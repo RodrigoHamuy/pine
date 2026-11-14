@@ -418,6 +418,27 @@ the agent. Several scopes can be on at once (a side conversation and the agent, 
 gets its own turn. An agent whose main conversation has an entry of its own is not woken a
 second time by a global one.
 
+### A fresh conversation for every event
+
+> Watch the camera. Judge every clip by itself, in a fresh conversation each time.
+
+A source that reports all day (a camera, a sensor, a busy folder) would fill one conversation
+with hundreds of events: it grows, it is shortened again and again, and what an early event
+said colours how a late one is read. An agent can be woken differently: with `fresh` on its
+`subscribe` tool (`"session": "new"` in the configuration, `--fresh` on `pine subscribe`),
+every event starts a conversation of its own. It holds the agent's instruction files, the note
+and that one event, and it is closed when the agent has answered.
+
+- It is the agent that listens this way, not one conversation: the agent scope, asked for in
+  its main conversation without a question, from a side conversation with one. As an agent it
+  listens in one place: asking for the main conversation ends the fresh one, and the other way round.
+- Nothing of one event is there in the next. What the agent has to know between them (what
+  it saw an hour ago, what you told it) it keeps in files in its workspace and reads when it
+  is woken; say so in its instructions. Its `MEMORY.md` is in every such conversation as in any other.
+- Its main conversation stays for you: what you write on Telegram arrives there, and it is
+  not marked as having read outside content by what the source reports.
+- Several events can be worked on at once, up to `limits.maxConcurrentRuns`.
+
 "Closed" means: its tab is closed in the terminal UI, it is reset (`/reset`, `pine reset`), or
 it is removed from the agent's list of conversations. Quitting the UI closes nothing: the same
 tabs open again next time, and what they listen to carries on in between. A conversation that
@@ -430,7 +451,7 @@ Every agent has these tools for it:
 | Tool | |
 |---|---|
 | `sources` | Lists the sources it can use and what is subscribed: this conversation, the agent, all agents, its other conversations. "What are you subscribed to?" always has an answer. |
-| `subscribe`, `unsubscribe` | For a source that exists. |
+| `subscribe`, `unsubscribe` | For a source that exists. With `fresh: true` on `subscribe` the agent is woken in a new conversation for every event instead of its main one. |
 | `add_source` | Sets up a new source and, when it is given a note on what to do, subscribes to it in the same step: "watch my project folder", "tell me when the price drops", "listen to the printer". It then runs at once, without a restart. Without a note the source is only set up. |
 | `remove_source` | Deletes a source for good, with its subscriptions. |
 | `add_source_type`, `remove_source_type` | Only the main agent: brings a new kind of source into pine, or takes it out. See "A source type of your own". |
@@ -584,7 +605,7 @@ The same key in `pine.json` is the global scope.
 | `when` | | Only events that match. Same filter as in [routes](events.md): keys are paths such as `payload.file`, values are compared, or `{ "regex": ... }`, `{ "gt": ... }`, `{ "in": [...] }`. |
 | `throttle` | `"10s"` | After one event, ignore the source for this long. Protects the model from a chatty device; `"0s"` turns it off. |
 | `debounce` | | Wait for this long without a new event, then handle only the last one. |
-| `session` | `main` (`on-<source>` with `separate`) | The conversation that listens. Leaving it out is the agent scope. |
+| `session` | `main` (`on-<source>` with `separate`) | The conversation that listens. Leaving it out is the agent scope. `"new"`: a fresh conversation for every event, closed when it is answered ("A fresh conversation for every event"). |
 | `separate` | `false` | `true`: do not deliver into a conversation of yours, but into one of its own (`on-<source>`), with the reduced tool set for sources that are not yours. See "Trust". |
 | `prompt` | | Replaces the standard text for the event. Templates as in routes: `{{payload.file}}`. |
 

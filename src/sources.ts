@@ -154,6 +154,11 @@ interface Running {
 }
 
 /** The settings every source has, whatever its type. A type's options cannot have these names. */
+/**
+ * The conversation name that stands for "a new one for every event": the agent is woken in a conversation of its
+ * own, started empty and closed when it has answered, so that a source that reports all day does not pile up in one.
+ */
+export const FRESH = "new";
 const RESERVED_OPTIONS = ["type", "use", "description", "agents", "trust", "start", "enabled", "session"];
 
 /** How a source that polls is doing: when it last looked, and since when looks fail. */
@@ -236,7 +241,7 @@ export class SourceHost {
 	}
 
 	private subscribersOf(key: string): string[] {
-		const own = Object.values(this.cfg.agents).flatMap((a) => a.subscribe.filter((sub) => sourceFor(this.cfg, a.id, sub.source)?.key === key).map((sub) => (sub.session === "main" ? a.id : `${a.id}/${sub.session}`)));
+		const own = Object.values(this.cfg.agents).flatMap((a) => a.subscribe.filter((sub) => sourceFor(this.cfg, a.id, sub.source)?.key === key).map((sub) => (sub.session === "main" ? a.id : sub.session === FRESH ? `${a.id} (a fresh conversation for every event)` : `${a.id}/${sub.session}`)));
 		return this.cfg.subscribe.some((sub) => sub.source === key) ? ["all agents", ...own] : own;
 	}
 
@@ -768,9 +773,10 @@ export class SourceHost {
 					type: found.source.type ?? "custom",
 					description: found.source.description,
 					local: session === "main" ? undefined : subs.find((x) => x.session === session),
-					agent: subs.find((x) => x.session === "main"),
+					// The agent as such listens in its main conversation, or (FRESH) in a new one for every event.
+					agent: subs.find((x) => x.session === "main") ?? subs.find((x) => x.session === FRESH),
 					global: found.scope === "global" ? this.cfg.subscribe.find((x) => x.source === name) : undefined,
-					elsewhere: subs.filter((x) => x.session !== session && x.session !== "main").map((x) => x.session),
+					elsewhere: subs.filter((x) => x.session !== session && x.session !== "main" && x.session !== FRESH).map((x) => x.session),
 				},
 			];
 		});

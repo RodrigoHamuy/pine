@@ -551,6 +551,35 @@ test("sources: a subscription is for one conversation, for the agent, or for all
 	await h.close();
 });
 
+test("sources: an agent can be woken in a fresh conversation for every event, so that a source that reports all day does not pile up in one", async () => {
+	const h = await harness({
+		pine: { sources: { beep: { use: "./sources/beep.ts", word: "hello", trust: "owner", description: "says a word" } } },
+		files: { "sources/beep.ts": BEEP },
+		agents: { main: {} },
+	});
+	const run = (session: string, steps: any[]) => h.pine.agents.run({ agent: "main", prompt: mockMsg(steps), session, ...owner });
+	let r = await run("main", [{ tools: [call("subscribe", { source: "beep", note: "judge each one by itself", throttle: "150ms", fresh: true })] }, { tools: [call("sources", {})] }]);
+	assert.match(h.toolResults()[0], /Subscribed to beep \(agent\)\. It is running\. Each event it reports \(source\/beep\/\.\.\.\) will start a conversation of its own, with your instructions and nothing else in it, which is closed when you have answered\. Nothing of one event is there in the next/);
+	assert.match(r.text, /agent: you are subscribed as an agent, and every event is handled in a conversation of its own that starts empty and is closed afterwards\. Its events do not arrive in this conversation\. Note: judge each one by itself/);
+	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(h.home, "agents", "main", "agent.json"), "utf8")).subscribe, [{ source: "beep", note: "judge each one by itself", throttle: "150ms", session: "new" }]);
+	assert.deepEqual(h.pine.sources.list()[0].subscribers, ["main (a fresh conversation for every event)"]);
+	await until(() => eventTasks(h).filter((t: any) => t.status === "done").length >= 3, 6000, "three events to be handled");
+	const woken = eventTasks(h).filter((t: any) => t.status === "done");
+	assert.ok(woken.every((t: any) => /^_t\d+$/.test(t.session)), "none of them in a conversation that is kept");
+	assert.equal(new Set(woken.map((t: any) => t.session)).size, woken.length, "and each in one of its own");
+	// Nothing of one event is in the next: every one of these requests holds its own event and no earlier one.
+	const events = h.mock.state.requests.filter((q: any) => JSON.stringify(q.body.messages).includes("source/beep/said"));
+	assert.ok(events.length >= 3 && events.every((q: any) => q.body.messages.filter((m: any) => m.role === "user" && JSON.stringify(m.content).includes("source/beep/said")).length === 1));
+	assert.ok(!h.pine.agents.status().sessions.some((x: any) => x.agent === "main" && x.session === "main" && x.tainted), "the agent's main conversation is not touched by them");
+	// As an agent it listens in one place: asking for the main conversation ends the fresh one, and unsubscribing as an agent ends whichever there is.
+	r = await run("main", [{ tools: [call("subscribe", { source: "beep", note: "in here", throttle: "1h" })] }]);
+	assert.deepEqual(h.pine.cfg.agents.main.subscribe.map((x: any) => x.session), ["main"]);
+	r = await run("main", [{ tools: [call("subscribe", { source: "beep", note: "fresh again", throttle: "1h", fresh: true })] }, { tools: [call("unsubscribe", { source: "beep", scope: "agent" })] }]);
+	assert.match(r.text, /Ended the agent's subscription to beep\. Nothing of yours is subscribed to beep any more\./);
+	assert.deepEqual(h.pine.cfg.agents.main.subscribe, []);
+	await h.close();
+});
+
 test("sources: closing or resetting a conversation ends what it was subscribed to on its own, and nothing else", async () => {
 	const h = await harness({
 		pine: { http: { port: 0 }, sources: { beep: { use: "./sources/beep.ts", word: "hello", trust: "owner" }, clock: { type: "command", run: "true", every: "1h" } } },

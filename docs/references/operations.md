@@ -240,7 +240,7 @@ What you type in a shell. Every command is the `pine` program with a word after 
 | `pine cancel <id>` | Stop a task |
 | `pine state [pattern]` | Shared state |
 | `pine sources` | Lists the event sources: running or idle, who is subscribed, last event; for one that polls (`http`, `command`), when it last looked or since when that fails |
-| `pine subscribe <agent> <source> [--session name] [--note text] [--throttle 5m] [--when json] [--separate]`, `pine unsubscribe <agent> <source> [--session name]` | Wake an agent on a source's events (with `--session`: only that conversation), or stop that |
+| `pine subscribe <agent> <source> [--session name \| --fresh] [--note text] [--throttle 5m] [--when json] [--separate]`, `pine unsubscribe <agent> <source> [--session name]` | Wake an agent on a source's events (with `--session`: only that conversation), or stop that |
 | `pine subscribe --global <source> [--note text] ...`, `pine unsubscribe --global <source>` | The same for every agent that can use the source |
 | `pine approvals`, `pine approve <id> [--always]`, `pine deny <id>` | Answer approval requests; `--always` stops the question for the rest of that conversation |
 | `pine reset <agent> [session]` | Start a conversation over; also clears its taint |

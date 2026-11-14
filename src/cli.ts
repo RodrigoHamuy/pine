@@ -56,9 +56,10 @@ Talking to a running daemon
 
 Event sources
   pine sources                    configured sources, whether they run, who is subscribed, last event
-  pine subscribe <agent> <source> [--session name] [--note text] [--throttle 5m] [--when json] [--separate]
+  pine subscribe <agent> <source> [--session name | --fresh] [--note text] [--throttle 5m] [--when json] [--separate]
                                   wake that agent whenever the source reports something: in its main
-                                  conversation, or only the conversation named with --session
+                                  conversation, only the conversation named with --session, or with
+                                  --fresh in a new conversation for every event
   pine subscribe --global <source> [--note text] ...
                                   wake every agent that can use the source
   pine unsubscribe <agent> <source> [--session name]   |   pine unsubscribe --global <source>
@@ -103,7 +104,7 @@ function parseArgs(argv: string[]) {
 		const a = argv[i];
 		if (a === "-f") flags.follow = true;
 		else if (a.startsWith("--no-")) flags[a.slice(5)] = false;
-		else if (a.startsWith("--")) flags[a.slice(2)] = argv[i + 1] !== undefined && !argv[i + 1].startsWith("--") && !["follow", "json", "api-key", "oauth", "taints", "offline", "always", "separate", "global", "yes", "keep-files", "network"].includes(a.slice(2)) ? argv[++i] : true;
+		else if (a.startsWith("--")) flags[a.slice(2)] = argv[i + 1] !== undefined && !argv[i + 1].startsWith("--") && !["follow", "json", "api-key", "oauth", "taints", "offline", "always", "separate", "fresh", "global", "yes", "keep-files", "network"].includes(a.slice(2)) ? argv[++i] : true;
 		else rest.push(a);
 	}
 	return { flags, rest };
@@ -680,8 +681,9 @@ async function main(): Promise<void> {
 				const r: any = await api.post(`/agents/${rest[0]}/unsubscribe`, { source: rest[1], session: typeof flags.session === "string" ? flags.session : undefined });
 				return out(r.unsubscribed ? `${rest[0]} is no longer subscribed to ${rest[1]}${r.sessions.some((x: string) => x !== "main") ? ` (conversations: ${r.sessions.join(", ")})` : ""}` : `${rest[0]} was not subscribed to ${rest[1]}`);
 			}
-			const info: any = await api.post(`/agents/${rest[0]}/subscribe`, { source: rest[1], session: flags.session, ...details });
-			return out(`${rest[0]} is subscribed to ${rest[1]} (${info.running ? "running" : "not running"}); each event wakes it in its conversation "${info.session}"`);
+			// --fresh: a conversation of its own for every event, instead of the agent's main one.
+			const info: any = await api.post(`/agents/${rest[0]}/subscribe`, { source: rest[1], session: flags.fresh === true ? "new" : flags.session, ...details });
+			return out(`${rest[0]} is subscribed to ${rest[1]} (${info.running ? "running" : "not running"}); each event wakes it in ${info.session === "new" ? "a fresh conversation of its own" : `its conversation "${info.session}"`}`);
 		}
 		case "approvals": {
 			const list: any[] = await api.get("/approvals");
