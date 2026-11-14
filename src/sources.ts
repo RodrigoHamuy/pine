@@ -693,11 +693,16 @@ export class SourceHost {
 	 * The sources an agent can send through, with what sending does. A global one or its own;
 	 * one that was set up for a single conversation only from there.
 	 */
-	senders(agentId: string, session = "main"): Array<{ name: string; type: string; sends: string }> {
+	senders(agentId: string, session = "main"): Array<{ name: string; type: string; sends: string; toOwner: boolean; files: boolean }> {
 		return this.available(agentId, session).flatMap((s) => {
-			const sends = this.types.get(s.type)?.type?.sends;
-			return sends ? [{ name: s.name, type: s.type, sends }] : [];
+			const type = this.types.get(s.type)?.type;
+			return type?.sends ? [{ name: s.name, type: s.type, sends: type.sends, toOwner: type.toOwner === true, files: type.files === true }] : [];
 		});
+	}
+
+	/** Whether sending through this source reaches the owner and nobody else. The source's type says so, never the call. */
+	tellsOwner(agentId: string, name: string, session = "main"): boolean {
+		return this.senders(agentId, session).some((s) => s.name === name && s.toOwner);
 	}
 
 	/** Send something out through a source, started if it is not running. Throws with the source's own reason if it refuses. */

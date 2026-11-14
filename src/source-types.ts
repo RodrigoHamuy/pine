@@ -67,4 +67,16 @@ export interface SourceType {
 	 * offers every source that says this.
 	 */
 	sends?: string;
+	/**
+	 * What it sends reaches the owner and nobody else: the type itself sees to that (a Telegram bot
+	 * that writes only to the chat the owner paired). A message to the owner is not information
+	 * leaving, so the `send` tool is not asked about for such a source after outside content.
+	 * Never set it for a type that can reach anybody else or act on a device.
+	 */
+	toOwner?: boolean;
+	/**
+	 * It can send a file along: a picture, a video or a sound file from the agent's workspace, handed to
+	 * `onSend` as `file` ({ name, mime, bytes }). The daemon reads the file, never the type.
+	 */
+	files?: boolean;
 }

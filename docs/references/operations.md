@@ -345,7 +345,8 @@ are JSON with `Content-Type: application/json`.
   the mode in the bottom bar of the terminal UI), or the question names a tool on its `approve`
   list. Sending something out also asks after a conversation has read outside content (it is
   tainted): "Always here" in the dialog covers that tool for the conversation, and `/reset`
-  or `pine reset` starts a clean one.
+  or `pine reset` starts a clean one. A message to you through Telegram is not among what
+  asks: an agent that watches something tells you without anybody at the keyboard.
 - **Back up:** the home directory. `data/pine.db` holds events and tasks, `agents/*/sessions`
   the conversations. Workspaces are wherever you put them.
 

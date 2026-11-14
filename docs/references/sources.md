@@ -231,7 +231,8 @@ What makes it different from the other types:
 - **It speaks for you.** Telegram vouches for the account and you proved it is yours, so what
   it writes counts as your own words: full tools, no "outside content" mark. That is why
   pairing takes a code and why the set-up is always put to you.
-- **It can send.** The agent writes to you on its own with the `send` tool; see below.
+- **It can send.** The agent writes to you on its own with the `send` tool, with a picture or
+  a video if it has one to show, and without a question to you; see below.
 - **Messages are not held back.** The ten-second pause between events that protects a model from
   a chatty device does not apply unless the subscription sets a `throttle` itself.
 
@@ -355,16 +356,44 @@ tool says which can and what each takes:
 
 | Type | Sending does | The agent passes |
 |---|---|---|
-| `telegram` | A message to you, in your chat with the bot | `text` |
+| `telegram` | A message to you, in your chat with the bot, with a picture, a video or a sound file if the agent has one to show | `text`, and optionally `file`: the path of a picture, video or sound file in its workspace |
 | `mqtt` | A message to a topic on the source's `publish` list, to act on a device | `data`: `{ "topic": "lamp/set", "message": "on" }`, optionally with `retain` and `qos` |
 
 > When the print is done, tell me on Telegram and switch the enclosure light off.
 
 Where things may go is the source's to decide, not the agent's: Telegram sends to your chat and
 nowhere else, MQTT only to the topics you listed. An answer to a message that came in through
-Telegram is sent back by itself; `send` is for what the agent says unasked. In a conversation
-that has read outside content, `send` asks you first
-([security.md](security.md), "What asks you").
+Telegram is sent back by itself; `send` is for what the agent says unasked.
+
+### A picture or a video with the message
+
+> When the camera sees somebody at the door, send me the picture on Telegram.
+
+`send` takes a `file` next to the `text`: the path of a picture (jpg, png, webp, gif), a video
+(mp4, mov, webm) or a sound file in the agent's workspace. Through Telegram the picture or the
+video arrives in your chat with the text under it as its caption; a text longer than a caption
+may be (1024 characters) is sent first, by itself. A picture up to 10 MB is shown as a photo, a
+larger one comes as a file, and Telegram takes up to 50 MB from a bot: a long clip the agent
+scales down first (`ffmpeg -i clip.mp4 -vf scale=960:-2 -an small.mp4`). A file a source
+received (a camera's upload) lies outside the workspace: the agent copies it, or the frame it
+took from it, into its workspace and sends that. Only a picture, video or sound file is sent
+this way, and only from the workspace. A source that takes no file (MQTT) says so.
+
+### Telling you needs no approval
+
+An agent that watches a camera, a device or a page messages you when you are not there, and
+by then it has read outside content: the upload, the reading, the page. A message to you is
+still never held back for your approval. `send` through Telegram goes out at once, in every
+conversation and in a run that an event woke, with nobody at the keyboard. That is what lets
+an agent alert you unattended: "tell me on Telegram when somebody is at the door" works
+without a yes for each message.
+
+What makes this safe is the source, not the agent: the Telegram source writes to the chat you
+paired or listed and refuses every other recipient, so a message leaves nothing with anybody
+but you. `send` through a source that acts on something (MQTT) does ask you first in a
+conversation that has read outside content ([security.md](security.md), "What asks you").
+To approve each message yourself all the same, put `"send:telegram"` (with the source's name)
+on the agent's `approve` list.
 
 A [route](events.md) can send the same way: `"reply": { "topic": "out/source/telegram@main" }`
 puts an agent's answer on Telegram, and an event published on `out/source/<name>` goes out
@@ -614,7 +643,8 @@ An event is therefore handed to the agent framed as data (see above), and the co
 arrives in is marked as having read outside content, exactly as after the agent read a web
 page there. From then on the usual rules of [security.md](security.md) apply in that
 conversation: actions that send information out ask you before they run,
-and bypass mode is paused.
+and bypass mode is paused. Telling you is not among them: the agent still reaches you through
+Telegram without a question ("Sending through a source").
 
 `"trust": "owner"` on a source says: this is my own device, and nobody else can make it say
 things. Its events then leave no mark. Use it for a
@@ -735,6 +765,8 @@ it will do in a dialog that has a field for the token, which goes into `.env`. I
 | `options` | The options as a JSON schema of an object. Give every property a `description`. `"secret": true` on a property keeps its value in `.env` and out of the configuration. With `"additionalProperties": false` an option that does not exist is refused instead of ignored. An option cannot be called like a setting every source has (`type`, `use`, `description`, `agents`, `trust`, `start`, `enabled`, `session`). |
 | `talks` | Optional, `true`: what it reports is somebody writing to the agent, so report only `message` events. The event's `text` reaches the agent as a message, the answer goes back through the source, and the default throttle does not apply. |
 | `sends` | Optional. One line for the agent on what sending through it does and what to pass. With it the agent's `send` tool offers the source. |
+| `files` | Optional, `true`: it can send a file along. `onSend` is then handed `file` (`{ name, mime, bytes }`) when the agent named one: a picture, video or sound file of its workspace, read by pine. |
+| `toOwner` | Optional, `true`: what it sends reaches the owner and nobody else, and the type's own code sees to that. Sending through it is then a message to the owner, which is not asked about after outside content. Never for a type that can reach anybody else or act on a device. |
 | `plan(options, setup)` | Optional. Returns `{ options, does, opens, read?, tell?, owner? }` (`owner: true`: the source itself makes sure who is on the other end, so what it reports counts as your own words; you are told before you confirm): the options as they are to be stored, what the source will do in plain words (shown in your dialog), whether it reaches something new (then you are asked), a folder the agent should be able to read, and what the agent should pass on to you afterwards. Throw for what cannot work. Without `plan`, a set-up is always put to you. `setup` has the source's `name` and `key` (`name`, or `name@agent` for an agent's own), the `agent` and its `workspace`, pine's `home`, `resolve(path)`, `random(bytes)` and `envName(option)`. |
 
 A type without a `type` export still works in the configuration, but agents cannot set one up

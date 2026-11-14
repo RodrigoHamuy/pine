@@ -36,6 +36,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 	// [what is asked, a part that must be among the first three]
 	const cases: Array<[string, RegExp]> = [
 		["telegram pairing code", /^sources#telegram$/],
+		["alert my owner unattended without approval for each message", /^sources#telling-you-needs-no-approval$/],
+		["send a photo or a video clip to my owner on telegram", /^sources#a-picture-or-a-video-with-the-message$/],
 		["what did another agent say in its chat", /^setup#conversations-and-tabs/],
 		["open a tab for my owner on a conversation", /^setup#conversations-and-tabs/],
 		["close a tab from a tool call", /^setup#conversations-and-tabs/],

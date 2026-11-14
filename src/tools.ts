@@ -514,17 +514,27 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			defineTool({
 				name: "send",
 				label: "Send through a source",
-				description: "Send something out through an event source that can also send: a message to your owner on Telegram, a command to a device over MQTT. Use it to reach your owner when they are not in this conversation, or to act on a device. The sources tool lists which sources can send and what each takes. An answer to a message that came in through a source is sent back by itself; do not send it again.",
+				description: "Send something out through an event source that can also send: a message to your owner on Telegram, with a picture or a video if you have one to show, or a command to a device over MQTT. Use it to reach your owner when they are not in this conversation, or to act on a device. The sources tool lists which sources can send and what each takes. An answer to a message that came in through a source is sent back by itself; do not send it again.",
 				parameters: Type.Object({
 					source: Type.String({ description: "Name of the source to send through" }),
 					text: Type.Optional(Type.String({ description: "The message, for a source that sends messages" })),
+					file: Type.Optional(Type.String({ description: "A picture, a video or a sound file in your workspace to send along with the message, for a source that takes one (Telegram): its path" })),
 					data: Type.Optional(Type.String({ description: 'Further fields as a JSON object, for a source that takes them, e.g. {"topic": "lamp/set", "message": "on"}' })),
 				}),
 				execute: async (_id, p) => {
 					run();
 					const extra = parseLoose(p.data);
 					if (p.data !== undefined && (!extra || typeof extra !== "object" || Array.isArray(extra))) throw new Error('"data" must be a JSON object');
-					const done = await host.send(agent.id, p.source, { ...(extra as Record<string, unknown> | undefined), ...(p.text !== undefined ? { text: p.text } : {}), agent: agent.id }, here());
+					// A file to go along: read here, by the daemon, and only a picture, video or sound file of the agent's own workspace.
+					let file: { name: string; mime: string; bytes: Buffer } | undefined;
+					if (p.file !== undefined && p.file !== "") {
+						const sender = host.senders(agent.id, here()).find((s) => s.name === p.source);
+						if (sender && !sender.files) throw new Error(`${p.source} sends no files. Leave "file" out${host.senders(agent.id, here()).some((s) => s.files) ? `, or send through ${host.senders(agent.id, here()).filter((s) => s.files).map((s) => s.name).join(" or ")}` : ""}.`);
+						const media = manager.workspaceImage(agent.id, p.file, here());
+						if (!media) throw new Error(`${p.file} is not a picture, a video or a sound file in your workspace (a picture up to 20 MB, a video up to 100 MB). Copy the file into your workspace first, and give its path from there.`);
+						file = { name: path.basename(p.file), mime: media.mime, bytes: media.bytes };
+					}
+					const done = await host.send(agent.id, p.source, { ...(extra as Record<string, unknown> | undefined), ...(p.text !== undefined ? { text: p.text } : {}), ...(file ? { file } : {}), agent: agent.id }, here());
 					return ok(`${p.source}: ${done}`);
 				},
 			}),

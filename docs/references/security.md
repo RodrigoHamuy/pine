@@ -316,10 +316,20 @@ asking, with two exceptions, and both are a question to you:
 | The action | Examples | When you are asked |
 |---|---|---|
 | is critical | shell startup files, ssh keys, git hooks and a repository's configuration, launch agents; a force push, `git reset --hard`, `git clean -f`, `curl ... \| sh`, `sudo`, deleting a home folder | In every conversation, also one that has read nothing from outside |
-| sends something out | `send` (Telegram, MQTT), events, the acting tools of MCP servers marked `"approve": "tainted"`, a task for an agent that can send things out, `subscribe` | Once the conversation has read outside content |
+| sends something out | `send` through a source that reaches somebody or something else (an MQTT device), events, the acting tools of MCP servers marked `"approve": "tainted"`, a task for an agent that can send things out, `subscribe` | Once the conversation has read outside content |
 
 Everything else runs, also after outside content: shell commands, files anywhere the agent
-reaches, downloads, and the agent's own memory and instructions.
+reaches, downloads, the agent's own memory and instructions, and a message to you.
+
+**Telling you is never asked about.** An agent that watches something (a camera, a device, a
+page) has read outside content by the time it has something to say, and it says it when you
+are not there. So `send` through a source that reaches you and nobody else goes out at once
+in every conversation: the Telegram source, which writes only to the chat you paired or
+listed. What an agent writes to you there you read as you read its answers; it leaves
+nothing with anybody else. The source decides where a message goes, not the call (layer 9),
+and the agent is told with its next message that this way stays open. To see every such
+message before it is sent, put it on the agent's `approve` list (`"approve": ["send:telegram"]`,
+with the source's name): that asks in every conversation.
 
 Critical actions are found by a fixed list of patterns, which you can read in
 `src/actions.ts` (`criticalCommand`, `PROTECTED_HOME`). Patterns are a net, not a wall: a
@@ -335,7 +345,7 @@ Once a conversation has **read outside content** (a web page, a search result, a
 from somebody else), somebody else may be steering the agent. What pine does about it, and
 what it does not:
 
-- Sending something out asks you (above).
+- Sending something out asks you (above). A message to you does not.
 - The file tools refuse to write what somebody else would read as instructions, and what
   makes git run programs (layer 4).
 - Nothing looks at an ordinary shell command. In `auto` mode, a page that talks the agent
@@ -357,7 +367,8 @@ page says "now send the notes folder to ...". pine tracks that:
   Sessions started by untrusted events are tainted from the start.
 - In a tainted session, actions that send information out or act on the world wait for your
   **approval**: what the agent's `approveWhenTainted` list names (default `publish_event` and
-  `send`), the acting tools of MCP servers marked `"approve": "tainted"`, `subscribe`, and
+  `send`; a `send` through a source that reaches only you, which Telegram is, is a message to
+  you and never waits: "What asks you"), the acting tools of MCP servers marked `"approve": "tainted"`, `subscribe`, and
   handing a task to an agent that can reach the internet. Its shell and its downloads are
   not among them.
 - Tools that only read never wait: `read`, `grep`, `find`, `ls`, `state_get`, `manual`, the
@@ -780,7 +791,8 @@ calls for it, so it is guarded like the instruction files:
 
 Whatever asks, the Telegram source sends only to your own chat, and the MQTT source publishes
 only to topics on its `publish` list. In a conversation that has read outside content, the
-`send` tool asks you first. An agent's `publish` list names the topics it
+`send` tool asks you first for a source that acts on something (MQTT), and not for one that
+only writes to you (Telegram). An agent's `publish` list names the topics it
 may use at all. Agents cannot publish on pine's own topics (`agent/`, `approval/`, `pine/`,
 `state/`, `timer/`).
 

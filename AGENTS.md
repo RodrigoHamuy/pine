@@ -244,13 +244,17 @@ These are invariants. A change that breaks one needs a test that shows why it is
 5. **Every tool call passes `tool_call` in `coreExtension()`, and has a class.** That is where
    deny patterns, the bash time limit, path checks, taint marking and approvals happen.
    `classify()` in `src/actions.ts` is the one place that says what a call is (look, local,
-   reach, send, own, critical, setup); the gate decides by class and mode. A new tool gets its
+   reach, send, tell, own, critical, setup); the gate decides by class and mode. A new tool gets its
    class there, not a check of its own somewhere else: one that sends information out is
    added to the default `approveWhenTainted` list in `config.ts` (class `send`), one that only
    reads to `LOOK_TOOLS`. No model judges a call: pine has no reviewer, and
    none is to be added. What asks is the owner, and the list is short on purpose: a `critical`
    call in every conversation, a `send` call (and `subscribe`) after outside content, the
-   owner's own `approve` list, and everything in manual mode. "Always here" is offered wherever
+   owner's own `approve` list, and everything in manual mode. A `send` through a source whose
+   type reaches the owner and nobody else (`toOwner`, Telegram) is class `tell`, not `send`:
+   a message to the owner is not information leaving, and an agent that watches something
+   has to be able to say what it saw with nobody there. Do not make `tell` ask outside manual
+   mode and the `approve` list, and do not give `toOwner` to a type that can reach anybody else. "Always here" is offered wherever
    the same question would come again; for a critical call it is kept by the kind of action
    (`action.note`), not for the whole tool. Do not make `reach`, `local` or `own` ask outside
    manual mode. A sub-agent never waits for the owner: where anything would ask, a sub-agent's
@@ -276,7 +280,8 @@ These are invariants. A change that breaks one needs a test that shows why it is
    conversation, as it was returned (`noteLinks` and `keyFor` in `coreExtension`). Not with an
    address the agent wrote itself, not along a redirect, and not for a server that `taints`.
 7. **A source that sends decides where to.** Telegram sends only to the owner's chat; MQTT
-   publishes only to `publish` topics. Do not move those checks into routes, prompts or the
+   publishes only to `publish` topics. That check is also what `toOwner` of a type rests on
+   (rule 5): the type's own code refuses every other recipient, whatever a call names. Do not move those checks into routes, prompts or the
    `send` tool. There is one way to connect pine to something outside, in or out: a source
    type in `src/sources/` with a schema. Do not add a second mechanism beside it.
    A type that has to go and look uses `source.poll` and `source.changed`, never timers of its

@@ -27,7 +27,10 @@ import { errText, sleep, truncate } from "../util.ts";
 export const type: SourceType = {
 	summary: "a Telegram bot: your owner writes to it from anywhere and you answer there; you can also message them through it. Needs the bot's token from @BotFather",
 	talks: true,
-	sends: 'a Telegram message to your owner: {"text": "..."}',
+	sends: 'a Telegram message to your owner: {"text": "..."}, and with "file" a picture, a video or a sound file from your workspace to go with it',
+	files: true,
+	// send() refuses every chat but the owner's (`heard`), whatever the message names.
+	toOwner: true,
 	options: Type.Object(
 		{
 			token: Type.String({ description: "the bot's token, which @BotFather gives when a bot is made with /newbot (123456789:AA...)", secret: true }),
@@ -67,6 +70,10 @@ export const type: SourceType = {
 };
 
 const MAX_PHOTO = 10 * 1024 * 1024;
+/** What a bot may upload in one file. */
+const MAX_UPLOAD = 50 * 1024 * 1024;
+/** How long a caption under a picture or a video may be. */
+const MAX_CAPTION = 1024;
 
 export default async function telegram(source: SourceApi): Promise<void> {
 	const o = source.options;
@@ -115,9 +122,31 @@ export default async function telegram(source: SourceApi): Promise<void> {
 	};
 
 	// ---- out: answers, and what an agent sends on its own -------------------------------------------
+	/** A picture, a video or a sound file to the owner's chat, with the message as its caption where it fits under one. */
+	const sendFile = async (chatId: number, file: { name: string; mime: string; bytes: Buffer }, text: string) => {
+		if (!heard(chatId)) throw new Error("that chat is not your owner's");
+		if (file.bytes.length > MAX_UPLOAD) throw new Error(`${file.name} is ${Math.round(file.bytes.length / 1024 / 1024)} MB, and Telegram takes files up to 50 MB from a bot. Send a smaller one: a single picture, or the video scaled down with ffmpeg`);
+		const [method, field] = file.mime.startsWith("image/") && file.bytes.length <= MAX_PHOTO ? ["sendPhoto", "photo"] : file.mime.startsWith("video/") ? ["sendVideo", "video"] : file.mime.startsWith("audio/") ? ["sendAudio", "audio"] : ["sendDocument", "document"];
+		// A message too long for a caption goes first, by itself, so that nothing of it is cut.
+		const caption = text.trim();
+		if (caption.length > MAX_CAPTION) await send(chatId, caption);
+		const form = new FormData();
+		form.set("chat_id", String(chatId));
+		if (caption && caption.length <= MAX_CAPTION) form.set("caption", caption);
+		form.set(field, new Blob([new Uint8Array(file.bytes)], { type: file.mime }), file.name);
+		const res = await fetch(`${base}/bot${token}/${method}`, { method: "POST", body: form, signal: AbortSignal.any([stop.signal, AbortSignal.timeout(180_000)]) });
+		const json: any = await res.json().catch(() => ({}));
+		if (!json.ok) throw new Error(`Telegram refused ${method}: ${json.description ?? res.status}`);
+	};
+
 	source.onSend(async (message) => {
 		const chatId = Number(message.chatId ?? ownerChat());
 		if (!Number.isFinite(chatId)) throw new Error("nobody is connected yet: your owner has to write to the bot once, and confirm it in pine");
+		const file = message.file as { name: string; mime: string; bytes: Buffer } | undefined;
+		if (file && Buffer.isBuffer(file.bytes)) {
+			await sendFile(chatId, file, String(message.text ?? ""));
+			return `sent to your owner on Telegram, with ${file.name}`;
+		}
 		await send(chatId, String(message.text ?? ""));
 		return "sent to your owner on Telegram";
 	});

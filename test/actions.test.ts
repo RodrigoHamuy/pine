@@ -55,6 +55,8 @@ test("actions: every tool call has a class, and the class is what decides", asyn
 	assert.equal(cls("download", { url: "https://x.example/a.png" }), "reach");
 	assert.equal(cls("download", { url: "https://x.example/a.png" }, { reachable: () => true }), "local");
 	assert.equal(cls("send", { source: "telegram" }, { sends: true }), "send");
+	assert.equal(cls("send", { source: "telegram" }, { sends: true, toOwner: true }), "tell", "a message to the owner themself is not information leaving");
+	assert.equal(cls("publish_event", { topic: "out/x" }, { sends: true, toOwner: true }), "send", "only the send tool tells the owner");
 	assert.equal(cls("publish_event", { topic: "out/x" }, { sends: true }), "send");
 	assert.equal(cls("delegate", { agent: "scout" }), "send");
 	assert.equal(cls("delegate", { agent: "books" }), "local");
@@ -102,7 +104,7 @@ test("auto mode: outside content takes nothing away and ordinary work is not ask
 	// What is read as instructions for somebody else stays closed to the file tools.
 	await run([{ tools: [call("write", { path: "CLAUDE.md", content: "EVIL" })] }]);
 	assert.match(h.toolResults().at(-1)!, /holds agent instructions and cannot be changed in a run that has handled outside content/);
-	assert.ok(h.mock.state.requests.flatMap((q: any) => notesOf(q)).join("\n").includes("Sending something out (a message, an event, a task for an agent that can send) asks your owner first from here on"), "the agent is told what changed");
+	assert.ok(h.mock.state.requests.flatMap((q: any) => notesOf(q)).join("\n").includes("Sending something out (an event, a message or a command through an event source, a task for an agent that can send) asks your owner first from here on"), "the agent is told what changed");
 
 	// Sending something out asks, with why, and offers "always" for the tool.
 	answer.allow = false;

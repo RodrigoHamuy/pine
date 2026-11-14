@@ -17,7 +17,7 @@ import { isInside, ownFileOf, realish, type Roots, tilde } from "./security.ts";
  * critical: what makes other programs run or opens the account: shell startup files, keys, hooks; and destroying a lot at once.
  * setup:    changes pine itself. Such a tool asks the owner by its own rules.
  */
-export type ActionClass = "look" | "local" | "reach" | "send" | "own" | "critical" | "setup";
+export type ActionClass = "look" | "local" | "reach" | "send" | "tell" | "own" | "critical" | "setup";
 
 /** Tools that only look. */
 /** Tools that carry a call out as a nested call of another tool (src/catalogue.ts). */
@@ -136,6 +136,8 @@ export interface ActionContext {
 	app?: { look: boolean };
 	/** Whether the agent's configuration counts this tool as sending something out (`approveWhenTainted`). */
 	sends: boolean;
+	/** For the send tool: whether the source it names reaches the owner and nobody else (`toOwner` of its type). */
+	toOwner?: boolean;
 	/** Whether the agent a task is handed to can send things out. */
 	canSendOut(agent: string): boolean;
 	/** Whether an address is one the agent can read anyway. */
@@ -154,7 +156,10 @@ export interface Action {
 export function classify(tool: string, input: any, ctx: ActionContext): Action {
 	// A tool that only hands the call on to the tool that is meant: that call is the one that is looked at.
 	if (ROUTERS.has(tool)) return { cls: "look" };
-	if (ctx.sends) return { cls: "send" };
+	// A message to the owner themself is not information leaving: who reads it is who the agent works for,
+	// and an answer in their own chat reaches them the same way. So an agent that watches something can
+	// tell its owner what it saw without the owner having to be there to allow it.
+	if (ctx.sends) return tool === "send" && ctx.toOwner ? { cls: "tell", note: "a message to the owner, through a source that reaches nobody else" } : { cls: "send" };
 	if (tool === "add_skill") return { cls: "own", note: "a skill is part of what the agent is told" };
 	// Subscribing changes what wakes the agent. The gate asks about it where the conversation has read outside content.
 	if (SETUP_TOOLS.includes(tool) || tool === "subscribe" || tool === "unsubscribe") return { cls: "setup" };

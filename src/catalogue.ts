@@ -85,7 +85,7 @@ const BRIEF: Record<string, string> = {
 	unsubscribe: "end a subscription: you are no longer woken, the source stays",
 	add_source:
 		'set up something new to watch; with a "note" you are subscribed to it at once, without subscribe. When another agent is to be the one that is woken, give "agent" here: a source of your own cannot be handed to it afterwards. "type" and its "options": folder {dir, mask?, pattern?, ignore?, recursive?}; http {url, every?, path?, match?, headers?, local?} (a page or a value in it that changes); command {run, every?, match?, timeout?} (what a command prints); mqtt {url, topics, publish?, username?}; webhook {open?}; ftp {port, user?, allow?}; telegram {allow?, approvals?}. Tokens and passwords are left out: pine asks your owner for them',
-	send: "send something out through a source that can send (a message to your owner on Telegram, a command over MQTT); an answer to a message that came in through a source goes back by itself",
+	send: "send something out through a source that can send (a message to your owner on Telegram, with `file` a picture or a video from your workspace along with it; a command over MQTT); an answer to a message that came in through a source goes back by itself",
 	remove_source: "remove an event source for good, when your owner no longer wants it watched at all (to only stop being woken: unsubscribe)",
 	publish_event: "publish an event on pine's bus",
 	add_source_type: "bring in a new kind of event source (a module)",
