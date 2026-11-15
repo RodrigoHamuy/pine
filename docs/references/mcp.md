@@ -206,6 +206,10 @@ reached over the network, that can be another computer, and three things follow:
   cannot send it anywhere else. Any other address on the server is fetched without the key, and
   a server that wants it answers HTTP 401: the agent calls the tool again and downloads the
   link it gets. After a `/reset` or a restart of pine the links given before count no longer.
+- **The `download` tool says how the file is shown.** When what it saved is a picture, a video
+  or a sound (by the name it was saved under), its answer ends with the line to write into the
+  reply: `![short caption](path)`, with the `!` in front. A server's own words for the next step
+  ("play it", "attach it") do not say how, and a plain link `[..](..)` shows and plays nothing.
 
 A server of your own that returns its files' paths is better off returning only a name and a
 link: a path is of use to nobody who is not on the same computer.

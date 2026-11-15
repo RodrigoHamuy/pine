@@ -471,6 +471,9 @@ test("download: files from the agent's own MCP servers arrive byte for byte; oth
 	await run([{ tools: [call("download", { url: `${origin}/files/cap.bin`, path: "in/cap.bin" })] }]);
 	assert.equal(h.toolResults().at(-1), `saved in/cap.bin: 70000 bytes, sha256 ${sha}, application/octet-stream`);
 	assert.ok(fs.readFileSync(path.join(ws, "in", "cap.bin")).equals(bytes));
+	// Saved under the name of a sound, the answer says how it is played: the form pine plays, not a plain link.
+	await run([{ tools: [call("download", { url: `${origin}/files/cap.bin`, path: "in/spoken.wav" })] }]);
+	assert.equal(h.toolResults().at(-1), `saved in/spoken.wav: 70000 bytes, sha256 ${sha}, application/octet-stream\nTo play it to your owner, write ![what is heard](in/spoken.wav) in your answer, once. With the "!" in front: a plain link [..](..) plays nothing.`);
 	assert.equal(asked.length, 0);
 	assert.equal(h.pine.agents.status().sessions.find((s) => s.session === "main")?.tainted, undefined);
 	assert.ok(notesOf(h.mock.state.requests[0])[0].includes("Your shell has no network access. To get a picture or another file from a web address, use the download tool"));
@@ -526,6 +529,8 @@ test("download: a server's key goes only with a link that server's own tool retu
 	// with the key; the agent never sees the key and never passes one.
 	await run([{ tools: [call("mcp__media__lookup", { q: `{"file":"a.png","url":"${origin}/files/a.png"}, also ${origin}/files/away.` })] }, { tools: [call("download", { url: `${origin}/files/a.png`, path: "a.png" })] }]);
 	assert.match(h.toolResults().at(-1)!, /^saved a\.png: /);
+	// What to do with a picture or a sound is said where it arrives, in the form pine shows: with the "!" in front.
+	assert.ok(h.toolResults().at(-1)!.endsWith('\nTo show it to your owner, write ![short caption](a.png) in your answer. With the "!" in front: a plain link [..](..) shows nothing.'), h.toolResults().at(-1)!);
 	assert.ok(fs.readFileSync(path.join(ws, "a.png")).equals(picture));
 	assert.ok(!JSON.stringify(h.mock.state.requests.map((r: any) => r.body)).includes("studio-key"), "the key is in no request to the model");
 

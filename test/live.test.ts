@@ -96,6 +96,25 @@ test("live: told a default for a tool in plain words, the main agent writes it i
 	await h.close();
 });
 
+// A media server says "play, show or attach the copy you saved", and a model's habit for "attach a file" is a plain
+// link, which plays nothing. pine says how where the file arrives (the download tool's answer).
+test("live: a sound that a media server made is saved and played to the owner, not put into the answer as a link", { skip: !live, timeout: 600_000 }, async (t) => {
+	const m = await liveModel(t);
+	const { httpMcp } = await import("./support/http-mcp.ts");
+	const wav = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WAVEfmt "), Buffer.alloc(24), Buffer.from("data"), Buffer.alloc(804)]);
+	const media = await httpMcp({ files: { "speech-20261115-1.wav": wav }, speak: "speech-20261115-1.wav" });
+	t.after(() => media.close());
+	const h = await harness({ mock: m.mock, model: m.model, pine: { main: "main", defaults: { model: m.ref } }, agents: { main: { agent: { description: "the owner's assistant", mcp: { media: { url: media.url } } } } } });
+	const r = await h.pine.agents.run({ agent: "main", prompt: "use speech: tell me in one sentence that the kettle is on", trust: "owner" });
+	assert.equal(r.status, "done", String(r.error));
+	say(`answer: ${r.text}`);
+	const played = /!\[[^\]]*\]\(([^)]*\.wav)\)/.exec(r.text);
+	assert.ok(played, `the sound is not in the answer in the form pine plays: ${r.text}`);
+	assert.ok(fs.existsSync(path.resolve(h.workspace("main"), played[1])), `the file the answer names was not saved: ${played[1]}`);
+	assert.doesNotMatch(r.text.replace(/!\[[^\]]*\]\([^)]*\)/g, ""), /\]\([^)]*\.wav\)/, "and not a plain link beside it");
+	await h.close();
+});
+
 // What an agent is given, asked for the way an owner asks: no tool is named in any message. For
 // each of the four kinds the agent has to list what it has, add one, use it and remove it again,
 // with its tools and without a look into pine's files.

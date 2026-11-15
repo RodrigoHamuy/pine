@@ -156,6 +156,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["a preference for a tool that only one agent should have", /^agents#(where-a-default-or-a-preference-goes|what-holds-for-all-agents|the-files-an-agent-keeps-itself|every-file-that-is-read-as-instructions)/],
 		["which markdown files are read into an agent's prompt", /^agents#(every-file-that-is-read-as-instructions|what-an-agent-sees|the-files-an-agent-keeps-itself)/],
 		["the difference between the TOOLS.md in pine's home and the one in my workspace", /^agents#(where-a-default-or-a-preference-goes|what-holds-for-all-agents|the-files-an-agent-keeps-itself|every-file-that-is-read-as-instructions)/],
+		["the agent wrote a link to the sound file instead of playing it", /^(mcp#files-and-pictures-from-a-remote-server|tui#)/],
 		["set a default voice for all agents", /^agents#what-holds-for-all-agents/],
 		["a preference that every agent should follow", /^agents#what-holds-for-all-agents/],
 		["is there a global instructions file injected into all agents", /^agents#(what-holds-for-all-agents|the-files-an-agent-keeps-itself)/],

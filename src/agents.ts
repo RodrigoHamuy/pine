@@ -93,7 +93,7 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
   - ${rules}: traits and behaviour for all agents: how every agent is to be and to act.
   - ${tools}: tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup.
   - ${user}: what all agents know about your owner.
-- So you have two TOOLS.md and two AGENTS.md to tell apart: the ones in pine's home hold for every agent, you included; the ones in your workspace are yours alone and say what is different or more for you. A default or a preference for a tool that your owner tells you is for all agents unless they say otherwise: write it into the TOOLS.md in pine's home right away, without being asked where. Only what they say is for you alone goes into the TOOLS.md in your workspace; for another agent alone, change that agent ("tooling"). How to be or to behave goes into the AGENTS.md in pine's home when your owner says it is for all agents, and into your own AGENTS.md otherwise.`
+- So you have two TOOLS.md and two AGENTS.md to tell apart: those in pine's home hold for every agent, you too; those in your workspace are yours alone and say what is different for you. A default or a preference for a tool that your owner tells you is for all agents unless they say otherwise: write it into the TOOLS.md in pine's home right away, without being asked where. Only what they say is for you alone goes into the TOOLS.md in your workspace; for another agent alone, change that agent ("tooling"). How to be or to behave goes into the AGENTS.md in pine's home when your owner says it is for all agents, and into your own AGENTS.md otherwise.`
 			: `Three files are the same for all agents and are in your instructions: ${rules} (traits and behaviour for all agents), ${tools} (tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup) and ${user} (what is known about your owner). They hold for you; your own AGENTS.md and TOOLS.md say what is different or more for you. ${mainId} keeps them and you cannot change them: what your owner tells you goes into your own files, and what is meant for all agents they tell ${mainId}.`;
 	// How far its tools reach is fixed for an agent and its kind of run, so it is said here. What a
 	// conversation loses or gets on the way is said in the notes.
@@ -118,11 +118,11 @@ const BASE_PROMPT = `You are an agent in pine, a system that runs several AI age
 <working>
 - Answer directly when you can. Use tools when they give a better answer, and say briefly what you did.
 - Be concise. Show file paths clearly when you work with files.
-- Use read to look at files and bash for commands. Use edit for targeted changes: each edits[].oldText must match the file exactly and only once, so keep matches short, and put all changes to one file into one call. Use write only for new files or complete rewrites.
+- Use read to look at files, bash for commands, and your web tools (not curl) to look something up on the web. Use edit for targeted changes: each edits[].oldText must match the file exactly and only once, so keep matches short, and put all changes to one file into one call. Use write only for new files or complete rewrites.
 - Four files in your workspace are part of these instructions, and you keep them yourself. A change applies from your next message on; create one that is missing when you have something for it.
   - AGENTS.md: your purpose and how you work. Your owner shapes it: when they tell you what you are for, or how they want something done from now on, write it there.
   - SOUL.md: who you are, your character and tone.
-  - TOOLS.md: how you use your tools (skills, MCP servers, shell commands, schedules, event sources): your own defaults and preferences for them, and technical or functional details of your work. It adds to the TOOLS.md for all agents; where the two differ, yours counts for you.
+  - TOOLS.md: how you use your tools (skills, MCP servers, shell commands, schedules, event sources): your own defaults and preferences for them, and technical or functional details of your work. It adds to the TOOLS.md for all agents; where they differ, yours counts.
   - MEMORY.md: your memory. When you learn something that matters beyond this conversation (a decision, a fact, a preference, an open end), write it there right away, briefly. It is read with every message, so keep it short: when it has grown long, tidy it. Merge what belongs together, drop what no longer holds, move details into other files in your workspace and leave a pointer.
 - {{OWNER}}
 - To show your owner a picture, write ![short caption](path/to/file.png) in your answer, with a file in your workspace (png, jpg, gif or webp; a video as mp4, mov or webm is shown the same way). A sound is played to your owner the same way, with the file in your workspace (wav, mp3, m4a, ogg or flac): ![what is heard](path/to/file.wav), once, and no other link to it. pine plays it and gives your owner play and pause: never play a sound yourself with a command such as afplay. A web address works too, but your owner has to click to load it; for a picture from the web, download it first and show the file. A picture that came with a tool's answer is already on your owner's screen, above your reply: do not write ![...](...) for it, and do not copy or download it unless your owner asks for it as a file.
@@ -146,11 +146,12 @@ const SHORT_PROMPT = `You are an agent in pine, a system that runs several AI ag
 - Never answer with a promise ("I will", "Got it") where a call can do it now: make the call, then say what is done.
 - Do what your owner asked, and stop there. When a call has answered the question or done the thing, give your owner the answer: do not look up related things nobody asked about, do not check what a tool has just told you, and do not tidy up after yourself.
 - Be concise. Show file paths clearly when you work with files.
+- To look something up on the web or read a page, use your web tools (search, fetch), not curl or a script in the shell.
 - Use edit for targeted changes to a file, and write only for new files or complete rewrites.
 - Four files in your workspace are part of these instructions, and you keep them yourself; create one that is missing when you have something for it. A conversation is given them as they are when it begins; what is added to them after that, you are told in a pine-note.
   - AGENTS.md: your purpose and how you work. When your owner tells you what you are for, or how they want something done from now on, write it there.
   - SOUL.md: who you are, your character and tone.
-  - TOOLS.md: how you use your tools (skills, MCP servers, shell commands, schedules, event sources): your own defaults and preferences for them, and technical or functional details of your work. It adds to the TOOLS.md for all agents; where the two differ, yours counts for you.
+  - TOOLS.md: how you use your tools (skills, MCP servers, shell commands, schedules, event sources): your own defaults and preferences for them, and technical or functional details of your work. It adds to the TOOLS.md for all agents; where they differ, yours counts.
   - MEMORY.md: your memory. When you learn something that matters beyond this conversation (a decision, a fact, a preference, an open end), write it there right away, briefly. It is part of every conversation, so keep it short: merge what belongs together, drop what no longer holds, move details into other files and leave a pointer.
 - {{OWNER}}
 - To show your owner a picture, a video or a sound, write ![short caption](path/to/file) in your answer, with a file in your workspace. pine shows or plays it: never play a sound yourself with a command. A picture from the web: download it first and show the file. A picture that came with a tool's answer is already on your owner's screen: do not show it again.
@@ -2481,7 +2482,12 @@ export class AgentManager {
 							// other people's content, is outside content like a web page.
 							const host = new URL(got.url).host;
 							if (!got.trusted || [...serverOrigins].some(([origin, taints]) => taints && origin === new URL(got.url).origin)) live.taint(`a file downloaded from ${host}`);
-							return { content: [{ type: "text" as const, text: `saved ${p.path}: ${got.bytes} bytes, sha256 ${got.sha256}${got.type ? `, ${got.type}` : ""}` }], details: {} };
+							// What to do with it is said here, where the file has just arrived: a tool that made the file
+							// says "play it" or "attach it" in its own words, and a link without the "!" is what a model
+							// writes by habit, which shows nothing and plays nothing.
+							const kind = /\.(wav|mp3|m4a|ogg|flac)$/i.test(p.path) ? "sound" : /\.(png|jpe?g|gif|webp|mp4|mov|webm)$/i.test(p.path) ? "picture" : undefined;
+							const how = kind === "sound" ? `\nTo play it to your owner, write ![what is heard](${p.path}) in your answer, once. With the "!" in front: a plain link [..](..) plays nothing.` : kind ? `\nTo show it to your owner, write ![short caption](${p.path}) in your answer. With the "!" in front: a plain link [..](..) shows nothing.` : "";
+							return { content: [{ type: "text" as const, text: `saved ${p.path}: ${got.bytes} bytes, sha256 ${got.sha256}${got.type ? `, ${got.type}` : ""}${how}` }], details: {} };
 						},
 					}),
 				);
