@@ -201,9 +201,9 @@ how pine got onto the machine, which `pine version` tells you:
 Afterwards it makes sure the browser the web tools drive matches the new version, which is a
 download only when that version changed.
 
-When it is done it says what changed: a line for every change in the versions between the one
-you had and the one you have now, the newest first (after a checkout was moved forward, a line
-for every commit that came). The list travels with the package, so nothing is fetched for it.
+When it is done it says what changed, as a list: every version between the one you had and
+the one you have now, the newest first, with a line for each change under it (after a
+checkout was moved forward, a line for every commit that came). The list travels with the package, so nothing is fetched for it.
 
 `pine update --check` changes nothing and says whether there is something newer.
 

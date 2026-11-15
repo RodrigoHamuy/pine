@@ -232,15 +232,18 @@ test("pine update knows how pine was installed and which version is newer; pine 
 		{ version: "0.12.1", changes: ["fix: what was there before"] },
 	];
 	const news = whatChanged(list, "0.12.1", "0.13.0");
-	assert.equal(news, "What changed since 0.12.1:\n\n  0.13.0  new: a conversation list\n  0.13.0  fixed: the tab bar keeps its place\n  0.12.2  Update README\n  0.12.2  docs: [31mred  words");
-	assert.equal(outcome("@pmndrs/pine", "0.13.0", "0.13.0", news).text, `\npine is now 0.13.0. ${news}\n\nA pine that is running keeps the old version until it is restarted: quit the terminal UI and open it again, or restart the daemon.`);
+	assert.equal(news, "What changed since 0.12.1:\n\n  0.13.0\n    - new: a conversation list\n    - fixed: the tab bar keeps its place\n  0.12.2\n    - Update README\n    - docs: [31mred  words");
+	// The list stands by itself, between the new version and what to do about it.
+	assert.equal(outcome("@pmndrs/pine", "0.13.0", "0.13.0", news).text, `\npine is now 0.13.0.\n\n${news}\n\nA pine that is running keeps the old version until it is restarted: quit the terminal UI and open it again, or restart the daemon.`);
 	// A package from before the list, or one that says nothing about these versions, adds nothing.
 	assert.deepEqual([whatChanged(undefined, "0.12.1", "0.13.0"), whatChanged({ no: "list" }, "0.12.1", "0.13.0"), whatChanged(list, "0.13.0", "0.13.0")], ["", "", ""]);
 	// A long list is cut, and says by how much.
 	const many = whatChanged([{ version: "0.13.0", changes: Array.from({ length: 30 }, (_, i) => `fix: number ${i}`) }], "0.12.0", "0.13.0");
-	assert.ok(many.split("\n").length === 28 && many.endsWith("\n  ... and 5 more"), many);
+	assert.ok(many.split("\n").length === 29 && many.endsWith("\n    - fixed: number 24\n  ... and 5 more"), many);
+	const two = whatChanged([{ version: "0.13.0", changes: Array.from({ length: 20 }, (_, i) => `fix: a ${i}`) }, { version: "0.12.5", changes: Array.from({ length: 20 }, (_, i) => `fix: b ${i}`) }, { version: "0.12.4", changes: ["fix: c"] }], "0.12.0", "0.13.0");
+	assert.ok(two.includes("\n  0.12.5\n    - fixed: b 0\n") && two.endsWith("\n    - fixed: b 4\n  ... and 16 more") && !two.includes("0.12.4"), two);
 	// A checkout has commits and no versions.
-	assert.equal(whatCame(["feat: sources of your own", "", "fix: a link is shown with its target"]), "What changed:\n\n  new: sources of your own\n  fixed: a link is shown with its target");
+	assert.equal(whatCame(["feat: sources of your own", "", "fix: a link is shown with its target"]), "What changed:\n\n  - new: sources of your own\n  - fixed: a link is shown with its target");
 	assert.equal(whatCame([""]), "");
 
 	const version = await run(process.execPath, [CLI, "version"]);

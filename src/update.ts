@@ -64,30 +64,44 @@ function worded(subject: string): string {
 /** The most lines of changes that are printed; the rest is counted. */
 const MOST = 25;
 
+/** The list as it is printed: a heading by itself, then the lines, cut after MOST changes with a count of the rest. */
+function listed(heading: string, groups: Array<{ title?: string; changes: string[] }>): string {
+	const total = groups.reduce((n, g) => n + g.changes.length, 0);
+	if (!total) return "";
+	const lines: string[] = [];
+	let left = MOST;
+	for (const g of groups) {
+		if (!g.changes.length || left <= 0) continue;
+		if (g.title) lines.push(`  ${g.title}`);
+		for (const c of g.changes.slice(0, left)) lines.push(`${g.title ? "    " : "  "}- ${c}`);
+		left -= g.changes.length;
+	}
+	return `${heading}\n\n${lines.join("\n")}${total > MOST ? `\n  ... and ${total - MOST} more` : ""}`;
+}
+
 /**
- * What the versions after `from` changed, up to `to`: a line for every commit, the newest
- * version first. `list` is the package's changes.json (scripts/changes.mjs). Empty when it says
- * nothing about these versions.
+ * What the versions after `from` changed, up to `to`: a list for every version, the newest
+ * first, a line for every commit. `list` is the package's changes.json (scripts/changes.mjs).
+ * Empty when it says nothing about these versions.
  */
 export function whatChanged(list: unknown, from: string, to: string): string {
 	if (!Array.isArray(list)) return "";
-	const lines: string[] = [];
+	const groups: Array<{ title: string; changes: string[] }> = [];
 	for (const entry of list) {
 		const version = typeof entry?.version === "string" ? plain(entry.version) : "";
 		if (!version || !newer(version, from) || newer(version, to) || !Array.isArray(entry.changes)) continue;
-		for (const c of entry.changes) if (typeof c === "string" && plain(c)) lines.push(`  ${version.padEnd(8)}${worded(c)}`);
+		const changes = entry.changes.filter((c: unknown): c is string => typeof c === "string" && Boolean(plain(c))).map(worded);
+		// A version can stand twice in a list that was built from an odd history: its changes are one list.
+		const at = groups.find((g) => g.title === version);
+		if (at) at.changes.push(...changes);
+		else groups.push({ title: version, changes });
 	}
-	if (!lines.length) return "";
-	const more = lines.length - MOST;
-	return `What changed since ${from}:\n\n${lines.slice(0, MOST).join("\n")}${more > 0 ? `\n  ... and ${more} more` : ""}`;
+	return listed(`What changed since ${from}:`, groups);
 }
 
 /** The same for a checkout, which has commits and no versions: the subjects that the pull brought. */
 export function whatCame(subjects: string[]): string {
-	const lines = subjects.map(plain).filter(Boolean).map((c) => `  ${worded(c)}`);
-	if (!lines.length) return "";
-	const more = lines.length - MOST;
-	return `What changed:\n\n${lines.slice(0, MOST).join("\n")}${more > 0 ? `\n  ... and ${more} more` : ""}`;
+	return listed("What changed:", [{ changes: subjects.map(plain).filter(Boolean).map(worded) }]);
 }
 
 /** What the installed package says its releases changed. */
@@ -109,8 +123,8 @@ export function outcome(name: string, wanted: string | undefined, now: string, n
 	if (wanted && newer(wanted, now)) {
 		return { ok: false, text: `\nNot updated: pine is still ${now}. npm knows ${wanted} but did not install it; that happens for a few minutes after a version is published. Run "pine update" again in a moment, or install it by its number:\n\n  npm install -g ${name}@${wanted}` };
 	}
-	// What changed comes before what to do about it, which is then the last thing on the screen.
-	return { ok: true, text: news ? `\npine is now ${now}. ${news}\n\n${RESTART}` : `\npine is now ${now}. ${RESTART}` };
+	// The list stands by itself, between the version and what to do about it, so that it is not read over.
+	return { ok: true, text: news ? `\npine is now ${now}.\n\n${news}\n\n${RESTART}` : `\npine is now ${now}. ${RESTART}` };
 }
 
 /**
