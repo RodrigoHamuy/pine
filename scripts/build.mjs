@@ -5,6 +5,7 @@
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { changesOf } from "./changes.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const out = path.join(root, "build");
@@ -31,6 +32,16 @@ pkg.bin = { pine: "bin/pine.js" };
 if (process.env.PINE_VERSION) pkg.version = process.env.PINE_VERSION;
 pkg.publishConfig = { access: "public" };
 fs.writeFileSync(path.join(out, "package.json"), `${JSON.stringify(pkg, null, 2)}\n`);
+
+// What this and the releases before it changed, which "pine update" says after it has installed
+// one (src/update.ts). Without git, or without its tags, the list is short or empty and nothing is said.
+let log = "";
+try {
+	log = execFileSync("git", ["log", "--first-parent", "--format=%D%x09%s", "-n", "500"], { cwd: root, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] });
+} catch {
+	// not a repository
+}
+fs.writeFileSync(path.join(out, "changes.json"), `${JSON.stringify(changesOf(log, pkg.version), null, "\t")}\n`);
 
 const left = fs.readdirSync(out, { recursive: true }).filter((f) => String(f).endsWith(".ts") && !String(f).endsWith(".d.ts") && !String(f).startsWith("examples") && !String(f).startsWith("docs"));
 if (left.length) throw new Error(`uncompiled sources in the package: ${left.join(", ")}`);

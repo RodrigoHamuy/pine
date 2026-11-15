@@ -199,7 +199,7 @@ test("the key prompt stays visible, says the input is hidden, and never echoes i
 });
 
 test("pine update knows how pine was installed and which version is newer; pine version says both", async () => {
-	const { installKind, newer, outcome } = await import("../src/update.ts");
+	const { installKind, newer, outcome, whatChanged, whatCame } = await import("../src/update.ts");
 	const root = path.resolve(import.meta.dirname, "..");
 	// A git clone that runs its sources is a checkout, wherever npm keeps its global packages.
 	assert.equal(installKind(root, "/usr/local/lib/node_modules"), "checkout");
@@ -222,6 +222,26 @@ test("pine update knows how pine was installed and which version is newer; pine 
 	assert.equal(missed.ok, false);
 	assert.match(missed.text, /Not updated: pine is still 0\.12\.1\. npm knows 0\.13\.0 but did not install it.*\n\n  npm install -g @pmndrs\/pine@0\.13\.0$/s);
 	assert.equal(outcome("@pmndrs/pine", undefined, "0.13.0").ok, true, "a checkout has no version to compare with");
+
+	// Afterwards it says what the versions in between changed, as the new package lists it: newest first,
+	// only what is newer than the version that was there, and what to do about it last.
+	const list = [
+		{ version: "0.14.0", changes: ["feat: not installed yet"] },
+		{ version: "0.13.0", changes: ["feat(tui): a conversation list", "fix: the tab bar keeps its place"] },
+		{ version: "0.12.2", changes: ["Update README", "docs: \u001b[31mred\u0007 words"] },
+		{ version: "0.12.1", changes: ["fix: what was there before"] },
+	];
+	const news = whatChanged(list, "0.12.1", "0.13.0");
+	assert.equal(news, "What changed since 0.12.1:\n\n  0.13.0  new: a conversation list\n  0.13.0  fixed: the tab bar keeps its place\n  0.12.2  Update README\n  0.12.2  docs: [31mred  words");
+	assert.equal(outcome("@pmndrs/pine", "0.13.0", "0.13.0", news).text, `\npine is now 0.13.0. ${news}\n\nA pine that is running keeps the old version until it is restarted: quit the terminal UI and open it again, or restart the daemon.`);
+	// A package from before the list, or one that says nothing about these versions, adds nothing.
+	assert.deepEqual([whatChanged(undefined, "0.12.1", "0.13.0"), whatChanged({ no: "list" }, "0.12.1", "0.13.0"), whatChanged(list, "0.13.0", "0.13.0")], ["", "", ""]);
+	// A long list is cut, and says by how much.
+	const many = whatChanged([{ version: "0.13.0", changes: Array.from({ length: 30 }, (_, i) => `fix: number ${i}`) }], "0.12.0", "0.13.0");
+	assert.ok(many.split("\n").length === 28 && many.endsWith("\n  ... and 5 more"), many);
+	// A checkout has commits and no versions.
+	assert.equal(whatCame(["feat: sources of your own", "", "fix: a link is shown with its target"]), "What changed:\n\n  new: sources of your own\n  fixed: a link is shown with its target");
+	assert.equal(whatCame([""]), "");
 
 	const version = await run(process.execPath, [CLI, "version"]);
 	assert.match(version.stdout, /^pine \d+\.\d+\.\d+ \(checkout in /);

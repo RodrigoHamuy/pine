@@ -51,17 +51,66 @@ const show = (cmd: string, args: string[], cwd?: string) => spawnSync(cmd, args,
 
 const RESTART = "A pine that is running keeps the old version until it is restarted: quit the terminal UI and open it again, or restart the daemon.";
 
+/** Text from a commit's subject, safe to print: one line, without anything a terminal would act on. */
+const plain = (s: string) => s.replace(/[\u0000-\u001f\u007f-\u009f]/g, " ").trim();
+
+/** A commit's subject as an owner reads it: "feat: x" is something new, "fix: x" something fixed. */
+function worded(subject: string): string {
+	const m = /^([a-z]+)(?:\([^)]*\))?!?:\s*(.+)$/.exec(plain(subject));
+	if (!m) return plain(subject);
+	return `${m[1] === "feat" ? "new" : m[1] === "fix" ? "fixed" : m[1]}: ${m[2]}`;
+}
+
+/** The most lines of changes that are printed; the rest is counted. */
+const MOST = 25;
+
+/**
+ * What the versions after `from` changed, up to `to`: a line for every commit, the newest
+ * version first. `list` is the package's changes.json (scripts/changes.mjs). Empty when it says
+ * nothing about these versions.
+ */
+export function whatChanged(list: unknown, from: string, to: string): string {
+	if (!Array.isArray(list)) return "";
+	const lines: string[] = [];
+	for (const entry of list) {
+		const version = typeof entry?.version === "string" ? plain(entry.version) : "";
+		if (!version || !newer(version, from) || newer(version, to) || !Array.isArray(entry.changes)) continue;
+		for (const c of entry.changes) if (typeof c === "string" && plain(c)) lines.push(`  ${version.padEnd(8)}${worded(c)}`);
+	}
+	if (!lines.length) return "";
+	const more = lines.length - MOST;
+	return `What changed since ${from}:\n\n${lines.slice(0, MOST).join("\n")}${more > 0 ? `\n  ... and ${more} more` : ""}`;
+}
+
+/** The same for a checkout, which has commits and no versions: the subjects that the pull brought. */
+export function whatCame(subjects: string[]): string {
+	const lines = subjects.map(plain).filter(Boolean).map((c) => `  ${worded(c)}`);
+	if (!lines.length) return "";
+	const more = lines.length - MOST;
+	return `What changed:\n\n${lines.slice(0, MOST).join("\n")}${more > 0 ? `\n  ... and ${more} more` : ""}`;
+}
+
+/** What the installed package says its releases changed. */
+function changesIn(root: string): unknown {
+	try {
+		return JSON.parse(fs.readFileSync(path.join(root, "changes.json"), "utf8"));
+	} catch {
+		return undefined;
+	}
+}
+
 /**
  * What to say after an update, and whether it worked: the version on disk has to be the one
  * that was asked for. npm can say that a version exists and still install an older one for a
  * few minutes after it was published (its two answers come from different places), and
  * "pine is now <the old version>" must not read like success.
  */
-export function outcome(name: string, wanted: string | undefined, now: string): { ok: boolean; text: string } {
+export function outcome(name: string, wanted: string | undefined, now: string, news = ""): { ok: boolean; text: string } {
 	if (wanted && newer(wanted, now)) {
 		return { ok: false, text: `\nNot updated: pine is still ${now}. npm knows ${wanted} but did not install it; that happens for a few minutes after a version is published. Run "pine update" again in a moment, or install it by its number:\n\n  npm install -g ${name}@${wanted}` };
 	}
-	return { ok: true, text: `\npine is now ${now}. ${RESTART}` };
+	// What changed comes before what to do about it, which is then the last thing on the screen.
+	return { ok: true, text: news ? `\npine is now ${now}. ${news}\n\n${RESTART}` : `\npine is now ${now}. ${RESTART}` };
 }
 
 /**
@@ -72,6 +121,8 @@ export async function update(opts: { check: boolean; out: (line: string) => void
 	const { out } = opts;
 	const me = installed();
 	let wanted: string | undefined;
+	/** Where a checkout stood before it was moved forward. */
+	let was: string | undefined;
 
 	if (me.kind === "checkout") {
 		const branch = capture("git", ["rev-parse", "--abbrev-ref", "HEAD"], me.root) ?? "?";
@@ -93,6 +144,7 @@ export async function update(opts: { check: boolean; out: (line: string) => void
 			return 0;
 		}
 		out(`Getting ${behind} new commit${behind === 1 ? "" : "s"} ...`);
+		was = capture("git", ["rev-parse", "HEAD"], me.root);
 		// Only ever a fast-forward: your own commits and changes are never rewritten or thrown away.
 		if (show("git", ["pull", "--ff-only"], me.root) !== 0) {
 			out("git could not simply move this checkout forward (you have commits or changes of your own in the way). Nothing was changed; sort it out with git and run pine update again.");
@@ -128,7 +180,10 @@ export async function update(opts: { check: boolean; out: (line: string) => void
 	}
 
 	// The version on disk decides whether it worked, not what npm said it would do.
-	const done = outcome(me.name, wanted, installed(me.root).version);
+	const now = installed(me.root).version;
+	// The package that is on disk now says what its releases changed; a checkout has its commits.
+	const news = me.kind === "checkout" ? (was ? whatCame((capture("git", ["log", "--first-parent", "--format=%s", `${was}..HEAD`], me.root) ?? "").split("\n")) : "") : whatChanged(changesIn(me.root), me.version, now);
+	const done = outcome(me.name, wanted, now, news);
 	if (!done.ok) {
 		out(done.text);
 		return 1;

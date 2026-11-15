@@ -404,6 +404,9 @@ one (`scripts/version.mjs`, tested in `test/release.test.ts`):
 | anything else | the patch number |
 
 So an ordinary push is a patch release, and the subject line is how you say that it is more.
+The subject line is also what an owner reads after `pine update` ("What changed since ..."):
+the package carries the subjects of its last releases (`scripts/changes.mjs` writes
+`changes.json` when it is built). Write it as a sentence that says what is different for them.
 To pick a version by hand, set it in `package.json`: it is used as it is while it is ahead of
 what the commits call for. A commit message that contains `[skip release]` publishes nothing.
 
