@@ -12,3 +12,6 @@ assets/spag-*.jpg
 
 # The scanner clip of story-scans.js, made from a phone video (frames and its sound): too big to keep.
 assets/scan/
+
+# The camera clips of story-watchdog.js, made by a video model (frames with a camera's clock and name on them): too big to keep.
+assets/cam/

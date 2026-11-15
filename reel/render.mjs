@@ -28,6 +28,13 @@ await page.goto(`file://${path.join(dir, "reel.html")}${story ? `?story=${story}
 // The frames of the scanner clip, when they are there (assets/scan/001.jpg on).
 const scanDir = path.join(dir, "assets", "scan");
 const scan = fs.existsSync(scanDir) ? fs.readdirSync(scanDir).filter((n) => n.endsWith(".jpg")).sort().map((n) => `scan/${n}`) : [];
+// The camera clips of story-watchdog.js (assets/cam/<clip>/001.jpg on) and the stills it shows.
+const camDir = path.join(dir, "assets", "cam");
+if (fs.existsSync(camDir)) for (const d of fs.readdirSync(camDir)) {
+	const p = path.join(camDir, d);
+	if (fs.statSync(p).isDirectory()) scan.push(...fs.readdirSync(p).filter((n) => n.endsWith(".jpg")).sort().map((n) => `cam/${d}/${n}`));
+	else if (d.endsWith(".jpg")) scan.push(`cam/${d}`);
+}
 await page.evaluate(async (scan) => {
 	await document.fonts.load('24px "JBM"');
 	await document.fonts.load('700 24px "JBM"');

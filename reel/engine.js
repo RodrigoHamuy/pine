@@ -122,7 +122,7 @@ function initial() {
 		mode: "shell", title: "~ — zsh",
 		shell: { lines: [], prompt: "⟦b.c|~⟧", typed: "", busy: false },
 		tabs: [], active: 0, input: "", attach: [], pane: { open: false, view: "changes", sub: "" }, overlay: null,
-		vs: { show: 0, typed: 0, dirty: false }, phone: { show: 0, msgs: [], input: "" }, drag: null, outro: 0, winDim: 0, winShift: 0, card: 0, cardText: "", finder: { show: 0, sel: -1, rows: [], ql: 0, text: "" },
+		vs: { show: 0, typed: 0, dirty: false }, phone: { show: 0, msgs: [], input: "", app: null }, cams: [], drag: null, outro: 0, winDim: 0, winShift: 0, card: 0, cardText: "", finder: { show: 0, sel: -1, rows: [], ql: 0, text: "" },
 	};
 }
 
@@ -387,6 +387,14 @@ function cameraAt(t) {
 
 // ---- drawing -------------------------------------------------------------------------------------
 
+/** The frame of a clip that is due at time t: its frames are assets/<src>/001.jpg on, `fps` a second of the finished film; it plays once and holds, or again and again with `loop`. */
+function frameOf(c, t) {
+	const s = Math.max(0, t - c.t0) / SPEED;
+	const i = Math.floor(s * c.fps);
+	const n = (c.loop ? i % c.frames : Math.min(i, c.frames - 1)) + 1;
+	return `assets/${c.src}/${String(n).padStart(3, "0")}.jpg`;
+}
+
 let SPEED = 1;
 function renderAt(seconds) {
 	const t = seconds * SPEED;
@@ -447,11 +455,22 @@ function renderAt(seconds) {
 			const a = ease(clamp(m.p * 1.0));
 			const style = `opacity:${a};transform:translateY(${(1 - a) * 22}px) scale(${0.96 + 0.04 * a});transform-origin:${m.me ? "100% 100%" : "0 100%"}`;
 			if (m.typing) return `<div class="msg in ty" style="${style}">•••</div>`;
-			return `<div class="msg ${m.me ? "out" : "in"}" style="${style}">${m.html}<small>${m.time}${m.me ? " ✓✓" : ""}</small></div>`;
+			// A picture or a clip sent along: a clip is drawn as the frame that is due (frameOf), with a mark that it plays.
+			const pic = m.clip ? `<div class="pic vid"><img src="${frameOf(m.clip, t)}"></div>` : m.img ? `<div class="pic"><img src="assets/${m.img}"></div>` : "";
+			return `<div class="msg ${m.me ? "out" : "in"}${pic ? " media" : ""}" style="${style}">${pic}${m.html}<small>${m.time}${m.me ? " ✓✓" : ""}</small></div>`;
 		}).join("");
 		$("phin").textContent = st.phone.input || "Message";
 		$("phin").className = st.phone.input ? "has" : "";
 		$("phtime").textContent = st.phone.clock || "17:42";
+		$("phname").textContent = st.phone.name || "pine";
+		$("phav").textContent = (st.phone.name || "pine")[0].toUpperCase();
+		// Another app on the same phone: a settings page with fields that are filled in (a camera's upload settings).
+		const app = $("phapp"), ap = st.phone.app;
+		app.style.display = ap && ap.show > 0.001 ? "block" : "none";
+		if (ap && ap.show > 0.001) {
+			app.style.opacity = ease(ap.show);
+			app.innerHTML = `<div class="at"><span class="bk">‹</span>${ap.title}</div><h6>${ap.section}</h6><div class="grp">${ap.fields.map((f) => `<p><span>${f.label}</span><b class="${f.on ? "on" : ""}">${f.secret ? "•".repeat(f.value.length) : escape(f.value)}${f.on ? '<i class="ct"></i>' : ""}</b></p>`).join("")}</div><div class="btn${ap.pressed ? " dn" : ""}">${ap.button}</div>${ap.result ? `<div class="res" style="opacity:${ease(clamp(ap.result))}">${ap.resultText}</div>` : ""}`;
+		}
 	}
 
 	// Finder, and Quick Look over it
@@ -470,7 +489,14 @@ function renderAt(seconds) {
 		ql.style.opacity = p;
 		ql.style.transform = `scale(${0.6 + 0.4 * p})`;
 		$("qltext").innerHTML = fs.text;
+		$("qltitle").textContent = fs.qlTitle || "TODO.md";
 	}
+
+	// what a camera sees: clips in small monitor windows on the desk, each a run of frames in assets/<src>/
+	$("cams").innerHTML = (st.cams || []).filter((c) => c.show > 0.001).map((c) => {
+		const p = ease(c.show);
+		return `<div class="cam${c.night ? " ir" : ""}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;opacity:${p};transform:scale(${0.92 + 0.08 * p})"><img src="${frameOf(c, t)}"><span class="rec"></span></div>`;
+	}).join("");
 
 	// a clip filmed on a phone, cut in over the whole picture: its frames are pictures in assets/<src>/,
 	// 001.jpg on, at `fps` frames a second of the finished film
