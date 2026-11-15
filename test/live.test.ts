@@ -59,6 +59,33 @@ test("live: the main agent hands a question to a specialist, which reads its own
 	await h.close();
 });
 
+// What an owner says in passing: no file is named and nothing says "for all agents". A default for
+// a tool is written where every agent reads it, and another agent then works by it.
+test("live: told a default for a tool in plain words, the main agent writes it into the TOOLS.md for all agents, and another agent works by it", { skip: !live, timeout: 600_000 }, async (t) => {
+	const m = await liveModel(t);
+	const speak = "---\nname: speak\ndescription: Say a text aloud to the owner. Voices are F1 and F2 (female), M1 and M2 (male). Speed is slow, normal or fast.\n---\nRun `say-aloud --voice <voice> --speed <speed> \"<text>\"`.\n";
+	const h = await harness({
+		mock: m.mock,
+		model: m.model,
+		pine: { main: "main", defaults: { model: m.ref } },
+		files: { "skills/speak/SKILL.md": speak },
+		agents: { main: { agent: { description: "the owner's assistant" } }, reader: { agent: { description: "reads things aloud" } } },
+	});
+	const tools = path.join(h.home, "TOOLS.md");
+	const before = fs.readFileSync(tools, "utf8");
+	const r = await h.pine.agents.run({ agent: "main", prompt: "default to fast and use a female voice", trust: "owner" });
+	assert.equal(r.status, "done", String(r.error));
+	const now = fs.readFileSync(tools, "utf8");
+	say(`TOOLS.md:\n${now}\nanswer: ${r.text}`);
+	assert.notEqual(now, before, `nothing was written into the TOOLS.md for all agents; the answer was: ${r.text}`);
+	assert.ok(/fast/i.test(now) && /female|\bF[12]\b/i.test(now), now);
+	// The agent that was not told reads it in its instructions.
+	const other = await h.pine.agents.run({ agent: "reader", prompt: "When you say something aloud, which speed and which kind of voice do you take? Answer in one line.", trust: "owner" });
+	assert.equal(other.status, "done", String(other.error));
+	assert.ok(/fast/i.test(other.text) && /female|\bF[12]\b/i.test(other.text), other.text);
+	await h.close();
+});
+
 // What an agent is given, asked for the way an owner asks: no tool is named in any message. For
 // each of the four kinds the agent has to list what it has, add one, use it and remove it again,
 // with its tools and without a look into pine's files.

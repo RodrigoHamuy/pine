@@ -683,9 +683,10 @@ export const WORKSPACE_FILES = ["AGENTS.md", "SOUL.md", "MEMORY.md"];
 
 /**
  * What is the same for all agents: three files in pine's home, in every agent's prompt, kept by
- * the main agent. AGENTS.md is how the owner wants things done whoever does them, TOOLS.md how
- * the tools are used here (which voice, which device, which account), USER.md what is known
- * about the owner. An agent's own files say what is different for it.
+ * the main agent. AGENTS.md is traits and behaviour (how every agent is to be and to act),
+ * TOOLS.md is tooling (defaults and preferences for tools of any kind: skills, MCP servers,
+ * shell commands, schedules, event sources; technical and functional details), USER.md what is
+ * known about the owner. An agent's own files say what is different for it.
  */
 export const SHARED_FILES = ["AGENTS.md", "TOOLS.md", "USER.md"];
 export const sharedFiles = (cfg: PineConfig): string[] => SHARED_FILES.map((f) => path.join(cfg.home, f));

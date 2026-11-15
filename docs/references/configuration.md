@@ -9,8 +9,8 @@ Everything pine needs is in its home directory: `~/.pine` by default, or `$PINE_
   models.json          optional: your own model servers, in pi's format
   .env                 secrets, referenced from the JSON files as ${NAME}
   auth.json            provider credentials, written by `pine login`
-  AGENTS.md            rules for all agents                 ┐ in every agent's prompt,
-  TOOLS.md             how the tools are used here          │ kept by the main agent
+  AGENTS.md            traits and behaviour for all agents  ┐ in every agent's prompt,
+  TOOLS.md             tooling defaults and preferences     │ kept by the main agent
   USER.md              what all agents know about you       ┘ (agents.md)
   agents/
     main/

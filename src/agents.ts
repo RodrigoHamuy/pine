@@ -89,11 +89,11 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
 	const [rules, tools, user] = sharedFiles(cfg);
 	const owner =
 		agent.id === mainId
-			? `Three files in pine's home are part of every agent's instructions, and you are the one who keeps them. When your owner wants something to hold for all agents (a rule, a preference, a default), write it into the one it belongs in; what is for you alone goes into your own files. An agent's own files say what is different for that agent.
-  - ${rules}: rules for all agents, how your owner wants things done whoever does them.
-  - ${tools}: how the tools are used here, for all agents: which voice, device, account or program to take, and other details of this setup.
+			? `Three files in pine's home are part of every agent's instructions, and you are the one who keeps them. A default or a preference for how a tool is used belongs in the TOOLS.md there: when your owner tells you one, write it there right away, without being asked where, unless they say it is for one agent alone. How to be or to behave goes into the AGENTS.md there when your owner says it is for all agents, and into your own AGENTS.md when it is for you. An agent's own files say what is different for that agent.
+  - ${rules}: traits and behaviour for all agents: how every agent is to be and to act.
+  - ${tools}: tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup. A tool is anything an agent works with: a skill, an MCP server, a shell command, a schedule, an event source.
   - ${user}: what all agents know about your owner.`
-			: `Three files are the same for all agents and are in your instructions: ${rules} (rules for all agents), ${tools} (how the tools are used here: which voice, device, account or program to take) and ${user} (what is known about your owner). They hold for you unless your own files say something else for you. ${mainId} keeps them and you cannot change them: when something belongs there, say so.`;
+			: `Three files are the same for all agents and are in your instructions: ${rules} (traits and behaviour for all agents), ${tools} (tooling: defaults and preferences for the tools, and other technical or functional details of this setup) and ${user} (what is known about your owner). They hold for you unless your own files say something else for you. ${mainId} keeps them and you cannot change them: when something belongs there, say so.`;
 	// How far its tools reach is fixed for an agent and its kind of run, so it is said here. What a
 	// conversation loses or gets on the way is said in the notes.
 	const reach =

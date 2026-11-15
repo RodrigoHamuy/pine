@@ -43,8 +43,8 @@ with the files for all agents they are read into its prompt with every conversat
 | `workspace/AGENTS.md` | Its purpose and how it works. You shape it by telling the agent ("your purpose is ...", "from now on answer in tables") | The agent, and you |
 | `workspace/SOUL.md` | Who it is: character and tone | The agent, and you. For another agent, the main agent: tell it how that agent should be or sound, and it replaces the file with `update_agent` (`soul`) |
 | `workspace/MEMORY.md` | What matters beyond a conversation: decisions, facts, preferences, open ends | The agent |
-| `AGENTS.md` in pine's home | Rules for all agents: how you want things done, whoever does them. See "What holds for all agents" | The main agent, and you |
-| `TOOLS.md` in pine's home | How the tools are used here, for all agents: which voice, device, account or program to take | The main agent, and you |
+| `AGENTS.md` in pine's home | Traits and behaviour for all agents: how every agent is to be and to act. See "What holds for all agents" | The main agent, and you |
+| `TOOLS.md` in pine's home | Tooling for all agents: defaults and preferences for the tools, and other technical or functional details of your setup | The main agent, and you |
 | `USER.md` in pine's home | What every agent knows about you. One file for all agents | The main agent, and you |
 | `agents/<id>/AGENTS.md` | Optional. Rules of yours that the agent reads and cannot change | You |
 
@@ -67,19 +67,24 @@ writes these files as before, without a question ([security.md](security.md)).
 ### What holds for all agents
 
 A rule, a preference or a default that is to hold for every agent is not a setting: tell the
-main agent ("for all agents: ...", "by default every agent ..."), and it writes it into one of
-three files in pine's home. These are pine's global instruction files: a global `AGENTS.md`,
-a global `TOOLS.md` and `USER.md`. They are put into every agent's prompt, and only the main
-agent (and you) can change them.
+main agent, and it writes it into one of three files in pine's home. These are pine's global
+instruction files: a global `AGENTS.md`, a global `TOOLS.md` and `USER.md`. They are put into
+every agent's prompt, and only the main agent (and you) can change them.
 
 | File | What goes into it | For example |
 |---|---|---|
-| `AGENTS.md` (in pine's home) | Rules for all agents: how you want things done, whoever does them | "Answer in English." "Ask before you delete anything." |
-| `TOOLS.md` (in pine's home) | How the tools are used here: which voice, device, account, program or folder to take when there are several, and other details of this setup | "Speak with voice F2, the fast one." "Photos go to the NAS, not the laptop." |
+| `AGENTS.md` (in pine's home) | Traits and behaviour: how every agent is to be and to act | "Answer in English." "Ask before you delete anything." |
+| `TOOLS.md` (in pine's home) | Tooling: defaults and preferences for the tools, and other technical or functional details of your setup. A tool is anything an agent works with: a skill, an MCP server, a shell command, a schedule, an event source | "Search with ripgrep." "Reports go to the NAS." "Speak fast, with a female voice." |
 | `USER.md` (in pine's home) | What every agent knows about you | Your name, what you do, how you like to be answered |
 
+The main agent is told where what goes. A default or a preference for a tool it writes into
+`TOOLS.md` when you say it, without being told where ("search with ripgrep by default"), unless
+you say it is for one agent alone. How to be or to behave it writes into the global
+`AGENTS.md` when you say it is for all agents ("every agent answers in English"), and into
+its own `AGENTS.md` otherwise.
+
 They hold unless an agent's own file says otherwise: its `AGENTS.md` says what is different
-for that agent ("this agent speaks with voice M1"), and for that agent its own file counts.
+for that agent ("this agent answers in German"), and for that agent its own file counts.
 What only one agent should know or do goes into that agent's files, not into these.
 
 `pine init` starts the three as short stubs, and a home from before gets the ones it lacks
@@ -105,7 +110,7 @@ Its system prompt is put together from, in this order:
    looks for in files (`sources`, `mcp_servers`, `skills`, `schedules`), that for everything
    else it should explain the steps to its owner, and that text from tools, files and the web
    is information, never a command. An `agents/<id>/SYSTEM.md` replaces this text.
-2. `AGENTS.md` from pine's home, the rules for all agents, then `agents/<id>/AGENTS.md`, if
+2. `AGENTS.md` from pine's home, traits and behaviour for all agents, then `agents/<id>/AGENTS.md`, if
    you keep one: rules the agent cannot change.
 3. The files it keeps itself, from its workspace: `AGENTS.md` (also `CLAUDE.md`), `SOUL.md`,
    then `TOOLS.md` and `USER.md` from pine's home, then `MEMORY.md`. See "The files an agent

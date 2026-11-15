@@ -31,8 +31,8 @@ test("instructions: an agent's own files and the files for all agents are read i
 	// Each agent is told what the files are for and who keeps those for all agents.
 	const at = (name: string) => path.join(h.home, name);
 	assert.ok(main.includes("MEMORY.md: your memory") && main.includes("AGENTS.md: your purpose and how you work"));
-	assert.ok(main.includes("part of every agent's instructions, and you are the one who keeps them") && main.includes(`${at("AGENTS.md")}: rules for all agents`) && main.includes(`${at("TOOLS.md")}: how the tools are used here`) && main.includes(`${at("USER.md")}: what all agents know about your owner`));
-	assert.ok(gonzo.includes(`${at("TOOLS.md")} (how the tools are used here`) && gonzo.includes("main keeps them and you cannot change them") && !gonzo.includes("you are the one who keeps them"));
+	assert.ok(main.includes("part of every agent's instructions, and you are the one who keeps them") && main.includes(`${at("AGENTS.md")}: traits and behaviour for all agents`) && main.includes(`${at("TOOLS.md")}: tooling for all agents`) && main.includes("A default or a preference for how a tool is used belongs in the TOOLS.md there") && main.includes(`${at("USER.md")}: what all agents know about your owner`));
+	assert.ok(gonzo.includes(`${at("TOOLS.md")} (tooling: defaults and preferences for the tools`) && gonzo.includes("main keeps them and you cannot change them") && !gonzo.includes("you are the one who keeps them"));
 	await h.close();
 });
 

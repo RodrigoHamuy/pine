@@ -17,8 +17,8 @@ Three things to know before anything else:
 2. **An agent is a folder**: `agents/<id>/agent.json` and a workspace. In the workspace lie the
    files the agent keeps itself and that are read into its prompt: `AGENTS.md` (its purpose),
    `SOUL.md` (who it is), `MEMORY.md` (its memory). Three files in the home are for all agents
-   and kept by the main agent: `AGENTS.md` (rules for all), `TOOLS.md` (how the tools are used
-   here) and `USER.md` (what agents know about you). The workspace is wherever `workspace` points, for example a repository.
+   and kept by the main agent: `AGENTS.md` (traits and behaviour), `TOOLS.md` (tooling defaults
+   and preferences) and `USER.md` (what agents know about you). The workspace is wherever `workspace` points, for example a repository.
 3. **Where content came from decides what it may do.** Your own messages get the agent's full
    tool set. Anything else is data. An event from outside runs with a reduced tool set in a
    separate session; an event from a source a conversation subscribed to arrives in that
