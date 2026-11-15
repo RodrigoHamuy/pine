@@ -2525,9 +2525,25 @@ export class AgentManager {
 			const fixed = this.contextBlock(agent, profile, live.trust === "owner", short(agent, live.trust));
 			pi.on("before_agent_start", async (event: any) => ({ systemPrompt: `${event.systemPrompt}\n\n${fixed}` }));
 
+			// How many tool calls ago the conversation last sent its list of steps (stepsReminder).
+			let sinceSteps = 0;
 			pi.on("tool_result", async (event: any) => {
-				if (event.isError) return undefined;
 				const tool = String(event.toolName);
+				// A list of steps is sent at the start and then forgotten over the work: nothing in a run of
+				// tool calls brings it back into view, and the owner watches a list that says "0 of 6" to the end.
+				// So the conversation is reminded where it is at work, in a tool's answer, every few calls.
+				// Not a sub-agent: the list is its conversation's.
+				let remind: string | undefined;
+				if (live.trust === "owner" && !live.leaf) {
+					const list = tool === "todo" ? [] : this.todos(live.perm);
+					if (!list.some((t) => t.status !== "done")) sinceSteps = 0;
+					else if (++sinceSteps >= STEPS_STALE) {
+						sinceSteps = 0;
+						remind = stepsReminder(list);
+					}
+				}
+				const reminded = () => (remind && Array.isArray(event.content) ? { content: [...event.content, { type: "text", text: remind }], structuredContent: event.structuredContent } : undefined);
+				if (event.isError) return reminded();
 				// What the conversation writes into its own instruction files it knows: it is not told again in a note.
 				if (short(agent, live.trust) && (tool === "write" || tool === "edit") && typeof event.input?.path === "string") this.wroteOwn(agent, live, event.input.path);
 				noteLinks(tool, event.content);
@@ -2537,8 +2553,8 @@ export class AgentManager {
 				// own servers, whose pictures are the agent's eyes, and not when the answer goes
 				// somewhere else than the conversation (a chat), where nothing was drawn.
 				const from = serverOf(tool);
-				if (from === undefined || profile.mcp[from]?.pine || live.current?.task.reply || !Array.isArray(event.content) || !event.content.some((c: any) => c?.type === "image")) return undefined;
-				return { content: [...event.content, { type: "text", text: SHOWN }], structuredContent: event.structuredContent };
+				if (from === undefined || profile.mcp[from]?.pine || live.current?.task.reply || !Array.isArray(event.content) || !event.content.some((c: any) => c?.type === "image")) return reminded();
+				return { content: [...event.content, { type: "text", text: SHOWN }, ...(remind ? [{ type: "text", text: remind }] : [])], structuredContent: event.structuredContent };
 			});
 
 			pi.on("tool_call", async (event: any, ctx: any) => {
@@ -3429,6 +3445,16 @@ export class AgentManager {
 			this.log.warn(`closing session ${id} failed`, errText(e));
 		}
 	}
+}
+
+/** After this many tool calls without a word about its list of steps, a conversation with open steps is reminded of it. */
+const STEPS_STALE = 6;
+
+/** Added to a tool's answer when the list of steps has stood still over the work (see the tool_result handler). */
+function stepsReminder(list: Todo[]): string {
+	const done = list.filter((t) => t.status === "done").length;
+	const doing = list.find((t) => t.status === "in_progress");
+	return `[pine: your list of steps has not changed for ${STEPS_STALE} tool calls. It says ${done} of ${list.length} done, and ${doing ? `"${doing.text}" in work` : "no step in work"}. Your owner watches this list. If a step is finished or the next has begun, send the list again with todo now, then go on.]`;
 }
 
 /** Added to a tool's answer that came with a picture (see the tool_result handler). */

@@ -276,7 +276,9 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					const list = manager.setTodos(live, run().task, p.items as any);
 					if (!list.length) return ok("The list is empty now.");
 					const open = list.filter((t) => t.status !== "done").length;
-					return ok(`${list.map((t) => `- [${t.status === "done" ? "x" : t.status === "in_progress" ? "~" : " "}] ${t.text}`).join("\n")}\n${open ? `${open} of ${list.length} still to do.` : "All done."}`);
+					// What comes next is said here, where the list was just sent: the owner watches it, and a list
+					// that is sent once and never again says "0 of 6" to the end of the work.
+					return ok(`${list.map((t) => `- [${t.status === "done" ? "x" : t.status === "in_progress" ? "~" : " "}] ${t.text}`).join("\n")}\n${open ? `${open} of ${list.length} still to do. Send the list again each time a step is done, and once more before your final answer, so that it does not end with steps open that are finished.` : "All done."}`);
 				},
 			}),
 		);

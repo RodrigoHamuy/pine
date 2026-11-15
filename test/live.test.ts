@@ -115,6 +115,31 @@ test("live: a sound that a media server made is saved and played to the owner, n
 	await h.close();
 });
 
+// A list of steps is easy to start and easy to forget: the work goes on in tool calls, and nothing in them
+// mentions the list. pine reminds the conversation where it works, so that the list ends as the work ends.
+test("live: an agent that lists the steps of its work keeps the list up to date and ends with every step done", { skip: !live, timeout: 900_000 }, async (t) => {
+	const m = await liveModel(t);
+	const h = await harness({ mock: m.mock, model: m.model, pine: { main: "main", defaults: { model: m.ref } }, agents: { main: { agent: { description: "the owner's assistant" } } } });
+	const sent: any[][] = [];
+	h.pine.bus.subscribe("agent/main/todos", (e) => void sent.push((e.payload as any).items));
+	// A job long enough that the list is far behind by the time the work ends, and no word about keeping it for anybody.
+	const r = await h.pine.agents.run({
+		agent: "main",
+		prompt:
+			"Build a small documentation site in site/ for an imaginary command line tool called tern. Four pages: index.html, install.html, usage.html and faq.html, and one style.css that all of them use. Every page has a nav that links all four pages, a heading and three paragraphs of its own. When the pages are written, check each one with grep: that it links the stylesheet and all four pages; fix what is missing. Then check the stylesheet has a rule for nav, h1 and p. Last, write site/REPORT.md that lists every file with its size in bytes (use wc -c). This is a job with several steps, so plan it first.",
+		trust: "owner",
+	});
+	assert.equal(r.status, "done", String(r.error));
+	const last = h.pine.agents.todosOf("main", "main");
+	const calls = h.pine.tasks.list({ agent: "main" })[0]?.meta.stats?.tools.length;
+	say(`the list was sent ${sent.length} times; at the end: ${JSON.stringify(last.map((x: any) => x.status))}; tool calls: ${calls}`);
+	assert.ok(fs.existsSync(path.join(h.workspace("main"), "site", "REPORT.md")), "the work itself was done");
+	assert.ok(last.length >= 3, `it kept a list: ${JSON.stringify(last)}`);
+	assert.ok(sent.length >= 3, `the list was sent only ${sent.length} time(s): it was not kept up to date`);
+	assert.deepEqual(last.filter((x: any) => x.status !== "done"), [], "no step is left open when the work is finished");
+	await h.close();
+});
+
 // What an agent is given, asked for the way an owner asks: no tool is named in any message. For
 // each of the four kinds the agent has to list what it has, add one, use it and remove it again,
 // with its tools and without a look into pine's files.

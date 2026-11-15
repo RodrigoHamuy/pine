@@ -455,3 +455,33 @@ test("conversations stay until they are removed or unused for too long; pinned, 
 	assert.equal(h.pine.agents.conversations("main").find((x) => x.session === "keep")!.pinned, false);
 	await h.close();
 });
+
+test("steps: a list that stands still over the work is brought back in a tool's answer, and one that is kept up to date is left alone", async () => {
+	const h = await harness({ agents: { main: {} } });
+	const list = (...status: string[]) => ({ name: "todo", args: { items: ["read the code", "change it", "run the tests"].map((text, i) => ({ text, status: status[i] })) } });
+	const look = (n: number) => ({ tools: [{ name: "manual", args: { search: `telegram ${n}` } }] });
+	const run = (session: string, steps: any[]) => h.pine.agents.run({ agent: "main", session, prompt: mockMsg([...steps, { text: "ok" }]), ...owner });
+	const said = /\[pine: your list of steps has not changed for 6 tool calls\. It says (\d) of 3 done, and (.*?)\. Your owner watches this list\. If a step is finished or the next has begun, send the list again with todo now, then go on\.\]$/;
+
+	// Sent once and then forgotten: after six calls the answer of the sixth says so, and again six calls later.
+	await run("a", [{ tools: [list("in_progress", "pending", "pending")] }, ...Array.from({ length: 13 }, (_, n) => look(n))]);
+	let out = h.toolResults();
+	assert.match(out[0], /3 of 3 still to do\. Send the list again each time a step is done, and once more before your final answer/);
+	assert.deepEqual(out.map((r, n) => (said.test(r) ? n : -1)).filter((n) => n >= 0), [6, 12], "the sixth call after the list, and the sixth after that");
+	assert.deepEqual(said.exec(out[6])!.slice(1), ["0", '"read the code" in work']);
+	assert.ok(out[6].startsWith('"telegram 5"'), "the tool's own answer stands first, as it was");
+
+	// Kept up to date, or finished: nothing is added.
+	await run("b", [{ tools: [list("in_progress", "pending", "pending")] }, ...[0, 1, 2, 3].map(look), { tools: [list("done", "in_progress", "pending")] }, ...[4, 5, 6, 7].map(look), { tools: [list("done", "done", "done")] }, ...Array.from({ length: 8 }, (_, n) => look(n + 8))]);
+	out = h.toolResults();
+	assert.equal(out.filter((r) => /\[pine: your list of steps/.test(r)).length, 0, out.join("\n---\n").slice(0, 600));
+	assert.match(out[5], /2 of 3 still to do\./);
+	assert.match(out[10], /All done\.$/);
+
+	// With no step in work it says that, and a conversation without a list is never told anything.
+	await run("c", [{ tools: [list("done", "pending", "pending")] }, ...Array.from({ length: 6 }, (_, n) => look(n))]);
+	assert.deepEqual(said.exec(h.toolResults()[6])!.slice(1), ["1", "no step in work"]);
+	await run("d", Array.from({ length: 8 }, (_, n) => look(n)));
+	assert.equal(h.toolResults().filter((r) => /\[pine:/.test(r)).length, 0);
+	await h.close();
+});
