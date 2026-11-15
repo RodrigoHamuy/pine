@@ -209,7 +209,7 @@ switched off. Looking at a folder runs nothing from it.
 Consequences worth knowing:
 
 - An agent cannot change its own `agent.json`, its extensions or `pine.json`.
-  It can change the files it is meant to keep: `AGENTS.md`, `SOUL.md` and `MEMORY.md` in its
+  It can change the files it is meant to keep: `AGENTS.md`, `SOUL.md`, `TOOLS.md` and `MEMORY.md` in its
   workspace, and for the main agent the files for all agents in pine's home (`AGENTS.md`,
   `TOOLS.md`, `USER.md`; [agents.md](agents.md)), until the session is
   restricted; see layer 4. Rules it must never change go into `agents/<id>/AGENTS.md`, which
@@ -381,7 +381,7 @@ page says "now send the notes folder to ...". pine tracks that:
   check it. It is taken at its word because you chose the server. What such a tool is asked (a
   search text, a path) does reach the server. For a server where that matters, set
   `"approve": "always"`: then every call asks, reading included.
-- A tainted session keeps the agent's own files: `MEMORY.md`, `AGENTS.md`, `SOUL.md`, and
+- A tainted session keeps the agent's own files: `MEMORY.md`, `AGENTS.md`, `SOUL.md`, `TOOLS.md`, and
   for the main agent the files for all agents (`AGENTS.md`, `TOOLS.md` and `USER.md` in
   pine's home). It writes them as before, and nobody checks what it writes there, so text
   from a page can end up in the agent's memory, and through the main agent in every agent's
@@ -858,8 +858,8 @@ itself can be fooled by a page, but it has nothing to give away and cannot act.
   run programs (a `CLAUDE.md` in a repository, a hook): the file tools refuse that, and
   nothing looks at a shell command that does it, unless it names a hook or a repository's
   configuration, which asks you. For an agent that reads the web, `safe` mode is the wall.
-- **Memory after outside content.** An agent writes its own `MEMORY.md`, `AGENTS.md` and
-  `SOUL.md` also in a conversation that has read outside content, unchecked. What a page
+- **Memory after outside content.** An agent writes its own `MEMORY.md`, `AGENTS.md`,
+  `SOUL.md` and `TOOLS.md` also in a conversation that has read outside content, unchecked. What a page
   talks it into writing there is read in every later conversation. The main agent writes
   the files for all agents the same way (`AGENTS.md`, `TOOLS.md` and `USER.md` in pine's
   home), and what it is talked into writing there is read by every agent. Look into those

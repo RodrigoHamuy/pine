@@ -906,7 +906,8 @@ test("tui: how fast the model read and wrote is shown beside its thought, in the
 	await until(() => !/working ·/.test(t.text()), 5000, "the work to be done");
 	await t.sees(bar);
 	// An answer that comes at once says nothing about speed: nothing new is shown, and the last figures stay.
-	const before = bar.exec(t.text())![0];
+	// (Only the figures: how full the context is can move by a percent with the second message.)
+	const before = new RegExp(`↑ ${rate} ↓ ${rate} `).exec(bar.exec(t.text())![0])![0];
 	await t.send(mockMsg([{ text: "ok" }]));
 	await t.sees(/^ ok$/m);
 	assert.ok(t.text().includes(before), t.text());

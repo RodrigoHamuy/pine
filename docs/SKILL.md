@@ -16,9 +16,10 @@ Three things to know before anything else:
    `models.json` (pi's model file), `.env` (secrets), and one folder per agent under `agents/`.
 2. **An agent is a folder**: `agents/<id>/agent.json` and a workspace. In the workspace lie the
    files the agent keeps itself and that are read into its prompt: `AGENTS.md` (its purpose),
-   `SOUL.md` (who it is), `MEMORY.md` (its memory). Three files in the home are for all agents
-   and kept by the main agent: `AGENTS.md` (traits and behaviour), `TOOLS.md` (tooling defaults
-   and preferences) and `USER.md` (what agents know about you). The workspace is wherever `workspace` points, for example a repository.
+   `SOUL.md` (who it is), `TOOLS.md` (how it uses its tools), `MEMORY.md` (its memory). Three
+   files in the home are for all agents and kept by the main agent: `AGENTS.md` (traits and
+   behaviour), `TOOLS.md` (tooling defaults and preferences) and `USER.md` (what agents know
+   about you); an agent's own `AGENTS.md` and `TOOLS.md` say what is different for it. The workspace is wherever `workspace` points, for example a repository.
 3. **Where content came from decides what it may do.** Your own messages get the agent's full
    tool set. Anything else is data. An event from outside runs with a reduced tool set in a
    separate session; an event from a source a conversation subscribed to arrives in that
@@ -55,6 +56,20 @@ For what has no tool (the control API, a secret):
    (quitting and reopening the terminal UI restarts an embedded one).
 3. Do not try to edit those files or work around the restriction. Say plainly that this is a
    step for them.
+
+What you keep yourself are four files at the top of your workspace, which are part of your
+instructions: `AGENTS.md` (your purpose and how you work), `SOUL.md` (who you are), `TOOLS.md`
+(your own defaults and preferences for your tools) and `MEMORY.md` (what should outlive a
+conversation). Three more files hold for every agent and lie in pine's home, where only the
+main agent writes: `AGENTS.md` (traits and behaviour for all agents), `TOOLS.md` (tooling
+defaults and preferences for all agents) and `USER.md` (what is known about your owner). You
+read both an `AGENTS.md` and a `TOOLS.md` of each kind; yours say what is different or more for
+you. If you are the main agent: a default or a preference for a tool that your owner tells you
+is for all agents unless they say otherwise, and goes into the `TOOLS.md` in pine's home;
+"for you alone" goes into your own, and for another agent alone you use `update_agent` with
+`tooling`. If you are not: write it into your own file, and when your owner means all agents,
+tell them to ask the main agent. Every file that is read as instructions is listed in
+[references/agents.md](references/agents.md), "Every file that is read as instructions".
 
 One thing you can start yourself: when your owner asks you to install or connect an MCP
 server, call `add_mcp_server` with a short name and either its https URL (a remote server) or,

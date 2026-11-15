@@ -10,6 +10,7 @@ agents/gonzo/
   workspace/     where it works, and the files it keeps itself:
     AGENTS.md      its purpose and how it works
     SOUL.md        who it is: character and tone
+    TOOLS.md       how it uses its tools, on top of the TOOLS.md for all agents
     MEMORY.md      what should outlive a conversation
   skills/        its own skills, one folder each; the agent adds them with add_skill
   conversations/ what was set up for one conversation alone (its skills); made when needed
@@ -21,7 +22,7 @@ agents/gonzo/
 
 Ask the main agent ("create an agent that keeps my books"): it calls `create_agent`, you confirm
 what it proposes, and the folder above is made with `agent.json` and a workspace that holds its
-instructions (`AGENTS.md`) and stubs of `SOUL.md` and `MEMORY.md`. The agent exists at once,
+instructions (`AGENTS.md`) and stubs of `SOUL.md`, `TOOLS.md` and `MEMORY.md`. The agent exists at once,
 without a restart. Only the main agent has this tool; the
 others tell you to ask it. See [setup.md](setup.md).
 
@@ -42,23 +43,28 @@ with the files for all agents they are read into its prompt with every conversat
 |---|---|---|
 | `workspace/AGENTS.md` | Its purpose and how it works. You shape it by telling the agent ("your purpose is ...", "from now on answer in tables") | The agent, and you |
 | `workspace/SOUL.md` | Who it is: character and tone | The agent, and you. For another agent, the main agent: tell it how that agent should be or sound, and it replaces the file with `update_agent` (`soul`) |
+| `workspace/TOOLS.md` | How it uses its tools: its own defaults and preferences for them, and technical or functional details of its work. It adds to the `TOOLS.md` for all agents, and where the two differ, the agent's own counts for it. It can be empty | The agent, and you. For another agent, the main agent, with `update_agent` (`tooling`) |
 | `workspace/MEMORY.md` | What matters beyond a conversation: decisions, facts, preferences, open ends | The agent |
 | `AGENTS.md` in pine's home | Traits and behaviour for all agents: how every agent is to be and to act. See "What holds for all agents" | The main agent, and you |
-| `TOOLS.md` in pine's home | Tooling for all agents: defaults and preferences for the tools, and other technical or functional details of your setup | The main agent, and you |
+| `TOOLS.md` in pine's home | Tooling for all agents: defaults and preferences for the tools, and other technical or functional details of your setup. Every agent reads it, before its own `TOOLS.md` | The main agent, and you |
 | `USER.md` in pine's home | What every agent knows about you. One file for all agents | The main agent, and you |
 | `agents/<id>/AGENTS.md` | Optional. Rules of yours that the agent reads and cannot change | You |
 
 Every agent is told what these files are for: to write into `AGENTS.md` what you say it is for
-or how you want things done, to put into `MEMORY.md` what it learns that matters later, at
+or how you want things done, to keep in `TOOLS.md` its own defaults and preferences for its
+tools (a tool is anything it works with: a skill, an MCP server, a shell command, a schedule,
+an event source), to put into `MEMORY.md` what it learns that matters later, at
 once and briefly, and to tidy its memory when it has grown long (merge, drop what no longer
 holds, move details into other files and leave a pointer). When `MEMORY.md` passes about 6 000
 characters, pine reminds the agent, because all of it is read with every message.
 
 `pine init` starts them as short stubs; `create_agent` writes the instructions it was given
-into `AGENTS.md` and starts the other two as stubs. A file that is missing is simply not
+into `AGENTS.md` and starts the other three as stubs. A file that is missing is simply not
 loaded, and the agent creates it when it has something to put there. A change applies from the
 agent's next message on. Only these names (and a `CLAUDE.md`), at the top of the workspace, are
 read; anything else the agent keeps there is its own notes, which it reads when it needs them.
+Every file that is read as instructions, and from where, is listed under "Every file that is
+read as instructions" below.
 
 Other agents get the three files of pine's home in their prompt but cannot open or change
 them; they tell you when something belongs there. A conversation that has read outside content
@@ -77,15 +83,28 @@ every agent's prompt, and only the main agent (and you) can change them.
 | `TOOLS.md` (in pine's home) | Tooling: defaults and preferences for the tools, and other technical or functional details of your setup. A tool is anything an agent works with: a skill, an MCP server, a shell command, a schedule, an event source | "Search with ripgrep." "Reports go to the NAS." "Speak fast, with a female voice." |
 | `USER.md` (in pine's home) | What every agent knows about you | Your name, what you do, how you like to be answered |
 
-The main agent is told where what goes. A default or a preference for a tool it writes into
-`TOOLS.md` when you say it, without being told where ("search with ripgrep by default"), unless
-you say it is for one agent alone. How to be or to behave it writes into the global
-`AGENTS.md` when you say it is for all agents ("every agent answers in English"), and into
-its own `AGENTS.md` otherwise.
+### Where a default or a preference goes
 
-They hold unless an agent's own file says otherwise: its `AGENTS.md` says what is different
-for that agent ("this agent answers in German"), and for that agent its own file counts.
-What only one agent should know or do goes into that agent's files, not into these.
+You do not have to say where to write a default or a preference: say it, and say whom it is
+for when it is not for everybody. The main agent keeps both kinds of file and is told to tell
+them apart:
+
+| You say to the main agent | It writes it into |
+|---|---|
+| A default or a preference for a tool, and nothing about whom it is for ("search with ripgrep by default", "speak with the fast voice") | `TOOLS.md` in pine's home: it is for all agents |
+| The same, "for you alone" | Its own `workspace/TOOLS.md` |
+| The same, "for the books agent" | That agent's `workspace/TOOLS.md`, with `update_agent` (`tooling`); you confirm it |
+| How to be or to behave, "for all agents" ("every agent answers in English") | `AGENTS.md` in pine's home |
+| How to be or to behave, and nothing about whom it is for | Its own `workspace/AGENTS.md` |
+
+Any other agent writes what you tell it into its own files, and tells you to ask the main
+agent when you mean all agents.
+
+`AGENTS.md` and `TOOLS.md` exist twice for every agent: the one in pine's home, for all
+agents, and the one in its own workspace. Both are read, the one for all agents first, and the
+agent's own says what is different or more for it ("this agent answers in German", "this
+agent searches with grep"); where the two differ, its own counts for that agent. What only one
+agent should know or do goes into that agent's files, not into the ones for all.
 
 `pine init` starts the three as short stubs, and a home from before gets the ones it lacks
 when pine starts. A stub nobody has written into is left out of the prompt where tools are
@@ -113,10 +132,33 @@ Its system prompt is put together from, in this order:
 2. `AGENTS.md` from pine's home, traits and behaviour for all agents, then `agents/<id>/AGENTS.md`, if
    you keep one: rules the agent cannot change.
 3. The files it keeps itself, from its workspace: `AGENTS.md` (also `CLAUDE.md`), `SOUL.md`,
-   then `TOOLS.md` and `USER.md` from pine's home, then `MEMORY.md`. See "The files an agent
-   keeps itself".
+   then `TOOLS.md` from pine's home and its own `TOOLS.md`, then `USER.md` from pine's home,
+   then `MEMORY.md`. See "The files an agent keeps itself".
    After them the instruction files of a folder opened for the conversation, and any files in
-   `context`.
+   `context`. All of them are in the table below.
+
+### Every file that is read as instructions
+
+In the order they enter the prompt. A file that does not exist is left out.
+
+| File | Where | What it is | Who writes it |
+|---|---|---|---|
+| `SYSTEM.md` | `agents/<id>/` | Optional. Replaces pine's base prompt for this agent | You |
+| `AGENTS.md` (for all agents) | pine's home | Traits and behaviour for every agent | The main agent, and you |
+| `AGENTS.md` (your rules for one agent) | `agents/<id>/` | Optional. Rules the agent reads and cannot change | You |
+| `AGENTS.md` (the agent's own) | its workspace | Its purpose and how it works | The agent, and you; the main agent with `update_agent` (`instructions`) |
+| `CLAUDE.md` | its workspace | Optional. Read like its `AGENTS.md`, for a workspace that is a repository with one | You |
+| `SOUL.md` | its workspace | Who it is: character and tone | The agent, and you; the main agent with `update_agent` (`soul`) |
+| `TOOLS.md` (for all agents) | pine's home | Tooling defaults and preferences for every agent | The main agent, and you |
+| `TOOLS.md` (the agent's own) | its workspace | Its own tooling defaults and preferences, on top of the ones for all agents | The agent, and you; the main agent with `update_agent` (`tooling`) |
+| `USER.md` | pine's home | What every agent knows about you | The main agent, and you |
+| `MEMORY.md` | its workspace | What should outlive a conversation | The agent |
+| `AGENTS.md`, `CLAUDE.md` of an opened folder | the folder you opened for a conversation | The project's instructions, for that conversation ([coding.md](coding.md)) | You, or whoever keeps the project |
+| Files named in `context` | anywhere you point `agent.json` at | Further instruction files of yours | You |
+| `SKILL.md` | a skill's folder | Not read into the prompt: one line per skill is, and the agent reads the file when it uses the skill | `add_skill`, or you |
+
+No other markdown file is read by itself. `IDENTITY.md`, `HEARTBEAT.md`, daily notes and
+whatever else lies in a workspace are the agent's own files, which it opens when it needs them.
 4. Its skills: one line each; the agent reads a skill's file when it needs it. This manual is
    not among them: the agent searches it with its `manual` tool (see below). An agent asked
    for another model or a route looks it up and tells you what to put into which file; an
@@ -220,7 +262,7 @@ With families, pine builds every request so that its beginning does not change:
 |---|---|
 | The tools | Always in one order and with fixed wording, for every conversation of the agent. Nothing in a description names what changes (which agents there are, which sources): that is in the note. |
 | The system prompt | pine's own text only, the same for every conversation of the agent, today and after a restart. |
-| The instruction files (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, those for all agents in pine's home, a folder's) | They open the conversation as a first message of their own, in `<instructions>`, as they were when the conversation began. What is added to one later, the agent is told once, in the note in front of the next message ("New in your MEMORY.md since this conversation began"). A `MEMORY.md` that was rewritten (tidied, lines dropped) is told the same way, as it now reads. A file of rules that lost or changed lines (`AGENTS.md`, `SOUL.md`, one of the files for all agents), or a memory longer than 8 000 characters, is taken anew, so that a rule that was taken back is not in front of the model: that conversation is read again once, the tools and pine's text before it are not. |
+| The instruction files (`AGENTS.md`, `SOUL.md`, `TOOLS.md`, `MEMORY.md`, those for all agents in pine's home, a folder's) | They open the conversation as a first message of their own, in `<instructions>`, as they were when the conversation began. What is added to one later, the agent is told once, in the note in front of the next message ("New in your MEMORY.md since this conversation began"). A `MEMORY.md` that was rewritten (tidied, lines dropped) is told the same way, as it now reads. A file of rules that lost or changed lines (`AGENTS.md`, `SOUL.md`, `TOOLS.md`, one of the files for all agents), or a memory longer than 8 000 characters, is taken anew, so that a rule that was taken back is not in front of the model: that conversation is read again once, the tools and pine's text before it are not. |
 | What changes (agents to hand work to, event sources to subscribe to, the time) | In the `<pine-note>` in front of a message, only when it changed. |
 
 So a line the agent writes into `MEMORY.md`, an agent that is created or removed, a schedule,

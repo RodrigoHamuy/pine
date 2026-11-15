@@ -27,7 +27,7 @@ test("pine init creates a private home that passes pine check", async (t) => {
 	const init = await run(process.execPath, [CLI, "init", dir]);
 	assert.match(init.stdout, /pine\.json/);
 	assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
-	for (const f of ["pine.json", "models.json", ".env", "USER.md", "AGENTS.md", "TOOLS.md", "agents/main/workspace/AGENTS.md", "agents/main/workspace/SOUL.md", "agents/main/workspace/MEMORY.md"]) assert.equal(fs.statSync(path.join(dir, f)).mode & 0o777, 0o600, f);
+	for (const f of ["pine.json", "models.json", ".env", "USER.md", "AGENTS.md", "TOOLS.md", "agents/main/workspace/AGENTS.md", "agents/main/workspace/SOUL.md", "agents/main/workspace/TOOLS.md", "agents/main/workspace/MEMORY.md"]) assert.equal(fs.statSync(path.join(dir, f)).mode & 0o777, 0o600, f);
 	assert.ok(!fs.existsSync(path.join(dir, "agents", "main", "AGENTS.md")), "an agent's instructions are in its workspace, where it can change them");
 	const check = await run(process.execPath, [CLI, "check", "--home", dir]);
 	for (const part of ["agent main (main)", "mcp        web, browser", "model      dev/claude-haiku", "No security notes."]) assert.ok(check.stdout.includes(part), `${part}\n${check.stdout}`);

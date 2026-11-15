@@ -25,6 +25,8 @@ export interface AgentChange {
 	instructions?: string;
 	/** The whole new text of its SOUL.md: who it is, its character and tone. */
 	soul?: string;
+	/** The whole new text of its TOOLS.md: its own defaults and preferences for its tools. Empty takes them back. */
+	tooling?: string;
 	/** "default" goes back to pine's default model. */
 	model?: string;
 	thinking?: string;
@@ -53,7 +55,7 @@ const folder = (given: string) => {
  * Check a change to an agent and say what it does, line by line, with what makes it wider.
  * Nothing is written. Throws with what is wrong and how it would be right.
  */
-export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: AgentChange, models: string[]): { lines: string[]; warnings: string[]; json: (raw: any) => void; instructions?: string; soul?: string } {
+export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: AgentChange, models: string[]): { lines: string[]; warnings: string[]; json: (raw: any) => void; instructions?: string; soul?: string; tooling?: string } {
 	const lines: string[] = [];
 	const warnings: string[] = [];
 	const steps: Array<(raw: any) => void> = [];
@@ -153,8 +155,11 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 		if (!soul) throw new Error("soul cannot be empty: it is who the agent is, its character and tone");
 		lines.push(`character and tone (its SOUL.md) replaced by:\n${soul.length > 1200 ? `${soul.slice(0, 1200)}...` : soul}`);
 	}
-	if (!lines.length) throw new Error("nothing to change: give at least one of description, instructions, soul, model, thinking, mode, tools, delegates, network, read, write, forget");
-	return { lines, warnings, json: (raw) => steps.forEach((s) => s(raw)), instructions, soul };
+	// Its own tooling can be empty: then only what holds for all agents holds for it.
+	const tooling = change.tooling?.trim();
+	if (tooling !== undefined) lines.push(tooling ? `its own defaults and preferences for tools (its TOOLS.md) replaced by:\n${tooling.length > 1200 ? `${tooling.slice(0, 1200)}...` : tooling}` : "its own defaults and preferences for tools (its TOOLS.md) taken back: the file is emptied");
+	if (!lines.length) throw new Error("nothing to change: give at least one of description, instructions, soul, tooling, model, thinking, mode, tools, delegates, network, read, write, forget");
+	return { lines, warnings, json: (raw) => steps.forEach((s) => s(raw)), instructions, soul, tooling };
 }
 
 /**
@@ -162,7 +167,7 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
  * with everything else: if the configuration does not load, the file is as it was and nothing
  * has changed.
  */
-export function applyAgentChange(cfg: PineConfig, agent: AgentConfig, checked: { json: (raw: any) => void; instructions?: string; soul?: string }): void {
+export function applyAgentChange(cfg: PineConfig, agent: AgentConfig, checked: { json: (raw: any) => void; instructions?: string; soul?: string; tooling?: string }): void {
 	const file = path.join(agent.dir, "agent.json");
 	const before = fs.readFileSync(file, "utf8");
 	try {
@@ -177,11 +182,11 @@ export function applyAgentChange(cfg: PineConfig, agent: AgentConfig, checked: {
 	}
 	// The workspace is the agent's to write. A file of that name is taken away and a new one
 	// made, never written through: what lies there could be a link to somewhere else.
-	for (const [name, text] of [["AGENTS.md", checked.instructions], ["SOUL.md", checked.soul]] as const) {
+	for (const [name, text] of [["AGENTS.md", checked.instructions], ["SOUL.md", checked.soul], ["TOOLS.md", checked.tooling]] as const) {
 		if (text === undefined) continue;
 		const target = path.join(agent.workspace, name);
 		fs.rmSync(target, { force: true });
-		fs.writeFileSync(target, `${text}\n`, { mode: 0o600, flag: "wx" });
+		fs.writeFileSync(target, text ? `${text}\n` : "", { mode: 0o600, flag: "wx" });
 	}
 }
 

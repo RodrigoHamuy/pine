@@ -61,7 +61,7 @@ test("live: the main agent hands a question to a specialist, which reads its own
 
 // What an owner says in passing: no file is named and nothing says "for all agents". A default for
 // a tool is written where every agent reads it, and another agent then works by it.
-test("live: told a default for a tool in plain words, the main agent writes it into the TOOLS.md for all agents, and another agent works by it", { skip: !live, timeout: 600_000 }, async (t) => {
+test("live: told a default for a tool in plain words, the main agent writes it into the TOOLS.md for all agents, and what is for it alone into its own", { skip: !live, timeout: 600_000 }, async (t) => {
 	const m = await liveModel(t);
 	const speak = "---\nname: speak\ndescription: Say a text aloud to the owner. Voices are F1 and F2 (female), M1 and M2 (male). Speed is slow, normal or fast.\n---\nRun `say-aloud --voice <voice> --speed <speed> \"<text>\"`.\n";
 	const h = await harness({
@@ -83,6 +83,16 @@ test("live: told a default for a tool in plain words, the main agent writes it i
 	const other = await h.pine.agents.run({ agent: "reader", prompt: "When you say something aloud, which speed and which kind of voice do you take? Answer in one line.", trust: "owner" });
 	assert.equal(other.status, "done", String(other.error));
 	assert.ok(/fast/i.test(other.text) && /female|\bF[12]\b/i.test(other.text), other.text);
+
+	// Said to be for the main agent alone, a preference goes into its own TOOLS.md, and the one for all agents stays as it is.
+	const mine = path.join(h.workspace("main"), "TOOLS.md");
+	const r2 = await h.pine.agents.run({ agent: "main", prompt: "for you alone, not for the other agents: when you search files, use ripgrep instead of grep", trust: "owner" });
+	assert.equal(r2.status, "done", String(r2.error));
+	const own = fs.existsSync(mine) ? fs.readFileSync(mine, "utf8") : "";
+	say(`main's own TOOLS.md:\n${own}\nanswer: ${r2.text}`);
+	assert.match(own, /ripgrep|\brg\b/i, `nothing about it in the main agent's own TOOLS.md; the answer was: ${r2.text}`);
+	assert.doesNotMatch(fs.readFileSync(tools, "utf8"), /ripgrep|\brg\b/i, "what is for one agent alone is not written for all of them");
+	assert.equal(fs.readFileSync(tools, "utf8"), now, "the TOOLS.md for all agents is as it was");
 	await h.close();
 });
 

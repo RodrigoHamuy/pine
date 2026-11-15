@@ -125,6 +125,18 @@ test("admin: the main agent lists agents and changes one by tool call; what is w
 	assert.equal(fs.readFileSync(soul, "utf8"), "Cool and technical. No commentary nobody asked for.\n");
 	assert.equal(fs.readFileSync(md, "utf8"), "You are HELPER, and you answer in English.\n", "its instructions are another file and stay");
 	assert.match(out[2], /soul cannot be empty/);
+	// Its own tooling (TOOLS.md) is a third file, read and replaced the same way; emptied, only what holds for all agents is left.
+	const tooling = path.join(h.workspace("helper"), "TOOLS.md");
+	const asks2 = asked.length;
+	await main(call("update_agent", { id: "helper", tooling: "Search with ripgrep, never with grep." }));
+	assert.equal(fs.readFileSync(tooling, "utf8"), "Search with ripgrep, never with grep.\n");
+	const more = await main(call("agents", { id: "helper" }));
+	await main(call("update_agent", { id: "helper", tooling: "" }));
+	assert.match(asked[asks2].summary, /its own defaults and preferences for tools \(its TOOLS\.md\) replaced by:\nSearch with ripgrep, never with grep\./);
+	assert.match(more[0], /Its own defaults and preferences for tools \(TOOLS\.md in its workspace, on top of the TOOLS\.md for all agents; update_agent "tooling" replaces it\):\nSearch with ripgrep, never with grep\./);
+	assert.match(asked[asks2 + 1].summary, /\(its TOOLS\.md\) taken back: the file is emptied/);
+	assert.equal(fs.readFileSync(tooling, "utf8"), "");
+	assert.equal(fs.readFileSync(soul, "utf8"), "Cool and technical. No commentary nobody asked for.\n", "its character is another file and stays");
 	// Opened as a file, it is another agent's: the refusal names the tools that are for it.
 	assert.match(out[3], /another agent|outside the paths this agent may read/);
 	await h.close();

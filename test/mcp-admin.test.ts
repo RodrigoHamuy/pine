@@ -308,7 +308,7 @@ test("the main agent creates an agent by tool call: the owner confirms, it exist
 	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "agent.json"), "utf8")), { description: "Looks things up and reports with sources", tools: ["read", "grep", "find", "ls"] });
 	// Its instructions are in its workspace, where it can change them, with the stubs of the files it keeps itself.
 	assert.match(fs.readFileSync(path.join(dir, "workspace", "AGENTS.md"), "utf8"), /^You are RESEARCH-PERSONA\./);
-	assert.deepEqual(fs.readdirSync(path.join(dir, "workspace")).sort(), ["AGENTS.md", "MEMORY.md", "SOUL.md"]);
+	assert.deepEqual(fs.readdirSync(path.join(dir, "workspace")).sort(), ["AGENTS.md", "MEMORY.md", "SOUL.md", "TOOLS.md"]);
 	assert.deepEqual(fs.readdirSync(dir).sort(), ["agent.json", "workspace"]);
 	const answer = await run("research", [{ text: "here" }]);
 	assert.equal(answer.text, "here");

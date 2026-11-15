@@ -211,6 +211,7 @@ agents/books/
   workspace/
     AGENTS.md    the instructions; the new agent can change them itself from then on
     SOUL.md      a stub
+    TOOLS.md     a stub
     MEMORY.md    a stub
 ```
 
@@ -264,13 +265,15 @@ conversation, or `/reset`, does it.
 
 ## Changing and removing an agent
 
-`update_agent` changes what is given and leaves the rest:
+Tell the main agent what to change about another agent ("give the books agent another model",
+"let it read my Documents folder"): `update_agent` changes what is given and leaves the rest:
 
 | Value | What it is |
 |---|---|
 | `description` | One line on what the agent is for |
 | `instructions` | The whole new text of its `AGENTS.md`. It replaces the file, so the main agent reads the present text first (`agents` with `id`) |
 | `soul` | The whole new text of its `SOUL.md`: who it is, its character and tone. It replaces the file the same way. This is what the main agent uses when you speak of an agent's personality or how it should sound |
+| `tooling` | The whole new text of its own `TOOLS.md`: tooling defaults and preferences for it alone. It replaces the file the same way; empty takes them back |
 | `model`, `thinking` | Its model (`"default"` for pine's default) and how much it reasons |
 | `mode` | `auto` (no sandbox: its shell and file tools reach your whole account and the network), `safe` (in the sandbox: its own folders), `manual` (in the sandbox, every action waits), `bypass`, `plan`, or `default` for what pine gives an agent that names none. This is also how far its shell and file tools reach |
 | `tools` | Its built-in tools, all of them: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls` |

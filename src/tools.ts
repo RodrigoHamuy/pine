@@ -1062,7 +1062,8 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						if (!a) throw new Error(`there is no agent "${p.id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
 						const text = readOwn(path.join(a.workspace, "AGENTS.md"), 6000);
 						const soul = readOwn(path.join(a.workspace, "SOUL.md"), 3000);
-						return ok(`${about(a)}\n    workspace: ${a.workspace}\n    may hand work to: ${some(a.delegates)}\n\nIts instructions (AGENTS.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them):\n${text === undefined ? "(none, or not readable)" : text.trim() || "(empty)"}\n\nIts character and tone (SOUL.md in its workspace; update_agent "soul" replaces it):\n${soul === undefined ? "(none, or not readable)" : soul.trim() || "(empty)"}`);
+						const tooling = readOwn(path.join(a.workspace, "TOOLS.md"), 3000);
+						return ok(`${about(a)}\n    workspace: ${a.workspace}\n    may hand work to: ${some(a.delegates)}\n\nIts instructions (AGENTS.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them):\n${text === undefined ? "(none, or not readable)" : text.trim() || "(empty)"}\n\nIts character and tone (SOUL.md in its workspace; update_agent "soul" replaces it):\n${soul === undefined ? "(none, or not readable)" : soul.trim() || "(empty)"}\n\nIts own defaults and preferences for tools (TOOLS.md in its workspace, on top of the TOOLS.md for all agents; update_agent "tooling" replaces it):\n${tooling === undefined ? "(none, or not readable)" : tooling.trim() || "(empty)"}`);
 					},
 				}),
 				defineTool({
@@ -1074,6 +1075,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						description: Type.Optional(Type.String({ description: "One line: what it is for" })),
 						instructions: Type.Optional(Type.String({ description: "The whole new text of its instructions, written to the agent itself. It replaces what is there: read the present text with agents (id) first and give back all of it with your change" })),
 						soul: Type.Optional(Type.String({ description: "The whole new text of its SOUL.md: who it is, its character and tone, written to the agent itself. It replaces what is there: read the present text with agents (id) first and give back all of it with your change. Use this, not instructions, when your owner speaks of its personality or how it should sound" })),
+						tooling: Type.Optional(Type.String({ description: "The whole new text of its own TOOLS.md: defaults and preferences for tools that are for this agent alone, on top of the TOOLS.md for all agents. It replaces what is there: read the present text with agents (id) first and give back all of it with your change. What is for all agents is not set here: you write that into the TOOLS.md in pine's home" })),
 						model: Type.Optional(Type.String({ description: 'As provider/model. "default" for pine\'s default model' })),
 						thinking: Type.Optional(Type.String({ description: "How much it reasons: off, minimal, low, medium, high, xhigh, max" })),
 						mode: Type.Optional(Type.String({ description: "auto (no sandbox: its shell and file tools reach your owner's whole account and the network), safe (in the sandbox: its own folders), manual (in the sandbox, every action waits for your owner), bypass (no sandbox, nothing waits), plan (nothing is done), or default" })),
@@ -1089,7 +1091,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						notHere("changing an agent");
 						const target = cfg.agents[p.id];
 						if (!target) throw new Error(`there is no agent "${p.id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
-						const change: AgentChange = { description: p.description, instructions: p.instructions, soul: p.soul, model: p.model, thinking: p.thinking, mode: p.mode, tools: listOf(p.tools), delegates: listOf(p.delegates), network: p.network, read: p.read, write: p.write, forget: p.forget };
+						const change: AgentChange = { description: p.description, instructions: p.instructions, soul: p.soul, tooling: p.tooling, model: p.model, thinking: p.thinking, mode: p.mode, tools: listOf(p.tools), delegates: listOf(p.delegates), network: p.network, read: p.read, write: p.write, forget: p.forget };
 						const checked = checkAgentChange(cfg, target, change, p.model && p.model !== "default" ? await manager.availableModels() : []);
 						const decision = await confirm("update_agent", `change the agent "${target.id}"\n${checked.lines.join("\n")}`, `this changes an agent in pine's configuration${checked.warnings.length ? `. Note: ${checked.warnings.join("; ")}` : ""}`, signal);
 						if (!decision.allow) throw new Error(`not changed (${decision.by}). Do not retry; tell your owner what you proposed.`);

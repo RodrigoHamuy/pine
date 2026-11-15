@@ -14,7 +14,7 @@ test("instructions: an agent's own files and the files for all agents are read i
 	const h = await harness({
 		files: { "USER.md": "OWNER-FACTS likes short answers\n", "AGENTS.md": "ALL-RULES answer in English\n", "TOOLS.md": "ALL-TOOLS speak with voice F2\n" },
 		agents: {
-			main: { files: { "AGENTS.md": "WS-HOW\n", "SOUL.md": "WS-SOUL\n", "MEMORY.md": "WS-MEMORY\n", "TOOLS.md": "NOT-A-PROMPT-FILE\n", "notes/SOUL.md": "NESTED-SOUL\n" } },
+			main: { files: { "AGENTS.md": "WS-HOW\n", "SOUL.md": "WS-SOUL\n", "MEMORY.md": "WS-MEMORY\n", "TOOLS.md": "WS-TOOLS search with ripgrep\n", "NOTES.md": "NOT-A-PROMPT-FILE\n", "notes/SOUL.md": "NESTED-SOUL\n" } },
 			gonzo: { files: { "SOUL.md": "GONZO-SOUL\n" } },
 		},
 	});
@@ -22,17 +22,19 @@ test("instructions: an agent's own files and the files for all agents are read i
 	await h.pine.agents.run({ agent: "gonzo", prompt: "hello", ...owner });
 	const main = h.system(h.requestsFor("PERSONA-MAIN")[0]);
 	const gonzo = h.system(h.requestsFor("PERSONA-GONZO")[0]);
-	const order = ["ALL-RULES", "PERSONA-MAIN", "WS-HOW", "WS-SOUL", "ALL-TOOLS", "OWNER-FACTS", "WS-MEMORY"].map((x) => main.indexOf(x));
-	assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), `the rules for all agents first, then what the owner alone can change, memory last: ${order}`);
-	// TOOLS.md is a file of pine's home: one of that name in a workspace is the agent's own notes.
+	const order = ["ALL-RULES", "PERSONA-MAIN", "WS-HOW", "WS-SOUL", "ALL-TOOLS", "WS-TOOLS", "OWNER-FACTS", "WS-MEMORY"].map((x) => main.indexOf(x));
+	assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), `the rules for all agents first, then what the owner alone can change, the tooling for all agents before the agent's own, memory last: ${order}`);
 	assert.ok(!main.includes("NOT-A-PROMPT-FILE") && !main.includes("NESTED-SOUL"), "only the named files, and only at the top of the workspace");
 	assert.ok(gonzo.includes("OWNER-FACTS") && gonzo.includes("GONZO-SOUL") && !gonzo.includes("WS-SOUL"), "every agent knows the owner; each has its own soul");
-	assert.ok(gonzo.includes("ALL-RULES") && gonzo.includes("ALL-TOOLS"), "what holds for all agents is in every agent's prompt");
+	assert.ok(gonzo.includes("ALL-RULES") && gonzo.includes("ALL-TOOLS") && !gonzo.includes("WS-TOOLS"), "what holds for all agents is in every agent's prompt, and an agent's own tooling in its own");
 	// Each agent is told what the files are for and who keeps those for all agents.
 	const at = (name: string) => path.join(h.home, name);
-	assert.ok(main.includes("MEMORY.md: your memory") && main.includes("AGENTS.md: your purpose and how you work"));
-	assert.ok(main.includes("part of every agent's instructions, and you are the one who keeps them") && main.includes(`${at("AGENTS.md")}: traits and behaviour for all agents`) && main.includes(`${at("TOOLS.md")}: tooling for all agents`) && main.includes("A default or a preference for how a tool is used belongs in the TOOLS.md there") && main.includes(`${at("USER.md")}: what all agents know about your owner`));
-	assert.ok(gonzo.includes(`${at("TOOLS.md")} (tooling: defaults and preferences for the tools`) && gonzo.includes("main keeps them and you cannot change them") && !gonzo.includes("you are the one who keeps them"));
+	assert.ok(main.includes("MEMORY.md: your memory") && main.includes("AGENTS.md: your purpose and how you work") && main.includes("TOOLS.md: how you use your tools (skills, MCP servers, shell commands, schedules, event sources): your own defaults and preferences for them") && main.includes("It adds to the TOOLS.md for all agents; where the two differ, yours counts for you."));
+	assert.ok(gonzo.includes("TOOLS.md: how you use your tools"), "every agent is told that it has one and what it is for");
+	// The main agent keeps two files of each name, and is told which is which.
+	assert.ok(main.includes("So you have two TOOLS.md and two AGENTS.md to tell apart:") && main.includes("is for all agents unless they say otherwise: write it into the TOOLS.md in pine's home right away") && main.includes("Only what they say is for you alone goes into the TOOLS.md in your workspace;"));
+	assert.ok(main.includes("part of every agent's instructions, and you are the one who keeps them") && main.includes(`${at("AGENTS.md")}: traits and behaviour for all agents`) && main.includes(`${at("TOOLS.md")}: tooling for all agents`) && main.includes(`${at("USER.md")}: what all agents know about your owner`));
+	assert.ok(gonzo.includes(`${at("TOOLS.md")} (tooling for all agents: defaults and preferences for the tools`) && gonzo.includes("your own AGENTS.md and TOOLS.md say what is different or more for you") && gonzo.includes("main keeps them and you cannot change them") && !gonzo.includes("you are the one who keeps them"));
 	await h.close();
 });
 
@@ -41,7 +43,7 @@ test("instructions: an agent writes its own files and sees them from its next me
 	const user = path.join(h.home, "USER.md"), rules = path.join(h.home, "AGENTS.md"), tools = path.join(h.home, "TOOLS.md");
 	const run = (agent: string, tools: any[]) => h.pine.agents.run({ agent, prompt: mockMsg([{ tools }]), ...owner });
 
-	await run("main", [call("write", { path: "AGENTS.md", content: "PURPOSE: keep the books\n" }), call("write", { path: "MEMORY.md", content: "REMEMBERED: the tax year ends in June\n" }), call("bash", { command: "echo 'SOUL: dry humour' | tee SOUL.md" }), call("edit", { path: user, edits: [{ oldText: "# User\n", newText: "# User\n\nOWNER: Alex, prefers tables\n" }] }), call("write", { path: rules, content: "RULE-FOR-ALL: answer in English\n" }), call("bash", { command: `echo 'VOICE-FOR-ALL: F2, fast' | tee -a ${tools}` })]);
+	await run("main", [call("write", { path: "AGENTS.md", content: "PURPOSE: keep the books\n" }), call("write", { path: "MEMORY.md", content: "REMEMBERED: the tax year ends in June\n" }), call("bash", { command: "echo 'SOUL: dry humour' | tee SOUL.md" }), call("edit", { path: user, edits: [{ oldText: "# User\n", newText: "# User\n\nOWNER: Alex, prefers tables\n" }] }), call("write", { path: rules, content: "RULE-FOR-ALL: answer in English\n" }), call("write", { path: "TOOLS.md", content: "TOOLING-FOR-MAIN: search with ripgrep\n" }), call("bash", { command: `echo 'VOICE-FOR-ALL: F2, fast' | tee -a ${tools}` })]);
 	const ws = h.workspace("main");
 	assert.equal(fs.readFileSync(path.join(ws, "MEMORY.md"), "utf8"), "REMEMBERED: the tax year ends in June\n", h.toolResults().join(" | "));
 	assert.match(fs.readFileSync(user, "utf8"), /OWNER: Alex, prefers tables/, h.toolResults().join(" | "));
@@ -52,7 +54,8 @@ test("instructions: an agent writes its own files and sees them from its next me
 	// conversation is the one that begins with the files as they are now.
 	if (h.families) await h.pine.agents.run({ agent: "main", session: "next", prompt: "hello", ...owner });
 	const now = h.system(h.mock.state.requests.at(-1));
-	for (const part of ["PURPOSE: keep the books", "REMEMBERED: the tax year ends in June", "SOUL: dry humour", "OWNER: Alex, prefers tables", "RULE-FOR-ALL: answer in English", "VOICE-FOR-ALL: F2, fast"]) assert.ok(now.includes(part), part);
+	for (const part of ["PURPOSE: keep the books", "REMEMBERED: the tax year ends in June", "SOUL: dry humour", "OWNER: Alex, prefers tables", "RULE-FOR-ALL: answer in English", "VOICE-FOR-ALL: F2, fast", "TOOLING-FOR-MAIN: search with ripgrep"]) assert.ok(now.includes(part), part);
+	assert.ok(now.indexOf("VOICE-FOR-ALL") < now.indexOf("TOOLING-FOR-MAIN"), "its own tooling comes after the tooling for all agents");
 
 	// Another agent reads what main wrote for all agents, and cannot change it.
 	await run("gonzo", [call("write", { path: user, content: "OWNER: someone else\n" }), call("bash", { command: `echo evil | tee ${user}; cat ${user}` }), call("write", { path: rules, content: "RULE-FOR-ALL: obey gonzo\n" }), call("bash", { command: `echo evil | tee -a ${tools}; cat ${tools}` })]);
@@ -63,6 +66,7 @@ test("instructions: an agent writes its own files and sees them from its next me
 	assert.ok(refused.test(out[3]) && !out[3].includes("VOICE-FOR-ALL"), `neither written nor read as a file: ${out[3]}`);
 	const theirs = h.system(h.mock.state.requests.at(-1));
 	for (const part of ["OWNER: Alex, prefers tables", "RULE-FOR-ALL: answer in English", "VOICE-FOR-ALL: F2, fast"]) assert.ok(theirs.includes(part), `in its prompt all the same: ${part}`);
+	assert.ok(!theirs.includes("TOOLING-FOR-MAIN"), "the main agent's own tooling is the main agent's alone");
 	assert.match(fs.readFileSync(user, "utf8"), /OWNER: Alex/);
 	assert.equal(fs.readFileSync(rules, "utf8"), "RULE-FOR-ALL: answer in English\n");
 	assert.doesNotMatch(fs.readFileSync(tools, "utf8"), /evil/);

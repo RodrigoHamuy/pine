@@ -89,11 +89,12 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
 	const [rules, tools, user] = sharedFiles(cfg);
 	const owner =
 		agent.id === mainId
-			? `Three files in pine's home are part of every agent's instructions, and you are the one who keeps them. A default or a preference for how a tool is used belongs in the TOOLS.md there: when your owner tells you one, write it there right away, without being asked where, unless they say it is for one agent alone. How to be or to behave goes into the AGENTS.md there when your owner says it is for all agents, and into your own AGENTS.md when it is for you. An agent's own files say what is different for that agent.
+			? `Three files in pine's home are part of every agent's instructions, and you are the one who keeps them:
   - ${rules}: traits and behaviour for all agents: how every agent is to be and to act.
-  - ${tools}: tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup. A tool is anything an agent works with: a skill, an MCP server, a shell command, a schedule, an event source.
-  - ${user}: what all agents know about your owner.`
-			: `Three files are the same for all agents and are in your instructions: ${rules} (traits and behaviour for all agents), ${tools} (tooling: defaults and preferences for the tools, and other technical or functional details of this setup) and ${user} (what is known about your owner). They hold for you unless your own files say something else for you. ${mainId} keeps them and you cannot change them: when something belongs there, say so.`;
+  - ${tools}: tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup.
+  - ${user}: what all agents know about your owner.
+- So you have two TOOLS.md and two AGENTS.md to tell apart: the ones in pine's home hold for every agent, you included; the ones in your workspace are yours alone and say what is different or more for you. A default or a preference for a tool that your owner tells you is for all agents unless they say otherwise: write it into the TOOLS.md in pine's home right away, without being asked where. Only what they say is for you alone goes into the TOOLS.md in your workspace; for another agent alone, change that agent ("tooling"). How to be or to behave goes into the AGENTS.md in pine's home when your owner says it is for all agents, and into your own AGENTS.md otherwise.`
+			: `Three files are the same for all agents and are in your instructions: ${rules} (traits and behaviour for all agents), ${tools} (tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup) and ${user} (what is known about your owner). They hold for you; your own AGENTS.md and TOOLS.md say what is different or more for you. ${mainId} keeps them and you cannot change them: what your owner tells you goes into your own files, and what is meant for all agents they tell ${mainId}.`;
 	// How far its tools reach is fixed for an agent and its kind of run, so it is said here. What a
 	// conversation loses or gets on the way is said in the notes.
 	const reach =
@@ -118,9 +119,10 @@ const BASE_PROMPT = `You are an agent in pine, a system that runs several AI age
 - Answer directly when you can. Use tools when they give a better answer, and say briefly what you did.
 - Be concise. Show file paths clearly when you work with files.
 - Use read to look at files and bash for commands. Use edit for targeted changes: each edits[].oldText must match the file exactly and only once, so keep matches short, and put all changes to one file into one call. Use write only for new files or complete rewrites.
-- Three files in your workspace are part of these instructions, and you keep them yourself. A change applies from your next message on; create one that is missing when you have something for it.
+- Four files in your workspace are part of these instructions, and you keep them yourself. A change applies from your next message on; create one that is missing when you have something for it.
   - AGENTS.md: your purpose and how you work. Your owner shapes it: when they tell you what you are for, or how they want something done from now on, write it there.
   - SOUL.md: who you are, your character and tone.
+  - TOOLS.md: how you use your tools (skills, MCP servers, shell commands, schedules, event sources): your own defaults and preferences for them, and technical or functional details of your work. It adds to the TOOLS.md for all agents; where the two differ, yours counts for you.
   - MEMORY.md: your memory. When you learn something that matters beyond this conversation (a decision, a fact, a preference, an open end), write it there right away, briefly. It is read with every message, so keep it short: when it has grown long, tidy it. Merge what belongs together, drop what no longer holds, move details into other files in your workspace and leave a pointer.
 - {{OWNER}}
 - To show your owner a picture, write ![short caption](path/to/file.png) in your answer, with a file in your workspace (png, jpg, gif or webp; a video as mp4, mov or webm is shown the same way). A sound is played to your owner the same way, with the file in your workspace (wav, mp3, m4a, ogg or flac): ![what is heard](path/to/file.wav), once, and no other link to it. pine plays it and gives your owner play and pause: never play a sound yourself with a command such as afplay. A web address works too, but your owner has to click to load it; for a picture from the web, download it first and show the file. A picture that came with a tool's answer is already on your owner's screen, above your reply: do not write ![...](...) for it, and do not copy or download it unless your owner asks for it as a file.
@@ -145,9 +147,10 @@ const SHORT_PROMPT = `You are an agent in pine, a system that runs several AI ag
 - Do what your owner asked, and stop there. When a call has answered the question or done the thing, give your owner the answer: do not look up related things nobody asked about, do not check what a tool has just told you, and do not tidy up after yourself.
 - Be concise. Show file paths clearly when you work with files.
 - Use edit for targeted changes to a file, and write only for new files or complete rewrites.
-- Three files in your workspace are part of these instructions, and you keep them yourself; create one that is missing when you have something for it. A conversation is given them as they are when it begins; what is added to them after that, you are told in a pine-note.
+- Four files in your workspace are part of these instructions, and you keep them yourself; create one that is missing when you have something for it. A conversation is given them as they are when it begins; what is added to them after that, you are told in a pine-note.
   - AGENTS.md: your purpose and how you work. When your owner tells you what you are for, or how they want something done from now on, write it there.
   - SOUL.md: who you are, your character and tone.
+  - TOOLS.md: how you use your tools (skills, MCP servers, shell commands, schedules, event sources): your own defaults and preferences for them, and technical or functional details of your work. It adds to the TOOLS.md for all agents; where the two differ, yours counts for you.
   - MEMORY.md: your memory. When you learn something that matters beyond this conversation (a decision, a fact, a preference, an open end), write it there right away, briefly. It is part of every conversation, so keep it short: merge what belongs together, drop what no longer holds, move details into other files and leave a pointer.
 - {{OWNER}}
 - To show your owner a picture, a video or a sound, write ![short caption](path/to/file) in your answer, with a file in your workspace. pine shows or plays it: never play a sound yourself with a command. A picture from the web: download it first and show the file. A picture that came with a tool's answer is already on your owner's screen: do not show it again.
@@ -3222,7 +3225,7 @@ export class AgentManager {
 	/** How many lines of a text are no longer in what the file says now (a file that is gone has lost all of them). */
 	/**
 	 * Whether a conversation is given its instruction files anew because of what happened to this one: it lost or
-	 * changed lines, and it is a file of rules (AGENTS.md, SOUL.md, and the files for all agents), where what was taken back must not stay
+	 * changed lines, and it is a file of rules (AGENTS.md, SOUL.md, TOOLS.md, and the files for all agents), where what was taken back must not stay
 	 * in front of the model, or a memory too long to be said again in a note. A memory that was tidied is told in the
 	 * note instead: it is the file that is rewritten most, by every conversation of the agent, and what an old line
 	 * of it says is a fact that no longer holds, not a rule.
@@ -3348,14 +3351,15 @@ export class AgentManager {
 	/**
 	 * The files that make up an agent's instructions, in the order they enter its prompt; those
 	 * that exist. First the rules for all agents, then what the owner alone can change, then what
-	 * the agent keeps itself, with what else is the same for all agents (how the tools are used
-	 * here, the owner) before the one that changes most often, which is last.
+	 * the agent keeps itself, with what else is the same for all agents among it (the tooling for
+	 * all agents before the agent's own, then the owner), and the one that changes most often last.
 	 */
 	private instructionFiles(agent: AgentConfig, folder?: string): string[] {
-		const [how, ...rest] = WORKSPACE_FILES.map((f) => path.join(agent.workspace, f));
+		const own = (name: string) => path.join(agent.workspace, name);
 		const shared = sharedFiles(this.cfg);
-		const [rules, ...setup] = shared;
-		const all = [rules, path.join(agent.dir, "AGENTS.md"), how, path.join(agent.workspace, "CLAUDE.md"), ...rest.slice(0, -1), ...setup, ...rest.slice(-1), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context];
+		const [rules, tools, user] = shared;
+		// What is for all agents comes before the agent's own file of the same name: its own says what is different for it.
+		const all = [rules, path.join(agent.dir, "AGENTS.md"), own("AGENTS.md"), own("CLAUDE.md"), own("SOUL.md"), tools, own("TOOLS.md"), user, own("MEMORY.md"), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context];
 		const seen = new Set<string>();
 		const found = all.filter((f) => fs.existsSync(f) && fs.statSync(f).isFile() && !seen.has(realish(f)) && Boolean(seen.add(realish(f))));
 		if (!short(agent)) return found;
@@ -3363,7 +3367,7 @@ export class AgentManager {
 		const untouched = (f: string) => {
 			const name = path.basename(f);
 			const forAll = shared.includes(f);
-			if (!forAll && !["SOUL.md", "MEMORY.md"].includes(name)) return false;
+			if (!forAll && !["SOUL.md", "TOOLS.md", "MEMORY.md"].includes(name)) return false;
 			const template = path.join(PINE_ROOT, "examples", "home", forAll ? name : path.join("agents", "main", "workspace", name));
 			try {
 				return fs.readFileSync(f, "utf8").trim() === fs.readFileSync(template, "utf8").trim();

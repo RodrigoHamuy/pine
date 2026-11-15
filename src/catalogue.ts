@@ -176,6 +176,7 @@ const ARG_HINT: Record<string, string> = {
 	"agents.id": "with agents: one agent in full",
 	"update_agent.description": "one line: what it is for",
 	"update_agent.soul": "the whole new text of its SOUL.md (character and tone), when your owner speaks of how it should be or sound",
+	"update_agent.tooling": "the whole new text of its own TOOLS.md: defaults and preferences for tools for this agent alone, on top of the TOOLS.md for all agents",
 	"update_agent.model": 'provider/model, or "default"',
 	"update_agent.tools": "all its built-in tools, separated by commas",
 	"update_agent.delegates": 'the agents it may hand work to, separated by commas; "*" is all',

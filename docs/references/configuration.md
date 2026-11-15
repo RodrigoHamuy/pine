@@ -18,8 +18,10 @@ Everything pine needs is in its home directory: `~/.pine` by default, or `$PINE_
       workspace/       its working folder, unless agent.json points elsewhere
         AGENTS.md      its purpose and how it works  ┐ read into its prompt,
         SOUL.md        who it is                     │ written by the agent itself
-        MEMORY.md      what should outlive a talk    ┘ (agents.md)
+        TOOLS.md       how it uses its tools         │ (agents.md)
+        MEMORY.md      what should outlive a talk    ┘
       AGENTS.md        optional: rules of yours the agent cannot change
+      SYSTEM.md        optional: replaces pine's base prompt for this agent
       skills/          skills only this agent has
       conversations/   what was set up for one conversation alone (its skills); made when needed
       extensions/      pi extensions only this agent loads
@@ -159,7 +161,7 @@ Every key is optional; `{}` is a valid agent.
 | Key | Default | Meaning |
 |---|---|---|
 | `description` | empty | One line other agents see when they choose whom to delegate to. Write it for them. |
-| `workspace` | `agents/<id>/workspace` | The agent's working folder. `AGENTS.md`, `SOUL.md` and `MEMORY.md` at its top are the agent's instructions and are loaded into its prompt. Must exist when you set it. |
+| `workspace` | `agents/<id>/workspace` | The agent's working folder. `AGENTS.md`, `SOUL.md`, `TOOLS.md` and `MEMORY.md` at its top are the agent's instructions and are loaded into its prompt. Must exist when you set it. |
 | `context` | `[]` | Further instruction files to load into the system prompt. |
 | `model`, `thinking` | from `defaults` | Per-agent model and thinking level. |
 | `catalogue` | from `defaults.catalogue` | How this agent's tools are declared to the model: `families` or `full`. See [agents.md](agents.md), "How tools are declared". |

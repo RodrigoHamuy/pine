@@ -55,7 +55,7 @@ export interface Roots {
 	 */
 	shared: string[];
 	/**
-	 * The owner let this conversation change the agent's own files (MEMORY.md, AGENTS.md, SOUL.md,
+	 * The owner let this conversation change the agent's own files (MEMORY.md, AGENTS.md, SOUL.md, TOOLS.md,
 	 * and for the main agent the files for all agents) although it has read outside content.
 	 */
 	ownOpen?: boolean;

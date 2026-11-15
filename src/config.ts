@@ -677,9 +677,11 @@ export function loadConfig(home = defaultHome()): PineConfig {
 /**
  * The files in an agent's workspace that are part of its prompt, in the order they enter it. They
  * are the agent's own: it reads them as its instructions and keeps them up to date itself.
- * AGENTS.md is how it works, SOUL.md who it is, MEMORY.md what should outlive a conversation.
+ * AGENTS.md is how it works, SOUL.md who it is, TOOLS.md how it uses its tools (what is
+ * different or more for it than the TOOLS.md for all agents says), MEMORY.md what should
+ * outlive a conversation.
  */
-export const WORKSPACE_FILES = ["AGENTS.md", "SOUL.md", "MEMORY.md"];
+export const WORKSPACE_FILES = ["AGENTS.md", "SOUL.md", "TOOLS.md", "MEMORY.md"];
 
 /**
  * What is the same for all agents: three files in pine's home, in every agent's prompt, kept by

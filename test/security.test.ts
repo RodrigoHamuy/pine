@@ -309,9 +309,10 @@ test("after outside content an agent keeps its own memory and instructions, and 
 	assert.ok(refused.test(out[4]) && out[4].includes("fine"), out[4]);
 	assert.ok(!fs.existsSync(path.join(ws, "CLAUDE.md")) && !fs.existsSync(path.join(ws, ".pi")) && !fs.existsSync(path.join(ws, "sub", "CLAUDE.md")));
 	// A run that an event from outside started writes none of them, although its profile has the tool.
-	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "write", args: { path: "MEMORY.md", content: "EVIL" } }, { name: "write", args: { path: "AGENTS.md", content: "EVIL" } }] }]), trust: "untrusted" } as any);
-	for (const r of h.toolResults().slice(-2)) assert.match(r, /holds agent instructions and cannot be changed in a run that has handled outside content/);
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "write", args: { path: "MEMORY.md", content: "EVIL" } }, { name: "write", args: { path: "AGENTS.md", content: "EVIL" } }, { name: "write", args: { path: "TOOLS.md", content: "EVIL" } }] }]), trust: "untrusted" } as any);
+	for (const r of h.toolResults().slice(-3)) assert.match(r, /holds agent instructions and cannot be changed in a run that has handled outside content/);
 	assert.equal(fs.readFileSync(path.join(ws, "AGENTS.md"), "utf8"), "RULES v2\n");
+	assert.ok(!fs.existsSync(path.join(ws, "TOOLS.md")), "its own tooling is read as instructions too");
 	// Nor what holds for all agents, which the main agent keeps in the owner's conversations: every agent would read it.
 	const forAll = ["AGENTS.md", "TOOLS.md", "USER.md"].map((f) => path.join(h.home, f));
 	const before = forAll.map((f) => fs.readFileSync(f, "utf8"));

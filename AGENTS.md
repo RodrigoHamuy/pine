@@ -161,7 +161,8 @@ These are invariants. A change that breaks one needs a test that shows why it is
    something away from another agent asks the owner in every case. A new kind of thing an agent can set up follows the same scopes and
    wording (`scopeOf`, `forWhom`, `whoIs` in `src/tools.ts`), not rules of its own.
    What an agent writes and pine reads back is text for a prompt, never code or
-   configuration: `AGENTS.md`, `SOUL.md` and `MEMORY.md` at the top of its workspace, and for
+   configuration: `AGENTS.md`, `SOUL.md`, `TOOLS.md` and `MEMORY.md` at the top of its workspace
+   (`WORKSPACE_FILES`; the main agent replaces another agent's with `update_agent`), and for
    the main agent the files for all agents in pine's home (`AGENTS.md`, `TOOLS.md`, `USER.md`:
    `SHARED_FILES` in `src/config.ts`), the only files there an agent may write, and text for
    every agent's prompt. A new file of that kind goes into that list and nowhere else. A
@@ -385,7 +386,7 @@ upgrade pi (`npm run baseline`, then `npm test`).
 | bash has no default timeout | the gate caps `input.timeout` at `bashTimeoutSec` |
 | bash ends a command at its timeout (`killProcessTree` in its `exec`) and cannot let go of one that is running: it owns the process and the pipes its output comes through | a command for the background never goes through pi's tool: `Programs.start` runs it, and the timeout message tells the agent to start it that way (`TIMEOUT_HINT`) |
 | `AGENTS.md` is read once | `refresh()` reloads when a file's mtime changed |
-| pi looks for instruction files in the working folder and the folders above it | `agentsFilesOverride` ignores what pi found and hands it `instructionFiles()`: the owner's `agents/<id>/AGENTS.md`, the agent's own `AGENTS.md`, `SOUL.md`, `MEMORY.md` (`WORKSPACE_FILES` in `src/config.ts`) and the home's `AGENTS.md`, `TOOLS.md` and `USER.md` (`SHARED_FILES`) |
+| pi looks for instruction files in the working folder and the folders above it | `agentsFilesOverride` ignores what pi found and hands it `instructionFiles()`: the owner's `agents/<id>/AGENTS.md`, the agent's own `AGENTS.md`, `SOUL.md`, `TOOLS.md`, `MEMORY.md` (`WORKSPACE_FILES` in `src/config.ts`) and the home's `AGENTS.md`, `TOOLS.md` and `USER.md` (`SHARED_FILES`) |
 | `prompt()` resolves on model failure | `execute()` inspects the last assistant message |
 | A session opened from its file stands at the last entry written; `branch()` moves it in memory only | `rewind()` in `undo.ts` works on the closed session and appends an entry of pine's own (`pine-undo`, no message) at the place it went back to |
 | Skills and `AGENTS.md` are discovered in the user's home and above the workspace | `skillsOverride` / `agentsFilesOverride` keep only configured locations |
