@@ -117,6 +117,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["copy the file a remote mcp server made into my workspace", /^(mcp#files-and-pictures-from-a-remote-server|setup#the-tools)/],
 		["play audio so that I can hear it", /^(tui#|agents#)/],
 		["can pine play speech or music", /^(tui#|agents#)/],
+		["the animated waveform next to a sound does not show for my mp3", /^(tui#pictures|stack#)/],
+		["what do the moving bars beside a playing sound mean", /^tui#pictures/],
 		["install a local mcp server with npx command", /^(mcp#adding-a-server|setup#the-tools)/],
 		["look at my dev server on localhost in the browser", /^mcp#local-addresses$/],
 		["click a button in an application on my mac", /^(computer|mcp#bundled-computer)/],

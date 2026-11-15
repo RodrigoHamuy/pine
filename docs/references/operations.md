@@ -9,8 +9,9 @@
   whose mode you did not choose work in `auto`, one you set to `safe` has no shell, and `pine check`
   says why. See [security.md](security.md), "On Linux".
 - Optional: `ffmpeg` for videos in the terminal UI (on Linux also for pictures other than
-  png, and its `ffplay` for sound; `mpv`, `pw-play`, `paplay` or `aplay` do as well. macOS plays
-  sound with what it has); on Linux `xclip`, or on Wayland `wl-copy` and `wl-paste`, for copying a selection and
+  png, for the bars of a sound that is not a wav file, and its `ffplay` for sound; `mpv`,
+  `pw-play`, `paplay` or `aplay` do as well. macOS plays sound and draws its bars with what it
+  has); on Linux `xclip`, or on Wayland `wl-copy` and `wl-paste`, for copying a selection and
   pasting a picture.
 - Node 24 or newer. From a checkout Node runs the TypeScript sources directly; the npm package
   holds them compiled.

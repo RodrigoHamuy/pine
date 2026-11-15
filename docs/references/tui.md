@@ -478,14 +478,35 @@ for it. An agent points at a sound file in its workspace the way it points at a 
 shows one line for it:
 
 ```
- ‖ pause · ♪ hello world · 0:01 / 0:03   ▸ open in player
+ ‖ pause  ▁▃▆█▇▅▃▅▆▄▅▅▄▃▃▂▂▃▂▂▁▁▂▁  ♪ hello world · 0:01 / 0:03   ▸ open in player
 ```
 
 - A sound that arrives while you are looking at the conversation is played at once, like a
   video; one from earlier in a conversation you reopen waits for a click.
 - `‖ pause` / `▶ play`: click to pause and to go on from there. At the end the line is back at
   the start. One sound plays at a time: starting another stops the first.
+- The bars show the sound itself while it plays: 24 of them, one for each range of pitch from
+  low (80 Hz, on the left) to high (8 kHz, on the right), each as high as that range is loud
+  at the moment being heard. They move ten times a second, stand still at a pause, and lie
+  flat and grey while nothing plays. Their height is measured against the loudest moment of
+  that sound, so a quiet recording moves as much as a loud one, and silence is a flat row.
 - `▸ open in player` hands the file to the system's player.
+
+The bars are worked out from the file before it plays, not from what is heard: the player is
+a program of the system, and pine does not listen to it. So they follow the line's own clock,
+and can be a moment off what the loudspeaker does. A wav file is read by pine itself. Every
+other kind (mp3, m4a, ogg, flac, aiff) has to be decoded first: by `ffmpeg` where it is
+installed, and on macOS by the system's own `afconvert`, so that a Mac needs nothing for
+them. On Linux without `ffmpeg` only wav files have bars. A file that nothing can decode
+plays as before, and its line is the one without bars:
+
+```
+ ‖ pause · ♪ hello world · 0:01 / 0:03   ▸ open in player
+```
+
+The same line shows where the terminal is too narrow: with less room there are fewer bars,
+each for several ranges, and with room for fewer than eight there are none. The bars of a
+long sound can come a few seconds after it started to play.
 
 It plays on the computer the terminal UI runs on, through what is there anyway: on macOS the
 system's own audio player (driven through `osascript`, nothing to install); on Linux the first
@@ -493,7 +514,8 @@ of `ffplay` (part of ffmpeg), `mpv`, `pw-play`, `paplay` and `aplay` that is ins
 any of them the line says so and `▸ open in player` still works. A pause is exact with the
 macOS player, `ffplay` and `mpv`, which can start in the middle of a file; the other three are
 held where they are instead. The player runs confined like the picture converters: no network,
-and it writes nowhere. A sound at a web address waits for a click on `▸ load sound https://...`, for the
+and it writes nowhere; so does the decoder for the bars, which may write in the temp folder
+only. A sound at a web address waits for a click on `▸ load sound https://...`, for the
 same reason a picture does. Speech, music and other sound a remote server made is fetched
 first (see "Files and pictures from a remote server" in [mcp.md](mcp.md)); a video still plays
 without its sound in the conversation.

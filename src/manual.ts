@@ -78,6 +78,7 @@ const SYNONYMS: string[][] = [
 	["log", "history", "audit", "record", "trace"],
 	["image", "picture", "photo", "screenshot", "video", "media", "clip"],
 	["sound", "audio", "speech", "voice", "music", "hear", "wav", "mp3"],
+	["bars", "waveform", "spectrum", "equalizer", "equaliser", "visualizer", "visualiser", "animation", "animated"],
 	["dictate", "dictating", "dictation", "microphone", "talk", "talking", "speak", "speaking"],
 	["browser", "web", "playwright", "page", "search"],
 	["fold", "collapse", "collapsed", "expand", "unfold", "clutter", "cluttered", "noise"],

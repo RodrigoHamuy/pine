@@ -532,8 +532,9 @@ the workspace, byte for byte, and reports size and SHA-256.
   out the moment it is displayed.
 - Picture files are decoded by macOS's `sips` (on Linux by `ffmpeg`) and videos by `ffmpeg`, both started without
   network access and without write access outside the temp folder, because the bytes can come
-  from anywhere. "Open in player" hands the file to the system's player, which has no such
-  limits; it only happens on your click.
+  from anywhere. A sound file is decoded the same way for the bars its line shows (by `ffmpeg`,
+  or macOS's `afconvert`), and played by a player that is confined like them. "Open in player"
+  hands the file to the system's player, which has no such limits; it only happens on your click.
 - Pictures a tool returned are kept in `data/media/tool` (mode 600) for as long as the event
   log reaches back (`limits.eventRetentionDays`).
 

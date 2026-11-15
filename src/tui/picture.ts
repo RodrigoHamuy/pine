@@ -5,6 +5,7 @@ import path from "node:path";
 import zlib from "node:zlib";
 import { allocateImageId, type Component, getCapabilities, getCellDimensions, getImageDimensions, Image, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { helperArgv } from "../security.ts";
+import { bars, type Levels, levelsOf } from "./levels.ts";
 import { c } from "./theme.ts";
 
 /**
@@ -587,7 +588,9 @@ export function stopVideos(): void {
 // ---- sound ---------------------------------------------------------------------------------------
 // A sound is one line in the conversation: play and pause, its name, how long it runs. It is played
 // by what the system has (its own audio player on macOS; ffplay, mpv, pw-play, paplay or aplay
-// elsewhere), confined like the converters: the bytes can come from anywhere.
+// elsewhere), confined like the converters: the bytes can come from anywhere. While it plays, the
+// line shows its levels as a row of bars. The player is another program, so pine does not hear
+// it: the levels are read from the file beforehand (levels.ts) and shown by the line's clock.
 
 /**
  * A program that plays a sound file: the command, with the file as its last argument. `from` says
@@ -634,6 +637,10 @@ export interface PreparedSound {
 	file: string;
 	name: string;
 	seconds?: number;
+	/** What the bars are drawn from, once it is worked out. A sound that nothing here can decode never has it. */
+	levels?: Levels;
+	/** Settles when the levels are there, or when it is clear that there are none. */
+	measured?: Promise<void>;
 }
 
 /** How long a wav file runs, from its header: the size of its data and the bytes it takes per second. */
@@ -658,8 +665,52 @@ function wavSeconds(file: string): number | undefined {
 	}
 }
 
-/** Get a sound file ready: how long it runs, where that can be told. */
+const AFCONVERT = "/usr/bin/afconvert";
+/** What a decoder is asked for: one channel at 16000 samples a second shows everything up to 8 kHz, which is all the bars cover. */
+const PLAIN = { rate: 16_000, channels: 1, bits: 16, float: false };
+
+export type SoundDecoder = "ffmpeg" | "afconvert";
+const decoders = (): SoundDecoder[] => [...(FFMPEG ? ["ffmpeg" as const] : []), ...(process.platform === "darwin" && d_exists(AFCONVERT) ? ["afconvert" as const] : [])];
+
+let measuring: Promise<unknown> = Promise.resolve();
+
+/**
+ * The levels of a sound file, for its bars. A wav file is read as it is. Anything else is decoded
+ * first, by ffmpeg where it is installed and by macOS's own afconvert; both run confined like the
+ * other converters. Undefined: nothing here can decode it, and the line has no bars.
+ */
+export function soundLevels(file: string, using: SoundDecoder[] = decoders()): Promise<Levels | undefined> {
+	// One at a time: a conversation full of sounds should not start a dozen decoders at once.
+	const job = measuring.then(() => measure(file, using));
+	measuring = job.catch(() => {});
+	return job.catch(() => undefined);
+}
+
+async function measure(file: string, using: SoundDecoder[]): Promise<Levels | undefined> {
+	const plain = await levelsOf(fs.createReadStream(file)).catch(() => undefined);
+	if (plain) return plain;
+	if (using.includes("ffmpeg") && FFMPEG) {
+		const child = confined(FFMPEG, ["-loglevel", "error", "-i", file, "-vn", "-ac", String(PLAIN.channels), "-ar", String(PLAIN.rate), "-f", "s16le", "-"], "pipe");
+		const ended = finished(child, 30_000);
+		const levels = child.stdout ? await levelsOf(child.stdout, PLAIN).catch(() => undefined) : undefined;
+		if ((await ended) && levels) return levels;
+	}
+	if (using.includes("afconvert") && d_exists(AFCONVERT)) {
+		const dir = fs.mkdtempSync(path.join(TMP, "pine-snd-"));
+		try {
+			const out = path.join(dir, "out.wav");
+			if (await finished(confined(AFCONVERT, ["-f", "WAVE", "-d", `LEI16@${PLAIN.rate}`, "-c", String(PLAIN.channels), "--mix", file, out], "ignore", dir), 30_000)) return await levelsOf(fs.createReadStream(out));
+		} finally {
+			fs.rmSync(dir, { recursive: true, force: true });
+		}
+	}
+	return undefined;
+}
+
+/** Get a sound file ready: how long it runs, where that can be told, and its levels for the bars. */
 export async function prepareSound(file: string, name: string): Promise<PreparedSound> {
+	const sound: PreparedSound = { file, name };
+	sound.measured = soundLevels(file).then((levels) => void (sound.levels = levels));
 	let seconds: number | undefined;
 	try {
 		seconds = wavSeconds(file);
@@ -672,16 +723,26 @@ export async function prepareSound(file: string, name: string): Promise<Prepared
 	} catch {
 		// played without a length
 	}
-	return { file, name, seconds: seconds && Number.isFinite(seconds) ? seconds : undefined };
+	sound.seconds = seconds && Number.isFinite(seconds) ? seconds : undefined;
+	// A short sound is measured in a moment, and its line then has its bars from the start. A long one
+	// is not waited for: it plays, and the bars come when they are ready.
+	await Promise.race([sound.measured, new Promise((r) => setTimeout(r, 250))]);
+	return sound;
 }
 
 let sounding: Sound | undefined;
+/** Fewer bars than this say nothing about a sound. */
+const FEWEST_BARS = 8;
 
 /**
  * One sound in the conversation: a line with play and pause, like a video's. A pause ends the
  * player and play starts one from where it was, as a video does with ffmpeg; a player that
  * cannot start in the middle is held instead (see SoundPlayer). At the end the line is back at
  * the start.
+ *
+ * Between the control and the name stands a row of bars, one for each band of frequencies from
+ * low to high: the sound's levels at the place the clock says is being heard. They move while it
+ * plays, stand still at a pause and lie flat when nothing plays.
  */
 export class Sound implements Component {
 	private s: PreparedSound;
@@ -703,6 +764,8 @@ export class Sound implements Component {
 		this.player = player;
 		this.redraw = redraw;
 		this.open = open;
+		// Levels that come after the line was drawn (a long sound) show as soon as they are there.
+		if (!sound.levels) void sound.measured?.then(() => sound.levels && this.redraw());
 	}
 
 	invalidate(): void {}
@@ -758,7 +821,9 @@ export class Sound implements Component {
 		child.on("error", () => over(false));
 		child.on("close", (code) => over(code === 0));
 		clearInterval(this.ticker);
-		const ticker = setInterval(() => this.paused || this.redraw(), 500);
+		// The bars move ten times a second, like a video's frames; the time alone needs a look twice a second.
+		let tick = 0;
+		const ticker = setInterval(() => this.paused || ((this.s.levels || tick++ % 5 === 0) && this.redraw()), 1000 / FPS);
 		ticker.unref?.();
 		this.ticker = ticker;
 		this.redraw();
@@ -804,10 +869,19 @@ export class Sound implements Component {
 		const at = this.s.seconds ? Math.min(this.played() / 1000, this.s.seconds) : this.played() / 1000;
 		const time = this.state !== "idle" ? `${clock(at)}${total ? ` / ${total}` : ""}` : total;
 		const note = this.failed ? " · could not be played here" : !this.player ? " · no program here that plays sound" : "";
-		const left = ` ${control ? `${c.accent(control)} ` : ""}${c.gray(`${control ? "· " : ""}♪ ${this.s.name}${time ? ` · ${time}` : ""}${note}`)}`;
+		const rest = `♪ ${this.s.name}${time ? ` · ${time}` : ""}${note}`;
+		const open = `   ${c.accent("▸ open in player")}`;
+		let left = ` ${control ? `${c.accent(control)} ` : ""}${c.gray(`${control ? "· " : ""}${rest}`)}`;
+		// The bars stand where the dot was, as many as the line has room for beside everything else: a
+		// narrow terminal gets fewer, and one without room for a few gets the line as it is without them.
+		const room = this.s.levels && control ? Math.min(this.s.levels.bands, width - visibleWidth(left) - visibleWidth(open) - 1) : 0;
+		if (this.s.levels && room >= FEWEST_BARS) {
+			const drawn = bars(this.s.levels, this.state === "idle" ? -1 : at, room);
+			left = ` ${c.accent(control)}  ${this.state === "idle" ? c.gray(drawn) : c.accent(drawn)}  ${c.gray(rest)}`;
+		}
 		this.playTo = control ? 1 + visibleWidth(control) : -1;
 		this.openFrom = visibleWidth(left) + 3;
-		return [truncateToWidth(`${left}   ${c.accent("▸ open in player")}`, width)];
+		return [truncateToWidth(`${left}${open}`, width)];
 	}
 }
 

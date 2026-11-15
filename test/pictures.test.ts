@@ -6,7 +6,9 @@ import { after, test } from "node:test";
 import { getCapabilities, setCapabilities } from "@earendil-works/pi-tui";
 import { PineTui } from "../src/tui/app.ts";
 import { Client } from "../src/tui/client.ts";
-import { halfBlocks, parseBmp, picturesIn, prepare, scaled } from "../src/tui/picture.ts";
+import { BANDS, bandEdges, bars, levelsOf } from "../src/tui/levels.ts";
+import { halfBlocks, parseBmp, picturesIn, prepare, prepareSound, Sound, soundLevels, scaled } from "../src/tui/picture.ts";
+import { c } from "../src/tui/theme.ts";
 import { harness, mockMsg, sleep, until } from "./support/harness.ts";
 import { png } from "./support/png.ts";
 import { FakeTerminal, KEY } from "./support/terminal.ts";
@@ -330,24 +332,214 @@ test("tui: a video plays by itself when it arrives, at the size it is shown; pau
 	await h.close();
 });
 
-/** A wav file of silence: 8000 samples a second, one channel, 16 bits. */
-function wav(seconds: number): Buffer {
-	const data = Buffer.alloc(Math.round(seconds * 8000) * 2);
+/** A tone in a wav file: how high, and how loud against the loudest a file can hold. Further tones follow the first. */
+type Tone = [hz: number, loud: number];
+
+/**
+ * A wav file, 8000 samples a second in one channel of 16 bits unless said otherwise. Without
+ * tones it is silence; `sounding` is one tone, several at once, or a list of such parts that
+ * follow one another and share the time.
+ */
+function wav(seconds: number, sounding: Tone | Tone[] | Tone[][] = [], how: { rate?: number; channels?: number; bits?: 16 | 24 | 32; tag?: number } = {}): Buffer {
+	const { rate = 8000, channels = 1, bits = 16, tag = bits === 32 ? 3 : 1 } = how;
+	const parts: Tone[][] = !sounding.length ? [[]] : typeof sounding[0] === "number" ? [[sounding as Tone]] : typeof (sounding[0] as Tone | Tone[])[0] === "number" ? [sounding as Tone[]] : (sounding as Tone[][]);
+	const count = Math.round(seconds * rate);
+	const width = bits / 8;
+	const data = Buffer.alloc(count * width * channels);
+	for (let i = 0; i < count; i++) {
+		let v = 0;
+		for (const [hz, loud] of parts[Math.min(parts.length - 1, Math.floor((i / count) * parts.length))]) v += loud * Math.sin((2 * Math.PI * hz * i) / rate);
+		for (let ch = 0; ch < channels; ch++) {
+			const at = (i * channels + ch) * width;
+			if (bits === 32) data.writeFloatLE(v, at);
+			else data.writeIntLE(Math.round(v * (2 ** (bits - 1) - 1)), at, width);
+		}
+	}
 	const head = Buffer.alloc(44);
 	head.write("RIFF", 0, "latin1");
 	head.writeUInt32LE(36 + data.length, 4);
 	head.write("WAVEfmt ", 8, "latin1");
 	head.writeUInt32LE(16, 16);
-	head.writeUInt16LE(1, 20);
-	head.writeUInt16LE(1, 22);
-	head.writeUInt32LE(8000, 24);
-	head.writeUInt32LE(16000, 28);
-	head.writeUInt16LE(2, 32);
-	head.writeUInt16LE(16, 34);
+	head.writeUInt16LE(tag, 20);
+	head.writeUInt16LE(channels, 22);
+	head.writeUInt32LE(rate, 24);
+	head.writeUInt32LE(rate * width * channels, 28);
+	head.writeUInt16LE(width * channels, 32);
+	head.writeUInt16LE(bits, 34);
 	head.write("data", 36, "latin1");
 	head.writeUInt32LE(data.length, 40);
 	return Buffer.concat([head, data]);
 }
+
+/** A file handed over in pieces of an odd size, as a decoder's output arrives. */
+async function* pieces(b: Buffer, size = 1021): AsyncGenerator<Buffer> {
+	for (let at = 0; at < b.length; at += size) yield b.subarray(at, at + size);
+}
+/** The band a frequency lies in, for a file with that many samples a second. */
+const bandOf = (hz: number, rate: number) => bandEdges(rate).findIndex((edge) => edge > hz) - 1;
+/** The bands of a row, and which of them is the loudest. */
+const rowOf = (levels: { data: Uint8Array }, row: number) => [...levels.data.subarray(row * BANDS, (row + 1) * BANDS)];
+const loudest = (levels: { data: Uint8Array }, row: number) => rowOf(levels, row).indexOf(Math.max(...rowOf(levels, row)));
+const FLAT = "▁".repeat(BANDS);
+
+test("sound: the levels of a tone lie in the band of its frequency, and silence is flat", async () => {
+	// One tone: a row for every tenth of a second, and in each the tone's band stands out alone.
+	const tone = (await levelsOf(pieces(wav(1, [1000, 0.5]))))!;
+	assert.equal(`${tone.rows} rows of ${tone.bands}, ${tone.step} s each`, "10 rows of 24, 0.1 s each");
+	const at = bandOf(1000, 8000);
+	assert.ok(at > 10 && at < 20, `1000 Hz lies in the middle of the row (${at})`);
+	for (let row = 0; row < tone.rows; row++) {
+		assert.equal(loudest(tone, row), at, `row ${row}`);
+		assert.equal(rowOf(tone, row)[at], 255);
+		assert.ok(rowOf(tone, row).every((v, band) => Math.abs(band - at) <= 2 || v === 0), `nothing far from the tone (row ${row}: ${rowOf(tone, row)})`);
+	}
+	assert.equal(bars(tone, 0.3), `${"▁".repeat(at)}█${"▁".repeat(BANDS - at - 1)}`);
+	assert.equal(bars(tone, -1), FLAT, "before the start the bars lie flat");
+	assert.equal(bars(tone, 1.2), FLAT, "and after the end");
+
+	// Silence is a row of nothing, however long.
+	const silence = (await levelsOf(pieces(wav(0.5))))!;
+	assert.equal(silence.rows, 5);
+	assert.ok(silence.data.every((v) => v === 0));
+	assert.equal(bars(silence, 0.2), FLAT);
+
+	// The bars are measured against the sound's own loudest moment: a quiet recording moves as much
+	// as a loud one, and a tone 20 decibels under another stands about half as high.
+	const quiet = (await levelsOf(pieces(wav(0.3, [1000, 0.004]))))!;
+	assert.equal(rowOf(quiet, 1)[at], 255);
+	const two = (await levelsOf(pieces(wav(0.3, [[500, 0.5], [2000, 0.05]]))))!;
+	assert.equal(rowOf(two, 1)[bandOf(500, 8000)], 255);
+	const lower = rowOf(two, 1)[bandOf(2000, 8000)];
+	assert.ok(lower > 100 && lower < 170, `the lower tone (${lower})`);
+
+	// Tones that follow one another are found one after the other, and a bar that lost its tone falls, not drops.
+	const then = (await levelsOf(pieces(wav(1, [[[500, 0.5]], [[2000, 0.5]]]))))!;
+	assert.deepEqual([loudest(then, 2), loudest(then, 8)], [bandOf(500, 8000), bandOf(2000, 8000)]);
+	const falling = [5, 6, 7].map((row) => rowOf(then, row)[bandOf(500, 8000)]);
+	assert.ok(falling[0] < 255 && falling[0] > falling[1] && falling[1] > falling[2], `the bar of the tone that ended (${falling})`);
+
+	// Other kinds of wav file say the same: two channels of 24 bits at 44100 samples a second, and floating point.
+	for (const how of [{ rate: 44100, channels: 2, bits: 24 as const }, { rate: 22050, bits: 32 as const }]) {
+		const other = (await levelsOf(pieces(wav(0.4, [3000, 0.3], how), 4099)))!;
+		assert.equal(other.rows, 4);
+		assert.equal(loudest(other, 2), bandOf(3000, how.rate), JSON.stringify(how));
+	}
+	// Bare samples, as a decoder writes them, are read without a header.
+	const bare = (await levelsOf(pieces(wav(0.3, [1000, 0.5]).subarray(44)), { rate: 8000, channels: 1, bits: 16, float: false }))!;
+	assert.equal(loudest(bare, 1), at);
+
+	// What is not samples has no levels: text, a wav file whose sound is compressed, and nothing at all.
+	assert.equal(await levelsOf(pieces(Buffer.from("this is only named like a sound"))), undefined);
+	assert.equal(await levelsOf(pieces(wav(0.3, [1000, 0.5], { tag: 2 }))), undefined);
+	assert.equal(await levelsOf(pieces(Buffer.alloc(0))), undefined);
+	assert.equal(await levelsOf(pieces(wav(0))), undefined);
+});
+
+test("sound: a file that is not a wav file is decoded for its levels, and one that nothing can decode has none", async (t) => {
+	const { execFileSync } = await import("node:child_process");
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-levels-test-")));
+	t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+	const source = path.join(dir, "tone.wav");
+	fs.writeFileSync(source, wav(1, [1000, 0.5], { rate: 16000 }));
+	const at = bandOf(1000, 16000);
+	assert.equal(loudest((await soundLevels(source, []))!, 5), at, "a wav file needs no decoder");
+	// ffmpeg, wherever it is installed. flac is a kind every ffmpeg writes.
+	if (ffmpeg) {
+		execFileSync(ffmpeg, ["-loglevel", "error", "-i", source, path.join(dir, "tone.flac")]);
+		const levels = await soundLevels(path.join(dir, "tone.flac"), ["ffmpeg"]);
+		assert.ok(levels && levels.rows === 10, `ffmpeg decodes it (${levels?.rows} rows)`);
+		assert.equal(loudest(levels, 5), at);
+		assert.equal(await soundLevels(path.join(dir, "tone.flac"), []), undefined, "without a decoder there are no levels");
+	}
+	// macOS's own converter, which is there without ffmpeg.
+	if (process.platform === "darwin" && fs.existsSync("/usr/bin/afconvert")) {
+		execFileSync("/usr/bin/afconvert", ["-f", "m4af", "-d", "aac", source, path.join(dir, "tone.m4a")]);
+		const levels = await soundLevels(path.join(dir, "tone.m4a"), ["afconvert"]);
+		assert.ok(levels && levels.rows >= 10 && levels.rows <= 11, `afconvert decodes it (${levels?.rows} rows)`);
+		assert.equal(loudest(levels, 5), at);
+		assert.ok(!fs.readdirSync(os.tmpdir()).some((f) => f.startsWith("pine-snd-")), "the decoded copy is removed");
+	}
+	fs.writeFileSync(path.join(dir, "fake.mp3"), "this is only named like a sound");
+	assert.equal(await soundLevels(path.join(dir, "fake.mp3")), undefined);
+	assert.equal(await soundLevels(path.join(dir, "missing.mp3")), undefined);
+});
+
+test("sound: the line shows the levels as bars that follow the clock while it plays; none without levels or without room", async (t) => {
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-bars-test-")));
+	t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+	// A stand-in for the player, which "plays" for a while and can start in the middle.
+	const script = path.join(dir, "player.mjs");
+	fs.writeFileSync(script, "setTimeout(() => {}, 4000);\n");
+	const player = { command: [process.execPath, script], from: (s: number) => [s.toFixed(1)] };
+	const plain = (line: string) => line.replace(/\x1b\[[0-9;]*m/g, "");
+	// The first second is a low tone, the second a high one.
+	fs.writeFileSync(path.join(dir, "two.wav"), wav(2, [[[500, 0.5]], [[2000, 0.5]]]));
+	const [low, high] = [bandOf(500, 8000), bandOf(2000, 8000)];
+	/** The bars a line shows, and which of them stands highest. */
+	const shown = (text: string) => /^ (?:‖ pause|▶ play) {2}([▁▂▃▄▅▆▇█]{8,24}) {2}♪/.exec(plain(text))?.[1];
+	const top = (text: string) => shown(text)?.indexOf("█");
+	const prepared = await prepareSound(path.join(dir, "two.wav"), "two tones");
+	await prepared.measured;
+	assert.equal(prepared.levels?.rows, 20);
+	let redraws = 0;
+	const opened: string[] = [];
+	const sound = new Sound(prepared, player, () => void redraws++, (f) => void opened.push(f));
+	t.after(() => sound.stop());
+	const line = (width = 100) => sound.render(width)[0];
+	const click = (word: string) => sound.handleMouse({ button: "left", type: "click", x: plain(line()).indexOf(word) + 1, y: 0 });
+
+	// Before it plays the bars lie flat, in grey.
+	assert.equal(plain(line()), ` ▶ play  ${FLAT}  ♪ two tones · 0:02   ▸ open in player`);
+	assert.ok(line().includes(c.gray(FLAT)));
+
+	// Playing: the bars are the levels at the place the clock is at, in the accent colour, and the line is drawn again ten times a second.
+	sound.play();
+	assert.equal(top(line()), low, plain(line()));
+	assert.ok(line().includes(c.accent(bars(prepared.levels!, 0))));
+	assert.match(plain(line()), /^ ‖ pause {2}\S{24} {2}♪ two tones · 0:00 \/ 0:02 {3}▸ open in player$/);
+	const before = redraws;
+	await sleep(450);
+	assert.ok(redraws - before >= 2, `drawn again as the bars move, not twice a second (${redraws - before} times in 450 ms)`);
+
+	// A narrower terminal has fewer bars, each for several bands; one with room for fewer than eight has the line without them.
+	assert.equal(shown(line(80))?.length, 24, "80 columns are just enough for all of them");
+	assert.equal(shown(line(79))?.length, 23);
+	assert.deepEqual([shown(line(64))?.length, top(line(64))], [8, Math.floor(low / 3)], "eight bars, three bands each");
+	assert.equal(plain(line(64)).length, 64);
+	assert.match(plain(line(63)), /^ ‖ pause · ♪ two tones · 0:00 \/ 0:02 {3}▸ open in player$/);
+
+	// A pause holds them where they are.
+	click("‖ pause");
+	assert.equal(sound.state, "paused");
+	const held = line();
+	assert.ok(top(held) === low && held.includes(c.accent(shown(held)!)), plain(held));
+	await sleep(300);
+	assert.equal(line(), held, "nothing moves during a pause");
+
+	// Going on, the clock reaches the second tone, and the bars are that one's.
+	click("▶ play");
+	assert.equal(sound.state, "playing");
+	await until(() => top(line()) === high, 3000, "the bars of the second tone");
+	assert.match(plain(line()), /♪ two tones · 0:01 \/ 0:02/);
+
+	// "open in player" is found behind the bars, and at the end the bars lie flat again.
+	click("▸ open in player");
+	assert.deepEqual(opened, [path.join(dir, "two.wav")]);
+	assert.equal(sound.state, "playing", "a click on the bars or the name does nothing");
+	sound.stop();
+	assert.equal(plain(line()), ` ▶ play  ${FLAT}  ♪ two tones · 0:02   ▸ open in player`);
+
+	// A file that nothing can decode plays (or not) as before, and its line has no bars.
+	fs.writeFileSync(path.join(dir, "odd.mp3"), "this is only named like a sound");
+	const odd = await prepareSound(path.join(dir, "odd.mp3"), "odd one");
+	await odd.measured;
+	assert.equal(odd.levels, undefined);
+	const bare = new Sound(odd, player, () => {}, () => {});
+	t.after(() => bare.stop());
+	assert.equal(plain(bare.render(100)[0]), " ▶ play · ♪ odd one   ▸ open in player");
+	bare.play();
+	assert.equal(plain(bare.render(100)[0]), " ‖ pause · ♪ odd one · 0:00   ▸ open in player");
+});
 
 test("tui: a sound an answer points at is played when it arrives, by the system's player; pause and play go on where it was", async (t) => {
 	const { execFileSync } = await import("node:child_process");
@@ -386,9 +578,10 @@ test("tui: a sound an answer points at is played when it arrives, by the system'
 	const clickWord = (word: string) => term.click(line().indexOf(word) + 1, app.screen().findIndex((l) => l.includes("♪ hello world")));
 
 	// It arrives and is played from the start: the player gets the file's bytes, and the line says how far it is.
+	// The file is silence, so the bars beside the control lie flat.
 	term.type(mockMsg([{ text: "Here it is: ![hello world](hello.wav) and ![gone](nope.wav)" }]));
 	term.type([KEY.enter]);
-	await sees(/‖ pause · ♪ hello world · 0:00 \/ 0:02\s+▸ open in player/);
+	await sees(new RegExp(`‖ pause  ${FLAT}  ♪ hello world · 0:00 / 0:02\\s+▸ open in player`));
 	await until(() => played().length === 1, 3000, "the player to start");
 	assert.deepEqual(played()[0].slice(1, 2), ["0.0"]);
 	assert.equal(played()[0].at(-1), String(sound.length));
@@ -398,18 +591,18 @@ test("tui: a sound an answer points at is played when it arrives, by the system'
 	// Pause ends the player and keeps the place; play starts one from there, not from the beginning.
 	await sleep(300);
 	clickWord("‖ pause");
-	await sees(/▶ play · ♪ hello world · 0:00 \/ 0:02/);
+	await sees(`▶ play  ${FLAT}  ♪ hello world · 0:00 / 0:02`);
 	await until(() => state(played()[0][0]) === "", 3000, "the player to be gone");
 	await sleep(1100);
-	assert.match(line(), /▶ play · ♪ hello world · 0:00 \/ 0:02/, "the pause outlasts the player's own time, and nothing moves");
+	assert.ok(line().includes(`▶ play  ${FLAT}  ♪ hello world · 0:00 / 0:02`), "the pause outlasts the player's own time, and nothing moves");
 	clickWord("▶ play");
-	await sees("‖ pause · ♪ hello world");
+	await sees(`‖ pause  ${FLAT}  ♪ hello world`);
 	await until(() => played().length === 2, 3000, "a player to go on");
 	const from = Number(played()[1][1]);
 	assert.ok(from >= 0.3 && from < 0.9, `it goes on where it was (${from})`);
 
 	// When the player is done, the line is back at the start, and a click plays it from there.
-	await sees(/▶ play · ♪ hello world · 0:02\s+▸ open in player/);
+	await sees(new RegExp(`▶ play  ${FLAT}  ♪ hello world · 0:02\\s+▸ open in player`));
 	clickWord("▶ play");
 	await until(() => played().length === 3, 3000, "the player to start again");
 	assert.equal(played()[2][1], "0.0");
@@ -429,7 +622,7 @@ test("tui: a sound an answer points at is played when it arrives, by the system'
 	await again.start();
 	const line2 = () => again.screen().find((l) => l.includes("♪ hello world")) ?? "";
 	const click2 = (word: string) => term2.click(line2().indexOf(word) + 1, again.screen().findIndex((l) => l.includes("♪ hello world")));
-	await until(() => line2().includes("▶ play · ♪ hello world"), 6000, "the conversation to be drawn again");
+	await until(() => line2().includes(`▶ play  ${FLAT}  ♪ hello world`), 6000, "the conversation to be drawn again");
 	await sleep(200);
 	assert.equal(played().length, 3, "nothing plays by itself that was there before");
 	click2("▶ play");
