@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { type AgentConfig, agentSkillsDir, conversationsDir, globalSkillsDir, type Level, mainAgentId, PINE_ROOT, type PineConfig, unsandboxed, userFile, WORKSPACE_FILES } from "./config.ts";
+import { type AgentConfig, agentSkillsDir, conversationsDir, globalSkillsDir, type Level, mainAgentId, PINE_ROOT, type PineConfig, sharedFiles, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import type { DenialTools } from "./access.ts";
 import { bwrapArgs, Guard, helperArgs, jailed, type Protected, protectedNow, SESSIONS } from "./sandbox-linux.ts";
 import type { Bus } from "./store.ts";
@@ -49,11 +49,14 @@ export interface Roots {
 	cwd: string;
 	/** The folder the owner opened for the conversation, if any. Its instruction files are guarded like the workspace's. */
 	folder?: string;
-	/** USER.md in pine's home: what all agents know about the owner. Only the main agent may write it. */
-	userFile: string;
+	/**
+	 * The files in pine's home that are in every agent's prompt (AGENTS.md, TOOLS.md, USER.md: what
+	 * holds for all agents). Only the main agent may write them.
+	 */
+	shared: string[];
 	/**
 	 * The owner let this conversation change the agent's own files (MEMORY.md, AGENTS.md, SOUL.md,
-	 * and USER.md for the main agent) although it has read outside content.
+	 * and for the main agent the files for all agents) although it has read outside content.
 	 */
 	ownOpen?: boolean;
 	/** Read access is refused here even when a broader rule would allow it. */
@@ -75,9 +78,9 @@ export function rootsFor(cfg: PineConfig, agent: AgentConfig): Roots {
 	const home = realish(cfg.home);
 	const tmp = agent.sandbox.sharedTmp ? [...new Set([realish(os.tmpdir()), "/private/tmp"])] : [];
 	// pine's manual is readable by every agent, so it can explain how its owner changes the setup.
-	// The one file of pine's home that an agent may touch: what is known about the owner, and only for the main agent.
-	const user = path.join(home, path.basename(userFile(cfg)));
-	const keepsUser = agent.id === mainAgentId(cfg) ? [user] : [];
+	// The files of pine's home that an agent may touch: what holds for all agents, and only for the main agent.
+	const shared = sharedFiles(cfg).map((f) => path.join(home, path.basename(f)));
+	const keepsUser = agent.id === mainAgentId(cfg) ? shared : [];
 	// Skills are read, never written, by the agent they are for: its own, its conversations', and those for all agents.
 	const skills = [agentSkillsDir(agent), conversationsDir(agent), globalSkillsDir(cfg), ...cfg.skills, ...agent.skills].map(realish);
 	const ownedRead = [...new Set([workspace, realish(sandboxHome), realish(path.join(PINE_ROOT, "docs")), ...skills, ...agent.sandbox.read.map(realish), ...keepsUser])];
@@ -91,7 +94,7 @@ export function rootsFor(cfg: PineConfig, agent: AgentConfig): Roots {
 		write: [...ownedWrite, ...tmp],
 		ownedRead,
 		ownedWrite,
-		userFile: user,
+		shared,
 		secrets: [path.join(home, ".env"), path.join(home, "auth.json"), path.join(home, "models.json"), path.join(home, "pine.json"), realish(cfg.dataDir)],
 		others: Object.values(cfg.agents)
 			.filter((a) => a.id !== agent.id)
@@ -232,14 +235,14 @@ export function isInstructionPath(workspace: string, p: string): boolean {
 	return INSTRUCTION_FILES.includes(path.basename(p)) || INSTRUCTION_DIRS.some((d) => rel === d || rel.startsWith(d + path.sep));
 }
 
-/** Whether a path is one of the files that are read into the agent's prompt from its workspace, or the owner's file in pine's home. */
+/** Whether a path is one of the files that are read into the agent's prompt from its workspace, or one of those for all agents in pine's home. */
 export function isOwnFile(roots: Roots, p: string): boolean {
-	return p === roots.userFile || (path.dirname(p) === roots.workspace && WORKSPACE_FILES.includes(path.basename(p)));
+	return roots.shared.includes(p) || (path.dirname(p) === roots.workspace && WORKSPACE_FILES.includes(path.basename(p)));
 }
 
-/** The files an agent keeps itself: its memory and instructions at the top of its workspace, and for the main agent what is known about the owner. */
+/** The files an agent keeps itself: its memory and instructions at the top of its workspace, and for the main agent what holds for all agents. */
 export function ownFiles(roots: Roots): string[] {
-	return [...WORKSPACE_FILES.map((f) => path.join(roots.workspace, f)), ...(roots.ownedWrite.includes(roots.userFile) ? [roots.userFile] : [])];
+	return [...WORKSPACE_FILES.map((f) => path.join(roots.workspace, f)), ...roots.shared.filter((f) => roots.ownedWrite.includes(f))];
 }
 
 /** The own file a path given to a file tool means, if it means one. */
@@ -291,7 +294,7 @@ export function sandboxProfile(_cfg: PineConfig, agent: AgentConfig, roots: Root
 	const restricted = variant === true || variant === "restricted";
 	// What is read into the prompt cannot be rewritten by a run that outside content may steer.
 	const frozen = () => {
-		const out = [`(deny file-write* ${[roots.userFile, ...WORKSPACE_FILES.map((f) => path.join(roots.workspace, f))].map((f) => `(literal ${q(f)})`).join(" ")}${said})`];
+		const out = [`(deny file-write* ${[...roots.shared, ...WORKSPACE_FILES.map((f) => path.join(roots.workspace, f))].map((f) => `(literal ${q(f)})`).join(" ")}${said})`];
 		for (const dir of [roots.workspace, ...(roots.folder ? [roots.folder] : [])]) {
 			out.push(`(deny file-write* (regex #"^${rx(dir)}/(.*/)?(${INSTRUCTION_FILES.map(rx).join("|")})$") (regex #"^${rx(dir)}/${GIT_RUNS_PROFILE}") ${subpaths(INSTRUCTION_DIRS.map((d) => path.join(dir, d)))}${said})`);
 		}
@@ -463,7 +466,7 @@ export const sandboxMissing = () => (sandboxKind() ? "" : whyNot);
 /** What a run that has handled outside content must not change, as the Linux sandbox needs it said. */
 const protectedOf = (roots: Roots): Protected => ({
 	roots: [roots.workspace, ...(roots.folder ? [roots.folder] : [])],
-	files: [roots.userFile, ...WORKSPACE_FILES.map((f) => path.join(roots.workspace, f))],
+	files: [...roots.shared, ...WORKSPACE_FILES.map((f) => path.join(roots.workspace, f))],
 	names: INSTRUCTION_FILES,
 	dirs: INSTRUCTION_DIRS.filter((d) => !d.includes("/")),
 	open: roots.ownOpen ? ownFiles(roots) : [],

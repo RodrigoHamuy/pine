@@ -100,7 +100,7 @@ In the sandbox, the same on both systems:
 | | |
 |---|---|
 | Can read | Its workspace, its private home, its skills, pine's manual (`docs/`), temp, the files its event sources received (see below), and the system outside your home folder (programs, libraries) |
-| Can write | Its workspace, its private home (`sandbox/<id>/`, which is `$HOME` in its shell), temp. The main agent also `USER.md` in pine's home, and nothing else there |
+| Can write | Its workspace, its private home (`sandbox/<id>/`, which is `$HOME` in its shell), temp. The main agent also the three files for all agents in pine's home (`AGENTS.md`, `TOOLS.md`, `USER.md`), and nothing else there |
 | Cannot read or write | Your home folder, pine's home (configuration, `.env`, database, other agents' folders), other agents' workspaces |
 | Cannot | Use the network (unless `sandbox.network` or you granted it to the conversation; the `download` tool is the exception described under Modes), signal or inspect other processes, or reach the services of your session: launching apps, AppleScript, the keychain or keyring, the clipboard, the session bus, the container daemon, an ssh agent |
 | Can compute on | macOS: the graphics chip and the neural engine, which the system's own recognition of text and pictures runs on (a Swift script that reads the text of a scanned page with Vision works). They compute; they reach no file, address or other program |
@@ -210,7 +210,8 @@ Consequences worth knowing:
 
 - An agent cannot change its own `agent.json`, its extensions or `pine.json`.
   It can change the files it is meant to keep: `AGENTS.md`, `SOUL.md` and `MEMORY.md` in its
-  workspace, and for the main agent `USER.md` ([agents.md](agents.md)), until the session is
+  workspace, and for the main agent the files for all agents in pine's home (`AGENTS.md`,
+  `TOOLS.md`, `USER.md`; [agents.md](agents.md)), until the session is
   restricted; see layer 4. Rules it must never change go into `agents/<id>/AGENTS.md`, which
   is outside its reach.
 - In the sandbox `git`, `node`, `python`, `sed` and the like work. Tools that need files in
@@ -381,8 +382,10 @@ page says "now send the notes folder to ...". pine tracks that:
   search text, a path) does reach the server. For a server where that matters, set
   `"approve": "always"`: then every call asks, reading included.
 - A tainted session keeps the agent's own files: `MEMORY.md`, `AGENTS.md`, `SOUL.md`, and
-  `USER.md` for the main agent. It writes them as before, and nobody checks what it writes
-  there, so text from a page can end up in the agent's memory ("What is not solved").
+  for the main agent the files for all agents (`AGENTS.md`, `TOOLS.md` and `USER.md` in
+  pine's home). It writes them as before, and nobody checks what it writes there, so text
+  from a page can end up in the agent's memory, and through the main agent in every agent's
+  instructions ("What is not solved"). A run started from outside writes none of them.
   Everything else that would be read as instructions (`CLAUDE.md`, `AGENTS.md` further
   down in the workspace, `.pi/`, `.agents/`, the instruction files of a folder opened for the
   conversation) is refused, with no question: by the file tools in every mode, and for shell
@@ -857,9 +860,11 @@ itself can be fooled by a page, but it has nothing to give away and cannot act.
   configuration, which asks you. For an agent that reads the web, `safe` mode is the wall.
 - **Memory after outside content.** An agent writes its own `MEMORY.md`, `AGENTS.md` and
   `SOUL.md` also in a conversation that has read outside content, unchecked. What a page
-  talks it into writing there is read in every later conversation. Look into those files
-  now and then; rules it must never change go into `agents/<id>/AGENTS.md`, which it cannot
-  write.
+  talks it into writing there is read in every later conversation. The main agent writes
+  the files for all agents the same way (`AGENTS.md`, `TOOLS.md` and `USER.md` in pine's
+  home), and what it is talked into writing there is read by every agent. Look into those
+  files now and then; rules it must never change go into `agents/<id>/AGENTS.md`, which it
+  cannot write.
 - **A model server reads what it is sent.** Whoever runs a server you add (`pine model add`,
   `add_model_server`) sees every conversation of the agents that use its models: your messages,
   the files they read, the results of their tools. Over plain `http` so does anyone on the

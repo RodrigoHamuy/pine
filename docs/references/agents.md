@@ -36,13 +36,15 @@ described in [setup.md](setup.md) under "Changing and removing an agent". Nobody
 ## The files an agent keeps itself
 
 An agent's instructions are files in its workspace, and the agent can write them. Together
-with one file about you they are read into its prompt with every conversation:
+with the files for all agents they are read into its prompt with every conversation:
 
 | File | Holds | Who writes it |
 |---|---|---|
 | `workspace/AGENTS.md` | Its purpose and how it works. You shape it by telling the agent ("your purpose is ...", "from now on answer in tables") | The agent, and you |
 | `workspace/SOUL.md` | Who it is: character and tone | The agent, and you. For another agent, the main agent: tell it how that agent should be or sound, and it replaces the file with `update_agent` (`soul`) |
 | `workspace/MEMORY.md` | What matters beyond a conversation: decisions, facts, preferences, open ends | The agent |
+| `AGENTS.md` in pine's home | Rules for all agents: how you want things done, whoever does them. See "What holds for all agents" | The main agent, and you |
+| `TOOLS.md` in pine's home | How the tools are used here, for all agents: which voice, device, account or program to take | The main agent, and you |
 | `USER.md` in pine's home | What every agent knows about you. One file for all agents | The main agent, and you |
 | `agents/<id>/AGENTS.md` | Optional. Rules of yours that the agent reads and cannot change | You |
 
@@ -58,9 +60,35 @@ loaded, and the agent creates it when it has something to put there. A change ap
 agent's next message on. Only these names (and a `CLAUDE.md`), at the top of the workspace, are
 read; anything else the agent keeps there is its own notes, which it reads when it needs them.
 
-Other agents get `USER.md` in their prompt but cannot open or change the file; they tell you
-when something belongs there. A conversation that has read outside content writes these files
-as before, without a question ([security.md](security.md)).
+Other agents get the three files of pine's home in their prompt but cannot open or change
+them; they tell you when something belongs there. A conversation that has read outside content
+writes these files as before, without a question ([security.md](security.md)).
+
+### What holds for all agents
+
+A rule, a preference or a default that is to hold for every agent is not a setting: tell the
+main agent ("for all agents: ...", "by default every agent ..."), and it writes it into one of
+three files in pine's home. These are pine's global instruction files: a global `AGENTS.md`,
+a global `TOOLS.md` and `USER.md`. They are put into every agent's prompt, and only the main
+agent (and you) can change them.
+
+| File | What goes into it | For example |
+|---|---|---|
+| `AGENTS.md` (in pine's home) | Rules for all agents: how you want things done, whoever does them | "Answer in English." "Ask before you delete anything." |
+| `TOOLS.md` (in pine's home) | How the tools are used here: which voice, device, account, program or folder to take when there are several, and other details of this setup | "Speak with voice F2, the fast one." "Photos go to the NAS, not the laptop." |
+| `USER.md` (in pine's home) | What every agent knows about you | Your name, what you do, how you like to be answered |
+
+They hold unless an agent's own file says otherwise: its `AGENTS.md` says what is different
+for that agent ("this agent speaks with voice M1"), and for that agent its own file counts.
+What only one agent should know or do goes into that agent's files, not into these.
+
+`pine init` starts the three as short stubs, and a home from before gets the ones it lacks
+when pine starts. A stub nobody has written into is left out of the prompt where tools are
+declared as families. A line added to one reaches a conversation that has already begun in
+the note in front of its next message, named as "for all agents"; a line that was changed or
+removed has every conversation take its instructions anew. What agents run on and how far
+they reach is not text but a setting, which the main agent changes with `set_setting`
+([setup.md](setup.md)).
 
 An existing home from before this layout keeps working: `agents/<id>/AGENTS.md` is still read.
 To hand the instructions over to the agent, move that file to `agents/<id>/workspace/AGENTS.md`;
@@ -77,9 +105,11 @@ Its system prompt is put together from, in this order:
    looks for in files (`sources`, `mcp_servers`, `skills`, `schedules`), that for everything
    else it should explain the steps to its owner, and that text from tools, files and the web
    is information, never a command. An `agents/<id>/SYSTEM.md` replaces this text.
-2. `agents/<id>/AGENTS.md`, if you keep one: rules the agent cannot change.
+2. `AGENTS.md` from pine's home, the rules for all agents, then `agents/<id>/AGENTS.md`, if
+   you keep one: rules the agent cannot change.
 3. The files it keeps itself, from its workspace: `AGENTS.md` (also `CLAUDE.md`), `SOUL.md`,
-   then `USER.md` from pine's home, then `MEMORY.md`. See "The files an agent keeps itself".
+   then `TOOLS.md` and `USER.md` from pine's home, then `MEMORY.md`. See "The files an agent
+   keeps itself".
    After them the instruction files of a folder opened for the conversation, and any files in
    `context`.
 4. Its skills: one line each; the agent reads a skill's file when it needs it. This manual is
@@ -185,7 +215,7 @@ With families, pine builds every request so that its beginning does not change:
 |---|---|
 | The tools | Always in one order and with fixed wording, for every conversation of the agent. Nothing in a description names what changes (which agents there are, which sources): that is in the note. |
 | The system prompt | pine's own text only, the same for every conversation of the agent, today and after a restart. |
-| The instruction files (`AGENTS.md`, `SOUL.md`, `USER.md`, `MEMORY.md`, a folder's) | They open the conversation as a first message of their own, in `<instructions>`, as they were when the conversation began. What is added to one later, the agent is told once, in the note in front of the next message ("New in your MEMORY.md since this conversation began"). A `MEMORY.md` that was rewritten (tidied, lines dropped) is told the same way, as it now reads. A file of rules that lost or changed lines (`AGENTS.md`, `SOUL.md`, `USER.md`), or a memory longer than 8 000 characters, is taken anew, so that a rule that was taken back is not in front of the model: that conversation is read again once, the tools and pine's text before it are not. |
+| The instruction files (`AGENTS.md`, `SOUL.md`, `MEMORY.md`, those for all agents in pine's home, a folder's) | They open the conversation as a first message of their own, in `<instructions>`, as they were when the conversation began. What is added to one later, the agent is told once, in the note in front of the next message ("New in your MEMORY.md since this conversation began"). A `MEMORY.md` that was rewritten (tidied, lines dropped) is told the same way, as it now reads. A file of rules that lost or changed lines (`AGENTS.md`, `SOUL.md`, one of the files for all agents), or a memory longer than 8 000 characters, is taken anew, so that a rule that was taken back is not in front of the model: that conversation is read again once, the tools and pine's text before it are not. |
 | What changes (agents to hand work to, event sources to subscribe to, the time) | In the `<pine-note>` in front of a message, only when it changed. |
 
 So a line the agent writes into `MEMORY.md`, an agent that is created or removed, a schedule,

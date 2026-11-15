@@ -227,7 +227,7 @@ export function helperArgs(write: string[], shared = SHARED, sessions = SESSIONS
 export interface Protected {
 	/** The agent's folders in which these rules hold: its workspace, and a folder opened for the conversation. */
 	roots: string[];
-	/** Single files that may not change, wherever they lie (USER.md, the files at the top of the workspace). */
+	/** Single files that may not change, wherever they lie (the files for all agents in pine's home, the files at the top of the workspace). */
 	files: string[];
 	/** File names that may not change anywhere under a root (AGENTS.md, CLAUDE.md, ...). */
 	names: string[];

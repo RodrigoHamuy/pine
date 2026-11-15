@@ -312,6 +312,12 @@ test("after outside content an agent keeps its own memory and instructions, and 
 	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "write", args: { path: "MEMORY.md", content: "EVIL" } }, { name: "write", args: { path: "AGENTS.md", content: "EVIL" } }] }]), trust: "untrusted" } as any);
 	for (const r of h.toolResults().slice(-2)) assert.match(r, /holds agent instructions and cannot be changed in a run that has handled outside content/);
 	assert.equal(fs.readFileSync(path.join(ws, "AGENTS.md"), "utf8"), "RULES v2\n");
+	// Nor what holds for all agents, which the main agent keeps in the owner's conversations: every agent would read it.
+	const forAll = ["AGENTS.md", "TOOLS.md", "USER.md"].map((f) => path.join(h.home, f));
+	const before = forAll.map((f) => fs.readFileSync(f, "utf8"));
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: forAll.map((f) => ({ name: "write", args: { path: f, content: "EVIL" } })) }]), trust: "untrusted" } as any);
+	for (const r of h.toolResults().slice(-3)) assert.match(r, /holds agent instructions and cannot be changed in a run that has handled outside content/);
+	assert.deepEqual(forAll.map((f) => fs.readFileSync(f, "utf8")), before);
 	await h.close();
 });
 

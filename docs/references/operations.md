@@ -335,8 +335,10 @@ are JSON with `Content-Type: application/json`.
   tools it called and the result. The full transcript is the newest `.jsonl` under
   `~/.pine/agents/<id>/sessions/<session>/`.
 - **Change instructions:** tell the agent ("from now on ..."); it writes that into `AGENTS.md` in
-  its workspace. Or edit the file yourself. Either applies to the next message. What all agents
-  should know about you goes into `USER.md` in pine's home, which the main agent keeps.
+  its workspace. Or edit the file yourself. Either applies to the next message. What is to
+  hold for all agents, tell the main agent: it keeps three files in pine's home that every
+  agent reads, `AGENTS.md` (rules), `TOOLS.md` (how the tools are used here: a default voice,
+  a device) and `USER.md` (what agents know about you).
 - **Change configuration:** edit `pine.json` or `agent.json`, run `pine check`, restart the
   daemon. Queued tasks survive the restart. MCP servers, event sources, subscriptions and new
   agents need neither an edit nor a restart: ask an agent ([setup.md](setup.md)), or use
@@ -390,7 +392,8 @@ are JSON with `Content-Type: application/json`.
 | Telegram `bindings` | A `telegram` source the agent sets up when you ask it to, and is subscribed to |
 | `SOUL.md`, `AGENTS.md`, `MEMORY.md` | The same three names in the agent's workspace, read into its prompt and written by the agent |
 | `USER.md` | One `USER.md` in pine's home for all agents, kept by the main agent |
-| `IDENTITY.md`, `TOOLS.md`, daily memory files | Not read by pine. Fold what matters into `SOUL.md`, `AGENTS.md` or `MEMORY.md`; other notes are ordinary files in the workspace |
+| `TOOLS.md` | One `TOOLS.md` in pine's home for all agents, kept by the main agent, beside an `AGENTS.md` there with rules for all agents. A `TOOLS.md` in a workspace is not read: move what it says into the one in pine's home, or into that agent's `AGENTS.md` |
+| `IDENTITY.md`, daily memory files | Not read by pine. Fold what matters into `SOUL.md`, `AGENTS.md` or `MEMORY.md`; other notes are ordinary files in the workspace |
 | Cron jobs | A schedule: ask the agent ("every morning at seven ..."), or write it under `schedules` with a `task` |
 | Heartbeat | Usually not needed: an event source wakes the agent when something happens, and looking again and again (`http`, `command`) costs no model turn. For a real one, a schedule with `every` whose task ends in "reply NO_REPLY if nothing needs attention" |
 | `/hooks/*` mappings | A `webhook` source the agent subscribes to, or `http.hooks` plus a route |

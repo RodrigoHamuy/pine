@@ -18,7 +18,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { dropConversationSkills, renameConversationSkills, skillDirs } from "./skills.ts";
-import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, toPiMcp, unsandboxed, userFile, WORKSPACE_FILES } from "./config.ts";
+import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, sharedFiles, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import { Limiter, type Slot } from "./limiter.ts";
 import { modelRuntime } from "./models.ts";
 import { families, NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK } from "./catalogue.ts";
@@ -84,8 +84,16 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
 		agent.id === mainId
 			? `You are the main agent, and pine's administrator: what your owner wants changed about pine, you change with your tools, and you never tell them to edit pine's files or delete its folders by hand. Only you can create, change and remove agents (create_agent, update_agent, remove_agent; agents lists them), change pine's settings (settings, set_setting) and its routes (routes, add_route, remove_route), set things up for all agents (scope "global") and bring in a new kind of event source (add_source_type). And you can do for another agent what it can do for itself: each tool for event sources, MCP servers, schedules and skills takes "agent". Your owner confirms what matters.`
 			: `Creating, changing and removing agents, pine's settings, and anything that is for all agents, is the main agent's job (its id is ${mainId}): you have no tools for it. When your owner wants that, tell them to ask ${mainId}.`;
-	const user = userFile(cfg);
-	const owner = agent.id === mainId ? `What all agents know about your owner is in ${user}; you are the one who keeps it.` : `What is known about your owner (USER.md) is kept by ${mainId} for all agents; when you learn something that belongs there, say so.`;
+	// What holds for all agents: the main agent is told that it keeps these files and what goes into which,
+	// every other agent that they are in its instructions and whom to tell.
+	const [rules, tools, user] = sharedFiles(cfg);
+	const owner =
+		agent.id === mainId
+			? `Three files in pine's home are part of every agent's instructions, and you are the one who keeps them. When your owner wants something to hold for all agents (a rule, a preference, a default), write it into the one it belongs in; what is for you alone goes into your own files. An agent's own files say what is different for that agent.
+  - ${rules}: rules for all agents, how your owner wants things done whoever does them.
+  - ${tools}: how the tools are used here, for all agents: which voice, device, account or program to take, and other details of this setup.
+  - ${user}: what all agents know about your owner.`
+			: `Three files are the same for all agents and are in your instructions: ${rules} (rules for all agents), ${tools} (how the tools are used here: which voice, device, account or program to take) and ${user} (what is known about your owner). They hold for you unless your own files say something else for you. ${mainId} keeps them and you cannot change them: when something belongs there, say so.`;
 	// How far its tools reach is fixed for an agent and its kind of run, so it is said here. What a
 	// conversation loses or gets on the way is said in the notes.
 	const reach =
@@ -2864,7 +2872,7 @@ export class AgentManager {
 	 * local models can only be taken back to a point the server saved: the start of a user message.
 	 * So everything before the first message is the same for every conversation of an agent, at
 	 * any time: the tools and pine's own instructions. What belongs to one conversation comes
-	 * after it: the instruction files (AGENTS.md, SOUL.md, USER.md, MEMORY.md) and the working
+	 * after it: the instruction files (the agent's own and those for all agents) and the working
 	 * folder open the conversation, as a first message of their own, as they were when it began.
 	 * A line added to MEMORY.md later is said in the note in front of the next message
 	 * (changedFiles), at the end; a file that lost lines is taken anew, which costs reading the
@@ -3214,7 +3222,7 @@ export class AgentManager {
 	/** How many lines of a text are no longer in what the file says now (a file that is gone has lost all of them). */
 	/**
 	 * Whether a conversation is given its instruction files anew because of what happened to this one: it lost or
-	 * changed lines, and it is a file of rules (AGENTS.md, SOUL.md, USER.md), where what was taken back must not stay
+	 * changed lines, and it is a file of rules (AGENTS.md, SOUL.md, and the files for all agents), where what was taken back must not stay
 	 * in front of the model, or a memory too long to be said again in a note. A memory that was tidied is told in the
 	 * note instead: it is the file that is rewritten most, by every conversation of the agent, and what an old line
 	 * of it says is a fact that no longer holds, not a rule.
@@ -3266,24 +3274,28 @@ export class AgentManager {
 			const was = kept.files[f];
 			const is = now[f];
 			if (was === is) continue;
-			const name = path.basename(f);
+			// A file for all agents is named as that: an agent has an AGENTS.md of its own too.
+			const forAll = sharedFiles(this.cfg).includes(f);
+			const name = forAll ? `${path.basename(f)} for all agents` : path.basename(f);
+			const the = forAll ? "the" : "your";
+			const The = forAll ? "The" : "Your";
 			// The instructions are taken anew with the next request (steady), so nothing is said here.
 			if (was !== undefined && this.retakes(f, was, is)) continue;
 			if (is === undefined) {
-				lines.push(`Your ${name} is gone since this conversation began: what it said at the start no longer holds.`);
+				lines.push(`${The} ${name} is gone since this conversation began: what it said at the start no longer holds.`);
 				continue;
 			}
 			// A memory with lines gone or reworded is said as it now reads, once. That costs its length; taking the
 			// instructions anew would cost the whole conversation, read again.
 			if (was !== undefined && this.linesGone(was, is) > 0) {
-				lines.push(`Your ${name} was rewritten since this conversation began. This replaces what you were given of it at the start:\n${is.trim()}`);
+				lines.push(`${The} ${name} was rewritten since this conversation began. This replaces what you were given of it at the start:\n${is.trim()}`);
 				continue;
 			}
 			if (was === undefined) lines.push(`Your instructions have a new file since this conversation began, ${name}:\n${truncate(is.trim(), 1500)}`);
 			else {
 				const old = new Set(was.split("\n").map((l) => l.trim()));
 				const added = is.split("\n").filter((l) => l.trim() && !old.has(l.trim()));
-				if (added.length) lines.push(`New in your ${name} since this conversation began:\n${truncate(added.join("\n"), 1500)}`);
+				if (added.length) lines.push(`New in ${the} ${name} since this conversation began:\n${truncate(added.join("\n"), 1500)}`);
 			}
 		}
 		return lines;
@@ -3335,19 +3347,26 @@ export class AgentManager {
 
 	/**
 	 * The files that make up an agent's instructions, in the order they enter its prompt; those
-	 * that exist. First what the owner alone can change, then what the agent keeps itself, the
-	 * one that changes most often last.
+	 * that exist. First the rules for all agents, then what the owner alone can change, then what
+	 * the agent keeps itself, with what else is the same for all agents (how the tools are used
+	 * here, the owner) before the one that changes most often, which is last.
 	 */
 	private instructionFiles(agent: AgentConfig, folder?: string): string[] {
 		const [how, ...rest] = WORKSPACE_FILES.map((f) => path.join(agent.workspace, f));
-		const all = [path.join(agent.dir, "AGENTS.md"), how, path.join(agent.workspace, "CLAUDE.md"), ...rest.slice(0, -1), userFile(this.cfg), ...rest.slice(-1), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context];
+		const shared = sharedFiles(this.cfg);
+		const [rules, ...setup] = shared;
+		const all = [rules, path.join(agent.dir, "AGENTS.md"), how, path.join(agent.workspace, "CLAUDE.md"), ...rest.slice(0, -1), ...setup, ...rest.slice(-1), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context];
 		const seen = new Set<string>();
 		const found = all.filter((f) => fs.existsSync(f) && fs.statSync(f).isFile() && !seen.has(realish(f)) && Boolean(seen.add(realish(f))));
 		if (!short(agent)) return found;
+		// A file that still says what pine started it with says nothing: it is left out, which a small model reads faster.
 		const untouched = (f: string) => {
-			const template = path.join(PINE_ROOT, "examples", "home", path.basename(f) === "USER.md" ? "USER.md" : path.join("agents", "main", "workspace", path.basename(f)));
+			const name = path.basename(f);
+			const forAll = shared.includes(f);
+			if (!forAll && !["SOUL.md", "MEMORY.md"].includes(name)) return false;
+			const template = path.join(PINE_ROOT, "examples", "home", forAll ? name : path.join("agents", "main", "workspace", name));
 			try {
-				return ["SOUL.md", "USER.md", "MEMORY.md"].includes(path.basename(f)) && fs.readFileSync(f, "utf8").trim() === fs.readFileSync(template, "utf8").trim();
+				return fs.readFileSync(f, "utf8").trim() === fs.readFileSync(template, "utf8").trim();
 			} catch {
 				return false;
 			}
@@ -3357,7 +3376,7 @@ export class AgentManager {
 
 	private stamp(agent: AgentConfig, folder?: string): string {
 		const [how, ...rest] = WORKSPACE_FILES.map((f) => path.join(agent.workspace, f));
-		return [path.join(agent.dir, "AGENTS.md"), how, path.join(agent.workspace, "CLAUDE.md"), ...rest, userFile(this.cfg), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context]
+		return [path.join(agent.dir, "AGENTS.md"), how, path.join(agent.workspace, "CLAUDE.md"), ...rest, ...sharedFiles(this.cfg), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context]
 			.map((f) => {
 				try {
 					return fs.statSync(f).mtimeMs;

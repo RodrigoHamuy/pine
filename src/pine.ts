@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Agent, Pool, setGlobalDispatcher } from "undici";
 import { AgentManager } from "./agents.ts";
-import { loadConfig, type PineConfig } from "./config.ts";
+import { loadConfig, PINE_ROOT, type PineConfig, sharedFiles } from "./config.ts";
 import { modelOrigins } from "./models.ts";
 import { HttpServer } from "./http.ts";
 import type { CompleteOptions } from "./router.ts";
@@ -71,6 +71,14 @@ export async function startPine(opts: { home?: string; config?: PineConfig; log?
 	for (const dir of [cfg.home, cfg.dataDir, path.join(cfg.home, "sandbox")]) {
 		fs.mkdirSync(dir, { recursive: true });
 		if (dir !== cfg.home) fs.chmodSync(dir, 0o700);
+	}
+	// A home from before there were files for all agents gets them, as `pine init` starts them: the
+	// main agent writes them inside its sandbox, where on Linux only a file that exists can be opened to it.
+	for (const file of sharedFiles(cfg)) {
+		const start = path.join(PINE_ROOT, "examples", "home", path.basename(file));
+		if (fs.existsSync(file) || !fs.existsSync(start)) continue;
+		fs.copyFileSync(start, file);
+		fs.chmodSync(file, 0o600);
 	}
 	installModelTimeouts(cfg);
 

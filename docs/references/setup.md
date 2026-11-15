@@ -367,7 +367,7 @@ What holds for them:
 
 | Setting | What it is |
 |---|---|
-| `defaults.model`, `defaults.thinking`, `defaults.mode` | What an agent gets that does not say otherwise: model, reasoning, mode (and with the mode, how far it reaches) |
+| `defaults.model`, `defaults.thinking`, `defaults.mode` | What an agent gets that does not say otherwise: model, reasoning, mode (and with the mode, how far it reaches). A rule or a preference for all agents (a default voice, a language) is not a setting: the main agent writes it into `AGENTS.md` or `TOOLS.md` in pine's home ([agents.md](agents.md), "What holds for all agents") |
 | `defaults.bashTimeoutSec`, `defaults.taskTimeoutSec` | Seconds a shell call and a task may run. From the next start |
 | `limits.maxConcurrentRuns` | How many agents work at the same time. From the next start |
 | `defaults.catalogue` | How tools are declared to the model: `families` (grouped, short) or `full` (every tool by itself). From the next start. See [agents.md](agents.md), "How tools are declared" |
