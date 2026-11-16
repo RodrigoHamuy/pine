@@ -173,7 +173,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	// As the system does it when a folder is dropped on the app's icon.
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
 	await sees(".tab.on .name >> text=pine-desktop-folder");
-	await page.click(".titlebar .btn[title^='Changes']");
+	await page.click(".conv-head .btn[title^='Changes']");
 	await sees(".code .frow");
 	assert.match(await page.textContent(".code .frow"), /index\.ts/);
 	await page.click(".code .frow");

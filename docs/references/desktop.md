@@ -81,28 +81,30 @@ you quit (`⌘Q`). A daemon the app started that stops answering is started agai
 ## The window
 
 ```
- ● ● ●  ⌕ ◧ │ ★ main ×  ○ main · notes ×  +                          ◨   ← tabs; the code panel's button
-────────────┼──────────────────────────────────────────────┬──────────────
- + New      │                what do the notes say?        │ Changes Last turn Files …
-            │                                              │
- MAIN       │ ▸ 1 tool call · read · 148 ms                │  M index.ts  src   +1 −1
- ★ main     │                                              │
- ○ notes    │ The notes say first line.                    │
- SCOUT      │                                              │
- ★ main     │ ┌──────────────────────────────────────────┐ │
-            │ │ Message main · / for commands · @ files  │ │
- ⌇ Events   │ │ ▢ no folder  ▣ m  ✳ off  ⛨ safe     7% ↑│ │
- ⚙ Settings │ └──────────────────────────────────────────┘ │
- ● pine 0.22 · started here                                │
+ ● ● ●          ◧   ★ main   ▢ main · notes ×   +                       ← tabs
+ ✎ New conversation    ╭──────────────────────────────╮ ╭───────────────────────╮
+ ⌕ Search and commands │ M main / notes   ▢ ~/dev/x  7% ◨ │ Changes Last turn Files … │
+ ▢ Open a folder       │                              │ │                       │
+                       │        what do the notes say?│ │  M index.ts  src +1 −1│
+ M main                │ ▸ 1 tool call · read · 148 ms│ │                       │
+   ★ main              │ The notes say first line.    │ │                       │
+   ○ notes             │ ╭──────────────────────────╮ │ │                       │
+ S scout               │ │ Message main · / · @     │ │ │                       │
+   ★ main              │ │ + ▢ x  ▣ m  ✳ off  ⛨ safe ↑│ │ │                       │
+ ⌇ Events  ⚙ Settings  │ ╰──────────────────────────╯ │ │                       │
+ ● pine 0.22 · started here ──────────────────────────╯ ╰───────────────────────╯
 ```
+
+The panels lie as cards on the window: the conversation, and beside it the code panel.
 
 | Part | What it is |
 |---|---|
-| Side bar | Every agent with its conversations: its own (`main`) first, then pinned ones, then by when they were last used. A click opens one in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). `+` beside an agent's name starts a new conversation with it. At the bottom: the event log, the settings, and whether pine answers |
+| Side bar | At the top: New conversation, Search and commands (the palette), Open a folder. Then every agent, the main one first, with its conversations: its own (`main`) first, then pinned ones, then by when they were last used. A click opens one in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). `+` beside an agent's name starts a new conversation with it. At the bottom: the event log, the settings, and whether pine answers |
 | Tabs | One conversation each, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
 | Conversation | Your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens. A `↳ … open` line opens a sub-agent's or delegated task's work in a tab of its own |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
-| The bar under the input | The folder the conversation works in, the agent's model, how much it reasons and its mode: each opens a list on a click. `outside content` appears when the conversation has read something from outside. The ring shows how full the context is |
+| The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |
+| The bar under the input | `+` attaches files; then the folder the conversation works in, the agent's model, how much it reasons and its mode: each opens a list on a click. `outside content` appears when the conversation has read something from outside |
 | Code panel | Beside a conversation (`⌥⌘B`): see "The code panel and the editor" |
 | Palette | `⌘K`: every command, open tab, conversation, agent and settings page by name |
 
@@ -116,7 +118,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | `/sessions`, the conversation list | The side bar |
 | `/code` | The code panel (`⌥⌘B`), which also edits |
 | `/mcp`, `/sources`, `/subscribe` | Also Settings > MCP servers and Settings > Events |
-| `/attach <path>`, `/paste` | Files from the Finder put on the input, a picture pasted into it, or the paper clip |
+| `/attach <path>`, `/paste` | Files from the Finder put on the input, a picture pasted into it, or the `+` in the bar under the input |
 | `/export` | Asks where to save the file |
 | `/voice`, `ctrl+r` | The microphone in the bar under the input, or `⌃R` |
 | `/quit` | `⌘Q` |

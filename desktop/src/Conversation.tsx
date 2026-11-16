@@ -369,6 +369,44 @@ function StatusLine({ tab }: { tab: Tab }) {
 	);
 }
 
+/** What a conversation is, in one line at its top: whose, which, where it works; and how full its context is. */
+function ConvHead({ tab }: { tab: Tab }) {
+	useModel(store);
+	const chat = tab.kind === "chat";
+	const total = tab.tokens.input + tab.tokens.cached;
+	return (
+		<div className="conv-head">
+			<span className="avatar">{tab.agent.slice(0, 1).toUpperCase()}</span>
+			<span className="muted">{tab.agent}</span>
+			<span className="faint">/</span>
+			<b className="cut">{chat ? tab.session : `task #${tab.task}`}</b>
+			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><Icon name="folder" size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
+			{chat && store.pins.has(tab.key) ? <Icon name="star" size={12} className="faint" /> : null}
+			<span className="grow" />
+			{tab.context !== undefined ? (
+				<span className="conv-meta" title={`Context ${tab.context}% full${tab.cacheShare !== undefined ? ` · ${tab.cacheShare}% of the last request came from the model server's cache` : ""}${speedText(tab.speed) ? ` · ${speedText(tab.speed)}` : ""}`}>
+					<Ring percent={tab.context} />
+					{total ? `${count(total)} · ` : ""}{Math.round(tab.context)}%
+				</span>
+			) : null}
+			{chat ? <Button small variant="ghost" className={store.code ? "on" : ""} icon="panel" title="Changes, files, output (⌥⌘B)" onClick={() => void store.command("code")} /> : null}
+		</div>
+	);
+}
+
+/** A small ring that fills with the conversation's context window. */
+function Ring({ percent }: { percent: number }) {
+	const r = 6;
+	const c = 2 * Math.PI * r;
+	const colour = percent >= 85 ? "var(--bad)" : percent >= 65 ? "var(--warn)" : "var(--muted)";
+	return (
+		<svg className="ring" width="16" height="16" viewBox="0 0 16 16">
+			<circle cx="8" cy="8" r={r} fill="none" stroke="var(--press)" strokeWidth="2" />
+			<circle cx="8" cy="8" r={r} fill="none" stroke={colour} strokeWidth="2" strokeDasharray={`${(c * Math.min(100, percent)) / 100} ${c}`} strokeLinecap="round" />
+		</svg>
+	);
+}
+
 export function Conversation({ tab }: { tab: Tab }) {
 	useModel(tab);
 	const [finding, setFinding] = useState(false);
@@ -399,6 +437,7 @@ export function Conversation({ tab }: { tab: Tab }) {
 	const chat = tab.kind === "chat";
 	return (
 		<div className="conv">
+			<ConvHead tab={tab} />
 			{finding ? <FindBar root={() => scroller.current} close={() => setFinding(false)} /> : null}
 			<div
 				className="transcript"

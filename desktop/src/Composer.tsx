@@ -5,7 +5,7 @@ import { api } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
 import { type Attachment, store, type Tab, useModel, useSignal } from "./model.ts";
-import { baseName, size, speedText, tilde } from "./text.ts";
+import { baseName, size, tilde } from "./text.ts";
 import { Icon } from "./ui.tsx";
 
 const MAX_FILE = 20 * 1024 * 1024;
@@ -39,19 +39,6 @@ interface Suggestion {
 	value: string;
 	label: string;
 	about?: string;
-}
-
-/** A small ring that fills with the conversation's context window. */
-function Context({ percent }: { percent: number }) {
-	const r = 6;
-	const c = 2 * Math.PI * r;
-	const colour = percent >= 85 ? "var(--bad)" : percent >= 65 ? "var(--warn)" : "var(--accent)";
-	return (
-		<svg className="ring" width="16" height="16" viewBox="0 0 16 16">
-			<circle cx="8" cy="8" r={r} fill="none" stroke="var(--press)" strokeWidth="2" />
-			<circle cx="8" cy="8" r={r} fill="none" stroke={colour} strokeWidth="2" strokeDasharray={`${(c * Math.min(100, percent)) / 100} ${c}`} strokeLinecap="round" />
-		</svg>
-	);
 }
 
 export function Composer({ tab }: { tab: Tab }) {
@@ -335,6 +322,7 @@ export function Composer({ tab }: { tab: Tab }) {
 					onBlur={() => window.setTimeout(() => setItems([]), 120)}
 				/>
 				<div className="composer-bar">
+					<button type="button" className="chip plus-btn" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><Icon name="plus" size={15} /></button>
 					<button type="button" className="chip" title={tab.folder ? `Works in ${tab.folder}` : "The folder this conversation works in"} onClick={() => void store.pickFolder(tab)}>
 						<Icon name="folder" size={13} />
 						<span className="cut">{tab.folder ? baseName(tab.folder) : "no folder"}</span>
@@ -353,14 +341,7 @@ export function Composer({ tab }: { tab: Tab }) {
 					</button>
 					{tainted ? <span className="chip warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><Icon name="eye" size={13} />outside content</span> : null}
 					<span className="grow" />
-					{tab.context !== undefined ? (
-						<span className="chip" title={`Context ${tab.context}% full${tab.cacheShare !== undefined ? ` · ${tab.cacheShare}% of the last request came from the model server's cache` : ""}${speedText(tab.speed) ? ` · ${speedText(tab.speed)}` : ""}`}>
-							<Context percent={tab.context} />
-							{Math.round(tab.context)}%
-						</span>
-					) : null}
 					{store.platform === "darwin" ? <button type="button" className={`chip${voice !== "off" ? " bad" : ""}`} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><Icon name="mic" size={14} /></button> : null}
-					<button type="button" className="chip" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><Icon name="clip" size={14} /></button>
 					{tab.busy && !text.trim() ? (
 						<button type="button" className="send stop" title="Stop (esc)" onClick={() => void store.stop(tab)}><Icon name="stop" size={12} /></button>
 					) : (

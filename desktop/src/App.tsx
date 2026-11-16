@@ -116,15 +116,12 @@ function Sidebar() {
 	return (
 		<aside className="sidebar">
 			<div className="side-top">
-				<Button variant="ghost" icon="search" title="Commands (⌘K)" onClick={() => void s.command("palette")} />
 				<Button variant="ghost" icon="sidebar" title="Hide the sidebar (⌘B)" onClick={() => void s.command("sidebar")} />
 			</div>
 			<div className="side-scroll">
-				<button type="button" className="side-new" onClick={() => void s.newConversation()}>
-					<Icon name="plus" size={14} />
-					New conversation
-					<kbd>⌘T</kbd>
-				</button>
+				<div className="side-row" onClick={() => void s.newConversation()}><Icon name="edit" size={14} /><span className="grow">New conversation</span><kbd>⌘T</kbd></div>
+				<div className="side-row" onClick={() => void s.command("palette")}><Icon name="search" size={14} /><span className="grow">Search and commands</span><kbd>⌘K</kbd></div>
+				<div className="side-row" onClick={() => void s.command("open-folder")}><Icon name="folder" size={14} /><span className="grow">Open a folder</span><kbd>⌘O</kbd></div>
 				{s.agents.map((a) => {
 					const list = s.conversations.get(a.id) ?? [];
 					// The agent's own conversation first, then what is pinned, then by when it was last used.
@@ -134,7 +131,7 @@ function Sidebar() {
 					for (const t of s.tabs) if (t.kind === "chat" && t.agent === a.id && !rows.some((c) => c.session === t.session)) rows.push({ session: t.session, tasks: 0, last: Date.now(), pinned: false, open: true });
 					return (
 						<div key={a.id}>
-							<div className="side-agent" title={a.description}>
+							<div className="side-agent" title={a.description} data-initial={a.id.slice(0, 1).toUpperCase()}>
 								<span className="cut grow">{a.id}</span>
 								<Button small variant="ghost" icon="plus" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)} />
 							</div>
@@ -197,7 +194,6 @@ function TitleBar() {
 			<Button variant="ghost" icon="plus" title="New conversation (⌘T)" onClick={() => void s.newConversation()} />
 			<span className="grow" />
 			{s.view === "settings" ? <Button variant="ghost" icon="x" onClick={() => void s.command("settings")}>Close settings</Button> : null}
-			{s.view === "chat" && s.active?.kind === "chat" ? <Button variant="ghost" className={s.code ? "on" : ""} icon="panel" title="Changes, files, output (⌥⌘B)" onClick={() => void s.command("code")} /> : null}
 		</header>
 	);
 }

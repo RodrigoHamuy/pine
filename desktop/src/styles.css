@@ -1,4 +1,5 @@
-/* Pine's look: quiet surfaces, one green, and type that does the work. Light and dark follow the system. */
+/* Pine's look: panels that lie as cards on the window, neutral surfaces, one green, and type that does the
+   work. Light and dark follow the system. */
 
 :root {
 	color-scheme: light dark;
@@ -8,17 +9,19 @@
 	--r-s: 7px;
 	--r-l: 14px;
 	--sidebar-w: 248px;
-	--bar-h: 46px;
+	--bar-h: 44px;
+	--gap: 6px;
 	--col: 780px;
 
-	--bg: #fbfbf9;
+	--bg: #fdfdfc;
 	--surface: #ffffff;
-	--raised: #f3f4f0;
-	--sunk: #eef0ec;
+	--raised: #f4f5f2;
+	--sunk: #eff0ed;
+	--composer: #ffffff;
 	--hover: rgba(20, 30, 24, 0.055);
 	--press: rgba(20, 30, 24, 0.09);
-	--line: #e3e6e0;
-	--line-soft: #eceee9;
+	--line: #e1e3de;
+	--line-soft: #ecedea;
 	--text: #1a1d1b;
 	--muted: #666e68;
 	--faint: #99a19b;
@@ -37,20 +40,21 @@
 	--del-bg: rgba(210, 70, 60, 0.11);
 	--shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 28px rgba(0, 0, 0, 0.1);
 	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.22);
-	--side: rgba(244, 245, 241, 0.84);
+	--side: rgba(236, 237, 233, 0.86);
 	--scrim: rgba(20, 24, 22, 0.28);
 }
 
 @media (prefers-color-scheme: dark) {
 	:root {
-		--bg: #0f1110;
-		--surface: #151817;
-		--raised: #1b1f1d;
-		--sunk: #0b0d0c;
+		--bg: #161716;
+		--surface: #1b1c1b;
+		--raised: #202221;
+		--sunk: #111211;
+		--composer: #1d1f1e;
 		--hover: rgba(225, 240, 232, 0.06);
 		--press: rgba(225, 240, 232, 0.1);
-		--line: #262b28;
-		--line-soft: #1e2220;
+		--line: #2a2c2b;
+		--line-soft: #222423;
 		--text: #e7eae7;
 		--muted: #8d958f;
 		--faint: #5f6761;
@@ -69,7 +73,7 @@
 		--del-bg: rgba(235, 100, 90, 0.13);
 		--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);
 		--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
-		--side: rgba(20, 23, 21, 0.82);
+		--side: rgba(12, 13, 12, 0.86);
 		--scrim: rgba(0, 0, 0, 0.5);
 	}
 }
@@ -161,18 +165,18 @@ select {
 .app {
 	display: flex;
 	height: 100%;
+	/* The window itself: what shows between and around the panels. On a Mac the system's material lies behind it. */
+	background: var(--side);
+}
+html:not([data-platform="darwin"]) .app {
+	background: var(--sunk);
 }
 .sidebar {
 	width: var(--sidebar-w);
 	flex: none;
 	display: flex;
 	flex-direction: column;
-	background: var(--side);
-	border-right: 1px solid var(--line);
 	min-height: 0;
-}
-html:not([data-platform="darwin"]) .sidebar {
-	background: var(--raised);
 }
 .side-top {
 	height: var(--bar-h);
@@ -198,34 +202,28 @@ html:not([data-platform="darwin"]) .side-top {
 	overflow-y: auto;
 	padding: 4px 8px 8px;
 }
-.side-new {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-	width: 100%;
-	padding: 7px 10px;
-	margin-bottom: 10px;
-	border: 1px solid var(--line);
-	border-radius: var(--r-s);
-	background: var(--surface);
-	text-align: left;
-}
-.side-new:hover {
-	border-color: var(--faint);
-}
-.side-new kbd {
-	margin-left: auto;
-}
 .side-agent {
 	display: flex;
 	align-items: center;
-	gap: 6px;
-	padding: 10px 6px 4px 8px;
-	font-size: 11px;
+	gap: 8px;
+	padding: 14px 6px 4px 8px;
+	font-size: 12.5px;
 	font-weight: 600;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--faint);
+	color: var(--text);
+}
+.side-agent::before,
+.avatar {
+	content: attr(data-initial);
+	width: 18px;
+	height: 18px;
+	border-radius: 5px;
+	background: var(--press);
+	color: var(--muted);
+	font-size: 10.5px;
+	font-weight: 650;
+	display: grid;
+	place-items: center;
+	flex: none;
 }
 .side-agent .btn {
 	opacity: 0;
@@ -268,7 +266,6 @@ html:not([data-platform="darwin"]) .side-top {
 .side-foot {
 	flex: none;
 	padding: 8px;
-	border-top: 1px solid var(--line-soft);
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
@@ -306,7 +303,6 @@ html:not([data-platform="darwin"]) .side-top {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
-	background: var(--bg);
 }
 .titlebar {
 	height: var(--bar-h);
@@ -314,8 +310,7 @@ html:not([data-platform="darwin"]) .side-top {
 	display: flex;
 	align-items: center;
 	gap: 4px;
-	padding: 0 8px;
-	border-bottom: 1px solid var(--line);
+	padding: 0 8px 0 2px;
 	-webkit-app-region: drag;
 }
 .app.no-sidebar:not(.fullscreen) .titlebar {
@@ -353,8 +348,9 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	color: var(--text);
 }
 .tab.on {
-	background: var(--press);
+	background: var(--bg);
 	color: var(--text);
+	box-shadow: 0 0 0 1px var(--line);
 }
 .tab .name {
 	overflow: hidden;
@@ -416,6 +412,45 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	flex: 1;
 	min-height: 0;
 	display: flex;
+	padding: 0 var(--gap) var(--gap) 0;
+}
+.app.no-sidebar .body {
+	padding-left: var(--gap);
+}
+/* The panels: each a card of its own on the window. */
+.conv,
+.code,
+.settings,
+.events {
+	background: var(--bg);
+	border: 1px solid var(--line);
+	border-radius: 12px;
+	overflow: hidden;
+}
+.conv-head {
+	height: 40px;
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 7px;
+	padding: 0 8px 0 12px;
+	font-size: 12.5px;
+	min-width: 0;
+}
+.conv-head b {
+	font-weight: 600;
+	flex: 0 1 auto;
+	min-width: 0;
+}
+.conv-meta {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	color: var(--muted);
+	font-size: 12px;
+	font-variant-numeric: tabular-nums;
+	margin-right: 4px;
+	flex: none;
 }
 
 /* ---- buttons and fields ---------------------------------------------------------------------------- */
@@ -1580,7 +1615,7 @@ select.input {
 .composer {
 	border: 1px solid var(--line);
 	border-radius: var(--r-l);
-	background: var(--surface);
+	background: var(--composer);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
 	transition: border-color 0.12s, box-shadow 0.12s;
 }
@@ -1618,10 +1653,15 @@ select.input {
 	padding: 4px 6px 6px;
 	min-width: 0;
 }
+.chip.plus-btn {
+	width: 26px;
+	padding: 0;
+	justify-content: center;
+}
 .send {
-	width: 30px;
-	height: 30px;
-	border-radius: 50%;
+	width: 28px;
+	height: 28px;
+	border-radius: 8px;
 	border: none;
 	background: var(--accent);
 	color: var(--on-accent);
@@ -1696,33 +1736,31 @@ select.input {
 /* ---- the panel beside a conversation ----------------------------------------------------------------- */
 
 .splitter {
-	width: 5px;
-	margin: 0 -2px;
+	width: var(--gap);
 	flex: none;
 	cursor: col-resize;
-	z-index: 4;
 	position: relative;
 }
 .splitter::after {
 	content: "";
 	position: absolute;
 	left: 2px;
-	top: 0;
-	bottom: 0;
-	width: 1px;
-	background: var(--line);
+	top: 14px;
+	bottom: 14px;
+	width: 2px;
+	border-radius: 2px;
+	background: transparent;
+	transition: background 0.12s;
 }
 .splitter:hover::after,
 .splitter.drag::after {
 	background: var(--accent);
-	width: 2px;
 }
 .code {
 	flex: none;
 	display: flex;
 	flex-direction: column;
 	min-width: 300px;
-	background: var(--bg);
 }
 .code-head {
 	height: 40px;
@@ -2149,6 +2187,9 @@ pre.log {
 	place-items: center;
 	-webkit-app-region: drag;
 	background: var(--bg);
+	margin: var(--gap);
+	border: 1px solid var(--line);
+	border-radius: 12px;
 }
 .gate-in {
 	-webkit-app-region: no-drag;
@@ -2175,7 +2216,7 @@ pre.log {
 
 .find {
 	position: absolute;
-	top: 10px;
+	top: 46px;
 	right: 22px;
 	z-index: 5;
 	display: flex;
