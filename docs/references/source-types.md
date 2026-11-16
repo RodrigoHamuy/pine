@@ -6,10 +6,6 @@ and how secrets are kept is in [sources.md](sources.md). This file is the catalo
 type there is, the options it takes, the events it reports with their fields, and the services
 and devices each one reaches, with an entry to copy for each.
 
-The seven everyday types (`folder`, `mqtt`, `webhook`, `ftp`, `telegram`, `http`, `command`)
-are described in [sources.md](sources.md), "The built-in types". The others are described
-here.
-
 ## Which type for what
 
 Two kinds of type exist. One **is told**: it listens on a port or holds a connection open, and
@@ -45,6 +41,29 @@ nothing: no event, nothing stored, no model woken.
 What should happen at a time is not a source but a schedule ([events.md](events.md),
 "Schedules"). A `calendar` source reports that an entry was added or moved; "ten minutes
 before it starts" is a schedule the agent sets when it is told of the entry.
+
+### Looking again and again
+
+`http`, `command`, `feed`, `calendar`, `modbus` and `presence` cannot be told when something
+happens; they go and look. Three things hold for every source that does:
+
+- **The first look is the starting point.** Setting a source up reports nothing. Only what is
+  different at a later look does.
+- **A look that finds nothing new costs nothing.** No event, nothing stored, no model woken.
+  This is the difference to waking an agent every few minutes to check: an agent's turn is
+  spent only when there is something to act on.
+- **A failed look is not an event.** The pause before the next one doubles with each failure in
+  a row, up to 15 minutes (or the source's own interval, if that is longer), and goes back to
+  normal with the first look that works.
+
+How a polling source is doing is said wherever sources are listed (`pine sources`, `/sources`,
+the agent's `sources` tool): `last looked 14:02:11`, or `failing since 14:02:11 (4 looks): it
+answered 503`, followed by what it found. What it found is repeated there only when it is a
+number or a single word; anything longer is only counted, because that line is read by agents
+without the mark that outside content gets.
+
+Two looks of one source never run at the same time, and each waits a little shorter or longer
+than its interval, so that sources set to the same interval do not all fire together.
 
 ## Which type for which service
 
@@ -83,99 +102,502 @@ before it starts" is a schedule the agent sets when it is told of the entry.
 
 ## How every type is used
 
-### Ask the agent
-
 Say what you want watched. The agent picks the type, pine shows you what the source will do,
 and you confirm:
 
 > Tell me on Telegram when pmndre/pine has a new release.
 
-The agent calls `add_source` with `type: "feed"`, the address, a description and a note for
-itself. The dialog says "read the feed at https://github.com/pmndre/pine/releases.atom
-every 15m and report each new entry". A password, token or key is never typed into the conversation: the
-agent leaves it out, and pine asks you for it in a dialog of its own and keeps it in `.env`
-([sources.md](sources.md), "Secrets").
+Or write the entry yourself, under `sources` in `pine.json` or in an agent's `agent.json`, with
+the options of the type next to `type`, and subscribe an agent to it. Each type below has an
+entry to copy.
 
-An agent is told the everyday types with their options. The other types it knows by name and
-purpose, and what one takes it looks up in this manual (a search for "source type" and the
-name finds a part made from the type's own description), or learns from the answer to a call
-that leaves a needed option out.
+What holds whatever the type is in [sources.md](sources.md): the keys every source has
+("Configuring sources"), what all types have in common, subscribing and its filter `when`
+("Being woken only for what counts"), how a password or token is kept ("Secrets"), what an
+event looks like, and whose words an event counts as ("Trust").
 
-### In the configuration
+## The types
 
-A source is an entry under `sources` in `pine.json` (every agent can subscribe) or in an
-agent's `agent.json` (only that agent can). The options of the type lie next to `type`:
+### folder
+
+A folder: reports every new or changed file once it has stopped growing.
 
 ```json
-"sources": {
-  "releases": { "type": "feed", "url": "https://github.com/pmndre/pine/releases.atom", "every": "30m", "description": "new releases of pine" }
+"scans": { "type": "folder", "dir": "~/Scans", "mask": "*.pdf" }
+```
+
+| Option | Default | |
+|---|---|---|
+| `dir` | | The folder. `~` and paths relative to the configuration file work. |
+| `mask` | | Only files whose name matches, as in a shell: `*.pdf`, `*.{png,jpg}`, `report-??.csv`. Several are separated by commas. Capitals do not matter. |
+| `pattern` | | Only files whose full path matches this regular expression, for what a mask cannot say (`/src/.*\\.ts$`). Capitals do not matter. |
+| `ignore` | version control, dependencies, editor leftovers | Never files whose path matches this one. The default skips `.git`, `node_modules`, `.DS_Store`, build folders, and files ending in `~`, `.swp`, `.tmp`, `.part`. |
+| `settle` | `"1.5s"` | How long a file must stay unchanged before it counts as complete. |
+| `recursive` | `true` | Also folders inside it. |
+
+Event `added`: `{ path, file, size, images? }`. For jpg, png, webp and gif under 10 MB the
+picture is shown to the agent if its model can look at images.
+
+### mqtt
+
+An MQTT broker: reports the messages on the topics you name.
+
+```json
+"printer": {
+  "type": "mqtt", "url": "mqtts://192.168.1.50:8883", "username": "bblp", "password": "${BAMBU_ACCESS_CODE}",
+  "topics": ["device/+/report"], "insecureTls": true, "minInterval": "30s",
+  "trust": "owner", "description": "status reports of the 3D printer"
 }
 ```
 
-The keys every source has, whatever its type (`description`, `agents`, `trust`, `start`,
-`enabled`), are in [sources.md](sources.md), "Configuring sources". Then an agent subscribes:
-in a conversation ("watch the releases"), or with `pine subscribe main releases`.
+| Option | Default | |
+|---|---|---|
+| `url` | | `mqtt://`, `mqtts://`, `ws://` or `wss://` address of the broker. |
+| `topics` | | One MQTT topic filter or a list. |
+| `publish` | none | Topics an agent may send to, to act on a device: `["zigbee2mqtt/+/set"]`. Without it the source only listens. See "Sending through a source" in [sources.md](sources.md). |
+| `username`, `password`, `clientId` | | As the broker wants them. |
+| `minInterval` | | Drop messages that follow the last one on the same topic sooner than this. Use it for devices that report every second. |
+| `insecureTls` | `false` | Accept a certificate that cannot be verified, as devices with self-made ones need. |
 
-### What an event looks like
+Event `message`: `{ topic, value }`, where `value` is the parsed JSON, or the text.
 
-Every report is an event on pine's bus:
+The example is a Bambu printer in LAN mode: it is its own broker on port 8883, the user is
+`bblp`, the password is the access code from the printer's screen.
 
-| Field | |
-|---|---|
-| `topic` | `source/<name>/<event>`, or `source/<name>@<agent>/<event>` for an agent's own source. `<event>` is the word in the tables below: `entry`, `message`, `changed`. |
-| `payload` | The fields in the tables below. |
-| `trust` | `"untrusted"` unless the source is marked as yours. The agent reads the event as data, not as instructions. |
-| `ts`, `id` | When it was reported, and its number in the event log. |
+### webhook
 
-`pine events --topic 'source/#'` shows them as they come, and `pine events --topic
-'source/releases/#'` those of one source. The agent receives the event as a message with the
-note of its subscription in front ([sources.md](sources.md), "What the agent is woken with").
-
-### Being woken only for what counts
-
-A subscription can carry a filter, `when`, so that the agent's turn is spent only on the
-events that matter. It names fields of the event and what each has to be:
+A web address other services can call: `POST http://<pine's control address>/hook/<name>`.
 
 ```json
-{ "source": "price", "when": { "payload.number": { "lt": 500 } }, "note": "Tell me: the fridge is under 500." }
+"github": { "type": "webhook", "secret": "${GITHUB_HOOK_SECRET}", "description": "pushes and issues of my repositories" }
 ```
 
-| In `when` | Holds when the field |
+| Option | |
 |---|---|
-| `"payload.kind": "dm"` | equals the value |
-| `{ "in": ["err", "crit"] }` | is one of these |
-| `{ "gt": 90 }`, `{ "gte": 90 }`, `{ "lt": 5 }`, `{ "lte": 5 }` | is a number above, at least, below, at most |
-| `{ "contains": "backup" }` | is a text or a list that contains it |
-| `{ "regex": "\\.pdf$" }` | matches the regular expression |
-| `{ "exists": true }` | is there at all |
-| `{ "ne": "ok" }` | is anything but the value |
+| `secret` | The caller proves itself with it: `Authorization: Bearer <secret>`, or a signature of the body (HMAC SHA-256 in `X-Hub-Signature-256` or `X-Signature`, as GitHub sends it). |
+| `open` | `true` instead of a secret: accept anyone who can reach the port. Only for a port nobody else can reach. |
 
-All fields named have to hold. The agent sets `when` with its `subscribe` tool; in a file it
-is a key of the subscription. Many types also narrow at the source (`match`, `keywords`,
-`topics`, `severity`): what is filtered there is not even an event. `throttle` and `debounce`
-of a subscription keep a source that reports in bursts from waking the agent for each one,
-and a subscription with `"session": "new"` gives every event a conversation of its own
-([sources.md](sources.md), "A fresh conversation for every event").
+Event `received`: `{ body, headers }`. `body` is the parsed JSON, or `{ text }`. Of the headers
+only a few that say what kind of request it is are kept (`content-type`, `user-agent`,
+`x-github-event` and the like), never the secret.
 
-### What all types have in common
+The address has the source's name as it is in the event topics: `/hook/<name>` for a source in
+`pine.json`, `/hook/<name>@<agent>` for one in an agent's own `agent.json` (which is where a
+source that an agent sets up goes, unless it is for all agents).
 
-- **Nothing runs until somebody is subscribed.** A configured source opens no port and no
-  connection. The first subscription starts it, the last one to end stops it.
-- **The start is the starting point.** What is there when a source starts (the entries of a
-  feed, the mail in a mailbox, the state of a device) is not reported. Only what comes after is.
-- **What is reported is bounded.** A text is cut to a few thousand characters, and most types
-  that are told things report at most so many events a minute (`perMinute` where it can be
-  set); what was left out is counted in the next event's `dropped`.
-- **An address is the one you confirmed.** A public address has to stay on the public
-  internet: if its name one day leads into your network, the source fails and says so. A local
-  address is said to be local in the dialog. A redirect to another host is not followed, and a
-  token goes only to the host it was given for.
-- **A source that also sends, sends only where you listed.** `sendTo` of `mail`, `slack`,
-  `matrix` and `discord`, `publish` of `mqtt`. Without the list nothing can be sent.
-- **How it is doing is said where sources are listed** (`pine sources`, `/sources`, the
-  agent's `sources` tool): connected since when, last looked when, failing since when and why.
+It needs the control API (`http` in `pine.json`), which listens on `127.0.0.1` by default. A
+service on the internet reaches it only through a tunnel or reverse proxy that you set up. While
+nobody is subscribed the address answers "not found".
 
-## The types
+### ftp
+
+An FTP drop: a small FTP server that accepts uploads and nothing else. For cameras, doorbells,
+scanners and other devices whose way of sending a file is "upload to FTP server".
+
+```json
+"door": { "type": "ftp", "port": 2121, "user": "cam", "password": "${CAMERA_FTP_PASSWORD}", "allow": ["192.168.1.40"], "description": "pictures from the front door camera when it sees motion" }
+```
+
+| Option | Default | |
+|---|---|---|
+| `port`, `user`, `password` | | What you enter in the device. The password needs 8 characters or more. When an agent sets the source up, `user` is `device` unless you name one, and a password you do not give is made by pine. |
+| `host` | `"0.0.0.0"` | The address to listen on. Devices on your network have to reach it. |
+| `allow` | everyone | Only these clients: a full address (`"192.168.1.40"`), or a prefix that ends in a dot (`"192.168.2."`). |
+| `pasvPorts` | any | `[from, to]`: the ports for data connections, if a firewall has to know them. |
+| `maxFileMb` | `50` | Largest file accepted. |
+| `keepDays` | `7` | Received files are deleted after this many days. |
+
+Event `upload`: `{ file, path, size, from, images? }`. `file` is the name the device gave it,
+`path` is where it lies now (`data/sources/<name>/files/`, or `data/sources/<name>@<agent>/files/`
+for an agent's own source). A picture is shown to the agent with the event. A video or any
+other file is not: the agent reads it from `path` (see "Files a source received" in
+[sources.md](sources.md)).
+
+It speaks plain FTP, as these devices do, so the password crosses your network unencrypted. It
+only receives: nothing can be listed, read, changed or deleted through it, and every file lands
+under a name of pine's choosing in the source's own folder. Set the device to passive mode.
+
+### telegram
+
+A Telegram bot: you write to it from wherever you are, and the agent that subscribed answers
+there. It is how you reach your agents when you are away, and how they reach you.
+
+> Watch Telegram. You are my assistant there, and what you want to tell me while I am away
+> goes to that chat.
+
+The agent calls `add_source`. The dialog you confirm has a field for the bot's token: you type
+or paste it there, where it is not shown and does not pass through the agent or its model (see
+"Secrets" in [sources.md](sources.md)). Then the agent tells you the one remaining step, which ties the bot to your account:
+
+1. Open the bot in Telegram and write anything to it.
+2. The bot answers that account with a six-digit code.
+3. pine shows a question on your computer that names the account and has a field for the code.
+   Type the code from your phone and press enter.
+
+From then on that account is the only one the bot listens to. The code is the point: it shows
+that the person at pine's keyboard holds that Telegram account. A stranger who finds the bot
+can make the question appear, but does not see your screen, and you do not have their code; a
+key pressed by accident cannot say yes. An account you deny is not put to you again, and only
+one question is open at a time.
+
+Anyone can write to a bot; that is how Telegram works. What they write reaches no agent. Before
+you have paired, an unknown account gets the code message (and a line if the code that was
+typed was wrong) and nothing else. After you have,
+unknown accounts get no answer at all and cause no question.
+
+```json
+"telegram": { "type": "telegram", "token": "${PINE_SOURCE_TELEGRAM_MAIN_TOKEN}", "trust": "owner", "description": "my Telegram" }
+```
+
+| Option | Default | |
+|---|---|---|
+| `token` | | The bot's token. Create a bot by writing `/newbot` to @BotFather in Telegram; it answers with the token. Kept in `.env`. |
+| `allow` | pairing | Telegram user ids that may talk to the bot, if you know yours. Without it the bot is paired as described above. With several ids, what the agent sends unasked and the approval requests go to the first. |
+| `approvals` | `true` | Approval requests are also sent to that chat, with buttons to answer them: Allow, Deny and, where a yes can be remembered for the conversation, Always. `/allow` and `/deny` work too (with the request's id when more than one is open). A question the agent asks with its `question` tool arrives the same way when it offers answers to pick from, with one button for each and one for "No answer"; an answer in your own words, and a question without answers to pick from, you type in the terminal UI. A request that needs a secret typed is never sent there. |
+| `apiBase` | Telegram's | The address of a Bot API server of your own. |
+
+Event `message`: `{ text, name, username, chatId, messageId, images? }`. A photo you send (up
+to 10 MB) is shown to the model. The bot listens only in its private chat with you: what is
+written in a group it was added to reaches no agent.
+
+What makes it different from the other types:
+
+- **It is a conversation.** Your message reaches the agent as your message, not as a report
+  about one, in the conversation that subscribed. The answer is sent back to the chat and is
+  also in that conversation in the terminal UI, so both show the same thread.
+- **It speaks for you.** Telegram vouches for the account and you proved it is yours, so what
+  it writes counts as your own words: full tools, no "outside content" mark. That is why
+  pairing takes a code and why the set-up is always put to you.
+- **It can send.** The agent writes to you on its own with the `send` tool, with a picture or
+  a video if it has one to show, and without a question to you; see "Sending through a
+  source" in [sources.md](sources.md).
+- **Messages are not held back.** The ten-second pause between events that protects a model from
+  a chatty device does not apply unless the subscription sets a `throttle` itself.
+
+Who the bot listens to is said wherever sources are listed: `pine sources`, `/sources` in the
+terminal UI, and the agent's `sources` tool show "listens to nobody yet", or the account you
+paired with its name and Telegram id. A bot never learns a phone number; the account's id is
+what Telegram vouches for. To pair with another account, remove the source and set it up
+again: the pairing goes with the source.
+
+Messages are fetched by long polling: one request that Telegram answers the moment something
+arrives. Nothing listens on a port, so it works behind any router. Only one program can poll a
+bot at a time; a second one makes both miss messages.
+
+### http
+
+A web address that is looked at again and again. For what cannot call you: a price, a version,
+a status page, a device on your network that has a state page.
+
+> Watch https://shop.example/fridge-3000 and tell me when the price drops below 500.
+
+```json
+"price": { "type": "http", "url": "https://shop.example/fridge-3000", "match": "Price: ([0-9.,]+)", "every": "30m", "description": "the price of the fridge" }
+```
+
+| Option | Default | |
+|---|---|---|
+| `url` | | The address, `https://...` (`http://` for a device on the local network). |
+| `every` | `"5m"` | How often to look. At least `"30s"` when an agent sets it up, and at least `"2m"` with `render`. |
+| `path` | | For an answer in JSON: watch only this field, `"data.price"` or `"items.0.state"`. `path`, `values`, `match` and `select` are four ways to say what counts in the answer; a source takes one of them. |
+| `match` | | For a page or text: watch only what this regular expression finds, its first group if it has one. It is looked for in what a reader of the page sees, then in the page's source. |
+| `select` | | For a page: watch only the text of the first element this CSS selector matches, `".product .price"` or `"#stock > span"`. With `render` it is any selector a browser reads. |
+| `attr` | | With `select`: the value of this attribute of the element instead of its text, `"content"` for a meta tag, `"data-price"`. |
+| `render` | `false` | `true` for a page that a script fills in after loading: every look opens the page in pine's browser, without a window, and takes what a reader sees then. See "A page that a script fills in". Not together with `path`, `values`, `method`, `body`, `headers`, `token` or `tokenHeader`. |
+| `values` | | For an answer in JSON: several fields at once, each under a name of your own: `{ "price": "data.price", "stock": "data.stock.count" }`. Twenty at most. |
+| `method` | `"GET"` | `"POST"` for an address that is asked by sending something. Nothing else: a source only looks. |
+| `body` | | With `POST`: what to send, as text. Sent as JSON when it is JSON. Not for secrets. |
+| `headers` | | Headers to send, `{ "accept": "application/json" }`. Not for secrets. |
+| `token` | | An access token or key, sent as `Authorization: Bearer <token>`. Kept in `.env`. |
+| `tokenHeader` | | Send the token as this header instead, as it is: `"x-api-key"`, `"cookie"`. |
+| `local` | `false` | The address is on your own network under a name that does not say so (`nas.home`, `ha.lan`). Not needed for an IP address, `localhost` or a `.local` name. |
+
+| Event | | |
+|---|---|---|
+| `changed` | `{ url, value, previous, number?, previousNumber? }` | With `path`, `match` or `select`: the value now and before. |
+| `changed` | `{ url, values, previous, changed }` | With `values`: all the fields now and before, and the names of those that differ. |
+| `changed` | `{ url, added, removed, more? }` | Without: the lines that are new and the lines that are gone, up to 30 of each. |
+| `down` | `{ url, error, looks }` | After three failed looks in a row, once. |
+| `up` | `{ url }` | When it answers again. |
+
+Without `path`, `values`, `match` or `select` the whole answer counts. For a page that is its text as a reader
+sees it: scripts, styles and markup are left out, so a counter in a script does not report a
+change at every look. A page that shows the time still does; give it a `match`.
+
+#### One element of a page
+
+`match` finds a value by the text around it; `select` finds it by where it stands in the page,
+which holds better when the words around a price change with the language or the season:
+
+```json
+"fridge": { "type": "http", "url": "https://shop.example/fridge-3000", "select": ".product-detail .price", "every": "30m", "description": "the price of the fridge" }
+```
+
+A selector is made of tags (`span`), ids (`#total`), classes (`.price`), attributes (`[itemprop]`,
+`[itemprop=price]`, also `~=`, `^=`, `$=`, `*=`), put together (`span.price`, `li.item.sale`) and
+nested with a space (somewhere inside) or `>` (directly inside); a comma separates alternatives.
+Nothing with a colon (`:first-child`, `:not(...)`) and no `+` or `~`: such a selector is refused
+with what it takes instead. The first element in the page that matches counts. Many shops also
+state the price for machines, which changes less often than the layout:
+
+```json
+"fridge": { "type": "http", "url": "https://shop.example/fridge-3000", "select": "meta[property=product:price:amount]", "attr": "content" }
+```
+
+The page is read as the server sends it. What a script fills in after loading is not
+there: for such a page set `render`, or watch the address the script itself asks (see "A
+page that a script fills in").
+
+#### A page that a script fills in
+
+Many pages arrive almost empty, and a script of the page then fetches the price or the state
+and writes it in. A plain look reads the page as the server sends it, so it finds the
+placeholder ("loading", an empty element, nothing at all) and never the value. With `render`
+the look is made by a browser:
+
+> The price on https://shop.example/fridge-3000 only shows up after the page has loaded. Watch
+> it and tell me when it drops.
+
+```json
+"fridge": { "type": "http", "url": "https://shop.example/fridge-3000", "render": true, "select": ".product-detail .price", "every": "30m", "description": "the price of the fridge" }
+```
+
+At every look pine starts its browser (the one the browser tools use, which `pine init` and
+`pine browser-install` fetch), without a window and with an empty profile, opens the address,
+waits until the page has loaded and then until it has stopped asking for things (five seconds
+at most), and takes what a reader sees. Then the browser is closed. What counts is chosen as
+without `render`:
+
+| With | What counts |
+|---|---|
+| `select` | The text of the first element the selector matches, as the browser shows it. The browser reads the selector, so everything CSS has works: `li:nth-child(2) .price`, `.offer:not(.sold-out)`, `h1 + p`. No element matches: the value is `null`. |
+| `select` and `attr` | The value of that attribute of the element. |
+| `match` | What the regular expression finds in the text a reader sees. The page's source is not looked at. |
+| neither | The whole text of the page, line by line; an event names the lines that are new and gone. |
+
+The events are the same, and an amount arrives as `number` as described below.
+
+**What it costs.** A plain look is one request and takes a moment. A rendered look starts a
+browser, runs the page's scripts and loads everything the page loads: a second or two and a
+few hundred megabytes of memory while it lasts, at every look. So:
+
+- `every` is at least `"2m"` when an agent sets the source up.
+- Two browsers run at a time, for all sources together. A look that finds them busy waits.
+- A look may take 45 seconds. After that it is ended and counts as failed.
+- There is no "nothing new" answer (see below): the page is loaded in full each time.
+
+**When the plain look is the better choice.** A script that fills a page in gets the value
+from somewhere, usually an address that answers JSON. If you can find it (the network tab of
+your browser's developer tools shows what the page asks), watch that address without `render`
+and with `path`: it is faster, it can be asked every 30 seconds, a number arrives as a number,
+it can take a `token`, and it does not break when the shop changes its layout. Use `render`
+when there is no such address, when it cannot be asked from outside the page, or when what you
+want is what the page shows.
+
+**What does not go with it.** A set-up with one of these and `render` is refused, with the
+reason:
+
+| Option | Why not |
+|---|---|
+| `path`, `values` | They read an answer in JSON. There is no page to render. Leave `render` out. |
+| `method`, `body` | A rendered page is asked the way a reader's browser asks it. |
+| `headers`, `token`, `tokenHeader` | The browser would send them with every request the page makes, to every address the page loads from. So a page behind a login cannot be watched this way. |
+| `local: true` | See below: a name that has to be looked up is not opened on your network. |
+
+**What the page can reach.** The page's own scripts run in that browser, as they would in
+yours, and the dialog you confirm says so. What they can reach is narrower than in yours:
+
+- Every connection of that browser goes through the same guard as the browser tools'
+  ([security.md](security.md)). The public internet is reachable. Your own network and this
+  computer are not: not for the page, and not for anything the page loads or its scripts ask.
+- One exception, which is the page itself: an address that says by itself that it is local
+  (`localhost`, a `.local` name, an IP address in a private range) is opened, and the browser
+  then reaches exactly that host and port and nothing else on your network. The dialog names
+  it.
+- A name that only turns out to be local when it is looked up (`nas.home`, `ha.lan`) is not
+  opened with `render`, also not with `local: true`: what such a name points at can change,
+  and a page's scripts would run there. Give the device by its IP address.
+- pine's own control port is never opened.
+- The look counts only if the browser ends up on the host that was set up. A page that sends
+  it on to another host is a failed look that names the host.
+- The browser keeps nothing from one look to the next (no cookies, no logins), downloads
+  nothing, and grants the page no permission (camera, location, notifications). A window the
+  page opens is closed.
+
+What such a source reports is outside content, like everything an `http` source reports.
+
+**When a look fails.** A failed look is retried with a growing pause, and `pine sources` shows
+since when it fails and why; after three in a row the source reports `down`, and `up` when the
+page opens again.
+
+| The status says | What it means |
+|---|---|
+| `pine's browser is not installed on this computer` | Type `pine browser-install` into a terminal. `pine init` and `pine update` do it too. |
+| `the page did not finish loading within 45 s` | The page is slow, or never finishes. |
+| `"select" is not a CSS selector the browser can read` | The selector has a mistake in it. |
+| `it sends on to <host>, which is not the address that was confirmed` | The page moved. Set the source up with the address it leads to, if that is the right one. |
+| `<host> leads to an address on your own network` | The name points into your network. With `render` only an address that says so itself is opened there. |
+| `it answered 403` (or another number) | The site turned the browser away. Some sites do that to a browser without a window. |
+| `the browser could not load it (...)` | No connection, an invalid certificate, or the like; the words in brackets are the browser's. |
+
+`found nothing with the selector` is not a failed look: the page opened and no element matched.
+If the value is there in your own browser, the selector is wrong, or the page fills the
+element in later than the look waits.
+
+#### An amount as a number
+
+A value that reads as a number or an amount, and nothing else, also arrives as `number` (and
+the one before as `previousNumber`), so that a subscription can compare it:
+
+```json
+"subscribe": [{ "source": "fridge", "when": { "payload.number": { "lt": 500 } }, "note": "Tell me: the fridge is under 500 now." }]
+```
+
+| The value | `number` |
+|---|---|
+| `12.5`, `"12.5"`, `"12,5"`, `"87 %"`, `"-3,5 °C"`, `"3 GB"` | 12.5, 12.5, 12.5, 87, -3.5, 3 |
+| `"$1,299.00"`, `"1.299,00 €"`, `"1 299,00 kr"`, `"1'299.50"` | 1299, 1299, 1299, 1299.5 |
+| `"1,299"`, `"1.299"` | 1299 and 1.299: as a program writes numbers |
+| `"1.299 €"`, `"1,299 €"` | 1299 and 1.299: next to `€`, `zł`, `kr` or `Kč` a dot groups thousands and a comma is the decimal point |
+| `"1.2.3"`, `"12:30"`, `"2026-05-01"`, `"about 5"`, `"sold out"` | none |
+
+The one case that can be read two ways is a single separator followed by exactly three digits,
+and the last two rows are how it is decided. Where that is not what the page means, take the
+digits apart with `match` (`"([0-9]+)[.,][0-9]{3} "`) and compare the text.
+
+#### Several fields, and an address that is asked with POST
+
+```json
+"fridge": {
+  "type": "http", "url": "https://shop.example/graphql", "method": "POST",
+  "body": "{\"query\": \"{ product(id: 7) { price stock { count } } }\"}",
+  "values": { "price": "data.product.price", "stock": "data.product.stock.count" },
+  "every": "30m", "description": "price and stock of the fridge"
+}
+```
+
+One event says which of the fields changed: `{ "values": { "price": 479, "stock": 3 },
+"previous": { "price": 499, "stock": 3 }, "changed": ["price"] }`. A field that is not in the
+answer is `null`. Since these are the values of the JSON itself, numbers are numbers and
+`when` compares them directly: `{ "payload.values.stock": { "gt": 0 } }`.
+
+A `POST` is for asking, and what it sends is shown to you in full before the source is set up:
+a source repeats it on a clock, with nobody there.
+
+#### Nothing new
+
+An address that names a version of its answer (`ETag`, `Last-Modified`) is asked "anything new
+since?" from the second look on, and answers with one line when there is not. That is a look
+like any other, only cheaper for both sides. `feed` and `calendar` ask the same way. A look
+with `render` loads the page in full every time.
+
+#### Which addresses it asks
+
+An address on your own network or this computer is said to be one in the dialog you confirm.
+Any other address has to stay on the public internet: if its name one day leads into your
+network, the look fails and says so instead of fetching from there.
+
+A redirect is followed only on the same host. One that leads to another host is a failed look
+that says where it leads: you confirmed one address, and the token is for that one. An answer
+is read up to 1 MB. A key that is part of the address (`?apikey=...`) is not a secret to pine:
+it is stored and shown like the rest of the address.
+
+Refused when it is set up: a user name or password in the address, `path` and `match`
+together, and a header that carries a secret (`authorization`, `cookie`), which belongs into
+`token`. Also more than one of `path`, `values`, `match` and `select`; `attr` without
+`select`; a selector that cannot be read; a `method` other than `GET` and `POST`; a `body`
+without `POST` or longer than 20000 characters; `values` that are empty, more than twenty, or
+under a name that is not a plain word. One look may take 20 seconds and follow five redirects.
+
+### command
+
+A command that is run again and again. For what only a command can tell: free disk space, a
+build, a branch that moved, the end of a log, whether a machine answers.
+A command that keeps running and prints a line whenever something happens is followed instead
+of run again and again: see "Following a command that keeps running" below.
+
+> Tell me when the disk is more than 90% full.
+
+```json
+"disk": { "type": "command", "run": "df -h /", "match": "([0-9]+)%", "every": "10m", "description": "how full the disk is" }
+```
+
+| Option | Default | |
+|---|---|---|
+| `run` | | The command line. bash runs it from the workspace of the agent the source belongs to. |
+| `every` | `"1m"` | How often. At least `"5s"` when an agent sets it up. |
+| `match` | | Watch only what this regular expression finds in what the command prints. |
+| `timeout` | `"30s"` | How long one run may take before it is stopped. |
+
+Event `changed`: `{ command, code, previousCode?, value, previous }` with `match`, or
+`{ command, code, previousCode?, added, removed, more? }` without. `code` is the exit code;
+`previousCode` is there when it changed, so `test -f build/done` or `ping -c1 nas` report by
+how they end.
+
+The command runs **like a command in the shell of an agent in `safe` mode**: in the
+agent's sandbox, with its private home folder and without your environment, also for an agent
+that works in `auto` mode and has your whole account in your conversations (nobody is there to answer for what a
+command on a clock does). It reaches the agent's own folders and nothing else: no network
+unless `sandbox.network` is set, none of your home folder beyond `sandbox.read`, none of
+pine's files. A source of all agents runs as the main agent. You are shown the
+command line before it is set up, every time. A command that cannot be started or runs out of
+time is a failed look (see "Looking again and again"), not an event. `timeout` is at least `"1s"`, and a command
+line of more than 2000 characters is refused (put it into a script). If the agent's sandbox is
+switched off, the command runs without one, as its shell does.
+
+#### Following a command that keeps running
+
+Some commands tell by themselves when something happens: `tail -F` a log, `log stream`,
+`docker events`, `kubectl get pods -w`, the client of a broker or a database. With `follow`
+the command is started once and kept running, and every line it prints is an event as it
+comes. This is the type for every protocol that has a command line client and no source type
+of its own.
+
+> Tell me when the backup log says ERROR.
+
+```json
+"backup": { "type": "command", "run": "tail -n 0 -F ~/Library/Logs/backup.log", "follow": true, "match": "ERROR (.*)", "description": "errors in the backup log" }
+```
+
+| Option | Default | |
+|---|---|---|
+| `follow` | `false` | `true`: start the command once, keep it running, report each line it prints. `every` and `timeout` are not used then. |
+| `perMinute` | `30` | With `follow`: report at most this many lines a minute. The rest are counted, and the next line that is reported carries the count as `dropped`. |
+| `match` | | With `follow`: only lines in which this regular expression finds something. Its first group is the line's `value`. |
+
+| Event | | |
+|---|---|---|
+| `line` | `{ command, line, value?, dropped? }` | One line the command printed. `value` is what `match` found, or the parsed line when it is JSON. |
+| `ended` | `{ command, code?, error?, ran }` | The command ended (`ran`: after how many seconds, `error`: the end of what it wrote as errors). It is started again, after a pause that grows while it keeps ending at once. A command that ends the moment it is started is reported once, not at every try. |
+
+| What to follow | `run` |
+|---|---|
+| A log file | `tail -n 0 -F /path/app.log` (`-n 0`: only what is written from now on; `-F`: also after the file was rotated) |
+| The Mac's own log | `log stream --style ndjson --predicate 'subsystem == "com.apple.TimeMachine"'` |
+| Docker | `docker events --format '{{json .}}'` |
+| Kubernetes | `kubectl get pods -w -o json`, `kubectl get events -w` |
+| systemd's journal, on another machine | `ssh nas journalctl -f -p warning -o json` |
+| PostgreSQL `LISTEN` | a few lines of script around a client library that print each notification as a line |
+| Redis | `redis-cli --raw subscribe alerts` |
+| NATS, Kafka, RabbitMQ | `nats sub 'orders.>'`, `kcat -C -b broker -t topic -o end`, `amqp-consume -q queue cat` |
+| A folder on another machine | `ssh nas inotifywait -m -e close_write /volume1/scans` |
+
+A line is cleaned of the colour codes a terminal would act on and cut at 2000 characters; a
+line that is JSON also arrives parsed, so a subscription's `when` can look into it
+(`{"payload.value.status": "die"}` for a container that stopped).
+
+The command runs in the same sandbox as one that is run again and again: the agent's own, as
+in `safe` mode. That is why most of the examples above need something from you first: the log
+file has to be readable by the agent (`sandbox.read`), and a client that talks to the network
+needs `sandbox.network`. The dialog shows the command line, and that it will keep running.
+
+On Linux `follow` is refused. The sandbox there cannot forbid a running command to make a file
+that is read as instructions; pine takes such a file away after a command has ended, and a
+followed command does not end. Run it again and again instead (`every`, with a `match`), or
+have the command's lines sent to a `syslog` or `webhook` source.
+
+When the source stops (the last subscriber left, or pine stops), the command and everything
+it started is ended with it.
 
 ### feed
 
@@ -552,7 +974,7 @@ turned app passwords off.
 the addresses on `sendTo` and nobody else; the type checks that itself, whatever a call names.
 With one address on the list, `to` can be left out. Mail can reach anybody, so unlike a
 Telegram message to you it counts as information leaving: after outside content the agent asks
-before it sends (see "Sending through a source"). The text goes as plain text; no files.
+before it sends (see "Sending through a source" in [sources.md](sources.md)). The text goes as plain text; no files.
 
 Refused when it is set up: a `host` with a scheme, port or path in it, `"security": "none"` for
 a server that is not local, a `from` entry that is neither an address nor `@domain`, `sendTo`
@@ -893,7 +1315,7 @@ answered the moment something arrives, so nothing listens on a port.
 | `mentions` | | User ids (`@paul:matrix.org`): only messages that mention one of them. |
 | `keywords` | | Only messages that contain one of these words. Capitals do not matter. |
 | `ignore` | | User ids that are never reported. What the account itself writes never is. |
-| `sendTo` | none | Room ids an agent may write to. Without it the source only listens. See "Sending through a source". |
+| `sendTo` | none | Room ids an agent may write to. Without it the source only listens. See "Sending through a source" in [sources.md](sources.md). |
 | `local` | `false` | The homeserver is on your own network under a name that does not say so. |
 
 Event `message`: `{ text, user, room, roomName?, kind, id, mention?, keyword?, dropped? }`.
@@ -952,7 +1374,7 @@ to Discord's gateway, so nothing listens on a port.
 | `keywords` | | In servers, only messages that contain one of these words. Capitals do not matter. With `mentions` as well, either is enough. |
 | `dms` | `true` | Direct messages to the bot count, without a mention or a keyword. |
 | `bots` | `false` | What other bots and webhooks write counts too. |
-| `sendTo` | none | Channel ids an agent may write to. Without it the source only listens. See "Sending through a source". |
+| `sendTo` | none | Channel ids an agent may write to. Without it the source only listens. See "Sending through a source" in [sources.md](sources.md). |
 | `apiBase` | `https://discord.com/api/v10` | A Discord-compatible server of your own: reached over https, or on this machine. |
 
 Ids are long numbers. With "Developer Mode" on (User Settings, Advanced), a right click on a
@@ -1440,10 +1862,10 @@ On Linux and Windows a `system` source cannot be set up. What a command can tell
 
 | Wanted | Instead |
 |---|---|
-| A page that a script fills in after loading | It has no type of its own: `http` with `render` has a browser make the look ([sources.md](sources.md), "A page that a script fills in"). Where the page's script asks an address that answers JSON, watching that with `path` is lighter. |
+| A page that a script fills in after loading | It has no type of its own: `http` with `render` has a browser make the look (see "A page that a script fills in" under `http`). Where the page's script asks an address that answers JSON, watching that with `path` is lighter. |
 | A calendar's "ten minutes before" | A schedule the agent sets when `calendar` reports the entry ([events.md](events.md), "Schedules"). |
 | Bluetooth sensors and beacons | A bridge that publishes them to MQTT (Theengs Gateway, OpenMQTTGateway), and the `mqtt` type. |
 | iMessage, WhatsApp | No type. Signal works through signal-cli and `stream`; Telegram, Slack, Matrix and Discord have types. |
 | KNX, Z-Wave, Zigbee, HomeKit, Matter | Through the hub that speaks them (Home Assistant, zigbee2mqtt, zwave-js-ui), by `mqtt` or `stream`. |
-| Something with a command line client and nothing else | `command` with `follow` ([sources.md](sources.md), "Following a command that keeps running"). |
+| Something with a command line client and nothing else | `command` with `follow` (see "Following a command that keeps running" under `command`). |
 | Something of your own | A source type of your own is a small module ([sources.md](sources.md), "A source type of your own"); the main agent can write and register one when you ask it. |

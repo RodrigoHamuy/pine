@@ -253,7 +253,7 @@ To receive webhooks from outside your network, put a tunnel or reverse proxy in 
 forward only `/hook/`.
 
 A hook here only publishes an event; a route decides what happens. For a webhook that wakes an
-agent directly, use a source of type `webhook` ([sources.md](sources.md)): it answers under
+agent directly, use a source of type `webhook` ([source-types.md](source-types.md)): it answers under
 `/hook/` too, while an agent is subscribed. A hook in `http.hooks` with the same name comes
 first.
 

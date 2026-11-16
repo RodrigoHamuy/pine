@@ -171,8 +171,8 @@ hand work to the agents listed in your prompt, and write shared state under your
 | Look up a key in `pine.json`, `agent.json`, `models.json` or `.env` | [references/configuration.md](references/configuration.md) |
 | Know what agents can set up by tool call, for whom, and what you are asked: event sources, MCP servers, skills, schedules, new agents, new source types, model servers; the main agent's tools for conversations and tabs; how an agent lists what it has; the table of pine's own tools (`question`, `todo`, `stop_program` and the rest) | [references/setup.md](references/setup.md) |
 | Add an agent, give it a workspace, tools and a persona; skills; how agents look pine up (the `manual` tool); how tools are declared to the model (`catalogue`: families) and what a model server keeps of a conversation (prompt cache, slots); delegation, sub-agents, sessions, goal mode (`/goal`: working until an objective is met), shared state | [references/agents.md](references/agents.md) |
-| Let an agent react to the outside world and reach out: Telegram, a watched folder, MQTT devices, a web address or a command that is looked at again and again, webhooks, FTP uploads from cameras; subscribing, unsubscribing, sending; a source type of your own | [references/sources.md](references/sources.md) |
-| Pick the source type for a service or a device, with its options, its events and an entry to copy: feeds, calendars, services that push (SSE, WebSocket), mail, Slack, Matrix, Discord, devices that mail or log (SMTP, syslog), cameras (ONVIF), inverters and meters (Modbus), serial ports, who is on the network, this computer (sleep, lock, power), a command that is followed; filtering events with `when` | [references/source-types.md](references/source-types.md) |
+| Let an agent react to the outside world and reach out: what a source and a subscription are, setting one up, who is woken (three scopes, a fresh conversation for every event), filtering events with `when`, sending and reading through a source, secrets, trust, files a source received; a source type of your own | [references/sources.md](references/sources.md) |
+| Pick the source type for a service or a device, with its options, its events and an entry to copy: a watched folder, MQTT devices, webhooks, FTP uploads from cameras, Telegram, a web address or a command that is looked at again and again or followed, feeds, calendars, services that push (SSE, WebSocket), mail, Slack, Matrix, Discord, devices that mail or log (SMTP, syslog), cameras (ONVIF), inverters and meters (Modbus), serial ports, who is on the network, this computer (sleep, lock, power) | [references/source-types.md](references/source-types.md) |
 | Have something done at a time (schedules); write rules for events yourself: set state, publish, single model calls, debounce | [references/events.md](references/events.md) |
 | Add MCP servers globally, per agent or for one conversation; web search, page reading and the bundled browser (showing its window to log in yourself, local addresses); turn shell commands into tools | [references/mcp.md](references/mcp.md) |
 | Operate the apps on a Mac: read a window, press, click, type; who may, what is asked, the grants macOS needs | [references/computer.md](references/computer.md) |
@@ -213,7 +213,8 @@ model" in [references/operations.md](references/operations.md).)
 
 Telegram as a second way in is set up by asking the main agent: "watch Telegram". The dialog
 you confirm has a field for the bot's token; then you write to the bot and type the six-digit
-code it sends you into pine. See [references/sources.md](references/sources.md).
+code it sends you into pine. See "telegram" in
+[references/source-types.md](references/source-types.md).
 
 `~/.pine/agents/gonzo/agent.json`, a second agent, a specialist the main agent can hand work to.
 Create the folder; the workspace here is `~/dev/gonzo`, which must exist, and an `AGENTS.md` in

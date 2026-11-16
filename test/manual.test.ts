@@ -35,7 +35,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 	const top = (q: string, n = 3) => manual.search(q, n).hits.map((h) => h.id);
 	// [what is asked, a part that must be among the first three]
 	const cases: Array<[string, RegExp]> = [
-		["telegram pairing code", /^sources#telegram$/],
+		["telegram pairing code", /^source-types#telegram$/],
 		["alert my owner unattended without approval for each message", /^sources#telling-you-needs-no-approval$/],
 		["send a photo or a video clip to my owner on telegram", /^sources#a-picture-or-a-video-with-the-message$/],
 		["camera events pile up in my conversation and the context grows", /^sources#a-fresh-conversation-for-every-event$/],
@@ -87,27 +87,27 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["add_schedule", /add-schedule$|^events#ask-the-agent/],
 		["who may set something up for all agents", /^setup(#who-can-set-up-what|#three-scopes)?$|^sources#ask-the-agent$/],
 		["where do passwords and tokens go", /^sources#secrets|^configuration#secrets/],
-		["watch a website for a price", /^sources#http$/],
+		["watch a website for a price", /^source-types#http$/],
 		// The types beyond the everyday ones, asked for by what they are for.
 		["which kind of source do I need for a service or a device", /^source-types#(which-type-for-what|which-type-for-which-service|source-types)/],
 		["tell my owner when a project on github publishes a new release", /^source-types#(feed|which-type-for-which-service)/],
 		["rss", /^source-types#(feed|which-type)/],
 		["be told when somebody adds or moves an appointment in a shared calendar", /^source-types#calendar/],
 		["remind my owner ten minutes before a meeting from their calendar", /^(source-types#(calendar|which-type-for-what|what-there-is-no-type-for)|events#)/],
-		["the price is inside a span with a class, how do I watch just that", /^sources#(one-element-of-a-page|http)/],
-		["the price only shows up after the page has loaded, and the source finds nothing", /^sources#(a-page-that-a-script-fills-in|http|one-element-of-a-page)/],
-		["watch a website that is built with javascript", /^(sources#(a-page-that-a-script-fills-in|http)|source-types#)/],
-		["only wake me when the price is below 500", /^(sources#(an-amount-as-a-number|http)|source-types#being-woken-only-for-what-counts)/],
-		["the api wants a POST with a graphql query", /^sources#(several-fields-and-an-address-that-is-asked-with-post|http)/],
+		["the price is inside a span with a class, how do I watch just that", /^source-types#(one-element-of-a-page|http)/],
+		["the price only shows up after the page has loaded, and the source finds nothing", /^source-types#(a-page-that-a-script-fills-in|http|one-element-of-a-page)/],
+		["watch a website that is built with javascript", /^source-types#/],
+		["only wake me when the price is below 500", /^(source-types#(an-amount-as-a-number|http)|sources#being-woken-only-for-what-counts)/],
+		["the api wants a POST with a graphql query", /^source-types#(several-fields-and-an-address-that-is-asked-with-post|http)/],
 		["get push notifications from ntfy into an agent", /^source-types#(stream|what-a-stream-reaches|which-type-for-which-service)/],
 		["a websocket that needs a login message after connecting", /^source-types#(stream|what-a-stream-reaches)/],
-		["receive github webhooks on a machine that has no public address", /^(source-types#(stream|what-a-stream-reaches|which-type-for-which-service)|sources#webhook|events#webhooks)/],
+		["receive github webhooks on a machine that has no public address", /^(source-types#(stream|what-a-stream-reaches|which-type-for-which-service|webhook)|events#webhooks)/],
 		["tell me when my boss writes in slack", /^source-types#slack/],
 		["a slack message refers to something said earlier in the thread, how do I see what", /^(source-types#(reading-what-was-written-before|slack)|sources#reading-through-a-source)/],
 		["can I read the history of a slack channel or a direct conversation", /^(source-types#(reading-what-was-written-before|slack)|sources#reading-through-a-source)/],
 		["read_source", /read-source$|^sources#reading-through-a-source|^source-types#reading-what-was-written-before/],
 		["be told when somebody writes to me personally or tags me in slack", /^source-types#slack/],
-		["wake me only for slack messages that mention me, not for the others", /^source-types#(slack|being-woken-only-for-what-counts)/],
+		["wake me only for slack messages that mention me, not for the others", /^(source-types#slack|sources#being-woken-only-for-what-counts)/],
 		["which scopes does the slack app need and what is the xapp token", /^source-types#slack/],
 		["messages in an encrypted matrix room do not arrive", /^source-types#matrix/],
 		["discord closes the connection, something about message content intent", /^source-types#discord/],
@@ -120,17 +120,17 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["my arduino prints temperatures over usb, can pine read them", /^source-types#(serial|which-type)/],
 		["is my phone at home", /^source-types#(presence|which-type)/],
 		["do something when the laptop is unlocked or runs on battery", /^source-types#(system|which-type)/],
-		["follow a log file and wake me for every line that says error", /^(sources#(following-a-command-that-keeps-running|command)|source-types#which-type)/],
-		["docker events", /^(sources#following-a-command-that-keeps-running|source-types#which-type)/],
+		["follow a log file and wake me for every line that says error", /^source-types#(following-a-command-that-keeps-running|command|which-type)/],
+		["docker events", /^source-types#(following-a-command-that-keeps-running|which-type)/],
 		["perMinute", /perminute$/],
 		["can the agent write an email, and to whom", /^source-types#mail/],
 		["my mailbox is at outlook.com and the password is refused", /^source-types#(mail|a-microsoft-mailbox-signing-in-instead-of-a-password|which-type-for-which-service)/],
 		["sign in to an Outlook mailbox", /^source-types#(a-microsoft-mailbox-signing-in-instead-of-a-password|mail)/],
 		["clientId", /clientid$|^source-types#a-microsoft-mailbox/],
 		["the camera uploaded a video and I cannot open the file", /^sources#files-a-source-received$/],
-		["why is the clip not shown to me like the picture", /^sources#(files-a-source-received|ftp)$/],
+		["why is the clip not shown to me like the picture", /^(sources#files-a-source-received|source-types#ftp)$/],
 		["access to uploads in pine's data folder blocked", /^sources#files-a-source-received$|^security#/],
-		["run a command again and again to check disk space", /^sources#command$/],
+		["run a command again and again to check disk space", /^source-types#command$/],
 		["device with its own protocol new kind of source", /^sources#(a-source-type-of-your-own|ask-the-main-agent)/],
 		["what counts as outside content", /^security#|^sources#trust|^configuration#pine-json\/security-taint/],
 		["approval dialog always allow in this conversation", /^(security#4|tui#approvals)/],
@@ -146,8 +146,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["revert what the agent just did and ask again differently", /^(coding#(taking-a-message-back|what-is-restored)|tui#commands\/undo)/],
 		["/redo", /redo$/],
 		["what is manual auto bypass mode", /^(security#modes|tui#modes)/],
-		["mqtt publish to a device", /^sources#(mqtt|sending-through-a-source)/],
-		["poll failed looks back off", /^sources#looking-again-and-again/],
+		["mqtt publish to a device", /^(source-types#mqtt|sources#sending-through-a-source)/],
+		["poll failed looks back off", /^source-types#looking-again-and-again/],
 		["create a new agent", /^(setup#creating-an-agent|agents#creating-an-agent)/],
 		["what happens when a conversation is removed", /^(setup#|tui#|agents#sessions)/],
 		["connect an mcp server", /^(mcp#|setup#)/],
@@ -211,19 +211,19 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		// The first words of agents that knew nothing about pine, from runs with puzzles.
 		["stretch reminder working days 6 pm recurring", /^events#ask-the-agent/],
 		["nag stretch 6 pm every working day reminder", /^events#ask-the-agent/],
-		["telegram stranger unknown sender bot owner connected", /^sources#telegram$/],
+		["telegram stranger unknown sender bot owner connected", /^source-types#telegram$/],
 		["one-off reminder missed pine not running startup", /^events#(ask-the-agent|in-the-files)/],
 		["watcher all agents main agent", /^setup#(who-can-set-up-what|three-scopes)|^sources#ask-the-agent/],
 		["shell command timeout default seconds per agent", /^configuration#/],
 		["skill single conversation location on disk", /^(setup#what-is-written|agents#)/],
 		["code pane open terminal columns beside conversation", /^coding#the-code-pane/],
-		["web address watch failed checks unreachable down up", /^sources#http/],
+		["web address watch failed checks unreachable down up", /^source-types#http/],
 		["pine schedules list scheduled command", /^(operations#commands|events#ask-the-agent)/],
 		["shell command list every skill list scheduled tasks", /^operations#commands/],
 		["conversation removed renamed sources set up for one conversation", /^setup#(three-scopes|what-is-written|conversations-and-tabs)/],
 		["sub-agents helpers run at the same time default concurrency", /^(agents#sub-agents|configuration#working-with-other-agents)/],
 		["model runs agent no model named default model", /^configuration#/],
-		["notify owner phone message away push", /^sources#(telegram|sending-through-a-source)/],
+		["notify owner phone message away push", /^(source-types#telegram|sources#sending-through-a-source)/],
 		["autonomy levels without asking", /^(security#modes|tui#modes)/],
 		["drag folder onto terminal window drop", /^(coding#a-folder-for-a-conversation|tui#attachments)/],
 		// Goal mode, asked for by somebody who does not know what it is called.
@@ -246,27 +246,27 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 	assert.match(showSearch(manual, ["zzzqqq"]), /nothing in the manual has these words\. That does not mean pine cannot do it/);
 	assert.equal(manual.search("the of and").hits.length, 0);
 	// Reading: a part in full with what lies below it, a long one in pages, a wrong id with what is close.
-	const read = showRead(manual, ["sources#telegram"]);
-	assert.ok(read.startsWith("## sources#telegram   (sources.md › The built-in types › telegram)") && read.includes("six-digit code"));
+	const read = showRead(manual, ["source-types#telegram"]);
+	assert.ok(read.startsWith("## source-types#telegram   (source-types.md › The types › telegram)") && read.includes("six-digit code"));
 	assert.match(showRead(manual, ["configuration#tools-and-extensions/bashtimeoutsec"]), /\(This is one row of a table in configuration#tools-and-extensions\. Read that part for what stands around it\.\)$/);
 	assert.match(showRead(manual, ["sources"]), /Parts below this one: sources#a-first-example, sources#configuring-sources/);
 	const long = createManual(partsOf("long", `# Long\n\n${Array.from({ length: 300 }, (_, i) => `Paragraph ${i} of a long part.\n`).join("\n")}`));
 	assert.match(showRead(long, ["long"]), /^## long   \(long\.md › Long, page 1 of 2\)[\s\S]*\(continues: read long@2\)$/);
 	assert.match(showRead(long, ["long@2"]), /page 2 of 2\)[\s\S]*Paragraph 299 of a long part\.$/);
-	assert.match(showRead(manual, ["telegram"]), /^## sources#telegram/, "the last piece of an id is enough when it is the only one");
-	assert.match(showRead(manual, ["sources#telegramm"]), /"sources#telegramm" is not a part of the manual\. Close to it: [^\n]*sources#telegram/);
+	assert.match(showRead(manual, ["telegram"]), /^## source-types#telegram/, "the last piece of an id is enough when it is the only one");
+	assert.match(showRead(manual, ["source-types#telegramm"]), /"source-types#telegramm" is not a part of the manual\. Close to it: [^\n]*source-types#telegram/);
 	assert.match(manual.contents(), /^pine: pine\n[\s\S]*\nsources: Event sources and subscriptions\n    sources#a-first-example/);
 });
 
 test("manual: every agent has it as a tool instead of a skill in its prompt, and pine manual is the same search in a shell", async () => {
 	const h = await harness({ pine: { main: "main", sourceTypes: { bell: "./sources/bell.ts" } }, files: { "sources/bell.ts": `export const type = { summary: "a doorbell on the network", options: { type: "object", properties: { url: { type: "string", description: "its address" } }, required: ["url"] } };\nexport default function () {}\n` }, agents: { main: {} } });
 	const call = (args: any) => ({ name: "manual", args });
-	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call({ search: "telegram pairing code" }), call({ search: ["doorbell", "bashTimeoutSec"] }), call({ read: "sources#telegram" }), call({})] }]), trust: "owner" });
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call({ search: "telegram pairing code" }), call({ search: ["doorbell", "bashTimeoutSec"] }), call({ read: "source-types#telegram" }), call({})] }]), trust: "owner" });
 	const [one, two, read, all] = h.toolResults().slice(-4);
-	assert.match(one, /^"telegram pairing code": \d of \d+ parts, the best first\n1\. sources#telegram /);
+	assert.match(one, /^"telegram pairing code": \d of \d+ parts, the best first\n1\. source-types#telegram /);
 	assert.match(two, /"doorbell": [^\n]*\n1\. source-type#bell   \(this pine › bell, registered in this pine\)\n   `bell`: a doorbell on the network · Options: url \(required\): its address/, "what this installation has beyond the manual is found too");
 	assert.match(two, /"bashTimeoutSec": [^\n]*\n1\. configuration#/);
-	assert.ok(read.startsWith("## sources#telegram") && all.startsWith("The parts of pine's manual."));
+	assert.ok(read.startsWith("## source-types#telegram") && all.startsWith("The parts of pine's manual."));
 	const req = h.mock.state.requests[0];
 	assert.ok(h.toolsOffered(req).includes("manual"));
 	assert.ok(!h.system(req).includes("<name>pine</name>"), "the manual is not carried in the prompt");
@@ -274,7 +274,7 @@ test("manual: every agent has it as a tool instead of a skill in its prompt, and
 	await h.close();
 
 	const found = await run(process.execPath, [CLI, "manual", "telegram", "pairing"]);
-	assert.match(found.stdout, /^"telegram pairing": \d of \d+ parts, the best first\n1\. sources#telegram /);
-	const part = await run(process.execPath, [CLI, "manual", "--read", "sources#telegram"]);
-	assert.ok(part.stdout.startsWith("## sources#telegram"));
+	assert.match(found.stdout, /^"telegram pairing": \d of \d+ parts, the best first\n1\. source-types#telegram /);
+	const part = await run(process.execPath, [CLI, "manual", "--read", "source-types#telegram"]);
+	assert.ok(part.stdout.startsWith("## source-types#telegram"));
 });

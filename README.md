@@ -220,8 +220,8 @@ Start at [docs/SKILL.md](docs/SKILL.md); it indexes everything.
 | Let agents set things up by tool call instead of editing files                          | [setup.md](docs/references/setup.md)                         |
 | Set up agents, delegation and sub-agents; how tools are declared and what stays cached   | [agents.md](docs/references/agents.md)                       |
 | Route events, schedules, model calls                                                    | [events.md](docs/references/events.md)                       |
-| Event sources: Telegram, folders, MQTT, web addresses, commands, webhooks, FTP          | [sources.md](docs/references/sources.md)                     |
-| Every source type and what it reaches: feeds, mail, Slack, streams, cameras, meters     | [source-types.md](docs/references/source-types.md)           |
+| Event sources: setting one up, subscribing, sending, secrets, trust                     | [sources.md](docs/references/sources.md)                     |
+| Every source type: Telegram, folders, MQTT, web addresses, feeds, mail, Slack, cameras  | [source-types.md](docs/references/source-types.md)           |
 | MCP servers, web search, command tools                                                  | [mcp.md](docs/references/mcp.md)                             |
 | Let an agent operate the apps on your Mac                                               | [computer.md](docs/references/computer.md)                   |
 | Know what is protected and what is not                                                  | [security.md](docs/references/security.md)                   |

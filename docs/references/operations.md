@@ -329,7 +329,7 @@ are JSON with `Content-Type: application/json`.
 | `POST /tasks/<id>/cancel` | Cancel |
 | `POST /approvals/<id>` `{ allow, always?, values? }` | Answer an approval. A request that lists `inputs` (a token, a password) is only allowed together with `values: { <name>: "..." }`; the terminal UI has a field for them. A question an agent asks with its `question` tool is such a request (`tool: "question"`, with the answers it offers in `choices`): answer it with `values: { "answer": "..." }`, or with `allow: false` for no answer |
 | `POST /state` `{ key, value }` | Write state; `null` deletes |
-| `POST /hook/<name>` | Webhook: a hook from `http.hooks` ([events.md](events.md)) or a running `webhook` source ([sources.md](sources.md)). No token; each has its own secret, unless a hook is declared `"open": true` |
+| `POST /hook/<name>` | Webhook: a hook from `http.hooks` ([events.md](events.md)) or a running `webhook` source ([source-types.md](source-types.md)). No token; each has its own secret, unless a hook is declared `"open": true` |
 
 ## Day to day
 

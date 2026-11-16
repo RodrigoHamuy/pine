@@ -384,7 +384,7 @@ async function main(): Promise<void> {
 		// The same search the agents use, for you and for trying out what they would find.
 		const manual = pineManual(path.join(PINE_ROOT, "docs"));
 		if (typeof flags.read === "string") return out(showRead(manual, flags.read.split(",")));
-		if (!rest.length) return out(`The parts of pine's manual. Search it (pine manual telegram pairing), or read a part (pine manual --read sources#telegram).\n${manual.contents()}`);
+		if (!rest.length) return out(`The parts of pine's manual. Search it (pine manual telegram pairing), or read a part (pine manual --read source-types#telegram).\n${manual.contents()}`);
 		return out(showSearch(manual, [rest.join(" ")]));
 	}
 

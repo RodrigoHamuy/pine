@@ -15,7 +15,7 @@ import path from "node:path";
 // A part that matches only some of the words keeps that share of its score.
 
 export interface Part {
-	/** What it is read by: "sources#telegram", or "configuration#agent-json/globalmcp" for a row. */
+	/** What it is read by: "source-types#telegram", or "configuration#agent-json/globalmcp" for a row. */
 	id: string;
 	kind: "section" | "row";
 	/** The file it is from, without ".md". */
