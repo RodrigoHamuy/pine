@@ -363,6 +363,8 @@ export const api = {
 
 	// sources and subscriptions
 	sources: () => get<SourceInfo[]>("/sources"),
+	/** The sources one agent can listen to, and how a conversation of it does: on its own, as the agent, with all agents. */
+	agentSources: (agent: string, session: string) => get<Array<{ name: string; type: string; description?: string; local?: { note?: string }; agent?: { note?: string; session?: string }; global?: { note?: string }; elsewhere: string[] }>>(`${a(agent)}/sources${s(session)}`),
 	sourceTypes: () => get<SourceType[]>("/sources/types"),
 	proposeSource: (body: { name: string; type: string; options: Record<string, unknown>; agent?: string }) => post<{ does: string[]; opens: boolean; needs: Array<{ name: string; label: string }>; owner?: boolean; tell?: string }>("/sources/propose", body),
 	addSource: (body: { name: string; type: string; description: string; options: Record<string, unknown>; agent?: string; own?: boolean; values?: Record<string, string> }) => post<{ name: string; type: string; tell?: string }>("/sources", body),

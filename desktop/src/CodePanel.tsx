@@ -1,6 +1,6 @@
-// The panel beside a conversation: what changed in its folder (git), what the last message
-// changed, the files with an editor, what the agent's tool calls printed, and what its commands
-// left running. Everything is read through the control API; a file is written through it too, by
+// The panel beside a conversation: the agent itself (AgentView.tsx), then its work: the files
+// with an editor, what changed in the folder (git), what the last message changed, what the
+// agent's tool calls printed, and what its commands left running. Everything is read through the control API; a file is written through it too, by
 // the daemon, inside a sandbox that reaches only this folder.
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
@@ -18,6 +18,7 @@ import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutt
 import { tags as t } from "@lezer/highlight";
 import { useEffect, useRef, useState } from "react";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
+import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
@@ -428,9 +429,10 @@ export function CodePanel({ tab }: { tab: Tab }) {
 						value={view}
 						onChange={setView}
 						options={[
+							{ value: "agent", label: "Agent" },
+							{ value: "files", label: "Files" },
 							{ value: "changes", label: "Changes" },
 							{ value: "turn", label: "Last turn" },
-							{ value: "files", label: "Files" },
 							{ value: "output", label: "Output" },
 							{ value: "running", label: "Running", badge: tab.programs.length || undefined },
 						]}
@@ -439,7 +441,9 @@ export function CodePanel({ tab }: { tab: Tab }) {
 					<Button small variant="ghost" icon="x" title="Close the panel" onClick={() => void store.command("code")} />
 				</div>
 				{steps ? <div className="code-steps"><Steps items={steps} /></div> : null}
-				{view === "changes" || view === "turn" ? (
+				{view === "agent" ? (
+					<AgentView tab={tab} />
+				) : view === "changes" || view === "turn" ? (
 					<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
 				) : view === "files" ? (
 					<Files tab={tab} file={state.file} setFile={setFile} />

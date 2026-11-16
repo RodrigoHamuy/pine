@@ -132,7 +132,7 @@ agent's:
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |
 | The bar under the input | `+` attaches files; then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours): each opens a list on a click. `outside content` appears when the conversation has read something from outside |
-| Code panel | Beside a conversation (`⌥⌘B`): see "The code panel and the editor" |
+| Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
 | Palette | `⌘K`: every command, open tab, conversation, agent and settings page by name |
 
 Everything in [tui.md](tui.md) about modes, goals, approvals, an agent's questions, its list
@@ -143,7 +143,7 @@ daemon's doing. What differs is how it is drawn and reached.
 |---|---|
 | `/model`, `/reasoning`, `/mode`, `/folder` | Also the bar under the input, and the Conversation menu |
 | `/sessions`, the conversation list | The side bar |
-| `/code` | The code panel (`⌥⌘B`), which also edits |
+| `/code` | The side panel (`⌥⌘B`), which begins with the agent and also edits |
 | `/mcp`, `/sources`, `/subscribe` | Also Settings > MCP servers and Settings > Events |
 | `/attach <path>`, `/paste` | Files from the Finder put on the input, a picture pasted into it, or the `+` in the bar under the input |
 | `/export` | Asks where to save the file |
@@ -165,14 +165,16 @@ daemon's doing. What differs is how it is drawn and reached.
 
 ## The code panel and the editor
 
-The panel beside a conversation shows the folder that conversation works in (the folder you
-opened for it, else the agent's workspace), in five views:
+The panel beside a conversation (`⌥⌘B`) begins with the agent and goes on to its work. The
+work is that of the folder the conversation works in (the folder you opened for it, else the
+agent's workspace):
 
 | View | Shows |
 |---|---|
+| Agent | The agent of this conversation: what it is for, its model, reasoning and mode (a click changes each), whom it hands work to; what is at work right now (this conversation, the sub-agents and delegated tasks it started, the agent's other conversations), each to open; what it listens to (event sources, and whether this conversation, the agent or all agents are subscribed); its schedules, skills and MCP servers; and what it remembers (its `MEMORY.md`). Buttons lead to the settings pages where each is changed |
+| Files | The folder as a tree, a search by name, and the editor |
 | Changes | What differs from the last commit (git): each file with its counts, and its diff on a click |
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
-| Files | The folder as a tree, a search by name, and the editor |
 | Output | The tool calls of the last messages, each with all it printed |
 | Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop |
 

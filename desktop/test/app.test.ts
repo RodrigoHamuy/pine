@@ -176,7 +176,11 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await sees(".pick-title >> text=Which agent works in");
 	await page.keyboard.press("Enter");
 	await sees(".tab.on .name >> text=pine-desktop-folder");
-	await page.click(".conv-head .btn[title^='Changes']");
+	await page.click(".conv-head .btn[title*='workspace']");
+	// The panel begins with the agent: who it is and what it runs on.
+	await sees(".agent-view .agent-name >> text=main");
+	assert.match(await page.textContent(".agent-view"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
+	await page.click(".code .segmented button >> text=Changes");
 	await sees(".code .frow");
 	assert.match(await page.textContent(".code .frow"), /index\.ts/);
 	await page.click(".code .frow");
@@ -313,6 +317,14 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(made.status, 200);
 	await sees(".side-agent .who >> text=test", 20_000);
 	assert.match((await page.locator(".side-agent", { has: page.locator(".who > :first-child", { hasText: /^test$/ }) }).textContent()) ?? "", /Made outside the app/);
+	// Beside a conversation, the panel's Agent view says what the agent has been given: here what was set up for all agents above.
+	await page.click(".tab >> nth=0");
+	if (!(await page.$(".code"))) await page.click(".conv-head .btn[title*='workspace']");
+	await page.click(".code .segmented button >> text=Agent");
+	await sees(".agent-view .agent-line .name >> text=invoices");
+	await sees(".agent-view .agent-line .name >> text=morning");
+	assert.match(await page.textContent(".agent-view"), /Nothing wakes it by itself\. 1 event source could/);
+	await shot("14-agent-view");
 	// A group folds away on a click on its agent, and comes back.
 	const group = page.locator(".side-group", { has: page.locator(".who > :first-child", { hasText: /^scout$/ }) });
 	assert.equal(await group.locator(".side-conv").count(), 1);

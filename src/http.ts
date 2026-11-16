@@ -113,7 +113,8 @@ export class HttpServer {
 				if (url.pathname === "/sources") return send(200, this.sources?.list() ?? []);
 				if (parts[0] === "agents" && parts[2] === "sources" && parts.length === 3) {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
-					return send(200, this.sources?.available(parts[1]) ?? []);
+					// (For one conversation with `session`: what that conversation is subscribed to on its own is said too.)
+					return send(200, this.sources?.available(parts[1], q.get("session") ?? "main") ?? []);
 				}
 				if (parts[0] === "agents" && parts[2] === "sessions" && parts.length === 3) {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");

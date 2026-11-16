@@ -353,7 +353,7 @@ are JSON with `Content-Type: application/json`.
 | `GET /tasks/<id>/images/<n>` | The n-th picture that came with a task (an attachment, a Telegram photo) |
 | `GET /agents/<id>/image?path=&session=` | A picture, video or sound file in that agent's workspace or, with `session`, in the folder opened for that conversation. Anything that is not an image, video or sound file in there is "not found" |
 | `POST /images/fetch` `{ url }` | Fetch a picture, video or sound from the web for display: https and public addresses only; pictures up to 20 MB, videos and sound up to 100 MB |
-| `GET /sources`, `GET /agents/<id>/sources` | Event sources and their state; the ones that agent can subscribe to |
+| `GET /sources`, `GET /agents/<id>/sources[?session=]` | Event sources and their state; the ones that agent can subscribe to, each with how it listens (`agent`: as the agent, `global`: with all agents, and with `session` also `local`: that conversation on its own) |
 | `POST /agents/<id>/subscribe` `{ source, session?, note?, when?, throttle?, debounce?, separate? }`, `POST /agents/<id>/unsubscribe` `{ source, session? }` | Change an agent's subscriptions (written to its `agent.json`); `session` makes it one conversation's |
 | `POST /subscribe` `{ source, note?, ... }`, `POST /unsubscribe` `{ source }` | The subscription of all agents (written to `pine.json`) |
 | `POST /agents/<id>/close` `{ session }` | A conversation's tab was closed in a UI: ends what it was subscribed to on its own. The conversation itself is kept |

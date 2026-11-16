@@ -411,7 +411,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 					{total ? `${count(total)} · ` : ""}{Math.round(tab.context)}%
 				</span>
 			) : null}
-			{chat ? <Button small variant="ghost" className={store.code ? "on" : ""} icon="panel" title="Changes, files, output (⌥⌘B)" onClick={() => void store.command("code")} /> : null}
+			{chat ? <Button small variant="ghost" className={store.code ? "on" : ""} icon="panel" title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")} /> : null}
 		</div>
 	);
 }

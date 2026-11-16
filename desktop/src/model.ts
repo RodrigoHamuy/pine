@@ -73,7 +73,7 @@ export interface Attachment {
 	preview?: string;
 }
 
-export type CodeView = "changes" | "turn" | "files" | "output" | "running";
+export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running";
 
 const MEDIA_KIND = (name: string): "image" | "video" | "audio" | undefined => (/\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm|m4v)$/i.test(name) ? "video" : /\.(wav|mp3|m4a|ogg|flac|aiff?)$/i.test(name) ? "audio" : undefined);
 export const mediaKind = MEDIA_KIND;
@@ -213,7 +213,7 @@ export class Store extends Model {
 	folded = new Set<string>(JSON.parse(localStorage.getItem("pine.folded") ?? "[]"));
 	sidebar = true;
 	code = false;
-	codeView: CodeView = "changes";
+	codeView: CodeView = "agent";
 	palette = false;
 	picker?: Picker;
 	/** The approval or question whose dialog is open. */
