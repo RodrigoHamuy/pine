@@ -138,6 +138,22 @@ export async function vet(host: string, o: GuardOptions, port?: number): Promise
 	return addrs[0].address;
 }
 
+/**
+ * A proxy carries what a browser asks it to carry, and a browser has roads of its own that never
+ * ask: WebRTC opens UDP sockets itself, QUIC is UDP, and a name can be looked up without a
+ * request. These switches close them in the browser, for every way pine starts one.
+ */
+export const NO_WAY_AROUND = [
+	"--disable-quic",
+	// WebRTC makes its own connections. Only what goes through the proxy is left, which for this proxy is nothing over UDP.
+	"--webrtc-ip-handling-policy=disable_non_proxied_udp",
+	"--enforce-webrtc-ip-permission-check",
+	// The proxy looks names up, not the browser: a lookup of the browser's own finds nothing.
+	"--host-resolver-rules=MAP * ~NOTFOUND , EXCLUDE 127.0.0.1",
+	"--dns-prefetch-disable",
+	"--no-pings",
+];
+
 /** A forward proxy that only lets vetted destinations through. */
 export async function startGuardProxy(o: GuardOptions, log: (line: string) => void = () => {}) {
 	const refused: string[] = [];
@@ -479,8 +495,12 @@ if (import.meta.main) {
 	const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pine-browser-"));
 	const proxy = await startGuardProxy(o, (line) => process.stderr.write(`[pine browser] ${line}\n`));
 	const caps = [...new Set(["storage", ...(o.caps ?? "").split(",").map((c) => c.trim()).filter(Boolean)])].join(",");
+	// Playwright's server takes switches for the browser from a configuration file only.
+	const sealed = path.join(scratch, "pine-browser.json");
+	fs.writeFileSync(sealed, JSON.stringify({ browser: { launchOptions: { args: NO_WAY_AROUND } } }));
 	const args = (headed: boolean) => [
 		cli,
+		"--config", sealed,
 		"--proxy-server", `http://127.0.0.1:${proxy.port}`,
 		"--output-dir", scratch,
 		"--ignore-roots",

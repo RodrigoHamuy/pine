@@ -354,6 +354,11 @@ What the guard does:
   server or pine's control port, whether by link, redirect, script or DNS trick. The one
   exception is an address you allowed for a conversation ("Local addresses" below). `file:`
   URLs are blocked by Playwright.
+- **No road around the proxy.** A proxy carries what a browser asks it to carry, and a browser
+  can also send things without asking: WebRTC (what video calls use) opens connections of its
+  own, and so does the newer web transport over QUIC. Both are switched off outside the proxy,
+  and the browser looks no names up itself. A page that uses WebRTC still loads; a call that
+  needs a direct connection between two computers does not come about.
 - **No code on your machine.** `browser_run_code_unsafe` (runs code in the server process),
   `browser_file_upload` and `browser_drop` (hand local files to a page), `browser_install`, and
   `browser_storage_state` and `browser_set_storage_state` (write and read a file of cookies)
