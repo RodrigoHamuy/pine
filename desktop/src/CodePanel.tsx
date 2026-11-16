@@ -27,19 +27,37 @@ import { Button, Confirm, Empty, Icon, Segmented, Spinner, useLoad } from "./ui.
 
 // ---- the editor ------------------------------------------------------------------------------------
 
+// The editor says what a token is, and styles.css what it looks like: the colours differ between light and
+// dark (dark is poimandres, which tells more kinds of keyword apart than light does).
 const colours = HighlightStyle.define([
-	{ tag: [t.comment, t.meta], color: "var(--faint)", fontStyle: "italic" },
-	{ tag: [t.keyword, t.operatorKeyword, t.modifier, t.controlKeyword, t.definitionKeyword, t.moduleKeyword], color: "var(--plan)" },
-	{ tag: [t.string, t.special(t.string), t.regexp, t.inserted], color: "var(--add)" },
-	{ tag: [t.number, t.bool, t.null, t.atom, t.url], color: "var(--warn)" },
-	{ tag: [t.function(t.variableName), t.function(t.propertyName), t.className, t.typeName, t.namespace, t.tagName], color: "var(--info)" },
-	{ tag: [t.propertyName, t.attributeName], color: "var(--text)" },
-	{ tag: [t.heading], fontWeight: "600" },
-	{ tag: [t.emphasis], fontStyle: "italic" },
-	{ tag: [t.strong], fontWeight: "600" },
-	{ tag: [t.link], textDecoration: "underline" },
-	{ tag: [t.deleted, t.invalid], color: "var(--del)" },
-	{ tag: [t.punctuation, t.bracket, t.operator], color: "var(--muted)" },
+	{ tag: [t.comment], class: "t-comment" },
+	{ tag: [t.meta], class: "t-meta" },
+	{ tag: [t.keyword], class: "t-kw" },
+	{ tag: [t.definitionKeyword], class: "t-kw-def" },
+	{ tag: [t.controlKeyword], class: "t-kw-flow" },
+	{ tag: [t.moduleKeyword, t.modifier, t.operatorKeyword, t.self], class: "t-kw-mod" },
+	{ tag: [t.string, t.special(t.string)], class: "t-str" },
+	{ tag: [t.regexp, t.escape], class: "t-re" },
+	{ tag: [t.number, t.atom, t.url], class: "t-num" },
+	{ tag: [t.bool], class: "t-bool" },
+	{ tag: [t.null], class: "t-nil" },
+	{ tag: [t.variableName], class: "t-var" },
+	{ tag: [t.propertyName], class: "t-prop" },
+	{ tag: [t.attributeName], class: "t-attr" },
+	{ tag: [t.function(t.variableName), t.function(t.propertyName)], class: "t-call" },
+	{ tag: [t.function(t.definition(t.variableName)), t.definition(t.function(t.propertyName))], class: "t-fn" },
+	{ tag: [t.className, t.definition(t.className)], class: "t-cls" },
+	{ tag: [t.typeName], class: "t-type" },
+	{ tag: [t.namespace], class: "t-ns" },
+	{ tag: [t.tagName], class: "t-tag" },
+	{ tag: [t.heading], class: "t-head" },
+	{ tag: [t.emphasis], class: "t-em" },
+	{ tag: [t.strong], class: "t-strong" },
+	{ tag: [t.link], class: "t-link" },
+	{ tag: [t.inserted], class: "t-ins" },
+	{ tag: [t.deleted, t.invalid], class: "t-del" },
+	{ tag: [t.punctuation, t.bracket], class: "t-punct" },
+	{ tag: [t.operator], class: "t-op" },
 ]);
 
 function language(file: string): Extension {

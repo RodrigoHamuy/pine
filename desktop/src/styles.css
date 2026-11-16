@@ -1,5 +1,7 @@
 /* Pine's look: panels that lie as cards on the window, neutral surfaces, one green, and type that does the
-   work. Light and dark follow the system. */
+   work. Light and dark follow the system. Dark is the poimandres theme (github.com/drcmda/poimandres-theme):
+   its colours are the --p-* values below, the app's own names are set from them, and code is coloured the
+   way the theme colours it. Light has no poimandres and keeps its own colours. */
 
 :root {
 	color-scheme: light dark;
@@ -42,39 +44,55 @@
 	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.22);
 	--side: rgba(236, 237, 233, 0.86);
 	--scrim: rgba(20, 24, 22, 0.28);
+	--select: color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
 	:root {
-		--bg: #161716;
-		--surface: #1b1c1b;
-		--raised: #202221;
-		--sunk: #111211;
-		--composer: #1d1f1e;
-		--hover: rgba(225, 240, 232, 0.06);
-		--press: rgba(225, 240, 232, 0.1);
-		--line: #2a2c2b;
-		--line-soft: #222423;
-		--text: #e7eae7;
-		--muted: #8d958f;
-		--faint: #5f6761;
-		--accent: #55ba8c;
-		--accent-soft: rgba(85, 186, 140, 0.13);
-		--on-accent: #06140d;
-		--warn: #e0b45a;
-		--warn-soft: rgba(224, 180, 90, 0.12);
-		--bad: #ec7268;
-		--bad-soft: rgba(236, 114, 104, 0.12);
-		--info: #76aef0;
-		--plan: #b594f5;
-		--add: #6fd39c;
-		--add-bg: rgba(70, 190, 125, 0.13);
-		--del: #f08a80;
-		--del-bg: rgba(235, 100, 90, 0.13);
+		--p-bg: #1b1e28;
+		--p-fg: #a6accd;
+		--p-bright: #e4f0fb;
+		--p-comment: #767c9d;
+		--p-mint: #5de4c7;
+		--p-teal: #5fb3a1;
+		--p-blue: #add7ff;
+		--p-sky: #89ddff;
+		--p-steel: #91b4d5;
+		--p-slate: #7390aa;
+		--p-yellow: #fffac2;
+		--p-pink: #d0679d;
+		--p-focus: #303340;
+
+		--bg: var(--p-bg);
+		--surface: #1e212c;
+		--raised: #232633;
+		--sunk: #171922;
+		--composer: #1e212c;
+		--hover: rgba(166, 172, 205, 0.07);
+		--press: rgba(166, 172, 205, 0.12);
+		--line: #2b2e3c;
+		--line-soft: #242734;
+		--text: var(--p-bright);
+		--muted: var(--p-fg);
+		--faint: var(--p-comment);
+		--accent: var(--p-mint);
+		--accent-soft: rgba(93, 228, 199, 0.12);
+		--on-accent: #171922;
+		--warn: var(--p-yellow);
+		--warn-soft: rgba(255, 250, 194, 0.1);
+		--bad: var(--p-pink);
+		--bad-soft: rgba(208, 103, 157, 0.15);
+		--info: var(--p-blue);
+		--plan: var(--p-sky);
+		--add: var(--p-mint);
+		--add-bg: rgba(93, 228, 199, 0.1);
+		--del: var(--p-pink);
+		--del-bg: rgba(208, 103, 157, 0.14);
+		--select: rgba(113, 124, 180, 0.3);
 		--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);
 		--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
-		--side: rgba(12, 13, 12, 0.86);
-		--scrim: rgba(0, 0, 0, 0.5);
+		--side: rgba(19, 21, 29, 0.88);
+		--scrim: rgba(10, 11, 17, 0.55);
 	}
 }
 
@@ -107,7 +125,7 @@ select {
 	color: inherit;
 }
 ::selection {
-	background: color-mix(in srgb, var(--accent) 28%, transparent);
+	background: var(--select);
 }
 ::-webkit-scrollbar {
 	width: 10px;
@@ -1659,11 +1677,176 @@ select.input {
 .hljs-params {
 	color: var(--muted);
 }
-.hljs-emphasis {
+.hljs-emphasis,
+.t-em {
 	font-style: italic;
 }
-.hljs-strong {
+.hljs-strong,
+.t-strong,
+.t-head {
 	font-weight: 600;
+}
+/* The editor's tokens (`colours` in CodePanel.tsx names them). */
+.t-comment,
+.t-meta {
+	color: var(--faint);
+	font-style: italic;
+}
+.t-kw,
+.t-kw-def,
+.t-kw-flow,
+.t-kw-mod {
+	color: var(--plan);
+}
+.t-str,
+.t-re,
+.t-ins {
+	color: var(--add);
+}
+.t-num,
+.t-bool,
+.t-nil {
+	color: var(--warn);
+}
+.t-fn,
+.t-call,
+.t-cls,
+.t-type,
+.t-ns,
+.t-tag {
+	color: var(--info);
+}
+.t-prop,
+.t-attr {
+	color: var(--text);
+}
+.t-link {
+	text-decoration: underline;
+}
+.t-del {
+	color: var(--del);
+}
+.t-punct,
+.t-op {
+	color: var(--muted);
+}
+
+/* Code in dark: poimandres, token by token as the theme has them. A highlighted block in a message knows
+   less than the editor does (one class for every keyword, none for a plain name), so `refine` in
+   markdown.tsx tells its keywords and constants apart, and what it leaves unmarked reads as a name. */
+@media (prefers-color-scheme: dark) {
+	.md pre {
+		color: var(--p-fg);
+	}
+	.md pre code.hl,
+	.t-var,
+	.t-prop,
+	.hljs-variable,
+	.hljs-template-variable,
+	.hljs-params,
+	.hljs-property,
+	.hljs-subst,
+	.hljs-tag {
+		color: var(--p-bright);
+	}
+	.t-kw,
+	.t-meta,
+	.t-punct,
+	.hljs-keyword.kw-plain,
+	.hljs-punctuation,
+	.hljs-meta,
+	.hljs-doctag {
+		color: var(--p-fg);
+	}
+	.t-meta {
+		font-style: normal;
+	}
+	.t-comment,
+	.hljs-comment,
+	.hljs-quote {
+		color: color-mix(in srgb, var(--p-comment) 70%, transparent);
+	}
+	.t-kw-def,
+	.t-op,
+	.t-ns,
+	.hljs-keyword,
+	.hljs-operator,
+	.hljs-attr,
+	.hljs-selector-attr,
+	.hljs-selector-pseudo {
+		color: var(--p-steel);
+	}
+	.t-attr {
+		color: var(--p-steel);
+		font-style: italic;
+	}
+	.t-kw-mod,
+	.t-str,
+	.t-num,
+	.t-bool,
+	.t-tag,
+	.t-head,
+	.hljs-keyword.kw-mod,
+	.hljs-keyword.lit,
+	.hljs-string,
+	.hljs-meta .hljs-string,
+	.hljs-number,
+	.hljs-literal,
+	.hljs-symbol,
+	.hljs-bullet,
+	.hljs-name,
+	.hljs-selector-tag,
+	.hljs-section,
+	.hljs-addition {
+		color: var(--p-mint);
+	}
+	.t-kw-flow,
+	.hljs-keyword.kw-flow {
+		color: color-mix(in srgb, var(--p-mint) 75%, transparent);
+	}
+	.t-re,
+	.hljs-regexp,
+	.hljs-char.escape_,
+	.hljs-selector-class,
+	.hljs-selector-id {
+		color: var(--p-teal);
+	}
+	.t-fn,
+	.t-cls,
+	.t-link,
+	.t-ins,
+	.hljs-title,
+	.hljs-title.function_,
+	.hljs-title.class_,
+	.hljs-built_in,
+	.hljs-attribute,
+	.hljs-link {
+		color: var(--p-blue);
+	}
+	.t-call {
+		color: color-mix(in srgb, var(--p-bright) 82%, transparent);
+	}
+	.t-type,
+	.hljs-type {
+		color: color-mix(in srgb, var(--p-fg) 75%, transparent);
+	}
+	.t-nil,
+	.t-del,
+	.hljs-keyword.kw-bad,
+	.hljs-keyword.nil,
+	.hljs-literal.nil,
+	.hljs-deletion {
+		color: var(--p-pink);
+	}
+	.t-em,
+	.t-strong,
+	.hljs-emphasis,
+	.hljs-strong {
+		color: var(--p-slate);
+	}
+	.diff {
+		color: var(--p-fg);
+	}
 }
 
 /* ---- the composer --------------------------------------------------------------------------------------- */
@@ -1976,7 +2159,7 @@ select.input {
 }
 .editor .cm-selectionBackground,
 .editor .cm-focused .cm-selectionBackground {
-	background: color-mix(in srgb, var(--accent) 26%, transparent) !important;
+	background: var(--select) !important;
 }
 .editor .cm-cursor {
 	border-left-color: var(--accent);
@@ -1998,6 +2181,28 @@ select.input {
 .editor .cm-searchMatch {
 	background: var(--warn-soft);
 	outline: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+	.editor .cm-editor {
+		color: var(--p-fg);
+	}
+	.editor .cm-cursor {
+		border-left-color: var(--p-fg);
+	}
+	.editor .cm-activeLine,
+	.editor .cm-activeLineGutter {
+		background: rgba(113, 124, 180, 0.08);
+	}
+	.editor .cm-gutters {
+		color: color-mix(in srgb, var(--p-comment) 55%, transparent);
+	}
+	.editor .cm-activeLineGutter {
+		color: var(--p-fg);
+	}
+	.editor .cm-searchMatch {
+		background: color-mix(in srgb, var(--p-blue) 25%, transparent);
+		outline-color: color-mix(in srgb, var(--p-blue) 50%, transparent);
+	}
 }
 .prog {
 	padding: 10px 12px;

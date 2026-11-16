@@ -91,6 +91,7 @@ export function draw(text: string, where?: Where): DocumentFragment {
 			try {
 				// The highlighter escapes what it is given; its output is markup of its own making.
 				code.innerHTML = hljs.highlight(source, { language: lang, ignoreIllegals: true }).value;
+				refine(code);
 			} catch {
 				// shown without colours
 			}
@@ -116,6 +117,28 @@ export function draw(text: string, where?: Where): DocumentFragment {
 		wrap.append(table);
 	}
 	return frag;
+}
+
+// The highlighter has one class for every keyword and one for every constant. The theme of the dark look
+// (poimandres) tells them apart, so the ones it colours differently get a second class. Light ignores it.
+const KW_MOD = new Set(["import", "export", "from", "default", "as", "async", "static", "new", "this", "super", "self", "public", "private", "protected", "readonly", "abstract", "override", "declare", "extends", "implements", "pub", "mut", "use", "package"]);
+const KW_FLOW = new Set(["return", "await", "yield", "break", "continue"]);
+const KW_PLAIN = new Set(["if", "else", "elif", "for", "while", "do", "switch", "case", "match", "in", "of", "loop", "then", "fi", "done", "esac", "end", "with", "and", "or", "not", "is"]);
+const KW_BAD = new Set(["try", "catch", "finally", "throw", "throws", "raise", "except", "delete", "del", "void", "panic", "unsafe"]);
+const NIL = new Set(["false", "null", "undefined", "nil", "none", "nan"]);
+
+function refine(code: Element): void {
+	for (const el of code.querySelectorAll(".hljs-keyword, .hljs-literal")) {
+		const word = (el.textContent ?? "").trim();
+		// Some languages (JSON) mark true, false and null as keywords.
+		if (NIL.has(word.toLowerCase())) el.classList.add("nil");
+		else if (el.classList.contains("hljs-literal") || word === "true") el.classList.add("lit");
+		else if (KW_MOD.has(word)) el.classList.add("kw-mod");
+		else if (KW_FLOW.has(word)) el.classList.add("kw-flow");
+		else if (KW_PLAIN.has(word)) el.classList.add("kw-plain");
+		else if (KW_BAD.has(word)) el.classList.add("kw-bad");
+	}
+	code.classList.add("hl");
 }
 
 function decorate(frag: DocumentFragment, where?: Where): void {

@@ -255,7 +255,7 @@ function createWindow(): void {
 		trafficLightPosition: { x: 16, y: 16 },
 		vibrancy: isMac ? "sidebar" : undefined,
 		visualEffectState: "followWindow",
-		backgroundColor: isMac ? "#00000000" : nativeTheme.shouldUseDarkColors ? "#0f1110" : "#fbfbf9",
+		backgroundColor: isMac ? "#00000000" : nativeTheme.shouldUseDarkColors ? "#1b1e28" : "#fbfbf9",
 		webPreferences: {
 			preload: path.join(HERE, "preload.cjs"),
 			contextIsolation: true,
