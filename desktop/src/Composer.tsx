@@ -265,7 +265,7 @@ export function Composer({ tab }: { tab: Tab }) {
 			{items.length ? (
 				<div className="suggest">
 					{items.map((s, i) => (
-						<div key={s.value} className={`pick-item${i === at ? " on" : ""}`} onMouseEnter={() => setAt(i)} onMouseDown={(e) => (e.preventDefault(), take(s))}>
+						<div key={s.value} className={`pick-item${i === at ? " on" : ""}`} onMouseMove={() => at !== i && setAt(i)} onMouseDown={(e) => (e.preventDefault(), take(s))}>
 							<span className="label mono">{s.label}</span>
 							{s.about ? <span className="about">{s.about}</span> : null}
 						</div>
@@ -323,10 +323,6 @@ export function Composer({ tab }: { tab: Tab }) {
 				/>
 				<div className="composer-bar">
 					<button type="button" className="chip plus-btn" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><Icon name="plus" size={15} /></button>
-					<button type="button" className="chip" title={tab.folder ? `Works in ${tab.folder}` : "The folder this conversation works in"} onClick={() => void store.pickFolder(tab)}>
-						<Icon name="folder" size={13} />
-						<span className="cut">{tab.folder ? baseName(tab.folder) : "no folder"}</span>
-					</button>
 					<button type="button" className="chip" title="Model" onClick={() => void store.pickModel(tab)}>
 						<Icon name="cpu" size={13} />
 						<span className="cut">{info?.model?.split("/").pop() ?? "model"}</span>
@@ -338,6 +334,10 @@ export function Composer({ tab }: { tab: Tab }) {
 					<button type="button" className={`chip ${modeTone}`} title="How much this agent does without asking" onClick={() => void store.pickMode(tab)}>
 						<Icon name="shield" size={13} />
 						<span>{mode}{paused ? " (paused)" : ""}</span>
+					</button>
+					<button type="button" className="chip" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
+						<Icon name="folder" size={13} />
+						<span className="cut">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
 					</button>
 					{tainted ? <span className="chip warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><Icon name="eye" size={13} />outside content</span> : null}
 					<span className="grow" />

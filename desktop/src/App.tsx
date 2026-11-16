@@ -2,7 +2,7 @@
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
 import { useEffect, useMemo, useRef, useState } from "react";
-import { api, type Approval, type Conversation as Conv } from "./api.ts";
+import { type AgentInfo, api, type Approval, type Conversation as Conv } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { CodePanel } from "./CodePanel.tsx";
 import { COMMANDS } from "./commands.ts";
@@ -65,6 +65,9 @@ function Gate() {
 }
 
 // ---- the side ----------------------------------------------------------------------------------------
+// The side bar is the agents. Each is a group of its own: who it is, whether it is at work, and
+// under it its conversations. What starts something new stands on the agent's own line, so it
+// is never a question whom a new conversation or a folder is for.
 
 function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const s = store;
@@ -96,10 +99,11 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 		}
 	};
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
+	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
-		<div className={`side-row${tab && tab === s.active && s.view === "chat" ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · ${c.folder}` : ""}`}>
-			{tab?.approvals.size ? <span className="needs">!</span> : tab?.busy ? <Spinner size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}
-			<span className="cut grow">{main ? "main" : c.session}</span>
+		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
+			{tab?.approvals.size ? <span className="needs">!</span> : working ? <Spinner size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}
+			<span className="cut grow">{main ? "main conversation" : c.session}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
 				<span className="acts" onClick={(e) => e.stopPropagation()}>
@@ -110,39 +114,76 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	);
 }
 
+function AgentGroup({ a }: { a: AgentInfo }) {
+	const s = store;
+	const folded = s.folded.has(a.id);
+	const list = s.conversations.get(a.id) ?? [];
+	// The agent's own conversation first, then what is pinned, then by when it was last used.
+	const sorted = [...list].sort((x, y) => Number(y.session === "main") - Number(x.session === "main") || Number(y.pinned) - Number(x.pinned) || y.last - x.last);
+	const rows = sorted.some((c) => c.session === "main") ? sorted : [{ session: "main", tasks: 0, last: 0, pinned: false, open: false }, ...sorted];
+	// A conversation that is open in a tab and has not been said anything in yet is not in the daemon's list.
+	for (const t of s.tabs) if (t.kind === "chat" && t.agent === a.id && !rows.some((c) => c.session === t.session)) rows.push({ session: t.session, tasks: 0, last: Date.now(), pinned: false, open: true });
+	const tabs = s.tabs.filter((t) => t.agent === a.id && t.kind === "chat");
+	const waits = tabs.some((t) => t.approvals.size > 0);
+	const working = s.isBusy(a.id) || tabs.some((t) => t.busy);
+	const unread = tabs.some((t) => t.unread);
+	const pickFolder = async () => {
+		const dir = await bridge.pickFolder(`A folder for a conversation with ${a.id}`);
+		if (dir) await s.openFolder(dir, a.id);
+	};
+	const menu = async () => {
+		const picked = await bridge.contextMenu([
+			{ id: "new", label: `New conversation with ${a.id}` },
+			{ id: "folder", label: `Open a folder with ${a.id}…` },
+			{ id: "sep", label: "", separator: true },
+			{ id: "settings", label: "Agent settings…" },
+			{ id: "fold", label: folded ? "Show its conversations" : "Hide its conversations" },
+		]);
+		if (picked === "new") await s.newConversation(a.id);
+		if (picked === "folder") await pickFolder();
+		if (picked === "settings") s.openSettings("agents", a.id);
+		if (picked === "fold") s.toggleFold(a.id);
+	};
+	return (
+		<div className="side-group">
+			<div className="side-agent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onClick={() => s.toggleFold(a.id)} onContextMenu={(e) => (e.preventDefault(), void menu())}>
+				<Icon name={folded ? "right" : "down"} size={10} className="faint" />
+				<span className="avatar">{a.id.slice(0, 1).toUpperCase()}</span>
+				<span className="who">
+					<span className="cut">{a.id}</span>
+					<span className="what cut">{a.description || a.model}</span>
+				</span>
+				{waits ? <span className="needs">!</span> : working ? <Spinner size={11} /> : unread && folded ? <span className="dot unread" /> : null}
+				<span className="agent-acts" onClick={(e) => e.stopPropagation()}>
+					<Button small variant="ghost" icon="gear" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)} />
+					<Button small variant="ghost" icon="folder" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()} />
+				</span>
+				<span onClick={(e) => e.stopPropagation()}>
+					<Button small variant="ghost" icon="plus" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)} />
+				</span>
+			</div>
+			{folded ? null : rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
+		</div>
+	);
+}
+
 function Sidebar() {
 	const s = useModel(store);
 	const ready = s.service.status === "ready";
+	const front = s.active;
 	return (
 		<aside className="sidebar">
 			<div className="side-top">
 				<Button variant="ghost" icon="sidebar" title="Hide the sidebar (⌘B)" onClick={() => void s.command("sidebar")} />
 			</div>
 			<div className="side-scroll">
-				<div className="side-row" onClick={() => void s.newConversation()}><Icon name="edit" size={14} /><span className="grow">New conversation</span><kbd>⌘T</kbd></div>
 				<div className="side-row" onClick={() => void s.command("palette")}><Icon name="search" size={14} /><span className="grow">Search and commands</span><kbd>⌘K</kbd></div>
-				<div className="side-row" onClick={() => void s.command("open-folder")}><Icon name="folder" size={14} /><span className="grow">Open a folder</span><kbd>⌘O</kbd></div>
-				{s.agents.map((a) => {
-					const list = s.conversations.get(a.id) ?? [];
-					// The agent's own conversation first, then what is pinned, then by when it was last used.
-					const sorted = [...list].sort((x, y) => Number(y.session === "main") - Number(x.session === "main") || Number(y.pinned) - Number(x.pinned) || y.last - x.last);
-					const rows = sorted.some((c) => c.session === "main") ? sorted : [{ session: "main", tasks: 0, last: 0, pinned: false, open: false }, ...sorted];
-					// A conversation that is open in a tab and has not been said anything in yet is not in the daemon's list.
-					for (const t of s.tabs) if (t.kind === "chat" && t.agent === a.id && !rows.some((c) => c.session === t.session)) rows.push({ session: t.session, tasks: 0, last: Date.now(), pinned: false, open: true });
-					return (
-						<div key={a.id}>
-							<div className="side-agent" title={a.description} data-initial={a.id.slice(0, 1).toUpperCase()}>
-								<span className="cut grow">{a.id}</span>
-								<Button small variant="ghost" icon="plus" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)} />
-							</div>
-							{rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
-						</div>
-					);
-				})}
+				<div className="side-label">Agents<span className="grow" /><Button small variant="ghost" icon="plus" title="New agent" onClick={() => s.openSettings("agents", "+")} /></div>
+				{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}
 			</div>
 			<div className="side-foot">
-				<div className={`side-row${s.active?.kind === "events" && s.view === "chat" ? " on" : ""}`} onClick={() => void s.openEvents()}><Icon name="wave" size={14} /><span className="grow">Events</span></div>
-				<div className={`side-row${s.view === "settings" ? " on" : ""}`} onClick={() => void s.command("settings")}><Icon name="gear" size={14} /><span className="grow">Settings</span><kbd>⌘,</kbd></div>
+				<div className={`side-row${front?.kind === "events" ? " on" : ""}`} onClick={() => void s.openEvents()}><Icon name="wave" size={14} /><span className="grow">Events</span></div>
+				<div className={`side-row${front?.kind === "settings" ? " on" : ""}`} onClick={() => s.openSettings()}><Icon name="gear" size={14} /><span className="grow">Settings</span><kbd>⌘,</kbd></div>
 				<div className="side-status" title={s.service.status === "ready" ? `${s.service.home} · ${s.service.started ? "started by this app" : "a pine that was already running"}` : ""}>
 					<span className={`dot ${!ready ? "warn" : s.connected ? "good" : "bad"}`} />
 					<span className="cut">{!ready ? "starting" : !s.connected ? "pine does not answer" : `pine${s.service.status === "ready" && s.service.version ? ` ${s.service.version}` : ""} · ${s.service.status === "ready" && s.service.started ? "started here" : "attached"}`}</span>
@@ -158,7 +199,7 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 	useModel(tab);
 	const s = store;
 	const [drop, setDrop] = useState(false);
-	const on = s.active === tab && s.view === "chat";
+	const on = s.active === tab;
 	const kept = tab.kind === "chat" && (tab.session === "main" || s.pins.has(tab.key));
 	return (
 		<div
@@ -170,14 +211,15 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 			onDrop={(e) => (setDrop(false), s.moveTab(Number(e.dataTransfer.getData("application/x-pine-tab")), index))}
 			onClick={() => s.activate(tab)}
 			onAuxClick={(e) => e.button === 1 && s.closeTab(tab)}
-			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : "events"}
+			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 		>
 			<span className="mark">
-				{tab.approvals.size ? <span className="needs">!</span> : tab.busy ? <Spinner size={11} /> : tab.unread ? <span className="dot unread" /> : tab.kind === "events" ? <Icon name="wave" size={12} /> : tab.kind === "task" ? <Icon name="list" size={12} /> : kept ? <Icon name="star" size={11} className="star" /> : <Icon name="chat" size={12} />}
+				{tab.approvals.size ? <span className="needs">!</span> : tab.busy ? <Spinner size={11} /> : tab.unread ? <span className="dot unread" /> : tab.kind === "events" ? <Icon name="wave" size={12} /> : tab.kind === "settings" ? <Icon name="gear" size={12} /> : tab.kind === "task" ? <Icon name="list" size={12} /> : <span className="avatar small">{tab.agent.slice(0, 1).toUpperCase()}</span>}
 			</span>
 			<span className="name">
-				{tab.kind === "events" ? "events" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {tab.session}</>}
+				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {tab.session}</>}
 			</span>
+			{kept && tab.session !== "main" ? <Icon name="star" size={10} className="star" /> : null}
 			<span className="close" onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><Icon name="x" size={11} /></span>
 		</div>
 	);
@@ -185,15 +227,15 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 
 function TitleBar() {
 	const s = useModel(store);
+	const with_ = s.agentInFront();
 	return (
 		<header className="titlebar">
 			{s.sidebar ? null : <Button variant="ghost" icon="sidebar" title="Show the sidebar (⌘B)" onClick={() => void s.command("sidebar")} />}
 			<div className="tabs">
 				{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
 			</div>
-			<Button variant="ghost" icon="plus" title="New conversation (⌘T)" onClick={() => void s.newConversation()} />
+			<Button variant="ghost" icon="plus" title={with_ ? `New conversation with ${with_} (⌘T)` : "New conversation (⌘T): you are asked with which agent"} onClick={() => void s.newConversation()} />
 			<span className="grow" />
-			{s.view === "settings" ? <Button variant="ghost" icon="x" onClick={() => void s.command("settings")}>Close settings</Button> : null}
 		</header>
 	);
 }
@@ -239,7 +281,7 @@ function PickDialog({ p }: { p: Picker }) {
 				{shown.length ? (
 					<div className="pick-list" ref={list}>
 						{shown.map((i, n) => (
-							<div key={i.value} className={`pick-item${n === at ? " on" : ""}${i.tone === "bad" ? " bad" : ""}`} onMouseEnter={() => setAt(n)} onClick={() => p.done(i.value)}>
+							<div key={i.value} className={`pick-item${n === at ? " on" : ""}${i.tone === "bad" ? " bad" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => p.done(i.value)}>
 								<span className="label">{i.label}</span>
 								{i.about ? <span className="about">{i.about}</span> : null}
 								{i.value === p.current ? <span className="cur"><Icon name="check" size={13} /></span> : null}
@@ -300,7 +342,7 @@ function Palette() {
 					{shown.map((r, n) => (
 						<div key={r.id}>
 							{!query && (n === 0 || shown[n - 1].group !== r.group) ? <div className="pick-group">{r.group}</div> : null}
-							<div className={`pick-item${n === at ? " on" : ""}`} onMouseEnter={() => setAt(n)} onClick={() => run(r)}>
+							<div className={`pick-item${n === at ? " on" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => run(r)}>
 								<span className="label">{r.label}</span>
 								{r.about ? <span className="about">{r.about}</span> : null}
 								{r.keys ? <kbd style={{ marginLeft: "auto", flex: "none" }}>{r.keys}</kbd> : null}
@@ -404,7 +446,7 @@ function QuestionDialog({ req }: { req: Approval }) {
 			{choices.length ? (
 				<div className="pick-list" style={{ padding: 0 }}>
 					{choices.map((c, i) => (
-						<div key={i} className={`pick-item${i === at && !own ? " on" : ""}`} onMouseEnter={() => setAt(i)} onClick={() => answer(c)}>
+						<div key={i} className={`pick-item${i === at && !own ? " on" : ""}`} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
 							<kbd>{i + 1}</kbd>
 							<span style={{ whiteSpace: "normal" }}>{c}</span>
 							{i === 0 ? <span className="tag good" style={{ marginLeft: "auto" }}>recommended</span> : null}
@@ -496,8 +538,8 @@ export function App() {
 					<div className="main">
 						<TitleBar />
 						<div className="body">
-							{s.view === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
-							{s.view === "chat" && s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+							{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
+							{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
 						</div>
 					</div>
 				</>

@@ -111,7 +111,7 @@ test("starts a daemon of its own and shows the main agent", async () => {
 	await sees(".welcome h1");
 	assert.equal(await page.textContent(".welcome h1"), "main");
 	assert.match(await page.textContent(".side-status"), /started here/);
-	const agents = await page.$$eval(".side-agent", (els: Element[]) => els.map((e) => e.textContent?.trim()));
+	const agents = await page.$$eval(".side-agent .who > :first-child", (els: Element[]) => els.map((e) => e.textContent?.trim()));
 	assert.deepEqual(agents, ["main", "scout"]);
 	// The daemon it started is the one of this home, on a port of its own.
 	assert.ok(fs.existsSync(path.join(home, "data", "http-token")));
@@ -172,6 +172,9 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 test("a folder is opened for a conversation: changes, and a file edited and saved", async () => {
 	// As the system does it when a folder is dropped on the app's icon.
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
+	// With several agents the app asks whose folder it is; the one in front is offered first.
+	await sees(".pick-title >> text=Which agent works in");
+	await page.keyboard.press("Enter");
 	await sees(".tab.on .name >> text=pine-desktop-folder");
 	await page.click(".conv-head .btn[title^='Changes']");
 	await sees(".code .frow");
@@ -195,6 +198,9 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 test("settings: a setting is changed, an agent made, a schedule added, a provider signed in to, a skill and a source added", async () => {
 	await menu("settings");
 	await sees(".set-in h1 >> text=General");
+	// The settings are a tab like any other, beside the conversations.
+	assert.equal(await page.textContent(".tab.on .name"), "Settings");
+	assert.ok((await page.$$eval(".tab", (els: Element[]) => els.length)) >= 3);
 	await sees(".item .mono >> text=limits.maxDownloadMb");
 	await shot("06-settings-general");
 	// A setting of pine's: checked by the daemon, written into pine.json, in force at once.
@@ -216,6 +222,8 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.click(".dialog .btn-primary >> text=Create agent");
 	await sees(".set-in h1 >> text=books");
 	assert.ok(fs.existsSync(path.join(home, "agents", "books", "agent.json")));
+	// It is in the side bar at once, with the others.
+	assert.deepEqual(await page.$$eval(".side-agent .who > :first-child", (els: Element[]) => els.map((e) => e.textContent?.trim())), ["main", "scout", "books"]);
 	await shot("07-settings-agent");
 	// Events: a schedule.
 	await page.click(".set-nav .side-row >> text=Events");
@@ -297,7 +305,41 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await menu("settings");
 });
 
+test("the side bar is the agents: one made elsewhere appears, a group folds away, and what is new says for whom", async () => {
+	// An agent that another hand makes (the main agent, a `pine agent add`): asked of the daemon directly, not through the app.
+	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(fs.readFileSync(path.join(home, "data", "pine.log"), "utf8"))![1];
+	const token = fs.readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
+	const made = await fetch(`http://127.0.0.1:${port}/agents`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ id: "test", description: "Made outside the app", instructions: "You are test." }) });
+	assert.equal(made.status, 200);
+	await sees(".side-agent .who >> text=test", 20_000);
+	assert.match((await page.locator(".side-agent", { has: page.locator(".who > :first-child", { hasText: /^test$/ }) }).textContent()) ?? "", /Made outside the app/);
+	// A group folds away on a click on its agent, and comes back.
+	const group = page.locator(".side-group", { has: page.locator(".who > :first-child", { hasText: /^scout$/ }) });
+	assert.equal(await group.locator(".side-conv").count(), 1);
+	await group.locator(".side-agent .who").click();
+	assert.equal(await group.locator(".side-conv").count(), 0);
+	await group.locator(".side-agent .who").click();
+	assert.equal(await group.locator(".side-conv").count(), 1);
+	// The plus on an agent's own line starts a conversation with that agent.
+	await group.locator(".side-agent .btn[title='New conversation with scout']").click();
+	await sees(".tab.on .name >> text=scout");
+	assert.equal(await page.textContent(".welcome h1"), "scout");
+	assert.match(await page.textContent(".welcome"), /Looks things up on the web/);
+	await shot("14-agents");
+	await page.click(".tab.on .close");
+	// Asked from where no agent is in front (the event log), a new conversation asks with whom.
+	await menu("events");
+	await sees(".tab.on .name >> text=Events");
+	await menu("new");
+	await sees(".pick-title >> text=New conversation with");
+	assert.deepEqual(await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent)), ["main", "scout", "books", "test"]);
+	await page.keyboard.press("Escape");
+	await page.click(".tab.on .close");
+});
+
 test("the palette finds things by name, and the event log follows", async () => {
+	// The pointer rests where the list will open: the first line is still the one that enter takes.
+	await page.mouse.move(640, 320);
 	await menu("palette");
 	await sees(".pick-input");
 	await page.keyboard.type("event log");

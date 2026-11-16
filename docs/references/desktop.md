@@ -81,30 +81,57 @@ you quit (`⌘Q`). A daemon the app started that stops answering is started agai
 ## The window
 
 ```
- ● ● ●          ◧   ★ main   ▢ main · notes ×   +                       ← tabs
- ✎ New conversation    ╭──────────────────────────────╮ ╭───────────────────────╮
- ⌕ Search and commands │ M main / notes   ▢ ~/dev/x  7% ◨ │ Changes Last turn Files … │
- ▢ Open a folder       │                              │ │                       │
-                       │        what do the notes say?│ │  M index.ts  src +1 −1│
- M main                │ ▸ 1 tool call · read · 148 ms│ │                       │
-   ★ main              │ The notes say first line.    │ │                       │
-   ○ notes             │ ╭──────────────────────────╮ │ │                       │
- S scout               │ │ Message main · / · @     │ │ │                       │
-   ★ main              │ │ + ▢ x  ▣ m  ✳ off  ⛨ safe ↑│ │ │                       │
+ ● ● ●          ◧   M main   M main · notes ×   ⚙ Settings   +           ← tabs
+ ⌕ Search and commands ╭──────────────────────────────╮ ╭───────────────────────╮
+ Agents              + │ M main / notes   ▢ ~/dev/x  7% ◨ │ Changes Last turn Files … │
+ ▾ M main            + │                              │ │                       │
+     the main agent    │        what do the notes say?│ │  M index.ts  src +1 −1│
+     ★ main conversation ▸ 1 tool call · read · 148 ms│ │                       │
+     ○ notes           │ The notes say first line.    │ │                       │
+ ▸ B books     ⠹     + │ ╭──────────────────────────╮ │ │                       │
+ ▾ S scout           + │ │ Message main · / · @     │ │ │                       │
+     ★ main conversation │ + ▣ m  ✳ off  ⛨ safe  ▢ x ↑│ │ │                       │
  ⌇ Events  ⚙ Settings  │ ╰──────────────────────────╯ │ │                       │
  ● pine 0.22 · started here ──────────────────────────╯ ╰───────────────────────╯
 ```
 
 The panels lie as cards on the window: the conversation, and beside it the code panel.
 
+**The side bar is your agents.** Each agent is a group: its name and what it is for, and under
+it its conversations. Everything that starts something new stands on the agent's own line, so
+it is never a question whom it is for.
+
+| On an agent's line | What it does |
+|---|---|
+| A click on the agent | Folds its conversations away, or shows them again. The app remembers which groups are folded. A folded agent still shows that it is at work (a spinner), waits for you (`!`) or has something new (a dot) |
+| `+` | A new conversation with that agent |
+| The folder (when the pointer is on the line) | Opens a folder of yours for a new conversation with that agent |
+| The gear (when the pointer is on the line) | That agent's page in the settings |
+| A right click | The same as a menu |
+| `+` beside "Agents" | A new agent |
+
+An agent that somebody else makes while the app is open (the main agent when you ask it to,
+`pine agent add`, the terminal UI) appears in the side bar within a few seconds, and one that
+is removed goes, with its tabs. A conversation in which an agent is at work has a spinner
+whether or not a tab shows it.
+
+Where no agent is named, the app goes by the tab in front, and asks when that is not an
+agent's:
+
+| You do | With whom |
+|---|---|
+| `⌘T`, or `+` at the end of the tabs | The agent of the tab in front (the button says which). From the settings or the event log you are asked with whom |
+| `⌘O`, or a folder put on the app's icon | With one agent, that one. With several you are asked which agent works in the folder; the one in front is offered first |
+| `⇧⌘T` | Always asks with whom |
+
 | Part | What it is |
 |---|---|
-| Side bar | At the top: New conversation, Search and commands (the palette), Open a folder. Then every agent, the main one first, with its conversations: its own (`main`) first, then pinned ones, then by when they were last used. A click opens one in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). `+` beside an agent's name starts a new conversation with it. At the bottom: the event log, the settings, and whether pine answers |
-| Tabs | One conversation each, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
-| Conversation | Your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens. A `↳ … open` line opens a sub-agent's or delegated task's work in a tab of its own |
+| Side bar | Search and commands at the top, then your agents (see above). An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
+| Tabs | One conversation each, with its agent's initial, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
+| Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens. A `↳ … open` line opens a sub-agent's or delegated task's work in a tab of its own |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |
-| The bar under the input | `+` attaches files; then the folder the conversation works in, the agent's model, how much it reasons and its mode: each opens a list on a click. `outside content` appears when the conversation has read something from outside |
+| The bar under the input | `+` attaches files; then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours): each opens a list on a click. `outside content` appears when the conversation has read something from outside |
 | Code panel | Beside a conversation (`⌥⌘B`): see "The code panel and the editor" |
 | Palette | `⌘K`: every command, open tab, conversation, agent and settings page by name |
 
@@ -164,8 +191,9 @@ On a system without a sandbox the daemon does not write, and the app says so.
 
 ## Settings
 
-`⌘,` opens the settings panel: pine's configuration, changed by clicking instead of by a
-command or by asking an agent. Each page asks the daemon what there is and tells it what to change.
+`⌘,` opens the settings panel in a tab of its own, beside the conversations (the same key puts
+it away again; the event log is a tab in the same way). It is pine's configuration, changed by
+clicking instead of by a command or by asking an agent. Each page asks the daemon what there is and tells it what to change.
 The daemon checks a change as it checks the main agent's (the same code), writes it, reads the
 configuration back, and undoes what does not load. You are not asked to confirm in a dialog
 of pine's: the app is your own hand, like a `pine` command.

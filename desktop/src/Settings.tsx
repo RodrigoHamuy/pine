@@ -349,8 +349,11 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 
 function Agents() {
 	const s = useModel(store);
-	const [open, setOpen] = useState<string>();
-	const [adding, setAdding] = useState(false);
+	// Which agent's page is open is the app's to say: the side bar opens one too. "+" is the new agent's dialog.
+	const open = s.settingsAgent !== "+" ? s.settingsAgent : undefined;
+	const adding = s.settingsAgent === "+";
+	const setOpen = (id?: string) => ((s.settingsAgent = id), s.touch());
+	const setAdding = (on: boolean) => setOpen(on ? "+" : undefined);
 	if (open && s.agents.some((a) => a.id === open)) return <AgentPage id={open} back={() => setOpen(undefined)} />;
 	return (
 		<Page title="Agents" lead="An agent is a folder with a workspace, instructions and a model. Each has its own conversations and reach." actions={<Button variant="primary" icon="plus" onClick={() => setAdding(true)}>New agent</Button>}>
@@ -366,7 +369,7 @@ function Agents() {
 					</div>
 				))}
 			</div>
-			{adding ? <NewAgent close={() => setAdding(false)} made={(id) => (setAdding(false), setOpen(id))} /> : null}
+			{adding ? <NewAgent close={() => setAdding(false)} made={(id) => setOpen(id)} /> : null}
 		</Page>
 	);
 }
@@ -990,7 +993,7 @@ export function Settings() {
 		<div className="settings">
 			<nav className="set-nav">
 				{SECTIONS.map((x) => (
-					<div key={x.id} className={`side-row${s.section === x.id ? " on" : ""}`} onClick={() => ((s.section = x.id), s.touch())}><Icon name={x.icon} size={14} /><span>{x.label}</span></div>
+					<div key={x.id} className={`side-row${s.section === x.id ? " on" : ""}`} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><Icon name={x.icon} size={14} /><span>{x.label}</span></div>
 				))}
 			</nav>
 			<div className="set-page" key={s.section}>

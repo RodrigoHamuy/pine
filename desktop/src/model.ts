@@ -81,7 +81,7 @@ export const mediaKind = MEDIA_KIND;
 /** One tab: a conversation, the work of one task, or the event log. */
 export class Tab extends Model {
 	id = uid();
-	kind: "chat" | "task" | "events";
+	kind: "chat" | "task" | "events" | "settings";
 	agent: string;
 	session: string;
 	/** For a tab on one task. */
@@ -141,7 +141,7 @@ export class Tab extends Model {
 	}
 
 	get key(): string {
-		return this.kind === "chat" ? `${this.agent}:${this.session}` : this.kind === "task" ? `task:${this.task}` : "events";
+		return this.kind === "chat" ? `${this.agent}:${this.session}` : this.kind === "task" ? `task:${this.task}` : this.kind;
 	}
 
 	get busy(): boolean {
@@ -204,8 +204,13 @@ export class Store extends Model {
 	bypassWhenTainted = false;
 	pins = new Set<string>();
 
-	view: "chat" | "settings" = "chat";
+	/** The page the settings tab shows, and the agent whose page is open there. */
 	section = "general";
+	settingsAgent?: string;
+	/** Conversations in which an agent is at work right now, whether a tab shows them or not: "agent:session". */
+	busy = new Map<string, Set<number>>();
+	/** Agents whose list of conversations is folded away in the side bar. */
+	folded = new Set<string>(JSON.parse(localStorage.getItem("pine.folded") ?? "[]"));
 	sidebar = true;
 	code = false;
 	codeView: CodeView = "changes";
@@ -245,6 +250,7 @@ export class Store extends Model {
 		bridge.onFocus((f: boolean) => {
 			this.focused = f;
 			if (f && this.active) this.seen(this.active);
+			if (f) void this.refreshAgents();
 		});
 		bridge.onFullscreen((f: boolean) => ((this.fullscreen = f), this.touch()));
 		bridge.onInitLine((line: string) => {
@@ -280,7 +286,7 @@ export class Store extends Model {
 		}
 		for (const a of this.agents) learnHome(a.workspace);
 		for (const t of this.timers) clearInterval(t);
-		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000)];
+		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000), window.setInterval(() => void this.refreshAgents(), 8000)];
 		const first = this.agents.find((a) => a.main) ?? this.agents[0];
 		if (!first) return this.flash("this pine has no agents", "bad");
 		const saved = await api.tabs().catch(() => ({ tabs: [] as Array<{ agent: string; session: string }>, active: 0, code: false }));
@@ -309,6 +315,58 @@ export class Store extends Model {
 	async askAgents(): Promise<AgentInfo[]> {
 		const list = await api.agents();
 		return [...list].sort((a, b) => Number(b.main) - Number(a.main));
+	}
+
+	/**
+	 * Ask which agents there are now. Another hand can make, change or remove one at any time: the
+	 * main agent when it is asked to, a `pine agent` command, the terminal UI. The daemon does not
+	 * announce it, so it is asked: now and then, when the window comes to the front, and whenever
+	 * something happened that may have been it.
+	 */
+	async refreshAgents(): Promise<void> {
+		if (this.service.status !== "ready") return;
+		const list = await this.askAgents().catch(() => undefined);
+		if (!list) return;
+		const was = this.agents.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}`).join("\n");
+		const now = list.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}`).join("\n");
+		if (was === now) return;
+		const fresh = list.filter((a) => !this.agents.some((x) => x.id === a.id)).map((a) => a.id);
+		const gone = this.agents.filter((a) => !list.some((x) => x.id === a.id)).map((a) => a.id);
+		this.agents = list;
+		for (const a of list) learnHome(a.workspace);
+		// An agent that is gone has no conversations to show.
+		for (const id of gone) {
+			this.conversations.delete(id);
+			for (const t of this.tabs.filter((x) => x.agent === id && (x.kind === "chat" || x.kind === "task"))) if (this.tabs.length > 1) this.closeTab(t);
+		}
+		this.touch();
+		for (const id of fresh) void this.refreshConversations(id);
+	}
+
+	toggleFold(agent: string): void {
+		if (this.folded.has(agent)) this.folded.delete(agent);
+		else this.folded.add(agent);
+		localStorage.setItem("pine.folded", JSON.stringify([...this.folded]));
+		this.touch();
+	}
+
+	/** Whether an agent is at work in a conversation, open in a tab or not. */
+	isBusy(agent: string, session?: string): boolean {
+		if (session !== undefined) return (this.busy.get(`${agent}:${session}`)?.size ?? 0) > 0;
+		for (const [key, tasks] of this.busy) if (tasks.size && key.startsWith(`${agent}:`)) return true;
+		return false;
+	}
+
+	openSettings(section?: string, agent?: string): void {
+		if (section) this.section = section;
+		this.settingsAgent = agent;
+		let tab = this.tabs.find((t) => t.kind === "settings");
+		if (!tab) {
+			tab = new Tab("settings", "settings", "");
+			tab.loaded = true;
+			this.tabs.push(tab);
+		}
+		this.activate(tab);
 	}
 
 	/** Questions that were asked before this window was there. */
@@ -396,7 +454,7 @@ export class Store extends Model {
 	 * agent or a web page wrote goes into a notification.
 	 */
 	private attention(title: string, body: string, tab: Tab): void {
-		if (this.focused && this.active === tab && this.view === "chat") return;
+		if (this.focused && this.active === tab) return;
 		if (!this.focused) void bridge.notify(title, body, tab.key);
 	}
 
@@ -405,7 +463,6 @@ export class Store extends Model {
 	activate(tab: Tab | undefined): void {
 		if (!tab) return;
 		this.active = tab;
-		this.view = "chat";
 		tab.unread = false;
 		this.saveTabs();
 		this.touch();
@@ -555,14 +612,28 @@ export class Store extends Model {
 		this.activate(this.tabs[(this.tabs.indexOf(this.active) + by + this.tabs.length) % this.tabs.length]);
 	}
 
-	newConversation(agent?: string): Promise<void> {
-		const id = agent ?? (this.active?.kind !== "events" ? this.active?.agent : undefined) ?? (this.agents.find((a) => a.main) ?? this.agents[0])?.id;
-		return id ? this.openTab(id, sessionName()) : Promise.resolve();
+	/** The agent something new is meant for when nobody said: the one of the tab in front, if that tab is an agent's. */
+	agentInFront(): string | undefined {
+		const t = this.active;
+		return t && (t.kind === "chat" || t.kind === "task") && this.agent(t.agent) ? t.agent : undefined;
+	}
+
+	/** Which agent: the one that was named, the only one there is, or the one the owner picks from the list. */
+	async whichAgent(title: string, named?: string): Promise<string | undefined> {
+		if (named) return named;
+		if (this.agents.length <= 1) return this.agents[0]?.id;
+		return this.pick({ title, items: this.agents.map((x) => ({ value: x.id, label: x.id, about: x.description || x.model })), current: this.agentInFront() });
+	}
+
+	/** A new conversation: with the agent that is named, else with the one in front, else the owner is asked with whom. */
+	async newConversation(agent?: string): Promise<void> {
+		const id = agent ?? this.agentInFront() ?? (await this.whichAgent("New conversation with"));
+		if (id) await this.openTab(id, sessionName());
 	}
 
 	/** A conversation that works in a folder of the owner's: the one that already does, or a new one named after it. */
-	async openFolder(dir: string): Promise<void> {
-		const agent = (this.agents.find((a) => a.main) ?? this.agents[0])?.id;
+	async openFolder(dir: string, named?: string): Promise<void> {
+		const agent = await this.whichAgent(`Which agent works in ${baseName(dir)}?`, named);
 		if (!agent) return;
 		const used = await api.folders(agent).catch(() => [] as Array<{ session: string; folder: string }>);
 		const have = used.find((u) => u.folder === dir);
@@ -595,6 +666,14 @@ export class Store extends Model {
 			this.taints.clear();
 			this.sessionModes.clear();
 			this.bypassWhenTainted = s.bypassWhenTainted === true;
+			// What is at work right now, as the daemon has it: events only tell what happened since this window opened.
+			for (const [key, tasks] of this.busy) if (!s.running.some((r) => `${r.agent}:${r.session}` === key && tasks.has(r.task))) this.busy.delete(key);
+			for (const r of s.running) {
+				if (r.kind === "subagent" || r.kind === "delegate" && String(r.session).startsWith("_t")) continue;
+				const key = `${r.agent}:${r.session}`;
+				if (!this.busy.has(key)) this.busy.set(key, new Set());
+				this.busy.get(key)!.add(r.task);
+			}
 			for (const x of s.sessions) {
 				const open = this.tabs.find((t) => t.kind === "chat" && t.agent === x.agent && t.session === x.session);
 				if (open && x.context?.percent !== undefined) open.context = x.context.percent;
@@ -988,19 +1067,14 @@ export class Store extends Model {
 		if (name.startsWith("code-")) {
 			this.code = true;
 			this.codeView = name.slice(5) as CodeView;
-			this.view = "chat";
 			this.saveTabs();
 			return this.touch();
 		}
-		if (name.startsWith("settings:")) {
-			this.view = "settings";
-			this.section = name.slice(9);
-			return this.touch();
-		}
+		if (name.startsWith("settings:")) return this.openSettings(name.slice(9));
 		switch (name) {
 			case "settings":
-				this.view = this.view === "settings" ? "chat" : "settings";
-				return this.touch();
+				// The same key opens the settings and puts them away again.
+				return tab?.kind === "settings" ? this.closeTab(tab) : this.openSettings();
 			case "palette":
 				this.palette = !this.palette;
 				return this.touch();
@@ -1009,7 +1083,6 @@ export class Store extends Model {
 				return this.touch();
 			case "code":
 				this.code = !this.code;
-				this.view = "chat";
 				this.saveTabs();
 				return this.touch();
 			case "events":
@@ -1019,7 +1092,7 @@ export class Store extends Model {
 			case "agent": {
 				this.agents = await this.askAgents().catch(() => this.agents);
 				const id = await this.pick({ title: "New conversation with", items: this.agents.map((x) => ({ value: x.id, label: x.id, about: x.description || x.model })), current: chat?.agent });
-				return id ? this.newConversation(id) : undefined;
+				return id ? this.openTab(id, sessionName()) : undefined;
 			}
 			case "open-folder": {
 				const dir = await bridge.pickFolder("Open a folder for a conversation");
@@ -1139,6 +1212,21 @@ export class Store extends Model {
 		if (e.topic === "pine/conversation") return void this.followed(p);
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
+
+		// Which conversations are at work, also those no tab shows: the side bar says so beside each agent.
+		if ((p.depth ?? 0) === 0 && typeof p.agent === "string" && typeof p.session === "string" && typeof p.task === "number") {
+			const key = `${p.agent}:${p.session}`;
+			if (kind === "started") {
+				if (!this.busy.has(key)) this.busy.set(key, new Set());
+				this.busy.get(key)!.add(p.task);
+				this.dirty.add(this);
+			} else if (kind === "done" || kind === "failed") {
+				this.busy.get(key)?.delete(p.task);
+				this.dirty.add(this);
+				// What an agent just did may have been making, changing or removing an agent.
+				void this.refreshAgents();
+			}
+		}
 
 		// A tab on one task follows that task and whatever it starts itself.
 		for (const t of this.tabs) {
@@ -1459,7 +1547,7 @@ export class Store extends Model {
 				break;
 			}
 		}
-		if (tab !== this.active || this.view !== "chat") {
+		if (tab !== this.active) {
 			if (!tab.unread) this.dirty.add(this);
 			tab.unread = true;
 		}

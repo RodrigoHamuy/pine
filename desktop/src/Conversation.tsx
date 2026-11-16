@@ -1,12 +1,12 @@
 // One tab's conversation: what was said, the work of each turn folded into a line, and what
 // waits for the owner. Each kind of line is a small component; the list only draws what changed.
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { TranscriptEntry } from "./api.ts";
+import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
-import { childKind, clock, count, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
-import { Button, Icon, Logo, Spinner } from "./ui.tsx";
+import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
+import { Button, Icon, Spinner } from "./ui.tsx";
 
 const TONE_ICON: Record<Tone, string> = { muted: "info", warn: "alert", bad: "alert", good: "check", accent: "undo" };
 
@@ -239,24 +239,46 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 	}
 });
 
+/** Where a conversation begins: who this agent is, what it runs on and reaches, and what it has. */
 function Welcome({ tab }: { tab: Tab }) {
+	useModel(store);
 	const info = store.agent(tab.agent);
+	const [has, setHas] = useState<AgentDetail>();
+	useEffect(() => {
+		let live = true;
+		// (An older pine does not say; the line is then left out.)
+		api.agentDetail(tab.agent).then((d) => live && setHas(d), () => {});
+		return () => {
+			live = false;
+		};
+	}, [tab.agent]);
 	const say = (text: string) => {
 		tab.draft = text;
 		tab.touch();
 		store.ask_("focus-input");
 	};
+	const mode = MODES.find((m) => m.value === info?.mode);
+	const h = has?.holdings;
+	const counts: Array<[string, number]> = h ? [["skill", h.skills.length], ["event source", h.sources.length], ["schedule", h.schedules.length], ["MCP server", h.servers.length], ["conversation", h.conversations.length]] : [];
 	return (
 		<div className="welcome">
-			<Logo size={30} />
+			<span className="avatar big">{tab.agent.slice(0, 1).toUpperCase()}</span>
 			<h1>{tab.agent}</h1>
 			<p>{info?.description || "An agent of yours."}</p>
+			<div className="facts">
+				<span className="fact" title="The model it runs on"><Icon name="cpu" size={12} /><b>{info?.model ?? "no model"}</b></span>
+				<span className="fact" title={mode?.about}><Icon name="shield" size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</span>
+				{info?.main ? <span className="fact" title="It creates and changes the other agents and pine's settings when you ask it to">administers pine</span> : null}
+				{info?.delegates.length ? <span className="fact" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></span> : null}
+				{counts.filter(([, n]) => n > 0).map(([what, n]) => <span className="fact" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</span>)}
+			</div>
 			<p className="faint">
-				{tab.session === "main" ? "Its main conversation" : `Conversation ${tab.session}`} · {info?.model ?? "no model"} · {tab.folder ? `works in ${tilde(tab.folder)}` : "its own workspace"}
+				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 			</p>
 			<div className="hints">
-				<Button small onClick={() => say("What can you do for me here?")}>What can you do?</Button>
-				<Button small icon="folder" onClick={() => void store.pickFolder(tab)}>Open a folder</Button>
+				<Button small onClick={() => say("What can you do for me, and what are you set up with?")}>What can you do?</Button>
+				<Button small icon="gear" onClick={() => store.openSettings("agents", tab.agent)}>Agent settings</Button>
+				<Button small icon="folder" onClick={() => void store.pickFolder(tab)}>Give it a folder</Button>
 				<Button small icon="command" onClick={() => void store.command("palette")}>Commands <kbd>⌘K</kbd></Button>
 			</div>
 		</div>
