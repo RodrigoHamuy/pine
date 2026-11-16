@@ -55,6 +55,7 @@ test("actions: every tool call has a class, and the class is what decides", asyn
 	assert.equal(cls("download", { url: "https://x.example/a.png" }), "reach");
 	assert.equal(cls("download", { url: "https://x.example/a.png" }, { reachable: () => true }), "local");
 	assert.equal(cls("send", { source: "telegram" }, { sends: true }), "send");
+	assert.equal(cls("read_source", { source: "work" }), "look", "reading through a source sends nothing out");
 	assert.equal(cls("send", { source: "telegram" }, { sends: true, toOwner: true }), "tell", "a message to the owner themself is not information leaving");
 	assert.equal(cls("publish_event", { topic: "out/x" }, { sends: true, toOwner: true }), "send", "only the send tool tells the owner");
 	assert.equal(cls("publish_event", { topic: "out/x" }, { sends: true }), "send");

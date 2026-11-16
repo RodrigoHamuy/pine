@@ -35,7 +35,9 @@ export async function slackSite() {
 	/** What the file host answers, by name. Anything else is not there. */
 	const files: Record<string, { status?: number; type?: string; body?: string | Buffer; location?: string }> = {};
 	/** `socket`, `upload`: another address to hand out for the socket, or for where a file is uploaded to, than this server's own. */
-	const state: { privateScope: boolean; socket?: string; upload?: string } = { privateScope: true };
+	const state: { privateScope: boolean; historyScope: boolean; socket?: string; upload?: string } = { privateScope: true, historyScope: true };
+	/** What was written before, by channel, oldest first: what conversations.history and conversations.replies answer from. */
+	const history: Record<string, Array<Record<string, any>>> = {};
 	/** What chat.postMessage answered: where each message is, and its ts. */
 	const posted: Array<{ channel: string; ts: string }> = [];
 	const names: Record<string, string> = { [ME]: "Paul Owner", [BOSS]: "Rainer Boss", [ANNA]: "Anna", [PINE]: "pine" };
@@ -82,6 +84,21 @@ export async function slackSite() {
 				if (!parsed.cursor) return json(res, { ok: true, channels: [{ id: "C00GENERAL1", name: "general" }, { id: RANDOM, name: "random" }], response_metadata: { next_cursor: "page-two" } });
 				return json(res, { ok: true, channels: [{ id: OPS, name: "ops" }, { id: DEV, name: "dev" }], response_metadata: { next_cursor: "" } });
 			}
+			if (method === "conversations.history" || method === "conversations.replies") {
+				if (!state.historyScope) return json(res, { ok: false, error: "missing_scope", needed: "channels:history,groups:history,mpim:history,im:history", provided: "channels:read" });
+				const all = history[parsed.channel];
+				if (!all) return json(res, { ok: false, error: "channel_not_found" });
+				const limit = Number(parsed.limit ?? 100);
+				const inside = (m: any) => (parsed.latest === undefined || Number(m.ts) < Number(parsed.latest)) && (parsed.oldest === undefined || Number(m.ts) > Number(parsed.oldest));
+				if (method === "conversations.replies") {
+					// A thread: its first message, then the answers, oldest first.
+					const thread = all.filter((m) => m.ts === parsed.ts || m.thread_ts === parsed.ts).filter((m) => m.ts === parsed.ts || inside(m));
+					return json(res, { ok: true, messages: thread.slice(0, limit), has_more: thread.length > limit });
+				}
+				// A channel: the newest first, as Slack answers.
+				const top = all.filter((m) => !m.thread_ts || m.thread_ts === m.ts).filter(inside).reverse();
+				return json(res, { ok: true, messages: top.slice(0, limit), has_more: top.length > limit });
+			}
 			if (method === "conversations.open") return parsed.users === ANNA ? json(res, { ok: true, channel: { id: ANNAS } }) : json(res, { ok: false, error: "user_not_found" });
 			if (method === "chat.postMessage") {
 				if (parsed.channel === DEV) return json(res, { ok: false, error: "not_in_channel" });
@@ -112,6 +129,7 @@ export async function slackSite() {
 		uploads,
 		posted,
 		files,
+		history,
 		state,
 		/** The calls of one method. */
 		called: (method: string) => calls.filter((c) => c.method === method),

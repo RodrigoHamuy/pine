@@ -32,7 +32,7 @@ src/
   config.ts         loads and validates pine.json, agent.json, .env; all defaults live here
   store.ts          SQLite: event log (Bus), shared state (State), private storage (Kv), tasks
   agents.ts         AgentManager: task queue, pi sessions, conversations, the policy gate, the download tool, context block
-  tools.ts          the tools pine gives an agent: delegate, subagent, publish_event, send, request_access, state_get,
+  tools.ts          the tools pine gives an agent: delegate, subagent, publish_event, send, read_source, request_access, state_get,
                     state_set, question, todo, stop_program, manual; the lists of what it has (sources, schedules,
                     mcp_servers, skills, models); and the setup tools (subscribe, unsubscribe, add_/remove_ source, source_type,
                     mcp_server, skill, schedule, model_server; create_agent); and the main agent's tools for
@@ -343,6 +343,13 @@ These are invariants. A change that breaks one needs a test that shows why it is
    are cut by pine when the source stops. Two SDK internals are relied on, the `ws_message`
    event and a throw from an `authenticated` listener: look at both when the SDK is upgraded,
    and run `test/chat.test.ts`, which fails without each of these.
+   A source that can be asked (`reads` on the type, `onRead` in the source, the agent's
+   `read_source`) decides what may be read as it decides where it sends: never more than it
+   was set up to listen to, checked in the type's own code whatever the call names (slack:
+   `listensTo`). `read_source` is class `look` and is not asked about, and what it returns
+   always marks the conversation (`isTaintSource`): it is other people's words. It is
+   registered only in the owner's own conversations, never for a run started from outside,
+   and never for a sub-agent. A new type that can be read keeps all three.
    A type that reads what people write (mail, slack, matrix, discord) is a watcher: never
    `talks`, never `toOwner`, never `owner` in its plan. A sender line can be forged, and a
    channel reaches other people. What it sends goes only where the owner listed (`sendTo`).

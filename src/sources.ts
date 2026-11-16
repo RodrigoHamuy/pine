@@ -60,6 +60,13 @@ export interface SourceApi {
 	 */
 	onSend(handler: (message: Record<string, any>) => void | string | Promise<void | string>): void;
 	/**
+	 * For a source that can also be asked: called with what an agent wants to look up through it
+	 * (the earlier messages of a channel, for example), and returns it as text. Throw to refuse.
+	 * The source decides what may be read, as it decides where it sends: never more than it was
+	 * set up for. What it returns is outside content.
+	 */
+	onRead(handler: (query: Record<string, any>) => string | Promise<string>): void;
+	/**
 	 * Say in one line how things stand, for whoever lists the sources: who it is connected to,
 	 * what it is waiting for. Call it again when that changes.
 	 */
@@ -164,6 +171,7 @@ interface Running {
 	stops: Array<() => void | Promise<void>>;
 	hook?: (req: { headers: Record<string, string | string[] | undefined>; body: Buffer }) => void | Promise<void>;
 	send?: (message: Record<string, any>) => void | string | Promise<void | string>;
+	read?: (query: Record<string, any>) => string | Promise<string>;
 }
 
 /** The settings every source has, whatever its type. A type's options cannot have these names. */
@@ -573,6 +581,7 @@ export class SourceHost {
 				return this.bus.publish(`source/${key}/${event}`, payload ?? {}, { source: `source:${key}`, trust: source.trust, persist: opts?.persist, reply: opts?.reply ? { topic: outTopic(key), payload: opts.reply } : undefined });
 			},
 			onSend: (handler) => void (run.send = handler),
+			onRead: (handler) => void (run.read = handler),
 			status: (line) => void this.statuses.set(key, String(line).slice(0, 300)),
 			on: (pattern, handler) => void run.stops.push(this.bus.subscribe(pattern, async (e) => {
 				try {
@@ -792,6 +801,24 @@ export class SourceHost {
 			const type = this.types.get(s.type)?.type;
 			return type?.sends ? [{ name: s.name, type: s.type, sends: type.sends, toOwner: type.toOwner === true, files: type.files === true }] : [];
 		});
+	}
+
+	/** The sources an agent can read through, with what each can be asked. The same sources it can subscribe to, where the type says it can be read. */
+	readers(agentId: string, session = "main"): Array<{ name: string; type: string; reads: string }> {
+		return this.available(agentId, session).flatMap((s) => {
+			const type = this.types.get(s.type)?.type;
+			return type?.reads ? [{ name: s.name, type: s.type, reads: type.reads }] : [];
+		});
+	}
+
+	/** Ask a source for something, started if it is not running. Throws with the source's own reason if it refuses. */
+	async read(agentId: string, name: string, query: Record<string, any>, session = "main"): Promise<string> {
+		if (!this.readers(agentId, session).some((s) => s.name === name)) throw new Error(`"${name}" is not a source you can read through. ${this.readers(agentId, session).map((s) => `${s.name}: ${s.reads}`).join("; ") || "There is none: a source reports what happens, and only some can also be asked."}`);
+		const found = sourceFor(this.cfg, agentId, name)!;
+		await this.ensure(found.key);
+		const read = this.running.get(found.key)?.read;
+		if (!read) throw new Error(`${name} ${this.running.has(found.key) ? "cannot be read as it is set up" : `is not running${this.errors.get(found.key) ? `: ${this.errors.get(found.key)}` : ""}`}`);
+		return String(await read(query));
 	}
 
 	/** Whether sending through this source reaches the owner and nobody else. The source's type says so, never the call. */

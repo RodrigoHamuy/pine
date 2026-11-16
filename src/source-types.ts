@@ -76,6 +76,13 @@ export interface SourceType {
 	 */
 	sends?: string;
 	/**
+	 * It can also be asked. One line for the agent on what can be read through it and what to pass,
+	 * for example 'earlier messages of a channel or a thread: {"channel": "C0123", "limit": 20}'.
+	 * The agent's `read_source` tool offers every source that says this. What comes back is
+	 * outside content, and the conversation that reads it is marked as having read some.
+	 */
+	reads?: string;
+	/**
 	 * What it sends reaches the owner and nobody else: the type itself sees to that (a Telegram bot
 	 * that writes only to the chat the owner paired). A message to the owner is not information
 	 * leaving, so the `send` tool is not asked about for such a source after outside content.

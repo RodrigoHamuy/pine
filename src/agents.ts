@@ -2353,7 +2353,8 @@ export class AgentManager {
 		};
 		const isTaintSource = (tool: string) => {
 			const s = serverOf(tool);
-			return (s !== undefined && taintServers.has(s)) || cfg.security.taintTools.some((g) => globMatch(g, tool));
+			// (What is read through a source was written by other people, wherever the source has it from.)
+			return tool === "read_source" || (s !== undefined && taintServers.has(s)) || cfg.security.taintTools.some((g) => globMatch(g, tool));
 		};
 
 		return (pi: any) => {

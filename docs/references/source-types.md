@@ -628,6 +628,8 @@ What you write yourself is never reported to you.
 | `ignore` | | User ids that are never reported: a colleague's bot account, a channel's chatterbox. An app's id (`B...`) is taken too. What the token's own account writes (with a user token: you) is left out without being listed. |
 | `sendTo` | none | Where an agent may write, by id only: channels (`"C0123ABCD"`) and people (`"U0123ABCD"`, a direct message). Without it the source only listens. Needs `token`. See "Sending" below. |
 | `perMinute` | `60` | At most this many reports a minute, 1 to 600. What comes on top is counted and dropped, and the next report says how many were (`dropped`). |
+| `history` | `true` | With a `token`: an agent may read what was written earlier where the source listens (`read_source`), and an answer in a thread comes with the messages it answers. `false` turns both off. |
+| `context` | `3` | How many earlier messages of a thread come with an answer in it, the thread's first message among them. `0` for none, `10` at most. |
 | `maxMb` | `10` | Files that come with a message are fetched up to this size (50 at most). A larger one is named in the event, without a `path`. Needs `token`. |
 | `keepDays` | `7` | Fetched files are deleted after this many days. |
 | `apiBase` | `https://slack.com/api` | A Slack-compatible server of your own: reached over https, or on this machine. |
@@ -670,6 +672,7 @@ The fields of a `message`:
 | `kind` | `"dm"` for a direct message, `"group"` for a group conversation or a private channel, `"channel"` for a public one. |
 | `ts` | Slack's time stamp of the message. It is what names a message: `send` takes it to react to it. |
 | `thread`, `reply` | For an answer in a thread: `reply: true`, and `thread` is the time stamp of the thread. `thread` is what `send` takes to answer in that thread. |
+| `context` | For an answer in a thread: what it answers, as a list of `{ user, userName?, text, ts }`, oldest first. The thread's first message and the last ones before the answer, `context` of them (3). Not there with `history: false`, without a `token`, or when the app may not read history. |
 | `bot` | `true` when an app or integration posted it. |
 | `why` | Why it is reported, a word for each reason: `"dm"` (written to you directly), `"mention"`, `"keyword"`, `"from"` (its sender is on `from`), or `"channel"` when it is none of these and simply was written where the source listens. A list, since a message can be several: a subscription picks with `"payload.why": { "contains": "mention" }`. |
 | `mention`, `keyword` | Which entry of `mentions` it mentions (for `"me"`: the id), and which word on `keywords` it contains. |
@@ -751,6 +754,34 @@ behalf of users" and the scopes added as user scopes) sees what you see: every c
 are in and your own direct messages. To be told when somebody writes to *you*, it has to be a
 user token. What you write yourself is then left out by itself (put `"me"` on `from` if you
 want it reported all the same). What is sent with a user token is sent in your name.
+
+#### Reading what was written before
+
+A message often cannot be understood by itself: "what does Claude say about that?" needs the
+thread it stands in. So an answer in a thread arrives with its `context`, and an agent can
+read further with `read_source`:
+
+| `data` | Reads |
+|---|---|
+| `{"channel": "C0123ABCD"}` | The last 20 messages of that channel or conversation, oldest first. `channel` is what an event had: an id that starts with C, G or D. |
+| `{"channel": "U0123ABCD"}` | The direct conversation with that person. pine knows which conversation that is from when the person last wrote to you. For somebody who has not written since the source was set up, Slack has to be asked, which needs the permission `im:write`; without it, give the `channel` of one of their messages. |
+| `{"channel": "...", "thread": "1712345678.000100"}` | That thread: `thread` is the `thread` of an event, or the `ts` of the message a thread began with. |
+| `"limit": 50` | More at once, 50 at most. |
+| `"before": "1712345678.000100"` | Further back: the messages before that one. The answer says which `ts` to give. |
+
+Each line is one message with when, who, its `ts`, and for a message that began a thread how
+many answers it has. What other apps posted is read like in an event; somebody joining or
+leaving is left out.
+
+It reads **where the source listens**: every channel the token sees when `channels` is not
+set, only those channels when it is, and direct conversations unless `dms` is off. With a user
+token that is what you can read yourself. Nothing is marked as read by it. It needs the same
+permissions as being told of messages there (`channels:history`, `groups:history`,
+`im:history`, `mpim:history`; for a user token among the User Token Scopes), so an app that
+reports messages can usually read them too; where one is missing, the answer names it.
+
+What is read is other people's words: the conversation counts as having read outside content
+afterwards, and sending is then put to you. `"history": false` turns reading off.
 
 #### Sending
 

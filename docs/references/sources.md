@@ -640,6 +640,29 @@ through that source. The name is the one in `pine.json`; for an agent's own sour
 what `add_source` makes, it is `<name>@<agent>` (`pine sources` shows which). The source has to be running, so give it `"start": "always"` if no conversation
 is subscribed to it.
 
+## Reading through a source
+
+A source reports what happens from now on. Some can also be asked for what was there before:
+with a Slack source an agent reads the earlier messages of a channel, of a direct conversation
+or of a thread, to understand a message it was woken with.
+
+> Rainer answered in a thread. Read the thread and tell me what he means.
+
+The agent calls `read_source` with the source and what to read; the `sources` tool says for
+each source whether it can be read and what it takes. For `slack` see
+[source-types.md](source-types.md), "Reading what was written before".
+
+- **It reads where the source listens, and no further.** What may be read is the source's to
+  say, as it says where it sends: a Slack source that was set up for one channel reads that
+  channel and no other.
+- **It is not asked about.** Reading sends nothing out, so it needs no approval (outside manual
+  mode), also after outside content.
+- **What it returns is outside content.** Other people wrote it. The conversation is marked as
+  having read outside content from then on, so sending something out afterwards is put to
+  you, like after a web page.
+- **Not for a run started from outside.** A run that an outside event started has no
+  `read_source`: nothing that arrives from outside can have your conversations read to it.
+
 ## Subscribing
 
 ### Who is woken: three scopes

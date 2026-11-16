@@ -35,6 +35,8 @@ import { guardFor, hold, keywordIn, listOf, ownServer, Plain, word } from "./str
  *   sendTo     channel and user ids the agent may write to. Without it nothing can be sent
  *   perMinute  at most this many reports a minute (60); the rest are counted and dropped
  *   maxMb, keepDays   files of a message are fetched up to this size (10) and kept this long (7)
+ *   history    false: nothing that was written earlier is read (default true, with a token)
+ *   context    how many earlier messages of a thread come with an answer in it (3; 0 for none)
  *
  * event "message":  { text, user, userName?, channel, channelName?, kind, ts, thread?, reply?, bot?, why, mention?, keyword?, from?, files?, images?, dropped? }
  *                   why: the reasons it is reported, a word each: "dm", "mention", "keyword", "from", or "channel" for none of these
@@ -117,6 +119,7 @@ function lists(o: Record<string, any>) {
 export const type: SourceType = {
 	summary: "a Slack workspace: reports messages (all, or only mentions, keywords, certain people), and reactions, edits, joins, pins, commands. Can post, react and send files to listed channels",
 	sends: 'a Slack message to a channel or person on its "sendTo" list: {"channel": "C0123ABCD", "text": "..."}. "thread" (a message\'s ts) answers in that thread; a user id as "channel" writes to that person directly; with "file" a file goes along; {"channel": "...", "ts": "...", "react": "eyes"} puts an emoji on a message',
+	reads: 'what was written earlier, to understand a message: {"channel": "C0123ABCD"} gives the last messages of a channel or direct conversation ("channel" as an event had it; a user id for the conversation with that person), with "thread" (the "thread" or "ts" of an event) that thread; "limit" up to 50, "before" a ts to go further back',
 	files: true,
 	options: Type.Object(
 		{
@@ -132,6 +135,8 @@ export const type: SourceType = {
 			ignore: Type.Optional(Type.Array(Type.String(), { description: "user ids whose messages are never reported. Not needed for your owner's own messages: what the token's account writes is left out by itself" })),
 			sendTo: Type.Optional(Type.Array(Type.String(), { description: 'where you may write, by id only: channels (["C0123ABCD"]) and people (["U0123ABCD"], a direct message). Only when your owner wants you to write there; without it nothing can be sent. Needs "token"' })),
 			perMinute: Type.Optional(Type.Number({ description: "at most this many reports a minute. Default 60; what comes on top is dropped and counted" })),
+			history: Type.Optional(Type.Boolean({ description: 'false: nothing that was written earlier is read. Default true: with a "token" you can read earlier messages where the source listens (read_source), and an answer in a thread comes with what it answers' })),
+			context: Type.Optional(Type.Number({ description: "how many earlier messages of a thread come with an answer in that thread, its first message among them. Default 3, 0 for none, 10 at most" })),
 			maxMb: Type.Optional(Type.Number({ description: 'files that come with a message are fetched up to this size, in MB. Default 10. Needs "token"' })),
 			keepDays: Type.Optional(Type.Number({ description: "fetched files are deleted after this many days. Default 7" })),
 			apiBase: Type.Optional(Type.String({ description: "address of a Slack-compatible server of your own, instead of https://slack.com/api" })),
@@ -167,6 +172,7 @@ export const type: SourceType = {
 		if (o.perMinute !== undefined && !(o.perMinute >= 1 && o.perMinute <= 600)) throw new Error('"perMinute" is a number from 1 to 600');
 		for (const key of ["maxMb", "keepDays"]) if (o[key] !== undefined && !(Number(o[key]) > 0)) throw new Error(`"${key}" must be a number above 0`);
 		if (o.maxMb !== undefined && o.maxMb > 50) throw new Error('"maxMb" is at most 50');
+		if (o.context !== undefined && !(Number.isInteger(o.context) && o.context >= 0 && o.context <= 10)) throw new Error('"context" is a whole number from 0 to 10');
 
 		const who = (x: string) => (x === "me" ? "the account the token belongs to" : x);
 		const some = (xs: string[]) => xs.map(who).join(", ");
@@ -192,6 +198,7 @@ export const type: SourceType = {
 				...(messages && o.bots === true ? ["also what other apps and integrations post there (alerts, GitHub, a bot), never what this app posts itself"] : []),
 				...(more.length ? [`${messages ? "also report" : "report"} ${more.join("; ")}`] : []),
 				...(messages ? [`with a token, fetch the files that come with a message, up to ${o.maxMb ?? 10} MB each, and keep them for ${o.keepDays ?? 7} ${plural(Number(o.keepDays ?? 7), "day")} where the agent can read them`] : []),
+				...(o.history === false ? [] : ["with a token, let the agent read what was written earlier where it listens (a channel, a direct conversation, a thread), so that it understands what it is told; an answer in a thread comes with the messages it answers"]),
 				...(l.ignore.length ? [`never what ${some(l.ignore)} ${plural(l.ignore.length, "writes or does", "write or do")}`] : []),
 				...(l.sendTo.length ? [`let the agent ${[rooms.length ? `post messages and files to ${rooms.join(", ")} and put emoji on messages there` : "", persons.length ? `write to ${persons.join(", ")} directly` : ""].filter(Boolean).join(", and ")}, where other people read them`] : []),
 			],
@@ -406,6 +413,17 @@ export default async function slack(source: SourceApi): Promise<void> {
 	// ---- names -----------------------------------------------------------------------------------
 	// Looked up once each. One that Slack will not give (a scope the app lacks) is not asked for again.
 	const names = new Map<string, string | null>();
+	/**
+	 * The direct conversation with each person, as far as it is known: seen when they wrote, or asked of
+	 * Slack once. Kept, because asking needs a permission (im:write) that an app which only listens need not have.
+	 */
+	const direct = new Map<string, string>(Object.entries(source.kv.get<Record<string, string>>("direct") ?? {}));
+	const met = (user: string, channel: string) => {
+		if (!user || direct.get(user) === channel) return;
+		direct.set(user, channel);
+		if (direct.size > 500) for (const k of [...direct.keys()].slice(0, 250)) direct.delete(k);
+		source.kv.set("direct", Object.fromEntries(direct));
+	};
 	const nameOf = async (kind: "user" | "channel", which: string): Promise<string | undefined> => {
 		const key = `${kind}:${which}`;
 		// (A name an event brought along is known without asking, also to a source without a token.)
@@ -511,6 +529,36 @@ export default async function slack(source: SourceApi): Promise<void> {
 				.replace(/&gt;/g, ">")
 				.replace(/&amp;/g, "&")
 		);
+	};
+
+	// ---- what was written before ------------------------------------------------------------------------
+	const history = o.history !== false;
+	const around = Math.max(0, Math.min(Number.isInteger(o.context) ? Number(o.context) : 3, 10));
+	/** Slack will not hand over earlier messages (the app lacks the scope): not asked for again with every answer in a thread. */
+	let noHistory = false;
+	/** One earlier message the way an event or a reading carries it. */
+	const said = async (m: any, most: number): Promise<{ user: string; userName?: string; text: string; ts: string }> => {
+		const user = String(m?.user ?? m?.bot_id ?? "");
+		const posted = m?.bot_id ? clip(String(m.username ?? m.bot_profile?.name ?? ""), 80) : "";
+		const userName = posted || (user ? await nameOf("user", user) : undefined);
+		return { user, ...(userName ? { userName } : {}), text: clip(await worded(readable(m)), most), ts: String(m?.ts ?? "") };
+	};
+	/** What an answer in a thread answers: the thread's first message and the last few before the answer. */
+	const earlier = async (channel: string, thread: string, ts: string) => {
+		if (!web || !history || !around || noHistory) return undefined;
+		try {
+			const res: any = await call(() => web.conversations.replies({ channel, ts: thread, limit: 100 }));
+			const before = list(res.messages).filter((m) => Number(m?.ts) < Number(ts)).sort((a, b) => Number(a.ts) - Number(b.ts));
+			const first = before.find((m) => String(m.ts) === thread);
+			const picked = [...(first ? [first] : []), ...before.filter((m) => m !== first).slice(-(around - (first ? 1 : 0)) || before.length)].slice(0, around);
+			const out: Array<Awaited<ReturnType<typeof said>>> = [];
+			for (const m of picked) out.push(await said(m, 600));
+			return out.length ? out : undefined;
+		} catch (e) {
+			if (e instanceof WebAPIPlatformError && e.data.error === "missing_scope") noHistory = true;
+			source.log.debug("could not read the thread of a message", reason(e));
+			return undefined;
+		}
 	};
 
 	// ---- the files of a message ----------------------------------------------------------------------
@@ -651,6 +699,8 @@ export default async function slack(source: SourceApi): Promise<void> {
 		const before = edit && m.previous_message ? readable(m.previous_message) : undefined;
 		// Slack also says "changed" when it has put the preview of a link under a person's message: what they wrote is the same.
 		if (edit && m.previous_message && (byApp ? before === raw : String(now.text ?? "") === String(m.previous_message.text ?? ""))) return;
+		// Whoever writes directly shows which conversation is theirs (before any filter: it is only remembered, not reported).
+		if (dm && !byApp && user !== me && String(m.channel_type ?? "") === "im") met(user, channel);
 		const why = counts({ user, bot: now.bot_id, channel, dm, text: raw });
 		if (!why) return;
 		later(async (dropped) => {
@@ -663,6 +713,8 @@ export default async function slack(source: SourceApi): Promise<void> {
 			const because = [...(dm ? ["dm"] : []), ...(why.mention ? ["mention"] : []), ...(why.keyword ? ["keyword"] : []), ...(why.from ? ["from"] : [])];
 			const reasons = { why: because.length ? because : ["channel"] };
 			if (edit) return out("edited", { text, ...(before !== undefined ? { previous: clip(await worded(before)) } : {}), user, ...who, ...place, ts: String(now.ts ?? ""), ...reasons, ...why }, dropped);
+			const inThread = m.thread_ts && m.thread_ts !== m.ts;
+			const context = inThread ? await earlier(channel, String(m.thread_ts), String(m.ts ?? "")) : undefined;
 			const got: MailFile[] = [];
 			for (const f of list(m.files).slice(0, 10)) got.push(await fetched(f));
 			const kept = got.length ? keepFiles(dir, { attachments: got } as unknown as Mail) : undefined;
@@ -678,6 +730,7 @@ export default async function slack(source: SourceApi): Promise<void> {
 					...(byApp ? { bot: true } : {}),
 					...reasons,
 					...why,
+					...(context ? { context } : {}),
 					...(kept ? { files: kept.attachments.map((a) => ({ name: a.file, type: a.type, size: a.size, ...(a.path ? { path: a.path } : {}) })) } : {}),
 					...(kept?.images ? { images: kept.images } : {}),
 				},
@@ -869,7 +922,6 @@ export default async function slack(source: SourceApi): Promise<void> {
 	});
 
 	// ---- sending: only to what the owner put on the list, whatever the call names ------------------------------
-	const direct = new Map<string, string>();
 	const refused = (e: unknown, method: string): Error => {
 		if (!(e instanceof WebAPIPlatformError)) return new Error(`could not send through Slack: ${reason(e)}`);
 		const code = e.data.error;
@@ -896,10 +948,70 @@ export default async function slack(source: SourceApi): Promise<void> {
 		if (!direct.has(user)) {
 			const opened = (await doing("conversations.open", () => web!.conversations.open({ users: user }))).channel?.id;
 			if (!opened) throw new Error("Slack opened no conversation with that person");
-			direct.set(user, opened);
+			met(user, opened);
 		}
 		return direct.get(user)!;
 	};
+	// ---- reading: what was written earlier, where the source listens and nowhere else ----------------------
+	const listensTo = (channel: string) => (channel.startsWith("D") ? dms : !l.channels.length || channels.has(channel));
+	source.onRead(async (q) => {
+		if (!web) throw new Error('this source has no bot or user token, so it cannot read what was written earlier. Your owner sets it up again and names "token" in "ask"');
+		if (!history) throw new Error('this source was set up not to read what was written earlier ("history": false). Tell your owner if you need it');
+		const stampOf = (v: unknown, key: string) => {
+			if (!/^\d{1,12}\.\d{1,9}$/.test(String(v))) throw new Error(`"${key}" is the ts of a message, as an event had it: "1712345678.000100"`);
+			return String(v);
+		};
+		let channel = String(q.channel ?? "").trim().replace(/^[#@]/, "");
+		if (!channel) throw new Error('say where: {"channel": "..."} with the "channel" of an event (it starts with C, G or D), and "thread" for a thread');
+		// The conversation with one person, named by the person.
+		if (isUser(channel)) {
+			if (!dms) throw new Error("this source does not listen to direct messages, so it does not read them either");
+			try {
+				channel = await directly(channel);
+			} catch (e) {
+				throw new Error(`${e instanceof Error ? e.message : String(e)}. Or name the conversation itself: the "channel" of a message that person wrote to your owner (it starts with D)`);
+			}
+		}
+		if (!isChannel(channel)) throw new Error(`"${clip(channel, 60)}" is not the id of a channel or a conversation. Take the "channel" of an event: it starts with C, G or D`);
+		// Reading goes as far as listening does: what the owner set the source up for.
+		if (!listensTo(channel)) throw new Error(`this source does not listen to ${channel}, so it does not read there either. It listens to ${channel.startsWith("D") ? "no direct messages" : `${[...channels].join(", ")}${dms ? " and direct messages" : ""}`}`);
+		const limit = Math.max(1, Math.min(Number.isInteger(Number(q.limit)) && q.limit !== undefined ? Number(q.limit) : 20, 50));
+		const thread = q.thread !== undefined && q.thread !== "" ? stampOf(q.thread, "thread") : undefined;
+		const before = q.before !== undefined && q.before !== "" ? stampOf(q.before, "before") : undefined;
+		let res: any;
+		try {
+			res = await call(() => (thread ? web.conversations.replies({ channel, ts: thread, limit, ...(before ? { latest: before, inclusive: false } : {}) }) : web.conversations.history({ channel, limit, ...(before ? { latest: before, inclusive: false } : {}) })));
+		} catch (e) {
+			if (!(e instanceof WebAPIPlatformError)) throw new Error(`could not read from Slack: ${reason(e)}`);
+			const code = e.data.error;
+			const scope = String((e.data as any).needed ?? "");
+			const hint =
+				code === "missing_scope"
+					? `. The app lacks ${/^[\w.:,-]{1,100}$/.test(scope) ? `the scope ${scope.split(",").join(" or ")}` : "a scope"} (for a user token: among the User Token Scopes): your owner adds it under "OAuth & Permissions" of the Slack app and installs the app again`
+					: code === "channel_not_found" || code === "not_in_channel"
+						? ". Slack knows no such conversation, or this token may not see it"
+						: code === "thread_not_found"
+							? '. There is no thread with that ts in that conversation: "thread" is the ts of a thread\'s first message'
+							: "";
+			throw new Error(`Slack did not hand it over: ${word(code)}${hint}`);
+		}
+		const written = list(res.messages)
+			.filter((m) => !m?.subtype || WRITTEN.includes(m.subtype))
+			.sort((a, b) => Number(a.ts) - Number(b.ts));
+		const place = `${channel.startsWith("D") ? "the direct conversation" : `the channel ${(await nameOf("channel", channel)) ?? ""}`.trim()} ${channel}`;
+		if (!written.length) return `Nothing was written ${thread ? `in the thread ${thread} of ${place}` : `in ${place}`}${before ? ` before ${before}` : ""}.`;
+		const lines: string[] = [];
+		for (const m of written) {
+			const one = await said(m, 1500);
+			const when = new Date(Number(one.ts) * 1000).toLocaleString("sv-SE").slice(0, 16);
+			const answers = !thread && Number(m.reply_count) > 0 ? `, a thread with ${Number(m.reply_count)} ${plural(Number(m.reply_count), "answer")}` : "";
+			const files = list(m.files).length ? ` [${list(m.files).length} ${plural(list(m.files).length, "file")}]` : "";
+			lines.push(`[${when}] ${one.userName ?? one.user} (ts ${one.ts}${answers}): ${one.text}${files}`);
+		}
+		const more = res.has_more ? (thread ? " The thread has more answers than these." : ` There is more before these: the same call with "before": "${String(written[0].ts)}".`) : "";
+		return `${thread ? `The thread ${thread} in ${place}` : `The last ${written.length} ${plural(written.length, "message")} in ${place}`}, oldest first.${more}${thread ? "" : ' To read a thread: the same call with "thread" set to its ts.'}\n\n${lines.join("\n")}`;
+	});
+
 	source.onSend(async (message) => {
 		if (!sendTo.length) throw new Error('this source was set up to listen only: it has nowhere to send to. Tell your owner; they can set it up again with "sendTo"');
 		if (!web) throw new Error('this source has no bot or user token, so it cannot send. Set it up again and name "token" in "ask"');

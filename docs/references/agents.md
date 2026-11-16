@@ -211,7 +211,7 @@ declares them in **families** (`catalogue`), which is about 11 500:
 | Family | Its actions |
 |---|---|
 | `pine_list` | What there is: `sources`, `schedules`, `mcp_servers`, `skills`, and for the main agent `agents`, `settings`, `routes`, `conversations`. `what` takes several at once (`["sources", "schedules"]`) |
-| `pine_sources` | `subscribe`, `unsubscribe`, `add_source`, `send`, `remove_source`, `publish_event`, and for the main agent `add_source_type`, `remove_source_type` |
+| `pine_sources` | `subscribe`, `unsubscribe`, `add_source`, `send`, `read_source`, `remove_source`, `publish_event`, and for the main agent `add_source_type`, `remove_source_type` |
 | `pine_schedules` | `add_schedule`, `remove_schedule` |
 | `pine_mcp` | `add_mcp_server`, `remove_mcp_server`, and the three tools for a server's resources |
 | `pine_skills` | `add_skill`, `remove_skill` |

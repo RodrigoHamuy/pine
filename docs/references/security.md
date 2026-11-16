@@ -593,6 +593,11 @@ safe:
   and this computer are closed to the page and to everything it loads, except the one local
   address you confirmed), has no tools, keeps no cookies, and is handed no token. The page's
   own scripts run in it, which the dialog says.
+- Reading through a source (`read_source`: the earlier messages of a Slack channel or thread)
+  only reads and is not asked about. It reads where the source listens and no further, which
+  the source's type checks itself. What it returns marks the conversation as having read
+  outside content, so whatever would send something out afterwards is put to you. A run
+  started from outside does not have the tool.
 - A command that is followed (`command` with `follow`) runs in the agent's sandbox like one
   that is run again and again, and ends with its source. On Linux it is refused.
 - The `system` type starts one helper program, built by pine from its own source into pine's
