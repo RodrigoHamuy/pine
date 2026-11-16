@@ -521,6 +521,14 @@ else {
 			send("pine:service", state);
 			for (const dir of pendingFolders.splice(0)) send("pine:menu", `folder:${dir}`);
 		});
+		// From a checkout the program is Electron's, and so would be its icon in the Dock.
+		if (isMac && !app.isPackaged) {
+			try {
+				app.dock?.setIcon(path.join(APP_ROOT, "assets", "icon.png"));
+			} catch {
+				// an icon is not worth failing over
+			}
+		}
 		buildMenu();
 		createWindow();
 		void startService();

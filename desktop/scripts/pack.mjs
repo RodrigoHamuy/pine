@@ -31,7 +31,8 @@ if (!flags.has("--no-pine")) {
 }
 
 // What an earlier run left is taken away first: the packer does not always manage to itself.
-fs.rmSync(path.join(root, "release"), { recursive: true, force: true });
+// (Tried a few times: the Finder and the system's index write into a folder that is being looked at.)
+fs.rmSync(path.join(root, "release"), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 
 const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 await packApp({

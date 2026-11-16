@@ -60,12 +60,14 @@ export function Icon({ name, size = 16, className }: { name: IconName | string; 
 	);
 }
 
-/** pine's mark: three boughs and a trunk. */
+/** pine's mark: the P of its wordmark (docs/images/logo-dark.svg), four blocks on a grid. */
 export function Logo({ size = 18 }: { size?: number }) {
 	return (
-		<svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true" className="logo">
-			<path d="M12 2.5l4.6 6.2h-2.5l3.9 5.4h-3l4 5.4H5l4-5.4H6l3.9-5.4H7.4z" fill="currentColor" />
-			<rect x="11" y="19" width="2" height="3" rx=".6" fill="currentColor" />
+		<svg width={size} height={size} viewBox="0 0 800 800" fill="currentColor" aria-hidden="true" className="logo">
+			<rect x="280" y="560" width="240" height="240" />
+			<rect x="280" y="280" width="240" height="240" />
+			<rect x="0" y="280" width="240" height="240" />
+			<path d="M560 0H280V240H560V520H800V0H560Z" />
 		</svg>
 	);
 }
