@@ -230,6 +230,7 @@ What you type in a shell. Every command is the `pine` program with a word after 
 | `pine browser-install` | Fetch the browser again. `pine init` and `pine update` do this already |
 | `pine check` | Validate the configuration; show each agent's workspace, model, tools, MCP servers; list security notes |
 | `pine start` | Run the daemon in the foreground. Ctrl-C or SIGTERM stops it cleanly |
+| `pine service [--keep]` | For a UI that is a program of its own (a desktop app): finds the daemon of this home or starts one, and prints one line of JSON saying where it answers and with which token. See "A UI of its own" |
 | `pine dev-model [--port 7464] [--model haiku]` | The `claude -p` model server |
 | `pine status` | Running tasks, live sessions (and whether they are tainted), model slots |
 | `pine agents` | Configured agents, as the daemon has them (JSON) |
@@ -264,6 +265,36 @@ token in `data/http-token`. The `pine mcp` and `pine model` commands work on the
 also tell a running daemon, so the change applies at once. `pine schedules`, `pine skills`,
 `pine check` and `pine manual` only read the files and need no daemon. `pine help` prints the
 list.
+
+### A UI of its own
+
+The terminal UI starts a daemon inside itself when none runs. A UI that is another program (a
+desktop app, an editor plug-in) gets the same with `pine service`, and is then a client of the
+control API like every other:
+
+```bash
+pine service
+```
+
+```json
+{"base":"http://127.0.0.1:7463","token":"...","mode":"embedded daemon","started":true,"home":"/Users/you/.pine","version":"0.22.2"}
+```
+
+That one line is all it ever writes to its output.
+
+| What it finds | What it does |
+|---|---|
+| A daemon of this home is running | Says where it is (`"mode": "attached"`, `"started": false`) and ends at once. The daemon goes on |
+| Nothing runs | Starts the daemon in itself (and the `claude -p` stand-in, when the configuration uses a `dev/` model and nothing serves it), logs to `data/pine.log`, says `"started": true`, and stays for as long as the daemon is to run |
+| Something else answers on the port (another pine home) | `{"error": "..."}` and exit code 1. It does not drive a daemon that does not take this home's token |
+| No home, or a configuration that does not load | `{"error": "..."}` with what to do, and exit code 1 |
+
+A daemon it started stops cleanly when the command gets SIGTERM or SIGINT, and when its input
+closes: start it with a pipe as its input and keep that open, and a daemon never outlives the
+program that started it, however that program ends. `--keep` leaves the input out of it, for a
+daemon that is to go on after the program is closed; it then runs until it is signalled.
+
+pine's own desktop app starts and finds its daemon this way ([desktop.md](desktop.md)).
 
 ## Running at login
 
@@ -302,7 +333,7 @@ are JSON with `Content-Type: application/json`.
 | `GET /agents/<id>/folder?session=`, `GET /agents/<id>/folders`, `POST /agents/<id>/folder` `{ session, folder }` | The folder a conversation works in; every conversation of the agent that has one; open a folder for a conversation (`folder: null` closes it). Refused for pine's home, pine's program and other agents' workspaces, and while the conversation is working |
 | `GET /agents/<id>/goal?session=`, `POST /agents/<id>/goal` `{ session, objective }` or `{ session, action }` | Goal mode. `GET` returns `{ goal }` with the objective, `status` (`active`, `paused`, `met`, `blocked`, `limit`), the round, pine's note on what happened last and the judge's reason; no goal: `{}`. `objective` sets the conversation's goal and starts on it; `action` is `pause`, `resume` or `clear`. Every change is also an event on `agent/<id>/goal`. See "Goal mode" in [agents.md](agents.md) |
 | `GET /agents/<id>/programs?session=`, `POST /agents/<id>/programs/stop` `{ session, id }` | What a conversation's commands left running (command, ports, how long), and stopping one of them. A command the agent started in the background is among them while it runs, with `background: true` and `output` (the file its output goes to). Only a program of that conversation can be stopped. |
-| `GET /agents/<id>/view/changes?session=`, `/view/diff?session=&path=`, `/view/tree?session=&path=`, `/view/file?session=&path=`, `/view/find?session=&q=` | What the code pane shows of a conversation's folder (or of the agent's workspace): what git says changed, one file's diff, what is in a folder, a file's text, the files whose name fits a few letters. Read-only, and nothing outside that folder |
+| `GET /agents/<id>/view/changes?session=`, `/view/diff?session=&path=`, `/view/tree?session=&path=`, `/view/file?session=&path=`, `/view/find?session=&q=` | What the code pane shows of a conversation's folder (or of the agent's workspace): what git says changed, one file's diff, what is in a folder, a file's text (the first 256 KB; with `&max=<bytes>` up to 2 MB, for an editor), the files whose name fits a few letters. Read-only, and nothing outside that folder |
 | `GET /agents/<id>/view/turn?session=`, `/view/turndiff?session=&path=` | What your last message in a conversation changed in its folder, which is what `/undo` would take back: `{ task, prompt, root, files, more, note? }` (at most 300 files; `note` says why there is nothing to show), and one file's diff over that message. While the message is still being worked on: what it has changed so far. See [coding.md](coding.md) |
 | `POST /agents/<id>/model` `{ model }` | Switch an agent's model and save it in its `agent.json` |
 | `GET /agents/<id>/todos?session=` | The list of steps the agent keeps in that conversation |
@@ -330,6 +361,39 @@ are JSON with `Content-Type: application/json`.
 | `POST /approvals/<id>` `{ allow, always?, values? }` | Answer an approval. A request that lists `inputs` (a token, a password) is only allowed together with `values: { <name>: "..." }`; the terminal UI has a field for them. A question an agent asks with its `question` tool is such a request (`tool: "question"`, with the answers it offers in `choices`): answer it with `values: { "answer": "..." }`, or with `allow: false` for no answer |
 | `POST /state` `{ key, value }` | Write state; `null` deletes |
 | `POST /hook/<name>` | Webhook: a hook from `http.hooks` ([events.md](events.md)) or a running `webhook` source ([source-types.md](source-types.md)). No token; each has its own secret, unless a hook is declared `"open": true` |
+
+### Setting pine up through the control API
+
+What the main agent sets up by tool call when you ask it, and the `pine` command in the files,
+a program of yours does with these: a settings panel of a UI, a script. They are checked and
+carried out by the same functions the tools use, without the question to you, since whoever
+has the token is you. An error is answered with `{ "error": "..." }` and what to do.
+
+| Request | Purpose |
+|---|---|
+| `GET /overview` | Where this pine stands: `{ version, home, main, platform, sandbox, warnings, modelNotes, log }`. `warnings` are the security notes of `pine check`, `modelNotes` what is wrong with model keys, `log` the path of the log file |
+| `GET /settings` | The settings of `pine.json` that can be changed while pine runs, each as `{ key, about, kind, now, live }`: what is in force (`now`), what a value has to be (`kind`: `"model"`, `"boolean"`, `"duration"`, `{ one: [...] }` or `{ from, to }`), and whether a change holds at once (`live`). `saved` is there when the file holds another value that takes effect at the next start. The same list as the main agent's `settings` tool |
+| `POST /settings` `{ key, value }` | Change one of them, as `set_setting` does. `"default"` as the value takes the entry out. Answers `{ key, now, live }` |
+| `GET /agents/<id>/detail` | One agent in full: `{ id, main, description, workspace, dir, model?, defaultModel, thinking, mode, tools, allTools, delegates, network, read, write, holdings, files }`. `model` is missing when it runs on the default. `holdings` is what it has (conversations, sources, servers, schedules, skills, routes, files in its workspace). `files` holds the text of its `instructions` (AGENTS.md), `soul`, `tooling`, `memory` and your `rules` for it, each only when the file exists. Changes go through `POST /agents/<id>/update` |
+| `GET /shared`, `POST /shared` `{ name, text }` | The three files for all agents in pine's home (`AGENTS.md`, `TOOLS.md`, `USER.md`) as `{ name, about, text }`, and replacing one of them. `name` is one of the three and never a path |
+| `GET /skills` | Every skill, as `pine skills` lists them, each with its `instructions` (the body of its SKILL.md) |
+| `POST /skills` `{ name, description, instructions, agent? }`, `POST /skills/remove` `{ name, agent?, session? }` | Write a skill for all agents, or with `agent` for that agent, as `add_skill` does (the same name again replaces it); remove one. A skill in a folder you named under `skills` in a configuration file stays yours and is refused |
+| `GET /schedules` | What is scheduled: `{ name, scope, session?, when, task?, next?, topic }` each, `scope` being `global` or an agent |
+| `POST /schedules` `{ name, task, cron? \| every? \| at? \| in?, agent?, session? }`, `POST /schedules/remove` `{ name, agent? }` | Add a schedule as `add_schedule` does: for all agents, for an agent, or with `session` for one of its conversations. Exactly one of `cron`, `every`, `at` (`"2026-12-24 17:00"`) and `in` (`"20m"`). Remove one |
+| `GET /routes` | The routes of `pine.json` |
+| `POST /routes` `{ name, on, when?, agent?, prompt?, session?, set?, publish_topic?, publish_payload?, call_prompt?, call_system?, call_model?, throttle?, debounce?, trust? }`, `POST /routes/remove` `{ name }` | Add a route with the values `add_route` takes (`when`, `set` and `publish_payload` as JSON text); it acts at once. Answers `{ name, lines, wider? }`: what it does in words, and what it gives up if it widens trust. Remove one |
+| `GET /sources/types` | The source types there are: `{ name, summary, options, own }` each, `options` being the schema of what a source of that type takes (a secret option has `secret: true`), `own` whether it was registered in this installation |
+| `POST /sources/propose` `{ name, type, options, agent?, ask? }` | What setting that source up would mean, without writing anything: `{ does, opens, needs, owner?, tell? }`. `needs` lists the secrets only you have (`{ name, label }`), to be sent as `values` |
+| `POST /sources` `{ name, type, description, options, agent?, own?, values?, ask? }`, `POST /sources/remove` `{ name, agent? }` | Set an event source up as `add_source` does after your yes: for all agents, or with `agent` for that one. `values` are the secrets from `needs`; they go into pine's `.env` and the configuration names them. `own: true` treats what it reports as your own words. Nobody is subscribed yet (`POST /agents/<id>/subscribe`). Remove one, with its subscriptions and secrets |
+| `GET /models/servers` | The model servers of your own, as `pine model list` |
+| `POST /models/servers` `{ name, url, key?, context?, reasoning? }`, `POST /models/servers/remove` `{ name }` | Add a model server by its address, as `pine model add` does: pine asks it for its models. A server that wants a key answers status 409 with `locked: true` until the right `key` is sent; the key goes into `.env`. Remove one: status 409 with `users` while an agent or a default uses one of its models |
+| `GET /models/providers` | The model providers pi knows: `{ id, name, signedIn, models, oauth }` each. `signedIn`: there is a credential or a key for it; `oauth`: it can be signed in to through a browser |
+| `POST /models/login` `{ provider, type? }` | Start a sign-in to a provider, as `pine login` does (`type`: `api_key` or `oauth`). Answers `{ id }`. The sign-in then waits for you, step by step |
+| `GET /models/login/<id>`, `POST /models/login/<id>` `{ answer }` or `{ cancel: true }` | Where a sign-in stands: `{ lines, url?, code?, question?, done, error?, models? }`. `url` is a page to open in a browser (pine does not open it), `code` what to enter there, `question` what it waits for (`{ message, secret, options? }`): answer it with `answer` (a key, a pasted address, the `id` of an option). `done` with `models` when it worked, with `error` when not. An answer is handed on and kept nowhere |
+| `POST /models/logout` `{ provider }` | Forget the stored credential of a provider |
+| `GET /mcp/states` | Whether each MCP server connects, as `pine mcp list` shows it. Takes as long as connecting to them does |
+| `POST /mcp/login` `{ name, agent? }` | Sign in to a remote MCP server through the browser, as `pine mcp login`. The request lasts until the sign-in is over and answers `{ code, out }` |
+| `POST /agents/<id>/view/write` `{ session?, path, text }` | Write one text file in the folder a conversation works in (or the agent's workspace): what an editor in a UI saves. At most 2 MB, into a folder that exists, and nowhere outside that folder. See "From a script" in [coding.md](coding.md) |
 
 ## Day to day
 

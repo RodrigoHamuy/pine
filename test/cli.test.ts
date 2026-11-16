@@ -262,3 +262,66 @@ test("pine <folder>: a first word that is a folder opens the UI there; a path th
 	assert.match(await pine("nothing-here"), /No pine home|unknown command|ENOENT|pine\.json/);
 	assert.doesNotMatch(await pine("status"), /No pine home at .* yet\. Create one/, "a command keeps its meaning when a folder has its name");
 });
+
+test("pine service finds this home's daemon or starts one, says where it answers on one line of JSON, and a daemon it started ends with whoever started it", async (t) => {
+	const port = await freePort();
+	const h = await harness({ pine: { http: { port }, logLevel: "warn" }, agents: { main: {} }, start: false });
+	const children: Array<ReturnType<typeof spawn>> = [];
+	t.after(() => children.forEach((c) => c.kill("SIGKILL")));
+	// Starts the command and resolves with its first line, which is all it ever writes to stdout.
+	const service = (home: string, ...flags: string[]) => {
+		const child = spawn(process.execPath, [CLI, "service", "--home", home, ...flags], { stdio: ["pipe", "pipe", "pipe"] });
+		children.push(child);
+		let out = "";
+		child.stdout!.on("data", (d) => (out += d));
+		const exit = new Promise<number | null>((r) => child.once("exit", (code) => r(code)));
+		const said = until(() => out.includes("\n"), 10_000, "pine service to answer").then(() => JSON.parse(out.split("\n")[0]));
+		return { child, exit, said, all: () => out };
+	};
+	const up = async () => (await fetch(`http://127.0.0.1:${port}/health`).catch(() => undefined))?.ok === true;
+
+	// No home: said as JSON too, with what to do.
+	const none = service(path.join(h.home, "not-there"));
+	assert.match((await none.said).error, /there is no pine home at .* yet\. Create one with: pine init/);
+	assert.equal(await none.exit, 1);
+
+	// Nothing runs: it starts the daemon and stays.
+	const first = service(h.home);
+	const told = await first.said;
+	assert.deepEqual({ base: told.base, mode: told.mode, started: told.started, home: told.home }, { base: `http://127.0.0.1:${port}`, mode: "embedded daemon", started: true, home: h.home });
+	assert.match(told.version, /^\d+\.\d+\.\d+/);
+	assert.equal(told.token, fs.readFileSync(path.join(h.home, "data", "http-token"), "utf8").trim());
+	assert.equal((await fetch(`${told.base}/status`, { headers: { authorization: `Bearer ${told.token}` } })).status, 200);
+	assert.ok(fs.existsSync(path.join(h.home, "data", "pine.log")), "it logs to a file, not to its output");
+
+	// One runs: a second call attaches, says the same, and is gone at once; the daemon goes on.
+	const second = service(h.home);
+	const again = await second.said;
+	assert.deepEqual({ base: again.base, token: again.token, mode: again.mode, started: again.started }, { base: told.base, token: told.token, mode: "attached", started: false });
+	assert.equal(await second.exit, 0);
+	assert.ok(await up());
+
+	// Another home on the same port is not this home's daemon, and is not driven.
+	const other = await harness({ pine: { http: { port }, logLevel: "warn" }, agents: { main: {} }, start: false });
+	const wrong = service(other.home);
+	assert.match((await wrong.said).error, /it is not the pine of .*Another pine home uses the same port/);
+	assert.equal(await wrong.exit, 1);
+	await other.close();
+
+	// Whoever started it is gone (its end of the pipe closes): the daemon stops cleanly.
+	first.child.stdin!.end();
+	assert.equal(await first.exit, 0);
+	assert.ok(!(await up()));
+	assert.equal(first.all().trim().split("\n").length, 1, "one line on stdout, and nothing else");
+
+	// With --keep it outlives its input and ends when it is told to.
+	const kept = service(h.home, "--keep");
+	assert.equal((await kept.said).started, true);
+	kept.child.stdin!.end();
+	await new Promise((r) => setTimeout(r, 300));
+	assert.ok(await up());
+	kept.child.kill("SIGTERM");
+	assert.equal(await kept.exit, 0);
+	assert.ok(!(await up()));
+	await h.close();
+});

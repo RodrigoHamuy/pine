@@ -710,3 +710,5 @@ mode 600, where agents cannot read it. The key you type is not echoed.
   tasks run the next time a daemon starts.
 - The UI is one of several ways in. Everything it does goes through the same events, tasks and
   approvals as Telegram or `pine send`.
+- On a Mac there is also an app with a window of its own, which shows the same conversations
+  and tabs and adds an editor and a settings panel: [desktop.md](desktop.md).

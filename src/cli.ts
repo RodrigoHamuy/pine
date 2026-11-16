@@ -29,6 +29,10 @@ Daemon
                                   as administrator; --yes skips the question). Safe to run again
   pine check                      validate the configuration and list what it sets up
   pine start                      run the daemon in the foreground
+  pine service [--keep]           for a UI that is a program of its own: find the running daemon or start one,
+                                  and say on one line of JSON where it answers and with which token. A daemon
+                                  it started runs until this command is ended or its input closes (--keep:
+                                  only until it is ended)
   pine dev-model [--port 7464] [--model haiku]
                                   OpenAI-compatible model server backed by "claude -p" (development only)
   pine update [--check]           bring pine up to date (npm for an install, git for a checkout) with what the
@@ -104,7 +108,7 @@ function parseArgs(argv: string[]) {
 		const a = argv[i];
 		if (a === "-f") flags.follow = true;
 		else if (a.startsWith("--no-")) flags[a.slice(5)] = false;
-		else if (a.startsWith("--")) flags[a.slice(2)] = argv[i + 1] !== undefined && !argv[i + 1].startsWith("--") && !["follow", "json", "api-key", "oauth", "taints", "offline", "always", "separate", "fresh", "global", "yes", "keep-files", "network"].includes(a.slice(2)) ? argv[++i] : true;
+		else if (a.startsWith("--")) flags[a.slice(2)] = argv[i + 1] !== undefined && !argv[i + 1].startsWith("--") && !["follow", "json", "api-key", "oauth", "taints", "offline", "always", "separate", "fresh", "global", "yes", "keep-files", "network", "keep", "detach-stdin"].includes(a.slice(2)) ? argv[++i] : true;
 		else rest.push(a);
 	}
 	return { flags, rest };
@@ -349,7 +353,7 @@ async function installBrowser(): Promise<number> {
 	return spawnSync(process.execPath, [cli, "install", "chromium"], { stdio: "inherit" }).status ?? 1;
 }
 
-const COMMANDS = new Set(["agent", "agents", "approvals", "approve", "browser-install", "cancel", "check", "deny", "dev-model", "emit", "events", "help", "init", "login", "logout", "manual", "mcp", "mode", "model", "reset", "schedules", "send", "skills", "sources", "start", "state", "status", "subscribe", "task", "tasks", "tui", "unsubscribe", "update", "version"]);
+const COMMANDS = new Set(["agent", "agents", "approvals", "approve", "browser-install", "cancel", "check", "deny", "dev-model", "emit", "events", "help", "init", "login", "logout", "manual", "mcp", "mode", "model", "reset", "schedules", "send", "service", "skills", "sources", "start", "state", "status", "subscribe", "task", "tasks", "tui", "unsubscribe", "update", "version"]);
 
 /** Whether a first argument means a folder to open: something written as a path, or the name of a folder here that is not a command. */
 function folderArgument(word: string | undefined, cwd = process.cwd()): string | undefined {
@@ -458,6 +462,46 @@ async function main(): Promise<void> {
 		const server = await startClaudeModel({ port: Number(flags.port ?? 7464), model: typeof flags.model === "string" ? flags.model : "haiku", log: (l) => console.error(`${new Date().toISOString()} ${l}`) });
 		out(`claude -p model server on ${server.baseUrl} (model ids: claude-haiku, claude-sonnet, claude-opus). Ctrl-C to stop.`);
 		process.on("SIGINT", () => void server.close().then(() => process.exit(0)));
+		return;
+	}
+
+	if (cmd === "service") {
+		// The answer is for a program: one line of JSON on stdout, whatever happens, and nothing else there.
+		const say = (o: unknown) => process.stdout.write(`${JSON.stringify(o)}\n`);
+		let service: Awaited<ReturnType<typeof import("./service.ts").ensureDaemon>>;
+		try {
+			if (!fs.existsSync(path.join(home, "pine.json"))) throw new Error(`there is no pine home at ${home} yet. Create one with: pine init${home === defaultHome() ? "" : ` ${home}`}`);
+			const cfg = loadConfig(home);
+			const { ensureDaemon } = await import("./service.ts");
+			service = await ensureDaemon(cfg);
+			const version = String(JSON.parse(fs.readFileSync(path.join(PINE_ROOT, "package.json"), "utf8")).version);
+			say({ base: service.base, token: service.token, mode: service.mode, started: service.started, home: cfg.home, version });
+		} catch (e) {
+			say({ error: e instanceof Error ? e.message : String(e) });
+			process.exit(1);
+		}
+		// A daemon that runs already goes on without this command.
+		if (!service.started) process.exit(0);
+		process.on("unhandledRejection", (e) => console.error(`${new Date().toISOString()} ERROR [pine] unhandled rejection: ${e instanceof Error ? (e.stack ?? e.message) : e}`));
+		process.on("uncaughtException", (e) => console.error(`${new Date().toISOString()} ERROR [pine] uncaught exception: ${e.stack ?? e.message}`));
+		let stopping = false;
+		const stop = () => {
+			if (stopping) return;
+			stopping = true;
+			void service.stop().then(() => process.exit(0));
+			setTimeout(() => process.exit(1), 10_000).unref();
+		};
+		process.on("SIGINT", stop);
+		process.on("SIGTERM", stop);
+		// The program that started this holds its input open for as long as it lives. When that
+		// closes, the program is gone, however it went, and its daemon is not left behind. A
+		// terminal's input is a person's: there Ctrl-C ends it.
+		if (flags.keep !== true && flags["detach-stdin"] !== true && !process.stdin.isTTY) {
+			process.stdin.on("end", stop);
+			process.stdin.on("close", stop);
+			process.stdin.on("error", stop);
+			process.stdin.resume();
+		}
 		return;
 	}
 

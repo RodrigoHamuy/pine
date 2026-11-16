@@ -1,0 +1,246 @@
+# The desktop app
+
+pine has an app with a window of its own, for macOS: **Pine**. It does what the terminal UI
+does (conversations in tabs, the work of a turn, approvals, the code panel) and adds an editor
+for the files of a conversation's folder, a settings panel for everything that is otherwise a
+`pine` command or a sentence to the main agent, pictures, video and sound shown and played as
+they are, menus and system notifications.
+
+It lies in `desktop/` of pine's repository and is built on Electron, so that the same app can
+be made for Linux and Windows later. It is a client of the daemon and nothing more: everything
+it shows and changes goes through the control API ([operations.md](operations.md)), as with
+the terminal UI and the `pine` commands. A conversation you have in the app is the same one
+the terminal UI or Telegram shows.
+
+## Starting it
+
+From a checkout of pine:
+
+```bash
+cd desktop
+```
+
+```bash
+npm install
+```
+
+```bash
+npm start
+```
+
+`npm run dev` is the same with the page reloading as you edit it. To make an app that can be
+put into Applications:
+
+```bash
+npm run pack
+```
+
+That writes `desktop/release/mac-<arch>/Pine.app` (`npm run dist` also makes a disk image).
+The app carries a pine of its own and is signed for the Mac it was built on; to hand it to
+others it has to be signed with a Developer ID (`CSC_NAME`) and notarised.
+
+| Command (in `desktop/`) | What it does |
+|---|---|
+| `npm start` | Builds the app and opens it |
+| `npm run dev` | Opens it with the page served by Vite, reloading on every change |
+| `npm run check` | Type check |
+| `npm test` | The app from end to end: the real app on a pine home of its own with a scripted model. Needs a screen. With `PINE_LIVE=1` on a Mac it also dictates with the real voice helper, from a recording |
+| `npm run pack` | `release/mac-<arch>/Pine.app`, with pine inside. `--no-pine` leaves pine out |
+| `npm run dist` | The same, and a disk image |
+| `node scripts/smoke.mjs` | Starts a packed app on a home of its own and checks that it comes up with the pine it carries |
+
+pine itself runs on Node 24 or newer, also when the app starts it: the app looks for `node` the
+way your shell finds it (it asks your login shell for its environment, since an app started
+from the Finder has none of it).
+
+## The daemon: started or reused
+
+When the app opens it asks `pine service` ([operations.md](operations.md), "A UI of its own")
+for the daemon of your home:
+
+| What it finds | What happens |
+|---|---|
+| A pine is running for this home (started in a terminal, at login, by the terminal UI) | The app attaches to it. The side bar says `attached`. Quitting the app leaves it running |
+| Nothing runs | The app starts one, as the terminal UI does, logging to `data/pine.log`. The side bar says `started here`. Quitting the app stops it, cleanly |
+| There is no pine home yet | A first screen offers to set pine up (`pine init`): the example home and the browser its web tools drive |
+| No Node, or no pine | A screen that says what to install |
+
+Which pine it runs, in this order: what `PINE_CLI` names; the checkout the app lies in; the
+pine packed into the app; the `pine` of your shell.
+
+| Setting (Settings > App) | What it does |
+|---|---|
+| Keep pine running after the app quits | A pine the app starts goes on in the background when the app is closed: schedules fire, sources report and Telegram answers. It then runs until it is stopped (`pine status` finds it; the next start of the app attaches to it) |
+| Home folder | Another pine home than `~/.pine`. Another home is another pine |
+| Appearance | Light, dark, or what the system is set to |
+| Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
+
+Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
+you quit (`⌘Q`). A daemon the app started that stops answering is started again.
+
+## The window
+
+```
+ ● ● ●  ⌕ ◧ │ ★ main ×  ○ main · notes ×  +                          ◨   ← tabs; the code panel's button
+────────────┼──────────────────────────────────────────────┬──────────────
+ + New      │                what do the notes say?        │ Changes Last turn Files …
+            │                                              │
+ MAIN       │ ▸ 1 tool call · read · 148 ms                │  M index.ts  src   +1 −1
+ ★ main     │                                              │
+ ○ notes    │ The notes say first line.                    │
+ SCOUT      │                                              │
+ ★ main     │ ┌──────────────────────────────────────────┐ │
+            │ │ Message main · / for commands · @ files  │ │
+ ⌇ Events   │ │ ▢ no folder  ▣ m  ✳ off  ⛨ safe     7% ↑│ │
+ ⚙ Settings │ └──────────────────────────────────────────┘ │
+ ● pine 0.22 · started here                                │
+```
+
+| Part | What it is |
+|---|---|
+| Side bar | Every agent with its conversations: its own (`main`) first, then pinned ones, then by when they were last used. A click opens one in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). `+` beside an agent's name starts a new conversation with it. At the bottom: the event log, the settings, and whether pine answers |
+| Tabs | One conversation each, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
+| Conversation | Your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens. A `↳ … open` line opens a sub-agent's or delegated task's work in a tab of its own |
+| Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
+| The bar under the input | The folder the conversation works in, the agent's model, how much it reasons and its mode: each opens a list on a click. `outside content` appears when the conversation has read something from outside. The ring shows how full the context is |
+| Code panel | Beside a conversation (`⌥⌘B`): see "The code panel and the editor" |
+| Palette | `⌘K`: every command, open tab, conversation, agent and settings page by name |
+
+Everything in [tui.md](tui.md) about modes, goals, approvals, an agent's questions, its list
+of steps, sub-agents, `/undo` and what a conversation is holds here unchanged: it is the
+daemon's doing. What differs is how it is drawn and reached.
+
+| In the terminal UI | In the app |
+|---|---|
+| `/model`, `/reasoning`, `/mode`, `/folder` | Also the bar under the input, and the Conversation menu |
+| `/sessions`, the conversation list | The side bar |
+| `/code` | The code panel (`⌥⌘B`), which also edits |
+| `/mcp`, `/sources`, `/subscribe` | Also Settings > MCP servers and Settings > Events |
+| `/attach <path>`, `/paste` | Files from the Finder put on the input, a picture pasted into it, or the paper clip |
+| `/export` | Asks where to save the file |
+| `/voice`, `ctrl+r` | The microphone in the bar under the input, or `⌃R` |
+| `/quit` | `⌘Q` |
+| `shift+tab` (next mode) | The same, while the input is empty |
+| `alt+1` … `alt+9` | `⌘1` … `⌘9`; `⌃⇥` is the next tab |
+
+### What the app adds
+
+| | |
+|---|---|
+| Pictures, video, sound | A picture an answer points at is shown as it is; a click enlarges it. A video and a sound file get the system's own player controls, with sound |
+| Files from the Finder | Files put on the input with the mouse are attached to the next message (up to 10 files of 20 MB each); a folder put there is opened for the conversation, as with `/folder`. A folder put on the app's icon in the Dock opens a conversation that works in it, as `pine <folder>` does |
+| Menus and keys | Everything is in the menu bar, with its key |
+| Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
+| Find | `⌘F` marks what you look for in the conversation |
+| Several views at once | A conversation, its changes and a file in the editor side by side |
+
+## The code panel and the editor
+
+The panel beside a conversation shows the folder that conversation works in (the folder you
+opened for it, else the agent's workspace), in five views:
+
+| View | Shows |
+|---|---|
+| Changes | What differs from the last commit (git): each file with its counts, and its diff on a click |
+| Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
+| Files | The folder as a tree, a search by name, and the editor |
+| Output | The tool calls of the last messages, each with all it printed |
+| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop |
+
+While an agent keeps a list of steps, the open steps stand at the top of the panel.
+
+**The editor.** A click on a file in Files (or "Edit" on a diff) opens it in an editor with
+line numbers, colours for the common languages, search (`⌘F` in the editor) and undo.
+`⌘S` saves. A file the agent changes while you look at it is shown anew; if you have typed
+meanwhile, the app says that the file changed on disk and lets you take the new one. Files
+over 2 MB and binary files are shown and not edited.
+
+Saving goes through the daemon like everything else (`POST /agents/<id>/view/write`). The
+daemon writes the file inside a sandbox that reaches only that folder, so that a link an agent
+planted in its folder cannot make your save land somewhere else ([security.md](security.md)).
+On a system without a sandbox the daemon does not write, and the app says so.
+
+## Settings
+
+`⌘,` opens the settings panel: pine's configuration, changed by clicking instead of by a
+command or by asking an agent. Each page asks the daemon what there is and tells it what to change.
+The daemon checks a change as it checks the main agent's (the same code), writes it, reads the
+configuration back, and undoes what does not load. You are not asked to confirm in a dialog
+of pine's: the app is your own hand, like a `pine` command.
+
+| Page | What you do there | The same by command or by asking the main agent |
+|---|---|---|
+| General | pine's settings (`defaults.model`, `defaults.mode`, `limits.*`, `security.*`), and the notes `pine check` would print about this setup | `set_setting`; `pine check` |
+| Agents | Every agent. On an agent's page: what it is for, its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). New agent; Remove, with or without its folder | `create_agent`, `update_agent`, `remove_agent`; `pine agent …` |
+| Models | Model servers of your own (add by name and address, with its key when it wants one; remove). Providers: sign in through the browser or with an API key, sign out. The models you can use now | `add_model_server`; `pine model …`, `pine login`, `pine logout` |
+| MCP servers | Every server with whom it is for and whether it connects. Add a remote one (its https address) or a program on this computer, for all agents or one. Sign in to a remote one through the browser. Remove | `add_mcp_server`; `pine mcp …` |
+| Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
+| Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: add (at set times, every so often, once), remove. **Routes**: add, remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
+| Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
+| App | The app's own settings, and the pine it talks to: started here or attached, restart, home folder |  |
+
+A secret you type on these pages (a model server's key, a source's token, a provider's API
+key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is
+not shown again, not kept by the app, and never reaches an agent or a model.
+
+An app that is newer than the pine it attached to says so where a page needs something that
+pine does not know yet ("this pine does not know that yet: it is older than the app"): update
+pine and restart it.
+
+## Dictating a message
+
+On a Mac the microphone in the bar under the input (or `⌃R`, or `/voice [language]`) dictates
+the message, with the helper the terminal UI uses: the words are recognised on the Mac itself,
+and what is heard is text in the input until you send it. `↩` ends the listening, `esc` throws
+away what was heard, and a key that types ends it too. Everything under "Dictating a message"
+in [tui.md](tui.md) holds here, also what the first use asks for and what to do when it does
+not work. On another system there is no microphone in the bar.
+
+## What the app is careful about
+
+The page in the window draws what agents write, and an answer can repeat what a web page told
+the agent to write. So:
+
+| | |
+|---|---|
+| The page has no token and no Node | The daemon's token stays in the app's main process, which makes each call for the page. The page runs in the browser's sandbox, without access to files or programs |
+| An answer is content, not a page | It is drawn from markdown and cleaned of everything that could act: scripts, styles, forms, frames. The window's own policy lets it load nothing from the web |
+| A link says where it leads | The address stands next to a link whose words are not the address, and only `http` and `https` addresses open, in your browser |
+| Nothing is fetched because an answer contains it | A picture at a web address is a line to click (`Load picture · https://…`); the daemon then fetches it, with its guard against addresses in your network. A picture at a path in the agent's workspace is shown from there |
+| What is drawn straight from the daemon | Only pictures, video and sound, by fixed addresses of the control API |
+| Notifications and the window's title | pine's own words only |
+| What is heard | Text for the input: never sent by itself |
+| The window stays the app | It cannot be taken to another address, and opens no further windows |
+
+The app does not reach into pine's home: it reads no configuration file and no token file
+itself. What it knows, the daemon told it.
+
+## For changing the app
+
+```
+desktop/
+  electron/
+    main.ts        the main process: the window, menus, dialogs, notifications; the daemon's token
+                   and every call of the control API; the two addresses the page may load from
+    preload.ts     the bridge: the short list of things the page may ask the main process for
+    service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
+  src/             the page (React)
+    model.ts       what the page knows: tabs, what each conversation shows, the daemon's live events
+    api.ts         the control API, typed
+    App.tsx        the window: side bar, tabs, palette, the dialogs for approvals and questions
+    Conversation.tsx, Composer.tsx, markdown.tsx     a conversation, the input, an answer drawn
+    CodePanel.tsx  changes, files and the editor, output, what is running
+    Settings.tsx   the settings pages
+    commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
+  scripts/         build, dev, pack, the icon, the smoke test of a packed app
+  test/            the app from end to end, driven through its real window
+```
+
+- The page asks for something new through `preload.ts` and a handler in `main.ts`, never by
+  getting more of the system. A handler checks that the call comes from the app's own page.
+- What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a
+  test there, then to `api.ts`. The app never does a daemon's work itself.
+- Text an answer or a tool produced is drawn through `markdown.tsx` or as plain text, never
+  set as HTML anywhere else.
+- A new thing the owner can see or do gets a test in `desktop/test/`, which starts the real
+  app on a home of its own.

@@ -1,0 +1,1485 @@
+// What the page knows: the tabs, what each conversation shows, and how the daemon's live events
+// become that. Nothing here is the truth about pine; the daemon is. This is what was asked of it
+// and what it reported since, kept so that it can be drawn.
+//
+// The models are plain objects that are changed in place and then say that they changed
+// (`touch`). A conversation gets a hundred events a second while a model writes; copying its
+// list for each would be the slowest thing the app does.
+import { useEffect, useRef, useSyncExternalStore } from "react";
+import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
+import { bridge, type Prefs, type ServiceState } from "./bridge.ts";
+import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
+
+export class Model {
+	v = 0;
+	private listeners = new Set<() => void>();
+	subscribe = (fn: () => void) => {
+		this.listeners.add(fn);
+		return () => void this.listeners.delete(fn);
+	};
+	version = () => this.v;
+	touch(): void {
+		this.v++;
+		for (const fn of this.listeners) fn();
+	}
+}
+
+/** Draw again whenever the model says it changed. */
+export function useModel<T extends Model>(model: T): T {
+	useSyncExternalStore(model.subscribe, model.version);
+	return model;
+}
+
+let ids = 1;
+const uid = () => ids++;
+
+export type Tone = "muted" | "warn" | "bad" | "good" | "accent";
+
+export type Part =
+	| { p: "tool"; key: string; tool: string; subject?: string; status: "run" | "ok" | "fail"; ms?: number; preview?: string; depth: number }
+	| { p: "thought"; text: string; done: boolean; ms?: number; speed?: string; startedAt: number }
+	| { p: "words"; text: string }
+	| { p: "child"; task: number; agent: string; kind: string; label: string; status: "run" | "done" | "failed" | "cancelled"; how?: string; depth: number };
+
+interface Base {
+	id: number;
+	/** Counts up when the item changes, so that only what changed is drawn again. */
+	v: number;
+}
+
+export type Item = Base &
+	(
+		| { t: "user"; text: string; from?: string; files?: string[] }
+		| { t: "answer"; task: number; agent: string; text: string; live: boolean }
+		| { t: "work"; parts: Part[]; done: boolean; open: boolean; startedAt: number; ms?: number }
+		| { t: "note"; tone: Tone; text: string; lines?: Array<{ text: string; tone?: Tone }>; action?: { label: string; run: () => void } }
+		| { t: "event"; label: string; body: string }
+		| { t: "approval"; req: Approval; state: "open" | "allowed" | "denied" | "gone"; by?: string; always?: boolean }
+		| { t: "steps"; task: number; items: Todo[] }
+		| { t: "media"; name: string; url: string; kind: "image" | "video" | "audio" }
+		| { t: "goal"; goal: GoalInfo; full?: boolean }
+		| { t: "divider"; text: string }
+		| { t: "entry"; entry: TranscriptEntry }
+	);
+
+type Of<K extends Item["t"]> = Extract<Item, { t: K }>;
+
+export interface Attachment {
+	name: string;
+	size: number;
+	/** base64 */
+	data: string;
+	/** For a picture: an address of the page's own to show it by. */
+	preview?: string;
+}
+
+export type CodeView = "changes" | "turn" | "files" | "output" | "running";
+
+const MEDIA_KIND = (name: string): "image" | "video" | "audio" | undefined => (/\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm|m4v)$/i.test(name) ? "video" : /\.(wav|mp3|m4a|ogg|flac|aiff?)$/i.test(name) ? "audio" : undefined);
+export const mediaKind = MEDIA_KIND;
+
+/** One tab: a conversation, the work of one task, or the event log. */
+export class Tab extends Model {
+	id = uid();
+	kind: "chat" | "task" | "events";
+	agent: string;
+	session: string;
+	/** For a tab on one task. */
+	task?: number;
+	baseDepth = 0;
+	items: Item[] = [];
+	loaded = false;
+
+	roots = new Set<number>();
+	running = new Set<number>();
+	awaiting: string[] = [];
+	answers = new Map<number, Of<"answer">>();
+	streamed = new Set<number>();
+	said?: { task: number; item: Of<"answer"> };
+	work?: Of<"work">;
+	tools = new Map<string, Extract<Part, { p: "tool" }>>();
+	thoughts = new Map<number, Extract<Part, { p: "thought" }>>();
+	lastThought?: { task: number; part: Extract<Part, { p: "thought" }> };
+	children = new Map<number, { agent: string; kind: string; label: string; running: boolean }>();
+	approvals = new Map<string, Of<"approval">>();
+	steps?: Of<"steps">;
+
+	unread = false;
+	startedAt = 0;
+	toolCalls = 0;
+	tokens = { input: 0, output: 0, cached: 0 };
+	thinking = false;
+	context?: number;
+	cacheShare?: number;
+	speed?: Speed;
+	lastAnswer?: string;
+	goal?: GoalInfo;
+	folder?: string;
+	workspace?: string;
+	programs: Program[] = [];
+	stopped?: { at: number; waiting: number; spared: Set<number> };
+	pauseNoted = false;
+
+	// the composer
+	draft = "";
+	attachments: Attachment[] = [];
+	inputs: string[] = [];
+	files = new Set<string>();
+
+	// the event log
+	log: PineEvent[] = [];
+	logFilter = "";
+
+	// the panel beside it
+	codeTick = 0;
+
+	constructor(kind: Tab["kind"], agent: string, session: string) {
+		super();
+		this.kind = kind;
+		this.agent = agent;
+		this.session = session;
+	}
+
+	get key(): string {
+		return this.kind === "chat" ? `${this.agent}:${this.session}` : this.kind === "task" ? `task:${this.task}` : "events";
+	}
+
+	get busy(): boolean {
+		return this.running.size > 0;
+	}
+
+	add<T extends Item["t"]>(item: Omit<Of<T>, "id" | "v"> & { t: T }): Of<T> {
+		const made = { ...item, id: uid(), v: 0 } as unknown as Of<T>;
+		this.items.push(made);
+		return made;
+	}
+
+	note(text: string, tone: Tone = "muted", more: Partial<Of<"note">> = {}): Of<"note"> {
+		return this.add({ t: "note", tone, text, ...more });
+	}
+
+	remove(item: Item): void {
+		const at = this.items.indexOf(item);
+		if (at >= 0) this.items.splice(at, 1);
+	}
+
+	clear(): void {
+		this.items = [];
+		for (const live of [this.roots, this.running, this.answers, this.streamed, this.tools, this.thoughts, this.children, this.approvals]) live.clear();
+		this.awaiting = [];
+		this.work = this.said = this.lastThought = this.steps = undefined;
+		this.thinking = false;
+	}
+}
+
+const STOP_GRACE = 3000;
+const sessionName = () => `s${Date.now().toString(36)}`;
+
+export interface Toast {
+	id: number;
+	text: string;
+	tone: Tone;
+}
+
+export type Picker = { title: string; items: Array<{ value: string; label: string; about?: string; tone?: Tone }>; current?: string; done: (value: string | undefined) => void; placeholder?: string; free?: boolean };
+
+/** The app as a whole. */
+export class Store extends Model {
+	service: ServiceState = { status: "starting" };
+	connected = false;
+	prefs: Prefs = { keepRunning: false, theme: "system", notify: true };
+	platform = "darwin";
+	focused = true;
+	fullscreen = false;
+	versions = { app: "", electron: "" };
+	/** The pine home the app was told to use, when it is not the usual one. */
+	home?: string;
+
+	agents: AgentInfo[] = [];
+	tabs: Tab[] = [];
+	active?: Tab;
+	conversations = new Map<string, Conversation[]>();
+	taints = new Map<string, string>();
+	sessionModes = new Map<string, string>();
+	bypassWhenTainted = false;
+	pins = new Set<string>();
+
+	view: "chat" | "settings" = "chat";
+	section = "general";
+	sidebar = true;
+	code = false;
+	codeView: CodeView = "changes";
+	palette = false;
+	picker?: Picker;
+	/** The approval or question whose dialog is open. */
+	asking?: string;
+	asked = new Set<string>();
+	toasts: Toast[] = [];
+	initLines: string[] = [];
+	initRunning = false;
+	/** Something a menu asked for that only a part of the page can do (save the file in the editor, focus the input). */
+	signal = new Model();
+	/** The name of what was asked for last. Read with `useSignal`, which several parts can do for the same asking. */
+	lastSignal = "";
+	/** The language dictation listens for, when it is not the system's. */
+	voiceLanguage?: string;
+
+	private restoring = false;
+	private started = false;
+	private timers: number[] = [];
+
+	// ---- start -----------------------------------------------------------------------------------
+
+	async boot(): Promise<void> {
+		if (this.started) return;
+		this.started = true;
+		bridge.onService((s: ServiceState) => void this.onService(s));
+		bridge.onEvents((batch: PineEvent[]) => this.onEvents(batch));
+		bridge.onConnection((up: boolean) => {
+			const back = up && !this.connected;
+			this.connected = up;
+			if (back && this.agents.length) void this.dropAnswered();
+			this.touch();
+		});
+		bridge.onMenu((command: string) => void this.command(command));
+		bridge.onFocus((f: boolean) => {
+			this.focused = f;
+			if (f && this.active) this.seen(this.active);
+		});
+		bridge.onFullscreen((f: boolean) => ((this.fullscreen = f), this.touch()));
+		bridge.onInitLine((line: string) => {
+			this.initLines.push(line);
+			if (this.initLines.length > 200) this.initLines.shift();
+			this.touch();
+		});
+		const first = await bridge.state();
+		this.prefs = first.prefs;
+		this.platform = first.platform;
+		this.fullscreen = first.fullscreen;
+		this.focused = first.focused;
+		this.versions = first.versions;
+		this.home = first.home;
+		document.documentElement.dataset.platform = this.platform;
+		bridge.ready();
+		await this.onService(first.state);
+	}
+
+	private async onService(s: ServiceState): Promise<void> {
+		const was = this.service.status;
+		this.service = s;
+		this.touch();
+		if (s.status === "ready" && (was !== "ready" || !this.agents.length)) await this.load();
+	}
+
+	/** Everything that is asked once the daemon answers: the agents, the tabs of last time, what waits for an answer. */
+	private async load(): Promise<void> {
+		try {
+			this.agents = await this.askAgents();
+		} catch (e) {
+			return this.flash(errText(e), "bad");
+		}
+		for (const a of this.agents) learnHome(a.workspace);
+		for (const t of this.timers) clearInterval(t);
+		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000)];
+		const first = this.agents.find((a) => a.main) ?? this.agents[0];
+		if (!first) return this.flash("this pine has no agents", "bad");
+		const saved = await api.tabs().catch(() => ({ tabs: [] as Array<{ agent: string; session: string }>, active: 0, code: false }));
+		// A daemon that was started again: what the tabs showed is asked for anew.
+		this.tabs = [];
+		this.active = undefined;
+		const again = saved.tabs.filter((t) => this.agents.some((a) => a.id === t.agent));
+		this.restoring = true;
+		try {
+			if (!again.length) await this.openTab(first.id, "main");
+			for (const t of again) await this.openTab(t.agent, t.session, false);
+			const chats = this.tabs.filter((t) => t.kind === "chat");
+			this.activate(chats[again.length ? Math.min(saved.active, chats.length - 1) : 0] ?? this.tabs[0]);
+		} finally {
+			this.restoring = false;
+		}
+		this.code = saved.code === true;
+		this.saveTabs();
+		void this.refreshTaints();
+		void this.refreshConversations();
+		void this.pending();
+		this.touch();
+	}
+
+	/** The agents, the main one first: it is the one that administers the others. */
+	async askAgents(): Promise<AgentInfo[]> {
+		const list = await api.agents();
+		return [...list].sort((a, b) => Number(b.main) - Number(a.main));
+	}
+
+	/** Questions that were asked before this window was there. */
+	private async pending(): Promise<void> {
+		const list = await api.approvals().catch(() => [] as Approval[]);
+		for (const req of list) {
+			const tab = this.tabFor(req) ?? this.tabs.find((t) => t.kind === "chat" && t.agent === req.agent) ?? this.active;
+			if (!tab || tab.approvals.has(req.id)) continue;
+			tab.approvals.set(req.id, tab.add({ t: "approval", req, state: "open" }));
+			tab.touch();
+		}
+		this.askNext();
+		this.badge();
+	}
+
+	// ---- small things ------------------------------------------------------------------------------
+
+	flash(text: string, tone: Tone = "muted", ms = 4500): void {
+		const toast = { id: uid(), text, tone };
+		this.toasts.push(toast);
+		if (this.toasts.length > 4) this.toasts.shift();
+		this.touch();
+		window.setTimeout(() => {
+			this.toasts = this.toasts.filter((t) => t !== toast);
+			this.touch();
+		}, tone === "bad" ? Math.max(ms, 7000) : ms);
+	}
+
+	/** Run something the owner asked for; what goes wrong is said, not thrown away. */
+	async attempt<T>(what: () => Promise<T>): Promise<T | undefined> {
+		try {
+			return await what();
+		} catch (e) {
+			this.flash(errText(e), "bad");
+			return undefined;
+		}
+	}
+
+	pick(p: Omit<Picker, "done">): Promise<string | undefined> {
+		return new Promise((resolve) => {
+			this.picker = {
+				...p,
+				done: (value) => {
+					this.picker = undefined;
+					this.touch();
+					resolve(value);
+				},
+			};
+			this.touch();
+		});
+	}
+
+	agent(id: string): AgentInfo | undefined {
+		return this.agents.find((a) => a.id === id);
+	}
+
+	isTainted(t: Tab): boolean {
+		return this.taints.has(`${t.agent}:${t.session}`);
+	}
+
+	/** The mode a conversation really works in: bypass that outside content paused is not bypass. */
+	modeOf(t: Tab): string {
+		return this.agent(t.agent)?.mode ?? "auto";
+	}
+
+	bypassPaused(t: Tab): boolean {
+		return this.modeOf(t) === "bypass" && this.isTainted(t) && !this.bypassWhenTainted && this.sessionModes.get(`${t.agent}:${t.session}`) !== "bypass";
+	}
+
+	private seen(tab: Tab): void {
+		if (tab.unread) {
+			tab.unread = false;
+			this.touch();
+			this.badge();
+		}
+	}
+
+	/** How many tabs want the owner: shown on the app's icon. */
+	private badge(): void {
+		void bridge.badge(this.tabs.filter((t) => t.approvals.size > 0).length);
+	}
+
+	/**
+	 * Call for the owner while they look at something else. The words are pine's own: nothing an
+	 * agent or a web page wrote goes into a notification.
+	 */
+	private attention(title: string, body: string, tab: Tab): void {
+		if (this.focused && this.active === tab && this.view === "chat") return;
+		if (!this.focused) void bridge.notify(title, body, tab.key);
+	}
+
+	// ---- tabs --------------------------------------------------------------------------------------
+
+	activate(tab: Tab | undefined): void {
+		if (!tab) return;
+		this.active = tab;
+		this.view = "chat";
+		tab.unread = false;
+		this.saveTabs();
+		this.touch();
+		this.badge();
+		if (tab.kind === "chat") void this.pollPrograms();
+		this.askNext();
+	}
+
+	private saveTabs(): void {
+		if (this.restoring) return;
+		const chats = this.tabs.filter((t) => t.kind === "chat");
+		void api.saveTabs(chats.map((t) => ({ agent: t.agent, session: t.session })), Math.max(0, chats.indexOf(this.active!)), this.code).catch(() => {});
+	}
+
+	async openTab(agent: string, session: string, front = true): Promise<void> {
+		const existing = this.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === session);
+		if (existing) return front ? this.activate(existing) : undefined;
+		if (!this.agent(agent)) this.agents = await this.askAgents().catch(() => this.agents);
+		if (!this.agent(agent)) return this.flash(`There is no agent called ${agent}.`, "bad");
+		const tab = new Tab("chat", agent, session);
+		this.tabs.push(tab);
+		if (front) this.activate(tab);
+		else {
+			tab.unread = !this.restoring;
+			this.saveTabs();
+			this.touch();
+		}
+		await this.fill(tab);
+		void this.refreshConversations(agent);
+	}
+
+	/** Ask for what a conversation holds and show it: the folder, the goal, the last messages, the open steps. */
+	private async fill(tab: Tab): Promise<void> {
+		const { agent, session } = tab;
+		const [folder, goal] = await Promise.all([api.folder(agent, session).catch(() => undefined), api.goal(agent, session).catch(() => undefined)]);
+		tab.folder = folder?.folder;
+		tab.workspace = folder?.workspace;
+		learnHome(folder?.workspace);
+		tab.goal = goal?.goal;
+		try {
+			const history = (await api.history(agent, session)).filter((t) => t.depth === 0).reverse();
+			for (const t of history) this.past(tab, t);
+			this.takeStats(tab, history.at(-1)?.meta?.stats);
+			// What is still at work goes on live from here.
+			for (const t of history) {
+				if (t.status === "running" || t.status === "pending") {
+					tab.roots.add(t.id);
+					if (t.status === "running") tab.running.add(t.id);
+				} else tab.roots.add(t.id);
+			}
+			if (tab.running.size) tab.startedAt = history.find((t) => t.status === "running")?.started ?? Date.now();
+			const steps = await api.todos(agent, session).catch(() => [] as Todo[]);
+			if (steps.some((t) => t.status !== "done")) this.showSteps(tab, -1, steps);
+			if (tab.goal) tab.add({ t: "goal", goal: tab.goal, full: true });
+		} catch (e) {
+			tab.note(`Could not load the conversation: ${errText(e)}`, "bad");
+		}
+		tab.loaded = true;
+		tab.touch();
+	}
+
+	private past(tab: Tab, t: Task): void {
+		if (t.meta?.compact) return void tab.note(t.status === "done" ? (t.result ?? "The earlier part of the conversation was summarised.") : `Shortening the conversation: ${t.status}${t.error ? ` (${t.error})` : ""}`);
+		if (t.kind === "event" && t.meta?.label) tab.add({ t: "event", label: t.meta.label, body: eventBody(t.prompt) });
+		else if (isGoalRound(t.kind, t.meta?.label)) tab.note(`↻ ${t.meta.label}`);
+		else tab.add({ t: "user", text: t.prompt, from: t.kind === "prompt" ? undefined : t.kind });
+		(t.meta?.images ?? []).forEach((_, i) => tab.add({ t: "media", kind: "image", name: `attached picture ${i + 1}`, url: `pine-media://daemon/tasks/${t.id}/images/${i}` }));
+		// It was read by work that was already running; the answer is that work's.
+		if (t.meta?.steered !== undefined) return;
+		if (t.status === "done") {
+			if (t.result) tab.lastAnswer = t.result;
+			tab.add({ t: "answer", task: t.id, agent: t.agent, text: t.result || "(no answer)", live: false });
+		} else if (t.status === "failed" || t.status === "cancelled") tab.note(t.status === "cancelled" ? "Stopped" : `Failed${t.error ? `: ${t.error}` : ""}`, t.status === "cancelled" ? "muted" : "bad");
+	}
+
+	/** A tab on one task, typically a sub-agent: what it was given, thought and wrote, and every tool call. */
+	async openTask(id: number): Promise<void> {
+		const existing = this.tabs.find((t) => t.kind === "task" && t.task === id);
+		if (existing) return this.activate(existing);
+		const data = await this.attempt(() => api.transcript(id));
+		if (!data) return;
+		const { task, entries } = data;
+		const tab = new Tab("task", task.agent, task.session);
+		tab.task = id;
+		tab.baseDepth = task.depth;
+		tab.roots.add(id);
+		this.tabs.push(tab);
+		const who = task.kind === "subagent" ? `sub-agent of ${task.agent}` : task.kind === "delegate" ? `${task.agent}, on a task from ${task.meta.chain?.at(-1) ?? "another agent"}` : task.agent;
+		const live = task.status === "running" || task.status === "pending";
+		tab.note(`${who} · task #${id}${task.parent !== undefined ? ` · started by task #${task.parent}` : ""} · ${task.status}`, "muted", { lines: [{ text: "This tab shows the work and takes no messages." }] });
+		if (entries.length) for (const entry of entries) tab.add({ t: "entry", entry });
+		else {
+			tab.add({ t: "user", text: task.prompt, from: "task" });
+			if (task.result) tab.add({ t: "answer", task: id, agent: task.agent, text: task.result, live: false });
+		}
+		if (live) {
+			tab.running.add(id);
+			tab.startedAt = task.started ?? Date.now();
+		} else tab.add({ t: "divider", text: taskSummary(task.status, task.meta.stats, task.error) });
+		tab.loaded = true;
+		this.activate(tab);
+	}
+
+	async openEvents(): Promise<void> {
+		let tab = this.tabs.find((t) => t.kind === "events");
+		if (!tab) {
+			tab = new Tab("events", "events", "");
+			tab.loaded = true;
+			this.tabs.push(tab);
+			tab.log = (await api.events(undefined, 300).catch(() => [] as PineEvent[])).reverse().filter((e) => !/\/(delta|thinking|message)$/.test(e.topic));
+			// The log comes newest first from the daemon; here the newest is at the bottom.
+			if (tab.log.length > 1 && tab.log[0].id > tab.log[tab.log.length - 1].id) tab.log.reverse();
+		}
+		this.activate(tab);
+	}
+
+	closeTab(tab: Tab): void {
+		const i = this.tabs.indexOf(tab);
+		if (i < 0) return;
+		if (this.tabs.length === 1) return this.flash("The last tab stays open.");
+		this.tabs.splice(i, 1);
+		// What a conversation was subscribed to on its own ends when its tab closes (not for an agent's main one).
+		if (tab.kind === "chat" && tab.session !== "main") {
+			void api
+				.closeSession(tab.agent, tab.session)
+				.then((r) => r.unsubscribed.length && this.flash(`Closed ${tab.agent} · ${tab.session}: its ${plural(r.unsubscribed.length, "subscription")} to ${r.unsubscribed.join(", ")} ended with it.`, "muted", 6000))
+				.catch(() => {});
+		}
+		if (this.active === tab) this.activate(this.tabs[Math.max(0, i - 1)]);
+		else {
+			this.saveTabs();
+			this.touch();
+		}
+		void this.refreshConversations(tab.agent);
+	}
+
+	moveTab(from: number, to: number): void {
+		if (from === to || from < 0 || to < 0 || from >= this.tabs.length || to >= this.tabs.length) return;
+		const [tab] = this.tabs.splice(from, 1);
+		this.tabs.splice(to, 0, tab);
+		this.saveTabs();
+		this.touch();
+	}
+
+	cycle(by: number): void {
+		if (this.tabs.length < 2 || !this.active) return;
+		this.activate(this.tabs[(this.tabs.indexOf(this.active) + by + this.tabs.length) % this.tabs.length]);
+	}
+
+	newConversation(agent?: string): Promise<void> {
+		const id = agent ?? (this.active?.kind !== "events" ? this.active?.agent : undefined) ?? (this.agents.find((a) => a.main) ?? this.agents[0])?.id;
+		return id ? this.openTab(id, sessionName()) : Promise.resolve();
+	}
+
+	/** A conversation that works in a folder of the owner's: the one that already does, or a new one named after it. */
+	async openFolder(dir: string): Promise<void> {
+		const agent = (this.agents.find((a) => a.main) ?? this.agents[0])?.id;
+		if (!agent) return;
+		const used = await api.folders(agent).catch(() => [] as Array<{ session: string; folder: string }>);
+		const have = used.find((u) => u.folder === dir);
+		if (have) return this.openTab(agent, have.session);
+		const taken = new Set(["main", ...used.map((u) => u.session), ...(await api.sessions(agent).catch(() => [] as Conversation[])).map((x) => x.session)]);
+		const base = (baseName(dir).replace(/[^A-Za-z0-9.-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "folder").slice(0, 24);
+		let name = base;
+		for (let n = 2; taken.has(name); n++) name = `${base}-${n}`;
+		const done = await this.attempt(() => api.setFolder(agent, name, dir));
+		if (done) await this.openTab(agent, name);
+	}
+
+	async refreshConversations(agent?: string): Promise<void> {
+		const ids = agent ? [agent] : this.agents.map((a) => a.id);
+		await Promise.all(
+			ids.map(async (id) => {
+				const list = await api.sessions(id).catch(() => undefined);
+				if (!list) return;
+				this.conversations.set(id, list);
+				for (const key of [...this.pins]) if (key.startsWith(`${id}:`)) this.pins.delete(key);
+				for (const c of list) if (c.pinned) this.pins.add(`${id}:${c.session}`);
+			}),
+		);
+		this.touch();
+	}
+
+	async refreshTaints(): Promise<void> {
+		try {
+			const s = await api.status();
+			this.taints.clear();
+			this.sessionModes.clear();
+			this.bypassWhenTainted = s.bypassWhenTainted === true;
+			for (const x of s.sessions) {
+				const open = this.tabs.find((t) => t.kind === "chat" && t.agent === x.agent && t.session === x.session);
+				if (open && x.context?.percent !== undefined) open.context = x.context.percent;
+				if (x.tainted) this.taints.set(`${x.agent}:${x.session}`, x.tainted);
+				this.sessionModes.set(`${x.agent}:${x.session}`, x.mode);
+			}
+			for (const [id, mode] of Object.entries(s.modes ?? {})) {
+				const info = this.agent(id);
+				if (info) info.mode = mode;
+			}
+			// Bypass that stopped applying must not go unnoticed.
+			for (const t of this.tabs) {
+				if (t.kind !== "chat" || t.pauseNoted || !this.bypassPaused(t)) continue;
+				t.pauseNoted = true;
+				t.note(`Bypass is paused in this conversation: it has read outside content (${this.taints.get(`${t.agent}:${t.session}`)}).`, "warn", { lines: [{ text: "The agent asks again before a critical action and before it sends something out. Choosing bypass again offers a clean conversation or bypass here anyway; a reset starts over." }] });
+				t.touch();
+			}
+			this.touch();
+		} catch {
+			// the bar keeps what it showed
+		}
+	}
+
+	private async pollPrograms(): Promise<void> {
+		const t = this.active;
+		if (!t || t.kind !== "chat" || this.service.status !== "ready") return;
+		const list = await api.programs(t.agent, t.session).catch(() => undefined);
+		if (!list) return;
+		const changed = list.length !== t.programs.length || list.some((p, i) => p.id !== t.programs[i]?.id);
+		t.programs = list;
+		if (changed || list.length) t.touch();
+	}
+
+	// ---- what the owner does in a conversation -----------------------------------------------------
+
+	async submit(tab: Tab, raw: string, whenBusy: "steer" | "queue" = "steer"): Promise<void> {
+		const text = raw.trim();
+		if (!text || tab.kind !== "chat") return;
+		tab.inputs.push(text);
+		const files = tab.attachments.splice(0);
+		tab.draft = "";
+		const mine = tab.add({ t: "user", text, files: files.map((f) => f.name) });
+		for (const f of files) if (f.preview) tab.add({ t: "media", kind: "image", name: f.name, url: f.preview });
+		tab.awaiting.push(text);
+		tab.touch();
+		try {
+			const busy = tab.busy;
+			const mentions = [...text.matchAll(/(?:^|\s)@([^\s@]+)/g)].map((m) => m[1]).filter((m) => tab.files.has(m.split("#")[0]));
+			const { task, steered } = await api.prompt(tab.agent, text, tab.session, files.length ? files.map((f) => ({ name: f.name, data: f.data })) : undefined, whenBusy, mentions.length ? mentions : undefined);
+			tab.roots.add(task);
+			if (steered !== undefined) {
+				tab.awaiting = tab.awaiting.filter((p) => p !== text);
+				this.flash("Given to the agent while it works. ⌥↩ makes a message wait its turn instead.", "muted", 3000);
+			} else if (busy) this.flash("It waits its turn: it is answered when the work that is running is done.", "muted", 3000);
+		} catch (e) {
+			tab.awaiting = tab.awaiting.filter((p) => p !== text);
+			tab.attachments.unshift(...files);
+			tab.remove(mine);
+			tab.draft = text;
+			tab.note(`Not sent: ${errText(e)}`, "bad");
+			tab.touch();
+		}
+		void this.refreshConversations(tab.agent);
+	}
+
+	/**
+	 * Stop what is running. A message typed while the agent worked starts the moment that work
+	 * stops: a second stop, pressed because nothing seemed to happen, would stop that message too.
+	 * So for a few seconds after a stop, the next one leaves alone a message that was waiting.
+	 */
+	async stop(tab: Tab): Promise<void> {
+		if (!tab.busy) return;
+		const recent = tab.stopped && Date.now() - tab.stopped.at < STOP_GRACE ? tab.stopped : undefined;
+		const ids = [...tab.running].filter((id) => !recent?.spared.has(id));
+		if (!ids.length) return this.flash("Stopped. This is your next message being answered; stop again in a moment to stop it too.");
+		tab.stopped = { at: Date.now(), waiting: tab.awaiting.length, spared: recent?.spared ?? new Set() };
+		for (const id of ids) await api.cancel(id).catch(() => {});
+	}
+
+	async undo(tab: Tab, redo: boolean): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const r = await this.attempt(() => (redo ? api.redo(tab.agent, tab.session) : api.undo(tab.agent, tab.session)));
+		if (!r) return;
+		tab.clear();
+		const history = (await api.history(tab.agent, tab.session).catch(() => [] as Task[])).filter((t) => t.depth === 0).reverse();
+		for (const t of history) (this.past(tab, t), tab.roots.add(t.id));
+		const said = undoLines(r, redo);
+		tab.note(`${redo ? "↷" : "↶"} ${said.head}`, "accent", { lines: said.lines });
+		if (!redo) tab.draft = r.prompt;
+		tab.codeTick++;
+		tab.touch();
+		void this.refreshTaints();
+	}
+
+	async reset(tab: Tab): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const ok = await this.pick({ title: `Start the conversation ${tab.session} of ${tab.agent} over?`, items: [{ value: "yes", label: "Forget it and start fresh", about: "What was said is gone; what it may do without asking, its goal and what it listens to on its own go with it.", tone: "bad" }, { value: "no", label: "Cancel" }] });
+		if (ok !== "yes") return;
+		if (!(await this.attempt(() => api.reset(tab.agent, tab.session)))) return;
+		this.freshen(tab);
+	}
+
+	private freshen(t: Tab): void {
+		t.clear();
+		t.context = t.cacheShare = t.goal = undefined;
+		this.taints.delete(`${t.agent}:${t.session}`);
+		t.note("Fresh conversation");
+		t.touch();
+		this.touch();
+	}
+
+	async setFolder(tab: Tab, folder: string | null): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const r = await this.attempt(() => api.setFolder(tab.agent, tab.session, folder));
+		if (!r) return;
+		for (const t of this.tabs) if (t.kind === "chat" && t.agent === tab.agent && t.session === tab.session) ((t.folder = r.folder), t.codeTick++);
+		tab.note(r.folder ? `This conversation now works in ${tilde(r.folder)}: ${tab.agent}'s tools start there and may read and change what is in it, from your next message on.` : `This conversation works in ${tab.agent}'s own workspace again; the folder is closed to it from your next message on.`);
+		tab.touch();
+		this.touch();
+	}
+
+	async pickFolder(tab: Tab): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const used = await api.folders(tab.agent).catch(() => [] as Array<{ session: string; folder: string }>);
+		const items = [{ value: "none", label: "No folder", about: `${tab.agent}'s own workspace` }, ...(tab.folder ? [{ value: tab.folder, label: tilde(tab.folder), about: "this conversation's folder" }] : [])];
+		for (const u of used) if (!items.some((i) => i.value === u.folder) && items.length < 9) items.push({ value: u.folder, label: tilde(u.folder), about: `also open in ${u.session}` });
+		items.push({ value: "pick", label: "Choose a folder…", about: "any folder of yours" });
+		const chosen = await this.pick({ title: `Folder for ${tab.agent} · ${tab.session}`, items, current: tab.folder ?? "none" });
+		if (!chosen || chosen === (tab.folder ?? "none")) return;
+		if (chosen !== "pick") return this.setFolder(tab, chosen === "none" ? null : chosen);
+		const picked = await bridge.pickFolder(`Folder for ${tab.agent} · ${tab.session}`);
+		if (picked) await this.setFolder(tab, picked);
+	}
+
+	async pickModel(tab: Tab): Promise<void> {
+		const info = this.agent(tab.agent);
+		const models = await this.attempt(() => api.models());
+		if (!info || !models) return;
+		const model = await this.pick({ title: `Model for ${tab.agent}`, items: models.map((m) => ({ value: m, label: m })), current: info.model, placeholder: "Search models" });
+		if (!model || model === info.model) return;
+		if (!(await this.attempt(() => api.setModel(tab.agent, model)))) return;
+		info.model = model;
+		tab.note(`${tab.agent} now uses ${model}. It is saved, and holds after a restart too.`);
+		tab.touch();
+		this.touch();
+	}
+
+	async pickReasoning(tab: Tab): Promise<void> {
+		const info = this.agent(tab.agent);
+		if (!info) return;
+		const about: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
+		const level = await this.pick({ title: `Reasoning for ${tab.agent}`, items: Object.entries(about).map(([value, a]) => ({ value, label: value, about: a })), current: info.thinking });
+		if (!level || level === info.thinking) return;
+		if (!(await this.attempt(() => api.setThinking(tab.agent, level)))) return;
+		info.thinking = level;
+		tab.note(`${tab.agent} now reasons at "${level}". A model that cannot reason ignores it.`);
+		tab.touch();
+		this.touch();
+	}
+
+	async pickMode(tab: Tab): Promise<void> {
+		const mode = await this.pick({ title: `Mode for ${tab.agent}`, items: MODES.map((m) => ({ value: m.value, label: m.label, about: m.about, tone: m.value === "bypass" ? "bad" : undefined })), current: this.modeOf(tab) });
+		if (mode) await this.setMode(tab, mode);
+	}
+
+	async setMode(t: Tab, mode: string): Promise<void> {
+		const info = this.agent(t.agent);
+		if (!info) return;
+		let anyway: string | undefined;
+		await this.refreshTaints();
+		if (mode === "bypass" && this.isTainted(t) && !this.bypassWhenTainted) {
+			// Bypass normally stops applying once a conversation has read outside content. Make that a choice, not a surprise.
+			const choice = await this.pick({
+				title: "This conversation has read outside content",
+				items: [
+					{ value: "new", label: "Bypass in a new, clean conversation", about: "recommended" },
+					{ value: "anyway", label: "Bypass here anyway", about: "what it read could steer an agent with your whole account", tone: "bad" },
+					{ value: "cancel", label: "Cancel" },
+				],
+			});
+			if (!choice || choice === "cancel") return;
+			if (choice === "anyway") anyway = t.session;
+			else {
+				if (!(await this.attempt(() => api.setMode(t.agent, mode)))) return;
+				info.mode = "bypass";
+				await this.openTab(t.agent, sessionName());
+				this.active?.note(`${t.agent} is in bypass mode in this new conversation. Nothing waits for approval, and its shell and file tools reach your whole account and the network.`, "warn");
+				return void this.active?.touch();
+			}
+		}
+		if (!(await this.attempt(() => api.setMode(t.agent, mode, anyway)))) return;
+		info.mode = mode as AgentInfo["mode"];
+		t.pauseNoted = false;
+		const more: Record<string, string> = {
+			bypass: "Nothing waits for approval now, and its shell and file tools reach your whole account and the network.",
+			plan: "It looks, reads and asks, and changes nothing: ask for what you want, read its plan, then switch the mode back to have it carried out.",
+			auto: "Its shell and file tools work without a sandbox: your whole account and the network. What is critical is still asked about.",
+			safe: "Its shell and file tools work inside its sandbox: its own folders, and what you allow it.",
+			manual: "Every command, edit and message waits for your go-ahead.",
+		};
+		t.note(`${t.agent} is now in ${mode} mode${mode === "bypass" || mode === "plan" ? " (until pine restarts)" : "; it is saved, and holds after a restart too"}.`, mode === "bypass" ? "warn" : "muted", { lines: [{ text: more[mode] ?? "" }] });
+		t.touch();
+		await this.refreshTaints();
+	}
+
+	async setGoal(tab: Tab, arg: string): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const word = arg.trim().toLowerCase();
+		if (!arg.trim()) {
+			tab.goal = (await api.goal(tab.agent, tab.session).catch(() => undefined))?.goal;
+			if (tab.goal) tab.add({ t: "goal", goal: tab.goal, full: true });
+			else tab.note("This conversation has no goal. Set one, and the agent works until it is met.");
+			return tab.touch();
+		}
+		if (word === "pause" || word === "resume" || word === "clear") {
+			// What changes is drawn when the daemon reports it.
+			const done = await this.attempt(() => api.setGoal(tab.agent, tab.session, { action: word }));
+			if (word === "clear" && done && !done.cleared) this.flash("This conversation has no goal.");
+			return;
+		}
+		// The first round is the objective itself, sent as a message of the owner's.
+		const mine = tab.add({ t: "user", text: arg.trim() });
+		tab.awaiting.push(arg.trim());
+		tab.touch();
+		try {
+			await api.setGoal(tab.agent, tab.session, { objective: arg.trim() });
+		} catch (e) {
+			tab.awaiting = tab.awaiting.filter((x) => x !== arg.trim());
+			tab.remove(mine);
+			tab.note(`No goal set: ${errText(e)}`, "bad");
+			tab.touch();
+		}
+	}
+
+	async askGoal(tab: Tab): Promise<void> {
+		const g = tab.goal;
+		const items = g ? [...(g.status === "active" ? [{ value: "pause", label: "Pause", about: "no further rounds until you resume" }] : g.status !== "met" ? [{ value: "resume", label: "Resume", about: "go on with the goal" }] : [{ value: "resume", label: "Resume", about: "it was called met too early" }]), { value: "clear", label: "Clear", about: "take the goal off this conversation" }] : [];
+		const answer = await this.pick({ title: g ? `Goal: ${short(oneLine(g.objective), 70)}` : "A goal for this conversation", items, free: true, placeholder: g ? "Or type a new objective and press ↩" : "What should be reached? The agent works until a judge says it is met" });
+		if (answer) await this.setGoal(tab, answer);
+	}
+
+	async pin(tab: Tab, pinned: boolean): Promise<void> {
+		if (tab.session === "main") return this.flash("An agent's main conversation always stays.");
+		if (!(await this.attempt(() => api.pinSession(tab.agent, tab.session, pinned)))) return;
+		if (pinned) this.pins.add(tab.key);
+		else this.pins.delete(tab.key);
+		this.touch();
+		void this.refreshConversations(tab.agent);
+	}
+
+	async rename(agent: string, session: string, to: string): Promise<void> {
+		const done = await this.attempt(() => api.renameSession(agent, session, to));
+		if (!done) return;
+		for (const t of this.tabs) if (t.kind === "chat" && t.agent === agent && t.session === session) ((t.session = done.session), t.touch());
+		this.saveTabs();
+		void this.refreshConversations(agent);
+		void this.refreshTaints();
+	}
+
+	async askRename(tab: Tab): Promise<void> {
+		if (tab.kind !== "chat") return;
+		if (tab.session === "main") return this.flash("An agent's main conversation keeps its name.");
+		const to = await this.pick({ title: `Another name for ${tab.session}`, items: [], free: true, placeholder: "The new name" });
+		if (to?.trim()) await this.rename(tab.agent, tab.session, to.trim());
+	}
+
+	async removeConversation(agent: string, session: string): Promise<void> {
+		const gone = await this.attempt(() => api.removeSession(agent, session));
+		if (!gone) return;
+		this.dropTabs(agent, session);
+		const with_ = [...(gone.sources.length ? [`its ${plural(gone.sources.length, "event source")} ${gone.sources.join(", ")}`] : gone.unsubscribed.length ? [`its ${plural(gone.unsubscribed.length, "subscription")} to ${gone.unsubscribed.join(", ")}`] : []), ...(gone.servers.length ? [`its ${plural(gone.servers.length, "MCP server")} ${gone.servers.join(", ")}`] : [])];
+		this.flash(`Removed the conversation ${session} of ${agent}${with_.length ? `, with ${with_.join(" and ")}` : ""}.`, "muted", with_.length ? 7000 : 4000);
+		void this.refreshConversations(agent);
+	}
+
+	/** A conversation is gone: a tab that showed it has nothing left to show. */
+	private dropTabs(agent: string, session: string): void {
+		const showing = this.tabs.filter((t) => t.kind === "chat" && t.agent === agent && t.session === session);
+		if (!showing.length) return;
+		this.tabs = this.tabs.filter((t) => !showing.includes(t));
+		if (!this.tabs.length) void this.openTab(agent, "main");
+		else if (this.active && showing.includes(this.active)) this.activate(this.tabs[0]);
+		this.saveTabs();
+		this.touch();
+	}
+
+	async copyAnswer(tab: Tab): Promise<void> {
+		if (!tab.lastAnswer) return this.flash("There is no answer to copy yet.");
+		await navigator.clipboard.writeText(tab.lastAnswer);
+		this.flash("Copied the last answer, as the agent wrote it.");
+	}
+
+	/** The conversation as Markdown: what was said, and with `full` what the agent thought and called. */
+	async markdownOf(tab: Tab, full: boolean): Promise<string> {
+		const tasks = (await api.history(tab.agent, tab.session, 500)).filter((t) => t.depth === 0).reverse();
+		const out = [`# ${tab.agent} · ${tab.session}`, "", `Exported from pine on ${new Date().toLocaleString("sv-SE")}.`];
+		for (const t of tasks) {
+			if (t.meta?.compact) {
+				out.push("", "---", "", `*${t.result || "The earlier part of the conversation was summarised here."}*`);
+				continue;
+			}
+			out.push("", t.kind === "prompt" ? (t.meta?.steered !== undefined ? "## You, while the agent worked" : "## You") : `## ${t.kind === "event" ? `Event${t.meta?.label ? `: ${t.meta.label}` : ""}` : `pine (${t.kind})`}`, "", t.prompt.trim());
+			if (t.meta?.steered !== undefined) continue;
+			if (full) {
+				const steps = (await api.transcript(t.id).catch(() => undefined))?.entries ?? [];
+				for (const s of steps) {
+					if (s.kind === "thinking" && s.text?.trim()) out.push("", "<details><summary>Thinking</summary>", "", s.text.trim(), "", "</details>");
+					else if (s.kind === "tool") out.push("", `- ${s.ok === false ? "✗" : "✓"} \`${s.tool}\`${s.subject ? ` ${oneLine(s.subject)}` : ""}${s.ok === false && s.result ? `: ${short(oneLine(s.result), 300)}` : ""}`);
+				}
+			}
+			out.push("", `## ${t.agent}`, "", t.status === "done" ? t.result?.trim() || "(no answer)" : `*${t.status}${t.error && t.error !== t.status ? `: ${t.error}` : ""}*`);
+		}
+		return `${out.join("\n")}\n`;
+	}
+
+	async exportConversation(tab: Tab, full: boolean): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const text = await this.attempt(() => this.markdownOf(tab, full));
+		if (!text) return;
+		const saved = await bridge.saveText(`pine-${tab.agent}-${tab.session}-${new Date().toISOString().slice(0, 10)}.md`, text);
+		if (saved) this.flash(`Saved to ${tilde(saved)}.`, "good");
+	}
+
+	// ---- approvals and questions -------------------------------------------------------------------
+
+	async decide(id: string, allow: boolean, always = false, values?: Record<string, string>): Promise<void> {
+		const r = await this.attempt(() => api.decide(id, allow, always, values));
+		if (r && !r.decided) this.flash("That request was already answered.");
+	}
+
+	closeAsking(): void {
+		this.asking = undefined;
+		this.touch();
+		// After what closed this one has run to its end.
+		window.setTimeout(() => this.askNext(), 0);
+	}
+
+	/**
+	 * Several requests can be open side by side. Only one dialog fits, so each of the others gets
+	 * its dialog when the one before it is gone. One that was put off is not asked again by itself.
+	 */
+	askNext(): void {
+		if (this.asking || this.picker || !this.active) return;
+		const next = [...this.active.approvals.values()].find((a) => !this.asked.has(a.req.id));
+		if (!next) return;
+		this.asking = next.req.id;
+		this.asked.add(next.req.id);
+		this.touch();
+	}
+
+	ask(id: string): void {
+		this.asking = id;
+		this.asked.add(id);
+		this.touch();
+	}
+
+	/** Forget the questions the daemon no longer has open: nobody can answer them any more. */
+	private async dropAnswered(): Promise<void> {
+		const pending = await api.approvals().catch(() => undefined);
+		if (!pending) return;
+		const open = new Set(pending.map((p) => p.id));
+		for (const tab of this.tabs) {
+			for (const [id, item] of tab.approvals) {
+				if (open.has(id)) continue;
+				item.state = "gone";
+				item.v++;
+				tab.approvals.delete(id);
+				this.asked.delete(id);
+				if (this.asking === id) this.asking = undefined;
+				tab.touch();
+			}
+		}
+		this.touch();
+		this.badge();
+	}
+
+	// ---- commands: what a menu, a key or the palette asks for --------------------------------------
+
+	/** Ask the parts of the page for something only they can do. */
+	ask_(name: string): void {
+		this.lastSignal = name;
+		this.signal.touch();
+	}
+
+	async command(name: string): Promise<void> {
+		const tab = this.active;
+		const chat = tab?.kind === "chat" ? tab : undefined;
+		if (name.startsWith("folder:")) return this.openFolder(name.slice(7));
+		if (name.startsWith("focus:")) return this.activate(this.tabs.find((t) => t.key === name.slice(6)));
+		if (name.startsWith("tab-")) return this.activate(this.tabs[Number(name.slice(4)) - 1]);
+		if (name.startsWith("code-")) {
+			this.code = true;
+			this.codeView = name.slice(5) as CodeView;
+			this.view = "chat";
+			this.saveTabs();
+			return this.touch();
+		}
+		if (name.startsWith("settings:")) {
+			this.view = "settings";
+			this.section = name.slice(9);
+			return this.touch();
+		}
+		switch (name) {
+			case "settings":
+				this.view = this.view === "settings" ? "chat" : "settings";
+				return this.touch();
+			case "palette":
+				this.palette = !this.palette;
+				return this.touch();
+			case "sidebar":
+				this.sidebar = !this.sidebar;
+				return this.touch();
+			case "code":
+				this.code = !this.code;
+				this.view = "chat";
+				this.saveTabs();
+				return this.touch();
+			case "events":
+				return this.openEvents();
+			case "new":
+				return this.newConversation();
+			case "agent": {
+				this.agents = await this.askAgents().catch(() => this.agents);
+				const id = await this.pick({ title: "New conversation with", items: this.agents.map((x) => ({ value: x.id, label: x.id, about: x.description || x.model })), current: chat?.agent });
+				return id ? this.newConversation(id) : undefined;
+			}
+			case "open-folder": {
+				const dir = await bridge.pickFolder("Open a folder for a conversation");
+				return dir ? this.openFolder(dir) : undefined;
+			}
+			case "close":
+				return tab ? this.closeTab(tab) : undefined;
+			case "next-tab":
+				return this.cycle(1);
+			case "prev-tab":
+				return this.cycle(-1);
+			case "save":
+			case "attach":
+			case "find":
+			case "help":
+			case "voice":
+			case "focus-input":
+				return this.ask_(name);
+		}
+		if (!chat) return name === "stop" && tab?.kind === "task" ? this.stop(tab) : undefined;
+		switch (name) {
+			case "stop":
+				return this.stop(chat);
+			case "undo":
+				return this.undo(chat, false);
+			case "redo":
+				return this.undo(chat, true);
+			case "compact":
+				return void (await this.attempt(() => api.compact(chat.agent, chat.session)));
+			case "reset":
+				return this.reset(chat);
+			case "model":
+				return this.pickModel(chat);
+			case "reasoning":
+				return this.pickReasoning(chat);
+			case "mode":
+				return this.pickMode(chat);
+			case "goal":
+				return this.askGoal(chat);
+			case "folder":
+				return this.pickFolder(chat);
+			case "pin":
+				return this.pin(chat, !this.pins.has(chat.key));
+			case "rename":
+				return this.askRename(chat);
+			case "copy":
+				return this.copyAnswer(chat);
+			case "export":
+				return this.exportConversation(chat, false);
+			case "export-full":
+				return this.exportConversation(chat, true);
+			case "clear":
+				chat.items = [];
+				return chat.touch();
+		}
+	}
+
+	// ---- the daemon's live events ------------------------------------------------------------------
+
+	private tabFor(p: any): Tab | undefined {
+		return p?.root !== undefined ? this.tabs.find((t) => t.kind === "chat" && t.roots.has(p.root)) : undefined;
+	}
+
+	private dirty = new Set<Model>();
+
+	onEvents(batch: PineEvent[]): void {
+		for (const e of batch) {
+			try {
+				this.onEvent(e);
+			} catch (err) {
+				console.error("event", e.topic, err);
+			}
+		}
+		for (const m of this.dirty) m.touch();
+		this.dirty.clear();
+	}
+
+	private onEvent(e: PineEvent): void {
+		const p = (e.payload ?? {}) as any;
+		const [ns, , kind] = e.topic.split("/");
+		const log = this.tabs.find((t) => t.kind === "events");
+		if (log && !/\/(delta|thinking|message)$/.test(e.topic)) {
+			log.log.push(e);
+			if (log.log.length > 1000) log.log.splice(0, log.log.length - 1000);
+			this.dirty.add(log);
+		}
+
+		if (ns === "approval") {
+			if (e.topic === "approval/requested") {
+				const tab = this.tabFor(p) ?? this.tabs.find((t) => t.kind === "chat" && t.agent === p.agent) ?? this.active;
+				if (!tab || tab.approvals.has(p.id)) return;
+				this.endWork(tab);
+				tab.approvals.set(p.id, tab.add({ t: "approval", req: p, state: "open" }));
+				if (tab !== this.active) tab.unread = true;
+				this.attention("Pine", p.tool === "question" ? `${tab.agent} has a question for you` : `${tab.agent} needs your approval`, tab);
+				this.dirty.add(tab).add(this);
+				this.badge();
+				if (tab === this.active && !this.asking && !this.picker) this.ask(p.id);
+			} else if (e.topic === "approval/decided") {
+				for (const tab of this.tabs) {
+					const item = tab.approvals.get(p.id);
+					if (!item) continue;
+					item.state = p.allow ? "allowed" : "denied";
+					item.by = p.by;
+					item.always = p.always === true;
+					item.v++;
+					tab.approvals.delete(p.id);
+					this.dirty.add(tab);
+				}
+				this.asked.delete(p.id);
+				if (this.asking === p.id) this.closeAsking();
+				this.dirty.add(this);
+				this.badge();
+			}
+			return;
+		}
+		if (e.topic === "pine/conversation") return void this.followed(p);
+		if (ns !== "agent") return;
+		if (kind === "goal") return this.goalEvent(p);
+
+		// A tab on one task follows that task and whatever it starts itself.
+		for (const t of this.tabs) {
+			if (t.kind !== "task") continue;
+			if (kind === "started" && p.parent !== undefined && t.roots.has(p.parent)) t.roots.add(p.task);
+			if (t.roots.has(p.task)) this.live(t, kind, p, (p.depth ?? 0) - t.baseDepth);
+		}
+
+		if (kind === "steered") {
+			// A message that went into running work: ours is on screen already, somebody else's is shown.
+			const tab = this.tabs.find((t) => t.kind === "chat" && t.agent === p.agent && t.session === p.session);
+			if (!tab || tab.roots.has(p.by)) return;
+			tab.roots.add(p.by);
+			const i = tab.awaiting.findIndex((x) => String(p.prompt ?? "").startsWith(x));
+			if (i >= 0) tab.awaiting.splice(i, 1);
+			else {
+				this.endWork(tab);
+				tab.add({ t: "user", text: String(p.prompt ?? ""), from: p.kind === "prompt" ? "elsewhere" : p.kind });
+			}
+			this.dirty.add(tab);
+			return;
+		}
+
+		if (kind === "started" && p.depth === 0) {
+			// A top-level task: ours (sent from a tab) or someone else's in a conversation a tab shows.
+			const tab = this.tabFor(p) ?? this.tabs.find((t) => t.kind === "chat" && t.agent === p.agent && t.session === p.session);
+			if (!tab) {
+				// An event woke the agent in a conversation nobody is looking at: say so where that agent is on screen.
+				const home = p.kind === "event" ? this.tabs.find((t) => t.kind === "chat" && t.agent === p.agent) : undefined;
+				if (home) {
+					home.note(`An event woke ${p.agent} in the conversation ${p.session}.`, "warn", { action: { label: "Open", run: () => void this.openTab(p.agent, String(p.session)) } });
+					this.dirty.add(home);
+				}
+				void this.refreshConversations(p.agent);
+				return;
+			}
+			const i = tab.awaiting.findIndex((x) => String(p.prompt ?? "").startsWith(x));
+			if (i >= 0) {
+				tab.awaiting.splice(i, 1);
+				// It waited behind work that was just stopped: the next stop is not meant for it.
+				if (tab.stopped && tab.stopped.waiting > 0 && Date.now() - tab.stopped.at < STOP_GRACE) {
+					tab.stopped.waiting--;
+					tab.stopped.spared.add(p.task);
+				}
+			} else if (p.compact) tab.note("Shortening the conversation: its earlier part becomes a summary…");
+			else if (p.requeued) {
+				if (tab.stopped && Date.now() - tab.stopped.at < STOP_GRACE) tab.stopped.spared.add(p.task);
+			} else if (!tab.roots.has(p.task)) {
+				if (p.kind === "event" && p.label) tab.add({ t: "event", label: String(p.label), body: eventBody(String(p.prompt ?? "")) });
+				// A round of a goal was announced by the goal's own line; its text is the same every round.
+				else if (!isGoalRound(p.kind, p.label)) tab.add({ t: "user", text: String(p.prompt ?? ""), from: p.kind === "prompt" ? "elsewhere" : p.kind });
+				// What came with it and was not typed here: a photo sent on Telegram, a picture a camera saved.
+				for (let n = 0; n < Number(p.images ?? 0); n++) tab.add({ t: "media", kind: "image", name: `picture ${n + 1}`, url: `pine-media://daemon/tasks/${p.task}/images/${n}` });
+			}
+			tab.roots.add(p.task);
+			tab.running.add(p.task);
+			if (tab.running.size === 1) {
+				tab.startedAt = Date.now();
+				tab.toolCalls = 0;
+				tab.tokens = { input: 0, output: 0, cached: 0 };
+			}
+			this.dirty.add(tab).add(this);
+			return;
+		}
+		const tab = this.tabFor(p);
+		if (tab) this.live(tab, kind, p, p.depth ?? 0);
+	}
+
+	/**
+	 * A conversation was changed by another hand than this window's: the main agent opened or
+	 * closed a tab, renamed a conversation, removed or pinned one. The tabs follow. A tab that is
+	 * opened this way never takes the place of the one the owner is in.
+	 */
+	private async followed(p: any): Promise<void> {
+		const agent = String(p.agent ?? "");
+		const session = String(p.session ?? "");
+		const showing = this.tabs.filter((t) => t.kind === "chat" && t.agent === agent && t.session === session);
+		if (p.change === "open") {
+			if (!showing.length) await this.openTab(agent, session || "main", false);
+		} else if (p.change === "close") {
+			for (const t of showing) if (this.tabs.length > 1) this.closeTab(t);
+		} else if (p.change === "rename" && typeof p.to === "string") {
+			for (const t of showing) ((t.session = p.to), t.touch());
+			if (showing.length) this.saveTabs();
+		} else if (p.change === "remove") this.dropTabs(agent, session);
+		void this.refreshConversations(agent);
+		this.touch();
+	}
+
+	private goalEvent(p: any): void {
+		for (const tab of this.tabs) {
+			if (tab.kind !== "chat" || tab.agent !== p.agent || tab.session !== p.session) continue;
+			tab.goal = p.event === "cleared" ? undefined : (p as GoalInfo);
+			tab.add({ t: "goal", goal: p as GoalInfo });
+			if (tab !== this.active) tab.unread = true;
+			this.dirty.add(tab).add(this);
+		}
+	}
+
+	/** The work of the turn that is going on: one block for as long as nothing else comes in between. */
+	private workOf(tab: Tab): Of<"work"> {
+		if (tab.work && tab.items.at(-1) === tab.work) return tab.work;
+		this.endWork(tab);
+		tab.work = tab.add({ t: "work", parts: [], done: false, open: false, startedAt: Date.now() });
+		return tab.work;
+	}
+
+	private endWork(tab: Tab): void {
+		if (tab.work) {
+			tab.work.done = true;
+			tab.work.ms = Date.now() - tab.work.startedAt;
+			tab.work.v++;
+		}
+		tab.work = tab.said = undefined;
+	}
+
+	/** Something an agent did on the way to its answer joins the turn's work. */
+	private did(tab: Tab, part: Part): void {
+		const work = this.workOf(tab);
+		work.parts.push(part);
+		work.v++;
+	}
+
+	/** A task goes on working after it wrote something: those words were not its answer, and join the work. */
+	private foldWords(tab: Tab, task: number): void {
+		const said = tab.said;
+		if (tab.kind !== "chat" || said?.task !== task) return;
+		tab.said = undefined;
+		// Only where nothing came after them.
+		if (tab.items.at(-1) !== said.item) return;
+		tab.items.pop();
+		tab.answers.delete(task);
+		this.did(tab, { p: "words", text: said.item.text });
+	}
+
+	private endAnswer(tab: Tab, task: number): void {
+		const item = tab.answers.get(task);
+		if (item) {
+			item.live = false;
+			item.v++;
+		}
+		tab.answers.delete(task);
+	}
+
+	private endThought(tab: Tab, task: number, ms?: number): void {
+		const part = tab.thoughts.get(task);
+		if (!part) return;
+		part.done = true;
+		part.ms = ms ?? Date.now() - part.startedAt;
+		tab.lastThought = { task, part };
+		tab.thoughts.delete(task);
+		if (tab.work) tab.work.v++;
+	}
+
+	private showSteps(tab: Tab, task: number, items: Todo[]): void {
+		if (!items.length) return void (tab.steps = undefined);
+		if (tab.steps?.task === task && tab.items.includes(tab.steps)) {
+			tab.steps.items = items;
+			tab.steps.v++;
+		} else {
+			this.endWork(tab);
+			tab.steps = tab.add({ t: "steps", task, items });
+		}
+	}
+
+	private takeStats(tab: Tab, stats: Stats | undefined): void {
+		if (!stats) return;
+		if (stats.context?.percent !== undefined) tab.context = stats.context.percent;
+		const total = stats.input + (stats.cached ?? 0);
+		// Shown once the server has reported cached input at least once; a permanent "0%" would say something that is not known.
+		if (total > 0 && (stats.cached || tab.cacheShare !== undefined)) tab.cacheShare = Math.round((100 * (stats.cached ?? 0)) / total);
+		const speed = speedOf(stats.timing);
+		if (speed.read || speed.write) tab.speed = speed;
+	}
+
+	/** One live event of a task in a tab. `depth` is counted from what the tab shows: 0 is its own task. */
+	private live(tab: Tab, kind: string, p: any, depth: number): void {
+		this.dirty.add(tab);
+		switch (kind) {
+			case "started":
+				if (depth <= 0) {
+					tab.running.add(p.task);
+					tab.startedAt = Date.now();
+					break;
+				}
+				tab.children.set(p.task, { agent: p.agent, kind: p.kind, label: short(oneLine(String(p.label ?? p.prompt ?? "")), 60), running: true });
+				this.did(tab, { p: "child", task: p.task, agent: p.agent, kind: p.kind, label: short(oneLine(String(p.label ?? p.prompt ?? "")), 120), status: "run", depth });
+				break;
+			case "thinking": {
+				if (p.phase === "end") {
+					tab.thinking = false;
+					this.endThought(tab, p.task, p.ms);
+					break;
+				}
+				tab.thinking = true;
+				if (depth > 0 || !p.text) break; // a child's thoughts stay with the child, like its prose
+				let thought = tab.thoughts.get(p.task);
+				if (!thought) {
+					this.foldWords(tab, p.task);
+					thought = { p: "thought", text: "", done: false, startedAt: Date.now() };
+					tab.thoughts.set(p.task, thought);
+					this.did(tab, thought);
+				}
+				thought.text += p.text;
+				if (tab.work) tab.work.v++;
+				break;
+			}
+			case "todos":
+				this.showSteps(tab, p.task, Array.isArray(p.items) ? p.items : []);
+				break;
+			case "delta": {
+				tab.thinking = false;
+				this.endThought(tab, p.task);
+				if (depth > 0) break; // a child's prose stays with the child; its answer reaches the parent as a tool result
+				let item = tab.answers.get(p.task);
+				if (!item) {
+					item = tab.add({ t: "answer", task: p.task, agent: p.agent ?? tab.agent, text: "", live: true });
+					tab.answers.set(p.task, item);
+					tab.said = { task: p.task, item };
+				}
+				item.text += p.text;
+				item.v++;
+				break;
+			}
+			case "message": {
+				this.endThought(tab, p.task);
+				const item = tab.answers.get(p.task);
+				if (item) {
+					if (depth === 0) tab.lastAnswer = item.text;
+					tab.streamed.add(p.task);
+				}
+				this.endAnswer(tab, p.task);
+				if (depth === 0) {
+					tab.tokens = { input: p.input ?? 0, output: p.output ?? 0, cached: p.cached ?? 0 };
+					if (p.context?.percent !== undefined) tab.context = p.context.percent;
+					if (p.speed && (p.speed.read || p.speed.write)) tab.speed = p.speed;
+				}
+				const ended = tab.lastThought;
+				if (ended && ended.task === p.task) {
+					if (depth === 0) ended.part.speed = speedText(p.speed);
+					tab.lastThought = undefined;
+					if (tab.work) tab.work.v++;
+				}
+				this.dirty.add(this);
+				break;
+			}
+			case "tool": {
+				tab.thinking = false;
+				this.endThought(tab, p.task);
+				this.endAnswer(tab, p.task);
+				tab.streamed.delete(p.task);
+				const key = `${p.task}:${p.call}`;
+				if (p.phase === "start") {
+					tab.toolCalls++;
+					if (depth === 0) this.foldWords(tab, p.task);
+					const part: Extract<Part, { p: "tool" }> = { p: "tool", key, tool: p.tool, subject: p.subject ? short(oneLine(String(p.subject)), 200) : undefined, status: "run", depth };
+					tab.tools.set(key, part);
+					this.did(tab, part);
+				} else {
+					let part = tab.tools.get(key);
+					// A call that began before this tab was opened has no line of its own yet.
+					if (!part) {
+						part = { p: "tool", key, tool: p.tool, subject: p.subject ? short(oneLine(String(p.subject)), 200) : undefined, status: "run", depth };
+						this.did(tab, part);
+					}
+					part.status = p.ok ? "ok" : "fail";
+					part.ms = p.ms;
+					if (!p.ok) part.preview = short(oneLine(String(p.preview ?? "")), 240);
+					tab.tools.delete(key);
+					if (tab.work) tab.work.v++;
+					const images = (p.images ?? []) as string[];
+					if (images.length) {
+						// A picture a tool returned is for the owner: it stands where it happened, not folded away.
+						this.endWork(tab);
+						for (const id of images) tab.add({ t: "media", kind: "image", name: `from ${p.tool}`, url: `pine-media://daemon/media/tool/${encodeURIComponent(id)}` });
+					}
+					tab.codeTick++;
+				}
+				break;
+			}
+			case "done":
+			case "failed": {
+				const item = tab.answers.get(p.task);
+				this.endAnswer(tab, p.task);
+				this.endThought(tab, p.task);
+				if (depth > 0) {
+					const child = tab.children.get(p.task);
+					if (child) child.running = false;
+					const n = p.stats?.tools?.length ?? 0;
+					const what = childKind(p.kind ?? child?.kind ?? "task");
+					const how = p.status === "done" ? `answered (${took(p.stats?.ms ?? 0)}${n ? `, ${plural(n, "tool call")}` : ""})` : `${p.status}${p.error ? `: ${p.error}` : ""}`;
+					const part = tab.work?.parts.find((x) => x.p === "child" && x.task === p.task) as Extract<Part, { p: "child" }> | undefined;
+					if (part) {
+						part.status = p.status;
+						part.how = how;
+						tab.work!.v++;
+					} else this.did(tab, { p: "child", task: p.task, agent: p.agent, kind: what, label: child?.label ?? "", status: p.status, how, depth });
+					break;
+				}
+				tab.running.delete(p.task);
+				tab.thinking = false;
+				if (!tab.busy) this.endWork(tab);
+				this.takeStats(tab, p.stats);
+				if (tab === this.active) void this.pollPrograms();
+				if (p.status !== "cancelled" && !tab.busy) this.attention("Pine", `${tab.agent} ${p.status === "done" ? "is done" : "stopped with an error"}`, tab);
+				if (p.status === "done") {
+					// Streaming normally showed the answer already; this covers a missed stream.
+					if (p.text) tab.lastAnswer = p.text;
+					if (!item && !tab.streamed.has(p.task) && p.text) tab.add({ t: "answer", task: p.task, agent: p.agent ?? tab.agent, text: p.text, live: false });
+				} else if (p.status === "cancelled") tab.note("Stopped");
+				else tab.note(`${p.status === "failed" ? "Failed" : p.status}${p.error && p.error !== p.status ? `: ${p.error}` : ""}`, "bad");
+				tab.streamed.delete(p.task);
+				if (tab.kind === "task") tab.add({ t: "divider", text: taskSummary(p.status, p.stats) });
+				else void this.refreshTaints();
+				tab.codeTick++;
+				this.dirty.add(this);
+				void this.refreshConversations(tab.agent);
+				break;
+			}
+		}
+		if (tab !== this.active || this.view !== "chat") {
+			if (!tab.unread) this.dirty.add(this);
+			tab.unread = true;
+		}
+	}
+}
+
+export const store = new Store();
+
+/**
+ * Do something when it is asked for by name (a menu item that only one part of the page can
+ * carry out). Each part hears every asking once, whatever the others do with it; what was asked
+ * before the part was there is not replayed.
+ */
+export function useSignal(name: string, run: () => void): void {
+	const signal = useModel(store.signal);
+	const seen = useRef(signal.v);
+	const live = useRef(run);
+	live.current = run;
+	useEffect(() => {
+		if (signal.v !== seen.current && store.lastSignal === name) live.current();
+		seen.current = signal.v;
+	}, [signal.v, name]);
+}

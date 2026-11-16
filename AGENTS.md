@@ -15,6 +15,9 @@ to change the code.
 | `npm run test:live` | End-to-end through `claude -p`, plus the real browser and, on a Mac, the real app control helper and the helper of the `system` source. Slow, uses a Claude plan and the network. Run it when you change prompts, tool descriptions, `src/dev/claude-model.ts`, `mcp/browser.ts`, `mcp/computer.ts` or `mcp/computer.swift`. The tests that operate TextEdit skip themselves unless the terminal app they run in has the Accessibility and Screen Recording grants. |
 | `npm run baseline` | The 59 pi SDK checks in `baseline/`. Run it after upgrading pi. |
 | `node src/cli.ts <command>` | The CLI without installing it. |
+| `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
+| `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
+| `npm run desktop:pack` | `desktop/release/mac-<arch>/Pine.app`, with the package of `npm run build` and its dependencies inside. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine it carries. |
 
 There is no build step. Node runs the TypeScript directly (the one compiled part, the app
 control helper `mcp/computer.swift`, is built by pine on the Mac it runs on, on first use), so:
@@ -72,6 +75,12 @@ src/
   snapshots.ts      the state of a folder as a git tree in a git directory of pine's own: recorded, compared, restored
   undo.ts           taking back the owner's last message: turns and their steps, what waits for a redo, pi's session file
   http.ts           control API and webhooks
+  owner.ts          what the owner does through the control API that the main agent does by tool: pine's settings,
+                    agents in full, the files for all agents, skills, schedules, routes, sources, model servers and
+                    sign-ins, an MCP sign-in, and writing a file of a conversation's folder. The same check and apply
+                    functions as the tools, without the question (the token is the owner)
+  service.ts        `ensureDaemon`: the daemon of a home, found or started in this process. The terminal UI uses it
+                    directly, another program through `pine service`
   limiter.ts        model slots with priority
   catalogue.ts      how tools are declared to the model (`defaults.catalogue`): families (one declared tool for a group, an
                     action for each tool, the call carried out by the tool itself), short declarations, arguments that are
@@ -99,6 +108,9 @@ examples/home/      what `pine init` copies
 test/               node:test files; support/harness.ts builds a temp home and a daemon
 baseline/           pi SDK behaviour checks and their results; the mock model server lives here
 docs/               SKILL.md index and references/
+desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
+                    main process (the window, the daemon's token, `pine service`), src/ the page (React), test/ the
+                    app driven through its real window. docs/references/desktop.md describes it and its layout
 ```
 
 ## What agents know about pine
@@ -406,6 +418,20 @@ These are invariants. A change that breaks one needs a test that shows why it is
    changes about a conversation reaches it as an event (`pine/conversation`, a topic only pine
    publishes on), and its tabs follow (`followed`): a tab opened that way never takes the place
    of the one the owner is in.
+   The desktop app (`desktop/`) is a client in the same way, and a stricter one: it does not
+   load pine's code and reads none of pine's files, the token included. It asks `pine service`
+   (`src/service.ts`) for a daemon and is told where it answers; from then on it uses the
+   control API. Whatever a settings page changes, the daemon changes, in `src/owner.ts`, with
+   the check and apply functions the main agent's tools use: do not give the app a way to
+   write a configuration file, and do not write a second check for the owner's hand. What the
+   app's page draws is content from outside (an answer can repeat a web page), so the page
+   holds no token and has no Node: `desktop/electron/main.ts` makes every call for it, takes
+   calls from the app's own page only, serves nothing but pictures, video and sound straight
+   from the daemon (`MEDIA`), opens only `http(s)` addresses and only in the owner's browser,
+   and sets the policy that lets the page load nothing from the web. Text from an agent or a
+   tool is drawn by `desktop/src/markdown.tsx` (parsed, cleaned, links with their address
+   beside them, a picture on the web as a line to click) or as plain text, nowhere as HTML.
+   `desktop/test/app.test.ts` has a test for it; keep it failing without the cleaning.
 11. **Only the owner opens a folder for a conversation, and looking at one runs nothing.**
    `setFolder` in `src/agents.ts` is reached from the control API only; there is no tool for it.
    It refuses pine's home, pine's code and other agents' workspaces in either direction, and a
@@ -427,6 +453,14 @@ These are invariants. A change that breaks one needs a test that shows why it is
    write through a link. Taking a message back puts the conversation's outside-content mark
    and what the owner allowed it (`setRights`) back to what they were before that message,
    never to more.
+   An editor in a UI saves a file of a conversation's folder through the control API
+   (`POST /agents/<id>/view/write`, `writeText` in `src/workspace-view.ts`): the owner's own
+   hand, no tool. The folder is one an agent writes in, so a path there is never taken at its
+   word. The bytes are put into place by `putInto`, a helper behind `helperArgv([folder])`
+   that writes a new file beside the target and moves it over it: the sandbox keeps the write
+   inside the folder whatever a path has become, and a link or a second name of a file
+   elsewhere is never written through. Without a sandbox it writes nothing. Do not write there
+   with `fs`, and do not add a second place that writes a folder for a UI.
 
 12. **What an agent left running is found by the daemon, not reported by the agent.** Every
    shell command notes its process group before its sandbox starts (`Programs.note`, fixed
@@ -545,6 +579,17 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   is not streamed is answered in one piece, and with `slotFiles` it writes and reads slot files
   (`state.slotActions`). The `live:` test at the end of `test/live.test.ts` asserts the same on a real
   server (`PINE_LIVE_URL`), by the tokens the server says it read and kept.
+- The desktop app has its own tests in `desktop/test/`, run by `npm run desktop:test` and not
+  by `npm test`: they start the real app (Electron, driven by Playwright through its window)
+  on a temp home with the mock model server, and a daemon of its own on port 0, so a pine the
+  developer has running is left alone. `sees()` there waits for something on screen and says
+  what is there instead when it does not come. What a menu item does is sent as the menu
+  sends it (`menu()`): keys typed into the page do not reach the system's menus. Voice input
+  is tested with a stand-in for the helper (`PINE_DESKTOP_VOICE`, for tests only); the `live:`
+  test in `desktop/test/voice-live.test.ts` (`PINE_LIVE=1`) puts the real helper behind it,
+  listening to a recording. No test shows the app's real window with its title bar: after a
+  change to the frame (`.side-top`, `.titlebar`, the window's options in `main.ts`), look at
+  it once in light and dark.
 - A new security property needs a test that fails without the code that provides it.
 
 ## Style

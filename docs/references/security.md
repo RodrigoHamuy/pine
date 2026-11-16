@@ -206,6 +206,14 @@ changes inside a sandbox that cannot write and has no network, with the programs
 can name for git to start (diff drivers, text converters, hooks, a file system monitor)
 switched off. Looking at a folder runs nothing from it.
 
+A UI can also save a file you changed in its editor (`POST /agents/<id>/view/write` of the
+control API; no agent has a tool for it). The folder it writes in is one an agent writes in
+too, so what lies there is not trusted: a file's name can be a link to something of yours
+elsewhere, or a second name of such a file. The daemon therefore never writes on such a path
+itself. The text is put into place by a helper inside a sandbox that may write in that folder
+and nowhere else, as a new file that then takes the place of the old one; what the old name
+pointed at is left as it was. Where there is no sandbox, nothing is written.
+
 Consequences worth knowing:
 
 - An agent cannot change its own `agent.json`, its extensions or `pine.json`.

@@ -36,6 +36,10 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 	// [what is asked, a part that must be among the first three]
 	const cases: Array<[string, RegExp]> = [
 		["telegram pairing code", /^source-types#telegram$/],
+		["start the daemon from a desktop app and get its token", /^operations#(a-ui-of-its-own|commands\/pine-service)/],
+		["change a setting over the control api from a script", /^operations#(setting-pine-up-through-the-control-api|the-control-api)/],
+		["save a file from an editor through the daemon", /^(operations#setting-pine-up-through-the-control-api\/post-agents-id-view-write|security#3-the-sandbox|coding#from-a-script)/],
+		["sign in to a model provider from another program", /^operations#setting-pine-up-through-the-control-api/],
 		["alert my owner unattended without approval for each message", /^sources#telling-you-needs-no-approval$/],
 		["send a photo or a video clip to my owner on telegram", /^sources#a-picture-or-a-video-with-the-message$/],
 		["camera events pile up in my conversation and the context grows", /^sources#a-fresh-conversation-for-every-event$/],
@@ -52,7 +56,11 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["warmSlots", /limits-warmslots$/],
 		["slotPages", /limits-slotpages$/],
 		["I have more conversations than the model server has slots, is each read again", /^(agents#what-the-model-server-keeps|operations#problems)/],
-		["can I talk to pine instead of typing", /^tui#(dictating-a-message|commands|keys)/],
+		["can I talk to pine instead of typing", /^(tui|desktop)#(dictating-a-message|commands|keys)/],
+		["is there an app with a window instead of the terminal", /^desktop/],
+		["is there a settings panel where I can change pine's configuration by clicking", /^desktop#settings/],
+		["an editor to change a file myself beside the conversation", /^desktop#the-code-panel-and-the-editor/],
+		["does the mac app start pine or do I have to start it first", /^desktop#the-daemon-started-or-reused/],
 		["voice input does not work on linux", /^tui#dictating-a-message/],
 		["how many tokens per second does my model make, and how fast does it process the prompt", /^tui#(how-fast-the-model-is|what-a-model-thinks)/],
 		["my owner wants an agent deleted together with its folder", /^(setup#(changing-and-removing-an-agent|the-main-agent-administers-pine|the-tools)|pine#if-you-are-an-agent-running-inside-pine)/],

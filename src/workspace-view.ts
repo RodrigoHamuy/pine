@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { bin, helperArgv, isInside, realish } from "./security.ts";
@@ -213,13 +214,15 @@ export function listDir(root: string, rel: string): { entries: Entry[]; more: bo
 }
 
 /** A file's text, for reading. Binary files and very large ones are only described. */
-export function readText(root: string, rel: string): { text?: string; size: number; binary: boolean; truncated: boolean } | undefined {
+/** The most text one read or one write of a file carries: what an editor in a UI works on. */
+export const MAX_EDIT = 2 * 1024 * 1024;
+
+export function readText(root: string, rel: string, max = 256 * 1024): { text?: string; size: number; binary: boolean; truncated: boolean } | undefined {
 	const file = inside(root, rel);
 	if (!file) return undefined;
 	try {
 		const stat = fs.statSync(file);
 		if (!stat.isFile()) return undefined;
-		const max = 256 * 1024;
 		const fd = fs.openSync(file, "r");
 		const buf = Buffer.alloc(Math.min(stat.size, max));
 		fs.readSync(fd, buf, 0, buf.length, 0);
@@ -229,4 +232,75 @@ export function readText(root: string, rel: string): { text?: string; size: numb
 	} catch {
 		return undefined;
 	}
+}
+
+/**
+ * Write a file's text: what the owner changed in an editor of a UI. The one place here that
+ * does not only read, and the owner's alone (the control API; no tool reaches it).
+ *
+ * The folder is one an agent writes in, so nothing in it is taken at its word: a file of that
+ * name may be a link to somewhere else or a second name of a file that lies elsewhere too, and a
+ * folder on the way may become a link between a look and the write. The path is looked at
+ * first, for a clear refusal. What keeps the write inside is not that look but `putInto`.
+ * A missing file is made; a missing folder is not.
+ */
+export async function writeText(root: string, rel: string, text: string): Promise<{ size: number }> {
+	if (typeof rel !== "string" || !rel || rel.includes("\0")) throw new Error("path: the file to write, from the top of the folder");
+	if (typeof text !== "string") throw new Error("text: what the file is to hold");
+	const bytes = Buffer.from(text, "utf8");
+	if (bytes.length > MAX_EDIT) throw new Error(`that is too much for one file here (${bytes.length} bytes, at most ${MAX_EDIT})`);
+	const base = realish(root);
+	const named = path.resolve(base, rel);
+	if (!isInside(base, named)) throw new Error(`${rel} is not a file in ${base}`);
+	const dir = realish(path.dirname(named));
+	if (dir !== base && !isInside(base, dir)) throw new Error(`${rel} leads out of ${base}: a link on the way points elsewhere`);
+	let parent: fs.Stats | undefined;
+	try {
+		parent = fs.statSync(dir);
+	} catch {
+		// said below
+	}
+	if (!parent?.isDirectory()) throw new Error(`there is no folder ${path.dirname(rel)} in ${base}; a file is written into a folder that exists`);
+	// Where a link of that name leads, if it is one: a link that stays in the folder is edited where its file lies.
+	const target = realish(path.join(dir, path.basename(named)));
+	if (!isInside(base, target)) throw new Error(`${rel} is a link that leads out of ${base}; the file it points at is not written from here`);
+	// A file keeps its rights (a script stays one); a new one gets the usual ones.
+	let mode = 0o644;
+	try {
+		const there = fs.statSync(target);
+		if (there.isDirectory()) throw new Error(`${rel} is a folder`);
+		if (there.isFile()) mode = there.mode & 0o777;
+	} catch (e) {
+		if ((e as NodeJS.ErrnoException).code !== "ENOENT") throw e;
+	}
+	const done = await putInto(base, target, bytes, mode);
+	if (done.code !== 0) throw new Error(`${rel} could not be written: ${done.err.trim().split("\n")[0] || `the helper ended with ${done.code}`}`);
+	return { size: bytes.length };
+}
+
+/**
+ * Put bytes into place as the file `target`, by a helper that the system's sandbox lets write
+ * in `base` and nowhere else, as a restore of the snapshots relies on: whatever a path has
+ * become since it was looked at, nothing outside the folder is written. The bytes go into a new
+ * file beside the target, which is then moved over it. So the file that was there is never
+ * written through, and what else it was (a link, another name of a file elsewhere) is left as
+ * it is, with what it pointed at.
+ */
+export function putInto(base: string, target: string, bytes: Buffer, mode = 0o644): Promise<{ code: number; err: string }> {
+	const jail = helperArgv([base]);
+	if (!jail) return Promise.resolve({ code: 127, err: "there is no sandbox on this system to write the file in, and without one pine writes nothing into a folder an agent works in. Change the file with an editor of your own" });
+	// A name nobody can have put there before; and should one be there, it is not written into (-C).
+	const fresh = `${target}.pine-${crypto.randomBytes(9).toString("hex")}`;
+	const script = 'set -eC; trap \'rm -f "$2"\' EXIT; cat > "$2"; chmod "$3" "$2"; mv -f "$2" "$1"';
+	return new Promise((resolve) => {
+		// The paths are arguments of their own, never part of the command's text.
+		const child = spawn(jail[0], [...jail.slice(1), "/bin/sh", "-c", script, "sh", target, fresh, (mode & 0o777).toString(8)], { stdio: ["pipe", "ignore", "pipe"], env: { PATH: "/usr/bin:/bin", LC_ALL: "C" } });
+		let err = "";
+		child.stderr!.on("data", (d: Buffer) => (err.length < 2000 ? (err += d.toString("utf8")) : undefined));
+		child.stdin!.on("error", () => {});
+		child.stdin!.end(bytes);
+		const timer = setTimeout(() => child.kill("SIGKILL"), 15_000);
+		child.on("error", (e) => (clearTimeout(timer), resolve({ code: 127, err: e.message })));
+		child.on("close", (code) => (clearTimeout(timer), resolve({ code: code ?? 1, err })));
+	});
 }

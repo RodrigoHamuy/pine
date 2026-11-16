@@ -156,6 +156,15 @@ the output of its tool calls. `/undo` takes your last message back, with the fil
 pine .
 ```
 
+There is also a desktop app for macOS, with the same conversations in a window, an editor for
+a conversation's folder and a settings panel for agents, models, MCP servers, skills and
+events. It starts pine itself, or uses the one that runs ([desktop.md](docs/references/desktop.md)).
+From a checkout:
+
+```bash
+npm run desktop
+```
+
 To get a newer version later, with whatever it needs:
 
 ```bash
@@ -214,6 +223,7 @@ Start at [docs/SKILL.md](docs/SKILL.md); it indexes everything.
 | --------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Understand how the pieces fit                                                           | [overview.md](docs/references/overview.md)                   |
 | Use the terminal UI                                                                     | [tui.md](docs/references/tui.md)                             |
+| Use the desktop app (macOS): conversations, an editor, and a settings panel in one window | [desktop.md](docs/references/desktop.md)                     |
 | Work on a project: `pine .`, the code pane with git changes, files and tool output, `/undo` | [coding.md](docs/references/coding.md)                       |
 | Install, run, use the CLI, run it as a service                                          | [operations.md](docs/references/operations.md)               |
 | Write `pine.json` and `agent.json`                                                      | [configuration.md](docs/references/configuration.md)         |

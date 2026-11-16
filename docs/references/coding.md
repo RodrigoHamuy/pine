@@ -301,7 +301,8 @@ The control API ([operations.md](operations.md)) has the same things:
 | `GET /agents/<id>/view/changes?session=` | What git says changed in the conversation's folder |
 | `GET /agents/<id>/view/diff?session=&path=` | The diff of one file (path from the top of the repository) |
 | `GET /agents/<id>/view/tree?session=&path=` | What is in one folder (path from the conversation's folder) |
-| `GET /agents/<id>/view/file?session=&path=` | A file's text |
+| `GET /agents/<id>/view/file?session=&path=` | A file's text: its first 256 KB, or with `&max=<bytes>` up to 2 MB, which is what an editor asks for. `truncated` says whether there is more |
+| `POST /agents/<id>/view/write` `{ session?, path, text }` | Write a file of the conversation's folder: what you changed in an editor of a UI. The path is from the conversation's folder. At most 2 MB of text; a missing file is made, a missing folder is not. The new text is put into a new file that takes the place of the old one, with the rights the old one had. A path that leads out of the folder is refused, and the write happens inside a sandbox that can write in that folder only: a link an agent left there does not get anything outside it changed. On a system without a sandbox it is refused |
 | `GET /agents/<id>/view/find?session=&q=` | The files of the conversation's folder whose name fits a few letters: what `@` offers |
 | `GET /tasks/<id>/transcript?full=1` | A task's steps with the whole output of each tool call |
 | `GET /agents/<id>/programs?session=`, `POST /agents/<id>/programs/stop` `{ session, id }` | What the conversation's commands left running, background commands among them, and stopping one |

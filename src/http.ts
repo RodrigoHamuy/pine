@@ -5,8 +5,11 @@ import { mainAgentId, type PineConfig } from "./config.ts";
 import { type Approvals, timingSafeEqual } from "./security.ts";
 import type { Bus, State, TaskStore } from "./store.ts";
 import { addServer, listServers, removeServer } from "./mcp-config.ts";
-import { changes, diffOf, listDir, readText, findFiles } from "./workspace-view.ts";
+import { changes, diffOf, listDir, MAX_EDIT, readText, findFiles } from "./workspace-view.ts";
+import { type LoginRunner, OwnerApi, Refusal } from "./owner.ts";
+import type { Router } from "./router.ts";
 import type { SourceHost } from "./sources.ts";
+import type { Scheduler } from "./timers.ts";
 import { errText, type Logger, topicMatches } from "./util.ts";
 
 const MAX_BODY = 1024 * 1024;
@@ -38,9 +41,12 @@ export class HttpServer {
 	port = 0;
 
 	private sources?: SourceHost;
+	/** What the owner changes about pine's setup with their own hand (src/owner.ts). */
+	private owner: OwnerApi;
 
-	constructor(deps: { cfg: PineConfig; bus: Bus; state: State; tasks: TaskStore; manager: AgentManager; approvals: Approvals; sources?: SourceHost; log: Logger; token: string }) {
+	constructor(deps: { cfg: PineConfig; bus: Bus; state: State; tasks: TaskStore; manager: AgentManager; approvals: Approvals; sources?: SourceHost; schedules?: Scheduler; router?: Router; log: Logger; token: string; loginRunner?: LoginRunner }) {
 		this.sources = deps.sources;
+		this.owner = new OwnerApi({ cfg: deps.cfg, manager: deps.manager, sources: deps.sources, schedules: deps.schedules, router: deps.router, log: deps.log, loginRunner: deps.loginRunner });
 		this.cfg = deps.cfg;
 		this.bus = deps.bus;
 		this.state = deps.state;
@@ -68,6 +74,7 @@ export class HttpServer {
 	}
 
 	async stop(): Promise<void> {
+		this.owner.stop();
 		this.server?.closeAllConnections?.();
 		await new Promise<void>((r) => (this.server ? this.server.close(() => r()) : r()));
 	}
@@ -156,7 +163,7 @@ export class HttpServer {
 					const root = this.manager.viewRoot(parts[1], q.get("session") ?? "main");
 					if (!root) throw new HttpError(404, "no such agent");
 					const rel = q.get("path") ?? "";
-					const found = parts[3] === "find" ? { files: await findFiles(root, (q.get("q") ?? "").slice(0, 200)) } : parts[3] === "changes" ? { root, ...(await changes(root)) } : parts[3] === "diff" ? await diffOf(root, rel) : parts[3] === "tree" ? listDir(root, rel) : parts[3] === "file" ? readText(root, rel) : undefined;
+					const found = parts[3] === "find" ? { files: await findFiles(root, (q.get("q") ?? "").slice(0, 200)) } : parts[3] === "changes" ? { root, ...(await changes(root)) } : parts[3] === "diff" ? await diffOf(root, rel) : parts[3] === "tree" ? listDir(root, rel) : parts[3] === "file" ? readText(root, rel, q.has("max") ? Math.max(1, Math.min(MAX_EDIT, Math.floor(num("max") || 0))) : undefined) : undefined;
 					if (!found) throw new HttpError(404, "nothing there");
 					return send(200, found);
 				}
@@ -168,13 +175,19 @@ export class HttpServer {
 				if (url.pathname === "/events/stream") return this.stream(req, res, q.get("topic") ?? "#");
 				if (url.pathname === "/state") return send(200, this.state.list(q.get("key") ?? "#"));
 				if (url.pathname === "/approvals") return send(200, this.approvals.pending());
+				const found = await this.owner.get(parts, q);
+				if (found !== undefined) return send(200, found);
 				throw new HttpError(404, "not found");
 			}
 
 			if (method !== "POST") throw new HttpError(405, "method not allowed");
 			// A message may carry attached files; everything else stays small.
 			const isPrompt = parts[0] === "agents" && parts[2] === "prompt" && parts.length === 3;
-			const body = (await this.json(req, isPrompt ? 64 * MAX_BODY : MAX_BODY)) as any;
+			// (So does a file's text from an editor: what it may hold, and room for how JSON writes it.)
+			const isFile = parts[0] === "agents" && parts[2] === "view" && parts[3] === "write" && parts.length === 4;
+			const body = (await this.json(req, isPrompt ? 64 * MAX_BODY : isFile ? 8 * MAX_BODY : MAX_BODY)) as any;
+			const changed = await this.owner.post(parts, body, () => res.setTimeout(0));
+			if (changed !== undefined) return send(200, changed);
 			if (url.pathname === "/images/fetch") {
 				if (typeof body.url !== "string") throw new HttpError(400, "url required");
 				try {
@@ -351,6 +364,7 @@ export class HttpServer {
 			}
 			throw new HttpError(404, "not found");
 		} catch (e) {
+			if (e instanceof Refusal) return send(e.status, { error: e.message, ...e.more });
 			const status = e instanceof HttpError ? e.status : /unknown agent|too many queued|does not accept|invalid topic|invalid state key|busy|is not defined in models.json|mode must be one of|at most 10 files|larger than 20 MB|inbox folder|can attach files|usable server name|MCP server needs|not a valid URL|must use https|reasoning level must be/.test(errText(e)) ? 400 : 500;
 			if (status === 500) this.log.error("http request failed", e);
 			send(status, { error: status === 500 ? "internal error" : errText(e) });

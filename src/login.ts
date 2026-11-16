@@ -14,6 +14,10 @@ export interface Prompter {
 	secret(message: string): Promise<string>;
 	say(line: string): void;
 	open(url: string): void;
+	/** A choice among a few, for a prompter that can show one. Without it the options are printed and a number is asked for. */
+	select?(message: string, options: Array<{ id: string; label: string; description?: string }>): Promise<string>;
+	/** A code to enter on a page, for a prompter that shows the two apart. Without it they are said in a line and the page is opened. */
+	device?(uri: string, code: string): void;
 }
 
 /**
@@ -84,7 +88,7 @@ export async function knownProviders(cfg: PineConfig): Promise<string[]> {
  * Sign in to a model provider with pi's own login flow and store the credential in
  * <home>/auth.json (mode 600). Agents cannot read that file.
  */
-export async function login(cfg: PineConfig, provider: string, type?: "api_key" | "oauth", prompter?: Prompter): Promise<string[]> {
+export async function login(cfg: PineConfig, provider: string, type?: "api_key" | "oauth", prompter?: Prompter, signal?: AbortSignal): Promise<string[]> {
 	const rt = await runtime(cfg);
 	if (!rt.getProvider(provider)) throw new Error(`unknown provider "${provider}". Known: ${rt.getProviders().map((p: any) => p.id).sort().join(", ")}`);
 	const own = prompter ? undefined : terminalPrompter();
@@ -92,8 +96,10 @@ export async function login(cfg: PineConfig, provider: string, type?: "api_key" 
 	try {
 		const kind = type ?? (OAUTH_FIRST.includes(provider) ? "oauth" : "api_key");
 		await rt.login(provider, kind, {
+			signal,
 			prompt: async (q: any) => {
 				if (q.type === "secret") return p.secret(q.message);
+				if (q.type === "select" && p.select) return p.select(q.message, q.options.map((o: any) => ({ id: o.id, label: o.label, description: o.description })));
 				if (q.type === "select") {
 					q.options.forEach((o: any, i: number) => p.say(`  ${i + 1}) ${o.label}${o.description ? ` - ${o.description}` : ""}`));
 					const n = Number(await p.text(`${q.message} [1-${q.options.length}]`));
@@ -105,7 +111,8 @@ export async function login(cfg: PineConfig, provider: string, type?: "api_key" 
 				if (e.type === "auth_url") {
 					p.say(`Open this page to sign in:\n\n  ${e.url}\n${e.instructions ? `\n${e.instructions}\n` : ""}`);
 					p.open(e.url);
-				} else if (e.type === "device_code") {
+				} else if (e.type === "device_code" && p.device) p.device(e.verificationUri, e.userCode);
+				else if (e.type === "device_code") {
 					p.say(`Go to ${e.verificationUri} and enter the code ${e.userCode}`);
 					p.open(e.verificationUri);
 				} else if (e.message) p.say(e.message);
@@ -124,9 +131,11 @@ export async function login(cfg: PineConfig, provider: string, type?: "api_key" 
 	return models;
 }
 
-export async function logout(cfg: PineConfig, provider: string): Promise<void> {
+/** `say` is where the one line about it goes: the terminal for the command, nowhere for the daemon, which must not write to its output. */
+export async function logout(cfg: PineConfig, provider: string, say: (line: string) => void = (line) => console.log(line)): Promise<void> {
 	const rt = await runtime(cfg);
+	if (!rt.getProvider(provider)) throw new Error(`unknown provider "${provider}". Known: ${rt.getProviders().map((p: any) => p.id).sort().join(", ")}`);
 	await rt.logout(provider);
 	await (rt as any).settleCredentialWrites?.();
-	console.log(`Removed the stored credential for ${provider}.`);
+	say(`Removed the stored credential for ${provider}.`);
 }

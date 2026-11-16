@@ -136,7 +136,7 @@ export async function startPine(opts: { home?: string; config?: PineConfig; log?
 
 	let http: HttpServer | undefined;
 	if (cfg.http && opts.http !== false) {
-		http = new HttpServer({ cfg, bus, state, tasks, manager: agents, approvals, sources, log: log.child("http"), token });
+		http = new HttpServer({ cfg, bus, state, tasks, manager: agents, approvals, sources, schedules: timers, router, log: log.child("http"), token });
 		await http.start();
 	}
 
