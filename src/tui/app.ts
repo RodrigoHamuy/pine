@@ -35,7 +35,7 @@ import {
 } from "@earendil-works/pi-tui";
 import type { TranscriptEntry } from "../types.ts";
 import type { PineEvent, Task } from "../types.ts";
-import { errText, expandHome, openInSystem, safeName, type Speed, speedOf, speedText } from "../util.ts";
+import { errText, expandHome, openInSystem, safeName, type Speed, speedOf, speedText, unfolded } from "../util.ts";
 import { Listening, type VoiceTools, voiceTools } from "./voice.ts";
 import type { AgentInfo, Client, Conversation, GoalInfo } from "./client.ts";
 import { CodePane, PANE_VIEWS, type PaneView } from "./code-pane.ts";
@@ -664,10 +664,19 @@ class Work implements Component {
 	}
 
 	/** The line at which something inside begins, as it is drawn at this width; nothing if it is not in view. */
-	rowOf(inner: Component, width: number): number | undefined {
+	rowOf(inner: object, width: number): number | undefined {
 		this.render(width);
 		const at = this.rows.findIndex((r) => r && r !== "toggle" && (r.part.component === inner || (r.part.component instanceof Linked && r.part.component.inner === inner)));
-		return at < 0 ? undefined : at;
+		if (at >= 0) return at;
+		// A folded block in words the agent wrote on the way.
+		for (let y = 0; y < this.rows.length; y++) {
+			const r = this.rows[y];
+			if (!r || r === "toggle" || r.y !== 0) continue;
+			const words = r.part.component instanceof Linked ? r.part.component.inner : r.part.component;
+			const within = words instanceof Answer ? words.rowOf(inner, width) : undefined;
+			if (within !== undefined) return y + within;
+		}
+		return undefined;
 	}
 
 	handleMouse(e: any) {
@@ -1614,6 +1623,8 @@ export class PineTui {
 
 	private add(tab: Tab, component: Component, gap = true): void {
 		if (gap && tab.doc.children.length) tab.doc.addChild(new Spacer(1));
+		// A block of the answer that a click opens or closes stays in the window, like the work of a turn.
+		if (component instanceof Answer) component.toggled = (block, open) => this.keepInView(tab, block, open);
 		tab.doc.addChild(new Linked(component));
 		if (tab !== this.active) tab.unread = true;
 		this.tui.requestRender();
@@ -1633,7 +1644,7 @@ export class PineTui {
 	}
 
 	/** Something in the conversation was opened or closed with a click: it stays in the window. */
-	private keepInView(tab: Tab, what: Component, open: boolean): void {
+	private keepInView(tab: Tab, what: object, open: boolean): void {
 		const scroll = tab.scroll;
 		if (open) {
 			// It grows downwards from its first line. A window that follows the end would run after
@@ -1648,13 +1659,13 @@ export class PineTui {
 	}
 
 	/** The row of the conversation at which a component begins; without one, how many rows there are. */
-	private rowOf(tab: Tab, inner?: Component): number {
+	private rowOf(tab: Tab, inner?: object): number {
 		const width = tab.doc.width;
 		let row = 0;
 		for (const child of tab.doc.children) {
 			if (inner) {
 				if (child === inner || (child instanceof Linked && child.inner === inner)) return row;
-				const at = child instanceof Work ? child.rowOf(inner, width) : undefined;
+				const at = child instanceof Work ? child.rowOf(inner, width) : child instanceof Linked && child.inner instanceof Answer ? child.inner.rowOf(inner, width) : undefined;
 				if (at !== undefined) return row + at;
 			}
 			row += child.render(width).length;
@@ -1698,7 +1709,7 @@ export class PineTui {
 		shown.pop();
 		if (shown.at(-1) instanceof Spacer) shown.pop();
 		// A model's text on one line: nothing in it may move the cursor or colour the screen.
-		this.work(tab).add({ component: last, brief: () => short(oneLine(stripTerminalSequences(said.block.text).replace(/[\x00-\x1f\x7f]/g, " ")), 160) });
+		this.work(tab).add({ component: last, brief: () => short(oneLine(stripTerminalSequences(unfolded(said.block.text)).replace(/[\x00-\x1f\x7f]/g, " ")), 160) });
 	}
 
 	/** The turn is over: its work becomes one line, unless somebody opened it. */
@@ -1706,6 +1717,13 @@ export class PineTui {
 		tab.work?.finish();
 		tab.work = undefined;
 		tab.said = undefined;
+	}
+
+	/** A task's message is whole: it is drawn as it was written, with nothing held back for a tag that might still come. */
+	private endBlock(tab: Tab, task: number): void {
+		const block = tab.blocks.get(task);
+		if (block) block.md.setText(block.text);
+		tab.blocks.delete(task);
 	}
 
 	/** A task's model stopped thinking: what it thought is closed, or stays open if somebody opened it. */
@@ -3110,7 +3128,7 @@ export class PineTui {
 					tab.said = { task: p.task, block };
 				}
 				block.text += p.text;
-				block.md.setText(block.text);
+				block.md.setText(block.text, true);
 				break;
 			}
 			case "message":
@@ -3120,7 +3138,7 @@ export class PineTui {
 					tab.streamed.set(p.task, tab.blocks.get(p.task)!.text);
 					this.answerPictures(tab, p.agent, tab.blocks.get(p.task)!.text);
 				}
-				tab.blocks.delete(p.task);
+				this.endBlock(tab, p.task);
 				if (depth === 0) {
 					tab.tokens = { input: p.input ?? 0, output: p.output ?? 0, cached: p.cached ?? 0 };
 					if (p.context?.percent !== undefined) tab.context = p.context.percent;
@@ -3136,7 +3154,7 @@ export class PineTui {
 			case "tool": {
 				tab.thinking = false;
 				this.endThought(tab, p.task);
-				tab.blocks.delete(p.task);
+				this.endBlock(tab, p.task);
 				tab.streamed.delete(p.task);
 				const key = `${p.task}:${p.call}`;
 				const label = `${c.bold(p.tool)}${p.subject ? ` ${c.gray(short(oneLine(p.subject), 100))}` : ""}`;
@@ -3162,7 +3180,7 @@ export class PineTui {
 			case "done":
 			case "failed": {
 				const block = tab.blocks.get(p.task);
-				tab.blocks.delete(p.task);
+				this.endBlock(tab, p.task);
 				this.endThought(tab, p.task);
 				if (depth > 0) {
 					const child = tab.children.get(p.task);

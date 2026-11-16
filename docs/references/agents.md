@@ -176,6 +176,12 @@ not to play a sound with a command of its own (`afplay`), which you could neithe
 screenshot, an image an MCP server made) is drawn where the tool ran, and the agent is told not
 to show it a second time.
 
+To fold away something long that goes with an answer (a full message, a log, a long list), an
+agent writes `<details><summary>what it is</summary>` in front of it and `</details>` after it.
+The terminal UI shows one line for it, which you open with a click (see "Folded parts of an
+answer" in [tui.md](tui.md)); a Telegram message carries the summary as a line and the text
+under it. pine's base prompt tells every agent this too.
+
 Nothing in the system prompt changes from one turn to the next. That is deliberate: a model
 server keeps what it has already read (the prompt cache) only as long as the beginning of the
 prompt is identical, and on a local model a miss means reading the whole conversation again

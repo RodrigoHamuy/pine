@@ -31,7 +31,7 @@ async function fakeTelegram() {
 		if (req.url === `/file/bot${TOKEN}/photos/p.jpg`) return void res.writeHead(200).end(PNG);
 		// A file comes as a form: its fields by name, and for the file its name, type and size.
 		const form = /^multipart\/form-data/.test(req.headers["content-type"] ?? "");
-		const body = !raw ? {} : form ? Object.fromEntries([...raw.matchAll(/name="(\w+)"(?:; filename="([^"]*)")?\r\n(?:Content-Type: ([^\r]*)\r\n)?\r\n([\s\S]*?)\r\n--/g)].map((p) => [p[1], p[2] ? { name: p[2], type: p[3], size: Buffer.byteLength(p[4], "latin1") } : p[4]])) : JSON.parse(raw);
+		const body = !raw ? {} : form ? Object.fromEntries([...raw.matchAll(/name="(\w+)"(?:; filename="([^"]*)")?\r\n(?:Content-Type: ([^\r]*)\r\n)?\r\n([\s\S]*?)\r\n--/g)].map((p) => [p[1], p[2] ? { name: p[2], type: p[3], size: Buffer.byteLength(p[4], "latin1") } : p[4]])) : JSON.parse(Buffer.concat(chunks).toString("utf8"));
 		const m = (req.url ?? "").match(/^\/bot([^/]+)\/(\w+)$/);
 		const reply = (result: unknown, ok = true) => res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(ok ? { ok, result } : { ok, description: result }));
 		if (!m || m[1] !== TOKEN) return reply("Unauthorized", false);
@@ -213,6 +213,10 @@ test("telegram: a list of user ids instead of pairing, and a wrong token says so
 	await until(() => tg.sent().length === 1, 5000, "the answer");
 	assert.equal(tg.sent()[0].chat_id, 1001);
 	assert.equal(asked.length, 0, "with a list there is nothing to pair: others are ignored without a question");
+	// Telegram folds nothing: a part the terminal UI would fold arrives as its summary and what it holds, without the tags.
+	tg.message(1001, mockMsg([{ text: "The landlord agrees.\n\n<details><summary>Full message</summary>\n\nDear Ms Okapi,\n\nthe keys are with the caretaker.\n\n</details>\n\nWrite `<details>` to fold.\n\n```\n<details>in code</details>\n```" }]));
+	await until(() => tg.sent().length === 2, 5000, "the second answer");
+	assert.equal(tg.sent()[1].text, "The landlord agrees.\n\n▾ Full message\nDear Ms Okapi,\n\nthe keys are with the caretaker.\n\nWrite `<details>` to fold.\n\n```\n<details>in code</details>\n```");
 	// What a type will not take is said before anything is written.
 	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("add_source", { name: "tg2", type: "telegram", description: "x", options: { token: "hello" } }), call("add_source", { name: "tg3", type: "telegram", description: "x", options: { token: TOKEN, apiBase: "http://example.com" } })] }]), ...owner });
 	assert.ok(/that is not a bot token/.test(h.toolResults().at(-2)!) && /must be reached over https/.test(h.toolResults().at(-1)!), r.text);

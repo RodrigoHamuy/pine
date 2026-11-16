@@ -4,7 +4,7 @@ import path from "node:path";
 import { Type } from "typebox";
 import type { SourceType } from "../source-types.ts";
 import type { SourceApi } from "../sources.ts";
-import { errText, sleep, truncate } from "../util.ts";
+import { errText, sleep, truncate, unfolded } from "../util.ts";
 
 /**
  * A Telegram bot: the owner writes to it from wherever they are, and the agent answers there.
@@ -143,11 +143,13 @@ export default async function telegram(source: SourceApi): Promise<void> {
 		const chatId = Number(message.chatId ?? ownerChat());
 		if (!Number.isFinite(chatId)) throw new Error("nobody is connected yet: your owner has to write to the bot once, and confirm it in pine");
 		const file = message.file as { name: string; mime: string; bytes: Buffer } | undefined;
+		// Sent as plain text, which folds nothing: a block the terminal UI would fold is its summary and what it holds.
+		const text = unfolded(String(message.text ?? ""));
 		if (file && Buffer.isBuffer(file.bytes)) {
-			await sendFile(chatId, file, String(message.text ?? ""));
+			await sendFile(chatId, file, text);
 			return `sent to your owner on Telegram, with ${file.name}`;
 		}
-		await send(chatId, String(message.text ?? ""));
+		await send(chatId, text);
 		return "sent to your owner on Telegram";
 	});
 

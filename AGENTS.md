@@ -84,12 +84,13 @@ src/
   tui/              terminal UI: app.ts (tabs, commands, rendering), client.ts (API + event stream), run.ts,
                     code-pane.ts (the pane beside a conversation: changes, files, tool output),
                     undo.ts (what the conversation says after /undo and /redo),
-                    theme.ts (colours, markdown), highlight.ts (code colours),
+                    theme.ts (colours, markdown, and the parts of an answer that are folded into a line: `Answer`), highlight.ts (code colours),
                     picture.ts (pictures, video and sound: conversion with sips or ffmpeg, Kitty-protocol or half-block drawing, the system's player for sound),
                     levels.ts (the bars of a sound: its levels by frequency band for each tenth of a second, from a wav file or a decoder's samples),
                     voice.ts (dictating a message: builds and runs voice.swift, the macOS helper that listens and has the system
                     recognise the words on the device; on another system a sentence and nothing else)
-  types.ts, util.ts shared types; topics, templates, filters, durations, logger
+  types.ts, util.ts shared types; topics, templates, filters, durations, logger; the folded parts of a text (`foldsIn`, for the
+                    terminal UI, and `unfolded` for a place that folds nothing)
   dev/claude-model.ts   OpenAI-compatible server backed by `claude -p` (development only)
 mcp/                bundled MCP servers (separate processes): web, browser, commands, computer; lib.ts is what they share
                     (render.ts is not a server: the helper of the http source's `render`, one look at a page with the browser)

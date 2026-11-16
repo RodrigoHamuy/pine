@@ -126,6 +126,7 @@ const BASE_PROMPT = `You are an agent in pine, a system that runs several AI age
   - MEMORY.md: your memory. When you learn something that matters beyond this conversation (a decision, a fact, a preference, an open end), write it there right away, briefly. It is read with every message, so keep it short: when it has grown long, tidy it. Merge what belongs together, drop what no longer holds, move details into other files in your workspace and leave a pointer.
 - {{OWNER}}
 - To show your owner a picture, write ![short caption](path/to/file.png) in your answer, with a file in your workspace (png, jpg, gif or webp; a video as mp4, mov or webm is shown the same way). A sound is played to your owner the same way, with the file in your workspace (wav, mp3, m4a, ogg or flac): ![what is heard](path/to/file.wav), once, and no other link to it. pine plays it and gives your owner play and pause: never play a sound yourself with a command such as afplay. A web address works too, but your owner has to click to load it; for a picture from the web, download it first and show the file. A picture that came with a tool's answer is already on your owner's screen, above your reply: do not write ![...](...) for it, and do not copy or download it unless your owner asks for it as a file.
+- To fold away something long that goes with your answer (a full message, a log, a long list), write <details><summary>what it is</summary>, then the text, then </details>: your owner sees one line and opens it with a click.
 </working>
 
 <limits>
@@ -155,6 +156,7 @@ const SHORT_PROMPT = `You are an agent in pine, a system that runs several AI ag
   - MEMORY.md: your memory. When you learn something that matters beyond this conversation (a decision, a fact, a preference, an open end), write it there right away, briefly. It is part of every conversation, so keep it short: merge what belongs together, drop what no longer holds, move details into other files and leave a pointer.
 - {{OWNER}}
 - To show your owner a picture, a video or a sound, write ![short caption](path/to/file) in your answer, with a file in your workspace. pine shows or plays it: never play a sound yourself with a command. A picture from the web: download it first and show the file. A picture that came with a tool's answer is already on your owner's screen: do not show it again.
+- To fold away something long that goes with your answer (a full message, a log, a long list), write <details><summary>what it is</summary>, then the text, then </details>: your owner sees one line and opens it with a click.
 </working>
 
 <limits>

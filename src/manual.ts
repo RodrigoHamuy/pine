@@ -99,7 +99,7 @@ const SYNONYMS: string[][] = [
 	["bars", "waveform", "spectrum", "equalizer", "equaliser", "visualizer", "visualiser", "animation", "animated"],
 	["dictate", "dictating", "dictation", "microphone", "talk", "talking", "speak", "speaking"],
 	["browser", "web", "playwright", "page", "search"],
-	["fold", "collapse", "collapsed", "expand", "unfold", "clutter", "cluttered", "noise"],
+	["fold", "collapse", "collapsed", "collapsible", "expand", "expandable", "unfold", "accordion", "spoiler", "details", "disclosure", "clutter", "cluttered", "noise"],
 	["show", "visible", "headed", "headless", "window", "watch", "see"],
 	["plan", "propose", "proposal", "outline", "preview", "dry"],
 	["todo", "step", "checklist", "track", "progress", "tasklist"],

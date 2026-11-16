@@ -58,6 +58,7 @@ Everything in the two bars reacts to a click.
 | Anywhere beside an open list | It closes. The click does nothing else |
 | Anywhere beside an approval dialog or a question | Nothing: it stays open until you answer it or put it off with `esc` |
 | A `▸ 12 tool calls` line | Everything the agent did in that turn opens: every tool call, thought and sub-task, and what it wrote in between. A click on the line, or on `▴ close` at the end, closes it again. See [The tool calls of a turn](#the-tool-calls-of-a-turn) |
+| A `▸` line inside an answer (`▸ Full message · click to open`) | The part of the answer that was folded away opens under the line. A click on the line, or on `▴ close` at its end, folds it again. See [Folded parts of an answer](#folded-parts-of-an-answer) |
 | A `▸ thinking` or `▸ thought for` line, or the lines under it | What the model thought opens in full. A click anywhere on the open text closes it again. See [What a model thinks](#what-a-model-thinks) |
 | A web address in the conversation | It opens in your browser |
 | A picture | It is enlarged; a second click shrinks it again |
@@ -414,11 +415,71 @@ An answer is markdown, and it is drawn, not shown as written:
 | A table | A grid. Columns follow the alignment of the table's second line (`---:` right, `:---:` centred); a `<br>` in a cell is a line break; cells wrap when the table is wider than the terminal |
 | Headings | Bold and in colour, without their `#`; the first level is underlined |
 | Lists, task lists, quotes, rules, links, bold, italic, strikethrough, inline code | As such |
+| A `<details>` block | One line with its summary, which a click opens. See [Folded parts of an answer](#folded-parts-of-an-answer) |
 
 Shown as written: other HTML tags and footnotes. A table too wide to fit even with one
 character per column is shown as written too. Code is coloured with the terminal's own sixteen
 colours; the accent and the background of your own messages come from the 256-colour palette.
 `NO_COLOR` turns colours off.
+
+## Folded parts of an answer
+
+An answer can carry something long that belongs with it and need not be read at once: the
+whole of a message it summed up, a log, a long list. The agent folds it away, and the
+conversation shows one line for it:
+
+```
+ ▸ Full message · click to open
+```
+
+A click on the line opens it. What was folded away stands under the line, drawn as markdown
+like the rest of the answer and set in by two columns:
+
+```
+ ▾ Full message · click here to close
+   Dear Ms Okapi,
+
+   the keys are with the caretaker until Friday.
+```
+
+A second click on the line folds it again, and so does `▴ close` at the end of a part of more
+than six lines; the line that is left is brought into view. There is no key for it. What you
+opened stays open for as long as the tab is: a new message, scrolling or a resize do not fold
+it. After the UI is opened again every part is as the answer wrote it.
+
+What an agent writes for it (every agent is told so in its prompt):
+
+```markdown
+The landlord agrees to the date. The keys are with the caretaker.
+
+<details><summary>Full message</summary>
+
+Dear Ms Okapi,
+
+the keys are with the caretaker until Friday.
+
+</details>
+```
+
+| In the answer | What it does |
+|---|---|
+| `<details>` ... `</details>` | Folds away what stands between them. Capitals do not matter and attributes are ignored. Without the closing tag the part runs to the end of the answer |
+| `<summary>` ... `</summary>` | Right after `<details>`: the one line that is shown. Bold and inline code in it are drawn, a line break is a space, and a long one is cut to the width. Without it the line reads `Details` |
+| `<details open>` | The part starts open |
+
+- A part inside a part is folded the same way: it has its own line inside the outer one, and
+  opens and closes by itself.
+- The tags inside a code block or inline code are text and are printed, so an agent can show
+  how it is written.
+- While an answer is still arriving, a part that is not finished is one line already (`▸ …`
+  until its summary is whole). The tags themselves never show.
+- A link inside a folded part has its address printed next to it, as everywhere.
+- A picture that a folded part points at with `![caption](path)` is drawn under the answer,
+  not inside the part.
+- `/copy` and `/export` give the answer as the agent wrote it, with the tags, so that it folds
+  again in a markdown viewer.
+- On Telegram nothing folds: the part arrives as its summary on a line of its own
+  (`▾ Full message`) with the text under it.
 
 ## Pictures
 

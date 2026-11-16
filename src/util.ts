@@ -192,3 +192,129 @@ export function speedText(s: Speed | undefined): string {
 	if (!s) return "";
 	return [s.read ? `↑ ${rate(s.read)} t/s` : "", s.write ? `↓ ${rate(s.write)} t/s` : ""].filter(Boolean).join(" ");
 }
+
+/** A part of an answer that its writer folded away: `<details><summary>what it is</summary> ... </details>`. */
+export interface Fold {
+	/** Where it lies in the text: from its opening tag to the end of its closing tag, or to the end of the text. */
+	from: number;
+	to: number;
+	/** What stands for it while it is folded, as written. None when it has no `<summary>`. */
+	summary?: string;
+	/** `<details open>`: it starts open. */
+	open: boolean;
+	/** What it folds away, as written. Another block inside it is part of this text. */
+	body: string;
+	/** The text ends before its summary does: all that can be said of it yet is that it is there. */
+	pending: boolean;
+}
+
+/**
+ * The stretches of a markdown text that are code: fenced blocks and inline code. A tag written
+ * there is text. `live`: the text is still being written, so code that is not closed yet runs to
+ * the end of it.
+ */
+function codeIn(text: string, live: boolean): Array<[number, number]> {
+	const out: Array<[number, number]> = [];
+	const inline = (from: number, to: number) => {
+		for (let i = from; i < to; ) {
+			if (text[i] === "\\") i += 2;
+			else if (text[i] !== "`") i++;
+			else {
+				let n = 1;
+				while (text[i + n] === "`") n++;
+				// Closed by as many backticks as opened it, in the same paragraph.
+				let close = -1;
+				for (let j = i + n; j < to && close < 0; ) {
+					if (text[j] !== "`") {
+						j++;
+						continue;
+					}
+					let m = 1;
+					while (text[j + m] === "`") m++;
+					if (m === n) close = j;
+					j += m;
+				}
+				if (close < 0 && live && to === text.length) close = to;
+				if (close >= 0) out.push([i, close + n]);
+				i = close < 0 ? i + n : close + n;
+			}
+		}
+	};
+	let fence: { mark: string; from: number } | undefined;
+	let paragraph = -1;
+	let at = 0;
+	for (const line of text.split("\n")) {
+		const end = at + line.length;
+		const mark = /^[ \t>]*(`{3,}|~{3,})(.*)$/.exec(line);
+		if (fence) {
+			if (mark && mark[1][0] === fence.mark[0] && mark[1].length >= fence.mark.length && !mark[2].trim()) {
+				out.push([fence.from, end]);
+				fence = undefined;
+			}
+		} else if (mark && !(mark[1][0] === "`" && mark[2].includes("`"))) {
+			if (paragraph >= 0) inline(paragraph, at);
+			paragraph = -1;
+			fence = { mark: mark[1], from: at };
+		} else if (!line.trim()) {
+			if (paragraph >= 0) inline(paragraph, at);
+			paragraph = -1;
+		} else if (paragraph < 0) paragraph = at;
+		at = end + 1;
+	}
+	if (fence) out.push([fence.from, text.length]);
+	else if (paragraph >= 0) inline(paragraph, text.length);
+	return out;
+}
+
+/**
+ * The folded blocks of a markdown text, the outermost ones: what is inside one, another block
+ * too, is its body. Tags are read whatever their capitals and attributes; one inside code is not
+ * a tag. A block whose closing tag is missing runs to the end of the text.
+ */
+export function foldsIn(markdown: string, live = false): Fold[] {
+	if (!/<details/i.test(markdown)) return [];
+	const code = codeIn(markdown, live);
+	const out: Fold[] = [];
+	const fold = (tag: RegExpExecArray, end: number, to: number) => {
+		const closed = end < to;
+		const inner = markdown.slice(tag.index + tag[0].length, end).trimStart();
+		const opens = /^<summary(?:\s[^<>]*)?>/i.exec(inner);
+		const closes = opens ? /<\/summary\s*>/i.exec(inner) : null;
+		const line = inner.indexOf("\n") < 0 ? inner.length : inner.indexOf("\n");
+		// A summary that was never closed is its first line: the rest is what the block holds.
+		const summary = opens ? inner.slice(opens[0].length, closes ? closes.index : line) : undefined;
+		const waits = !opens && !closed && (/^<summary\s[^<>]*$/i.test(inner) || "<summary".startsWith(inner.toLowerCase()));
+		const body = waits ? "" : !opens ? inner : inner.slice(closes ? closes.index + closes[0].length : line);
+		out.push({ from: tag.index, to, summary, open: /\sopen(?:[\s=]|$)/i.test(tag[2]), body, pending: waits || (!!opens && !closes && !closed) });
+	};
+	let depth = 0;
+	let first: RegExpExecArray | undefined;
+	for (const tag of markdown.matchAll(/<(\/?)details((?:\s[^<>]*)?)>/gi)) {
+		if (code.some(([a, z]) => tag.index >= a && tag.index < z)) continue;
+		if (!tag[1]) {
+			if (depth++ === 0) first = tag;
+		} else if (depth > 0 && --depth === 0) fold(first!, tag.index, tag.index + tag[0].length);
+	}
+	if (depth > 0) fold(first!, markdown.length, markdown.length);
+	return out;
+}
+
+/** A block's summary on one line; "Details" for a block that has none, as a browser calls it. */
+export const summaryOf = (fold: Fold) => (fold.summary ?? "").replace(/\s+/g, " ").trim() || "Details";
+
+/**
+ * A text with folded blocks for a place that folds nothing (a chat message): each block becomes
+ * its summary on a line of its own with what it held under it, so that no tags are left to read.
+ */
+export function unfolded(markdown: string): string {
+	const folds = foldsIn(markdown);
+	if (!folds.length) return markdown;
+	const parts: string[] = [];
+	let at = 0;
+	for (const f of folds) {
+		parts.push(markdown.slice(at, f.from).trim(), `▾ ${summaryOf(f)}\n${unfolded(f.body).trim()}`.trim());
+		at = f.to;
+	}
+	parts.push(markdown.slice(at).trim());
+	return parts.filter(Boolean).join("\n\n");
+}

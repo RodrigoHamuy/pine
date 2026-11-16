@@ -891,6 +891,149 @@ test("tui: an answer's markdown is drawn, not shown raw: code in colour without 
 	await t.close();
 });
 
+test("tui: a part of an answer that is folded away is one line; a click opens it, a second click folds it again", async () => {
+	const { Answer, markdownTheme } = await import("../src/tui/theme.ts");
+	const { Markdown } = await import("@earendil-works/pi-tui");
+	const plain = (lines: string[]) => lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+	const draw = (text: string, width = 70) => plain(new Answer(text).render(width));
+	const click = (a: InstanceType<typeof Answer>, y: number, x = 3) => a.handleMouse({ x, y, button: "left", type: "click" });
+	const letter = "The landlord agrees.\n\n<details><summary>Full message</summary>\n\nDear Ms Okapi,\n\nthe keys are with the **caretaker**, see [the plan](https://example.com/plan).\n\n</details>\n\nThat is all.";
+
+	// Folded: one line for it. Open: the same line and under it what it holds, drawn and set in. A link's address is printed.
+	const a = new Answer(letter);
+	assert.deepEqual(plain(a.render(70)), [" The landlord agrees.", "", " ▸ Full message · click to open", "", " That is all."]);
+	assert.deepEqual(click(a, 2), { handled: true, render: true });
+	assert.deepEqual(plain(a.render(70)), [" The landlord agrees.", "", " ▾ Full message · click here to close", "   Dear Ms Okapi,", "", "   the keys are with the caretaker, see the plan", "   (https://example.com/plan).", "", " That is all."]);
+	assert.equal(click(a, 0), undefined, "a line of text is left to the selection");
+	assert.equal(click(a, 5), undefined, "and so is a line of what the block holds");
+	click(a, 2);
+	assert.equal(plain(a.render(70))[2], " ▸ Full message · click to open");
+
+	// <details open> starts open. Capitals and attributes do not matter; without a summary it is "Details".
+	assert.deepEqual(draw('<DETAILS class="x" open>\nthe body\n</Details>'), [" ▾ Details · click here to close", "   the body"]);
+	assert.deepEqual(draw("<details>\nno summary\n</details>"), [" ▸ Details · click to open"]);
+	// The summary is one line: bold and code in it are drawn, a line break is a space, a long one is cut.
+	assert.deepEqual(draw("<details><summary>The **whole**\n`log` of <b>today</b></summary>x</details>"), [" ▸ The whole log of today · click to open"]);
+	const cut = draw(`<details><summary>${"very long summary ".repeat(10)}</summary>x</details>`, 50);
+	assert.ok(cut.length === 1 && cut[0].length <= 50 && cut[0].startsWith(" ▸ very long summary very") && cut[0].endsWith("… · click to open"), cut.join("\n"));
+	// A long block has a line at its end that closes it.
+	const long = new Answer(`<details open><summary>Lines</summary>\n\n${Array.from({ length: 8 }, (_, i) => `- item ${i + 1}`).join("\n")}\n\n</details>`);
+	assert.deepEqual(plain(long.render(70)).slice(-2), ["   - item 8", " ▴ close"]);
+	click(long, 9);
+	assert.deepEqual(plain(long.render(70)), [" ▸ Lines · click to open"]);
+
+	// In a code block or in inline code the tags are text.
+	assert.deepEqual(draw("```html\n<details><summary>x</summary>y</details>\n```\n\nand `<details>` in a sentence"), [" html", " │ <details><summary>x</summary>y</details>", "", " and <details> in a sentence"]);
+	// A block inside a block is a block of its own, and a block without its closing tag runs to the end.
+	const nested = new Answer("<details><summary>Outer</summary>\nouter text\n<details><summary>Inner</summary>\ninner text\n</details>\nmore outer text\n</details>\n\n<details><summary>Not closed</summary>\nthe rest");
+	assert.deepEqual(plain(nested.render(70)), [" ▸ Outer · click to open", "", " ▸ Not closed · click to open"]);
+	click(nested, 0);
+	assert.deepEqual(plain(nested.render(70)), [" ▾ Outer · click here to close", "   outer text", "", "   ▸ Inner · click to open", "", "   more outer text", "", " ▸ Not closed · click to open"]);
+	click(nested, 3, 5);
+	click(nested, plain(nested.render(70)).indexOf(" ▸ Not closed · click to open"));
+	assert.deepEqual(plain(nested.render(70)), [" ▾ Outer · click here to close", "   outer text", "", "   ▾ Inner · click here to close", "     inner text", "", "   more outer text", "", " ▾ Not closed · click here to close", "   the rest"]);
+	click(nested, 0);
+	click(nested, 0);
+	assert.equal(plain(nested.render(70))[3], "   ▾ Inner · click here to close", "what was opened inside is still open when the outer one opens again");
+
+	// While it is being written: one line from the moment its opening tag is there, "…" until the summary
+	// is whole, and at no length of the text a tag or a piece of one. Open too, where what it holds is in view.
+	const stream = "Before.\n\n<details><summary>Full message</summary>\n\nfirst line\n\n<details open><summary>Inner part</summary>\ninner line\n</details>\n\nlast line\n\n</details>\n\nAfter.";
+	for (const opened of [false, true]) {
+		const live = new Answer("");
+		const heads = new Set<string>();
+		for (let n = 0; n <= stream.length; n++) {
+			live.setText(stream.slice(0, n), true);
+			let lines = plain(live.render(70));
+			const closed = lines.findIndex((l) => l.startsWith(" ▸"));
+			if (opened && closed >= 0) {
+				click(live, closed);
+				lines = plain(live.render(70));
+			}
+			assert.ok(!lines.some((l) => /[<>]/.test(l)), `after ${n} characters:\n${lines.join("\n")}`);
+			for (const l of lines) if (/^ [▸▾]/.test(l)) heads.add(l);
+		}
+		assert.deepEqual([...heads], opened ? [" ▾ … · click here to close", " ▾ Full message · click here to close"] : [" ▸ … · click to open", " ▸ Full message · click to open"]);
+		live.setText(stream);
+		assert.deepEqual(plain(live.render(70)), opened ? [" Before.", "", " ▾ Full message · click here to close", "   first line", "", "   ▾ Inner part · click here to close", "     inner line", "", "   last line", "", " After."] : [" Before.", "", " ▸ Full message · click to open", "", " After."]);
+	}
+	// What only looks like the beginning of a tag is held back while more may come, and printed when the answer is whole.
+	const tail = new Answer("");
+	tail.setText("a is smaller: a <", true);
+	assert.deepEqual(plain(tail.render(70)), [" a is smaller: a"]);
+	tail.setText("a is smaller: a <");
+	assert.deepEqual(plain(tail.render(70)), [" a is smaller: a <"]);
+
+	// An answer that folds nothing is drawn as it always was, to the last colour.
+	const usual = "# Title\n\nSome **bold** text with a [link](https://example.com) and <b>a tag</b>.\n\n- one\n- two\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n</details>";
+	assert.deepEqual(new Answer(usual).render(64), new Markdown(usual, 1, 0, markdownTheme).render(64));
+
+	// And in a conversation.
+	const copied: string[] = [];
+	const t = await open({ agents: { main: {} } }, [110, 44], { copy: async (text) => (copied.push(text), true) });
+	await t.sees("type a message");
+	const rows = () => t.app.screen();
+	// A line of the conversation, not of the typed message that scripted it.
+	const rowOf = (what: string) => rows().indexOf(what);
+	const line = (what: string) => rowOf(what) >= 0;
+	const two = `${letter.replace("\n\nThat is all.", "")}\n\n<details><summary>The log</summary>\n\nlog-line-1\n\n</details>\n\nThat is all.`;
+	await t.send(mockMsg([{ text: two }]));
+	await until(() => line(" That is all."), 4000, "the answer");
+	assert.ok(line(" ▸ Full message · click to open") && line(" ▸ The log · click to open") && !line("   Dear Ms Okapi,") && !line("   log-line-1"), t.text());
+	assert.ok(!rows().some((l) => /^ <\/?(details|summary)/.test(l)), `no tags\n${t.text()}`);
+	assert.ok(t.h.system(t.h.mock.state.requests.at(-1)).includes("write <details><summary>what it is</summary>, then the text, then </details>"), "an agent is told that it can fold something away");
+
+	// Each opens and closes by itself.
+	t.term.click(6, rowOf(" ▸ Full message · click to open"));
+	await until(() => line(" ▾ Full message · click here to close"), 2000, "the first block to open");
+	assert.ok(line("   Dear Ms Okapi,") && line("   the keys are with the caretaker, see the plan (https://example.com/plan).") && line(" ▸ The log · click to open") && !line("   log-line-1"), t.text());
+	assert.ok(rowOf("   Dear Ms Okapi,") === rowOf(" ▾ Full message · click here to close") + 1 && rowOf(" ▸ The log · click to open") < rowOf(" That is all."), `under its line, in its place\n${t.text()}`);
+	t.term.click(6, rowOf(" ▸ The log · click to open"));
+	await until(() => line("   log-line-1"), 2000, "the second block to open");
+	assert.ok(line("   Dear Ms Okapi,"), t.text());
+	t.term.click(40, rowOf(" ▾ Full message · click here to close"));
+	await until(() => !line("   Dear Ms Okapi,"), 2000, "the first block to fold");
+	assert.ok(line(" ▸ Full message · click to open") && line(" ▾ The log · click here to close") && line("   log-line-1"), t.text());
+
+	// What was opened stays open when the conversation goes on.
+	await t.send("and another message");
+	await t.sees("ECHO[and another message]");
+	assert.ok(line(" ▾ The log · click here to close") && line("   log-line-1") && line(" ▸ Full message · click to open"), t.text());
+
+	// The answer leaves as it was written, tags and all: it folds again in a markdown viewer.
+	await done(t.h, 2);
+	await t.send("/export copy");
+	await t.sees("copied the conversation as Markdown");
+	assert.ok(copied[0].includes(`## main\n\n${two}\n`), copied[0]);
+	await t.send(mockMsg([{ text: "<details open><summary>Open from the start</summary>\n\nseen at once\n\n</details>\n\n```html\n<details><summary>In code</summary>shown as text</details>\n```" }]));
+	await until(() => line(" │ <details><summary>In code</summary>shown as text</details>"), 4000, "the tags in a code block");
+	assert.ok(line(" ▾ Open from the start · click here to close") && line("   seen at once") && !rows().some((l) => /[▸▾] In code/.test(l)), t.text());
+	await t.send("/copy");
+	await t.sees("copied the last answer");
+	assert.ok(copied[1].startsWith("<details open><summary>Open from the start</summary>\n\nseen at once\n\n</details>"), copied[1]);
+	await t.send("/reset");
+	await until(() => !line("   seen at once"), 4000, "an empty conversation");
+
+	// An answer that arrives slowly: its block is a line before its closing tag is there, and can be opened then.
+	const slow = `Here it comes.\n\n<details><summary>Slow part</summary>\n\n${Array.from({ length: 60 }, (_, i) => `- slow-item-${i + 1}`).join("\n")}\n\n</details>\n\nIt has all arrived.`;
+	await t.send(mockMsg([{ text: slow, chunkDelayMs: 12 }]));
+	await until(() => line(" ▸ Slow part · click to open"), 4000, "the block while it is written");
+	const arriving = () => t.h.pine.tasks.list({ status: "running" }).length > 0;
+	assert.ok(!line(" It has all arrived.") && arriving(), `the answer is still arriving\n${t.text()}`);
+	t.term.click(6, rowOf(" ▸ Slow part · click to open"));
+	await until(() => line(" ▾ Slow part · click here to close") && line("   - slow-item-1"), 2000, "the block to open while it is written");
+	const seen: string[] = [];
+	await until(() => (seen.push(...rows().filter((l) => /^ {1,3}<\/?(details|summary|d|s|$)/.test(l))), !arriving()), 6000, "the answer to be whole");
+	assert.deepEqual(seen, [], "no tag was on screen at any time");
+	// It stayed open, and the window went along with the answer to its end. Closed from there, the line that is left is in view.
+	await until(() => line(" ▴ close") && line(" It has all arrived."), 2000, "the end of the answer");
+	assert.ok(line("   - slow-item-60") && !line(" ▾ Slow part · click here to close"), `open, and its first line far above\n${t.text()}`);
+	t.term.click(4, rowOf(" ▴ close"));
+	await until(() => line(" ▸ Slow part · click to open"), 2000, "the block to fold");
+	assert.ok(!line("   - slow-item-60") && line(" It has all arrived.") && line(" Here it comes."), t.text());
+	await t.close();
+});
+
 test("tui: how fast the model read and wrote is shown beside its thought, in the status line while it works, and in the bottom bar after", async () => {
 	const t = await open({ agents: { main: {} }, model: { reasoning: true } }, [120, 40]);
 	await t.sees("type a message");

@@ -165,7 +165,7 @@ hand work to the agents listed in your prompt, and write shared state under your
 | You want to | Read |
 |---|---|
 | See what an agent is given (events, schedules, MCP servers, skills) and how events, tasks and sessions fit together | [references/overview.md](references/overview.md) |
-| Chat with agents in the terminal: tabs, slash commands (`/goal`, `/compact`, `/copy`, `/export`, `/undo`), keys, the five modes (auto, safe, manual, bypass, plan), approvals, an agent's questions and its list of steps, what a model thinks, pictures, switching models | [references/tui.md](references/tui.md) |
+| Chat with agents in the terminal: tabs, slash commands (`/goal`, `/compact`, `/copy`, `/export`, `/undo`), keys, the five modes (auto, safe, manual, bypass, plan), approvals, an agent's questions and its list of steps, what a model thinks, pictures, parts of an answer that are folded away, switching models | [references/tui.md](references/tui.md) |
 | Work on a project: `pine .`, a folder for a conversation, the code pane with git changes, files and tool output, what an agent left running, what it runs in the background, and taking a message back with `/undo` and `/redo` | [references/coding.md](references/coding.md) |
 | Install it, start it, update it, use the CLI (every `pine` command), the control API for scripts, run it at login or in a container, find out why something did not happen | [references/operations.md](references/operations.md) |
 | Look up a key in `pine.json`, `agent.json`, `models.json` or `.env` | [references/configuration.md](references/configuration.md) |
