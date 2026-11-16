@@ -663,6 +663,46 @@ test("tui: esc or a click beside a menu closes only the menu; an approval can co
 	await t.close();
 });
 
+test("tui: two values asked for at once are two blocks: a name, what it is, a bar to type into, and an empty line between them", async () => {
+	const t = await open({ agents: { main: {} } }, [120, 40]);
+	await t.send(mockMsg([{ tools: [{ name: "add_source", args: { name: "team", type: "slack", description: "the team's Slack", options: {}, ask: ["token"] } }] }]));
+	await t.sees("Approval needed, and something only you have");
+	const rows = () => t.app.screen().map((l) => l.replace(/^.*?│ ?/, "").replace(/ *│.*$/, ""));
+	const at = (what: RegExp) => rows().findIndex((l) => what.test(l));
+	await until(() => at(/^token +2 of 2$/) > 0, 4000, `both blocks\n${t.text()}`);
+	// The name stands alone on its line, what it is comes under it, and the bar under that.
+	const first = at(/^appToken +1 of 2$/);
+	const second = at(/^token +2 of 2$/);
+	assert.ok(first > 0 && second > first);
+	assert.match(rows()[first + 1], /^the app-level token of the Slack app/);
+	assert.match(rows()[second + 1], /^a bot token \(xoxb-/);
+	assert.equal(rows()[second - 1], "", "an empty line between the two");
+	assert.match(rows()[second - 2], /^>/, "the first one's bar is the line before that, and it is the one typed into");
+	assert.equal(rows()[first - 1], "", "and one before the first");
+	const bars = () => rows().filter((l) => /^>( |$)|^  (•|empty)/.test(l));
+	assert.deepEqual(bars().map((l) => l.trim()), [">", "empty"], "the bar that is not typed into says that it is empty");
+	assert.ok(t.text().includes("Type or paste each one into its bar; tab goes to the next."));
+
+	t.term.type("abc");
+	await until(() => bars()[0]?.trim() === "> •••");
+	t.term.type([KEY.tab]);
+	t.term.type("xy");
+	await until(() => bars()[1]?.trim() === "> ••", 4000, `the second bar to take what is typed\n${t.text()}`);
+	assert.equal(bars()[0].trim(), "•••", "what the first holds stays, as dots");
+	// A click on a block is where the typing goes next.
+	t.term.click(30, t.app.screen().findIndex((l) => /appToken +1 of 2/.test(l)) + 1);
+	t.term.type("d");
+	await until(() => bars()[0]?.trim() === "> ••••", 4000, `the first bar to be typed into again\n${t.text()}`);
+	assert.equal(bars()[1].trim(), "••");
+	assert.ok(!t.text().includes("abcd"), "and nothing typed is shown");
+	t.term.type([KEY.esc]);
+	await until(() => !t.text().includes("Approval needed, and something only you have"));
+	await sleep(300);
+	await t.send("/deny");
+	await until(() => t.h.pine.approvals.pending().length === 0);
+	await t.close();
+});
+
 test("tui: a sub-agent's work opens in a tab of its own, while it runs and afterwards", async () => {
 	const t = await open({ agents: { main: {} } }, [120, 40]);
 	await t.sees("type a message");

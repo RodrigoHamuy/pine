@@ -381,7 +381,8 @@ test("tui: a secret is typed into the dialog without being shown, and never appe
 	term.type(mockMsg([{ tools: [call("add_source", { name: "telegram", type: "telegram", description: "my Telegram", options: { apiBase: tg.apiBase }, note: "Answer briefly." })] }]));
 	term.type(["\r"]);
 	await sees("Approval needed, and something only you have");
-	await sees("token: the bot's token, which @BotFather gives");
+	// The value's name on a line of its own, and under it what it is.
+	await sees(/│ token +│\n.*│ the bot's token, which @BotFather gives/);
 	await sees("Type or paste it here. It is not shown, goes into pine's .env file");
 	// Enter with nothing typed does not say yes, and letters are part of the value, not shortcuts.
 	term.type(["\r"]);
@@ -406,7 +407,7 @@ test("tui: a secret is typed into the dialog without being shown, and never appe
 	tg.message(1001, "", { caption: "what is this?", photo: [{ file_id: "f1", file_unique_id: "u1", file_size: PNG.length }] });
 	const code = async () => { await until(() => tg.sent().some((m) => /type this code/.test(m.text))); return tg.sent().findLast((m) => /type this code/.test(m.text))!.text.match(/(\d{3}) (\d{3})/)!.slice(1).join(""); };
 	await pair;
-	await sees("code: the six digits the bot just sent to that account in Telegram");
+	await sees(/│ code +│\n.*│ the six digits the bot just sent to that account in Telegram/);
 	term.type(await code());
 	await sees(/> \d{6}/);
 	term.type(["\r"]);

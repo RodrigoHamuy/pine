@@ -369,10 +369,12 @@ answer the one before it or put it off.
 | `esc` | Later: the request stays open until `security.approvalTimeout` (5 minutes) has passed and then counts as denied. Until then the status line keeps reminding you, `enter` on an empty line opens the dialog again, and `/approve` or `/deny` answer it A question in a tab that is not in front opens no dialog there: that tab gets a `!` in the tab bar, and the status line of the tab you are in says which tab waits (`alt+<n>` goes there) |
 
 When the action needs something only you have (a bot's token, a device's password), the dialog
-has a field for it. Type or paste it: a secret is shown as dots, goes into pine's `.env` and is
+has a field for it: the value's name, under it what it is, and a bar to type into. When it needs
+several (the two tokens of a Slack app), each is a block of its own, numbered "1 of 2", and the
+name of the one you are typing into is in colour. Type or paste it: a secret is shown as dots, goes into pine's `.env` and is
 never seen by the agent or its model. (Pairing a Telegram account uses the same dialog for the
 six-digit code the bot sent to your phone; the code is shown as you type and is not stored.)
-`enter` saves and allows, `tab` and `shift+tab` or the arrow keys move between fields, `ctrl+u`
+`enter` saves and allows, `tab` and `shift+tab`, the arrow keys or a click on a field move between fields, `ctrl+u`
 empties one, `esc` leaves it for later, and `/approve` opens the dialog again. The letter keys
 are part of what you type there, so `a` and `d` are not shortcuts in this dialog; Deny is a
 button to click.

@@ -956,6 +956,8 @@ class ApprovalDialog implements Component {
 	 */
 	private fields: Array<{ name: string; label: string; value: string; secret: boolean }>;
 	private field = 0;
+	/** The rows each value's block takes in the dialog, for a click on one. */
+	private areas: Array<{ from: number; to: number; field: number }> = [];
 
 	constructor(req: any, done: (answer: ApprovalAnswer, values?: Record<string, string>) => void) {
 		this.req = req;
@@ -990,6 +992,9 @@ class ApprovalDialog implements Component {
 	handleMouse(e: any) {
 		const b = this.buttons.find((x) => e.y === x.row && e.x >= x.from && e.x < x.to);
 		if (b && e.type === "click" && e.button === "left") this.answer(b.answer);
+		// A click on a value's block is where the typing goes next.
+		const area = this.areas.find((x) => e.y >= x.from && e.y < x.to);
+		if (area && e.type === "click" && e.button === "left") this.field = area.field;
 		return { handled: true, render: true };
 	}
 
@@ -1021,11 +1026,6 @@ class ApprovalDialog implements Component {
 
 	render(width: number): string[] {
 		const inner = Math.max(20, width - 4);
-		const inputs = this.fields.flatMap((f, i) => [
-			...wrapTextWithAnsi(c.bold(f.label), inner),
-			// A secret is never shown: a dot for each character, so that you see it arrive.
-			`${i === this.field ? c.accent(">") : " "} ${c.yellow(f.secret ? "•".repeat(Math.min(f.value.length, inner - 6)) : f.value.slice(-(inner - 6)))}${i === this.field ? c.inverse(" ") : ""}`,
-		]);
 		const body = [
 			c.bold(c.yellow(this.fields.length ? "Approval needed, and something only you have" : "Approval needed")),
 			"",
@@ -1037,9 +1037,37 @@ class ApprovalDialog implements Component {
 			...(this.req.holds ? wrapTextWithAnsi(c.gray(`"Allow" holds for ${this.req.holds}: you are not asked about it again there.`), inner) : []),
 			...(this.req.remember ? wrapTextWithAnsi(c.gray(`"Always here" stops asking about ${this.req.remember} in this conversation.`), inner) : []),
 			...(!this.req.remember && !this.req.holds && !this.fields.length ? wrapTextWithAnsi(c.gray("This one is asked every time: there is no \"always\" for it."), inner) : []),
-			...(inputs.length ? ["", ...inputs, ...wrapTextWithAnsi(c.gray(this.fields.some((f) => f.secret) ? "Type or paste it here. It is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Type it here and press enter. Without it, this cannot be allowed."), inner)] : []),
-			"",
 		];
+		// Each value is a block of its own: its name, what it is, and a bar to type into, with an empty
+		// line before it. Run together, two tokens read as one paragraph.
+		const bar = inner - 2;
+		this.areas = [];
+		this.fields.forEach((f, i) => {
+			const active = i === this.field;
+			// A label that reads "name: what it is" or "NAME (what it is)" is its name and, under it, the rest.
+			const [, name, about] = f.label.match(/^([\w.-]+): ([\s\S]+)$/) ?? f.label.match(/^([\w.-]+) \(([\s\S]+)\)$/) ?? [null, f.label, ""];
+			const count = this.fields.length > 1 ? `${i + 1} of ${this.fields.length}` : "";
+			// A secret is never shown: a dot for each character, so that you see it arrive.
+			const shown = f.secret ? "•".repeat(Math.min(f.value.length, bar - 2)) : f.value.slice(-(bar - 2));
+			const typed = shown || active ? `${c.yellow(shown)}${active ? c.inverse(" ") : ""}` : c.gray("empty");
+			body.push("");
+			const from = 1 + body.length;
+			body.push(
+				...wrapTextWithAnsi(active ? c.bold(c.accent(name)) : c.bold(name), inner - count.length - 2).map((l, n) => (n || !count ? l : `${l}${" ".repeat(Math.max(2, inner - visibleWidth(l) - count.length))}${c.gray(count)}`)),
+				...(about ? wrapTextWithAnsi(about, inner) : []),
+				`${active ? c.accent(">") : " "} ${c.bgPanel(`${typed}${" ".repeat(Math.max(0, bar - visibleWidth(typed)))}`)}`,
+			);
+			this.areas.push({ from, to: 1 + body.length, field: i });
+		});
+		if (this.fields.length) {
+			const hint = !this.fields.some((f) => f.secret)
+				? "Type it here and press enter. Without it, this cannot be allowed."
+				: this.fields.length > 1
+					? "Type or paste each one into its bar; tab goes to the next. They are not shown, go into pine's .env file, and never reach the agent or its model."
+					: "Type or paste it here. It is not shown, goes into pine's .env file, and never reaches the agent or its model.";
+			body.push("", ...wrapTextWithAnsi(c.gray(hint), inner));
+		}
+		body.push("");
 		// The buttons, wrapped onto a second line in a narrow window. Their places are kept for clicks:
 		// two columns of border and padding, then the labels.
 		const rows: string[] = [""];
