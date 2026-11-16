@@ -247,7 +247,8 @@ function createWindow(): void {
 		height: b?.height ?? 820,
 		x: b?.x,
 		y: b?.y,
-		minWidth: 720,
+		// The side bar, a conversation and the panel beside it, each at its narrowest, fit into this.
+		minWidth: 880,
 		minHeight: 480,
 		show: false,
 		title: "Pine",

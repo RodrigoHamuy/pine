@@ -1003,7 +1003,7 @@ select.input {
 
 .conv {
 	flex: 1;
-	min-width: 0;
+	min-width: 340px;
 	display: flex;
 	flex-direction: column;
 	position: relative;
@@ -1911,12 +1911,48 @@ select.input {
 .pick-input::placeholder {
 	color: var(--faint);
 }
+/* One line, cut at the end: a hint that wraps in a narrow input would give it a scroll bar. */
+.composer textarea::placeholder {
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
 .composer-bar {
 	display: flex;
 	align-items: center;
 	gap: 2px;
 	padding: 4px 6px 6px;
 	min-width: 0;
+	container: cbar / inline-size;
+}
+/* A narrow input keeps every chip on one line and whole: only the model's and the folder's names are cut,
+   and what has no room for its words stands as its sign alone, with the words in its tooltip. */
+.composer-bar .chip {
+	flex: none;
+	white-space: nowrap;
+}
+.composer-bar .chip.gives {
+	flex: 0 1 auto;
+}
+@container cbar (max-width: 490px) {
+	.chip.warn .label {
+		display: none;
+	}
+}
+@container cbar (max-width: 400px) {
+	.chip.model .cut {
+		display: none;
+	}
+}
+@container cbar (max-width: 320px) {
+	.chip.thinks span {
+		display: none;
+	}
+}
+@container cbar (max-width: 290px) {
+	.chip.gives .cut {
+		display: none;
+	}
 }
 .chip.plus-btn {
 	width: 26px;
@@ -2021,11 +2057,12 @@ select.input {
 .splitter.drag::after {
 	background: var(--accent);
 }
+/* The panel gives way before the conversation does: in a narrow window it is the panel that gets narrower. */
 .code {
-	flex: none;
+	flex: 0 1 auto;
 	display: flex;
 	flex-direction: column;
-	min-width: 300px;
+	min-width: 240px;
 }
 .code-head {
 	height: 40px;
@@ -2564,7 +2601,7 @@ pre.log {
 }
 .agent-card {
 	display: flex;
-	align-items: center;
+	align-items: flex-start;
 	gap: 12px;
 	padding: 16px 14px 2px;
 }
@@ -2621,4 +2658,5 @@ button.fact {
 .agent-none {
 	padding: 2px 14px;
 	color: var(--faint);
+	overflow-wrap: anywhere;
 }

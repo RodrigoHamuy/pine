@@ -323,11 +323,11 @@ export function Composer({ tab }: { tab: Tab }) {
 				/>
 				<div className="composer-bar">
 					<button type="button" className="chip plus-btn" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><Icon name="plus" size={15} /></button>
-					<button type="button" className="chip" title="Model" onClick={() => void store.pickModel(tab)}>
+					<button type="button" className="chip gives model" title={`Model: ${info?.model ?? "none"}`} onClick={() => void store.pickModel(tab)}>
 						<Icon name="cpu" size={13} />
 						<span className="cut">{info?.model?.split("/").pop() ?? "model"}</span>
 					</button>
-					<button type="button" className="chip" title="How much the model thinks before it answers" onClick={() => void store.pickReasoning(tab)}>
+					<button type="button" className="chip thinks" title={`How much the model thinks before it answers: ${info?.thinking ?? "off"}`} onClick={() => void store.pickReasoning(tab)}>
 						<Icon name="spark" size={13} />
 						<span>{info?.thinking ?? "off"}</span>
 					</button>
@@ -335,11 +335,11 @@ export function Composer({ tab }: { tab: Tab }) {
 						<Icon name="shield" size={13} />
 						<span>{mode}{paused ? " (paused)" : ""}</span>
 					</button>
-					<button type="button" className="chip" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
+					<button type="button" className="chip gives" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
 						<Icon name="folder" size={13} />
 						<span className="cut">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
 					</button>
-					{tainted ? <span className="chip warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><Icon name="eye" size={13} />outside content</span> : null}
+					{tainted ? <span className="chip warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><Icon name="eye" size={13} /><span className="label">outside content</span></span> : null}
 					<span className="grow" />
 					{store.platform === "darwin" ? <button type="button" className={`chip${voice !== "off" ? " bad" : ""}`} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><Icon name="mic" size={14} /></button> : null}
 					{tab.busy && !text.trim() ? (
