@@ -2,6 +2,7 @@
 //   node scripts/pack.mjs            the app, for this Mac's kind of processor
 //   node scripts/pack.mjs --dmg      also a disk image
 //   node scripts/pack.mjs --no-pine  without a pine inside: the app then uses the `pine` of the owner's shell
+//   node scripts/pack.mjs --out <folder>   into another folder than release/ (for a build beside one that is in use)
 //
 // The app carries a pine of its own, so that it works on a Mac where pine was never installed:
 // the package `npm run build` makes in the checkout (the sources compiled, as they go to npm)
@@ -16,6 +17,20 @@ const root = path.resolve(import.meta.dirname, "..");
 const repo = path.resolve(root, "..");
 const stage = path.join(root, ".stage", "pine");
 const flags = new Set(process.argv.slice(2));
+const outAt = process.argv.indexOf("--out");
+const out = path.resolve(root, outAt > 0 && process.argv[outAt + 1] ? process.argv[outAt + 1] : "release");
+
+// An app that runs from the folder this would clear is somebody's open window: it is not deleted under them.
+try {
+	const running = execFileSync("/usr/bin/pgrep", ["-fl", `${out}/`], { encoding: "utf8" }).split("\n").filter((l) => l.includes(".app/Contents/MacOS/"));
+	if (running.length) {
+		console.error(`An app from ${out} is running (process ${running[0].split(" ")[0]}). Quit it first, or pack into another folder: node scripts/pack.mjs --out release-next`);
+		process.exit(1);
+	}
+} catch (e) {
+	// pgrep ends with 1 when nothing matches: nothing runs from there.
+	if (e.status !== 1) throw e;
+}
 const run = (cmd, args, cwd) => execFileSync(cmd, args, { cwd, stdio: "inherit" });
 
 run(process.execPath, [path.join(root, "scripts", "build.mjs")], root);
@@ -32,7 +47,7 @@ if (!flags.has("--no-pine")) {
 
 // What an earlier run left is taken away first: the packer does not always manage to itself.
 // (Tried a few times: the Finder and the system's index write into a folder that is being looked at.)
-fs.rmSync(path.join(root, "release"), { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+fs.rmSync(out, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 
 const version = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 await packApp({
@@ -42,7 +57,7 @@ await packApp({
 		appId: "dev.pine.desktop",
 		productName: "Pine",
 		copyright: "pine contributors",
-		directories: { output: "release", buildResources: "assets" },
+		directories: { output: path.relative(root, out), buildResources: "assets" },
 		// Everything the app runs is in the two built folders: the page and the main process are bundles.
 		files: ["dist/**", "dist-electron/**", "package.json"],
 		// pine goes in whole, with what it depends on, before the app is signed. (Listed as a resource,
@@ -74,4 +89,4 @@ await packApp({
 		win: { target: ["nsis"], icon: "assets/icon.png" },
 	},
 });
-console.log(`the app is in ${path.join(root, "release")}`);
+console.log(`the app is in ${out}`);
