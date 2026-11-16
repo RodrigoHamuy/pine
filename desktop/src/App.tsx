@@ -103,7 +103,7 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	return (
 		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
 			{tab?.approvals.size ? <span className="needs">!</span> : working ? <Spinner size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}
-			<span className="cut grow">{main ? "main conversation" : c.session}</span>
+			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
 				<span className="acts" onClick={(e) => e.stopPropagation()}>
@@ -177,7 +177,7 @@ function Sidebar() {
 				<Button variant="ghost" icon="sidebar" title="Hide the sidebar (⌘B)" onClick={() => void s.command("sidebar")} />
 			</div>
 			<div className="side-scroll">
-				<div className="side-row" onClick={() => void s.command("palette")}><Icon name="search" size={14} /><span className="grow">Search and commands</span><kbd>⌘K</kbd></div>
+				<div className="side-row" onClick={() => void s.command("palette")} title="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page"><Icon name="search" size={14} /><span className="grow">Search</span><kbd>⌘K</kbd></div>
 				<div className="side-label">Agents<span className="grow" /><Button small variant="ghost" icon="plus" title="New agent" onClick={() => s.openSettings("agents", "+")} /></div>
 				{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}
 			</div>
@@ -217,7 +217,7 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 				{tab.approvals.size ? <span className="needs">!</span> : tab.busy ? <Spinner size={11} /> : tab.unread ? <span className="dot unread" /> : tab.kind === "events" ? <Icon name="wave" size={12} /> : tab.kind === "settings" ? <Icon name="gear" size={12} /> : tab.kind === "task" ? <Icon name="list" size={12} /> : <span className="avatar small">{tab.agent.slice(0, 1).toUpperCase()}</span>}
 			</span>
 			<span className="name">
-				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {tab.session}</>}
+				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
 			</span>
 			{kept && tab.session !== "main" ? <Icon name="star" size={10} className="star" /> : null}
 			<span className="close" onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><Icon name="x" size={11} /></span>
@@ -301,18 +301,47 @@ function Palette() {
 	const [query, setQuery] = useState("");
 	const [at, setAt] = useState(0);
 	const list = useRef<HTMLDivElement>(null);
+	useModel(s);
+	type Row = { id: string; group: string; label: string; about?: string; keys?: string; run: () => void; conv?: { agent: string; session: string } };
 	const all = useMemo(() => {
 		const chat = s.active?.kind === "chat";
-		const rows: Array<{ id: string; group: string; label: string; about?: string; keys?: string; run: () => void }> = [];
+		const rows: Row[] = [];
+		for (const t of s.tabs) rows.push({ id: `t:${t.id}`, group: "Open tabs", label: t.kind === "chat" ? `${t.agent} · ${s.titleOf(t.agent, t.session)}` : t.kind === "task" ? `${t.agent} task #${t.task}` : t.kind === "settings" ? "Settings" : "Events", run: () => s.activate(t), conv: t.kind === "chat" ? { agent: t.agent, session: t.session } : undefined });
+		for (const [agent, convs] of s.conversations) for (const c of convs) if (!s.tabs.some((t) => t.kind === "chat" && t.agent === agent && t.session === c.session)) rows.push({ id: `s:${agent}:${c.session}`, group: "Conversations", label: `${agent} · ${s.titleOf(agent, c.session)}`, about: `${ago(c.last)}${c.folder ? ` · ${c.folder}` : ""}`, run: () => void s.openTab(agent, c.session), conv: { agent, session: c.session } });
 		for (const c of COMMANDS) if (!c.chat || chat) rows.push({ id: `c:${c.name}`, group: "Commands", label: c.title, about: c.about, keys: c.keys, run: () => void c.run("", s.active) });
-		for (const t of s.tabs) rows.push({ id: `t:${t.id}`, group: "Open tabs", label: t.kind === "chat" ? `${t.agent} · ${t.session}` : t.kind === "task" ? `${t.agent} task #${t.task}` : "events", run: () => s.activate(t) });
-		for (const [agent, convs] of s.conversations) for (const c of convs) if (!s.tabs.some((t) => t.kind === "chat" && t.agent === agent && t.session === c.session)) rows.push({ id: `s:${agent}:${c.session}`, group: "Conversations", label: `${agent} · ${c.session}`, about: ago(c.last), run: () => void s.openTab(agent, c.session) });
 		for (const a of s.agents) rows.push({ id: `a:${a.id}`, group: "Agents", label: `New conversation with ${a.id}`, about: a.description, run: () => void s.newConversation(a.id) });
 		for (const [id, label] of [["general", "General"], ["agents", "Agents"], ["models", "Models"], ["mcp", "MCP servers"], ["skills", "Skills"], ["events", "Events"], ["instructions", "Instructions"], ["app", "App"]]) rows.push({ id: `p:${id}`, group: "Settings", label: `Settings: ${label}`, run: () => void s.command(`settings:${id}`) });
 		return rows;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, []);
-	const shown = useMemo(() => (query ? all.map((r) => ({ r, rank: Math.min(...[fuzzy(query, r.label), fuzzy(query, r.about ?? "") + 10].filter((x) => x >= 0), 99) })).filter((x) => x.rank < 99).sort((a, b) => a.rank - b.rank).map((x) => x.r).slice(0, 60) : all), [query, all]);
+	}, [s.titles]);
+	// What fits by its name comes first; then the conversations in which the words were said; then
+	// what only fits by its description, and last what fits by letters in order.
+	const shown = useMemo(() => {
+		if (!query.trim()) return all;
+		const q = query.trim().toLowerCase();
+		const named: Row[] = [];
+		const described: Row[] = [];
+		const loose: Row[] = [];
+		for (const r of all) {
+			if (r.label.toLowerCase().includes(q)) named.push(r);
+			else if ((r.about ?? "").toLowerCase().includes(q)) described.push(r);
+			else if (fuzzy(q, r.label) >= 0) loose.push(r);
+		}
+		// A conversation is listed once. One that fits by its name and also holds the words opens at the words.
+		const found = s.searchSaid(q);
+		const holds = (r: Row) => (r.conv ? found.find((m) => m.agent === r.conv!.agent && m.session === r.conv!.session) : undefined);
+		const listed = new Set<string>();
+		const here = (r: Row): Row => {
+			const m = holds(r);
+			if (!m) return r;
+			listed.add(`${m.agent}:${m.session}`);
+			return { ...r, about: `${m.who}: ${m.snippet}`, keys: ago(m.ts), run: () => void s.openFound(m.agent, m.session, query.trim()) };
+		};
+		const byName = named.map(here);
+		const said: Row[] = found.filter((m) => !listed.has(`${m.agent}:${m.session}`)).map((m) => ({ id: `m:${m.agent}:${m.session}`, group: "Said in conversations", label: `${m.agent} · ${s.titleOf(m.agent, m.session)}`, about: `${m.who}: ${m.snippet}`, keys: ago(m.ts), run: () => void s.openFound(m.agent, m.session, query.trim()) }));
+		return [...byName, ...said, ...described.filter((r) => !holds(r) || !listed.has(`${r.conv!.agent}:${r.conv!.session}`)), ...loose.filter((r) => !r.conv || !listed.has(`${r.conv.agent}:${r.conv.session}`))].slice(0, 80);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [query, all, s.said]);
 	useEffect(() => setAt(0), [query]);
 	useEffect(() => {
 		// (In a block: scrolling answers with a promise, and an effect may only give back a function.)
@@ -326,7 +355,7 @@ function Palette() {
 				<input
 					autoFocus
 					className="pick-input"
-					placeholder="Type a command, an agent or a conversation"
+					placeholder="Search conversations (by name or by what was said), commands, agents"
 					value={query}
 					onChange={(e) => setQuery(e.target.value)}
 					onKeyDown={(e) => {
@@ -341,7 +370,7 @@ function Palette() {
 				<div className="pick-list" ref={list}>
 					{shown.map((r, n) => (
 						<div key={r.id}>
-							{!query && (n === 0 || shown[n - 1].group !== r.group) ? <div className="pick-group">{r.group}</div> : null}
+							{n === 0 || shown[n - 1].group !== r.group ? <div className="pick-group">{r.group}</div> : null}
 							<div className={`pick-item${n === at ? " on" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => run(r)}>
 								<span className="label">{r.label}</span>
 								{r.about ? <span className="about">{r.about}</span> : null}
@@ -528,13 +557,32 @@ export function App() {
 	}, []);
 	const ready = s.service.status === "ready" && s.agents.length > 0 && s.active;
 	const tab = s.active;
+	// The side bar is as wide as it was dragged, as the panel on the other side is.
+	const [sideWidth, setSideWidth] = useState(() => Number(localStorage.getItem("pine.sidebar.width")) || 248);
+	const [sideDrag, setSideDrag] = useState(false);
+	const dragSide = (e: React.MouseEvent) => {
+		e.preventDefault();
+		setSideDrag(true);
+		const from = e.clientX;
+		const was = sideWidth;
+		let now = was;
+		const move = (m: MouseEvent) => setSideWidth((now = Math.max(190, Math.min(460, was + m.clientX - from))));
+		const up = () => {
+			setSideDrag(false);
+			localStorage.setItem("pine.sidebar.width", String(now));
+			window.removeEventListener("mousemove", move);
+			window.removeEventListener("mouseup", up);
+		};
+		window.addEventListener("mousemove", move);
+		window.addEventListener("mouseup", up);
+	};
 	return (
-		<div className={`app${s.sidebar && ready ? "" : " no-sidebar"}${s.fullscreen ? " fullscreen" : ""}`}>
+		<div className={`app${s.sidebar && ready ? "" : " no-sidebar"}${s.fullscreen ? " fullscreen" : ""}`} style={{ "--sidebar-w": `${sideWidth}px` } as React.CSSProperties}>
 			{!ready ? (
 				<Gate />
 			) : (
 				<>
-					{s.sidebar ? <Sidebar /> : null}
+					{s.sidebar ? <><Sidebar /><div className={`splitter side${sideDrag ? " drag" : ""}`} onMouseDown={dragSide} onDoubleClick={() => (setSideWidth(248), localStorage.setItem("pine.sidebar.width", "248"))} title="Drag to make the side bar wider or narrower" /></> : null}
 					<div className="main">
 						<TitleBar />
 						<div className="body">

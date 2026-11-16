@@ -177,6 +177,19 @@ html:not([data-platform="darwin"]) .app {
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
+	/* Where nothing is to click, the side bar moves the window, like the bar along the top. */
+	-webkit-app-region: drag;
+}
+.sidebar .side-row,
+.sidebar .side-agent,
+.sidebar .side-label .btn,
+.sidebar .side-status,
+.splitter {
+	-webkit-app-region: no-drag;
+}
+.splitter.side {
+	margin: 0 -3px;
+	z-index: 6;
 }
 .side-top {
 	height: var(--bar-h);
@@ -214,11 +227,23 @@ html:not([data-platform="darwin"]) .side-top {
 }
 .side-agent {
 	display: flex;
-	align-items: center;
+	/* Everything on the agent's line stands on the line of its name, not half-way down to what it is for. */
+	align-items: flex-start;
 	gap: 7px;
 	min-height: 40px;
-	padding: 4px 4px 4px 6px;
+	padding: 5px 4px 5px 6px;
 	border-radius: var(--r-s);
+}
+.side-agent > .icon {
+	margin-top: 5px;
+}
+.side-agent > .spinner,
+.side-agent > .needs,
+.side-agent > .dot {
+	margin-top: 4px;
+}
+.side-agent .btn {
+	margin-top: -2px;
 }
 .side-agent:hover {
 	background: var(--hover);
@@ -228,12 +253,13 @@ html:not([data-platform="darwin"]) .side-top {
 	min-width: 0;
 	display: flex;
 	flex-direction: column;
-	line-height: 1.25;
+	line-height: 20px;
 	font-weight: 600;
 }
 .side-agent .what {
 	font-weight: 400;
 	font-size: 11.5px;
+	line-height: 15px;
 	color: var(--faint);
 }
 .side-agent .agent-acts {
@@ -659,6 +685,14 @@ select.input {
 	border-radius: 9px;
 	background: var(--sunk);
 	border: 1px solid var(--line-soft);
+	/* In a narrow place its words stay whole and it is moved sideways; they are never broken over two lines. */
+	max-width: 100%;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+.segmented::-webkit-scrollbar {
+	display: none;
 }
 .segmented button {
 	display: flex;
@@ -671,6 +705,8 @@ select.input {
 	background: transparent;
 	color: var(--muted);
 	font-size: 12px;
+	white-space: nowrap;
+	flex: none;
 }
 .segmented button.on {
 	background: var(--surface);
@@ -957,6 +993,7 @@ select.input {
 .transcript {
 	flex: 1;
 	overflow-y: auto;
+	overflow-x: hidden;
 	scroll-behavior: auto;
 	overflow-anchor: none;
 }
@@ -987,6 +1024,8 @@ select.input {
 	margin: 0;
 	color: var(--muted);
 	max-width: 520px;
+	/* A long path is broken where the card ends, not pushed out of it. */
+	overflow-wrap: anywhere;
 }
 .hints {
 	display: flex;

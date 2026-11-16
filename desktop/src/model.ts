@@ -209,6 +209,13 @@ export class Store extends Model {
 	settingsAgent?: string;
 	/** Conversations in which an agent is at work right now, whether a tab shows them or not: "agent:session". */
 	busy = new Map<string, Set<number>>();
+	/** What was said lately, in every conversation: for finding one by its words, and for naming one that has no name of its own. */
+	said: Task[] = [];
+	titles = new Map<string, string>();
+	private saidAt = 0;
+	private saidLater?: number;
+	/** A conversation that is to open with something looked for in it. */
+	pendingFind?: { key: string; query: string };
 	/** Agents whose list of conversations is folded away in the side bar. */
 	folded = new Set<string>(JSON.parse(localStorage.getItem("pine.folded") ?? "[]"));
 	sidebar = true;
@@ -307,6 +314,7 @@ export class Store extends Model {
 		this.saveTabs();
 		void this.refreshTaints();
 		void this.refreshConversations();
+		void this.refreshSaid(true);
 		void this.pending();
 		this.touch();
 	}
@@ -341,6 +349,71 @@ export class Store extends Model {
 		}
 		this.touch();
 		for (const id of fresh) void this.refreshConversations(id);
+	}
+
+	/**
+	 * Ask for what was said lately (the last thousand tasks, which is what the daemon hands out
+	 * at once). Not more often than every few seconds: it is asked after each answer.
+	 */
+	async refreshSaid(force = false): Promise<void> {
+		if (this.service.status !== "ready") return;
+		const wait = 4000 - (Date.now() - this.saidAt);
+		if (!force && wait > 0) {
+			// Asked for too soon: it is done once, when the time is up, so that the last answer is not missed.
+			this.saidLater ??= window.setTimeout(() => ((this.saidLater = undefined), void this.refreshSaid(true)), wait);
+			return;
+		}
+		this.saidAt = Date.now();
+		const list = await api.tasks(undefined, 1000).catch(() => undefined);
+		if (!list) return;
+		this.said = list.filter((t) => t.depth === 0 && !t.session.startsWith("_t") && !t.meta?.compact);
+		// A conversation is called by the first thing the owner said in it.
+		const titles = new Map<string, string>();
+		for (let i = this.said.length - 1; i >= 0; i--) {
+			const t = this.said[i];
+			const key = `${t.agent}:${t.session.replace(/~u$/, "")}`;
+			if (!titles.has(key) && t.kind === "prompt" && t.prompt.trim()) titles.set(key, short(oneLine(t.prompt), 48));
+		}
+		this.titles = titles;
+		this.touch();
+	}
+
+	/**
+	 * What a conversation is called. One the owner or an agent named keeps its name; one that was
+	 * only started (its name is a stamp like "s1x2y3z") is called by how it began.
+	 */
+	titleOf(agent: string, session: string): string {
+		if (session === "main") return "main conversation";
+		if (!/^s[0-9a-z]{6,10}$/.test(session)) return session;
+		return this.titles.get(`${agent}:${session}`) ?? "new conversation";
+	}
+
+	/** Conversations in which something was said that holds these words, the latest first, each with the place. */
+	searchSaid(query: string): Array<{ agent: string; session: string; snippet: string; who: string; ts: number }> {
+		const q = query.trim().toLowerCase();
+		if (q.length < 2) return [];
+		const seen = new Set<string>();
+		const out: Array<{ agent: string; session: string; snippet: string; who: string; ts: number }> = [];
+		const around = (text: string, at: number) => `${at > 30 ? "…" : ""}${oneLine(text.slice(Math.max(0, at - 30), at + q.length + 60))}${text.length > at + q.length + 60 ? "…" : ""}`;
+		for (const t of this.said) {
+			const session = t.session.replace(/~u$/, "");
+			const key = `${t.agent}:${session}`;
+			if (seen.has(key) || !this.agent(t.agent)) continue;
+			const asked = t.prompt.toLowerCase().indexOf(q);
+			const answered = asked < 0 ? (t.result ?? "").toLowerCase().indexOf(q) : -1;
+			if (asked < 0 && answered < 0) continue;
+			seen.add(key);
+			out.push({ agent: t.agent, session, who: asked >= 0 ? (t.kind === "prompt" ? "you" : t.kind) : t.agent, snippet: asked >= 0 ? around(t.prompt, asked) : around(t.result ?? "", answered), ts: t.created });
+			if (out.length >= 30) break;
+		}
+		return out;
+	}
+
+	/** Open a conversation at what was looked for: the words are marked in it. */
+	async openFound(agent: string, session: string, query: string): Promise<void> {
+		this.pendingFind = { key: `${agent}:${session}`, query };
+		await this.openTab(agent, session);
+		this.ask_("find");
 	}
 
 	toggleFold(agent: string): void {
@@ -1077,6 +1150,7 @@ export class Store extends Model {
 				return tab?.kind === "settings" ? this.closeTab(tab) : this.openSettings();
 			case "palette":
 				this.palette = !this.palette;
+				if (this.palette) void this.refreshSaid();
 				return this.touch();
 			case "sidebar":
 				this.sidebar = !this.sidebar;
@@ -1225,6 +1299,7 @@ export class Store extends Model {
 				this.dirty.add(this);
 				// What an agent just did may have been making, changing or removing an agent.
 				void this.refreshAgents();
+				void this.refreshSaid();
 			}
 		}
 

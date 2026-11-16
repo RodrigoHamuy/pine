@@ -180,6 +180,8 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	// The panel begins with the agent: who it is and what it runs on.
 	await sees(".agent-view .agent-name >> text=main");
 	assert.match(await page.textContent(".agent-view"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
+	// However narrow the panel is, the names of its views stay whole on one line.
+	assert.ok((await page.$eval(".code .segmented button >> text=Last turn", (b: Element) => b.getBoundingClientRect().height)) <= 26);
 	await page.click(".code .segmented button >> text=Changes");
 	await sees(".code .frow");
 	assert.match(await page.textContent(".code .frow"), /index\.ts/);
@@ -325,6 +327,17 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await sees(".agent-view .agent-line .name >> text=morning");
 	assert.match(await page.textContent(".agent-view"), /Nothing wakes it by itself\. 1 event source could/);
 	await shot("14-agent-view");
+	// On an agent's line, its initial stands beside its name, not half-way down to its description.
+	const line = await page.$eval(".side-agent", (el: Element) => ({ avatar: el.querySelector(".avatar")!.getBoundingClientRect(), name: el.querySelector(".who > :first-child")!.getBoundingClientRect() }));
+	assert.ok(Math.abs(line.avatar.y + line.avatar.height / 2 - (line.name.y + line.name.height / 2)) <= 2, JSON.stringify(line));
+	// The side bar is as wide as it is dragged.
+	const before = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
+	const edge = await page.$eval(".splitter.side", (el: Element) => el.getBoundingClientRect());
+	await page.mouse.move(edge.x + edge.width / 2, 300);
+	await page.mouse.down();
+	await page.mouse.move(edge.x + edge.width / 2 + 80, 300, { steps: 4 });
+	await page.mouse.up();
+	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), before + 80);
 	// A group folds away on a click on its agent, and comes back.
 	const group = page.locator(".side-group", { has: page.locator(".who > :first-child", { hasText: /^scout$/ }) });
 	assert.equal(await group.locator(".side-conv").count(), 1);
@@ -338,6 +351,30 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(await page.textContent(".welcome h1"), "scout");
 	assert.match(await page.textContent(".welcome"), /Looks things up on the web/);
 	await shot("14-agents");
+	// A conversation that was only started is called by how it began, in the side bar and on its tab.
+	assert.match(await page.textContent(".tab.on .name"), /new conversation/);
+	await page.fill(".composer textarea", "where is the okapi invoice");
+	await page.keyboard.press("Enter");
+	await sees(".md >> text=ECHO[where is the okapi invoice]");
+	await sees(".tab.on .name >> text=where is the okapi invoice", 15_000);
+	assert.equal(await group.locator(".side-conv >> text=where is the okapi invoice").count(), 1);
+	await page.click(".tab.on .close");
+	// Search finds a conversation by what was said in it, and opens it with the words marked.
+	await menu("palette");
+	await sees(".pick-input");
+	// By words that are only in an answer of the agent's, never in a name:
+	await page.keyboard.type("echo[where");
+	await sees(".pick-group >> text=Said in conversations");
+	assert.match(await page.textContent(".pick-list"), /scout · where is the okapi invoice[\s\S]*ECHO\[where is the okapi invoice\]/);
+	await shot("15-search");
+	// By words that are also its name, it is listed once, and still opens at the words.
+	await page.fill(".pick-input", "okapi invoice");
+	await page.waitForFunction(() => document.querySelectorAll(".pick-item").length > 0 && [...document.querySelectorAll(".pick-item .label")].filter((e) => /where is the okapi invoice/.test(e.textContent ?? "")).length === 1);
+	await page.click(".pick-item:has-text('scout · where is the okapi invoice')");
+	await sees(".tab.on .name >> text=where is the okapi invoice");
+	await sees(".find >> text=/\\d+ of \\d+/");
+	assert.equal(await page.inputValue(".find input"), "okapi invoice");
+	await page.keyboard.press("Escape");
 	await page.click(".tab.on .close");
 	// Asked from where no agent is in front (the event log), a new conversation asks with whom.
 	await menu("events");

@@ -126,14 +126,33 @@ agent's:
 
 | Part | What it is |
 |---|---|
-| Side bar | Search and commands at the top, then your agents (see above). An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
+| Side bar | Search at the top, then your agents (see above). Drag its right edge to make it wider or narrower (a double click on the edge sets it back); where nothing is to click, it moves the window. An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
 | Tabs | One conversation each, with its agent's initial, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens. A `↳ … open` line opens a sub-agent's or delegated task's work in a tab of its own |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |
 | The bar under the input | `+` attaches files; then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours): each opens a list on a click. `outside content` appears when the conversation has read something from outside |
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
-| Palette | `⌘K`: every command, open tab, conversation, agent and settings page by name |
+| Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
+
+### Finding a conversation
+
+`⌘K` (or Search at the top of the side bar) is one box for everything. Type a few words:
+
+| It finds | By |
+|---|---|
+| A conversation | Its name, and what was said in it: your messages and the agent's answers. A conversation found by what was said opens with the words marked in it (`↩` goes to the one before, `⇧↩` to the next) |
+| An open tab, an agent, a settings page | Its name |
+| A command | Its name, or what it does |
+
+What fits by its name comes first, then the conversations in which the words were said (each
+with who said it and the place), then the rest. The search over what was said covers the last
+thousand tasks of all agents, which is what the daemon hands out at once; an older message is
+found by opening its conversation and using `⌘F` there.
+
+A conversation you only started (`+`) has no name of its own. The app calls it by how it
+began: the first thing you said in it, in the side bar, on its tab and in the search. Give it a
+name with Rename (a right click, or `/rename`) and that name is used.
 
 Everything in [tui.md](tui.md) about modes, goals, approvals, an agent's questions, its list
 of steps, sub-agents, `/undo` and what a conversation is holds here unchanged: it is the

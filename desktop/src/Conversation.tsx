@@ -289,8 +289,8 @@ function Welcome({ tab }: { tab: Tab }) {
  * Find in the conversation. The matches are marked with the browser's own highlights, which
  * change nothing in the page: no element is added to what an answer drew.
  */
-function FindBar({ root, close }: { root: () => HTMLElement | null; close: () => void }) {
-	const [query, setQuery] = useState("");
+function FindBar({ root, close, initial }: { root: () => HTMLElement | null; close: () => void; initial?: string }) {
+	const [query, setQuery] = useState(initial ?? "");
 	const [at, setAt] = useState(0);
 	const ranges = useRef<Range[]>([]);
 	const [count, setCount] = useState(0);
@@ -401,7 +401,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 			<span className="avatar">{tab.agent.slice(0, 1).toUpperCase()}</span>
 			<span className="muted">{tab.agent}</span>
 			<span className="faint">/</span>
-			<b className="cut">{chat ? tab.session : `task #${tab.task}`}</b>
+			<b className="cut" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
 			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><Icon name="folder" size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
 			{chat && store.pins.has(tab.key) ? <Icon name="star" size={12} className="faint" /> : null}
 			<span className="grow" />
@@ -431,8 +431,22 @@ function Ring({ percent }: { percent: number }) {
 
 export function Conversation({ tab }: { tab: Tab }) {
 	useModel(tab);
-	const [finding, setFinding] = useState(false);
-	useSignal("find", () => setFinding(true));
+	// It opens by a key, and by itself when the conversation was found by words that are in it.
+	const take = () => (store.pendingFind?.key === tab.key ? store.pendingFind.query : undefined);
+	const [finding, setFinding] = useState(() => take() !== undefined);
+	const [looked, setLooked] = useState(() => {
+		const q = take();
+		if (q !== undefined) store.pendingFind = undefined;
+		return q;
+	});
+	useSignal("find", () => {
+		if (store.active !== tab) return;
+		const q = take();
+		if (q !== undefined) (store.pendingFind = undefined), setLooked(q);
+		setFinding(true);
+	});
+	// The words are marked once what was said is on the page.
+	const loaded = tab.loaded;
 	const scroller = useRef<HTMLDivElement>(null);
 	const stick = useRef(true);
 	const [away, setAway] = useState(false);
@@ -460,7 +474,7 @@ export function Conversation({ tab }: { tab: Tab }) {
 	return (
 		<div className="conv">
 			<ConvHead tab={tab} />
-			{finding ? <FindBar root={() => scroller.current} close={() => setFinding(false)} /> : null}
+			{finding && loaded ? <FindBar key={looked ?? ""} initial={looked} root={() => scroller.current} close={() => (setFinding(false), setLooked(undefined))} /> : null}
 			<div
 				className="transcript"
 				ref={scroller}
