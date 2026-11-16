@@ -1,5 +1,5 @@
 {
-  "name": "@pmndrs/pine",
+  "name": "@pmndre/pine",
   "version": "0.22.2",
   "description": "PI neural engine: an event-driven multi-agent daemon built on the pi coding agent SDK",
   "private": true,
@@ -7,11 +7,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pmndrs/pine.git"
+    "url": "git+https://github.com/pmndre/pine.git"
   },
-  "homepage": "https://github.com/pmndrs/pine#readme",
+  "homepage": "https://github.com/pmndre/pine#readme",
   "bugs": {
-    "url": "https://github.com/pmndrs/pine/issues"
+    "url": "https://github.com/pmndre/pine/issues"
   },
   "bin": {
     "pine": "bin/pine"

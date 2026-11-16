@@ -101,7 +101,7 @@ export default function discord(source: SourceApi): void {
 	const api = async (method: string, path: string, signal: AbortSignal, body?: unknown): Promise<any> => {
 		const res = await fetch(`${base}${path}`, {
 			method,
-			headers: { authorization: `Bot ${token}`, "user-agent": "DiscordBot (https://github.com/pmndrs/pine, 1)", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
+			headers: { authorization: `Bot ${token}`, "user-agent": "DiscordBot (https://github.com/pmndre/pine, 1)", ...(body !== undefined ? { "content-type": "application/json" } : {}) },
 			...(body !== undefined ? { body: JSON.stringify(body) } : {}),
 			redirect: "error",
 			signal: AbortSignal.any([signal, AbortSignal.timeout(20_000)]),

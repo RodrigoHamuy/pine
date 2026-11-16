@@ -88,10 +88,10 @@ before it starts" is a schedule the agent sets when it is told of the entry.
 Say what you want watched. The agent picks the type, pine shows you what the source will do,
 and you confirm:
 
-> Tell me on Telegram when pmndrs/pine has a new release.
+> Tell me on Telegram when pmndre/pine has a new release.
 
 The agent calls `add_source` with `type: "feed"`, the address, a description and a note for
-itself. The dialog says "read the feed at https://github.com/pmndrs/pine/releases.atom
+itself. The dialog says "read the feed at https://github.com/pmndre/pine/releases.atom
 every 15m and report each new entry". A password, token or key is never typed into the conversation: the
 agent leaves it out, and pine asks you for it in a dialog of its own and keeps it in `.env`
 ([sources.md](sources.md), "Secrets").
@@ -108,7 +108,7 @@ agent's `agent.json` (only that agent can). The options of the type lie next to 
 
 ```json
 "sources": {
-  "releases": { "type": "feed", "url": "https://github.com/pmndrs/pine/releases.atom", "every": "30m", "description": "new releases of pine" }
+  "releases": { "type": "feed", "url": "https://github.com/pmndre/pine/releases.atom", "every": "30m", "description": "new releases of pine" }
 }
 ```
 

@@ -486,14 +486,14 @@ test("feed and calendar by asking: the type says what it will do, and what canno
 					add("i", "calendar", {}),
 				],
 			},
-			{ tools: [add("releases", "feed", { url: "https://github.com/pmndrs/pine/releases.atom", match: "^v" }), add("family", "calendar", { url: "webcal://127.0.0.1:9/family.ics", ahead: "14d" })] },
+			{ tools: [add("releases", "feed", { url: "https://github.com/pmndre/pine/releases.atom", match: "^v" }), add("family", "calendar", { url: "webcal://127.0.0.1:9/family.ics", ahead: "14d" })] },
 		]),
 		...owner,
 	});
 	const refused = h.toolResults(h.mock.state.requests[1]);
 	for (const [i, re] of [/"every" must be at least "1m"/, /must start with https:\/\/ or http:\/\//, /"match" is not a regular expression/, /user name or password in it is not taken/, /the header Cookie carries a secret: leave it out, name "token" in "ask" and give "tokenHeader": "cookie"/, /"ahead" must be at least "1h"/, /must start with https:\/\/ or http:\/\//, /url is missing/].entries()) assert.match(refused[i], re);
 	assert.equal(asked.length, 2);
-	assert.match(asked[0].summary, /It will: read the feed at https:\/\/github\.com\/pmndrs\/pine\/releases\.atom every 15m and report each new entry whose title or text \/\^v\/ finds\./);
+	assert.match(asked[0].summary, /It will: read the feed at https:\/\/github\.com\/pmndre\/pine\/releases\.atom every 15m and report each new entry whose title or text \/\^v\/ finds\./);
 	assert.match(asked[1].summary, /It will: read the calendar at https:\/\/127\.0\.0\.1:9\/family\.ics \(an address on your own network or this computer\) every 15m and report entries that are added, changed or removed, as far as they begin within 14d\./);
 	const done = h.toolResults().slice(-2);
 	assert.match(done[0], /Added the event source "releases" \(feed\)\. The entries that are in the feed now are the starting point and are not reported/);
