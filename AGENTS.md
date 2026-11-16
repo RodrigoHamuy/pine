@@ -344,6 +344,11 @@ These are invariants. A change that breaks one needs a test that shows why it is
    are cut by pine when the source stops. Two SDK internals are relied on, the `ws_message`
    event and a throw from an `authenticated` listener: look at both when the SDK is upgraded,
    and run `test/chat.test.ts`, which fails without each of these.
+   After a time without a connection the `slack` type asks for what was written meanwhile
+   (`catchUp`): only where it listens, and every message it finds goes through `written()`,
+   so the same filters and the same cap hold as for one it was told. What it could not look
+   at is said in the `gap` event (`missing`), never left out: a new reason why something was
+   not looked at goes there. The gap in the status line is fixed text and times.
    A source that can be asked (`reads` on the type, `onRead` in the source, the agent's
    `read_source`) decides what may be read as it decides where it sends: never more than it
    was set up to listen to, checked in the type's own code whatever the call names (slack:

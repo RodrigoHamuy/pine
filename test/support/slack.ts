@@ -35,7 +35,11 @@ export async function slackSite() {
 	/** What the file host answers, by name. Anything else is not there. */
 	const files: Record<string, { status?: number; type?: string; body?: string | Buffer; location?: string }> = {};
 	/** `socket`, `upload`: another address to hand out for the socket, or for where a file is uploaded to, than this server's own. */
-	const state: { privateScope: boolean; historyScope: boolean; socket?: string; upload?: string } = { privateScope: true, historyScope: true };
+	/** `lists`: which kinds of conversation the app may list (users.conversations), each a scope of its own. */
+	const state: { privateScope: boolean; historyScope: boolean; lists: Record<string, boolean>; socket?: string; upload?: string } = { privateScope: true, historyScope: true, lists: { public_channel: true, private_channel: true, mpim: true, im: true } };
+	/** The conversations the token's account is in, by kind: what users.conversations answers from. */
+	const member: Record<string, string[]> = { public_channel: [OPS, DEV], private_channel: [], mpim: [], im: [DM, ANNAS] };
+	const READS: Record<string, string> = { public_channel: "channels:read", private_channel: "groups:read", mpim: "mpim:read", im: "im:read" };
 	/** What was written before, by channel, oldest first: what conversations.history and conversations.replies answer from. */
 	const history: Record<string, Array<Record<string, any>>> = {};
 	/** What chat.postMessage answered: where each message is, and its ts. */
@@ -84,6 +88,12 @@ export async function slackSite() {
 				if (!parsed.cursor) return json(res, { ok: true, channels: [{ id: "C00GENERAL1", name: "general" }, { id: RANDOM, name: "random" }], response_metadata: { next_cursor: "page-two" } });
 				return json(res, { ok: true, channels: [{ id: OPS, name: "ops" }, { id: DEV, name: "dev" }], response_metadata: { next_cursor: "" } });
 			}
+			if (method === "users.conversations") {
+				const types = String(parsed.types ?? "public_channel").split(",");
+				const lacking = types.find((t) => !state.lists[t]);
+				if (lacking) return json(res, { ok: false, error: "missing_scope", needed: READS[lacking] ?? "", provided: "chat:write" });
+				return json(res, { ok: true, channels: types.flatMap((t) => (member[t] ?? []).map((id) => ({ id, is_im: t === "im", is_mpim: t === "mpim", is_private: t !== "public_channel" }))), response_metadata: { next_cursor: "" } });
+			}
 			if (method === "conversations.history" || method === "conversations.replies") {
 				if (!state.historyScope) return json(res, { ok: false, error: "missing_scope", needed: "channels:history,groups:history,mpim:history,im:history", provided: "channels:read" });
 				const all = history[parsed.channel];
@@ -118,6 +128,7 @@ export async function slackSite() {
 		return id;
 	};
 	let events = 0;
+	let stamps = 0;
 	/** Tell every connected app that something happened, as the Events API does. */
 	const happen = (event: Record<string, unknown>, eventId = `Ev${++events}`) => envelope("events_api", { event_id: eventId, api_app_id: APP_ID, type: "event_callback", event });
 	return {
@@ -130,7 +141,10 @@ export async function slackSite() {
 		posted,
 		files,
 		history,
+		member,
 		state,
+		/** A ts for something written now. Each is later than the one before, also within a millisecond. */
+		stamp: (ms = Date.now()) => `${Math.floor(ms / 1000)}.${String(ms % 1000).padStart(3, "0")}${String(++stamps % 1000).padStart(3, "0")}`,
 		/** The calls of one method. */
 		called: (method: string) => calls.filter((c) => c.method === method),
 		/** Answer the next `times` calls of a method (made with this token, if one is given) with 429 and "Retry-After: 1". */

@@ -109,6 +109,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["be told when somebody writes to me personally or tags me in slack", /^source-types#slack/],
 		["wake me only for slack messages that mention me, not for the others", /^(source-types#slack|sources#being-woken-only-for-what-counts)/],
 		["which scopes does the slack app need and what is the xapp token", /^source-types#slack/],
+		["my laptop was asleep, did I miss slack messages that were written meanwhile", /^source-types#(after-a-time-without-a-connection|slack)/],
+		["slack was disconnected for a while, is what came in during that time complete or incomplete", /^source-types#(after-a-time-without-a-connection|slack)/],
 		["messages in an encrypted matrix room do not arrive", /^source-types#matrix/],
 		["discord closes the connection, something about message content intent", /^source-types#discord/],
 		["tell me when an email from my bank arrives", /^source-types#(mail|which-type)/],

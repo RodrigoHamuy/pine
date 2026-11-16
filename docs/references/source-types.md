@@ -1050,7 +1050,7 @@ What you write yourself is never reported to you.
 | `ignore` | | User ids that are never reported: a colleague's bot account, a channel's chatterbox. An app's id (`B...`) is taken too. What the token's own account writes (with a user token: you) is left out without being listed. |
 | `sendTo` | none | Where an agent may write, by id only: channels (`"C0123ABCD"`) and people (`"U0123ABCD"`, a direct message). Without it the source only listens. Needs `token`. See "Sending" below. |
 | `perMinute` | `60` | At most this many reports a minute, 1 to 600. What comes on top is counted and dropped, and the next report says how many were (`dropped`). |
-| `history` | `true` | With a `token`: an agent may read what was written earlier where the source listens (`read_source`), and an answer in a thread comes with the messages it answers. `false` turns both off. |
+| `history` | `true` | With a `token`: an agent may read what was written earlier where the source listens (`read_source`), an answer in a thread comes with the messages it answers, and what was written while the source was not connected is asked for afterwards. `false` turns all three off. |
 | `context` | `3` | How many earlier messages of a thread come with an answer in it, the thread's first message among them. `0` for none, `10` at most. |
 | `maxMb` | `10` | Files that come with a message are fetched up to this size (50 at most). A larger one is named in the event, without a `path`. Needs `token`. |
 | `keepDays` | `7` | Fetched files are deleted after this many days. |
@@ -1071,7 +1071,7 @@ shown where the sources are listed: `there is no channel named "opps" that the a
 
 | `events` | Event | Fields | When |
 |---|---|---|---|
-| `"message"` | `message` | `{ text, user, userName?, channel, channelName?, kind, ts, thread?, reply?, bot?, mention?, keyword?, from?, files?, images?, dropped? }` | Somebody wrote something that counts. |
+| `"message"` | `message` | `{ text, user, userName?, channel, channelName?, kind, ts, thread?, reply?, bot?, mention?, keyword?, from?, files?, images?, late?, dropped? }` | Somebody wrote something that counts. |
 | `"reaction"` | `reaction` | `{ reaction, added, user, userName?, channel, channelName?, ts, author?, authorName? }` | Somebody put an emoji on a message (`added: true`) or took it away (`false`). `ts` is the message, `author` who wrote it. |
 | `"edit"` | `edited` | `{ text, previous?, user, userName?, channel, channelName?, kind, ts, mention?, keyword?, from? }` | A message was changed. `previous` is what it said before. The preview Slack puts under a link is not an edit. |
 | `"edit"` | `deleted` | `{ channel, channelName?, ts, previous? }` | A message was deleted. `previous` is what it said. |
@@ -1080,6 +1080,7 @@ shown where the sources are listed: `there is no channel named "opps" that the a
 | `"pin"` | `pin` | `{ added, channel, channelName?, ts?, user, userName? }` | A message was pinned (`added: true`) or unpinned. |
 | `"command"` | `command` | `{ command, text, user, userName?, channel, channelName? }` | Somebody typed a slash command of your app: `command` is `"/deploy"`, `text` what followed it. Whoever typed it reads "Passed on." |
 | `"other"` | `event` | `{ type, data }` | Any other event your app is subscribed to. `type` is Slack's name for it, `data` the event as Slack sent it, cut at 4000 characters. |
+| always | `gap` | `{ text, from, to, seconds, found, looked, complete, missing? }` | The source was not connected for a minute or longer, and is again. `text` says it in a sentence. `complete: false` means that not everything from that time is known, and `missing` lists why. See "After a time without a connection". |
 
 Any event can carry `dropped`: how many reports were left out before it, when more than
 `perMinute` counted in a minute.
@@ -1096,6 +1097,7 @@ The fields of a `message`:
 | `thread`, `reply` | For an answer in a thread: `reply: true`, and `thread` is the time stamp of the thread. `thread` is what `send` takes to answer in that thread. |
 | `context` | For an answer in a thread: what it answers, as a list of `{ user, userName?, text, ts }`, oldest first. The thread's first message and the last ones before the answer, `context` of them (3). Not there with `history: false`, without a `token`, or when the app may not read history. |
 | `bot` | `true` when an app or integration posted it. |
+| `late` | `true` when it was written while the source was not connected, and pine asked Slack for it afterwards. `ts` says when it was written. |
 | `why` | Why it is reported, a word for each reason: `"dm"` (written to you directly), `"mention"`, `"keyword"`, `"from"` (its sender is on `from`), or `"channel"` when it is none of these and simply was written where the source listens. A list, since a message can be several: a subscription picks with `"payload.why": { "contains": "mention" }`. |
 | `mention`, `keyword` | Which entry of `mentions` it mentions (for `"me"`: the id), and which word on `keywords` it contains. |
 | `from` | `true` when its sender is on `from`. |
@@ -1161,13 +1163,16 @@ On api.slack.com/apps, "Create New App", "From scratch":
 | names of people | | `users:read` |
 | names of channels, and `channels` by name | | `channels:read`, and `groups:read` for private channels |
 | the files of a message | | `files:read` |
+| what was written while it was not connected, in conversations it has seen a message in | | the `...:history` scope of that kind of conversation, which being told of messages there needs anyway |
+| the same in conversations it has not seen a message in yet (somebody who writes to you for the first time) | | `im:read` for direct conversations; without a list of `channels` also `channels:read`, `groups:read` and `mpim:read` |
 | posting a message | | `chat:write` (and `chat:write.public` to post in a public channel the bot is not in) |
 | a direct message to a person on `sendTo` | | `chat:write`, `im:write` |
 | an emoji on a message | | `reactions:write` |
 | sending a file | | `files:write` |
 
 A scope that is missing does not stop the source, with one exception: a name is left out, a
-file has no `path`, and a `send` says which scope Slack wants. The exception is a channel
+file has no `path`, a `send` says which scope Slack wants, and after a time without a
+connection the `gap` event names what could not be looked at. The exception is a channel
 given by its name, which cannot be found without `channels:read`.
 
 A **bot token** (`xoxb-`) sees the channels the bot was invited to (`/invite @yourapp`) and
@@ -1238,15 +1243,59 @@ there writes /invite and its name`.
 
 If the connection ends it is made again, as described under `stream` ("Staying connected").
 Slack itself closes it now and then and says so beforehand; pine connects again at once.
-Slack is pinged every few seconds, so a line that died without a word is noticed. Messages
-written while it was not connected are not asked for afterwards. When Slack says "slow down"
-to a call, pine waits as long as Slack says and asks again.
+Slack is pinged every few seconds, so a line that died without a word is noticed. A machine
+that slept does not trust the line it finds open when it wakes: pine connects again. When
+Slack says "slow down" to a call, pine waits as long as Slack says and asks again.
 
 Where the sources are listed, the line says how things stand: `connected since 14:02:11.
 listening to 2 channels and direct messages, for messages, reactions`, or `cannot connect
 since 14:02:11 (3 attempts): Slack refused apps.connections.open: invalid_auth`. A `token`
 that Slack does not take, and a channel name it does not know, are why a source does not
 start at all.
+
+#### After a time without a connection
+
+Slack does not send again what was written while nobody was connected: the machine was
+asleep, the network was gone, pine was not running. So pine notes when the connection last
+worked (also across a restart), and when it is connected again it asks Slack for what was
+written since, where the source listens and nowhere else:
+
+- Each message that counts is reported like any other, with `late: true`, oldest first. An
+  answer in a thread is found when the thread began among the last 50 messages of its channel.
+- After a minute or more, a `gap` event comes first:
+
+```json
+{ "text": "Slack was not connected from 2026-03-02 14:02:11 to 2026-03-02 14:07:30 (5 minutes). 2 messages written in that time follow, marked \"late\". It looked through all 14 conversations it listens to.",
+  "from": "2026-03-02 14:02:11", "to": "2026-03-02 14:07:30", "seconds": 319, "found": 2, "looked": 14, "complete": true }
+```
+
+`complete: false` means that the time is not fully known, and `missing` says why, each reason
+a sentence. An agent that tells you what came in passes that on, and does not say "nothing
+new" for a time it could not look at:
+
+| `missing` says | Why | What helps |
+|---|---|---|
+| `direct conversations this source had not seen a message in were not looked at (the app lacks the scope im:read)` | pine knows a conversation from the first message it saw in it. Which others there are, it has to ask Slack, and the app may not. The same for `public channels` (`channels:read`), `private channels` (`groups:read`) and `group conversations` (`mpim:read`) when the source has no list of `channels`. | Add the scope to the Slack app (for a user token among the User Token Scopes) and install the app again. |
+| `1 direct conversation could not be read (the app lacks the scope im:history)` | The app may not read what was written earlier in that kind of conversation. | Add that scope. |
+| `3 conversations could not be read (not_in_channel)` | Slack refused, in its own word, or could not be reached. | For `not_in_channel`: invite the app to the channel. |
+| `this source has no token, so it could not ask Slack what was written in that time` | Asking needs the `token`. | Set the source up again with a `token`. |
+| `this source was set up not to read what was written earlier ("history": false)` | | |
+| `2 more messages from that time were left out, since at most 60 are reported in a minute` | `perMinute`. | The agent reads the rest with `read_source`. |
+| `what else happened in that time (reactions, edits) cannot be asked for afterwards` | Slack keeps messages, and not who reacted, joined or edited when. A source that reports such things always says this. | |
+| `what the people on "from" wrote outside the listed channels was not looked for` | With a list of `channels`, only those and direct conversations are asked for. | |
+| `12 more conversations were not looked at: 200 is the most at once` | | |
+
+A gap shorter than a minute (Slack renewing the connection, which it does now and then and
+which takes a moment) is made up for quietly: pine asks in the listed `channels` and in the conversations
+it has seen a message in, 40 at most, and reports no `gap`. After a longer one it also asks
+Slack which conversations there are, 200 at most. Reactions, edits and the other kinds are
+never made up for.
+
+Where the sources are listed, the last gap is said too: `connected since 14:07:30. listening
+to ... Not connected from 2026-03-02 14:02:11 to 2026-03-02 14:07:30: not everything from
+then is known`. A subscription that picks with `when` (`"payload.why": { "contains":
+"mention" }`) is not woken by a `gap`, which has no `why`: an agent that is asked what came
+in looks at that line.
 
 #### Coming from the old Slack monitor
 

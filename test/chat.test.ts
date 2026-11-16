@@ -679,6 +679,197 @@ test("slack: a socket that never answers is not waited for, neither with its gre
 	assert.deepEqual([silent.taken(), deaf.taken(), slack.calls.length], taken, "nothing connects after the sources stopped");
 });
 
+// What a gap looks like here: a second counts as one, Slack's "wait this long" lasts a second and a half, and the connection is noted to work ten times a second. Pings are left out.
+const gapPace = { second: 1500, ping: 3_600_000, beat: 100, margin: 4000, quiet: 1000, between: 0 };
+const STAMP = "\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d";
+/** The line goes, and Slack lets none of the `sources` back in for a moment. */
+const lineGoes = (slack: Slack, sources: number) => {
+	slack.limit("apps.connections.open", sources);
+	for (const c of slack.site.live()) c.drop();
+};
+const gaps = (h: Harness, name: string) => named(h, name).filter(([kind]) => kind === "gap").map(([, p]) => p);
+const lateOnes = (h: Harness, name: string) => payloads(h, name).filter((p) => p.late).map((p) => p.text);
+
+test("slack, a gap: what was written while it was not connected is asked for afterwards and reported late, and an event says how long it was away", async (t) => {
+	const slack = await slackSite();
+	t.after(() => slack.site.close());
+	const usual = { ...pace };
+	Object.assign(pace, gapPace);
+	t.after(() => void Object.assign(pace, usual));
+	const root = "1700000000.000100";
+	slack.history[OPS] = [{ user: ANNA, ts: "1700000001.000100", text: "long ago" }];
+	slack.history[DEV] = [{ user: BOSS, ts: root, text: "shall we move the release?", reply_count: 1 }];
+	slack.history[DM] = [];
+	slack.history[ANNAS] = [];
+	// The owner's own account, everywhere it is; one that reports little; one that also reports reactions.
+	const mine = { type: "slack", start: "always", apiBase: slack.api, appToken: APP, token: USER };
+	const h = await harness({ pine: { sources: { inbox: mine, tight: { ...mine, perMinute: 2 }, likes: { ...mine, events: ["message", "reaction"] } } }, agents: { main: {} } });
+	await connected(h, "inbox", "tight", "likes");
+	// Told as it is written: the usual way.
+	const before = { user: ANNA, ts: slack.stamp(), text: "before the line went" };
+	slack.history[OPS].push(before);
+	slack.say({ ...before, channel: OPS, channel_type: "channel" });
+	await until(() => ["inbox", "tight", "likes"].every((n) => reported(h, n).length === 1), 4000, "the message before the gap");
+	assert.equal(slack.called("conversations.history").length, 0, "nothing is asked for while the connection holds");
+
+	// Meanwhile people write: in a channel, somebody new directly, an answer in an old thread. And the owner writes too.
+	lineGoes(slack, 3);
+	slack.history[OPS].push({ user: ANNA, ts: slack.stamp(), text: "written while away" }, { subtype: "channel_join", user: BOSS, ts: slack.stamp(), text: "joined" });
+	slack.history[ANNAS].push({ user: ANNA, ts: slack.stamp(), text: "a first message from somebody new" });
+	slack.history[DM].push({ user: ME, ts: slack.stamp(), text: "what I wrote myself" });
+	const answer = slack.stamp();
+	slack.history[DEV][0].latest_reply = answer;
+	slack.history[DEV].push({ user: ANNA, ts: answer, thread_ts: root, text: "yes, to Thursday" });
+	await until(() => ["inbox", "tight", "likes"].every((n) => gaps(h, n).length === 1) && reported(h, "inbox").length === 5, 8000, "the gap and what was written in it");
+	await connected(h, "inbox", "tight", "likes");
+
+	// First how long it was away and that this is everything, then the messages, oldest first, each marked.
+	const all = named(h, "inbox");
+	assert.deepEqual(all.map(([kind, p]) => [kind, p.text?.startsWith("Slack was not") ? "" : p.text, p.late]), [
+		["message", "before the line went", undefined],
+		["gap", "", undefined],
+		["message", "written while away", true],
+		["message", "a first message from somebody new", true],
+		["message", "yes, to Thursday", true],
+	]);
+	const gap = all[1][1];
+	assert.match(gap.text, new RegExp(`^Slack was not connected from ${STAMP} to ${STAMP} \\(\\d+ seconds?\\)\\. 3 messages written in that time follow, marked "late"\\. It looked through all 4 conversations it listens to\\.$`));
+	assert.deepEqual([gap.found, gap.looked, gap.complete, gap.missing], [3, 4, true, undefined]);
+	assert.ok(gap.seconds >= 1 && new RegExp(`^${STAMP}$`).test(gap.from) && new RegExp(`^${STAMP}$`).test(gap.to), JSON.stringify(gap));
+	// A late message is a message like any other: where, by whom, why, and for an answer in a thread what it answers.
+	assert.deepEqual([all[3][1].kind, all[3][1].why, all[3][1].channel, all[3][1].userName], ["dm", ["dm"], ANNAS, "Anna"]);
+	assert.deepEqual([all[4][1].thread, all[4][1].reply, all[4][1].channelName, all[4][1].context.map((c: any) => c.text)], [root, true, "dev", ["shall we move the release?"]]);
+	assert.equal(reported(h, "inbox")[2].trust, "untrusted");
+	// Where the sources are listed, the gap is said too, for an agent that was not woken by it.
+	assert.match(sourceInfo(h, "inbox").status!, new RegExp(`^connected since \\d\\d:\\d\\d:\\d\\d\\. listening to every channel the app is in and direct messages\\. Not connected from ${STAMP} to ${STAMP}: what was written then was asked for afterwards$`));
+	// Each kind of conversation was asked for once by each source: that is how the one with somebody new was found.
+	assert.equal(slack.called("users.conversations").length, 12);
+
+	// More than a source reports in a minute: said, with how to read the rest. Nothing is passed off as everything.
+	const tight = gaps(h, "tight")[0];
+	assert.deepEqual([tight.found, tight.complete, tight.missing], [1, false, ['2 more messages from that time were left out, since at most 2 are reported in a minute ("perMinute"): read_source shows what was written']]);
+	assert.match(tight.text, /marked "late"\. This is not everything: 2 more messages from that time were left out/);
+	assert.deepEqual(lateOnes(h, "tight"), ["written while away"]);
+	// A reaction cannot be asked for afterwards, and a source that reports them says so.
+	assert.deepEqual([gaps(h, "likes")[0].found, gaps(h, "likes")[0].complete, gaps(h, "likes")[0].missing], [3, false, ["what else happened in that time (reactions) cannot be asked for afterwards"]]);
+
+	// The line is gone for a moment only, as when Slack renews it: what was written is still found, in the conversations
+	// the source knows, and nobody is told of a gap or asked for a list.
+	const listed = slack.called("users.conversations").length;
+	for (const c of slack.site.live()) c.drop();
+	slack.history[OPS].push({ user: BOSS, ts: slack.stamp(), text: "in the blink of an eye" });
+	await until(() => lateOnes(h, "inbox").includes("in the blink of an eye"), 5000, "the message of a short gap");
+	await connected(h, "inbox", "tight", "likes");
+	await sleep(150);
+	assert.equal(gaps(h, "inbox").length, 1, "a gap too short to matter is not reported");
+	assert.equal(slack.called("users.conversations").length, listed);
+
+	// pine is stopped and started: what it knew is kept, so what was written meanwhile is found and nothing is told twice.
+	slack.history[OPS].push({ user: ANNA, ts: slack.stamp(), text: "while pine was not running" });
+	await h.restart();
+	await until(() => lateOnes(h, "inbox").includes("while pine was not running"), 8000, "the message from while pine was not running");
+	await sleep(150);
+	const texts = payloads(h, "inbox").map((p) => p.text);
+	for (const once of ["before the line went", "written while away", "in the blink of an eye", "while pine was not running"]) assert.equal(texts.filter((x) => x === once).length, 1, once);
+	assert.ok(!texts.includes("what I wrote myself") && !texts.includes("joined") && !texts.includes("long ago"));
+	nothingSecret(h);
+	await h.close();
+});
+
+test("slack, a gap: what the app may not list or read is named as missing, nothing is passed off as everything, and the source stays up", async (t) => {
+	const slack = await slackSite();
+	t.after(() => slack.site.close());
+	const usual = { ...pace };
+	Object.assign(pace, gapPace);
+	t.after(() => void Object.assign(pace, usual));
+	// An app with the least: it is told of messages, and may list nothing.
+	slack.state.lists = {};
+	slack.history[OPS] = [];
+	slack.history[DM] = [];
+	slack.history[DEV] = [];
+	slack.history[ANNAS] = [];
+	slack.history[RANDOM] = [];
+	const bot = { type: "slack", start: "always", apiBase: slack.api, appToken: APP, token: BOT };
+	const names = ["plain", "named", "deaf", "shut"];
+	const h = await harness({
+		pine: { sources: { plain: bot, named: { ...bot, channels: [OPS], from: [BOSS] }, deaf: { type: "slack", start: "always", apiBase: slack.api, appToken: APP }, shut: { ...bot, history: false } } },
+		agents: { main: {} },
+	});
+	await connected(h, ...names);
+	// Where it has seen a message, it knows a conversation without asking for a list.
+	for (const m of [{ user: ANNA, channel: OPS, channel_type: "channel", ts: slack.stamp(), text: "morning" }, { user: ANNA, channel: DM, channel_type: "im", ts: slack.stamp(), text: "hi" }]) {
+		slack.history[m.channel].push(m);
+		slack.say(m);
+	}
+	await until(() => names.every((n) => reported(h, n).length === 2), 4000, "the messages before the gap");
+
+	lineGoes(slack, 4);
+	slack.history[OPS].push({ user: ANNA, ts: slack.stamp(), text: "outage while away" });
+	slack.history[DM].push({ user: ANNA, ts: slack.stamp(), text: "are you there?" });
+	slack.history[DEV].push({ user: ANNA, ts: slack.stamp(), text: "in a channel it never saw a message in" });
+	slack.history[ANNAS].push({ user: BOSS, ts: slack.stamp(), text: "a first message from somebody new" });
+	slack.history[RANDOM].push({ user: BOSS, ts: slack.stamp(), text: "the boss, outside the listed channels" });
+	await until(() => names.every((n) => gaps(h, n).length === 1) && lateOnes(h, "plain").length === 2 && lateOnes(h, "named").length === 2, 8000, "the gaps");
+	await connected(h, ...names);
+	await sleep(150);
+
+	const unseen = (what: string, scope: string) => `${what} this source had not seen a message in were not looked at (the app lacks the scope ${scope})`;
+	const plain = gaps(h, "plain")[0];
+	assert.deepEqual(lateOnes(h, "plain"), ["outage while away", "are you there?"]);
+	assert.deepEqual([plain.found, plain.looked, plain.complete], [2, 2, false]);
+	assert.deepEqual(plain.missing, [unseen("public channels", "channels:read"), unseen("private channels", "groups:read"), unseen("group conversations", "mpim:read"), unseen("direct conversations", "im:read")]);
+	assert.match(plain.text, new RegExp(`^Slack was not connected from ${STAMP} to ${STAMP} \\(\\d+ seconds?\\)\\. 2 messages written in that time follow, marked "late"\\. This is not everything: public channels this source had not seen a message in were not looked at \\(the app lacks the scope channels:read\\); .*; direct conversations this source had not seen a message in were not looked at \\(the app lacks the scope im:read\\)\\.$`));
+	assert.match(sourceInfo(h, "plain").status!, /^connected since .*\. Not connected from .* to .*: not everything from then is known$/);
+	// Given its channels, it asks for no list of channels; what somebody on "from" wrote elsewhere is said not to be known.
+	assert.deepEqual(lateOnes(h, "named"), ["outage while away", "are you there?"]);
+	assert.deepEqual(gaps(h, "named")[0].missing, [unseen("direct conversations", "im:read"), 'what the people on "from" wrote outside the listed channels was not looked for']);
+	assert.equal(slack.called("users.conversations").length, 5);
+	// Without a token, and set up not to read: nothing can be asked for, which is what the event says.
+	assert.deepEqual([gaps(h, "deaf")[0].found, gaps(h, "deaf")[0].looked, gaps(h, "deaf")[0].complete, gaps(h, "deaf")[0].missing], [0, 0, false, ["this source has no token, so it could not ask Slack what was written in that time"]]);
+	assert.match(gaps(h, "deaf")[0].text, new RegExp(`^Slack was not connected from ${STAMP} to ${STAMP} \\(\\d+ seconds?\\)\\. This is not everything: this source has no token, so it could not ask Slack what was written in that time\\.$`));
+	assert.deepEqual(gaps(h, "shut")[0].missing, ['this source was set up not to read what was written earlier ("history": false)']);
+	assert.deepEqual([lateOnes(h, "deaf"), lateOnes(h, "shut")], [[], []]);
+	// Reading went as far as listening does: no conversation was asked for that the source had not been told a message from.
+	assert.deepEqual([...new Set(slack.called("conversations.history").map((c) => c.body.channel))].sort(), [OPS, DM].sort());
+
+	// An app that may not read what was written earlier either: said by the kind of conversation, with the scope each needs.
+	slack.state.historyScope = false;
+	lineGoes(slack, 4);
+	slack.history[OPS].push({ user: ANNA, ts: slack.stamp(), text: "nobody will see this" });
+	await until(() => gaps(h, "plain").length === 2, 8000, "the second gap");
+	await connected(h, ...names);
+	const second = gaps(h, "plain")[1];
+	assert.deepEqual([second.found, second.looked, second.complete], [0, 0, false]);
+	assert.deepEqual(second.missing.slice(4), ["1 direct conversation could not be read (the app lacks the scope im:history)", "1 public channel could not be read (the app lacks the scope channels:history)"]);
+	assert.ok(!second.text.includes("Nothing that counts"), "it does not say nothing was written where it could not look");
+	// And it still hears what is written now.
+	slack.say({ user: ANNA, channel: OPS, channel_type: "channel", ts: slack.stamp(), text: "still here?" });
+	await until(() => payloads(h, "plain").some((p) => p.text === "still here?" && !p.late), 4000, "a message after the gaps");
+	nothingSecret(h);
+	await h.close();
+});
+
+test("slack, a gap: a machine that slept does not trust the line it finds open, connects again and asks for what was written", async (t) => {
+	const slack = await slackSite();
+	t.after(() => slack.site.close());
+	const usual = { ...pace };
+	// The connection is noted to work twenty times a second, and a note that comes a seventh of a second late means the process stood still.
+	Object.assign(pace, { ping: 3_600_000, beat: 50, margin: 200, quiet: 250, between: 0 });
+	t.after(() => void Object.assign(pace, usual));
+	slack.history[OPS] = [];
+	const h = await harness({ pine: { sources: { inbox: { type: "slack", start: "always", apiBase: slack.api, appToken: APP, token: BOT, channels: [OPS], dms: false } } }, agents: { main: {} } });
+	await connected(h, "inbox");
+	await sleep(120);
+	const before = opened(slack);
+	// Nothing happens for a while, here and at the stand-in alike: the lid is closed. The line is open as before when it is over.
+	slack.history[OPS].push({ user: ANNA, ts: slack.stamp(Date.now() + 200), text: "written while the lid was closed" });
+	Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 600);
+	await until(() => opened(slack) > before && gaps(h, "inbox").length >= 1 && lateOnes(h, "inbox").length === 1, 8000, "the new connection and what was written meanwhile");
+	assert.deepEqual(lateOnes(h, "inbox"), ["written while the lid was closed"]);
+	assert.equal(gaps(h, "inbox")[0].complete, true);
+	await h.close();
+});
+
 // ---- Matrix -----------------------------------------------------------------------------------------
 
 const MX = "syt_stand-in-matrix-access-token";
@@ -1013,6 +1204,7 @@ test("slack, matrix and discord by asking: ids are checked, tokens are typed int
 				'also report who puts which emoji on which message, or takes it away; the slash commands of your app, each answered with "Passed on."',
 				"with a token, fetch the files that come with a message, up to 10 MB each, and keep them for 7 days where the agent can read them",
 				"with a token, let the agent read what was written earlier where it listens (a channel, a direct conversation, a thread), so that it understands what it is told; an answer in a thread comes with the messages it answers",
+				"with a token, after a time without a connection (the machine asleep, the network gone, pine not running), ask Slack for what was written there meanwhile and report it late",
 				`let the agent post messages and files to ${OPS} and put emoji on messages there, and write to ${ANNA} directly, where other people read them.`,
 			].join("; "),
 		),

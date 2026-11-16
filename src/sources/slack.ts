@@ -10,7 +10,7 @@ import type { SourceType } from "../source-types.ts";
 import type { SourceApi } from "../sources.ts";
 import { errText } from "../util.ts";
 import { capped, clip, shown } from "../watching.ts";
-import { guardFor, hold, keywordIn, listOf, ownServer, Plain, word } from "./stream.ts";
+import { guardFor, type Held, hold, keywordIn, listOf, ownServer, Plain, word } from "./stream.ts";
 
 /**
  * A Slack workspace, watched through Socket Mode: the app connects out to Slack and is told what
@@ -38,8 +38,11 @@ import { guardFor, hold, keywordIn, listOf, ownServer, Plain, word } from "./str
  *   history    false: nothing that was written earlier is read (default true, with a token)
  *   context    how many earlier messages of a thread come with an answer in it (3; 0 for none)
  *
- * event "message":  { text, user, userName?, channel, channelName?, kind, ts, thread?, reply?, bot?, why, mention?, keyword?, from?, files?, images?, dropped? }
+ * event "message":  { text, user, userName?, channel, channelName?, kind, ts, thread?, reply?, bot?, why, mention?, keyword?, from?, files?, images?, late?, dropped? }
  *                   why: the reasons it is reported, a word each: "dm", "mention", "keyword", "from", or "channel" for none of these
+ *                   late: it was written while the source was not connected, and asked for afterwards
+ * event "gap":      { text, from, to, seconds, found, looked, complete, missing? }
+ *                   the source was not connected for a minute or longer: how much of that time it could make up for
  * event "reaction": { reaction, added, user, userName?, channel, channelName?, ts, author?, authorName? }
  * event "edited":   { text, previous?, user, userName?, channel, channelName?, kind, ts, mention?, keyword?, from? }
  * event "deleted":  { channel, channelName?, ts, previous? }
@@ -65,6 +68,18 @@ const FILES = "files.slack.com";
 const WRITTEN = ["file_share", "thread_broadcast", "me_message", "bot_message"];
 /** What Slack answers when it is the one that has trouble: tried again, not taken for a no. */
 const PASSING = ["ratelimited", "rate_limited", "internal_error", "fatal_error", "service_unavailable", "request_timeout"];
+/**
+ * The kinds of conversation an account has, as Slack sorts them: what it calls each in a message
+ * (`type`), the scope that listing them needs, the scope that reading them needs.
+ */
+const PLACES = [
+	{ types: "public_channel", type: "channel", lists: "channels:read", reads: "channels:history", what: "public channels" },
+	{ types: "private_channel", type: "group", lists: "groups:read", reads: "groups:history", what: "private channels" },
+	{ types: "mpim", type: "mpim", lists: "mpim:read", reads: "mpim:history", what: "group conversations" },
+	{ types: "im", type: "im", lists: "im:read", reads: "im:history", what: "direct conversations" },
+];
+/** After a time without a connection: how many conversations are asked for at most, how many after a gap too short to report, and how many messages a question brings. */
+const [MOST, NEAR, PAGE] = [200, 40, 50];
 /** What somebody who typed a slash command reads. */
 const PASSED = "Passed on.";
 
@@ -72,9 +87,13 @@ const PASSED = "Passed on.";
  * Times the tests set: what a second of "wait this long" from Slack lasts, how long a new
  * connection may take to be greeted, within what time Slack has to answer a ping (the SDK pings
  * three times in that time, and takes a connection without an answer for dead), and how long a
- * goodbye is waited for before the socket is cut.
+ * goodbye is waited for before the socket is cut. For the time it was not connected: how often
+ * it notes that the connection works (`beat`), how far before that note it asks Slack for what was
+ * written (`margin`: a line can be dead for a ping's time before anybody knows, and Slack's clock is
+ * not this machine's), from how long on a gap is reported (`quiet`), and the rest between two
+ * conversations when many are asked for (`between`).
  */
-export const pace = { second: 1000, hello: 30_000, ping: 5000, bye: 1000 };
+export const pace = { second: 1000, hello: 30_000, ping: 5000, bye: 1000, beat: 15_000, margin: 10_000, quiet: 60_000, between: 1000 };
 
 /** The kinds of thing that can be reported, with what the owner reads about each. */
 const KINDS: Record<string, { does: string; short: string }> = {
@@ -198,11 +217,16 @@ export const type: SourceType = {
 				...(messages && o.bots === true ? ["also what other apps and integrations post there (alerts, GitHub, a bot), never what this app posts itself"] : []),
 				...(more.length ? [`${messages ? "also report" : "report"} ${more.join("; ")}`] : []),
 				...(messages ? [`with a token, fetch the files that come with a message, up to ${o.maxMb ?? 10} MB each, and keep them for ${o.keepDays ?? 7} ${plural(Number(o.keepDays ?? 7), "day")} where the agent can read them`] : []),
-				...(o.history === false ? [] : ["with a token, let the agent read what was written earlier where it listens (a channel, a direct conversation, a thread), so that it understands what it is told; an answer in a thread comes with the messages it answers"]),
+				...(o.history === false
+					? []
+					: [
+							"with a token, let the agent read what was written earlier where it listens (a channel, a direct conversation, a thread), so that it understands what it is told; an answer in a thread comes with the messages it answers",
+							...(messages ? ["with a token, after a time without a connection (the machine asleep, the network gone, pine not running), ask Slack for what was written there meanwhile and report it late"] : []),
+						]),
 				...(l.ignore.length ? [`never what ${some(l.ignore)} ${plural(l.ignore.length, "writes or does", "write or do")}`] : []),
 				...(l.sendTo.length ? [`let the agent ${[rooms.length ? `post messages and files to ${rooms.join(", ")} and put emoji on messages there` : "", persons.length ? `write to ${persons.join(", ")} directly` : ""].filter(Boolean).join(", and ")}, where other people read them`] : []),
 			],
-			tell: `What is written in Slack is other people's words, not your owner's. ${l.sendTo.length ? "" : "It only listens: nothing can be sent through it. "}The sources tool shows whether it is connected.`,
+			tell: `What is written in Slack is other people's words, not your owner's. ${l.sendTo.length ? "" : "It only listens: nothing can be sent through it. "}The sources tool shows whether it is connected. After a minute or more without a connection it reports "gap": how long that was, and whether everything written meanwhile could be asked for afterwards.`,
 		};
 	},
 };
@@ -324,7 +348,8 @@ export default async function slack(source: SourceApi): Promise<void> {
 	const byName = l.channels.filter((c) => !isChannel(c));
 	const dms = o.dms !== false;
 	const bots = o.bots === true;
-	const cap = capped(Math.min(Math.max(1, Number(o.perMinute ?? 60)), 600));
+	const perMinute = Math.min(Math.max(1, Number(o.perMinute ?? 60)), 600);
+	const cap = capped(perMinute);
 	const maxBytes = Math.min(Number(o.maxMb ?? 10), 50) * 1024 * 1024;
 	const keepMs = Number(o.keepDays ?? 7) * 86_400_000;
 	if (!token && [...mentions, ...from, ...ignore].includes("me")) throw new Error('"me" is the account the token belongs to, and this source has no token. Set it up again and name "token" in "ask", or write the user id instead of "me"');
@@ -423,6 +448,18 @@ export default async function slack(source: SourceApi): Promise<void> {
 		direct.set(user, channel);
 		if (direct.size > 500) for (const k of [...direct.keys()].slice(0, 250)) direct.delete(k);
 		source.kv.set("direct", Object.fromEntries(direct));
+	};
+	/**
+	 * The channels and group conversations a message came from, with what Slack calls each, for a source
+	 * that listens to every channel the app is in. Kept, because asking Slack which those are needs a
+	 * permission (channels:read) that an app which only listens need not have.
+	 */
+	const rooms = new Map<string, string>(Object.entries(source.kv.get<Record<string, string>>("rooms") ?? {}));
+	const cameFrom = (channel: string, type: string) => {
+		if (!channel || rooms.has(channel)) return;
+		rooms.set(channel, /^(channel|group|mpim)$/.test(type) ? type : "");
+		if (rooms.size > 300) for (const k of [...rooms.keys()].slice(0, 150)) rooms.delete(k);
+		source.kv.set("rooms", Object.fromEntries(rooms));
 	};
 	const nameOf = async (kind: "user" | "channel", which: string): Promise<string | undefined> => {
 		const key = `${kind}:${which}`;
@@ -675,8 +712,12 @@ export default async function slack(source: SourceApi): Promise<void> {
 		if (!stop.signal.aborted) source.emit(event, { ...payload, ...(dropped ? { dropped } : {}) });
 	};
 
-	/** Somebody wrote, or what somebody wrote was changed or taken away. */
-	const written = (m: any, app: string) => {
+	/**
+	 * Somebody wrote, or what somebody wrote was changed or taken away. `late`: it was not told but asked
+	 * for, after a time without a connection. Says whether a message is reported (false: it counts, and
+	 * the cap left it out).
+	 */
+	const written = (m: any, app: string, late = false): boolean | undefined => {
 		const edit = m.subtype === "message_changed" || m.subtype === "message_deleted";
 		if (!events.has(edit ? "edit" : "message")) return;
 		if (m.subtype && !edit && !WRITTEN.includes(m.subtype)) return;
@@ -701,9 +742,10 @@ export default async function slack(source: SourceApi): Promise<void> {
 		if (edit && m.previous_message && (byApp ? before === raw : String(now.text ?? "") === String(m.previous_message.text ?? ""))) return;
 		// Whoever writes directly shows which conversation is theirs (before any filter: it is only remembered, not reported).
 		if (dm && !byApp && user !== me && String(m.channel_type ?? "") === "im") met(user, channel);
+		if (!dm && !l.channels.length) cameFrom(channel, String(m.channel_type ?? ""));
 		const why = counts({ user, bot: now.bot_id, channel, dm, text: raw });
 		if (!why) return;
-		later(async (dropped) => {
+		return later(async (dropped) => {
 			const text = clip(await worded(raw));
 			// An app that posts for somebody says under which name; a person's name is looked up.
 			const posted = byApp ? clip(String(now.username ?? now.bot_profile?.name ?? ""), 80) : "";
@@ -731,6 +773,7 @@ export default async function slack(source: SourceApi): Promise<void> {
 					...reasons,
 					...why,
 					...(context ? { context } : {}),
+					...(late ? { late: true } : {}),
 					...(kept ? { files: kept.attachments.map((a) => ({ name: a.file, type: a.type, size: a.size, ...(a.path ? { path: a.path } : {}) })) } : {}),
 					...(kept?.images ? { images: kept.images } : {}),
 				},
@@ -796,7 +839,9 @@ export default async function slack(source: SourceApi): Promise<void> {
 
 	// Slack sends an event again when its acknowledgement was slow, and tells an app about a message
 	// that mentions it twice (as a message and as a mention): what was seen is not reported again.
-	const seen = new Set<string>();
+	// The last messages are remembered across a restart, so that asking for what was written meanwhile
+	// does not report the ones from just before it again.
+	const seen = new Set<string>(list(source.kv.get("seen")).map(String));
 	const fresh = (key: string) => {
 		if (seen.has(key)) return false;
 		seen.add(key);
@@ -850,7 +895,197 @@ export default async function slack(source: SourceApi): Promise<void> {
 		clearTimeout(late);
 		cut();
 	};
+
+	// ---- the time it was not connected ------------------------------------------------------------------
+	// Slack does not send again what was written while no connection was open. So the source notes when
+	// its connection last worked, and once it is connected again it asks Slack for what was written
+	// since, as far as its token lets it, and says how long it was away and whether that is everything.
+	/** When the connection was last known to work. Noted every few seconds, and kept across a restart. */
+	let alive = Number(source.kv.get("alive")) || 0;
+	// A look back that a restart cut short begins where it began.
+	const owed = Number(source.kv.get("owed")) || 0;
+	if (owed && owed < alive) alive = owed;
+	let beat: NodeJS.Timeout | undefined;
+	/** Why the source itself ended a connection that looked open. */
+	let stale = "";
+	let lastGap = "";
+	let held: Held | undefined;
+	const lives = () => {
+		alive = Date.now();
+		source.kv.set("alive", alive);
+		source.kv.set("seen", [...seen].filter((k) => /^\w+:\d+\.\d+$/.test(k)).slice(-100));
+	};
+	const stamp = (ms: number) => new Date(ms).toLocaleString("sv-SE").slice(0, 19);
+	const span = (ms: number) => {
+		const of = (n: number, unit: string) => `${Math.round(n)} ${plural(Math.round(n), unit)}`;
+		return ms < 90_000 ? of(ms / 1000, "second") : ms < 5_400_000 ? of(ms / 60_000, "minute") : ms < 129_600_000 ? of(ms / 3_600_000, "hour") : of(ms / 86_400_000, "day");
+	};
+	/**
+	 * Ask Slack for what was written between `since` and `until`, where the source listens and nowhere
+	 * else, and report it as late. After a gap of a minute or more an event of its own says how long it
+	 * was and what could not be looked at; a shorter one (Slack renewing its connection) is made up for
+	 * quietly, in the conversations the source knows without asking.
+	 */
+	const catchUp = async (since: number, until: number) => {
+		const long = until - since >= pace.quiet;
+		const missing: string[] = [];
+		const gathered: any[] = [];
+		let looked = 0;
+		if (!events.has("message")) {
+			// Nothing of what it reports can be asked for: said below.
+		} else if (!web) missing.push("this source has no token, so it could not ask Slack what was written in that time");
+		else if (!history) missing.push('this source was set up not to read what was written earlier ("history": false)');
+		else {
+			source.kv.set("owed", since);
+			// A line can be dead for a while before anybody knows, and Slack's clock is not this machine's: asked from a little earlier. What was told already is known (`fresh`).
+			const oldest = (since - pace.beat - pace.margin) / 1000;
+			// Where: the channels it was given, then what it has seen a message in, the newest first. After a long gap, also what Slack lists.
+			const places = new Map<string, string>();
+			for (const c of channels) places.set(c, "");
+			if (dms) for (const c of [...direct.values()].reverse()) if (!places.has(c)) places.set(c, "im");
+			if (!l.channels.length) for (const [c, type] of [...rooms].reverse()) if (!places.has(c)) places.set(c, type);
+			if (long) {
+				for (const p of PLACES) {
+					if (p.type === "im" ? !dms : l.channels.length > 0) continue;
+					try {
+						let cursor = "";
+						for (let page = 0; page < 5; page++) {
+							const got: any = await call(() => web.users.conversations({ types: p.types, exclude_archived: true, limit: 200, ...(cursor ? { cursor } : {}) }));
+							for (const c of list(got.channels)) if (typeof c?.id === "string" && isChannel(c.id) && !places.has(c.id)) places.set(c.id, p.type);
+							cursor = String(got.response_metadata?.next_cursor ?? "");
+							if (!cursor) break;
+						}
+					} catch (e) {
+						if (stop.signal.aborted) return;
+						const lacks = e instanceof WebAPIPlatformError && e.data.error === "missing_scope";
+						missing.push(`${p.what} this source had not seen a message in were not looked at (${lacks ? `the app lacks the scope ${p.lists}` : reason(e, "users.conversations")})`);
+					}
+				}
+				if (l.channels.length && from.length) missing.push('what the people on "from" wrote outside the listed channels was not looked for');
+			}
+			const all = [...places].slice(0, long ? MOST : NEAR);
+			if (long && places.size > all.length) missing.push(`${places.size - all.length} more ${plural(places.size - all.length, "conversation")} were not looked at: ${MOST} is the most at once`);
+			let flooded = 0;
+			/** What was written in one conversation since: its messages, and the answers in the threads among its last messages. */
+			const read = async (channel: string, type: string) => {
+				const got: any[] = [];
+				const threads = new Set<string>();
+				let latest = "";
+				for (let page = 0; ; page++) {
+					const res: any = await call(() => web.conversations.history({ channel, limit: PAGE, ...(latest ? { latest, inclusive: false } : {}) }));
+					const batch = list(res.messages);
+					for (const m of batch) {
+						if (Number(m?.ts) > oldest) got.push(m);
+						if (Number(m?.latest_reply) > oldest && threads.size < 10) threads.add(String(m.ts));
+					}
+					if (!res.has_more || !batch.length || batch.some((m) => !(Number(m?.ts) > oldest))) break;
+					if (page >= 3) {
+						flooded++;
+						break;
+					}
+					latest = String(batch.reduce((a, m) => (Number(m.ts) < Number(a.ts) ? m : a)).ts);
+				}
+				for (const ts of threads) {
+					const res: any = await call(() => web.conversations.replies({ channel, ts, oldest: oldest.toFixed(6), limit: 100 }));
+					got.push(...list(res.messages).filter((m) => String(m?.ts) !== ts && Number(m?.ts) > oldest));
+				}
+				return got.map((m) => ({ ...m, type: "message", channel, ...(type ? { channel_type: type } : {}) }));
+			};
+			const kindOf = (channel: string, type: string) => PLACES.find((p) => p.type === (type || (channel.startsWith("D") ? "im" : channel.startsWith("G") ? "group" : "channel")))!;
+			const closed = new Map<(typeof PLACES)[number], number>();
+			const failed = new Map<string, number>();
+			const count = <K>(m: Map<K, number>, key: K) => void m.set(key, (m.get(key) ?? 0) + 1);
+			/** One conversation. Says whether to try it once more: what failed for the moment (the network) may work a little later. */
+			const look = async (channel: string, type: string, last: boolean): Promise<boolean> => {
+				const kind = kindOf(channel, type);
+				// What Slack refused for one conversation of a kind, it refuses for the others: counted, not asked.
+				if (closed.has(kind)) {
+					count(closed, kind);
+					return false;
+				}
+				try {
+					gathered.push(...(await read(channel, type)));
+					looked++;
+				} catch (e) {
+					if (stop.signal.aborted) return false;
+					if (e instanceof WebAPIPlatformError && e.data.error === "missing_scope") count(closed, kind);
+					else if (e instanceof WebAPIPlatformError && !PASSING.includes(e.data.error)) count(failed, word(e.data.error));
+					else if (last) count(failed, reason(e, "conversations.history"));
+					else return true;
+				}
+				return false;
+			};
+			const again: Array<[string, string]> = [];
+			let asked = 0;
+			for (const [channel, type] of all) {
+				if (stop.signal.aborted) return;
+				// Many at once would be more than Slack takes in a minute.
+				if (++asked > 30) await rest(pace.between);
+				if (await look(channel, type, false)) again.push([channel, type]);
+			}
+			for (const [channel, type] of again) {
+				if (stop.signal.aborted) return;
+				await look(channel, type, true);
+			}
+			for (const [kind, n] of closed) missing.push(`${n} ${n === 1 ? kind.what.replace(/s$/, "") : kind.what} could not be read (the app lacks the scope ${kind.reads})`);
+			for (const [why, n] of failed) missing.push(`${n} ${plural(n, "conversation")} could not be read (${why})`);
+			if (flooded) missing.push(`in ${flooded} ${plural(flooded, "conversation")} more was written than the last ${PAGE * 4} messages, and the older ones were not looked at`);
+		}
+		if (stop.signal.aborted) return;
+		gathered.sort((a, b) => Number(a.ts) - Number(b.ts));
+		const tally = { found: 0, over: 0 };
+		// In its turn: before the late messages, which are counted by the time this runs.
+		if (long)
+			queue = queue
+				.then(() => {
+					if (stop.signal.aborted) return;
+					if (tally.over) missing.push(`${tally.over} more ${plural(tally.over, "message")} from that time ${plural(tally.over, "was", "were")} left out, since at most ${perMinute} are reported in a minute ("perMinute"): read_source shows what was written`);
+					const others = [...events].filter((k) => k !== "message").map((k) => KINDS[k].short);
+					if (others.length) missing.push(`what else happened in that time (${others.join(", ")}) cannot be asked for afterwards`);
+					const complete = !missing.length;
+					const text = [
+						`Slack was not connected from ${stamp(since)} to ${stamp(until)} (${span(until - since)}).`,
+						tally.found ? `${tally.found} ${plural(tally.found, "message")} written in that time ${plural(tally.found, "follows", "follow")}, marked "late".` : looked ? "Nothing that counts was written in that time where it looked." : "",
+						complete ? (looked ? `It looked through ${looked === 1 ? "the one conversation" : `all ${looked} conversations`} it listens to.` : "There is no conversation it listens to yet.") : `This is not everything: ${missing.join("; ")}.`,
+					];
+					source.emit("gap", { text: text.filter(Boolean).join(" "), from: stamp(since), to: stamp(until), seconds: Math.round((until - since) / 1000), found: tally.found, looked, complete, ...(complete ? {} : { missing }) });
+					lastGap = `Not connected from ${stamp(since)} to ${stamp(until)}: ${complete ? "what was written then was asked for afterwards" : "not everything from then is known"}`;
+					held?.refresh();
+				})
+				.catch((e) => source.log.warn("could not report a gap", reason(e)));
+		for (const m of gathered) {
+			if (!fresh(`${m.channel}:${m.ts}`)) continue;
+			const took = written(m, self.app, true);
+			if (took) tally.found++;
+			else if (took === false) tally.over++;
+		}
+		source.kv.set("owed", 0);
+	};
+	let catching = Promise.resolve();
+	/** Connected: from here on the connection is noted to work, and what was written since it last did is asked for. */
+	const back = () => {
+		const [since, until] = [alive, Date.now()];
+		lives();
+		beat = setInterval(() => {
+			// This is late: the machine slept, or the process stood still. What the line carried meanwhile is not known, so it is connected to again and asked for.
+			if (Date.now() - alive > pace.beat + pace.margin / 2) {
+				stale = "this machine stood still for a while";
+				return void leave();
+			}
+			lives();
+		}, pace.beat);
+		beat.unref?.();
+		if (since) catching = catching.then(() => catchUp(since, until)).catch((e) => source.log.warn("could not ask for what was written meanwhile", reason(e)));
+	};
+	const away = () => {
+		clearInterval(beat);
+		beat = undefined;
+	};
+
 	source.onStop(async () => {
+		// Stopped while connected: up to here nothing was missed.
+		if (beat) lives();
+		away();
 		stop.abort();
 		clearInterval(pruner);
 		await leave();
@@ -870,9 +1105,9 @@ export default async function slack(source: SourceApi): Promise<void> {
 		return `listening to ${[l.channels.length ? `${l.channels.length} ${plural(l.channels.length, "channel")}` : "every channel the app is in", ...(dms ? ["direct messages"] : [])].join(" and ")}${events.size === 1 && events.has("message") ? "" : `, for ${kinds.join(", ")}`}`;
 	};
 	let fatal = false;
-	hold(source, {
+	held = hold(source, {
 		host: api.hostname,
-		note: listening,
+		note: () => `${listening()}${lastGap ? `. ${lastGap}` : ""}`,
 		run: async (signal, up, wait) => {
 			// Said once; trying the same again and again would ask Slack for nothing new.
 			if (fatal) return new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true }));
@@ -884,6 +1119,7 @@ export default async function slack(source: SourceApi): Promise<void> {
 			}
 			if (calm > Date.now()) await rest(calm - Date.now());
 			closing = "";
+			stale = "";
 			let trouble: unknown;
 			let ended = () => {};
 			const gone = new Promise<void>((resolve) => (ended = resolve));
@@ -905,8 +1141,10 @@ export default async function slack(source: SourceApi): Promise<void> {
 					clearTimeout(greeted);
 				}
 				up();
+				back();
 				await gone;
 			} finally {
+				away();
 				// Down for certain before the next attempt: a socket that is still saying goodbye would be taken for the new one.
 				await leave();
 				client.off("error", failed);
@@ -917,7 +1155,7 @@ export default async function slack(source: SourceApi): Promise<void> {
 				wait(10);
 				throw new Plain("Slack asked for a new connection");
 			}
-			throw new Plain(closing ? `Slack closed the connection: ${word(closing)}` : trouble ? reason(trouble) : "the connection was closed");
+			throw new Plain(stale || (closing ? `Slack closed the connection: ${word(closing)}` : trouble ? reason(trouble) : "the connection was closed"));
 		},
 	});
 
