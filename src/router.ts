@@ -122,7 +122,7 @@ export class Router {
 			}
 			if (route.agent) {
 				const reply = route.reply === false ? undefined : route.reply ? { topic: render(route.reply.topic, ctx), payload: renderDeep(route.reply.payload ?? {}, ctx) as Record<string, unknown> } : e.reply;
-				const text = route.prompt ? render(route.prompt, ctx) : defaultPrompt(e);
+				const text = route.prompt ? render(route.prompt, ctx) : defaultPrompt(e, route.whole);
 				this.manager.submit({
 					agent: route.agent,
 					// An event delivered into the owner's conversation is still what it is: framed as data.
@@ -166,10 +166,10 @@ export class Router {
 	}
 }
 
-function defaultPrompt(e: PineEvent): string {
+function defaultPrompt(e: PineEvent, whole = false): string {
 	const p = e.payload as any;
 	if (typeof p === "string") return p;
-	if (p && typeof p.text === "string" && p.text) return p.text;
+	if (!whole && p && typeof p.text === "string" && p.text) return p.text;
 	return `Event ${e.topic}:\n${JSON.stringify(p, null, 2)}`;
 }
 

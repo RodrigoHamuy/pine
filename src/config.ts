@@ -63,7 +63,16 @@ export interface SourceConfig {
 	options: Record<string, any>;
 }
 
-export const SOURCE_TYPES = ["folder", "mqtt", "webhook", "ftp", "telegram", "http", "command"];
+export const SOURCE_TYPES = ["folder", "mqtt", "webhook", "ftp", "telegram", "http", "command", "feed", "calendar", "stream", "mail", "slack", "matrix", "discord", "smtp", "syslog", "system", "presence", "modbus", "serial", "onvif"];
+
+/**
+ * The types an agent is told about with all their options, in the description of its add_source
+ * tool. The others are named there with what they are for: what each takes is in the manual
+ * (a part per type, made from the type's own schema) and in the answer to a call that leaves a
+ * needed option out. A description that carried every option of every type would be read with
+ * every request.
+ */
+export const EVERYDAY_TYPES = ["folder", "mqtt", "webhook", "ftp", "telegram", "http", "command"];
 
 /** Topics only the daemon itself publishes on: the publish_event tool and route definitions refuse them. */
 export const RESERVED_TOPICS = ["approval/#", "agent/#", "pine/#", "state/#", "timer/#"];
@@ -104,6 +113,12 @@ export interface RouteConfig {
 	debounceMs?: number;
 	/** Handle the first event, then ignore matching events for this long. */
 	throttleMs?: number;
+	/**
+	 * Without a `prompt`: show the agent the whole event, also when it has a `text`. Otherwise an
+	 * event with a text is that text and nothing else, which is right for somebody writing to the
+	 * agent and wrong for a report about a message (who wrote it, where, is the rest of the event).
+	 */
+	whole?: boolean;
 	/** Template for the debounce/throttle bucket. Default: the event topic. */
 	key?: string;
 	/** Write world state: key template -> value template. */

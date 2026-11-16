@@ -18,6 +18,7 @@ fs.rmSync(path.join(out, "docs", "images"), { recursive: true, force: true });
 // The helper of the app control server is built from its source on the Mac it runs on.
 fs.copyFileSync(path.join(root, "mcp", "computer.swift"), path.join(out, "mcp", "computer.swift"));
 fs.copyFileSync(path.join(root, "src", "tui", "voice.swift"), path.join(out, "src", "tui", "voice.swift"));
+fs.copyFileSync(path.join(root, "src", "sources", "system.swift"), path.join(out, "src", "sources", "system.swift"));
 fs.mkdirSync(path.join(out, "bin"), { recursive: true });
 fs.copyFileSync(path.join(root, "bin", "pine.js"), path.join(out, "bin", "pine.js"));
 fs.chmodSync(path.join(out, "bin", "pine.js"), 0o755);

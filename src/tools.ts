@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { type AgentConfig, effectiveMcp, mainAgentId, type McpServerConfig, PINE_ROOT, RESERVED_TOPICS, unsandboxed } from "./config.ts";
+import { type AgentConfig, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpServerConfig, PINE_ROOT, RESERVED_TOPICS, SOURCE_TYPES, unsandboxed } from "./config.ts";
 import { AGENT_TOOLS, checkNewAgent, createAgent } from "./agent-admin.ts";
 import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkRoute, checkSetting, dropRoute, routesText, SETTINGS, settingsText } from "./admin.ts";
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
@@ -353,6 +353,8 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 	// even when nothing is configured. Subscribing changes what wakes this agent from now on, so only
 	// a conversation with the owner can do it.
 	const host = live.trust === "owner" && !profile.leaf ? manager.sources : undefined;
+	// A type whose options the add_source tool spells out: the everyday ones, and those this pine registered itself.
+	const inFull = (t: { name: string }) => EVERYDAY_TYPES.includes(t.name) || !SOURCE_TYPES.includes(t.name);
 	if (host) {
 		// A subscription is for the conversation it is asked for in, unless the owner says it is for more.
 		const wider = `"agent": your main conversation is woken instead, whichever conversation this was said in, and it stays until it is ended.${isMain ? ' "global": every agent is woken, each in its main conversation.' : ""} Use ${isMain ? "these two" : "it"} only when your owner said so in so many words ("always", "as an agent", "in your main conversation"${isMain ? '; "all agents", "everyone"' : ""}); your owner is then asked to confirm. If you think they might want more than this conversation, ask them, do not decide it.`;
@@ -478,7 +480,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			defineTool({
 				name: "add_source",
 				label: "Add event source",
-				description: `Set up a new event source and subscribe to it, when your owner asks you to watch or react to something that no existing source covers: a folder ("watch ~/Scans", "tell me when a pdf lands in my downloads"), a web address ("tell me when the price drops"), a device or service. What should happen at a time ("every morning at seven", "remind me at five") is a schedule: use add_schedule for that. Pick the type and pass its options; your owner confirms it where that is needed. Passwords, tokens and keys are not yours to handle: never ask your owner to write one into the conversation, and do not go looking for one. Leave a secret option out and pine asks your owner for it in a dialog of its own, where it is typed without being shown and stored without passing through you. If your owner says it is already in pine's .env file under a name, pass "\${NAME}" as its value. Types and their options:\n${host.typeList().map((t) => `- ${t.name}: ${t.summary}. Options: ${describeOptions(t.options)}`).join("\n")}`,
+				description: `Set up a new event source and subscribe to it, when your owner asks you to watch or react to something that no existing source covers: a folder ("watch ~/Scans", "tell me when a pdf lands in my downloads"), a web address ("tell me when the price drops"), a device or service. What should happen at a time ("every morning at seven", "remind me at five") is a schedule: use add_schedule for that. Pick the type and pass its options; your owner confirms it where that is needed. Passwords, tokens and keys are not yours to handle: never ask your owner to write one into the conversation, and do not go looking for one. Leave a secret option out and pine asks your owner for it in a dialog of its own, where it is typed without being shown and stored without passing through you. If your owner says it is already in pine's .env file under a name, pass "\${NAME}" as its value. Types and their options:\n${host.typeList().filter(inFull).map((t) => `- ${t.name}: ${t.summary}. Options: ${describeOptions(t.options)}`).join("\n")}${host.typeList().some((t) => !inFull(t)) ? `\nMore types, for what those do not cover. What one takes: ask the manual (search "source type" and its name), or call this tool with the type and without options, and the answer says what is missing:\n${host.typeList().filter((t) => !inFull(t)).map((t) => `- ${t.name}: ${t.summary}`).join("\n")}` : ""}`,
 				parameters: Type.Object({
 					name: Type.String({ description: "Short name for it: lowercase letters, digits, - and _ (for example scans, morning, printer)" }),
 					type: Type.String({ description: `One of: ${host.typeList().map((t) => t.name).join(", ")}` }),
@@ -1407,8 +1409,10 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 			execute: async (_id, p) => {
 				const list = (v: unknown) => (Array.isArray(v) ? v : v === undefined || v === "" ? [] : [v]).map(String).map((x) => x.trim()).filter(Boolean);
 				// Beyond the files: the source types this installation registered itself.
+				// And what each of pine's own types takes, said by the type itself: for the ones the add_source tool only names.
 				const own = new Set(manager.sources?.ownTypes().map((t) => t.name));
-				const extra: Part[] = (manager.sources?.typeList() ?? []).filter((t) => own.has(t.name)).map((t) => ({ id: `source-type#${t.name}`, kind: "row", file: "this pine", path: ["Source types registered here", t.name], title: t.name, text: `\`${t.name}\`: ${t.summary}\nOptions: ${describeOptions(t.options)}\nSet one up with add_source (type: "${t.name}").`, children: [], boost: 2, note: "registered in this pine" }));
+				const told = (t: { name: string }) => own.has(t.name) || !EVERYDAY_TYPES.includes(t.name);
+				const extra: Part[] = (manager.sources?.typeList() ?? []).filter(told).map((t) => ({ id: `source-type#${t.name}`, kind: "row", file: "this pine", path: [own.has(t.name) ? "Source types registered here" : "Source types", t.name], title: t.name, text: `\`${t.name}\`: ${t.summary}\nOptions: ${describeOptions(t.options)}\nSet one up with add_source (type: "${t.name}").`, children: [], boost: 2, note: own.has(t.name) ? "registered in this pine" : "a source type, with its options" }));
 				const manual = pineManual(path.join(PINE_ROOT, "docs"), extra);
 				const search = list(p.search).slice(0, 6);
 				const read = list(p.read);

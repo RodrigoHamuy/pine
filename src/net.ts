@@ -42,6 +42,31 @@ export function publicOnlyAgent(timeoutMs: number, allowPrivate = false): Agent 
 /** Names that say by themselves that they are on this computer or the local network. */
 export const isLocalName = (host: string) => host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host.endsWith(".internal");
 
+/** A host that says by itself that it is this computer or the local network: such a name, or an address in a private range. */
+export const isLocalHost = (host: string) => {
+	const h = host.replace(/^\[|\]$/g, "").toLowerCase();
+	return isLocalName(h) || (net.isIP(h) !== 0 && isPrivateAddress(h));
+};
+
+/**
+ * What a socket (net.connect, tls.connect) to a host the owner confirmed is opened with. A local
+ * one, said to be local when it was confirmed, is reached as it is. Any other one has to stay on
+ * the public internet: the check runs on the address that is used, when the connection is made,
+ * so a name that one day points into the local network is not followed there.
+ */
+export function reachOptions(host: string, local = false): { lookup?: (hostname: string, opts: any, cb: any) => void } {
+	if (local || isLocalHost(host)) return {};
+	return {
+		lookup: (hostname, opts, cb) =>
+			dns.lookup(hostname, { ...opts, all: true }, (err, addrs: any) => {
+				if (err) return cb(err);
+				const list = Array.isArray(addrs) ? addrs : [{ address: addrs, family: net.isIPv6(addrs) ? 6 : 4 }];
+				if (list.some((a: any) => isPrivateAddress(a.address))) return cb(new Error(`${hostname} leads to an address on your own network. If that is meant, set the source up again with "local": true`));
+				return opts?.all ? cb(null, list) : cb(null, list[0].address, list[0].family);
+			}),
+	};
+}
+
 /** "host:port" the way a web address writes it. */
 export const hostPort = (host: string, port: number) => `${net.isIPv6(host) ? `[${host}]` : host}:${port}`;
 

@@ -45,7 +45,7 @@ scans", or `pine unsubscribe main scans`.
 ```json
 "sources": {
   "<name>": {
-    "type": "folder | mqtt | webhook | ftp | telegram | http | command",
+    "type": "folder | mqtt | webhook | ftp | telegram | http | command | feed | ...",
     "description": "one line, shown to agents and in listings",
     "...": "the options of the type, see below"
   }
@@ -54,7 +54,7 @@ scans", or `pine unsubscribe main scans`.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `type` | | One of the built-in types below, or a type of your own registered under `sourceTypes` (see "A source type of your own"). Or `use` instead: the path of a module, for a one-off. |
+| `type` | | One of the built-in types: the seven everyday ones below, and the ones in [source-types.md](source-types.md) (`feed`, `calendar`, `stream`, `mail`, `slack`, `matrix`, `discord`, `smtp`, `syslog`, `system`, `presence`, `modbus`, `serial`, `onvif`). Or a type of your own registered under `sourceTypes` (see "A source type of your own"). Or `use` instead: the path of a module, for a one-off. |
 | `description` | | What it reports. Agents choose what to subscribe to by this line, so write it for them. |
 | `agents` | all | In `pine.json` only: the agents that may subscribe, e.g. `["house"]`. |
 | `trust` | `"untrusted"` | Who its events speak for. See "Trust" below. |
@@ -81,6 +81,10 @@ What should happen at a time ("every morning at seven", "remind me at five") is 
 but a schedule: [events.md](events.md), "Schedules".
 
 ## The built-in types
+
+These are the seven everyday types. Fourteen more, for feeds, calendars, services that push,
+mail, chat, devices and the computer itself, are in [source-types.md](source-types.md),
+together with a table of which type reaches which service.
 
 ### folder
 
@@ -260,9 +264,15 @@ a status page, a device on your network that has a state page.
 | Option | Default | |
 |---|---|---|
 | `url` | | The address, `https://...` (`http://` for a device on the local network). |
-| `every` | `"5m"` | How often to look. At least `"30s"` when an agent sets it up. |
-| `path` | | For an answer in JSON: watch only this field, `"data.price"` or `"items.0.state"`. |
+| `every` | `"5m"` | How often to look. At least `"30s"` when an agent sets it up, and at least `"2m"` with `render`. |
+| `path` | | For an answer in JSON: watch only this field, `"data.price"` or `"items.0.state"`. `path`, `values`, `match` and `select` are four ways to say what counts in the answer; a source takes one of them. |
 | `match` | | For a page or text: watch only what this regular expression finds, its first group if it has one. It is looked for in what a reader of the page sees, then in the page's source. |
+| `select` | | For a page: watch only the text of the first element this CSS selector matches, `".product .price"` or `"#stock > span"`. With `render` it is any selector a browser reads. |
+| `attr` | | With `select`: the value of this attribute of the element instead of its text, `"content"` for a meta tag, `"data-price"`. |
+| `render` | `false` | `true` for a page that a script fills in after loading: every look opens the page in pine's browser, without a window, and takes what a reader sees then. See "A page that a script fills in". Not together with `path`, `values`, `method`, `body`, `headers`, `token` or `tokenHeader`. |
+| `values` | | For an answer in JSON: several fields at once, each under a name of your own: `{ "price": "data.price", "stock": "data.stock.count" }`. Twenty at most. |
+| `method` | `"GET"` | `"POST"` for an address that is asked by sending something. Nothing else: a source only looks. |
+| `body` | | With `POST`: what to send, as text. Sent as JSON when it is JSON. Not for secrets. |
 | `headers` | | Headers to send, `{ "accept": "application/json" }`. Not for secrets. |
 | `token` | | An access token or key, sent as `Authorization: Bearer <token>`. Kept in `.env`. |
 | `tokenHeader` | | Send the token as this header instead, as it is: `"x-api-key"`, `"cookie"`. |
@@ -270,14 +280,184 @@ a status page, a device on your network that has a state page.
 
 | Event | | |
 |---|---|---|
-| `changed` | `{ url, value, previous }` | With `path` or `match`: the value now and before. |
+| `changed` | `{ url, value, previous, number?, previousNumber? }` | With `path`, `match` or `select`: the value now and before. |
+| `changed` | `{ url, values, previous, changed }` | With `values`: all the fields now and before, and the names of those that differ. |
 | `changed` | `{ url, added, removed, more? }` | Without: the lines that are new and the lines that are gone, up to 30 of each. |
 | `down` | `{ url, error, looks }` | After three failed looks in a row, once. |
 | `up` | `{ url }` | When it answers again. |
 
-Without `path` or `match` the whole answer counts. For a page that is its text as a reader
+Without `path`, `values`, `match` or `select` the whole answer counts. For a page that is its text as a reader
 sees it: scripts, styles and markup are left out, so a counter in a script does not report a
 change at every look. A page that shows the time still does; give it a `match`.
+
+#### One element of a page
+
+`match` finds a value by the text around it; `select` finds it by where it stands in the page,
+which holds better when the words around a price change with the language or the season:
+
+```json
+"fridge": { "type": "http", "url": "https://shop.example/fridge-3000", "select": ".product-detail .price", "every": "30m", "description": "the price of the fridge" }
+```
+
+A selector is made of tags (`span`), ids (`#total`), classes (`.price`), attributes (`[itemprop]`,
+`[itemprop=price]`, also `~=`, `^=`, `$=`, `*=`), put together (`span.price`, `li.item.sale`) and
+nested with a space (somewhere inside) or `>` (directly inside); a comma separates alternatives.
+Nothing with a colon (`:first-child`, `:not(...)`) and no `+` or `~`: such a selector is refused
+with what it takes instead. The first element in the page that matches counts. Many shops also
+state the price for machines, which changes less often than the layout:
+
+```json
+"fridge": { "type": "http", "url": "https://shop.example/fridge-3000", "select": "meta[property=product:price:amount]", "attr": "content" }
+```
+
+The page is read as the server sends it. What a script fills in after loading is not
+there: for such a page set `render`, or watch the address the script itself asks (see "A
+page that a script fills in").
+
+#### A page that a script fills in
+
+Many pages arrive almost empty, and a script of the page then fetches the price or the state
+and writes it in. A plain look reads the page as the server sends it, so it finds the
+placeholder ("loading", an empty element, nothing at all) and never the value. With `render`
+the look is made by a browser:
+
+> The price on https://shop.example/fridge-3000 only shows up after the page has loaded. Watch
+> it and tell me when it drops.
+
+```json
+"fridge": { "type": "http", "url": "https://shop.example/fridge-3000", "render": true, "select": ".product-detail .price", "every": "30m", "description": "the price of the fridge" }
+```
+
+At every look pine starts its browser (the one the browser tools use, which `pine init` and
+`pine browser-install` fetch), without a window and with an empty profile, opens the address,
+waits until the page has loaded and then until it has stopped asking for things (five seconds
+at most), and takes what a reader sees. Then the browser is closed. What counts is chosen as
+without `render`:
+
+| With | What counts |
+|---|---|
+| `select` | The text of the first element the selector matches, as the browser shows it. The browser reads the selector, so everything CSS has works: `li:nth-child(2) .price`, `.offer:not(.sold-out)`, `h1 + p`. No element matches: the value is `null`. |
+| `select` and `attr` | The value of that attribute of the element. |
+| `match` | What the regular expression finds in the text a reader sees. The page's source is not looked at. |
+| neither | The whole text of the page, line by line; an event names the lines that are new and gone. |
+
+The events are the same, and an amount arrives as `number` as described below.
+
+**What it costs.** A plain look is one request and takes a moment. A rendered look starts a
+browser, runs the page's scripts and loads everything the page loads: a second or two and a
+few hundred megabytes of memory while it lasts, at every look. So:
+
+- `every` is at least `"2m"` when an agent sets the source up.
+- Two browsers run at a time, for all sources together. A look that finds them busy waits.
+- A look may take 45 seconds. After that it is ended and counts as failed.
+- There is no "nothing new" answer (see below): the page is loaded in full each time.
+
+**When the plain look is the better choice.** A script that fills a page in gets the value
+from somewhere, usually an address that answers JSON. If you can find it (the network tab of
+your browser's developer tools shows what the page asks), watch that address without `render`
+and with `path`: it is faster, it can be asked every 30 seconds, a number arrives as a number,
+it can take a `token`, and it does not break when the shop changes its layout. Use `render`
+when there is no such address, when it cannot be asked from outside the page, or when what you
+want is what the page shows.
+
+**What does not go with it.** A set-up with one of these and `render` is refused, with the
+reason:
+
+| Option | Why not |
+|---|---|
+| `path`, `values` | They read an answer in JSON. There is no page to render. Leave `render` out. |
+| `method`, `body` | A rendered page is asked the way a reader's browser asks it. |
+| `headers`, `token`, `tokenHeader` | The browser would send them with every request the page makes, to every address the page loads from. So a page behind a login cannot be watched this way. |
+| `local: true` | See below: a name that has to be looked up is not opened on your network. |
+
+**What the page can reach.** The page's own scripts run in that browser, as they would in
+yours, and the dialog you confirm says so. What they can reach is narrower than in yours:
+
+- Every connection of that browser goes through the same guard as the browser tools'
+  ([security.md](security.md)). The public internet is reachable. Your own network and this
+  computer are not: not for the page, and not for anything the page loads or its scripts ask.
+- One exception, which is the page itself: an address that says by itself that it is local
+  (`localhost`, a `.local` name, an IP address in a private range) is opened, and the browser
+  then reaches exactly that host and port and nothing else on your network. The dialog names
+  it.
+- A name that only turns out to be local when it is looked up (`nas.home`, `ha.lan`) is not
+  opened with `render`, also not with `local: true`: what such a name points at can change,
+  and a page's scripts would run there. Give the device by its IP address.
+- pine's own control port is never opened.
+- The look counts only if the browser ends up on the host that was set up. A page that sends
+  it on to another host is a failed look that names the host.
+- The browser keeps nothing from one look to the next (no cookies, no logins), downloads
+  nothing, and grants the page no permission (camera, location, notifications). A window the
+  page opens is closed.
+
+What such a source reports is outside content, like everything an `http` source reports.
+
+**When a look fails.** A failed look is retried with a growing pause, and `pine sources` shows
+since when it fails and why; after three in a row the source reports `down`, and `up` when the
+page opens again.
+
+| The status says | What it means |
+|---|---|
+| `pine's browser is not installed on this computer` | Type `pine browser-install` into a terminal. `pine init` and `pine update` do it too. |
+| `the page did not finish loading within 45 s` | The page is slow, or never finishes. |
+| `"select" is not a CSS selector the browser can read` | The selector has a mistake in it. |
+| `it sends on to <host>, which is not the address that was confirmed` | The page moved. Set the source up with the address it leads to, if that is the right one. |
+| `<host> leads to an address on your own network` | The name points into your network. With `render` only an address that says so itself is opened there. |
+| `it answered 403` (or another number) | The site turned the browser away. Some sites do that to a browser without a window. |
+| `the browser could not load it (...)` | No connection, an invalid certificate, or the like; the words in brackets are the browser's. |
+
+`found nothing with the selector` is not a failed look: the page opened and no element matched.
+If the value is there in your own browser, the selector is wrong, or the page fills the
+element in later than the look waits.
+
+#### An amount as a number
+
+A value that reads as a number or an amount, and nothing else, also arrives as `number` (and
+the one before as `previousNumber`), so that a subscription can compare it:
+
+```json
+"subscribe": [{ "source": "fridge", "when": { "payload.number": { "lt": 500 } }, "note": "Tell me: the fridge is under 500 now." }]
+```
+
+| The value | `number` |
+|---|---|
+| `12.5`, `"12.5"`, `"12,5"`, `"87 %"`, `"-3,5 °C"`, `"3 GB"` | 12.5, 12.5, 12.5, 87, -3.5, 3 |
+| `"$1,299.00"`, `"1.299,00 €"`, `"1 299,00 kr"`, `"1'299.50"` | 1299, 1299, 1299, 1299.5 |
+| `"1,299"`, `"1.299"` | 1299 and 1.299: as a program writes numbers |
+| `"1.299 €"`, `"1,299 €"` | 1299 and 1.299: next to `€`, `zł`, `kr` or `Kč` a dot groups thousands and a comma is the decimal point |
+| `"1.2.3"`, `"12:30"`, `"2026-05-01"`, `"about 5"`, `"sold out"` | none |
+
+The one case that can be read two ways is a single separator followed by exactly three digits,
+and the last two rows are how it is decided. Where that is not what the page means, take the
+digits apart with `match` (`"([0-9]+)[.,][0-9]{3} "`) and compare the text.
+
+#### Several fields, and an address that is asked with POST
+
+```json
+"fridge": {
+  "type": "http", "url": "https://shop.example/graphql", "method": "POST",
+  "body": "{\"query\": \"{ product(id: 7) { price stock { count } } }\"}",
+  "values": { "price": "data.product.price", "stock": "data.product.stock.count" },
+  "every": "30m", "description": "price and stock of the fridge"
+}
+```
+
+One event says which of the fields changed: `{ "values": { "price": 479, "stock": 3 },
+"previous": { "price": 499, "stock": 3 }, "changed": ["price"] }`. A field that is not in the
+answer is `null`. Since these are the values of the JSON itself, numbers are numbers and
+`when` compares them directly: `{ "payload.values.stock": { "gt": 0 } }`.
+
+A `POST` is for asking, and what it sends is shown to you in full before the source is set up:
+a source repeats it on a clock, with nobody there.
+
+#### Nothing new
+
+An address that names a version of its answer (`ETag`, `Last-Modified`) is asked "anything new
+since?" from the second look on, and answers with one line when there is not. That is a look
+like any other, only cheaper for both sides. `feed` and `calendar` ask the same way. A look
+with `render` loads the page in full every time.
+
+#### Which addresses it asks
 
 An address on your own network or this computer is said to be one in the dialog you confirm.
 Any other address has to stay on the public internet: if its name one day leads into your
@@ -290,12 +470,17 @@ it is stored and shown like the rest of the address.
 
 Refused when it is set up: a user name or password in the address, `path` and `match`
 together, and a header that carries a secret (`authorization`, `cookie`), which belongs into
-`token`. One look may take 20 seconds and follow five redirects.
+`token`. Also more than one of `path`, `values`, `match` and `select`; `attr` without
+`select`; a selector that cannot be read; a `method` other than `GET` and `POST`; a `body`
+without `POST` or longer than 20000 characters; `values` that are empty, more than twenty, or
+under a name that is not a plain word. One look may take 20 seconds and follow five redirects.
 
 ### command
 
 A command that is run again and again. For what only a command can tell: free disk space, a
 build, a branch that moved, the end of a log, whether a machine answers.
+A command that keeps running and prints a line whenever something happens is followed instead
+of run again and again: see "Following a command that keeps running" below.
 
 > Tell me when the disk is more than 90% full.
 
@@ -326,10 +511,64 @@ time is a failed look (see below), not an event. `timeout` is at least `"1s"`, a
 line of more than 2000 characters is refused (put it into a script). If the agent's sandbox is
 switched off, the command runs without one, as its shell does.
 
+#### Following a command that keeps running
+
+Some commands tell by themselves when something happens: `tail -F` a log, `log stream`,
+`docker events`, `kubectl get pods -w`, the client of a broker or a database. With `follow`
+the command is started once and kept running, and every line it prints is an event as it
+comes. This is the type for every protocol that has a command line client and no source type
+of its own.
+
+> Tell me when the backup log says ERROR.
+
+```json
+"backup": { "type": "command", "run": "tail -n 0 -F ~/Library/Logs/backup.log", "follow": true, "match": "ERROR (.*)", "description": "errors in the backup log" }
+```
+
+| Option | Default | |
+|---|---|---|
+| `follow` | `false` | `true`: start the command once, keep it running, report each line it prints. `every` and `timeout` are not used then. |
+| `perMinute` | `30` | With `follow`: report at most this many lines a minute. The rest are counted, and the next line that is reported carries the count as `dropped`. |
+| `match` | | With `follow`: only lines in which this regular expression finds something. Its first group is the line's `value`. |
+
+| Event | | |
+|---|---|---|
+| `line` | `{ command, line, value?, dropped? }` | One line the command printed. `value` is what `match` found, or the parsed line when it is JSON. |
+| `ended` | `{ command, code?, error?, ran }` | The command ended (`ran`: after how many seconds, `error`: the end of what it wrote as errors). It is started again, after a pause that grows while it keeps ending at once. A command that ends the moment it is started is reported once, not at every try. |
+
+| What to follow | `run` |
+|---|---|
+| A log file | `tail -n 0 -F /path/app.log` (`-n 0`: only what is written from now on; `-F`: also after the file was rotated) |
+| The Mac's own log | `log stream --style ndjson --predicate 'subsystem == "com.apple.TimeMachine"'` |
+| Docker | `docker events --format '{{json .}}'` |
+| Kubernetes | `kubectl get pods -w -o json`, `kubectl get events -w` |
+| systemd's journal, on another machine | `ssh nas journalctl -f -p warning -o json` |
+| PostgreSQL `LISTEN` | a few lines of script around a client library that print each notification as a line |
+| Redis | `redis-cli --raw subscribe alerts` |
+| NATS, Kafka, RabbitMQ | `nats sub 'orders.>'`, `kcat -C -b broker -t topic -o end`, `amqp-consume -q queue cat` |
+| A folder on another machine | `ssh nas inotifywait -m -e close_write /volume1/scans` |
+
+A line is cleaned of the colour codes a terminal would act on and cut at 2000 characters; a
+line that is JSON also arrives parsed, so a subscription's `when` can look into it
+(`{"payload.value.status": "die"}` for a container that stopped).
+
+The command runs in the same sandbox as one that is run again and again: the agent's own, as
+in `safe` mode. That is why most of the examples above need something from you first: the log
+file has to be readable by the agent (`sandbox.read`), and a client that talks to the network
+needs `sandbox.network`. The dialog shows the command line, and that it will keep running.
+
+On Linux `follow` is refused. The sandbox there cannot forbid a running command to make a file
+that is read as instructions; pine takes such a file away after a command has ended, and a
+followed command does not end. Run it again and again instead (`every`, with a `match`), or
+have the command's lines sent to a `syslog` or `webhook` source.
+
+When the source stops (the last subscriber left, or pine stops), the command and everything
+it started is ended with it.
+
 ### Looking again and again
 
-`http` and `command` cannot be told when something happens; they go and look. Three things
-hold for every source that does:
+`http`, `command`, `feed`, `calendar`, `modbus` and `presence` cannot be told when something
+happens; they go and look. Three things hold for every source that does:
 
 - **The first look is the starting point.** Setting a source up reports nothing. Only what is
   different at a later look does.

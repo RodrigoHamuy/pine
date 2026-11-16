@@ -572,6 +572,31 @@ safe:
 - The `ftp` type only receives, needs a password, writes under names of its own choosing into
   its own folder, and can be limited to client addresses. The `webhook` type needs a secret
   unless it is set up with `"open": true`, which the dialog spells out.
+- The other types that listen on a port do the same: `smtp` (mail from devices) only
+  receives, relays nothing, and needs a password or a list of client addresses; `syslog` has
+  no login in its protocol, so without a list of sender addresses (`allow`) the dialog says
+  that anyone on the network can write lines, and `pine check` says so afterwards.
+- A type that connects out (`feed`, `calendar`, `stream`, `mail`, `slack`, `matrix`,
+  `discord`, `http`) reaches the address you confirmed and no other: a public name that one
+  day leads into your network is refused, a redirect to another host is not followed, and a
+  token goes only to the host it was given for. An address a camera hands back (`onvif`) is
+  used for its path only.
+- What people write is never taken for your words. A mail's sender line can be forged and a
+  channel is read by others, so `mail`, `smtp`, `slack`, `matrix` and `discord` report
+  outside content, whoever the message says it is from. Do not give such a source
+  `"trust": "owner"`; `pine check` names every source that has it.
+- A source that can also send (`mail`, `slack`, `matrix`, `discord`, `mqtt`) sends only to
+  the addresses, channels, rooms or topics on its own list, checked by the type itself. Such a
+  send is asked about after outside content like any other way of sending something out.
+- A look of an `http` source with `render` is made by pine's browser, started for that one
+  look and closed after it. It runs behind the same guard as the browser tools (your network
+  and this computer are closed to the page and to everything it loads, except the one local
+  address you confirmed), has no tools, keeps no cookies, and is handed no token. The page's
+  own scripts run in it, which the dialog says.
+- A command that is followed (`command` with `follow`) runs in the agent's sandbox like one
+  that is run again and again, and ends with its source. On Linux it is refused.
+- The `system` type starts one helper program, built by pine from its own source into pine's
+  data folder; no option of a source names a program for the daemon to run.
 - A subscription has a throttle (10 s unless you change it), so a device that reports every
   second cannot keep a model busy.
 

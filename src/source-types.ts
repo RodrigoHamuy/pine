@@ -3,8 +3,8 @@ import type { TSchema } from "typebox";
 // A source type is a module: its default export starts a source, and its `type` export says what
 // such a source is and which options it takes. That description is all an agent's add_source tool
 // knows about the type: it offers the type with these options, checks what it is given against the
-// schema, and lets the type say what the set-up would do. pine's own types (folder, mqtt, webhook,
-// ftp, telegram, http, command) and the ones you register under "sourceTypes" in pine.json are described the same way.
+// schema, and lets the type say what the set-up would do. pine's own types (SOURCE_TYPES in
+// config.ts) and the ones you register under "sourceTypes" in pine.json are described the same way.
 
 /** What setting a source up would mean, worked out before anything is written. */
 export interface SourcePlan {
@@ -36,6 +36,8 @@ export interface SourceSetup {
 	workspace: string;
 	/** pine's home folder, which no source may point into. */
 	home: string;
+	/** The port of pine's own control API, if it has one: an address a source is never pointed at to act there. */
+	controlPort?: number;
 	/** An absolute path for one an agent wrote: ~ is the user's home, anything relative is meant from the workspace. */
 	resolve(p: string): string;
 	/** A fresh secret of `bytes` random bytes, as letters and digits. */
@@ -53,6 +55,12 @@ export interface SourceType {
 	 * in .env and out of the configuration, the event log and what models see.
 	 */
 	options: TSchema;
+	/**
+	 * Optional secret options that a set-up with these options cannot do without (a password,
+	 * unless the mailbox is signed in to another way). pine asks the owner for each that is
+	 * missing, as it does for a required one, without the agent having to name it.
+	 */
+	needs?(options: Record<string, any>): string[];
 	/** Check the options and say what the source would do. Throw for what cannot work. Without it, a set-up is always put to the owner. */
 	plan?(options: Record<string, any>, setup: SourceSetup): SourcePlan;
 	/**

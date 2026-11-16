@@ -425,7 +425,8 @@ test("sources: asked to watch something, an agent sets the source up itself, the
 	fs.writeFileSync(path.join(project, "notes.md"), "PROJECT-NOTES-CONTENT\n");
 	await until(() => eventTasks(h).some((x: any) => x.meta.label === "project: source/project@main/added" && x.status === "done"), 6000, "the change to wake the agent");
 	assert.ok(userText(h.mock.state.requests.at(-1)).includes('"file": "notes.md"'));
-	h.pine.bus.publish("source/project@main/added", { path: path.join(project, "notes.md"), file: "notes.md", text: mockMsg([{ tools: [call("read", { path: path.join(project, "notes.md") })] }]) }, { source: "source:project@main", trust: "untrusted" });
+	// (The event is the script for the model, and nothing else: a report with a text among its fields is shown whole, as JSON.)
+	h.pine.bus.publish("source/project@main/added", mockMsg([{ tools: [call("read", { path: path.join(project, "notes.md") })] }]), { source: "source:project@main", trust: "untrusted" });
 	await until(() => h.toolResults().some((x: string) => x.includes("PROJECT-NOTES-CONTENT")), 6000, "the woken agent to read the file");
 
 	// Things that are checked before anything is written.

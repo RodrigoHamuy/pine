@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { ease, fit, shortDeclarations } from "../src/catalogue.ts";
+import { SOURCE_TYPES } from "../src/config.ts";
 import { harness as plain, MCP_STUB, mockMsg, rawTextOf, textOf, until } from "./support/harness.ts";
 
 // These tests are about families (defaults.catalogue), whatever the rest of the suite is run with.
@@ -36,7 +37,7 @@ test("families: a group of tools is one declared tool, and a call is carried out
 	assert.deepEqual([...lists.parameters.properties.what.items.enum].sort(), ["agents", "conversations", "mcp_servers", "models", "routes", "schedules", "settings", "skills", "sources"]);
 	assert.match(lists.description, /- schedules: what is scheduled for you/);
 	assert.deepEqual(fam.parameters.properties.scope.enum, ["local", "agent", "global"]);
-	assert.deepEqual(tool(first, "pine_sources").parameters.properties.type.enum, ["folder", "mqtt", "webhook", "ftp", "telegram", "http", "command"]);
+	assert.deepEqual(tool(first, "pine_sources").parameters.properties.type.enum, SOURCE_TYPES);
 	assert.deepEqual(tool(first, "pine_agents").parameters.properties.mode.enum, ["auto", "safe", "manual", "bypass", "plan", "default"]);
 	assert.match(fam.description, /- add_schedule\(name, task, cron\?, every\?, at\?, in\?, scope\?\)/);
 	// The call was the real tool's: it is in pine's schedules, under the name the tool keeps.

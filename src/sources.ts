@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { StringDecoder } from "node:string_decoder";
 import fs from "node:fs";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -11,7 +12,7 @@ import { setEnv, unsetEnv } from "./env-file.ts";
 import { editJson } from "./mcp-config.ts";
 import type { SourcePlan, SourceType } from "./source-types.ts";
 import type { Router } from "./router.ts";
-import { type Approvals, realish, type Redactor, bin, rootsFor, sandboxArgv, sandboxAvailable, sandboxGuard, shellEnv } from "./security.ts";
+import { type Approvals, realish, type Redactor, bin, rootsFor, sandboxArgv, sandboxAvailable, sandboxGuard, sandboxKind, shellEnv } from "./security.ts";
 import type { Bus, Kv } from "./store.ts";
 import type { PineEvent } from "./types.ts";
 import { errText, type Logger, parseDuration, resolvePath } from "./util.ts";
@@ -41,6 +42,8 @@ export interface SourceApi {
 	options: Record<string, any>;
 	/** Folder that relative paths in the options are meant from. */
 	base: string;
+	/** The port of pine's own control API, if it has one. */
+	controlPort?: number;
 	/** A folder of its own for whatever it has to keep (received files, for example). */
 	dataDir: string;
 	log: Logger;
@@ -101,6 +104,16 @@ export interface SourceApi {
 	 * errors included. Throws when it cannot be started or takes longer than `timeoutMs` (30 s).
 	 */
 	exec(command: string, opts?: { timeoutMs?: number; maxBytes?: number; signal?: AbortSignal }): Promise<{ code: number; output: string; truncated: boolean }>;
+	/**
+	 * Start a command that keeps running and get what it prints, line by line, as it comes: for
+	 * `tail -F`, `log stream`, `docker events`. It runs with the same rights as `exec`. Resolves when
+	 * the command has ended, with its exit code and the end of what it wrote as errors; rejects
+	 * when it cannot be started. It is stopped with the source, or by `signal`.
+	 *
+	 * Not on Linux: what its sandbox cannot forbid there (making a file that is read as
+	 * instructions) is taken away after a command, and a command that runs on has no "after".
+	 */
+	follow(command: string, onLine: (line: string) => void, opts?: { signal?: AbortSignal }): Promise<{ code: number; error: string }>;
 	/** Private storage that survives restarts. */
 	kv: { get<T = unknown>(key: string): T | undefined; set(key: string, value: unknown): void };
 	/** Keep this value out of events and messages. */
@@ -171,6 +184,9 @@ interface Polling {
 
 /** The longest pause between two looks of a source whose looks keep failing (or its own interval, if that is longer). */
 const POLL_BACKOFF_MAX = 15 * 60_000;
+
+/** The longest line a followed command hands on. */
+const FOLLOW_LINE = 4000;
 
 const clock = (ts: number) => new Date(ts).toTimeString().slice(0, 8);
 
@@ -393,7 +409,9 @@ export class SourceHost {
 		if (unknownAsk.length) throw new Error(`"ask" is for the secret options of a ${typeName} source (${secretKeys.join(", ") || "it has none"}), not for ${unknownAsk.join(", ")}`);
 		options = { ...options };
 		for (const k of secretKeys) if (options[k] === "" || options[k] === null) delete options[k];
-		const needs = secretKeys.filter((k) => options[k] === undefined && (ask.includes(k) || ((type.options as any).required ?? []).includes(k))).map((k) => ({ name: k, label: `${k}: ${props[k].description ?? "a secret"}` }));
+		// (Required by the schema, named by the agent, or needed with these very options, which the type says.)
+		const wanted = type.needs?.(options) ?? [];
+		const needs = secretKeys.filter((k) => options[k] === undefined && (ask.includes(k) || ((type.options as any).required ?? []).includes(k) || wanted.includes(k))).map((k) => ({ name: k, label: `${k}: ${props[k].description ?? "a secret"}` }));
 		// One that is in pine's .env already is given by name; its value is looked up here, for the type to check, and never shown.
 		const refs: Record<string, string> = {};
 		for (const k of secretKeys) {
@@ -422,6 +440,7 @@ export class SourceHost {
 			agent: agent.id,
 			workspace: agent.workspace,
 			home: this.cfg.home,
+			controlPort: this.cfg.http?.port,
 			resolve: (p: string) => realish(p.startsWith("~") ? path.join(os.homedir(), p.slice(1)) : path.isAbsolute(p) ? p : path.join(agent.workspace, p)),
 			random: (bytes: number) => crypto.randomBytes(bytes).toString("base64url"),
 			envName: (option: string) => this.envName(name, forAll ? undefined : agent.id, option),
@@ -495,6 +514,8 @@ export class SourceHost {
 			agent: agentId,
 			session: sub.session,
 			prompt: sub.prompt,
+			// A report about a message (a mail, a line in a channel) is shown whole: who wrote it and where is not in its text.
+			whole: Boolean(type && !type.talks),
 			preface: `[You are subscribed to the event source "${name}" (${what}), and it has just reported the event below.${sub.note ? ` Your note for this subscription: ${sub.note}` : " Act on it as your instructions say."} If nothing needs doing, say so in one line.]`,
 			label: `${name}: {{topic}}`,
 			...talk,
@@ -535,12 +556,16 @@ export class SourceHost {
 		const dataDir = path.join(this.cfg.dataDir, "sources", key.replace(/[^A-Za-z0-9_@.-]/g, "_"));
 		fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
 		const run: Running = { stops: [] };
+		// Aborted when the source stops: what it left running (a followed command) ends with it.
+		const ended = new AbortController();
+		run.stops.push(() => ended.abort());
 		const prefix = `source:${key}:`;
 		const api: SourceApi = {
 			name,
 			key,
 			options: source.options,
 			base: source.base,
+			controlPort: this.cfg.http?.port,
 			dataDir,
 			log: this.log.child(key),
 			emit: (event, payload, opts) => {
@@ -606,6 +631,7 @@ export class SourceHost {
 				return before ? { previous: before.value } : undefined;
 			},
 			exec: (command, opts) => this.exec(key, command, opts),
+			follow: (command, onLine, opts) => this.follow(key, command, onLine, opts?.signal ? AbortSignal.any([opts.signal, ended.signal]) : ended.signal),
 			kv: { get: (k) => this.kv.get(prefix + k), set: (k, v) => this.kv.set(prefix + k, v) },
 			secret: (value) => this.redactor.add([value]),
 			media: (dir) => void this.media.set(key, [...new Set([...(this.media.get(key) ?? []), realish(dir)])]),
@@ -626,33 +652,48 @@ export class SourceHost {
 		this.log.info(`source ${key} started`);
 	}
 
-	/** A source's shell command, run the way the shell of the agent it belongs to would run it. */
-	private exec(key: string, command: string, opts: { timeoutMs?: number; maxBytes?: number; signal?: AbortSignal } = {}): Promise<{ code: number; output: string; truncated: boolean }> {
+	/** A source's shell command, started the way the shell of the agent it belongs to would start it. Throws when it cannot be. */
+	private shell(key: string, command: string) {
 		const agent = this.cfg.agents[key.includes("@") ? key.slice(key.lastIndexOf("@") + 1) : mainAgentId(this.cfg)];
-		if (!agent) return Promise.reject(new Error("the agent this source belongs to is gone"));
+		if (!agent) throw new Error("the agent this source belongs to is gone");
 		const roots = rootsFor(this.cfg, agent);
 		// Where the agent's own shell is withheld because nothing could confine it, a source's command is not run either.
-		if (!sandboxAvailable()) return Promise.reject(new Error("there is no sandbox on this platform to run the command in, so it is not run"));
+		if (!sandboxAvailable()) throw new Error("there is no sandbox on this platform to run the command in, so it is not run");
 		// The variant of a run that has read outside content: what is read into the agent's prompt stays as it is.
 		const argv = [...sandboxArgv(this.cfg, agent, roots, "restricted"), bin("bash"), "-c", command];
 		// On Linux a protected file that did not exist cannot be forbidden, only taken away again.
 		const guard = sandboxGuard(roots, "restricted");
+		const child = spawn(argv[0], argv.slice(1), { cwd: roots.workspace, env: shellEnv(agent, roots, {}), stdio: ["ignore", "pipe", "pipe"], detached: true });
+		// The whole group: a command that started others must not leave them behind.
+		const kill = () => {
+			try {
+				process.kill(-child.pid!, "SIGKILL");
+			} catch {
+				child.kill("SIGKILL");
+			}
+		};
+		return { child, guard, kill };
+	}
+
+	/** A source's shell command, run the way the shell of the agent it belongs to would run it. */
+	private exec(key: string, command: string, opts: { timeoutMs?: number; maxBytes?: number; signal?: AbortSignal } = {}): Promise<{ code: number; output: string; truncated: boolean }> {
 		const max = opts.maxBytes ?? 256 * 1024;
 		const timeoutMs = opts.timeoutMs ?? 30_000;
 		return new Promise((resolve, reject) => {
 			if (opts.signal?.aborted) return reject(new Error("stopped"));
-			const child = spawn(argv[0], argv.slice(1), { cwd: roots.workspace, env: shellEnv(agent, roots, {}), stdio: ["ignore", "pipe", "pipe"], detached: true });
+			let sh: ReturnType<SourceHost["shell"]>;
+			try {
+				sh = this.shell(key, command);
+			} catch (e) {
+				return reject(e);
+			}
+			const { child, guard } = sh;
 			const chunks: Buffer[] = [];
 			let size = 0;
 			let why = "";
-			// The whole group: a command that started others must not leave them behind.
 			const kill = (reason: string) => {
 				why ||= reason;
-				try {
-					process.kill(-child.pid!, "SIGKILL");
-				} catch {
-					child.kill("SIGKILL");
-				}
+				sh.kill();
 			};
 			const take = (d: Buffer) => {
 				if (size < max) chunks.push(d.subarray(0, max - size));
@@ -674,6 +715,54 @@ export class SourceHost {
 				guard?.restore();
 				if (why) return reject(new Error(why));
 				resolve({ code: code ?? 1, output: Buffer.concat(chunks).toString("utf8"), truncated: size > max });
+			});
+		});
+	}
+
+	/** A source's command that keeps running: what it prints is handed on line by line until it ends or is stopped. */
+	private follow(key: string, command: string, onLine: (line: string) => void, signal: AbortSignal): Promise<{ code: number; error: string }> {
+		return new Promise((resolve, reject) => {
+			// Rule of the house: where the sandbox only cleans up after a command, a command without an end is not started.
+			if (sandboxKind() === "linux") return reject(new Error("a command cannot be followed on Linux: its sandbox takes away what a command must not leave behind only after the command, and this one would not end. Run it again and again instead (without \"follow\")"));
+			if (signal.aborted) return reject(new Error("stopped"));
+			let sh: ReturnType<SourceHost["shell"]>;
+			try {
+				sh = this.shell(key, command);
+			} catch (e) {
+				return reject(e);
+			}
+			const { child, kill } = sh;
+			const text = new StringDecoder("utf8");
+			let rest = "";
+			const hand = (line: string) => {
+				// One line's trouble (a handler that throws) must not end the command.
+				try {
+					if (line.trim()) onLine(line.slice(0, FOLLOW_LINE));
+				} catch (e) {
+					this.log.warn(`source ${key} failed on a line`, errText(e));
+				}
+			};
+			child.stdout.on("data", (d: Buffer) => {
+				rest += text.write(d);
+				for (let at = rest.indexOf("\n"); at >= 0; at = rest.indexOf("\n")) {
+					hand(rest.slice(0, at).replace(/\r$/, ""));
+					rest = rest.slice(at + 1);
+				}
+				// A line that never ends is handed on in pieces, not kept.
+				if (rest.length > FOLLOW_LINE * 4) {
+					hand(rest);
+					rest = "";
+				}
+			});
+			let error = "";
+			child.stderr.on("data", (d: Buffer) => (error = (error + d.toString("utf8")).slice(-2000)));
+			signal.addEventListener("abort", kill, { once: true });
+			child.on("error", (e) => (signal.removeEventListener("abort", kill), reject(new Error(`could not be started: ${errText(e)}`))));
+			child.on("close", (code) => {
+				signal.removeEventListener("abort", kill);
+				if (rest) hand(rest);
+				if (signal.aborted) return reject(new Error("stopped"));
+				resolve({ code: code ?? 1, error: error.trim() });
 			});
 		});
 	}

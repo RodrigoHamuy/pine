@@ -757,6 +757,8 @@ export function audit(cfg: PineConfig): string[] {
 		for (const [name, s] of Object.entries(sources)) {
 			if (s.use) out.push(`${where}: the source "${name}" runs the module ${s.use} inside pine with your rights, outside any sandbox`);
 			if (s.type === "webhook" && s.options.open === true) out.push(`${where}: the webhook source "${name}" has no secret; anyone who can reach the port can make it report`);
+			// syslog has no login: without a list of senders, whoever reaches the port writes lines an agent reads.
+			if (s.type === "syslog" && !(Array.isArray(s.options.allow) && s.options.allow.length)) out.push(`${where}: the syslog source "${name}" has no list of senders ("allow"); anyone who can reach the port can make it report`);
 		}
 	}
 	for (const r of cfg.routes) if (r.trust === "owner") out.push(`route "${r.name}" treats events on ${r.on.join(", ")} as coming from you; whoever can publish there gets the agent's full tool set`);

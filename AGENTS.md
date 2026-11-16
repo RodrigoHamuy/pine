@@ -12,7 +12,7 @@ to change the code.
 | `npm run build` | Makes the npm package in `build/`: the sources compiled to JavaScript at the same paths, plus docs and examples. Node runs TypeScript directly in a checkout but not inside `node_modules`, so only the package is compiled. Code that names one of pine's own module files at run time uses `EXT` from `src/config.ts` (".ts" or ".js"). |
 | `npm run release` | What the Release workflow runs on every push to `main` (`.github/workflows/release.yml`): works out the next version, builds, publishes to npm, and marks the release with a tag. `node scripts/release.mjs --dry-run` shows the version and checks the package without publishing. The checkout's `package.json` is marked private so that the sources are never published uncompiled. |
 | `npm run check` | Type check (`tsc --noEmit`). |
-| `npm run test:live` | End-to-end through `claude -p`, plus the real browser and, on a Mac, the real app control helper. Slow, uses a Claude plan and the network. Run it when you change prompts, tool descriptions, `src/dev/claude-model.ts`, `mcp/browser.ts`, `mcp/computer.ts` or `mcp/computer.swift`. The tests that operate TextEdit skip themselves unless the terminal app they run in has the Accessibility and Screen Recording grants. |
+| `npm run test:live` | End-to-end through `claude -p`, plus the real browser and, on a Mac, the real app control helper and the helper of the `system` source. Slow, uses a Claude plan and the network. Run it when you change prompts, tool descriptions, `src/dev/claude-model.ts`, `mcp/browser.ts`, `mcp/computer.ts` or `mcp/computer.swift`. The tests that operate TextEdit skip themselves unless the terminal app they run in has the Accessibility and Screen Recording grants. |
 | `npm run baseline` | The 59 pi SDK checks in `baseline/`. Run it after upgrading pi. |
 | `node src/cli.ts <command>` | The CLI without installing it. |
 
@@ -50,8 +50,13 @@ src/
   manual.ts         pine's manual made searchable: docs/ cut into parts, BM25 over them, synonyms; the `manual` tool and `pine manual`
   skills.ts         skills by tool call: where one lies says whom it is for (all agents, an agent, a conversation)
   source-types.ts   what a source type module declares: summary, options schema, plan()
-  sources/          the built-in source types: folder, mqtt, webhook, ftp, telegram, http, command
-  watching.ts       what the polling types share: picking a value, line differences, a page's text
+  sources/          the built-in source types (`SOURCE_TYPES` in config.ts). That look: http, command, feed, calendar,
+                    modbus, presence. That are told: folder, mqtt, webhook, ftp, telegram, stream, mail, slack, matrix,
+                    discord, smtp, syslog, serial, onvif, system (system.swift is its macOS helper: it repeats what
+                    the system says and decides nothing), and command with `follow`
+  watching.ts       what the types that look share: fetching an address, picking a value (a field, a pattern, a
+                    selector, a number), line differences, a page's text; and `capped`, the limit on how often a type that is told may report
+  mime.ts           an e-mail message read into sender, subject, text and attachments, for the mail and smtp types
   env-file.ts       sets and removes entries in .env (secrets of sources that agents set up)
   update.ts         `pine update`: brings pine up to date the way it was installed (git or npm) and fetches what the new version needs
   net.ts            address guard (no private ranges) and fetchToFile, used by the download tool and mcp/web.ts
@@ -87,6 +92,7 @@ src/
   types.ts, util.ts shared types; topics, templates, filters, durations, logger
   dev/claude-model.ts   OpenAI-compatible server backed by `claude -p` (development only)
 mcp/                bundled MCP servers (separate processes): web, browser, commands, computer; lib.ts is what they share
+                    (render.ts is not a server: the helper of the http source's `render`, one look at a page with the browser)
                     (computer.swift is the macOS helper of computer.ts: accessibility tree, mouse and key events, pictures; it decides nothing)
 examples/home/      what `pine init` copies
 test/               node:test files; support/harness.ts builds a temp home and a daemon
@@ -107,6 +113,14 @@ describes a named thing. For a change this means:
 - Words people use for it that the manual does not use go into `SYNONYMS` in `src/manual.ts`.
 - `test/manual.test.ts` holds questions and the part that has to answer each. Add one for a new
   feature, in the words of somebody who does not know what it is called.
+- A source type is described three times, on purpose, for three readers. The model that sets
+  one up reads the type's own `summary` and option descriptions; only the everyday types
+  (`EVERYDAY_TYPES` in `src/config.ts`) are spelled out with their options in `add_source`,
+  the others are named there (and in the line for `add_source` in `BRIEF`, `src/catalogue.ts`)
+  and what one takes is a part of the manual made from its schema (`source-type#<name>`) and
+  the answer to a call that leaves a needed option out. The owner reads
+  `docs/references/source-types.md`: what it is for, which services it reaches, examples. A
+  new built-in type goes into `SOURCE_TYPES`, into that line of `BRIEF`, and into that file.
 
 ## Rules that keep it safe
 
@@ -279,6 +293,15 @@ These are invariants. A change that breaks one needs a test that shows why it is
    The way that avoids this is the default: a tool leaves the secret out, the approval request
    lists it under `inputs`, and the owner's answer brings the value straight to the tool
    (`ApprovalDecision.values`, never in an event). A new tool that needs a secret does the same.
+   A sign-in a source makes itself (`mail` with `signIn`: the owner signs in at Microsoft with
+   a code, pine is handed something it renews at every connection) is not a value anybody typed, and it
+   changes all the time: it is kept in the source's own storage (`source.kv`, pine's database
+   in its home) and goes when the source is removed. It is sent to the address it is for and
+   to no other: where that is, is fixed in the code (`oauth.authority` in
+   `src/sources/mail.ts`, which only a test moves) and never an option of a source. What the
+   owner is shown of such a sign-in (the page, the code) is checked to be what it claims;
+   nothing else the sign-in server writes is shown, logged or put into a status line. Waiting
+   for the owner never holds up the start of a source: at boot it would hold up pine.
    A remote MCP server's `headers` are its key. Besides the server's own calls they go with one
    thing: a `download` of an address that one of that server's tools returned in the same
    conversation, as it was returned (`noteLinks` and `keyFor` in `coreExtension`). Not with an
@@ -292,7 +315,37 @@ These are invariants. A change that breaks one needs a test that shows why it is
    own: the first look reports nothing, an unchanged look does nothing, a failed look backs off
    and shows in the status. A status line is read by agents without the outside-content mark,
    so it never repeats outside text (`harmless()` in `watching.ts`). A type that runs a command
-   uses `source.exec`, which is the sandbox of the agent the source belongs to.
+   uses `source.exec`, which is the sandbox of the agent the source belongs to, and for a
+   command that keeps running `source.follow`, which is the same sandbox and is refused on
+   Linux for the reason rule 12 gives (`Guard` protects nothing while a command runs on).
+   A type that is told things (a listener, a held connection) bounds what it passes on: each
+   event's text is cut (`clip`, `shown`), and how many a minute is capped (`capped`), so that
+   a device that talks all day fills neither the event log nor a conversation.
+   An address a type connects to is the one the owner confirmed: public unless it says by
+   itself that it is local or `local` was set (`publicOnlyAgent` for fetch, `reachOptions` in
+   `src/net.ts` for a socket), a redirect only on the same host, an address a device hands
+   back never followed to another host (onvif), and a token only to the host it was given for.
+   A type that listens on a port (ftp, smtp, syslog) receives and nothing else, and needs a
+   password or a list of client addresses, or says in the owner's dialog that anyone on the
+   network can write to it.
+   A type that needs a program of its own (system) builds it from pine's source into the
+   source's folder in pine's data, where no agent writes, and starts it by its path with
+   fixed arguments. Which program the daemon runs is never an option of a source: a test puts
+   its stand-in into the module (`standIn` in `src/sources/system.ts`). The same holds for
+   the system's own tools a type starts (`ping`, `stty`): an absolute path, a fixed list of
+   arguments, and what comes from the options checked to be exactly what it claims.
+   The `slack` type runs on Slack's SDK (`@slack/web-api`, `@slack/socket-mode`), and pine
+   keeps what the SDK does not give: the Web API goes through a `fetch` of pine's own (the
+   address guard, no redirect, the token only to the API host and `*.slack.com`, an upload
+   form rebuilt because the SDK's does not survive undici's fetch), the SDK's own reconnect is
+   off and `hold` reconnects (a failed reconnect of the SDK's is thrown where nothing catches
+   it), rate limits are waited for by pine so that the wait ends with the source, and sockets
+   are cut by pine when the source stops. Two SDK internals are relied on, the `ws_message`
+   event and a throw from an `authenticated` listener: look at both when the SDK is upgraded,
+   and run `test/chat.test.ts`, which fails without each of these.
+   A type that reads what people write (mail, slack, matrix, discord) is a watcher: never
+   `talks`, never `toOwner`, never `owner` in its plan. A sender line can be forged, and a
+   channel reaches other people. What it sends goes only where the owner listed (`sendTo`).
    A new type is a program inside the daemon: `add_source_type` is the main agent's, refuses in
    a tainted conversation, asks the owner in every mode, and runs the copy pine took, not the
    agent's file. Keep all four.
@@ -305,6 +358,27 @@ These are invariants. A change that breaks one needs a test that shows why it is
    `browser_hide` in `mcp/browser.ts`): the daemon says which sessions may (`window`, set where
    the server is registered, never for a run started from outside), and the guard proxy and
    the blocked tools are the same with a window as without.
+   A proxy carries only what a browser asks it to carry. What a browser sends without asking
+   (WebRTC's own UDP, QUIC, name lookups of its own) is switched off in the browser itself,
+   for every way pine starts one (`NO_WAY_AROUND` in `mcp/browser.ts`). The `live:` test
+   "reaches nothing nearby" in `test/browser.test.ts` listens on a UDP port for anything that
+   gets out: run it (`npm run test:live`) when Playwright MCP is upgraded, since the switches
+   are Chromium's and a new build can rename one.
+   The `http` source with `render` looks at a page with the same browser, in a helper of its
+   own (`mcp/render.ts`, started by `rendered` in `src/watching.ts`), behind the same guard
+   proxy, loopback included, and with what goes around a proxy switched off (QUIC, WebRTC
+   outside the proxy, the browser's own name lookups). It has no tools. Of a source's options
+   it is handed an address, a selector and an attribute name, and those reach the page as
+   values, never as script. A local address is opened only where it is local by its own name
+   (`localTarget`), and then exactly that host and port, which the source writes into its own
+   folder in pine's data; a name that needs a lookup is refused together with `render`, also
+   with `local: true`, and so is pine's control port. A look counts only on the host that was
+   confirmed (`sameSite`). The helper gets none of the daemon's environment, is read one
+   bounded line from, and is gone with its browser when the look ends, whatever ends it
+   (`sweep` for a helper that had to be killed outright). Never give it a token or a header:
+   the browser would send it to every address the page loads from. It cannot go behind
+   `helperArgv()`, which has no network: like the browser server, what contains it is
+   Chromium's own sandbox and the proxy.
    The browser has one exception, and it is the owner's: when an agent itself opens an address
    that is local by its own name (`localTarget` in `src/net.ts`), the gate in `coreExtension`
    asks, and a yes allows that host and port for the conversation (`AgentManager.allowLocal`
@@ -432,6 +506,13 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   `test/cli.test.ts`); the variable exists for tests only and is not a user option.
 - `npm test` passes `--test-force-exit`, so a leaked handle cannot hang the run; a test that
   fails must still not leave a daemon behind (see the `after` hooks in `test/support/harness.ts`).
+- The source types are tested on stand-ins that run on any system and need no network: a web
+  server whose answers the test changes (`test/watch.test.ts`, `test/feeds.test.ts`), a
+  WebSocket server written by hand (`test/support/ws.ts`), scripted IMAP, SMTP, Modbus and
+  camera servers on a loopback port, hand-made DNS packets, and for `system` a script in place
+  of its helper (`standIn`). A source in a test's configuration may look more often than a
+  model is allowed to set (`every: "40ms"`): the limit is in `plan()`, which a configuration
+  file does not pass through. The `live:` test in `test/system.test.ts` builds the real helper.
 - App control is tested on a stand-in for its helper (`FAKE_HELPER` in `test/computer.test.ts`),
   a script that speaks the helper's protocol and runs on any system; the server's `helper`
   option names it. No test in the ordinary suite touches a real app or needs macOS. The `live:`
@@ -500,6 +581,9 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
 - The UI shows what an answer points at, and answers can carry text from outside. It must never
   fetch a web address because an answer contains it (pictures load on a click), and endpoints
   that take a path from an answer serve only what they are for.
+- What a watcher reports is shown to the agent whole, as the event's fields (`RouteConfig.whole`,
+  set by `SourceHost.route` for every type that does not `talks`): who wrote a message and
+  where is not in its text. Only somebody writing to the agent (`talks`) arrives as their words alone.
 - A source only reports (`emit`); it never starts agent work itself. Waking an agent is the
   subscription's job, which is a route added at runtime (`SourceHost.route`). Keep new source
   types free of agent, session or prompt logic, and make them start nothing until `setup` runs:
