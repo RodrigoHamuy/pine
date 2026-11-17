@@ -47,8 +47,28 @@ test("a named session keeps its history, also across a daemon restart; a new ses
 	assert.ok(!fs.existsSync(path.join(h.home, "data", "pi", "sessions")), "nothing is stored in pi's global dir");
 
 	assert.equal(await h.pine.agents.resetSession("main"), true);
+	// What was said before is gone from the tasks too, which is where a UI reads a conversation from. Another conversation keeps its own.
+	assert.deepEqual(h.pine.tasks.list({ agent: "main", session: "main" }), []);
+	assert.deepEqual(h.pine.tasks.list({ agent: "main", session: "case-7" }).map((t) => t.prompt), ["other thread"]);
 	await h.pine.agents.run({ agent: "main", prompt: "after reset", ...owner });
 	assert.deepEqual(users(h.mock.state.requests.at(-1)), ["after reset"]);
+	assert.deepEqual(h.pine.tasks.list({ agent: "main", session: "main" }).map((t) => t.prompt), ["after reset"]);
+	await h.close();
+});
+
+test("a reset takes a conversation's finished work out of the tasks, and leaves what waits and what another agent keeps", async () => {
+	const h = await harness({ agents: { main: { agent: { delegates: ["gonzo"] } }, gonzo: {} } });
+	h.mock.state.scripts.once = [{ text: "one-off answer" }];
+	h.mock.state.scripts.kept = [{ text: "kept answer" }];
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "delegate", args: { agent: "gonzo", task: "@@REF:once@@" } }, { name: "delegate", args: { agent: "gonzo", task: "@@REF:kept@@", thread: "okapi" } }] }, { text: "both back" }]), ...owner });
+	const before = h.pine.tasks.list({ agent: "gonzo" });
+	assert.equal(before.length, 2);
+	const waiting = h.pine.tasks.insert({ agent: "main", session: "main", kind: "prompt", prompt: "still to come", status: "pending", priority: 0, created: Date.now(), hops: 0, depth: 0, meta: {} });
+
+	await h.pine.agents.resetSession("main");
+	assert.deepEqual(h.pine.tasks.list({ agent: "main" }).map((t) => t.id), [waiting.id], "what waits is still to be done");
+	const left = h.pine.tasks.list({ agent: "gonzo" });
+	assert.deepEqual(left.map((t) => t.session.startsWith("_t")), [false], "the one-off task went with the conversation; the thread gonzo keeps is gonzo's");
 	await h.close();
 });
 

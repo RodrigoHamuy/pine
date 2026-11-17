@@ -249,6 +249,19 @@ export class TaskStore {
 		return Number(this.db.prepare(sql).run(agent, ...sessions).changes);
 	}
 
+	/**
+	 * Delete what was said in these conversations of an agent and is over, with the one-off work
+	 * it started (sub-agents, a task handed to another agent for one run): for a conversation
+	 * that starts anew. What waits or runs stays, and so does what another agent did in a
+	 * conversation it keeps.
+	 */
+	clear(agent: string, sessions: string[]): number {
+		if (!sessions.length) return 0;
+		const marks = sessions.map(() => "?").join(", ");
+		const sql = `WITH RECURSIVE gone(id) AS (SELECT id FROM tasks WHERE agent = ? AND session IN (${marks}) AND status NOT IN ('pending', 'running') UNION SELECT t.id FROM tasks t JOIN gone g ON t.parent = g.id WHERE t.session LIKE '\\_t%' ESCAPE '\\' AND t.status NOT IN ('pending', 'running')) DELETE FROM tasks WHERE id IN (SELECT id FROM gone)`;
+		return Number(this.db.prepare(sql).run(agent, ...sessions).changes);
+	}
+
 	/** Delete everything an agent was ever asked, with all the work that started: for an agent that is removed. */
 	forgetAgent(agent: string): number {
 		const sql = "WITH RECURSIVE gone(id) AS (SELECT id FROM tasks WHERE agent = ? UNION SELECT t.id FROM tasks t JOIN gone g ON t.parent = g.id) DELETE FROM tasks WHERE id IN (SELECT id FROM gone)";

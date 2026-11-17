@@ -894,6 +894,8 @@ export class AgentManager {
 			// What the conversation left running goes with it.
 			this.programs.stopAll(`${agentId}:${key}`);
 		}
+		// What was said in it is not its history any more: a UI reads a conversation from its tasks.
+		if (this.tasks.clear(agentId, [sessionKey(session), `${sessionKey(session)}~u`])) found = true;
 		// A conversation that is forgotten no longer listens to anything on its own.
 		await this.sources?.closeSession(agentId, sessionKey(session));
 		return found;

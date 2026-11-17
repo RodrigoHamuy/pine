@@ -391,8 +391,11 @@ work of its own.
 
 `pine reset <agent> [session]` (or `/reset` in the terminal UI) starts a session
 over. The old history is kept on disk next to it with a `.reset-<time>` suffix for
-`limits.eventRetentionDays`. What the conversation was subscribed to on its own ends with the
-reset.
+`limits.eventRetentionDays`. It is no longer shown, also after a restart of pine: the
+finished tasks of the session are gone from `pine tasks`, with the sub-agents and one-off
+delegations they started. A task that still waits stays and runs in the fresh session; what
+another agent did in a thread it keeps stays that agent's. What the conversation was
+subscribed to on its own ends with the reset.
 
 A named conversation does not stay for ever. One that is not an agent's `main`, not pinned, not
 open in a tab of the terminal UI, not subscribed to an event source and without a schedule of

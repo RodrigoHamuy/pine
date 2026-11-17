@@ -79,6 +79,37 @@ test("tui: a conversation streams in, tools and delegated work are shown, and hi
 	await t.h.close();
 });
 
+test("tui: what /reset cleared does not come back when the UI is opened again", async () => {
+	const t = await open({ agents: { main: {} } });
+	await t.send("before the reset");
+	await t.sees("ECHO[before the reset]");
+	await done(t.h, 1);
+	await t.send("/reset");
+	await t.sees("fresh conversation");
+	assert.ok(!t.text().includes("ECHO[before the reset]"), t.text());
+
+	// Closed right after the reset: the new UI opens the tab empty.
+	await t.app.stop();
+	const empty = new PineTui({ client: t.app.client, terminal: new FakeTerminal(110, 40) });
+	apps.push(empty);
+	await empty.start();
+	await until(() => empty.screen().join("\n").includes("type a message"));
+	await sleep(60);
+	assert.ok(!/before the reset|earlier in this session/.test(empty.screen().join("\n")), empty.screen().join("\n"));
+	await empty.stop();
+
+	// And after more was said, only that is its history.
+	await t.h.pine.agents.run({ agent: "main", prompt: "after the reset", trust: "owner" });
+	const again = new PineTui({ client: t.app.client, terminal: new FakeTerminal(110, 40) });
+	apps.push(again);
+	await again.start();
+	await until(() => again.screen().join("\n").includes("── now ──"));
+	const restored = again.screen().join("\n");
+	assert.ok(restored.includes("earlier in this session (1)") && restored.includes("ECHO[after the reset]") && !restored.includes("before the reset"), restored);
+	await again.stop();
+	await t.h.close();
+});
+
 test("tui: tabs, slash commands and keys", async () => {
 	const t = await open({ agents: { main: {}, gonzo: { agent: { description: "law" } } } });
 	await t.sees("type a message");
