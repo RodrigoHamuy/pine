@@ -5,6 +5,10 @@
   </picture>
 </h1>
 
+<p align="center">
+  <img src="docs/images/reel.webp" width="100%" alt="pine in half a minute. pine start: it runs as a service. In the terminal, for a chat: a question about the weather is answered with a web search. Or in the desktop app, for code: an agent adds a function, runs the tests, and the diff is shown beside the conversation. Then a card: pine is built on an event bus, agents can react to any external stimuli. A colleague writes in Slack; in pine that is an event, and the agent that listens wakes, reads the message and says what it is about. At night a camera sees somebody with a covered face at the door; the clip is an event, the agent watches it and asks its owner on Telegram whether to ring the alarm. A letter goes through the scanner; the scan is an event, the agent reads the letter and puts what is due on a TODO list.">
+</p>
+
 ```bash
 npm install -g @pmndre/pine
 ```
@@ -26,61 +30,6 @@ PINE of course also handles regular chat, coding, tasks and orchestration. Agent
 
 > [!IMPORTANT]
 > pine runs on macOS and Linux; `pine init` sets up what it needs. Windows users can try [Docker](#docker). It remains open what exactly is necessary to make it run completely in Windows.
-
-<br/>
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/meme.png" width="100%" alt="pine searches the web, downloads a picture and shows it in the terminal"><br/>
-      <sub>Support for images</sub>
-    </td>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/video.gif" width="100%" alt="pine fetches a video from the web and plays it in the terminal"><br/>
-      <sub>Support for videos</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/drop.png" width="100%" alt="A picture dropped into the terminal, shown as a thumbnail, and the agent's answer about it"><br/>
-      <sub>Drag and drop</sub>
-    </td>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/watch.png" width="100%" alt="Asked to watch a folder, the agent sets up an event source; a file changes, it wakes up and shows the git diff"><br/>
-      <sub>Event sources (file watchers, ...)</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/tabs.png" width="100%" alt="Tabs for several agents and conversations, with the list of conversations: pinned ones stay, the others clean themselves up"><br/>
-      <sub>UI can be navigated by clicking</sub>
-    </td>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/flipper.png" width="100%" alt="pine drives a Flipper Zero through an MCP server"><br/>
-      <sub>Support for MCPs and skills</sub>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/code.png" width="100%" alt="The code pane beside a conversation: the git diff of a file the agent just changed"><br/>
-      <sub>Code assistance</sub>
-    </td>
-    <td align="center" width="50%">
-      <br />
-      <img src="docs/images/folder.png" width="100%" alt="pine started in a project folder: the agent inspects it, and the folder menu lists the folders a conversation can work in"><br/>
-      <sub>Current folders</sub>
-    </td>
-  </tr>
-</table>
-
-<br/>
 
 ```
                   you:  terminal UI · Telegram
