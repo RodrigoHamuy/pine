@@ -245,40 +245,64 @@ html:not([data-platform="darwin"]) .side-top {
 }
 .side-agent {
 	display: flex;
-	/* Everything on the agent's line stands on the line of its name, not half-way down to what it is for. */
-	align-items: flex-start;
+	align-items: center;
 	gap: 7px;
-	min-height: 40px;
-	padding: 5px 4px 5px 6px;
+	height: 30px;
+	padding: 0 4px 0 6px;
 	border-radius: var(--r-s);
-}
-.side-agent > .icon {
-	margin-top: 5px;
-}
-.side-agent > .spinner,
-.side-agent > .needs,
-.side-agent > .dot {
-	margin-top: 4px;
-}
-.side-agent .btn {
-	margin-top: -2px;
 }
 .side-agent:hover {
 	background: var(--hover);
 }
+/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it
+   is for takes the room that is left and is cut off where that ends. */
 .side-agent .who {
 	flex: 1;
 	min-width: 0;
 	display: flex;
-	flex-direction: column;
-	line-height: 20px;
+	align-items: baseline;
+	gap: 7px;
 	font-weight: 600;
 }
+.side-agent .who > :first-child {
+	flex: 0 1 auto;
+	min-width: 0;
+}
 .side-agent .what {
+	flex: 1 1 0;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
 	font-weight: 400;
 	font-size: 11.5px;
-	line-height: 15px;
 	color: var(--faint);
+	/* (So that the text inside can be told how wide this is: 100cqw below.) */
+	container-type: inline-size;
+}
+/* With the pointer on the line, what was cut off slides through, to its end and back, so that
+   it can be read. A text that fits has nowhere to go and stays. */
+.side-agent:hover .what {
+	text-overflow: clip;
+}
+.side-agent:hover .what > span {
+	display: inline-block;
+	animation: what-slides 5s linear 0.5s infinite alternate;
+}
+@keyframes what-slides {
+	0%,
+	12% {
+		transform: translateX(0);
+	}
+	88%,
+	100% {
+		transform: translateX(min(0px, 100cqw - 100%));
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.side-agent:hover .what > span {
+		animation: none;
+	}
 }
 .side-agent .agent-acts {
 	display: none;

@@ -151,7 +151,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 				<span className="avatar">{a.id.slice(0, 1).toUpperCase()}</span>
 				<span className="who">
 					<span className="cut">{a.id}</span>
-					<span className="what cut">{a.description || a.model}</span>
+					<span className="what"><span>{a.description || a.model}</span></span>
 				</span>
 				{waits ? <span className="needs">!</span> : working ? <Spinner size={11} /> : unread && folded ? <span className="dot unread" /> : null}
 				<span className="agent-acts" onClick={(e) => e.stopPropagation()}>

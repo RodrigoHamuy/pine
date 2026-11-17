@@ -347,6 +347,20 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	// On an agent's line, its initial stands beside its name, not half-way down to its description.
 	const line = await page.$eval(".side-agent", (el: Element) => ({ avatar: el.querySelector(".avatar")!.getBoundingClientRect(), name: el.querySelector(".who > :first-child")!.getBoundingClientRect() }));
 	assert.ok(Math.abs(line.avatar.y + line.avatar.height / 2 - (line.name.y + line.name.height / 2)) <= 2, JSON.stringify(line));
+	// What the agent is for stands on that line too, after the name and on the line its letters stand on.
+	const one = await page.$eval(".side-agent", (el: Element) => {
+		const stands = (node: Element) => {
+			const range = document.createRange();
+			range.selectNodeContents(node);
+			const box = range.getBoundingClientRect();
+			const pen = document.createElement("canvas").getContext("2d")!;
+			pen.font = getComputedStyle(node).font;
+			return { left: box.left, right: box.right, baseline: box.top + pen.measureText("x").fontBoundingBoxAscent };
+		};
+		return { name: stands(el.querySelector(".who > :first-child")!), what: stands(el.querySelector(".what > span")!), row: el.getBoundingClientRect().height };
+	});
+	assert.ok(one.what.left > one.name.right && Math.abs(one.what.baseline - one.name.baseline) <= 0.75, `an agent's name and what it is for are not on one line: ${JSON.stringify(one)}`);
+	assert.equal(one.row, 30, "an agent's line is as high as a conversation's");
 	// The side bar is as wide as it is dragged.
 	const before = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
 	const edge = await page.$eval(".splitter.side", (el: Element) => el.getBoundingClientRect());
