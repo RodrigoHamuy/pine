@@ -11,7 +11,7 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Choices, Confirm, Dialog, Icon, Lightbox, Logo, Pick, Pulse, Split, StripTab, TabStrip, Toasts } from "./ui.tsx";
+import { Button, Choices, Confirm, Dialog, Fold, Icon, Lightbox, List, ListRow, Logo, Pick, Pulse, Split, StripTab, TabStrip, Toasts } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -101,16 +101,16 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
-		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
+		<ListRow value={c.session} label={s.titleOf(agent, c.session)} className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
 			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
-				<span className="acts" onClick={(e) => e.stopPropagation()}>
+				<span className="acts" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
 					<Confirm icon="trash" label="Remove this conversation for good" sure="Remove?" onConfirm={() => void s.removeConversation(agent, c.session)} />
 				</span>
 			)}
-		</div>
+		</ListRow>
 	);
 }
 
@@ -146,25 +146,38 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		if (picked === "remove") await s.removeAgent(a.id);
 	};
 	return (
-		<div className="side-group">
-			<div className="side-agent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onClick={() => s.toggleFold(a.id)} onContextMenu={(e) => (e.preventDefault(), void menu())}>
-				<Icon name={folded ? "right" : "down"} size={10} className="faint" />
-				<span className="avatar">{a.id.slice(0, 1).toUpperCase()}</span>
-				<span className="who">
-					<span className="cut">{a.id}</span>
-					<span className="what"><span>{a.description || a.model}</span></span>
-				</span>
-				{waits ? <span className="needs">!</span> : working ? <Pulse size={11} /> : unread && folded ? <span className="dot unread" /> : null}
-				<span className="agent-acts" onClick={(e) => e.stopPropagation()}>
-					<Button small variant="ghost" icon="gear" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)} />
-					<Button small variant="ghost" icon="folder" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()} />
-				</span>
-				<span onClick={(e) => e.stopPropagation()}>
+		<Fold
+			className="side-group"
+			lineClassName="side-agent"
+			title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`}
+			open={!folded}
+			onOpenChange={() => s.toggleFold(a.id)}
+			onContextMenu={(e) => (e.preventDefault(), void menu())}
+			head={
+				<>
+					<Icon name={folded ? "right" : "down"} size={10} className="faint" />
+					<span className="avatar">{a.id.slice(0, 1).toUpperCase()}</span>
+					<span className="who">
+						<span className="cut">{a.id}</span>
+						<span className="what"><span>{a.description || a.model}</span></span>
+					</span>
+					{waits ? <span className="needs">!</span> : working ? <Pulse size={11} /> : unread && folded ? <span className="dot unread" /> : null}
+				</>
+			}
+			aside={
+				<>
+					<span className="agent-acts">
+						<Button small variant="ghost" icon="gear" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)} />
+						<Button small variant="ghost" icon="folder" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()} />
+					</span>
 					<Button small variant="ghost" icon="plus" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)} />
-				</span>
-			</div>
-			{folded ? null : rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
-		</div>
+				</>
+			}
+		>
+			<List label={`Conversations with ${a.id}`} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onOpen={(session) => void s.openTab(a.id, session)}>
+				{rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
+			</List>
+		</Fold>
 	);
 }
 

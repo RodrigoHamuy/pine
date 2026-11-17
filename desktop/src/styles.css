@@ -254,6 +254,22 @@ html:not([data-platform="darwin"]) .side-top {
 .side-group {
 	margin-bottom: 4px;
 }
+/* What folds the group is the agent's line but its buttons: a button that looks like none. */
+.fold-trigger {
+	display: flex;
+	align-items: center;
+	gap: inherit;
+	flex: 1;
+	min-width: 0;
+	align-self: stretch;
+	padding: 0;
+	border: none;
+	border-radius: var(--r-s);
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: start;
+}
 .side-agent {
 	display: flex;
 	align-items: center;
@@ -2391,6 +2407,19 @@ button.pick-item {
 }
 .frow.on {
 	background: var(--press);
+}
+/* The lists and the tree are one tab stop each; the row that has focus shows it, from the keyboard. */
+[data-slot="listbox"],
+[data-slot="tree"],
+[data-slot="tree-item"] {
+	outline: none;
+}
+.frow:focus-visible,
+.side-row:focus-visible,
+[data-slot="tree-item"]:focus-visible > .frow,
+.fold-trigger:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+	outline-offset: -2px;
 }
 .frow .st {
 	width: 14px;

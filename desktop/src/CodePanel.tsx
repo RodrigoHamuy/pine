@@ -24,7 +24,7 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { Ask, Button, Confirm, Empty, Icon, Segmented, Pulse, useLoad } from "./ui.tsx";
+import { Ask, Button, Confirm, Empty, Icon, List, ListRow, Segmented, Pulse, Tree, TreeRow, useLoad } from "./ui.tsx";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -137,16 +137,16 @@ export function Diff({ text }: { text: string }) {
 
 // ---- its views -------------------------------------------------------------------------------------
 
-function ChangeRow({ c, on, pick }: { c: Change; on: boolean; pick: () => void }) {
+function ChangeRow({ c }: { c: Change }) {
 	const at = c.path.lastIndexOf("/");
 	return (
-		<div className={`frow${on ? " on" : ""}`} onClick={pick} title={c.path}>
+		<ListRow value={c.path} label={c.path.slice(at + 1)} className="frow" title={c.path}>
 			<span className={`st ${c.status === "?" ? "Q" : c.status}`}>{c.status === "?" ? "U" : c.status}</span>
 			<span className="cut">{c.path.slice(at + 1)}</span>
 			<span className="faint cut grow">{at > 0 ? c.path.slice(0, at) : ""}</span>
 			{c.added ? <span className="plus">+{c.added}</span> : null}
 			{c.removed ? <span className="minus">−{c.removed}</span> : null}
-		</div>
+		</ListRow>
 	);
 }
 
@@ -186,7 +186,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 			</div>
 			<div className="code-body">
 				{data.note ? <div className="out">{data.note}</div> : null}
-				{data.files.length ? data.files.map((c) => <ChangeRow key={c.path} c={c} on={false} pick={() => setFile(c.path)} />) : <Empty icon="check" title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
+				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> :<Empty icon="check" title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
 				{data.more ? <div className="out">… and more.</div> : null}
 			</div>
 		</>
@@ -201,14 +201,34 @@ interface TreeState {
 const trees = new Map<string, TreeState>();
 const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map() }), trees.get(key)!);
 
-function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: number; pick: (file: string) => void; tick: number }) {
+/** The folder's files as a tree: a folder opens and closes, a file opens in the editor. */
+function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void; tick: number }) {
 	const state = treeOf(tab.key);
 	const [, redraw] = useState(0);
+	const isDir = (full: string) => {
+		const at = full.lastIndexOf("/");
+		return Boolean(state.dirs.get(at > 0 ? full.slice(0, at) : "")?.find((e) => e.name === full.slice(at + 1))?.dir);
+	};
+	const entries = state.dirs.get("");
+	return (
+		<>
+			{entries && !entries.length ? <Empty icon="folder" title="This folder is empty" /> : null}
+			{entries ? null : <Empty title=""><Pulse /></Empty>}
+			<Tree label="Files" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} onOpen={(full) => !isDir(full) && pick(full)}>
+				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
+			</Tree>
+		</>
+	);
+}
+
+/** A folder's rows in the tree, read when it opens; `onLoad` redraws the tree around once they are read. */
+function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: number; tick: number; onLoad: () => void }) {
+	const state = treeOf(tab.key);
 	useEffect(() => {
 		let live = true;
 		api.tree(tab.agent, tab.session, dir).then(
-			(r) => live && (state.dirs.set(dir, r.entries), redraw((n) => n + 1)),
-			() => live && (state.dirs.set(dir, []), redraw((n) => n + 1)),
+			(r) => live && (state.dirs.set(dir, r.entries), onLoad()),
+			() => live && (state.dirs.set(dir, []), onLoad()),
 		);
 		return () => {
 			live = false;
@@ -216,32 +236,24 @@ function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: n
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [tab.key, dir, tick]);
 	const entries = state.dirs.get(dir);
-	if (!entries) return depth ? null : <Empty title=""><Pulse /></Empty>;
-	if (!entries.length && !depth) return <Empty icon="folder" title="This folder is empty" />;
+	if (!entries) return null;
 	return (
 		<>
 			{entries.map((e) => {
 				const full = dir ? `${dir}/${e.name}` : e.name;
 				const open = state.open.has(full);
+				const row = (
+					<>
+						{e.dir ? <Icon name={open ? "down" : "right"} size={11} className="faint" /> : <span style={{ width: 11 }} />}
+						<Icon name={e.dir ? "folder" : "file"} size={13} className="faint" />
+						<span className="cut grow">{e.name}</span>
+						{!e.dir ? <span className="faint" style={{ fontSize: 11 }}>{size(e.size)}</span> : null}
+					</>
+				);
 				return (
-					<div key={full}>
-						<div
-							className={`frow${state.file === full ? " on" : ""}`}
-							style={{ paddingLeft: 10 + depth * 14 }}
-							onClick={() => {
-								if (!e.dir) return pick(full);
-								if (open) state.open.delete(full);
-								else state.open.add(full);
-								redraw((n) => n + 1);
-							}}
-						>
-							{e.dir ? <Icon name={open ? "down" : "right"} size={11} className="faint" /> : <span style={{ width: 11 }} />}
-							<Icon name={e.dir ? "folder" : "file"} size={13} className="faint" />
-							<span className="cut grow">{e.name}</span>
-							{!e.dir ? <span className="faint" style={{ fontSize: 11 }}>{size(e.size)}</span> : null}
-						</div>
-						{e.dir && open ? <Tree tab={tab} dir={full} depth={depth + 1} pick={pick} tick={tick} /> : null}
-					</div>
+					<TreeRow key={full} value={full} label={e.name} row={row} on={state.file === full} depth={depth} branch={e.dir}>
+						{e.dir && open ? <Dir tab={tab} dir={full} depth={depth + 1} tick={tick} onLoad={onLoad} /> : null}
+					</TreeRow>
 				);
 			})}
 		</>
@@ -330,9 +342,9 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 			</div>
 			<div className="code-body">
 				{query.trim() ? (
-					found.data?.length ? found.data.map((f) => <div key={f} className="frow" onClick={() => setFile(f)}><Icon name="file" size={13} className="faint" /><span className="cut">{f}</span></div>) : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
+					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className="frow"><Icon name="file" size={13} className="faint" /><span className="cut">{f}</span></ListRow>)}</List> :<Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
 				) : (
-					<Tree tab={tab} dir="" depth={0} pick={setFile} tick={tick} />
+					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
 			</div>
 		</>

@@ -2,9 +2,11 @@
 import { bindDrag, dragThreshold } from "@ui-sdk/core";
 import { type ButtonHTMLAttributes, createContext, type ReactNode, useContext, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AlertDialog, AlertDialogBackdrop, AlertDialogClose, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@ui-sdk/react/alert-dialog";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "@ui-sdk/react/collapsible";
 import { Command, CommandEmpty, CommandGroup, CommandGroupLabel, CommandInput, CommandItem, CommandList } from "@ui-sdk/react/command";
 import { Dialog as UiDialog, DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/react/dialog";
 import { FieldDescription, FieldLabel, Field as UiField } from "@ui-sdk/react/field";
+import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Radio, RadioGroup } from "@ui-sdk/react/radio";
 import { createResizableController, Resizable, ResizableHandle, ResizablePanel } from "@ui-sdk/react/resizable";
 import { SelectContent, SelectItem, SelectItemIndicator, SelectTrigger, Select as UiSelect, SelectValue } from "@ui-sdk/react/select";
@@ -12,6 +14,7 @@ import { SegmentedControl, SegmentedControlItem } from "@ui-sdk/react/segmented-
 import { SwitchThumb, Switch as UiSwitch } from "@ui-sdk/react/switch";
 import { Tabs, TabsList, TabsTab } from "@ui-sdk/react/tabs";
 import { createToaster, Toast, ToastRegion, ToastTitle } from "@ui-sdk/react/toast";
+import { TreeGroup, TreeItem, TreeItemLabel, Tree as UiTree } from "@ui-sdk/react/tree";
 
 const PATHS: Record<string, string> = {
 	plus: "M8 3v10M3 8h10",
@@ -146,6 +149,67 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 				</SegmentedControlItem>
 			))}
 		</SegmentedControl>
+	);
+}
+
+/**
+ * A list of rows to open, one tab stop: Tab goes in, the arrow keys move, Enter or a click opens a row
+ * with `onOpen`. `value` is the row that is open, if one of them is.
+ */
+export function List({ label, value = null, onOpen, className, children }: { label: string; value?: string | null; onOpen: (value: string) => void; className?: string; children: ReactNode }) {
+	return (
+		<Listbox aria-label={label} className={className} activation="manual" value={value} onValueChange={(next) => typeof next === "string" && onOpen(next)}>
+			{children}
+		</Listbox>
+	);
+}
+
+/** One row of a `List`. */
+export function ListRow({ value, label, className, children, ...rest }: { value: string; label?: string; className?: string; children: ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, "children">) {
+	return (
+		<ListboxItem value={value} label={label} className={className} {...rest}>
+			{children}
+		</ListboxItem>
+	);
+}
+
+/**
+ * A hierarchy announced as a tree: the arrow keys move, open and close its branches, Enter or a click runs
+ * `onOpen` with a row's value. Which branches are open is `expanded`, kept by the caller.
+ */
+export function Tree({ label, expanded, onExpandedChange, onOpen, children }: { label: string; expanded: string[]; onExpandedChange: (expanded: string[]) => void; onOpen: (value: string) => void; children: ReactNode }) {
+	return (
+		<UiTree aria-label={label} className="tree" expanded={expanded} onExpandedChange={(next) => onExpandedChange(next)} expandOnPress onAction={(value) => onOpen(value)}>
+			{children}
+		</UiTree>
+	);
+}
+
+/** One row of a `Tree`, `depth` levels in. A `branch` holds its rows in `children`, shown while it is open. */
+export function TreeRow({ value, label, row, on, depth, branch, children }: { value: string; label: string; row: ReactNode; on?: boolean; depth: number; branch?: boolean; children?: ReactNode }) {
+	return (
+		<TreeItem value={value} label={label} branch={branch}>
+			<TreeItemLabel className={`frow${on ? " on" : ""}`} style={{ paddingLeft: 10 + depth * 14 }}>
+				{row}
+			</TreeItemLabel>
+			{branch ? <TreeGroup>{children}</TreeGroup> : null}
+		</TreeItem>
+	);
+}
+
+/**
+ * A line that folds what is under it away: `head` is the button that folds it (Enter, Space or a click),
+ * `aside` stands beside it on the line, and `children` is what folds.
+ */
+export function Fold({ open, onOpenChange, head, aside, className, lineClassName, title, onContextMenu, children }: { open: boolean; onOpenChange: (open: boolean) => void; head: ReactNode; aside?: ReactNode; className?: string; lineClassName?: string; title?: string; onContextMenu?: React.MouseEventHandler<HTMLDivElement>; children: ReactNode }) {
+	return (
+		<Collapsible className={className} open={open} onOpenChange={(next) => onOpenChange(next)}>
+			<div className={lineClassName} title={title} onContextMenu={onContextMenu}>
+				<CollapsibleTrigger className="fold-trigger">{head}</CollapsibleTrigger>
+				{aside}
+			</div>
+			<CollapsiblePanel>{children}</CollapsiblePanel>
+		</Collapsible>
 	);
 }
 
