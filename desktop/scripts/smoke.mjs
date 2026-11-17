@@ -60,6 +60,15 @@ try {
 	await page.waitForSelector(".welcome h1", { timeout: 60_000 }).catch(async () => {
 		throw new Error(`no conversation appeared. On screen: ${await page.evaluate(() => document.body.innerText.slice(0, 600))}`);
 	});
+	// On a Mac without the browser build this pine drives (a new one, a CI machine) the app asks at
+	// its start whether to fetch it, and the question lies over the page. The daemon says whether
+	// it will be asked: then it is waited for and answered with "Not now".
+	const over = await page.evaluate(() => window.pine.call("GET", "/overview"));
+	if (over?.data?.browser === false) {
+		await page.waitForSelector(".dialog-title >> text=The browser for the web tools is not on this Mac", { timeout: 30_000 });
+		await page.click(".dialog-foot .btn >> text=Not now");
+		await page.waitForSelector(".dialog", { state: "detached", timeout: 15_000 });
+	}
 	const status = await page.textContent(".side-status");
 	await page.fill(".composer textarea", "hello from the packed app");
 	await page.keyboard.press("Enter");
