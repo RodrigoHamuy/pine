@@ -2083,6 +2083,23 @@ select.input {
 	padding: 0 8px;
 	border-bottom: 1px solid var(--line-soft);
 }
+/* The pane is a card already, and its head a strip of that card: a switcher with a frame of its
+   own would be a third box inside two. Here its words stand on the card, and only the one in
+   front is filled, like a row of the side bar. */
+.code-head .segmented {
+	padding: 0;
+	border: none;
+	border-radius: 0;
+	background: none;
+}
+.code-head .segmented button.on {
+	background: var(--press);
+	box-shadow: none;
+}
+.code-head .segmented button:not(.on):hover {
+	background: var(--hover);
+	color: var(--text);
+}
 .code-sub {
 	flex: none;
 	display: flex;
