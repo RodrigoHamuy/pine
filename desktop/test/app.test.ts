@@ -141,7 +141,7 @@ test("starts a daemon of its own and shows the main agent", async () => {
 	// lies outside the row is cut off. So the row has to leave the line its pixel on every side.
 	const room = await page.evaluate(() => {
 		const row = document.querySelector(".tabs")!.getBoundingClientRect();
-		const tab = document.querySelector(".tab.on")!.getBoundingClientRect();
+		const tab = document.querySelector(".tab[data-selected]")!.getBoundingClientRect();
 		return { top: tab.top - row.top, bottom: row.bottom - tab.bottom, left: tab.left - row.left };
 	});
 	assert.ok(room.top >= 1 && room.bottom >= 1 && room.left >= 1, `the row cuts off the line around the tab in front: ${JSON.stringify(room)}`);
@@ -469,7 +469,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	// With several agents the app asks whose folder it is; the one in front is offered first.
 	await sees(".pick-title >> text=Which agent works in");
 	await page.keyboard.press("Enter");
-	await sees(".tab.on .name >> text=pine-desktop-folder");
+	await sees(".tab[data-selected] .name >> text=pine-desktop-folder");
 	await page.click(".conv-head .btn[title*='workspace']");
 	// The panel begins with the agent: who it is and what it runs on.
 	await sees(".agent-view .agent-name >> text=main");
@@ -515,7 +515,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await menu("settings");
 	await sees(".set-in h1 >> text=General");
 	// The settings are a tab like any other, beside the conversations.
-	assert.equal(await page.textContent(".tab.on .name"), "Settings");
+	assert.equal(await page.textContent(".tab[data-selected] .name"), "Settings");
 	assert.ok((await page.$$eval(".tab", (els: Element[]) => els.length)) >= 3);
 	await sees(".item .mono >> text=limits.maxDownloadMb");
 	// A setting is called by a few words; its key stands beside them. What only tunes pine is not on the page.
@@ -734,7 +734,7 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await menu("sidebar");
 	await page.waitForSelector(".sidebar", { state: "detached" });
 	await page.reload();
-	await sees(".tab.on");
+	await sees(".tab[data-selected]");
 	assert.equal(await page.locator(".sidebar").count(), 0);
 	await menu("sidebar");
 	await sees(".sidebar");
@@ -750,18 +750,18 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(await group.locator(".side-conv").count(), 1);
 	// The plus on an agent's own line starts a conversation with that agent.
 	await group.locator(".side-agent .btn[title='New conversation with scout']").click();
-	await sees(".tab.on .name >> text=scout");
+	await sees(".tab[data-selected] .name >> text=scout");
 	assert.equal(await page.textContent(".welcome h1"), "scout");
 	assert.match(await page.textContent(".welcome"), /Looks things up on the web/);
 	await shot("14-agents");
 	// A conversation that was only started is called by how it began, in the side bar and on its tab.
-	assert.match(await page.textContent(".tab.on .name"), /new conversation/);
+	assert.match(await page.textContent(".tab[data-selected] .name"), /new conversation/);
 	await page.fill(".composer textarea", "where is the okapi invoice");
 	await page.keyboard.press("Enter");
 	await sees(".md >> text=ECHO[where is the okapi invoice]");
-	await sees(".tab.on .name >> text=where is the okapi invoice", 15_000);
+	await sees(".tab[data-selected] .name >> text=where is the okapi invoice", 15_000);
 	assert.equal(await group.locator(".side-conv >> text=where is the okapi invoice").count(), 1);
-	await page.click(".tab.on .close");
+	await page.click(".tab[data-selected] .close");
 	// Search finds a conversation by what was said in it, and opens it with the words marked.
 	await menu("palette");
 	await sees(".pick-input");
@@ -774,19 +774,19 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await page.fill(".pick-input", "okapi invoice");
 	await page.waitForFunction(() => document.querySelectorAll(".pick-item").length > 0 && [...document.querySelectorAll(".pick-item .label")].filter((e) => /where is the okapi invoice/.test(e.textContent ?? "")).length === 1);
 	await page.click(".pick-item:has-text('scout · where is the okapi invoice')");
-	await sees(".tab.on .name >> text=where is the okapi invoice");
+	await sees(".tab[data-selected] .name >> text=where is the okapi invoice");
 	await sees(".find >> text=/\\d+ of \\d+/");
 	assert.equal(await page.inputValue(".find input"), "okapi invoice");
 	await page.keyboard.press("Escape");
-	await page.click(".tab.on .close");
+	await page.click(".tab[data-selected] .close");
 	// Asked from where no agent is in front (the event log), a new conversation asks with whom.
 	await menu("events");
-	await sees(".tab.on .name >> text=Events");
+	await sees(".tab[data-selected] .name >> text=Events");
 	await menu("new");
 	await sees(".pick-title >> text=New conversation with");
 	assert.deepEqual(await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent)), ["main", "scout", "books", "test"]);
 	await page.keyboard.press("Escape");
-	await page.click(".tab.on .close");
+	await page.click(".tab[data-selected] .close");
 });
 
 test("a right click on an agent offers to remove it, and never the main agent", async () => {
@@ -849,9 +849,9 @@ test("a conversation is opened from the palette with the keyboard alone", async 
 	assert.match(at.text, /scout · where is the okapi invoice/);
 	await page.keyboard.press("Enter");
 	await page.waitForSelector(".dialog", { state: "detached" });
-	await sees(".tab.on .name >> text=where is the okapi invoice");
+	await sees(".tab[data-selected] .name >> text=where is the okapi invoice");
 	await page.keyboard.press("Escape");
-	await page.click(".tab.on .close");
+	await page.click(".tab[data-selected] .close");
 });
 
 test("the palette finds things by name, and the event log follows", async () => {
@@ -876,11 +876,11 @@ test("a sub-agent's work opens in a tab of its own", async () => {
 	await page.click(".work-head >> nth=-1");
 	await sees(".work .part .open-link");
 	await page.click(".work .part .open-link >> nth=0");
-	await sees(".tab.on .name >> text=#");
+	await sees(".tab[data-selected] .name >> text=#");
 	await sees(".md >> text=hi from the child");
 	assert.match(await page.textContent(".column"), /sub-agent of main/);
 	await shot("12-task");
-	await page.click(".tab.on .close");
+	await page.click(".tab[data-selected] .close");
 });
 
 test("the last message is taken back, and its text is in the input again", async () => {
@@ -919,6 +919,27 @@ test("find marks what is looked for", async () => {
 	await shot("13-find");
 	await page.keyboard.press("Escape");
 	await page.waitForSelector(".find", { state: "detached" });
+});
+
+test("the tab strip is a tab list: the arrows move between tabs, Enter opens one, and a tab dragged lands elsewhere", async () => {
+	if ((await page.locator(".tab").count()) < 3) await menu("settings");
+	await sees(".tabs[role='tablist']");
+	const names = () => page.$$eval(".tab .name", (els: Element[]) => els.map((e) => e.textContent));
+	await page.click(".tab >> nth=0");
+	await page.focus(".tab >> nth=0");
+	await page.keyboard.press("ArrowRight");
+	assert.equal(await page.evaluate(() => [...document.querySelectorAll(".tab")].indexOf(document.activeElement!)), 1, "the arrow moves focus to the next tab");
+	assert.equal(await page.getAttribute(".tab >> nth=0", "aria-selected"), "true", "moving does not open it yet");
+	await page.keyboard.press("Enter");
+	await sees(".tab:nth-child(2)[aria-selected='true']");
+	// Dragged past the next tab, the first tab lands after it.
+	const order = await names();
+	const [a, b] = await page.$$eval(".tab", (els: Element[]) => els.slice(0, 2).map((e) => e.getBoundingClientRect().toJSON()));
+	await page.mouse.move(a.x + a.width / 2, a.y + a.height / 2);
+	await page.mouse.down();
+	await page.mouse.move(b.x + b.width - 4, b.y + b.height / 2, { steps: 6 });
+	await page.mouse.up();
+	assert.deepEqual((await names()).slice(0, 2), [order[1], order[0]]);
 });
 
 test("quitting stops the daemon it started", async () => {

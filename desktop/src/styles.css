@@ -478,12 +478,16 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	color: var(--muted);
 	flex: 0 1 auto;
 	position: relative;
+	border: 0;
+	background: none;
+	font: inherit;
+	text-align: left;
 }
 .tab:hover {
 	background: var(--hover);
 	color: var(--text);
 }
-.tab.on {
+.tab[data-selected] {
 	background: var(--bg);
 	color: var(--text);
 	box-shadow: 0 0 0 1px var(--line);
@@ -507,7 +511,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	color: var(--muted);
 }
 .tab:hover .close,
-.tab.on .close {
+.tab[data-selected] .close {
 	opacity: 1;
 }
 .tab .close:hover {
@@ -524,7 +528,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	color: var(--warn);
 	flex: none;
 }
-.tab.drop::before {
+.tab[data-drop]::before {
 	content: "";
 	position: absolute;
 	left: -2px;
@@ -533,6 +537,10 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	width: 2px;
 	border-radius: 2px;
 	background: var(--accent);
+}
+.tab[data-drop="after"]::before {
+	left: auto;
+	right: -2px;
 }
 .needs {
 	font-size: 10px;

@@ -11,7 +11,7 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Choices, Confirm, Dialog, Icon, Lightbox, Logo, Pick, Pulse, Toasts } from "./ui.tsx";
+import { Button, Choices, Confirm, Dialog, Icon, Lightbox, Logo, Pick, Pulse, StripTab, TabStrip, Toasts } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -198,21 +198,14 @@ function Sidebar() {
 
 // ---- the tabs ------------------------------------------------------------------------------------------
 
-function TabButton({ tab, index }: { tab: Tab; index: number }) {
+function TabButton({ tab }: { tab: Tab }) {
 	useModel(tab);
 	const s = store;
-	const [drop, setDrop] = useState(false);
-	const on = s.active === tab;
 	const kept = tab.kind === "chat" && (tab.session === "main" || s.pins.has(tab.key));
 	return (
-		<div
-			className={`tab${on ? " on" : ""}${drop ? " drop" : ""}`}
-			draggable
-			onDragStart={(e) => (e.dataTransfer.setData("application/x-pine-tab", String(index)), (e.dataTransfer.effectAllowed = "move"))}
-			onDragOver={(e) => e.dataTransfer.types.includes("application/x-pine-tab") && (e.preventDefault(), setDrop(true))}
-			onDragLeave={() => setDrop(false)}
-			onDrop={(e) => (setDrop(false), s.moveTab(Number(e.dataTransfer.getData("application/x-pine-tab")), index))}
-			onClick={() => s.activate(tab)}
+		<StripTab
+			value={String(tab.id)}
+			className="tab"
 			onAuxClick={(e) => e.button === 1 && s.closeTab(tab)}
 			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 		>
@@ -223,8 +216,8 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
 			</span>
 			{kept && tab.session !== "main" ? <Icon name="star" size={10} className="star" /> : null}
-			<span className="close" onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><Icon name="x" size={11} /></span>
-		</div>
+			<span className="close" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><Icon name="x" size={11} /></span>
+		</StripTab>
 	);
 }
 
@@ -234,9 +227,9 @@ function TitleBar() {
 	return (
 		<header className="titlebar">
 			{s.sidebar ? null : <Button variant="ghost" icon="sidebar" title="Show the sidebar (⌘B)" onClick={() => void s.command("sidebar")} />}
-			<div className="tabs">
-				{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
-			</div>
+			<TabStrip label="Open tabs" value={s.active ? String(s.active.id) : null} onSelect={(id) => s.activate(s.tabs.find((t) => String(t.id) === id))} onMove={(from, to) => s.moveTab(from, to)}>
+				{s.tabs.map((t) => <TabButton key={t.id} tab={t} />)}
+			</TabStrip>
 			<Button variant="ghost" icon="plus" title={with_ ? `New conversation with ${with_} (⌘T)` : "New conversation (⌘T): you are asked with which agent"} onClick={() => void s.newConversation()} />
 			<span className="grow" />
 		</header>
