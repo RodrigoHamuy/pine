@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { Icon, StripTab, TabStrip } from "../ui.tsx";
+import { Icon } from "./Icon.tsx";
+import { StripTab, TabStrip } from "./TabStrip.tsx";
 
 const TABS = ["main", "scout", "Settings"];
 

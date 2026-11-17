@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Pulse } from "../ui.tsx";
+import { Pulse } from "./Pulse.tsx";
 
 // The dot breathes; Chromatic pauses CSS animations at their end, so the snapshot is steady.
 const meta = { component: Pulse, args: { size: 14 } } satisfies Meta<typeof Pulse>;

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { Icon, Tree, TreeRow } from "../ui.tsx";
+import { Icon } from "./Icon.tsx";
+import { Tree, TreeRow } from "./Tree.tsx";
 
 type Node = { name: string; children?: Node[] };
 

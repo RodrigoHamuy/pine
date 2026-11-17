@@ -8,7 +8,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
-import { toast } from "./ui.tsx";
+import { toast } from "./ui/Toasts.tsx";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 
 export class Model {

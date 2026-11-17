@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useLayoutEffect } from "react";
-import { Toasts, toast } from "../ui.tsx";
+import { Toasts, toast } from "./Toasts.tsx";
 
 const meta = {
 	component: Toasts,

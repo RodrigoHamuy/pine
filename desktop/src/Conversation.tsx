@@ -6,7 +6,9 @@ import { Composer } from "./Composer.tsx";
 import { Markdown } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
-import { Button, Icon, Pulse } from "./ui.tsx";
+import { Button } from "./ui/Button.tsx";
+import { Icon } from "./ui/Icon.tsx";
+import { Pulse } from "./ui/Pulse.tsx";
 
 const TONE_ICON: Record<Tone, string> = { muted: "info", warn: "alert", bad: "alert", good: "check", accent: "undo" };
 

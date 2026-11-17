@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { AutoText } from "../ui.tsx";
+import { AutoText } from "./AutoText.tsx";
 
 const meta = {
 	component: AutoText,

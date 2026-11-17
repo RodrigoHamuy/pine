@@ -4,7 +4,10 @@
 import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
-import { Button, Icon, Pulse, useLoad } from "./ui.tsx";
+import { Button } from "./ui/Button.tsx";
+import { Icon } from "./ui/Icon.tsx";
+import { Pulse } from "./ui/Pulse.tsx";
+import { useLoad } from "./ui/useLoad.ts";
 
 function Section({ title, count, children, action }: { title: string; count?: number; children: React.ReactNode; action?: React.ReactNode }) {
 	return (

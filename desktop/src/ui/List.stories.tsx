@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { Icon, List, ListRow } from "../ui.tsx";
+import { Icon } from "./Icon.tsx";
+import { List, ListRow } from "./List.tsx";
 
 const FILES = ["README.md", "src/index.ts", "src/ui.tsx", "package.json"];
 

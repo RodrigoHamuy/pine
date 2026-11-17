@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Split } from "../ui.tsx";
+import { Split } from "./Split.tsx";
 
 const meta = {
 	component: Split,

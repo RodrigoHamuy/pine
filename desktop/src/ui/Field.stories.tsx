@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Field } from "../ui.tsx";
+import { Field } from "./Field.tsx";
 
 const meta = {
 	component: Field,

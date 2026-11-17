@@ -6,7 +6,7 @@ import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
 import { type Attachment, store, type Tab, useModel, useSignal } from "./model.ts";
 import { baseName, size, tilde } from "./text.ts";
-import { Icon } from "./ui.tsx";
+import { Icon } from "./ui/Icon.tsx";
 import {
 	createTriggerMenuController,
 	type TextEditorAdapter,

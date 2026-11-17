@@ -11,7 +11,20 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Choices, Confirm, Dialog, Fold, Icon, Lightbox, List, ListRow, Logo, Pick, Pulse, Split, StripTab, TabStrip, Toasts } from "./ui.tsx";
+import { Button } from "./ui/Button.tsx";
+import { Choices } from "./ui/Choices.tsx";
+import { Confirm } from "./ui/Confirm.tsx";
+import { Dialog } from "./ui/Dialog.tsx";
+import { Fold } from "./ui/Fold.tsx";
+import { Icon } from "./ui/Icon.tsx";
+import { Lightbox } from "./ui/Lightbox.tsx";
+import { List, ListRow } from "./ui/List.tsx";
+import { Logo } from "./ui/Logo.tsx";
+import { Pick } from "./ui/Pick.tsx";
+import { Pulse } from "./ui/Pulse.tsx";
+import { Split } from "./ui/Split.tsx";
+import { StripTab, TabStrip } from "./ui/TabStrip.tsx";
+import { Toasts } from "./ui/Toasts.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 

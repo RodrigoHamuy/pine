@@ -1,6 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { Button, Fold, Icon } from "../ui.tsx";
+import { Button } from "./Button.tsx";
+import { Fold } from "./Fold.tsx";
+import { Icon } from "./Icon.tsx";
 
 const meta = {
 	component: Fold,

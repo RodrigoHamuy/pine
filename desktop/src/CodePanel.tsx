@@ -24,7 +24,16 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { Ask, Button, Confirm, Empty, Icon, List, ListRow, Segmented, Pulse, Tree, TreeRow, useLoad } from "./ui.tsx";
+import { Ask } from "./ui/Ask.tsx";
+import { Button } from "./ui/Button.tsx";
+import { Confirm } from "./ui/Confirm.tsx";
+import { Empty } from "./ui/Empty.tsx";
+import { Icon } from "./ui/Icon.tsx";
+import { List, ListRow } from "./ui/List.tsx";
+import { Pulse } from "./ui/Pulse.tsx";
+import { Segmented } from "./ui/Segmented.tsx";
+import { Tree, TreeRow } from "./ui/Tree.tsx";
+import { useLoad } from "./ui/useLoad.ts";
 
 // ---- the editor ------------------------------------------------------------------------------------
 

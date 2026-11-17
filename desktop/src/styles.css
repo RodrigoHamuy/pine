@@ -920,7 +920,7 @@ textarea.input {
 	background: var(--bad-soft);
 	color: var(--bad);
 }
-/* Something is at work: a green dot that breathes, slowly. All of them breathe in step (Pulse in ui.tsx). */
+/* Something is at work: a green dot that breathes, slowly. All of them breathe in step (ui/Pulse.tsx). */
 .pulse {
 	display: inline-grid;
 	place-items: center;

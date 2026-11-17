@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Confirm } from "../ui.tsx";
+import { Confirm } from "./Confirm.tsx";
 
 const meta = { component: Confirm, args: { label: "Remove", onConfirm: () => {} } } satisfies Meta<typeof Confirm>;
 export default meta;

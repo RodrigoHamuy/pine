@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Empty } from "../ui.tsx";
+import { Empty } from "./Empty.tsx";
 
 const meta = { component: Empty, args: { icon: "chat", title: "No conversation yet", children: "Write a message to begin." } } satisfies Meta<typeof Empty>;
 export default meta;

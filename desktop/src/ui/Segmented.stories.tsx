@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { Segmented } from "../ui.tsx";
+import { Segmented } from "./Segmented.tsx";
 
 const meta = {
 	component: Segmented,

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { expect, userEvent, within } from "storybook/test";
-import { Select } from "../ui.tsx";
+import { Select } from "./Select.tsx";
 
 const meta = {
 	component: Select,

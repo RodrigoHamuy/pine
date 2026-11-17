@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { Choices } from "../ui.tsx";
+import { Choices } from "./Choices.tsx";
 
 const meta = {
 	component: Choices,

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Icon } from "../ui.tsx";
+import { Icon } from "./Icon.tsx";
 
 const meta = { component: Icon, args: { name: "gear", size: 16 } } satisfies Meta<typeof Icon>;
 export default meta;

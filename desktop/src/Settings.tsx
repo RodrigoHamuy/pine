@@ -7,7 +7,18 @@ import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
-import { AutoText, Button, Confirm, Dialog, Empty, Field, Icon, Segmented, Pulse, Select, Switch, useLoad } from "./ui.tsx";
+import { AutoText } from "./ui/AutoText.tsx";
+import { Button } from "./ui/Button.tsx";
+import { Confirm } from "./ui/Confirm.tsx";
+import { Dialog } from "./ui/Dialog.tsx";
+import { Empty } from "./ui/Empty.tsx";
+import { Field } from "./ui/Field.tsx";
+import { Icon } from "./ui/Icon.tsx";
+import { Pulse } from "./ui/Pulse.tsx";
+import { Segmented } from "./ui/Segmented.tsx";
+import { Select } from "./ui/Select.tsx";
+import { Switch } from "./ui/Switch.tsx";
+import { useLoad } from "./ui/useLoad.ts";
 
 const SECTIONS: Array<{ id: string; label: string; icon: string }> = [
 	{ id: "general", label: "General", icon: "sliders" },

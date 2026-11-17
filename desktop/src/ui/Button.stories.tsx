@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button } from "../ui.tsx";
+import { Button } from "./Button.tsx";
 
 const meta = { component: Button, args: { children: "Save" } } satisfies Meta<typeof Button>;
 export default meta;

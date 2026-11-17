@@ -7,7 +7,10 @@ import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
-import { Button, Empty, Icon, Pulse } from "./ui.tsx";
+import { Button } from "./ui/Button.tsx";
+import { Empty } from "./ui/Empty.tsx";
+import { Icon } from "./ui/Icon.tsx";
+import { Pulse } from "./ui/Pulse.tsx";
 
 type Op = Record<string, unknown> & { do: string };
 

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
-import { Pick, type PickRow } from "../ui.tsx";
+import { Pick, type PickRow } from "./Pick.tsx";
 
 const ROWS: PickRow[] = [
 	{ value: "new", label: "New conversation", keys: "N", group: "Conversations" },

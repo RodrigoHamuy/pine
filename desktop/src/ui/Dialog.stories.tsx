@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button, Dialog, Field } from "../ui.tsx";
+import { Button } from "./Button.tsx";
+import { Dialog } from "./Dialog.tsx";
+import { Field } from "./Field.tsx";
 
 const meta = {
 	component: Dialog,

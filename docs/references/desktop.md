@@ -441,8 +441,8 @@ desktop/
 
 ### Stories and Chromatic
 
-The parts the page is built from (`src/ui.tsx`: buttons, fields, switches, the segmented
-control, dialogs) have stories beside them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need neither Electron
+The parts the page is built from (`src/ui/<Component>.tsx`, one file each: buttons, fields, switches, the segmented
+control, dialogs) have stories beside them (`src/ui/<Component>.stories.tsx`, titled by its path), which need neither Electron
 nor a daemon. Story only parts that take everything as props; a part that calls `api.ts` or
 the bridge has no story.
 
