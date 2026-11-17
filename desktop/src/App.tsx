@@ -11,7 +11,7 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Confirm, Dialog, Icon, Logo, Pulse } from "./ui.tsx";
+import { Button, Confirm, Dialog, Icon, Lightbox, Logo, Pulse, Toasts } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -534,16 +534,15 @@ function Help({ close }: { close: () => void }) {
 	);
 }
 
-function Lightbox() {
-	const [src, setSrc] = useState<string>();
+function Zoom() {
+	const [open, setOpen] = useState<{ src: string; from: HTMLElement | null }>();
 	useEffect(() => {
-		const show = (e: Event) => setSrc((e as CustomEvent<string>).detail);
-		const key = (e: KeyboardEvent) => e.key === "Escape" && setSrc(undefined);
+		// The picture pressed has the focus (a zoomable picture can take it): that is where it comes back to.
+		const show = (e: Event) => setOpen({ src: (e as CustomEvent<string>).detail, from: document.activeElement as HTMLElement | null });
 		window.addEventListener("pine:zoom", show);
-		window.addEventListener("keydown", key);
-		return () => (window.removeEventListener("pine:zoom", show), window.removeEventListener("keydown", key));
+		return () => window.removeEventListener("pine:zoom", show);
 	}, []);
-	return src ? <div className="lightbox" onClick={() => setSrc(undefined)}><img src={src} alt="" /></div> : null;
+	return <Lightbox src={open?.src} from={open?.from} onClose={() => setOpen(undefined)} />;
 }
 
 /**
@@ -650,8 +649,8 @@ export function App() {
 			{s.palette ? <Palette /> : null}
 			<Asking />
 			{help ? <Help close={() => setHelp(false)} /> : null}
-			<Lightbox />
-			<div className="toasts">{s.toasts.map((t) => <div key={t.id} className={`toast ${t.tone}`}>{t.text}</div>)}</div>
+			<Zoom />
+			<Toasts />
 		</div>
 	);
 }

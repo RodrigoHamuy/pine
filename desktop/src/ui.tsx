@@ -1,10 +1,12 @@
 // The small parts everything else is built from: icons, buttons, fields, a dialog, a menu.
 import { type ButtonHTMLAttributes, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { AlertDialog, AlertDialogBackdrop, AlertDialogClose, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@ui-sdk/react/alert-dialog";
 import { Dialog as UiDialog, DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/react/dialog";
 import { FieldDescription, FieldLabel, Field as UiField } from "@ui-sdk/react/field";
 import { SelectContent, SelectItem, SelectItemIndicator, SelectTrigger, Select as UiSelect, SelectValue } from "@ui-sdk/react/select";
 import { SegmentedControl, SegmentedControlItem } from "@ui-sdk/react/segmented-control";
 import { SwitchThumb, Switch as UiSwitch } from "@ui-sdk/react/switch";
+import { createToaster, Toast, ToastRegion, ToastTitle } from "@ui-sdk/react/toast";
 
 const PATHS: Record<string, string> = {
 	plus: "M8 3v10M3 8h10",
@@ -180,6 +182,56 @@ export function Dialog({ title, children, onClose, width = 520, tone, footer }: 
 				{footer ? <div className="dialog-foot">{footer}</div> : null}
 			</DialogContent>
 		</UiDialog>
+	);
+}
+
+/**
+ * A question that needs an answer before going on, open while it is rendered: `yes` agrees, the
+ * other button and Escape do not.
+ */
+export function Ask({ title, children, yes, no = "Cancel", onAnswer }: { title: ReactNode; children?: ReactNode; yes: string; no?: string; onAnswer: (yes: boolean) => void }) {
+	return (
+		<AlertDialog open onOpenChange={(open, details) => !open && onAnswer(details.returnValue === "yes")}>
+			<AlertDialogBackdrop className="scrim" />
+			<AlertDialogContent className="dialog dialog-warn" style={{ width: 420 }}>
+				<AlertDialogTitle render={<div className="dialog-title" />}>{title}</AlertDialogTitle>
+				{children ? <AlertDialogDescription render={<div className="dialog-body" />}>{children}</AlertDialogDescription> : null}
+				<div className="dialog-foot">
+					<AlertDialogClose className="btn btn-ghost" value="no">{no}</AlertDialogClose>
+					<AlertDialogClose className="btn btn-danger" value="yes">{yes}</AlertDialogClose>
+				</div>
+			</AlertDialogContent>
+		</AlertDialog>
+	);
+}
+
+/**
+ * A picture over the whole page, open while `src` is set. Escape and a press anywhere close it,
+ * and focus goes back to `from`, the picture it was opened from.
+ */
+export function Lightbox({ src, from, onClose }: { src?: string; from?: HTMLElement | null; onClose: () => void }) {
+	return (
+		<UiDialog open={Boolean(src)} onOpenChange={(open) => !open && onClose()}>
+			<DialogContent className="lightbox" aria-label="Picture" finalFocus={from ?? undefined} onClick={onClose}>
+				<img src={src} alt="" />
+			</DialogContent>
+		</UiDialog>
+	);
+}
+
+/** The app's passing messages: `toast()` says one from anywhere, the one `Toasts` region shows it. */
+export const toast = createToaster();
+
+/** Where toasts show, each announced to screen readers once. */
+export function Toasts() {
+	return (
+		<ToastRegion toaster={toast} className="toasts" side="bottom" align="center" maxVisible={4} expanded>
+			{() => (
+				<Toast className="toast">
+					<ToastTitle />
+				</Toast>
+			)}
+		</ToastRegion>
 	);
 }
 

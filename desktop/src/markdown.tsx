@@ -55,6 +55,7 @@ function player(kind: "image" | "video" | "audio", src: string, alt: string): HT
 		el.setAttribute("alt", alt);
 		el.setAttribute("draggable", "false");
 		el.dataset.zoom = "1";
+		el.tabIndex = 0;
 	} else {
 		el.setAttribute("controls", "");
 		el.setAttribute("preload", "metadata");

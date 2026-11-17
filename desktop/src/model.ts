@@ -8,6 +8,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
+import { toast } from "./ui.tsx";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 
 export class Model {
@@ -175,11 +176,6 @@ export class Tab extends Model {
 const STOP_GRACE = 3000;
 const sessionName = () => `s${Date.now().toString(36)}`;
 
-export interface Toast {
-	id: number;
-	text: string;
-	tone: Tone;
-}
 
 export type Picker = { title: string; items: Array<{ value: string; label: string; about?: string; tone?: Tone }>; current?: string; done: (value: string | undefined) => void; placeholder?: string; free?: boolean };
 
@@ -234,7 +230,6 @@ export class Store extends Model {
 	/** The approval or question whose dialog is open. */
 	asking?: string;
 	asked = new Set<string>();
-	toasts: Toast[] = [];
 	initLines: string[] = [];
 	initRunning = false;
 	/** Whether the browser build this pine drives is on this computer; nothing while it is not known. */
@@ -527,14 +522,8 @@ export class Store extends Model {
 	// ---- small things ------------------------------------------------------------------------------
 
 	flash(text: string, tone: Tone = "muted", ms = 4500): void {
-		const toast = { id: uid(), text, tone };
-		this.toasts.push(toast);
-		if (this.toasts.length > 4) this.toasts.shift();
-		this.touch();
-		window.setTimeout(() => {
-			this.toasts = this.toasts.filter((t) => t !== toast);
-			this.touch();
-		}, tone === "bad" ? Math.max(ms, 7000) : ms);
+		const type = ({ muted: "default", warn: "warning", bad: "error", good: "success", accent: "info" } as const)[tone];
+		toast({ title: text, type, duration: tone === "bad" ? Math.max(ms, 7000) : ms });
 	}
 
 	/** Run something the owner asked for; what goes wrong is said, not thrown away. */

@@ -342,6 +342,25 @@ test("what an answer points at on the web is not fetched by itself", async () =>
 	assert.equal(await page.$$eval(".md script, .md a[href]", (els: Element[]) => els.length), 0);
 });
 
+test("a picture opens over the page, and Escape closes it back onto the picture", async () => {
+	const picture = await app.evaluate(({ nativeImage }: any) => nativeImage.createFromBitmap(Buffer.alloc(40 * 30 * 4, 180), { width: 40, height: 30 }).toPNG().toString("base64"));
+	fs.writeFileSync(path.join(home, "agents", "main", "workspace", "okapi.png"), Buffer.from(picture, "base64"));
+	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "read", args: { path: "okapi.png" } }] }, { text: "an okapi" }], "picture "));
+	await page.keyboard.press("Enter");
+	const img = ".it-media img";
+	await sees(img);
+	await page.click(img);
+	await sees(".lightbox[role=dialog] img");
+	await page.keyboard.press("Escape");
+	await page.waitForFunction(() => !document.querySelector(".lightbox"));
+	assert.equal(await page.evaluate((s: string) => document.activeElement === document.querySelector(s), img), true);
+	// A press beside the picture closes it too.
+	await page.click(img);
+	await sees(".lightbox[role=dialog] img");
+	await page.mouse.click(5, 5);
+	await page.waitForFunction(() => !document.querySelector(".lightbox"));
+});
+
 test("an approval is asked in a dialog and answered from it, and so is a question", async () => {
 	// The owner listed bash under "approve": it asks in every mode.
 	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo hello" } }] }, { tools: [{ name: "question", args: { question: "Which database?", choices: ["the old one", "the new one"] } }] }, { text: "done" }], "run it "));
@@ -402,6 +421,17 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	for (let i = 0; i < 50 && !fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8").includes("43"); i++) await new Promise((r) => setTimeout(r, 100));
 	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n");
 	await shot("05-editor");
+	// Leaving what was typed and not saved is asked in the app: staying keeps it, leaving drops it.
+	await page.keyboard.type("// draft");
+	await page.click(".code-sub .btn[title='Back to the files']");
+	await sees("[role=alertdialog] >> text=without saving");
+	await page.click("[role=alertdialog] .btn >> text=Cancel");
+	await page.waitForFunction(() => !document.querySelector("[role=alertdialog]"));
+	assert.ok(await page.$(".editor .cm-content"));
+	await page.click(".code-sub .btn[title='Back to the files']");
+	await page.click("[role=alertdialog] .btn >> text=Leave");
+	await page.waitForFunction(() => !document.querySelector(".editor"));
+	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n");
 });
 
 test("settings: a setting is changed, an agent made, a schedule added, a provider signed in to, a skill and a source added", async () => {
@@ -424,7 +454,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// One that cannot be is refused, and the file stays as it is.
 	await limit.fill("0");
 	await limit.press("Enter");
-	await page.waitForFunction(() => [...document.querySelectorAll(".toast.bad")].some((t) => /whole number from 1/.test(t.textContent ?? "")));
+	await page.waitForFunction(() => [...document.querySelectorAll('.toast[data-type=error]')].some((t) => /whole number from 1/.test(t.textContent ?? "")));
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).limits.maxDownloadMb, 123);
 	// A setting chosen from a list is chosen with the keyboard alone: Escape closes the list and gives
 	// focus back to it, Enter opens it, the arrows move, Enter chooses.

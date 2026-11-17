@@ -123,7 +123,7 @@ function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
 			</div>
 			{entry.result ? <div className="entry-result" style={entry.ok === false ? { color: "var(--bad)" } : undefined}>{short(entry.result, 4000)}</div> : null}
 			{(entry.images ?? []).map((id) => (
-				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" onClick={(e) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: (e.target as HTMLImageElement).src }))} /></div>
+				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" tabIndex={0} onClick={(e) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: (e.target as HTMLImageElement).src }))} /></div>
 			))}
 		</div>
 	);
@@ -214,7 +214,7 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 		case "media":
 			return (
 				<div className="it-media">
-					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} onClick={() => zoom(item.url)} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
+					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} tabIndex={0} onClick={() => zoom(item.url)} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
 					<div className="cap">{item.name}</div>
 				</div>
 			);

@@ -24,7 +24,7 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { Button, Confirm, Empty, Icon, Segmented, Pulse, useLoad } from "./ui.tsx";
+import { Ask, Button, Confirm, Empty, Icon, Segmented, Pulse, useLoad } from "./ui.tsx";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -253,6 +253,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	const disk = useLoad(() => api.file(tab.agent, tab.session, file), [tab.key, file, tab.codeTick]);
 	const [draft, setDraft] = useState<string>();
 	const [saving, setSaving] = useState(false);
+	const [leaving, setLeaving] = useState(false);
 	const [base, setBase] = useState<string>();
 	const kind = mediaKind(file);
 	const text = disk.data?.text;
@@ -282,8 +283,9 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	const root = tab.folder ?? tab.workspace;
 	return (
 		<>
+			{leaving ? <Ask title={`Leave ${file} without saving what you typed?`} yes="Leave" onAnswer={(yes) => (setLeaving(false), yes && close())} /> : null}
 			<div className="code-sub">
-				<Button small variant="ghost" icon="back" onClick={() => (dirty && !window.confirm(`Leave ${file} without saving what you typed?`) ? undefined : close())} title="Back to the files" />
+				<Button small variant="ghost" icon="back" onClick={() => (dirty ? setLeaving(true) : close())} title="Back to the files" />
 				<span className="cut grow mono" title={file}>{file}{dirty ? <span style={{ color: "var(--warn)" }}> ●</span> : null}</span>
 				{disk.data?.truncated ? <span className="tag warn">too large to edit</span> : null}
 				{root ? <Button small variant="ghost" icon="external" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)} /> : null}

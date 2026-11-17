@@ -1074,9 +1074,13 @@ textarea.input {
 	transform: translateX(-50%);
 	z-index: 80;
 	display: flex;
-	flex-direction: column;
+	/* ui-sdk lists the newest first; it shows last, at the bottom, as it always has. */
+	flex-direction: column-reverse;
 	gap: 6px;
 	align-items: center;
+	margin: 0;
+	padding: 0;
+	list-style: none;
 	pointer-events: none;
 }
 .toast {
@@ -1089,17 +1093,25 @@ textarea.input {
 	box-shadow: var(--shadow);
 	animation: rise 0.16s ease-out;
 }
-.toast.bad {
+.toast[data-type="error"] {
 	background: var(--bad);
 	color: #fff;
 }
-.toast.good {
+.toast[data-type="success"] {
 	background: var(--accent);
 	color: var(--on-accent);
 }
 .lightbox {
+	/* The content opens in the top layer: it covers the page itself and drops the popover UA box. */
 	position: fixed;
 	inset: 0;
+	width: auto;
+	height: auto;
+	max-width: none;
+	max-height: none;
+	margin: 0;
+	border: 0;
+	outline: none;
 	z-index: 90;
 	background: rgba(0, 0, 0, 0.82);
 	display: grid;
