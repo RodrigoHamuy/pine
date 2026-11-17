@@ -346,6 +346,12 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	await sees(".dialog-warn");
 	assert.match(await page.textContent(".dialog-warn"), /Approval needed[\s\S]*echo hello/);
 	await shot("03-approval");
+	// What is at work is a dot that breathes, and all of them breathe in step, whenever each appeared:
+	// here the line of the turn's work and the line under the conversation, which came one after the other.
+	const breaths = await page.evaluate(() => document.getAnimations().filter((a) => (a as CSSAnimation).animationName === "pulse").map((a) => ({ start: a.startTime, every: (a.effect as KeyframeEffect).getTiming().duration })));
+	assert.ok(breaths.length >= 2, `${breaths.length} dots at work`);
+	assert.deepEqual([...new Set(breaths.map((b: any) => `${b.start}/${b.every}`))], ["0/2000"], JSON.stringify(breaths));
+	assert.equal(await page.$$eval(".spinner", (els: Element[]) => els.length), 0);
 	await page.click(".dialog-warn .btn-primary");
 	await sees(".it-approval.allowed");
 	// Then the agent asks something: the answers it offers, the recommended one first.

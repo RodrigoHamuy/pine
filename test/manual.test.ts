@@ -71,6 +71,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["build a user interface for my owner in the browser", /^interfaces/],
 		["play tic tac toe with my owner in the browser, how do I get their moves", /^interfaces/],
 		["my page server ends with listen EPERM", /^interfaces#the-steps/],
+		["WebSocket connection failed: Establishing a tunnel via proxy server failed", /^(operations#problems|interfaces#the-steps|mcp#)/],
+		["my page cannot reach its websocket server on another port in the browser", /^(operations#problems|interfaces#the-steps|mcp#)/],
 		["I installed the mac app, how do I use my ChatGPT or Claude subscription with it", /^desktop#the-first-start/],
 		["the app says the browser for the web tools is not on this Mac", /^(desktop#the-first-start|desktop#settings|operations#problems)/],
 		["my agent says its model cannot answer because the claude command is missing", /^(desktop#the-first-start|operations#problems)/],

@@ -7,7 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
-import { Button, Empty, Icon, Spinner } from "./ui.tsx";
+import { Button, Empty, Icon, Pulse } from "./ui.tsx";
 
 type Op = Record<string, unknown> & { do: string };
 
@@ -156,6 +156,18 @@ export function BrowserView({ tab }: { tab: Tab }) {
 
 	return (
 		<div className="code-body browser">
+			{open && state.tabs.length ? (
+				<div className="browser-tabs">
+					{state.tabs.map((t, i) => (
+						<div key={i} className={`browser-tab${i === state.current ? " on" : ""}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
+							<span className="cut grow">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
+							{/* (The last tab stays: a browser without one would open one again.) */}
+							{state.tabs.length > 1 ? <button type="button" className="browser-tab-close" title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><Icon name="x" size={10} /></button> : null}
+						</div>
+					))}
+					<Button small variant="ghost" icon="plus" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />
+				</div>
+			) : null}
 			<div className="browser-bar">
 				<Button small variant="ghost" icon="back" title="Back" disabled={!open} onClick={() => act({ do: "back" })} />
 				<Button small variant="ghost" icon="right" title="Forward" disabled={!open} onClick={() => act({ do: "forward" })} />
@@ -174,20 +186,8 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						if (e.key === "Escape") (setAddress(undefined), e.currentTarget.blur());
 					}}
 				/>
-				{busy ? <Spinner size={12} /> : null}
+				{busy ? <Pulse size={12} /> : null}
 			</div>
-			{open && state.tabs.length ? (
-				<div className="browser-tabs">
-					{state.tabs.map((t, i) => (
-						<div key={i} className={`browser-tab${i === state.current ? " on" : ""}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
-							<span className="cut grow">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
-							{/* (The last tab stays: a browser without one would open one again.) */}
-							{state.tabs.length > 1 ? <button type="button" className="browser-tab-close" title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><Icon name="x" size={10} /></button> : null}
-						</div>
-					))}
-					<Button small variant="ghost" icon="plus" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />
-				</div>
-			) : null}
 			{open ? (
 				<div className="browser-page" ref={room}>
 					<canvas
@@ -224,7 +224,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) (e.preventDefault(), act({ do: "text", text: e.key }, 90));
 						}}
 					/>
-					{drawn ? null : <div className="browser-wait"><Spinner size={14} /></div>}
+					{drawn ? null : <div className="browser-wait"><Pulse size={14} /></div>}
 				</div>
 			) : (
 				<Empty icon="eye" title={state ? "No page is open" : "Looking for the browser…"}>

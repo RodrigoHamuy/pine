@@ -1039,7 +1039,7 @@ export class SourceHost {
 	 * agent as such), note, when, debounce, throttle, separate, prompt. Subscribing the same
 	 * conversation again replaces its entry.
 	 */
-	async subscribe(agentId: string, name: string, raw: Record<string, unknown> = {}): Promise<SourceInfo & { session: string }> {
+	async subscribe(agentId: string, name: string, raw: Record<string, unknown> = {}): Promise<SourceInfo & { session: string; pauseMs?: number }> {
 		const agent = this.cfg.agents[agentId];
 		if (!agent) throw new Error(`unknown agent "${agentId}"`);
 		const found = sourceFor(this.cfg, agentId, name);
@@ -1056,11 +1056,13 @@ export class SourceHost {
 			json.subscribe = [...rawSubscriptions(json.subscribe).filter((x) => !this.same(sub)(x)), clean];
 		});
 		agent.subscribe = [...agent.subscribe.filter((x) => !(x.source === sub.source && x.session === sub.session)), sub];
-		this.router.add(this.route(agentId, found.key, found.source, sub));
+		const route = this.route(agentId, found.key, found.source, sub);
+		this.router.add(route);
 		this.wireGlobal();
 		await this.ensure(found.key);
 		this.log.info(`${agentId} subscribed its conversation "${sub.session}" to ${found.key}`);
-		return { ...this.started(found.key), session: sub.session };
+		// How long events are ignored after one that woke the agent (the subscription's throttle), for the agent to be told.
+		return { ...this.started(found.key), session: sub.session, pauseMs: route.throttleMs };
 	}
 
 	/** Subscribe every agent that can use a source of pine.json: each is woken in its main conversation. Kept in pine.json. */

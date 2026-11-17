@@ -24,7 +24,7 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { Button, Confirm, Empty, Icon, Segmented, Spinner, useLoad } from "./ui.tsx";
+import { Button, Confirm, Empty, Icon, Segmented, Pulse, useLoad } from "./ui.tsx";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -165,7 +165,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		return prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
 	};
 	if (list.error) return <Empty icon={turn ? "undo" : "branch"} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</Empty>;
-	if (!data) return <Empty title=""><Spinner /></Empty>;
+	if (!data) return <Empty title=""><Pulse /></Empty>;
 	if (!turn && !data.repo) return <Empty icon="branch" title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</Empty>;
 	if (file)
 		return (
@@ -175,7 +175,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 					<span className="cut grow mono" title={file}>{file}</span>
 					<Button small variant="ghost" icon="edit" onClick={() => openFile(inFolder(file))}>Edit</Button>
 				</div>
-				<div className="code-body">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className="out">… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Spinner />}</Empty>}</div>
+				<div className="code-body">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className="out">… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</div>
 			</>
 		);
 	return (
@@ -216,7 +216,7 @@ function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: n
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [tab.key, dir, tick]);
 	const entries = state.dirs.get(dir);
-	if (!entries) return depth ? null : <Empty title=""><Spinner /></Empty>;
+	if (!entries) return depth ? null : <Empty title=""><Pulse /></Empty>;
 	if (!entries.length && !depth) return <Empty icon="folder" title="This folder is empty" />;
 	return (
 		<>
@@ -301,7 +301,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				) : disk.error ? (
 					<Empty icon="file" title="This file cannot be shown">{disk.error}</Empty>
 				) : !disk.data ? (
-					<Empty title=""><Spinner /></Empty>
+					<Empty title=""><Pulse /></Empty>
 				) : disk.data.binary ? (
 					<Empty icon="file" title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
 				) : (
@@ -328,7 +328,7 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 			</div>
 			<div className="code-body">
 				{query.trim() ? (
-					found.data?.length ? found.data.map((f) => <div key={f} className="frow" onClick={() => setFile(f)}><Icon name="file" size={13} className="faint" /><span className="cut">{f}</span></div>) : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Spinner /> : null}</Empty>
+					found.data?.length ? found.data.map((f) => <div key={f} className="frow" onClick={() => setFile(f)}><Icon name="file" size={13} className="faint" /><span className="cut">{f}</span></div>) : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
 				) : (
 					<Tree tab={tab} dir="" depth={0} pick={setFile} tick={tick} />
 				)}
@@ -349,7 +349,7 @@ function Output({ tab }: { tab: Tab }) {
 		return out;
 	}, [tab.key, tab.codeTick]);
 	const [open, setOpen] = useState<string>();
-	if (!calls.data) return <Empty title="">{calls.error ?? <Spinner />}</Empty>;
+	if (!calls.data) return <Empty title="">{calls.error ?? <Pulse />}</Empty>;
 	if (!calls.data.length) return <Empty icon="terminal" title="No tool calls yet">What the agent's commands and tools print appears here.</Empty>;
 	const shown = calls.data.find((c) => `${c.task}:${c.n}` === open);
 	if (shown)

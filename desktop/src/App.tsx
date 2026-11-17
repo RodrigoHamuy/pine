@@ -11,7 +11,7 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Confirm, Dialog, Icon, Logo, Spinner } from "./ui.tsx";
+import { Button, Confirm, Dialog, Icon, Logo, Pulse } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -35,7 +35,7 @@ function Gate() {
 				{state.status === "starting" ? (
 					<>
 						<h1>Starting pine</h1>
-						<p className="row"><Spinner /> Looking for a running pine, or starting one…</p>
+						<p className="row"><Pulse /> Looking for a running pine, or starting one…</p>
 					</>
 				) : state.status === "error" && state.kind === "no-home" ? (
 					<>
@@ -43,7 +43,7 @@ function Gate() {
 						<p>pine keeps its agents, their workspaces and its settings in a home folder ({s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).</p>
 						{s.initLines.length ? <pre className="log" style={{ width: "100%" }}>{s.initLines.slice(-40).join("\n")}</pre> : null}
 						<div className="row">
-							<Button variant="primary" disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Spinner size={12} /> Setting up…</> : "Set up pine"}</Button>
+							<Button variant="primary" disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Pulse size={12} /> Setting up…</> : "Set up pine"}</Button>
 							<Button disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
 						</div>
 					</>
@@ -57,7 +57,7 @@ function Gate() {
 						</div>
 					</>
 				) : (
-					<p className="row"><Spinner /> Loading your agents…</p>
+					<p className="row"><Pulse /> Loading your agents…</p>
 				)}
 			</div>
 		</div>
@@ -102,7 +102,7 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
 		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
-			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Spinner size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
+			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
@@ -154,7 +154,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 					<span className="cut">{a.id}</span>
 					<span className="what"><span>{a.description || a.model}</span></span>
 				</span>
-				{waits ? <span className="needs">!</span> : working ? <Spinner size={11} /> : unread && folded ? <span className="dot unread" /> : null}
+				{waits ? <span className="needs">!</span> : working ? <Pulse size={11} /> : unread && folded ? <span className="dot unread" /> : null}
 				<span className="agent-acts" onClick={(e) => e.stopPropagation()}>
 					<Button small variant="ghost" icon="gear" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)} />
 					<Button small variant="ghost" icon="folder" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()} />
@@ -217,7 +217,7 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 		>
 			<span className="mark">
-				{tab.approvals.size ? <span className="needs">!</span> : tab.busy ? <Spinner size={11} /> : tab.unread ? <span className="dot unread" /> : tab.kind === "events" ? <Icon name="wave" size={12} /> : tab.kind === "settings" ? <Icon name="gear" size={12} /> : tab.kind === "task" ? <Icon name="list" size={12} /> : <span className="avatar small">{tab.agent.slice(0, 1).toUpperCase()}</span>}
+				{tab.approvals.size ? <span className="needs">!</span> : tab.busy ? <Pulse size={11} /> : tab.unread ? <span className="dot unread" /> : tab.kind === "events" ? <Icon name="wave" size={12} /> : tab.kind === "settings" ? <Icon name="gear" size={12} /> : tab.kind === "task" ? <Icon name="list" size={12} /> : <span className="avatar small">{tab.agent.slice(0, 1).toUpperCase()}</span>}
 			</span>
 			<span className="name">
 				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
@@ -585,7 +585,7 @@ function BrowserAsk() {
 			footer={
 				<>
 					<Button disabled={s.browserFetching} onClick={later}>Not now</Button>
-					<Button variant="primary" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner size={12} /> Fetching…</> : "Fetch it"}</Button>
+					<Button variant="primary" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={12} /> Fetching…</> : "Fetch it"}</Button>
 				</>
 			}
 		>

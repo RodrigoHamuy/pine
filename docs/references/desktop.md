@@ -175,7 +175,7 @@ it is never a question whom it is for.
 
 | On an agent's line | What it does |
 |---|---|
-| A click on the agent | Folds its conversations away, or shows them again. The app remembers which groups are folded. A folded agent still shows that it is at work (a spinner), waits for you (`!`) or has something new (a dot) |
+| A click on the agent | Folds its conversations away, or shows them again. The app remembers which groups are folded. A folded agent still shows that it is at work (a green dot that pulses), waits for you (`!`) or has something new (a dot) |
 | `+` | A new conversation with that agent |
 | The folder (when the pointer is on the line) | Opens a folder of yours for a new conversation with that agent |
 | The gear (when the pointer is on the line) | That agent's page in the settings |
@@ -184,7 +184,7 @@ it is never a question whom it is for.
 
 An agent that somebody else makes while the app is open (the main agent when you ask it to,
 `pine agent add`, the terminal UI) appears in the side bar within a few seconds, and one that
-is removed goes, with its tabs. A conversation in which an agent is at work has a spinner
+is removed goes, with its tabs. A conversation in which an agent is at work has a green dot that pulses
 whether or not a tab shows it.
 
 Where no agent is named, the app goes by the tab in front, and asks when that is not an
@@ -199,7 +199,7 @@ agent's:
 | Part | What it is |
 |---|---|
 | Side bar | Search at the top, then your agents (see above). Drag its right edge to make it wider or narrower (a double click on the edge sets it back), `⌘B` hides it and shows it again, and it is after a restart as you left it; where nothing is to click, it moves the window. An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
-| Tabs | One conversation each, with its agent's initial, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
+| Tabs | One conversation each, with its agent's initial, as in the terminal UI: a green dot that pulses while the agent works (every such dot in the window pulses in step), a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens. A `↳ … open` line opens a sub-agent's or delegated task's work in a tab of its own |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |

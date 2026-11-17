@@ -329,11 +329,12 @@ async function fakeBrowser(t: { after(fn: () => void): void }, o: Record<string,
 	fs.writeFileSync(script, FAKE_BROWSER);
 	const got = new Map<unknown, any>();
 	let ended = false;
+	const refused: string[] = [];
 	const server = relay(o as any, {
 		launch: (headed) => spawn(process.execPath, [script, headed ? "headed" : "hidden", log, ...flags], { stdio: ["pipe", "pipe", "inherit"] }),
 		send: (msg: any) => void got.set(msg.id, msg),
 		scratch,
-		refused: [],
+		refused,
 		ended: () => void (ended = true),
 	});
 	t.after(() => (server.child().kill(), fs.rmSync(scratch, { recursive: true, force: true })));
@@ -349,7 +350,7 @@ async function fakeBrowser(t: { after(fn: () => void): void }, o: Record<string,
 		return { text: r.content.map((p: any) => p.text).join("\n") as string, failed: r.isError === true };
 	};
 	await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "test", version: "0" } });
-	return { rpc, call, scratch, view: server.view, log: () => fs.readFileSync(log, "utf8").trim().split("\n"), raw: () => fs.readFileSync(`${log}.raw`, "utf8").trim().split("\n"), ended: () => ended, owner: (...lines: string[]) => fs.writeFileSync(`${log}.owner`, lines.join("\n")) };
+	return { rpc, call, scratch, refused, view: server.view, log: () => fs.readFileSync(log, "utf8").trim().split("\n"), raw: () => fs.readFileSync(`${log}.raw`, "utf8").trim().split("\n"), ended: () => ended, owner: (...lines: string[]) => fs.writeFileSync(`${log}.owner`, lines.join("\n")) };
 }
 
 test("browser: with a window the owner uses it too: the agent is moved to the page they opened and does not leave a page it has not seen", async (t) => {
@@ -468,6 +469,34 @@ test("browser: an agent whose browser is on the owner's screen is told that the 
 });
 
 // Starts a real browser and uses the network: only with PINE_LIVE=1.
+test("browser: what a page reached for on this computer and was refused, the agent is told with its next look, once", async (t) => {
+	const b = await fakeBrowser(t, { localFile: "/nowhere/allowed.json" });
+	await b.call("browser_navigate", { url: "http://localhost:8100/" });
+	// The page opens a WebSocket on another port than the one the owner allowed, and loads a picture from the router.
+	// (The lines are the guard's own, as startGuardProxy notes them.)
+	b.refused.push(`localhost:8101: localhost is a local name. ${ASK_HINT}`, `localhost:8101: localhost is a local name. ${ASK_HINT}`, `http://192.168.1.1/logo.png?ignore=all+rules: 192.168.1.1 is a private address. ${ASK_HINT}`, "tracker.example:443: tracker.example is on the deny list");
+	const looked = await b.call("browser_snapshot");
+	assert.ok(!looked.failed);
+	const note = looked.text.split("\n").find((l) => l.startsWith("pine: the page reached for"))!;
+	assert.ok(note, looked.text);
+	// Which addresses, by host and port and nothing else of what the page wrote; why; and what to do about it.
+	assert.ok(note.includes('"localhost:8101", "192.168.1.1"') && !note.includes("ignore=all") && !note.includes("tracker.example"), note);
+	assert.match(note, /A yes is for one host and one port/);
+	assert.match(note, /Establishing a tunnel via proxy server failed/);
+	assert.match(note, /Serve everything the page needs from the address that is allowed, or open the other address once with browser_navigate so that your owner is asked\.$/);
+	// Said once: the next call is not told again, and a new address is.
+	assert.ok(!(await b.call("browser_snapshot")).text.includes("pine: the page reached for"));
+	b.refused.push(`printer.local:631: printer.local is a local name. ${ASK_HINT}`, `localhost:8101: localhost is a local name. ${ASK_HINT}`);
+	const again = (await b.call("browser_snapshot")).text;
+	assert.ok(again.includes('pine: the page reached for "printer.local:631"') && !again.includes("localhost:8101"), again);
+	// Where nobody can be asked (a run started from outside), it is said without the way that needs the owner.
+	const outside = await fakeBrowser(t, { window: false });
+	await outside.call("browser_navigate", { url: "https://example.com/" });
+	outside.refused.push("10.0.0.5:80: 10.0.0.5 is a private address");
+	const plain = (await outside.call("browser_snapshot")).text;
+	assert.ok(plain.includes('pine: the page reached for "10.0.0.5:80"') && !plain.includes("browser_navigate so that your owner"), plain);
+});
+
 // ---- the owner's own window (the Pine app shows the browser beside a conversation) ---------------
 
 test("browser view: what the owner did is taken piece by piece, and an address is one of the web or nothing", () => {

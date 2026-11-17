@@ -6,12 +6,12 @@ import { Composer } from "./Composer.tsx";
 import { Markdown } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
-import { Button, Icon, Spinner } from "./ui.tsx";
+import { Button, Icon, Pulse } from "./ui.tsx";
 
 const TONE_ICON: Record<Tone, string> = { muted: "info", warn: "alert", bad: "alert", good: "check", accent: "undo" };
 
 function Status({ status }: { status: "run" | "ok" | "fail" | "done" | "failed" | "cancelled" }) {
-	if (status === "run") return <span className="st"><Spinner size={11} /></span>;
+	if (status === "run") return <span className="st"><Pulse size={11} /></span>;
 	const ok = status === "ok" || status === "done";
 	return <span className={`st ${ok ? "ok" : "fail"}`}><Icon name={ok ? "check" : "x"} size={12} /></span>;
 }
@@ -87,7 +87,7 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 	return (
 		<div className={`work${open ? " open" : ""}`}>
 			<button type="button" className="work-head" onClick={() => ((item.open = !open), setOpen(!open))}>
-				{item.done ? <Icon name="right" size={12} className="chev" /> : <Spinner size={12} />}
+				{item.done ? <Icon name="right" size={12} className="chev" /> : <Pulse size={12} />}
 				<span className="grow cut">{workHead(parts, item.done, item.ms) || "working"}</span>
 				{!item.done && !open && parts.length > 6 ? <span className="faint">show all</span> : null}
 			</button>
@@ -389,7 +389,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 	].filter(Boolean);
 	return (
 		<div className={`status${waiting.length ? " warn" : ""}`}>
-			<Spinner size={13} />
+			<Pulse size={13} />
 			{goal ? <span>goal · round {goal.round} of {goal.until}</span> : null}
 			{parts.map((p, i) => <span key={i} className={i || goal ? "sep" : ""}>{p}</span>)}
 			<span className="grow" />
@@ -493,7 +493,7 @@ export function Conversation({ tab }: { tab: Tab }) {
 				}}
 			>
 				<div className="column">
-					{!tab.loaded ? <div className="empty"><Spinner /></div> : !tab.items.length && chat ? <Welcome tab={tab} /> : tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
+					{!tab.loaded ? <div className="empty"><Pulse /></div> : !tab.items.length && chat ? <Welcome tab={tab} /> : tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
 				</div>
 			</div>
 			{away ? <Button className="jump" small icon="down" onClick={() => ((stick.current = true), toEnd(), setAway(false))}>Latest</Button> : null}

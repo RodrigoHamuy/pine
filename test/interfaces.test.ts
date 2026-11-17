@@ -45,7 +45,7 @@ test("a page as a user interface: the manual's server passes on what its page re
 	const asked: any[] = [];
 	h.pine.bus.subscribe("approval/requested", (e) => (asked.push(e.payload), void h.pine.approvals.decide((e.payload as any).id, true, "test")));
 	// Step 4 of the manual, as it says it.
-	const r = await h.pine.agents.run({ agent: "main", session: "game", trust: "owner", prompt: mockMsg([{ tools: [{ name: "add_source", args: { name: "board", type: "stream", description: "what my owner presses on the board", options: { url: `${at}/events` }, note: "Your owner plays O. Make your move as X." } }] }, { text: "GAME-ON" }]) } as any);
+	const r = await h.pine.agents.run({ agent: "main", session: "game", trust: "owner", prompt: mockMsg([{ tools: [{ name: "add_source", args: { name: "board", type: "stream", description: "what my owner presses on the board", options: { url: `${at}/events` }, note: "Your owner plays O. Make your move as X.", throttle: "0s" } }] }, { text: "GAME-ON" }]) } as any);
 	assert.equal(r.status, "done");
 	assert.equal(asked.length, 1, "the owner is asked once");
 	assert.match(asked[0].summary, /stay connected to http:\/\/127\.0\.0\.1:\d+\/events \(an address on your own network or this computer\)/);
@@ -61,4 +61,34 @@ test("a page as a user interface: the manual's server passes on what its page re
 	assert.ok(JSON.stringify(woken).includes("GAME-ON"), "the same conversation");
 	assert.ok(said.includes("Your note for this subscription: Your owner plays O. Make your move as X.") && said.includes("this did not come from your owner") && /\\"cell\\": 4/.test(said), said.slice(-500));
 	assert.match(h.pine.agents.status().sessions.find((s: any) => s.session === "game")?.tainted ?? "", /an event from the source "board"/);
+
+	// The next click comes at once, as in a game: with the manual's `throttle: "0s"` it wakes the agent too.
+	const second = h.mock.state.requests.length;
+	await fetch(`${at}/event`, { method: "POST", body: JSON.stringify({ cell: 0 }) });
+	await until(() => h.mock.state.requests.slice(second).some((req: any) => /\\"cell\\": 0/.test(JSON.stringify(req.body.messages.at(-1).content))), 8000, "a second click right after the first woke the agent as well");
+	assert.ok(doc.includes('`throttle: "0s"`'), "the manual says how");
+});
+
+test("a subscription says how long it ignores a source after an event, and a click in that time wakes nobody", async (t) => {
+	// What happened before the manual said `throttle: "0s"`: every second move of a game was lost, and the agent could not tell why.
+	const h = await harness({ pine: { http: { port: 0 }, sources: { board: { type: "webhook", open: true, description: "what my owner presses" } } }, agents: { main: {} } });
+	t.after(() => h.close());
+	const subscribe = async (session: string, more: Record<string, unknown> = {}) => {
+		await h.pine.agents.run({ agent: "main", session, trust: "owner", prompt: mockMsg([{ tools: [{ name: "subscribe", args: { source: "board", note: "Make your move.", ...more } }] }, { text: "ok" }]) } as any);
+		return h.toolResults()[0] as string;
+	};
+	// Two conversations listen to the same source: one as an agent subscribes when it is told nothing more, one with "0s".
+	const said = await subscribe("slow");
+	assert.match(said, /After an event has woken you, further events of this source are ignored for 10 seconds \(the throttle[^)]*\)\. They are not kept for later\. Where every event counts \(each click on a page, each move in a game\), subscribe again with throttle "0s"\./);
+	const fast = await subscribe("fast", { throttle: "0s" });
+	assert.ok(fast.startsWith("Subscribed to board (local)") && !fast.includes("are ignored for"), fast);
+	const woken = (session: string) => h.pine.tasks.list({ agent: "main", session, limit: 50 }).filter((x: any) => x.event).length;
+	// Two clicks, one right after the other.
+	for (const cell of [1, 2]) h.pine.bus.publish("source/board/received", { body: { cell } }, { source: "source:board" });
+	await until(() => woken("fast") === 2, 5000, 'with "0s" both clicks woke the conversation');
+	await until(() => woken("slow") === 1, 5000, "the first click woke the other conversation");
+	await new Promise((r) => setTimeout(r, 300));
+	assert.equal(woken("slow"), 1, "the second click, a moment later, woke nobody there, and is not made up for");
+	// Both clicks are in the event log all the same: that is where a click that was not answered is found.
+	assert.equal(h.pine.bus.query({ topic: "source/board/#", limit: 10 }).length, 2);
 });

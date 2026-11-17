@@ -4,7 +4,7 @@
 import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
-import { Button, Icon, Spinner, useLoad } from "./ui.tsx";
+import { Button, Icon, Pulse, useLoad } from "./ui.tsx";
 
 function Section({ title, count, children, action }: { title: string; count?: number; children: React.ReactNode; action?: React.ReactNode }) {
 	return (
@@ -69,16 +69,16 @@ export function AgentView({ tab }: { tab: Tab }) {
 
 			{tab.busy || helpers.length || elsewhere.length ? (
 				<Section title="At work">
-					{tab.busy ? <div className="agent-line"><Spinner size={11} /><span className="name">this conversation</span><span className="about cut">{tab.thinking ? "thinking" : "working"}{tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}</span></div> : null}
+					{tab.busy ? <div className="agent-line"><Pulse size={11} /><span className="name">this conversation</span><span className="about cut">{tab.thinking ? "thinking" : "working"}{tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}</span></div> : null}
 					{helpers.map(([id, c]) => (
 						<div key={id} className="agent-line click" onClick={() => void s.openTask(id)}>
-							{c.running ? <Spinner size={11} /> : <Icon name="check" size={13} className="faint" />}
+							{c.running ? <Pulse size={11} /> : <Icon name="check" size={13} className="faint" />}
 							<span className="name">{c.agent}</span>
 							<span className="about cut">{childKind(c.kind)} #{id}: {c.label}</span>
 							<span className="tag">open</span>
 						</div>
 					))}
-					{elsewhere.map((session) => <div key={session} className="agent-line click" onClick={() => void s.openTab(tab.agent, session)}><Spinner size={11} /><span className="name">{session}</span><span className="about cut">another conversation of {tab.agent}</span><span className="tag">open</span></div>)}
+					{elsewhere.map((session) => <div key={session} className="agent-line click" onClick={() => void s.openTab(tab.agent, session)}><Pulse size={11} /><span className="name">{session}</span><span className="about cut">another conversation of {tab.agent}</span><span className="tag">open</span></div>)}
 				</Section>
 			) : null}
 

@@ -387,7 +387,7 @@ The same key in `pine.json` is the global scope.
 |---|---|---|
 | `note` | | What is to be done when woken, and what you want to hear about. Shown with every event. |
 | `when` | | Only events that match: keys are paths such as `payload.file`, values say what each has to be. See "Being woken only for what counts" below. The same filter as in [routes](events.md). |
-| `throttle` | `"10s"` | After one event, ignore the source for this long. Protects the model from a chatty device; `"0s"` turns it off. |
+| `throttle` | `"10s"` | After one event, ignore the source for this long. Protects the model from a chatty device; `"0s"` turns it off. What arrives in that time is in the event log and wakes nobody: it is not kept for later. An agent is told this when it subscribes. For a source where every event counts (each click on a page the agent made, each move in a game), `"0s"`. |
 | `debounce` | | Wait for this long without a new event, then handle only the last one. |
 | `session` | `main` (`on-<source>` with `separate`) | The conversation that listens. Leaving it out is the agent scope. `"new"`: a fresh conversation for every event, closed when it is answered ("A fresh conversation for every event"). |
 | `separate` | `false` | `true`: do not deliver into a conversation of yours, but into one of its own (`on-<source>`), with the reduced tool set for sources that are not yours. See "Trust". |

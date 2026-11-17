@@ -7,7 +7,7 @@ import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
-import { AutoText, Button, Confirm, Dialog, Empty, Field, Icon, Segmented, Spinner, Switch, useLoad } from "./ui.tsx";
+import { AutoText, Button, Confirm, Dialog, Empty, Field, Icon, Segmented, Pulse, Switch, useLoad } from "./ui.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: string }> = [
 	{ id: "general", label: "General", icon: "sliders" },
@@ -36,7 +36,7 @@ function Page({ title, lead, children, actions }: { title: string; lead?: ReactN
 }
 
 function Loading({ state }: { state: { error?: string; loading: boolean } }) {
-	return state.error ? <div className="notice bad"><Icon name="alert" />{state.error}</div> : <div className="empty"><Spinner /></div>;
+	return state.error ? <div className="notice bad"><Icon name="alert" />{state.error}</div> : <div className="empty"><Pulse /></div>;
 }
 
 /** Who something is for: all agents, or one. */
@@ -423,7 +423,7 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 					</Field>
 				)
 			) : !state?.done && !error ? (
-				<div className="row muted"><Spinner /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
+				<div className="row muted"><Pulse /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
 			) : null}
 			{state?.done && !state.error ? <div className="notice plain"><Icon name="check" />{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</div> : null}
 			{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
@@ -582,7 +582,7 @@ function Mcp() {
 										<div className="about mono">{s.target}</div>
 									</div>
 									<div className="ctl">
-										{s.remote ? <Button small disabled={busy === s.name} onClick={() => void login(s.name, agent)}>{busy === s.name ? <><Spinner size={11} /> In your browser…</> : "Sign in"}</Button> : null}
+										{s.remote ? <Button small disabled={busy === s.name} onClick={() => void login(s.name, agent)}>{busy === s.name ? <><Pulse size={11} /> In your browser…</> : "Sign in"}</Button> : null}
 										{s.target.startsWith("bundled:") ? null : <Confirm label="Remove" sure="Remove it?" onConfirm={() => void store.attempt(() => api.removeMcp(s.name, agent)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} />}
 									</div>
 								</div>
@@ -1002,7 +1002,7 @@ function AppPage() {
 							<div className="about">{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</div>
 							{!s.browser && s.initLines.length ? <pre className="log">{s.initLines.slice(-12).join("\n")}</pre> : null}
 						</div>
-						{s.browser ? null : <div className="ctl"><Button small disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner size={11} /> Fetching…</> : "Fetch it"}</Button></div>}
+						{s.browser ? null : <div className="ctl"><Button small disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={11} /> Fetching…</> : "Fetch it"}</Button></div>}
 					</div>
 				) : null}
 				<div className="item">

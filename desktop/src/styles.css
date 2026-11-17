@@ -310,7 +310,7 @@ html:not([data-platform="darwin"]) .side-top {
 .side-agent:hover .agent-acts {
 	display: flex;
 }
-/* A conversation's name stands under its agent's name: what leads the row (a star, a spinner, a
+/* A conversation's name stands under its agent's name: what leads the row (a star, a pulsing dot, a
    dot, each of a width of its own) has a place of one width, and the row begins where that
    place and the gap after it end at the name above. */
 .side-row.side-conv {
@@ -842,17 +842,31 @@ select.input {
 	background: var(--bad-soft);
 	color: var(--bad);
 }
-.spinner {
-	display: inline-block;
-	border-radius: 50%;
-	border: 1.6px solid var(--press);
-	border-top-color: var(--accent);
-	animation: spin 0.7s linear infinite;
+/* Something is at work: a green dot that breathes, slowly. All of them breathe in step (Pulse in ui.tsx). */
+.pulse {
+	display: inline-grid;
+	place-items: center;
 	flex: none;
 }
-@keyframes spin {
-	to {
-		transform: rotate(360deg);
+.pulse > span {
+	border-radius: 50%;
+	background: var(--accent);
+	animation: pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+	0%,
+	100% {
+		opacity: 0.3;
+		transform: scale(0.82);
+	}
+	50% {
+		opacity: 1;
+		transform: scale(1);
+	}
+}
+@media (prefers-reduced-motion: reduce) {
+	.pulse > span {
+		animation: none;
 	}
 }
 .empty {

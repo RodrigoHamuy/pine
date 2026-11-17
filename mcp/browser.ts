@@ -567,6 +567,26 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 		if (headed || shared) return void guarded(inFlight);
 		write(inFlight);
 	};
+	/** The local addresses a page reached for by itself and was refused, that the agent has not been told yet: each once, a few at a time. */
+	const told = new Set<string>();
+	const unsaid = (): string[] => {
+		const fresh: string[] = [];
+		for (const line of io.refused) {
+			const what = line.match(/^(.*?): \S+ is a (?:local name|private address)/)?.[1];
+			if (!what) continue;
+			let address = what;
+			try {
+				if (/^https?:\/\//i.test(what)) address = new URL(what).host;
+			} catch {
+				continue;
+			}
+			// A host and a port, and nothing else of what the page wrote.
+			if (!/^[A-Za-z0-9.\-:[\]]{1,80}$/.test(address) || told.has(address)) continue;
+			told.add(address);
+			if (fresh.length < 3) fresh.push(address);
+		}
+		return fresh;
+	};
 	/** Something this server does itself (a picture for the owner, what the owner did): it waits its turn like a call of the agent's. */
 	const between = <T>(job: () => Promise<T>): Promise<T> =>
 		new Promise<T>((resolve, reject) => {
@@ -662,6 +682,15 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 		if (closed) page = undefined;
 		for (const part of msg.result?.content ?? []) if (part.type === "text" && typeof part.text === "string") part.text = inlineFiles(part.text, io.scratch);
 		if (msg.result?.content && io.refused.length && msg.result.isError) msg.result.content.push({ type: "text", text: `pine: the browser was refused ${io.refused.at(-1)}` });
+		// What a page reached for by itself and did not get, the agent would otherwise only meet as an
+		// error of the page's own ("Establishing a tunnel via proxy server failed") and take for something else.
+		const reached = current && Array.isArray(msg.result?.content) ? unsaid() : [];
+		if (reached.length && !msg.result.isError) {
+			msg.result.content.push({
+				type: "text",
+				text: `pine: the page reached for ${reached.map((a) => `"${a}"`).join(", ")} and the browser's guard refused it: that is on this computer or your owner's network, and nobody allowed it. A yes is for one host and one port, so a page on localhost:3000 does not reach localhost:3001 by it. In the page this shows as a failed request, or for a WebSocket as "Establishing a tunnel via proxy server failed".${o.localFile ? " Serve everything the page needs from the address that is allowed, or open the other address once with browser_navigate so that your owner is asked." : ""}`,
+			});
+		}
 		if (current?.notice && Array.isArray(msg.result?.content)) msg.result.content.unshift({ type: "text", text: current.notice });
 		if (!current) return io.send(msg);
 		// What the tabs are after the agent's own call is what it has seen. (A closed browser is not asked: asking would open it again.)

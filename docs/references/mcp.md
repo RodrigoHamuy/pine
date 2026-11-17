@@ -393,8 +393,11 @@ opens the address and waits.
 - A no blocks the call. The agent should not try another spelling of the address, or start a
   browser of its own from the shell instead.
 - Only what the agent itself opens is asked about. What a page loads, links or redirects to on
-  another local address is refused. If the page really needs it (an API on another port), the
-  agent opens that address with `browser_navigate` once, which asks.
+  another local address is refused. If the page really needs it (an API or a WebSocket on
+  another port), the agent opens that address with `browser_navigate` once, which asks. The
+  page itself only sees a request that failed, and for a WebSocket the error `Establishing a
+  tunnel via proxy server failed`; so pine adds a line to the agent's next browser result that
+  names the address the page reached for and says what to do.
 - Asked about are addresses that are local by their own name: `localhost`, names ending in
   `.localhost`, `.local` or `.internal`, and IP addresses in private ranges. A name that only
   turns out to be local when it is looked up (`nas.home`) is refused without a question; for

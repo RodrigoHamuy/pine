@@ -28,14 +28,24 @@ For the agent that is asked for such a page. Each step is a tool call it has.
    `node ui/server.mjs`. It keeps running after the turn. Read its output file if the page does
    not answer.
 4. **Listen to it**: `add_source` with `type: "stream"`, `options: { "url":
-   "http://127.0.0.1:4173/events" }`, a `description`, and a `note` that says what to do when
-   something is pressed. The owner is asked once. With the note the conversation is subscribed
-   at once.
+   "http://127.0.0.1:4173/events" }`, a `description`, a `note` that says what to do when
+   something is pressed, and `throttle: "0s"`. The owner is asked once. With the note the
+   conversation is subscribed at once. Without `throttle: "0s"` a subscription ignores the
+   source for ten seconds after each event that woke the agent, and a click in that time is
+   lost: the owner presses a cell and nothing happens.
 5. **Show the page**: `browser_navigate` to `http://127.0.0.1:4173/` (the owner is asked once,
    because the address is on this computer), then `browser_show`.
 6. **Play.** Each thing the owner presses arrives as an event `message` whose `value` is what
    the page reported, for example `{ "cell": 4 }`. Answer by writing `state.json` anew: the
    page looks at it every second and draws what it says.
+
+**One port for everything.** Your owner's yes for the page is for one host and one port. The
+page, its state and its event stream therefore come from the same server on the same port, as
+below. A page that reaches for another port on this computer (a WebSocket server of its own on
+a second port, an API) is refused by the browser's guard: the request fails, and a WebSocket
+fails with `Establishing a tunnel via proxy server failed`. That is not the browser being
+unable to carry a WebSocket; on the port that was allowed it carries one. Use one port, or open
+the second address once with `browser_navigate` so that your owner is asked.
 
 | Name | What it is |
 |---|---|
@@ -140,6 +150,7 @@ writes there may repeat something it read elsewhere.
 |---|---|
 | Where the events arrive | In the conversation that set the source up, as a message of pine's own that says it is an event and not the owner's words. The agent has the tools it has there |
 | Outside content | Like every event source, what the page reports counts as outside content: the conversation is marked, and from then on pine asks before the agent sends something out ([security.md](security.md)). The page's server takes a report from anything on this computer that can reach its port, so a report is not proof that the owner pressed something |
+| A click that is not answered | Nearly always the subscription's throttle: ten seconds unless it was given, during which further events are ignored and not kept. Subscribe again with `throttle: "0s"`. The event log shows it: the click is there as an event, and no turn of the agent's followed it |
 | How many | A `stream` source passes on at most 30 reports a minute and drops the rest. For a page that is pressed more often, give `perMinute` in its options (up to 600) |
 | The agent's own clicks | What the agent does in the page with its browser tools is reported by the page like the owner's clicks. A page that the agent changes through `state.json` does not have that problem; one it clicks in itself has to tell the two apart |
 | The server keeps running | It is listed under Running in the code pane, with its port, and stopped there or with `stop_program`. Resetting or removing the conversation stops it, and removing the conversation removes a source that was its own. A `stream` source whose server is gone says so where the sources are listed, and connects again by itself when the server is back |
