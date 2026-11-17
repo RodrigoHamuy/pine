@@ -198,7 +198,7 @@ agent's:
 
 | Part | What it is |
 |---|---|
-| Side bar | Search at the top, then your agents (see above). Drag its right edge to make it wider or narrower (a double click on the edge sets it back), `⌘B` hides it and shows it again, and it is after a restart as you left it; where nothing is to click, it moves the window. An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
+| Side bar | Search at the top, then your agents (see above). Drag its right edge to make it wider or narrower, or focus the edge with Tab and use the arrow keys (a double click on the edge sets it back), `⌘B` hides it and shows it again, and it is after a restart as you left it; where nothing is to click, it moves the window. An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab, and so does Enter: Tab reaches an agent's line (Enter or Space folds it) and then its conversations, where the arrow keys move; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
 | Tabs | One conversation each, with its agent's initial, as in the terminal UI: a green dot that pulses while the agent works (every such dot in the window pulses in step), a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens. A `↳ … open` line opens a sub-agent's or delegated task's work in a tab of its own |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
@@ -264,7 +264,7 @@ agent's workspace):
 | View | Shows |
 |---|---|
 | Agent | The agent of this conversation: what it is for, its model, reasoning and mode (a click changes each), whom it hands work to; what is at work right now (this conversation, the sub-agents and delegated tasks it started, the agent's other conversations), each to open; what it listens to (event sources, and whether this conversation, the agent or all agents are subscribed); its schedules, skills and MCP servers; and what it remembers (its `MEMORY.md`). Buttons lead to the settings pages where each is changed |
-| Files | The folder as a tree, a search by name, and the editor |
+| Files | The folder as a tree, a search by name, and the editor. The tree is one Tab stop: the arrow keys move, open and close folders, typing goes to a name, Enter opens a file; the search's results and the changes are lists the arrow keys move in the same way |
 | Changes | What differs from the last commit (git): each file with its counts, and its diff on a click |
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
 | Browser | The browser the agent of this conversation works in, live, and yours to use too. See "The browser" below |
@@ -426,6 +426,7 @@ desktop/
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
     ui.tsx         pine's own small parts, made of shadcn's components
+    lists.tsx      the tree of files and the lists to open a row from, on ui-sdk (shadcn has neither)
     index.css      Tailwind and shadcn's tokens, set from the colours of styles.css (components.json
                    is shadcn's configuration: Base UI, lucide icons)
     styles.css     the colours, light in `:root` and poimandres in `:root.dark`, and the rest of the look
@@ -451,10 +452,13 @@ desktop/
 
 ### Stories and Chromatic
 
-Buttons, switches, inputs, fields, tabs (the segmented controls) and selects are shadcn's own
-components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
-are lucide's. They have no stories of their own. pine's own parts (`src/ui.tsx`: the logo, a
-labelled field and a choice made of shadcn's pieces, dialogs, an empty view) have stories beside
+Buttons, switches, inputs, fields, tabs (the segmented controls), selects, the edges that resize
+the side bar and the code panel (Resizable) and the agents' groups in the side bar (Collapsible)
+are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
+are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
+of rows to open) is ui-sdk's (`@ui-sdk/react`), in `src/lists.tsx`; ui-sdk is never used for a
+piece shadcn has. pine's own parts (`src/ui.tsx`: the logo, a
+labelled field and a choice made of shadcn's pieces, dialogs, an empty view; `src/lists.tsx`: the tree and the list) have stories beside
 them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need
 neither Electron nor a daemon. Story only parts that take everything as props; a part that calls
 `api.ts` or the bridge has no story.
