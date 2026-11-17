@@ -6,9 +6,12 @@
 //   node reel/render.mjs --at 1 --sound     only the sound -> reel/sfx.wav
 //   node reel/render.mjs --story scans      another script: story-scans.js -> reel/pine-reel-scans.mp4
 //   node reel/render.mjs --scale 1          1920×1080 instead of 3840×2160
+//   node reel/render.mjs --story front --webp   also reel/pine-reel-front.webp: the film as a picture that
+//                                           moves, 880 wide and without sound, for a README (needs img2webp)
 // The whole film also gets its sound: one small sound per key and click, made by sound.py.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { chromium } from "../node_modules/playwright-core/index.mjs";
 
@@ -28,11 +31,18 @@ await page.goto(`file://${path.join(dir, "reel.html")}${story ? `?story=${story}
 // The frames of the scanner clip, when they are there (assets/scan/001.jpg on).
 const scanDir = path.join(dir, "assets", "scan");
 const scan = fs.existsSync(scanDir) ? fs.readdirSync(scanDir).filter((n) => n.endsWith(".jpg")).sort().map((n) => `scan/${n}`) : [];
+// The camera clips of story-watchdog.js (assets/cam/<clip>/001.jpg on) and the stills it shows.
+const camDir = path.join(dir, "assets", "cam");
+if (fs.existsSync(camDir)) for (const d of fs.readdirSync(camDir)) {
+	const p = path.join(camDir, d);
+	if (fs.statSync(p).isDirectory()) scan.push(...fs.readdirSync(p).filter((n) => n.endsWith(".jpg")).sort().map((n) => `cam/${d}/${n}`));
+	else if (d.endsWith(".jpg")) scan.push(`cam/${d}`);
+}
 await page.evaluate(async (scan) => {
 	await document.fonts.load('24px "JBM"');
 	await document.fonts.load('700 24px "JBM"');
 	await document.fonts.ready;
-	const names = ["meme.jpg", "cones.jpg", "../bill/water-bill-page1.png", "../bill/water-bill-page2.png", "logo.svg", "wallpaper.jpg", ...Array.from({ length: 40 }, (_, i) => `spag-${String(i).padStart(2, "0")}.jpg`), ...scan];
+	const names = ["meme.jpg", "cones.jpg", "kevin.jpg", "../bill/water-bill-page1.png", "../bill/water-bill-page2.png", "logo.svg", "wallpaper.jpg", ...Array.from({ length: 40 }, (_, i) => `spag-${String(i).padStart(2, "0")}.jpg`), ...scan];
 	window.keep = await Promise.all(names.map((n) => new Promise((done) => { const im = new Image(); im.onload = im.onerror = () => done(im); im.src = `assets/${n}`; })));
 }, scan);
 const duration = await page.evaluate(() => DURATION);
@@ -79,6 +89,19 @@ if (arg("at")) {
 		fs.renameSync(out, silent);
 		await run("ffmpeg", ["-y", "-loglevel", "error", "-i", silent, "-i", path.join(dir, "sfx.wav"), "-c:v", "copy", "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]);
 		fs.rmSync(silent);
+	}
+	if (process.argv.includes("--webp")) {
+		// An animated WebP and not a GIF: every colour instead of 256, and a fraction of the size.
+		// img2webp takes pictures, so the film is cut into them first: 15 a second, 67 ms each, as wide as
+		// a README shows them. A whole picture at least every two seconds (-kmax), so that what a fade
+		// leaves behind on a dark ground goes. Smaller than this, the text in it starts to suffer.
+		const run = (cmd, args) => new Promise((done, fail) => spawn(cmd, args, { stdio: ["ignore", "ignore", "inherit"] }).on("error", fail).on("close", (code) => (code ? fail(new Error(`${cmd} ended with ${code}`)) : done())));
+		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pine-reel-"));
+		await run("ffmpeg", ["-y", "-loglevel", "error", "-i", out, "-vf", "fps=15,scale=880:-1:flags=lanczos", path.join(tmp, "%04d.png")]);
+		const webp = out.replace(/\.mp4$/, ".webp");
+		await run("img2webp", ["-loop", "0", "-lossy", "-q", "30", "-m", "6", "-sharp_yuv", "-d", "67", "-kmin", "15", "-kmax", "30", ...fs.readdirSync(tmp).sort().map((n) => path.join(tmp, n)), "-o", webp]);
+		fs.rmSync(tmp, { recursive: true, force: true });
+		console.log(`${webp}  ${(fs.statSync(webp).size / 1e6).toFixed(1)} MB`);
 	}
 	console.log(`${out}  ${(to - from).toFixed(1)} s, ${frames} frames`);
 }

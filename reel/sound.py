@@ -61,6 +61,13 @@ def tap():
     """A finger on glass: hardly there."""
     return hit(int(0.04 * SR), 1700 * rng.uniform(0.9, 1.1), 1.3, 0.0028) + 0.3 * hit(int(0.04 * SR), 3400, 1.4, 0.0012)
 
+def whoosh():
+    """Air going by: the picture slides from one desk to another. Noise that swells and falls away, darker at its ends."""
+    n = int(0.62 * SR)
+    t = np.arange(n) / n
+    swell = np.sin(np.pi * t) ** 2.2
+    return (noise(n, 520, 2.6) * (1 - 0.55 * np.sin(np.pi * t)) + noise(n, 1500, 2.2) * 0.9 * np.sin(np.pi * t)) * swell
+
 # A handful of each, as a keyboard has a handful of keys that sound alike but not the same.
 # `peak` is how loud one is at its loudest, where 1 is as loud as a file can be.
 def pool(make, count, peak):
@@ -78,6 +85,7 @@ POOL = {
     "release": pool(lambda: mouse(down=False), 4, 0.1),
     "tap": pool(tap, 10, 0.03),
     "tap-space": pool(tap, 4, 0.03),
+    "whoosh": pool(whoosh, 3, 0.085),
 }
 
 def describe(name):

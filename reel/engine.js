@@ -122,7 +122,8 @@ function initial() {
 		mode: "shell", title: "~ — zsh",
 		shell: { lines: [], prompt: "⟦b.c|~⟧", typed: "", busy: false },
 		tabs: [], active: 0, input: "", attach: [], pane: { open: false, view: "changes", sub: "" }, overlay: null,
-		vs: { show: 0, typed: 0, dirty: false }, phone: { show: 0, msgs: [], input: "" }, drag: null, outro: 0, winDim: 0, winShift: 0, card: 0, cardText: "", finder: { show: 0, sel: -1, rows: [], ql: 0, text: "" },
+		app: { show: 0, dir: "", shot: "", only: false }, outroText: "",
+		vs: { show: 0, typed: 0, dirty: false }, phone: { show: 0, msgs: [], input: "", app: null }, cams: [], room: 0, chat: null, web: null, drag: null, outro: 0, winDim: 0, winShift: 0, card: 0, cardText: "", finder: { show: 0, sel: -1, rows: [], ql: 0, text: "" },
 	};
 }
 
@@ -152,7 +153,7 @@ function blockLines(b, w, t) {
 		case "text":
 			return wrap(L(b.s), inner, b.hang || 0).map((l) => pad(l));
 		case "user": {
-			const lines = wrap(L(b.s), inner).map((l) => pad(withClass(l, "U"), "U"));
+			const lines = b.s.split("\n").flatMap((part) => (part ? wrap(L(part), inner) : [[]])).map((l) => pad(withClass(l, "U"), "U"));
 			for (const a of b.attached || []) lines.push(pad(L(`⟦d.U|attached: ${a}⟧`), "U"));
 			return lines;
 		}
@@ -184,6 +185,12 @@ function blockLines(b, w, t) {
 			for (let i = 1; i < b.rows; i++) lines.push(sp(w));
 			lines.push(pad(L(typeof b.cap === "function" ? b.cap(t - b.t0) : b.cap)));
 			return lines;
+		}
+		case "fold": {
+			// What pine draws for <details> in an answer: one line while it is folded, the text set in under it once a click
+			// has opened it. The arrow and the hint are grey, the summary is the answer's own text.
+			const head = pad(L(b.open ? `⟦d|▾⟧ ${b.summary} ⟦d|· click here to close⟧` : `⟦d|▸⟧ ${b.summary} ⟦d|· click to open⟧`));
+			return b.open ? [head, ...b.body.flatMap((x) => wrap(L(x), inner - 2).map((l) => pad([...sp(2), ...l])))] : [head];
 		}
 		case "event":
 			return [pad(L(`⟦am|⚡⟧ ⟦b|${b.label}⟧`)), ...wrap(L(`⟦d|${b.s}⟧`), inner - 2).map((l) => pad([...sp(2), ...l]))];
@@ -221,17 +228,33 @@ function overlayLines(o) {
 		});
 		return { w, lines: boxed([L(`⟦b|${o.title}⟧`), L("⟦a|>⟧ ⟦d|type to search · enter opens · ctrl+p pins · ctrl+x removes · esc closes⟧"), ...rows, L("⟦d|pin keeps a conversation for good · × removes it now⟧")], w) };
 	}
+	if (o.k === "ask") {
+		// What pine shows when an agent asks: the question, the answers it offers with the one it recommends first, a line for the owner's own words.
+		const w = 80, inner = w - 4;
+		const rows = o.choices.map((x, i) => (i === o.sel ? L(`⟦A| ${i + 1}  ${x} ⟧`) : L(` ${i + 1}  ${x}`)));
+		return { w, lines: boxed([L(`⟦b.a|${o.agent} asks⟧`), [], ...o.question.flatMap((q) => wrap(L(q), inner)), [], ...rows, [], L("⟦d|or in your own words:⟧ ⟦A| ⟧"), [], L("⟦d|enter or a click answers · 1-9 picks by number · esc: later⟧")], w, "a") };
+	}
 	if (o.k === "approve") {
 		const w = 76, inner = w - 4;
 		const indented = (str) => wrap(L(str), inner - 2).map((l) => [...sp(2), ...l]);
 		// A request that needs something only the owner has: a field for it, dots for a secret.
-		const fields = (o.fields || []).flatMap((f) => [...wrap(L(`⟦b|${f.label}⟧`), inner), L(`⟦a|>⟧ ⟦y|${f.secret === false ? f.value : "•".repeat(f.value.length)}⟧⟦A| ⟧`)]);
-		const hint = !o.fields ? [] : wrap(L(`⟦d|${o.fields.some((f) => f.secret !== false) ? "Type or paste it here. It is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Type it here and press enter. Without it, this cannot be allowed."}⟧`), inner);
+		// Each value is a block of its own, as in pine: its name, what it is, a bar to type into, an empty line before it.
+		const n = (o.fields || []).length;
+		const fields = (o.fields || []).flatMap((f, i) => {
+			const on = i === (o.on || 0);
+			const [, name, about] = f.label.match(/^([\w.-]+): ([\s\S]+)$/) || [null, f.label, ""];
+			const count = n > 1 ? L(`⟦d|${i + 1} of ${n}⟧`) : [];
+			const shown = f.secret === false ? f.value : "•".repeat(f.value.length);
+			const typed = shown || on ? [...(shown ? L(`⟦y.P|${shown}⟧`) : []), ...(on ? L("⟦A| ⟧") : [])] : L("⟦d.P|empty⟧");
+			return [[], [...fit(L(on ? `⟦b.a|${name}⟧` : `⟦b|${name}⟧`), inner - count.length), ...count], ...(about ? wrap(L(about), inner) : []), [...(on ? L("⟦a|>⟧ ") : sp(2)), ...fit(typed, inner - 2, "P")]];
+		});
+		const secret = (o.fields || []).some((f) => f.secret !== false);
+		const hint = !o.fields ? [] : wrap(L(`⟦d|${!secret ? "Type it here and press enter. Without it, this cannot be allowed." : n > 1 ? "Type or paste each one into its bar; tab goes to the next. They are not shown, go into pine's .env file, and never reach the agent or its model." : "Type or paste it here. It is not shown, goes into pine's .env file, and never reaches the agent or its model."}⟧`), inner);
 		const body = [
 			L(`⟦b.am|${o.fields ? "Approval needed, and something only you have" : "Approval needed"}⟧`), [],
 			L(`⟦d|agent ⟧ ${o.agent}${o.task ? ` ⟦d|(task #${o.task})⟧` : ""}`), L(`⟦d|action⟧ ⟦b|${o.tool}⟧`), ...o.summary.flatMap(indented), [],
 			...wrap(L(`⟦d|Why you are asked: ${o.why}⟧`), inner),
-			...(fields.length ? [[], ...fields, ...hint] : []), [],
+			...(fields.length ? [...fields, [], ...hint] : []), [],
 			L(o.fields ? "⟦A| Save and allow (enter) ⟧   Deny    Later (esc)   " : "⟦A| Allow once (a) ⟧   Deny (d)    Later (esc)   "),
 		];
 		return { w, lines: boxed(body, w, "am") };
@@ -245,7 +268,8 @@ function paneLines(st, w, h) {
 	const head = L(` ${tabs}`);
 	const right = L("⟦d| ↻  × ⟧");
 	const lines = [[...fit(head, w - right.length), ...right], fit(L(` ⟦d|${(data.info || {})[p.view] || ""}⟧`), w), rule(w)];
-	const body = (data[`${p.view}${p.sub ? `:${p.sub}` : ""}`] || []).map((s) => fit([...sp(1), ...L(s)], w));
+	// `shown`: only so many of its lines are there yet (a file that is being written).
+	const body = (data[`${p.view}${p.sub ? `:${p.sub}` : ""}`] || []).slice(0, p.shown ?? 1e9).map((s) => fit([...sp(1), ...L(s)], w));
 	return [...lines, ...body].slice(0, h).concat(Array.from({ length: Math.max(0, h - 3 - body.length) }, () => sp(w)));
 }
 
@@ -269,7 +293,8 @@ function pineScreen(st) {
 	dock.push(fit(L(` ${helpers}`), COLS));
 	if (st.attach.length) dock.push(fit(L(`⟦d| attached: ⟧${st.attach.map((a) => `⟦b|${a.name}⟧ ⟦d|${a.size} × ⟧`).join(" ")}`), COLS));
 	const typed = [];
-	for (let i = 0; i <= st.input.length; i += COLS - 3) typed.push(st.input.slice(i, i + COLS - 3));
+	// What is typed may have lines of its own (a list); each is broken where the window ends.
+	for (const part of st.input.split("\n")) for (let i = 0; i <= part.length; i += COLS - 3) typed.push(part.slice(i, i + COLS - 3));
 	dock.push(rule(COLS));
 	typed.forEach((s, i) => dock.push(fit(L(` ${s}${i === typed.length - 1 ? "█" : ""}`), COLS)));
 	dock.push(rule(COLS));
@@ -385,7 +410,69 @@ function cameraAt(t) {
 	return v;
 }
 
+// ---- the desktop app -----------------------------------------------------------------------------
+
+/** Where the app's window lies on the stage, and how much larger than it was when its pictures were taken. */
+const APP = { x: 193, y: 36, s: 1.3 };
+/** A point of the app's window on the stage, given as it was in the window. */
+const inApp = (x, y) => ({ x: APP.x + x * APP.s, y: APP.y + y * APP.s });
+/** Where something in the app's window is on the stage; the places come with the pictures (assets/<story>/shots.js). */
+const appPoint = (name) => inApp(SHOTS.boxes[name].x, SHOTS.boxes[name].y);
+
 // ---- drawing -------------------------------------------------------------------------------------
+
+/** How far to the right the second desk lies (somebody else's computer); the camera slides there and back. */
+const ROOM_DX = 2720;
+/** One message of the team chat on the second desk: who, when, what, a file, and how many answers it has. */
+function chatRow(m) {
+	const a = ease(clamp(m.p ?? 1));
+	const style = `opacity:${a};transform:translateY(${(1 - a) * 14}px)`;
+	if (m.day) return `<div class="day" style="${style}"><span>${m.day}</span></div>`;
+	if (m.count) return `<div class="cnt" style="${style}">${m.count}</div>`;
+	const file = m.link ? `<div class="file link"><i></i><b>${m.link}</b><span>${m.linkTitle}</span></div>` : m.file ? `<div class="file"><i></i>${m.file}<span>${m.fileKind || "Spreadsheet"}</span></div>` : "";
+	const rep = m.replies ? `<div class="rep"><s style="background:${m.replyColor || "#2f7d6b"}"></s>${m.replies}<em>${m.replied || ""}</em></div>` : "";
+	return `<div class="row" style="${style}"><span class="av" style="background:${m.color}">${m.name[0]}</span><b>${m.name}</b><small>${m.time}</small><p>${m.html}</p>${file}${rep}</div>`;
+}
+/** The agent's browser on a pull request: its changes, the box in which a review is written, and the page after the review. */
+function webHTML(w) {
+	const tabs = (on) => `<div class="g-tabs">${[["Conversation", w.comments + (w.approved ? 1 : 0)], ["Commits", w.commits], ["Checks", w.checks], ["Files changed", w.files.length]].map(([n, c]) => `<u class="${n === on ? "on" : ""}">${n}<i>${c}</i></u>`).join("")}${on === "Files changed" ? `<span class="g-btn${w.pressed === "review" ? " dn" : ""}">Review changes ▾</span>` : ""}</div>`;
+	const head = `<div class="g-top">${w.repo.split("/").join("<span>/</span>")}</div><div class="g-title">${w.title} <span>#${w.number}</span></div><div class="g-meta"><span class="pill">Open</span><b>${w.author}</b> wants to merge ${w.commits} commits into <code>main</code> from <code>${w.branch}</code></div>`;
+	let body;
+	if (w.tab === "files") {
+		body = tabs("Files changed") + w.files.map((f, i) => {
+			let a = f.from || 1;
+			const lines = f.lines.map(([k, s]) => `<div class="dl ${k === "+" ? "add" : k === "-" ? "del" : ""}"><n>${k === "-" ? "&nbsp;" : a++}</n>${k} ${escape(s)}</div>`).join("");
+			return `<div class="g-file"><div class="fh">${f.path}<em>+${f.add}</em>${f.del ? `<em>−${f.del}</em>` : ""}<span class="seen${i < (w.seen || 0) ? " on" : ""}">${i < (w.seen || 0) ? "✓ Viewed" : "Viewed"}</span></div>${lines}</div>`;
+		}).join("");
+	} else {
+		body = tabs("Conversation") + `<div class="g-ev"><span class="av" style="background:${w.me.color}">${w.me.name[0]}</span><div class="hd"><span class="ok">✓</span><b>${w.me.login}</b> approved these changes · now</div><div class="bd">${escape(w.review.text)}</div></div><div class="g-merge"><p><b>✓ Changes approved</b><span>1 approving review by a reviewer with write access</span></p><p><b>✓ All checks have passed</b><span>${w.checks} successful checks</span></p><p><span class="mb">Merge pull request</span></p></div>`;
+	}
+	const r = w.review;
+	const review = r && w.tab === "files" && r.open ? `<div class="rv" style="opacity:${ease(clamp(r.open))}"><h4>Finish your review</h4><div class="ta${r.typing ? " on" : ""}">${escape(r.text.slice(0, r.typed))}${r.typing ? '<i class="ct"></i>' : ""}</div>${[["Comment", "Submit general feedback without explicit approval."], ["Approve", "Submit feedback and approve merging these changes."], ["Request changes", "Submit feedback that must be addressed before merging."]].map(([n, d]) => `<p class="${r.pick === n ? "on" : ""}"><s></s>${n}<small>${d}</small></p>`).join("")}<span class="sub${w.pressed === "submit" ? " dn" : ""}">Submit review</span></div>` : "";
+	// Further down the page its title and the button for a review stay in sight, as on the real page.
+	const stick = w.tab === "files" && (w.scroll || 0) > 150 ? `<div class="g-stick"><span class="pill">Open</span>${w.title} <span>#${w.number}</span><span class="g-btn${w.pressed === "review" ? " dn" : ""}">Review changes ▾</span></div>` : "";
+	const ping = w.ping && w.ping.p < 1 ? `<div class="ping" style="left:${w.ping.x}px;top:${w.ping.y}px;opacity:${1 - w.ping.p};transform:scale(${0.3 + 0.9 * ease(w.ping.p)})"></div>` : "";
+	// The agent's own pointer, with its name beside it: whoever watches sees that it is the agent that moves here, not the owner.
+	const ptr = w.ptr ? `<div class="agent" style="left:${w.ptr.x}px;top:${w.ptr.y}px;opacity:${w.ptr.o ?? 1}"><svg viewBox="0 0 34 34"><path d="M5 3 L5 26.5 L11.2 21 L15.3 30.6 L19.3 28.9 L15.2 19.5 L23.6 19.5 Z"/></svg><span>agent</span></div>` : "";
+	return `<div class="wb-tabs"><div class="lights"><b></b><b></b><b></b></div><div class="tab">${w.title} · Pull Request #${w.number}</div></div><div class="wb-bar"><span class="nav">‹›↻</span><div class="url">${w.host}<em>/${w.repo}/pull/${w.number}${w.tab === "files" ? "/files" : ""}</em></div></div><div class="wb-info">Chrome is being controlled by automated test software.</div><div class="pg"><div class="in" style="transform:translateY(${-(w.scroll || 0)}px)">${head}${body}</div>${stick}${review}</div>${ping}${ptr}`;
+}
+function chatHTML(c, t) {
+	const box = (text, hint) => `<div class="comp"><div class="tb">BIS</div><div class="tx${text ? "" : " ph"}">${text ? `${escape(text)}<i class="ct"></i>` : hint}</div><span class="ic">+Aa</span><span class="snd${text ? " on" : ""}"></span></div>`;
+	const people = c.people.map((x) => `<p class="${x.name === c.with.name ? "on" : ""}"><s style="background:${x.color}"></s>${x.name}${x.you ? "  you" : ""}</p>`).join("");
+	const thread = c.thread ? `<div class="ct-thr"><div class="th">Thread<small>${c.with.name}</small><em>×</em></div><div class="tl">${c.thread.msgs.map(chatRow).join("")}</div>${box(c.thread.input, "Reply…")}</div>` : "";
+	return `<div class="ct-top"><div class="lights"><b></b><b></b><b></b></div><div class="srch">Search ${c.ws}</div></div>
+<div class="ct-rail"><b>${c.ws[0]}</b><i class="on"></i><span>Home</span><i></i><span>DMs</span><i></i><span>Activity</span></div>
+<div class="ct-side"><h5>${c.ws}</h5><p><u>≡</u>Threads</p><p><u>➤</u>Drafts &amp; sent</p><h6>Channels</h6>${c.channels.map((n) => `<p><u>#</u>${n}</p>`).join("")}<h6>Direct messages</h6>${people}</div>
+<div class="ct-main"><div class="ct-head"><s style="background:${c.with.color}"></s>${c.with.name}</div><div class="ct-tabs"><u class="on">Messages</u><u>Files</u><u>+</u></div><div class="ct-list"><div class="in">${c.msgs.map(chatRow).join("")}</div></div>${box(c.input, `Message ${c.with.name}`)}</div>${thread}`;
+}
+
+/** The frame of a clip that is due at time t: its frames are assets/<src>/001.jpg on, `fps` a second of the finished film; it plays once and holds, or again and again with `loop`. */
+function frameOf(c, t) {
+	const s = Math.max(0, t - c.t0) / SPEED;
+	const i = Math.floor(s * c.fps);
+	const n = (c.loop ? i % c.frames : Math.min(i, c.frames - 1)) + 1;
+	return `assets/${c.src}/${String(n).padStart(3, "0")}.jpg`;
+}
 
 let SPEED = 1;
 function renderAt(seconds) {
@@ -421,6 +508,24 @@ function renderAt(seconds) {
 	win.style.filter = st.winDim ? `brightness(${1 - 0.45 * st.winDim})` : "";
 	win.style.transformOrigin = "0 50%";
 	win.style.transform = st.winScale ? `scale(${1 - st.winScale})` : "";
+	win.style.display = st.app.only ? "none" : "";
+
+	// the desktop app: one picture of the real one at a time, in the terminal's place or over it
+	const ap = $("app");
+	ap.style.display = st.app.show > 0.001 ? "block" : "none";
+	if (st.app.show > 0.001) {
+		const p = ease(st.app.show);
+		ap.style.left = `${APP.x + st.winShift}px`;
+		ap.style.top = `${APP.y}px`;
+		ap.style.width = `${SHOTS.size.w * APP.s}px`;
+		ap.style.height = `${SHOTS.size.h * APP.s}px`;
+		ap.style.opacity = p;
+		ap.style.filter = st.winDim ? `brightness(${1 - 0.45 * st.winDim})` : "";
+		ap.style.transformOrigin = st.app.show < 1 ? "50% 60%" : "0 50%";
+		ap.style.transform = `translate(0, ${(1 - p) * 70}px) scale(${(0.95 + 0.05 * p) * (1 - (st.winScale || 0))})`;
+		const src = `assets/${st.app.dir}/${st.app.shot}`;
+		if (ap.firstChild.dataset.src !== src) ap.firstChild.src = ap.firstChild.dataset.src = src;
+	}
 
 	// the editor
 	const vs = $("vs");
@@ -443,15 +548,38 @@ function renderAt(seconds) {
 	if (st.phone.show > 0.001) {
 		const p = ease(st.phone.show);
 		ph.style.transform = `translate(${(1 - p) * 520}px, ${(1 - p) * 30}px) rotate(${(1 - p) * 4}deg)`;
-		$("msgs").innerHTML = st.phone.msgs.map((m) => {
+		ph.className = st.phone.theme || "";
+		// A team chat instead of a messenger: each message a row with who wrote it and when, days set apart, files as chips.
+		if (st.phone.theme === "team") $("msgs").innerHTML = st.phone.msgs.map((m) => {
+			const a = ease(clamp(m.p * 1.0));
+			const style = `opacity:${a};transform:translateY(${(1 - a) * 18}px)`;
+			if (m.day) return `<div class="tday" style="${style}"><span>${m.day}</span></div>`;
+			if (m.typing) return `<div class="ttyp" style="${style}"><b>${m.who}</b> is typing…</div>`;
+			return `<div class="trow${m.fresh ? " new" : ""}" style="${style}"><span class="tav" style="background:${m.color || "#4a6fa5"}">${m.name[0]}</span><b>${m.name}</b><small>${m.time}</small><p>${m.html}</p>${m.file ? `<div class="tfile"><i></i>${m.file}</div>` : ""}${m.replies ? `<div class="trep">${m.replies}</div>` : ""}</div>`;
+		}).join("");
+		else $("msgs").innerHTML = st.phone.msgs.map((m) => {
 			const a = ease(clamp(m.p * 1.0));
 			const style = `opacity:${a};transform:translateY(${(1 - a) * 22}px) scale(${0.96 + 0.04 * a});transform-origin:${m.me ? "100% 100%" : "0 100%"}`;
 			if (m.typing) return `<div class="msg in ty" style="${style}">•••</div>`;
-			return `<div class="msg ${m.me ? "out" : "in"}" style="${style}">${m.html}<small>${m.time}${m.me ? " ✓✓" : ""}</small></div>`;
+			// A picture or a clip sent along: a clip is drawn as the frame that is due (frameOf), with a mark that it plays.
+			const pic = m.clip ? `<div class="pic vid"><img src="${frameOf(m.clip, t)}"></div>` : m.img ? `<div class="pic"><img src="assets/${m.img}"></div>` : "";
+			return `<div class="msg ${m.me ? "out" : "in"}${pic ? " media" : ""}" style="${style}">${pic}${m.html}<small>${m.time}${m.me ? " ✓✓" : ""}</small></div>`;
 		}).join("");
-		$("phin").textContent = st.phone.input || "Message";
+		$("phin").textContent = st.phone.input || st.phone.placeholder || "Message";
+		$("phsub").textContent = st.phone.sub ?? "bot";
 		$("phin").className = st.phone.input ? "has" : "";
 		$("phtime").textContent = st.phone.clock || "17:42";
+		$("phname").textContent = st.phone.name || "pine";
+		// The bot's picture when it has one (assets/<avatar>), else the first letter of its name.
+		if (st.phone.avatar) $("phav").innerHTML = `<img src="assets/${st.phone.avatar}" alt="">`;
+		else $("phav").textContent = (st.phone.initial || st.phone.name || "pine")[0].toUpperCase();
+		// Another app on the same phone: a settings page with fields that are filled in (a camera's upload settings).
+		const app = $("phapp"), ap = st.phone.app;
+		app.style.display = ap && ap.show > 0.001 ? "block" : "none";
+		if (ap && ap.show > 0.001) {
+			app.style.opacity = ease(ap.show);
+			app.innerHTML = `<div class="at"><span class="bk">‹</span>${ap.title}</div><h6>${ap.section}</h6><div class="grp">${ap.fields.map((f) => `<p><span>${f.label}</span><b class="${f.on ? "on" : ""}">${f.secret ? "•".repeat(f.value.length) : escape(f.value)}${f.on ? '<i class="ct"></i>' : ""}</b></p>`).join("")}</div><div class="btn${ap.pressed ? " dn" : ""}">${ap.button}</div>${ap.result ? `<div class="res" style="opacity:${ease(clamp(ap.result))}">${ap.resultText}</div>` : ""}`;
+		}
 	}
 
 	// Finder, and Quick Look over it
@@ -470,7 +598,14 @@ function renderAt(seconds) {
 		ql.style.opacity = p;
 		ql.style.transform = `scale(${0.6 + 0.4 * p})`;
 		$("qltext").innerHTML = fs.text;
+		$("qltitle").textContent = fs.qlTitle || "TODO.md";
 	}
+
+	// what a camera sees: clips in small monitor windows on the desk, each a run of frames in assets/<src>/
+	$("cams").innerHTML = (st.cams || []).filter((c) => c.show > 0.001).map((c) => {
+		const p = ease(c.show);
+		return `<div class="cam${c.night ? " ir" : ""}" style="left:${c.x}px;top:${c.y}px;width:${c.w}px;opacity:${p};transform:scale(${0.92 + 0.08 * p})"><img src="${frameOf(c, t)}"><span class="rec"></span></div>`;
+	}).join("");
 
 	// a clip filmed on a phone, cut in over the whole picture: its frames are pictures in assets/<src>/,
 	// 001.jpg on, at `fps` frames a second of the finished film
@@ -505,9 +640,33 @@ function renderAt(seconds) {
 		drag.innerHTML = `${st.drag.kind === "pdf" ? '<div class="doc"></div>' : `<div class="thumb" style="background-image:url(assets/${st.drag.src})"></div>`}<span class="name">${st.drag.name}</span>`;
 	}
 
-	// the camera
+	// the second desk, and the team chat that is open on it
+	const chat = $("chat");
+	chat.style.display = st.chat ? "block" : "none";
+	if (st.chat) {
+		chat.className = st.chat.thread ? "thr" : "";
+		chat.innerHTML = chatHTML(st.chat, t);
+	}
+
+	// the agent's browser, when it is a window on the owner's screen
+	const web = $("web");
+	web.style.display = st.web && st.web.show > 0.001 ? "block" : "none";
+	if (st.web && st.web.show > 0.001) {
+		const p = ease(st.web.show);
+		web.style.opacity = p;
+		web.style.transform = `translate(${(1 - p) * 70}px, ${(1 - p) * 60}px) scale(${0.95 + 0.05 * p})`;
+		web.innerHTML = webHTML(st.web);
+	}
+
+	// the camera. Sliding over to the other desk it goes fast, and what goes fast is blurred the way it moves.
 	const view = cameraAt(t);
-	$("world").style.transform = `translate(${960 - view.x * view.z}px, ${540 - view.y * view.z}px) scale(${view.z})`;
+	const world = $("world");
+	world.style.transform = `translate(${960 - (view.x + st.room * ROOM_DX) * view.z}px, ${540 - view.y * view.z}px) scale(${view.z})`;
+	const dt = 1 / 60;
+	const speed = Math.abs(stateAt(t + dt).room - stateAt(Math.max(0, t - dt)).room) / (2 * dt) * ROOM_DX;
+	const sigma = Math.min(90, speed * 0.008);
+	$("mbg").setAttribute("stdDeviation", `${sigma.toFixed(1)} 0`);
+	world.style.filter = sigma > 0.5 ? "url(#mb)" : "";
 
 	const cap = captions.map((c) => ({ c, v: Math.min(clamp((t - c.from) / 0.35), clamp((c.to - t) / 0.35)) })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v)[0];
 	$("caption").innerHTML = cap ? `<span>${escape(cap.c.s)}</span>` : "";
@@ -515,6 +674,7 @@ function renderAt(seconds) {
 	$("card").style.display = st.card > 0.001 ? "flex" : "none";
 	$("card").style.opacity = st.card;
 	$("cardtext").innerHTML = st.cardText;
+	if (st.outroText) $("outro").lastElementChild.textContent = st.outroText;
 	$("outro").style.opacity = ease(st.outro);
 	$("outro").style.display = st.outro > 0.001 ? "flex" : "none";
 	return st;
