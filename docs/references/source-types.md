@@ -828,6 +828,10 @@ Each line is an entry for `"sources"`; an agent sets the same up with `add_sourc
 | A Nostr relay | `{ "type": "stream", "url": "wss://relay.damus.io", "hello": [["REQ", "pine", { "kinds": [1], "authors": ["<public key in hex>"] }]], "path": "2.content" }` | The notes of one author. (`hello` is a list of messages, and a Nostr message is itself a list.) |
 | Wikimedia's public event stream, to try it | `{ "type": "stream", "url": "https://stream.wikimedia.org/v2/stream/recentchange", "path": "title", "perMinute": 2 }` | The title of a page somebody just edited, twice a minute, with `dropped` saying how many edits were left out. |
 
+A page an agent makes for its owner to click in is listened to this way too: the page's own
+small server offers what is pressed as an event stream on this computer
+([interfaces.md](interfaces.md)).
+
 What has no stream of its own but can call a web address is a `webhook` source; what can only
 be asked is an `http` source; what has a command that prints as things happen (`tail -f`,
 `docker events`) is a `command` source.

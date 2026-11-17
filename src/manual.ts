@@ -44,6 +44,8 @@ const SYNONYMS: string[][] = [
 	["approve", "approval", "permission", "confirm", "consent", "ask", "allow", "deny", "dialog", "prompt", "question"],
 	["sandbox", "isolation", "confine", "restrict", "jail", "permission", "access"],
 	["conversation", "session", "tab", "chat", "thread"],
+	["interface", "ui", "gui", "frontend", "dashboard", "widget", "panel"],
+	["click", "press", "tap", "button", "pressed", "clicked"],
 	["preview", "beta", "prerelease", "nightly", "canary", "unreleased"],
 	["notarise", "notarize", "notarization", "gatekeeper", "codesign"],
 	["rss", "atom", "podcast", "blog", "newsletter", "release", "changelog", "syndication"],

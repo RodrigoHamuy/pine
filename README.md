@@ -176,6 +176,7 @@ Start at [docs/SKILL.md](docs/SKILL.md); it indexes everything.
 | Use the terminal UI                                                                     | [tui.md](docs/references/tui.md)                             |
 | Use the desktop app (macOS): conversations, an editor, and a settings panel in one window | [desktop.md](docs/references/desktop.md)                     |
 | Work on a project: `pine .`, the code pane with git changes, files and tool output, `/undo` | [coding.md](docs/references/coding.md)                       |
+| Let an agent make a web page you click in, as its user interface, and be woken by what you press | [interfaces.md](docs/references/interfaces.md)               |
 | Install, run, use the CLI, run it as a service                                          | [operations.md](docs/references/operations.md)               |
 | Write `pine.json` and `agent.json`                                                      | [configuration.md](docs/references/configuration.md)         |
 | Let agents set things up by tool call instead of editing files                          | [setup.md](docs/references/setup.md)                         |

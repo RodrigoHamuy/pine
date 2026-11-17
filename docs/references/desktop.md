@@ -299,6 +299,9 @@ one on your screen (`browser_show`); in the app it is in the panel, and no other
 | What the agent knows | What you do there, it sees when it next looks at the page. When you took the browser to another page, the agent is told so before it acts, and does not act on a page it has not seen ([mcp.md](mcp.md), "Seeing the browser, and logging in yourself") |
 | No page | Until the agent opens one, or you type an address, there is nothing to show. A conversation whose agent has not worked yet since pine started has no browser running: send it a message first |
 
+A page the agent made for you to use (a board, switches, a form) is shown here like any other,
+and what you press on it wakes the agent ([interfaces.md](interfaces.md)).
+
 It is a picture of the page, and not the page: nothing of a web page is loaded into the app's
 window. So what a browser does around a page is not there: no downloads to your disk, no file
 to choose for an upload, no passkey or system dialog, no copying out of the page, and text is
