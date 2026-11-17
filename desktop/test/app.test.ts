@@ -372,6 +372,43 @@ test("a model is chosen from its picker with the keyboard alone, and focus goes 
 	assert.match((await page.getAttribute(chip, "title")) ?? "", /mock\/m/);
 });
 
+test("a command is picked from the composer's suggestions with the arrows and Enter, and the input keeps focus", async () => {
+	const area = ".composer textarea";
+	const state = () =>
+		page.evaluate((s: string) => {
+			const field = document.querySelector(s) as HTMLTextAreaElement;
+			const id = field.getAttribute("aria-activedescendant");
+			const option = id ? document.getElementById(id) : null;
+			return { focused: document.activeElement === field, value: field.value, controls: Boolean(field.getAttribute("aria-controls")), option: option?.getAttribute("role"), text: option?.textContent ?? "" };
+		}, area);
+	await page.fill(area, "");
+	await page.focus(area);
+	await page.keyboard.type("/");
+	await sees("[role=listbox] [role=option].pick-item");
+	const names = await page.$$eval("[role=listbox] [role=option].pick-item .label", (els: Element[]) => els.map((e) => e.textContent ?? ""));
+	assert.ok(names.length > 2, JSON.stringify(names));
+	// Arrows move the highlight, announced on the field, and focus stays in it.
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowUp");
+	let at = await state();
+	assert.deepEqual([at.focused, at.controls, at.option], [true, true, "option"], JSON.stringify(at));
+	assert.equal(at.text.split(" ")[0], names[1].split(" ")[0]);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector("[role=listbox] [role=option].pick-item", { state: "detached" });
+	at = await state();
+	assert.equal(at.value, `${names[1].split(" ")[0]} `);
+	assert.equal(at.focused, true);
+	// Escape dismisses the list and keeps the text.
+	await page.fill(area, "");
+	await page.keyboard.type("/");
+	await sees("[role=listbox] [role=option].pick-item");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[role=listbox] [role=option].pick-item", { state: "detached" });
+	assert.equal((await state()).value, "/");
+	await page.fill(area, "");
+});
+
 test("what an answer points at on the web is not fetched by itself", async () => {
 	await page.fill(".composer textarea", mockMsg([{ text: 'Look: ![a cat](https://example.com/cat.png)\n\n<img src="https://example.com/dog.png">\n\n<script>window.hacked = 1</script><a href="javascript:window.hacked=2">x</a>' }], "pictures "));
 	await page.keyboard.press("Enter");

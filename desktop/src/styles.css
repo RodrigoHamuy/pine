@@ -1042,7 +1042,6 @@ button.pick-item {
 	text-align: left;
 	cursor: default;
 }
-.pick-item.on,
 .pick-item[data-highlighted],
 .pick-item[data-checked] {
 	background: var(--hover);
@@ -2139,15 +2138,20 @@ button.pick-item {
 	border-radius: 4px;
 	margin-left: -4px;
 }
+.visually-hidden {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
 .ring {
 	flex: none;
 	transform: rotate(-90deg);
 }
 .suggest {
-	position: absolute;
-	left: 0;
-	right: 0;
-	bottom: calc(100% + 6px);
+	width: var(--anchor-width);
 	z-index: 10;
 	background: var(--surface);
 	border: 1px solid var(--line);

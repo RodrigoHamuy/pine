@@ -7,6 +7,18 @@ import { COMMANDS, runSlash } from "./commands.ts";
 import { type Attachment, store, type Tab, useModel, useSignal } from "./model.ts";
 import { baseName, size, tilde } from "./text.ts";
 import { Icon } from "./ui.tsx";
+import {
+	createTriggerMenuController,
+	type TextEditorAdapter,
+	textFieldAdapter,
+	type TriggerDefinition,
+	type TriggerMenuDataItem,
+	TriggerMenu,
+	TriggerMenuContent,
+	TriggerMenuItem,
+	TriggerMenuList,
+	TriggerMenuStatus,
+} from "@ui-sdk/react/trigger-menu";
 
 const MAX_FILE = 20 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -35,21 +47,18 @@ export async function attach(tab: Tab, files: File[]): Promise<void> {
 	tab.touch();
 }
 
-interface Suggestion {
-	value: string;
-	label: string;
-	about?: string;
-}
-
 export function Composer({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
 	const area = useRef<HTMLTextAreaElement>(null);
 	const picker = useRef<HTMLInputElement>(null);
 	const [over, setOver] = useState(false);
-	const [items, setItems] = useState<Suggestion[]>([]);
-	const [at, setAt] = useState(0);
-	const [kind, setKind] = useState<"slash" | "file" | undefined>();
+	const [menu] = useState(createTriggerMenuController);
+	const [editor, setEditor] = useState<TextEditorAdapter>();
+	const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+	// The trigger whose suggestions show, `/` for a command or `@` for a file, while they do. Not
+	// state: it changes inside the field's own input event, and a render then would undo the typing.
+	const showing = useRef<string | null>(null);
 	const recall = useRef(-1);
 	// Dictating: what is heard is put after what was typed, and is text in the input and nothing
 	// more. It is never sent by itself.
@@ -127,50 +136,25 @@ export function Composer({ tab }: { tab: Tab }) {
 	useSignal("attach", () => picker.current?.click());
 	useSignal("focus-input", () => area.current?.focus());
 
-	/** What is being typed right before the cursor: a command at the start of the input, or a file after an @. */
-	const suggest = async (value: string, cursor: number) => {
-		const before = value.slice(0, cursor);
-		if (/^\/[a-z]*$/i.test(before)) {
-			const word = before.slice(1).toLowerCase();
-			setKind("slash");
-			setAt(0);
-			return setItems(COMMANDS.filter((c) => c.name.startsWith(word)).map((c) => ({ value: c.name, label: `/${c.name}${c.hint ? ` ${c.hint}` : ""}`, about: c.about })));
-		}
-		const mention = /(?:^|\s)@([^\s@]*)$/.exec(before);
-		if (mention) {
-			const found = await api.find(tab.agent, tab.session, mention[1].split("#")[0]).catch(() => ({ files: [] as string[] }));
-			// What was typed meanwhile decides whether the answer is still wanted.
-			if (area.current && area.current.value.slice(0, area.current.selectionStart) !== before) return;
-			for (const f of found.files) tab.files.add(f);
-			setKind("file");
-			setAt(0);
-			return setItems(found.files.slice(0, 12).map((f) => ({ value: f, label: f })));
-		}
-		setKind(undefined);
-		setItems([]);
-	};
-
-	const take = (s: Suggestion) => {
-		const el = area.current!;
-		const cursor = el.selectionStart;
-		const before = text.slice(0, cursor);
-		const next = kind === "slash" ? `/${s.value} ` : `${before.replace(/@([^\s@]*)$/, `@${s.value} `)}`;
-		const whole = kind === "slash" ? next : next + text.slice(cursor);
-		set(whole);
-		setItems([]);
-		setKind(undefined);
-		requestAnimationFrame(() => {
-			el.focus();
-			const pos = kind === "slash" ? whole.length : next.length;
-			el.setSelectionRange(pos, pos);
-		});
-	};
+	/** A command at the start of the input, or a file after an @: what the suggestions offer. */
+	const triggers: TriggerDefinition<string>[] = [
+		{ char: "/", boundary: "start", pattern: /[a-z]/i, filter: "startsWith", items: COMMANDS.map((c) => ({ value: c.name, label: c.name })) },
+		{
+			char: "@",
+			pattern: /[^\s@]/,
+			items: async (query) => {
+				const found = await api.find(tab.agent, tab.session, query.split("#")[0]).catch(() => ({ files: [] as string[] }));
+				for (const f of found.files) tab.files.add(f);
+				return found.files.slice(0, 12).map((f) => ({ value: f, label: f }));
+			},
+		},
+	];
 
 	const send = async (whenBusy: "steer" | "queue") => {
 		const value = text.trim();
 		if (!value) return;
 		recall.current = -1;
-		setItems([]);
+		menu.close();
 		if (value.startsWith("/") && !value.startsWith("//")) {
 			tab.inputs.push(value);
 			set("");
@@ -186,20 +170,9 @@ export function Composer({ tab }: { tab: Tab }) {
 			if (e.key === "Enter") return (e.preventDefault(), endVoice(false));
 			if (e.key === "Escape") return (e.preventDefault(), endVoice(true), set(typed.current));
 		}
-		if (items.length) {
-			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-				e.preventDefault();
-				return setAt((at + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length);
-			}
-			if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && (kind === "file" || items[at].value !== text.slice(1).trim()))) {
-				e.preventDefault();
-				return take(items[at]);
-			}
-			if (e.key === "Escape") {
-				e.preventDefault();
-				return setItems([]);
-			}
-		}
+		// The suggestions take their keys while they show, and have already handled one they took.
+		if (e.defaultPrevented) return;
+		if (showing.current &&["ArrowDown", "ArrowUp", "Tab", "Enter", "Escape"].includes(e.key)) return;
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			return void send(e.altKey ? "queue" : "steer");
@@ -228,6 +201,17 @@ export function Composer({ tab }: { tab: Tab }) {
 		}
 	};
 
+	// Enter on a command typed out in full sends it rather than completing it: caught before the suggestions see the key.
+	const onKeyCapture = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+		if (showing.current !== "/" || e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+		const highlighted = document.querySelector<HTMLElement>("[data-slot=trigger-menu-item][data-highlighted]");
+		if (highlighted?.dataset.value !== text.slice(1).trim()) return;
+		e.stopPropagation();
+		e.preventDefault();
+		menu.close();
+		void send(e.altKey ? "queue" : "steer");
+	};
+
 	const onDrop = async (e: React.DragEvent) => {
 		e.preventDefault();
 		setOver(false);
@@ -253,7 +237,12 @@ export function Composer({ tab }: { tab: Tab }) {
 	const goal = tab.goal && tab.goal.status !== "met" ? tab.goal : undefined;
 
 	return (
-		<>
+		<TriggerMenu
+			controller={menu}
+			editor={editor}
+			triggers={triggers}
+			onOpenChange={(open, details) => void (showing.current = open ? details.trigger : null)}
+		>
 			{goal && goal.status !== "active" ? (
 				<div className="banner warn">
 					<Icon name="clock" size={14} />
@@ -262,16 +251,24 @@ export function Composer({ tab }: { tab: Tab }) {
 					<button type="button" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</button>
 				</div>
 			) : null}
-			{items.length ? (
-				<div className="suggest">
-					{items.map((s, i) => (
-						<div key={s.value} className={`pick-item${i === at ? " on" : ""}`} onMouseMove={() => at !== i && setAt(i)} onMouseDown={(e) => (e.preventDefault(), take(s))}>
-							<span className="label mono">{s.label}</span>
-							{s.about ? <span className="about">{s.about}</span> : null}
-						</div>
-					))}
-				</div>
-			) : null}
+			<TriggerMenuContent className="suggest" side="top" align="start" sideOffset={6} anchor={anchor}>
+				<TriggerMenuList>
+					{(state) =>
+						(state.items as TriggerMenuDataItem<string>[]).map((item) => {
+							const command = state.trigger === "/" ? COMMANDS.find((c) => c.name === item.value) : undefined;
+							return (
+								<TriggerMenuItem key={item.value} value={item.value} label={item.label} className="pick-item" data-value={item.value}>
+									<span className="label mono">{command ? `/${command.name}${command.hint ? ` ${command.hint}` : ""}` : item.label}</span>
+									{command?.about ? <span className="about">{command.about}</span> : null}
+								</TriggerMenuItem>
+							);
+						})
+					}
+				</TriggerMenuList>
+			</TriggerMenuContent>
+			<div className="visually-hidden">
+				<TriggerMenuStatus />
+			</div>
 			{voice !== "off" ? (
 				<div className="banner">
 					<span className="dot bad" />
@@ -279,6 +276,7 @@ export function Composer({ tab }: { tab: Tab }) {
 				</div>
 			) : null}
 			<div
+				ref={setAnchor}
 				className={`composer${over ? " over" : ""}`}
 				onDragOver={(e) => {
 					if (![...e.dataTransfer.types].includes("Files")) return;
@@ -301,7 +299,10 @@ export function Composer({ tab }: { tab: Tab }) {
 					</div>
 				) : null}
 				<textarea
-					ref={area}
+					ref={(el) => {
+						area.current = el;
+						if (el && editor?.element !== el) setEditor(textFieldAdapter(el));
+					}}
 					rows={1}
 					value={text}
 					placeholder={tab.busy ? `Say something to ${tab.agent} while it works…` : `Message ${tab.agent} · / for commands · @ for files`}
@@ -310,8 +311,8 @@ export function Composer({ tab }: { tab: Tab }) {
 						if (voice !== "off") endVoice(true);
 						recall.current = -1;
 						set(e.target.value);
-						void suggest(e.target.value, e.target.selectionStart);
 					}}
+					onKeyDownCapture={onKeyCapture}
 					onKeyDown={onKey}
 					onPaste={(e) => {
 						const files = [...e.clipboardData.files];
@@ -319,7 +320,6 @@ export function Composer({ tab }: { tab: Tab }) {
 						e.preventDefault();
 						void attach(tab, files);
 					}}
-					onBlur={() => window.setTimeout(() => setItems([]), 120)}
 				/>
 				<div className="composer-bar">
 					<button type="button" className="chip plus-btn" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><Icon name="plus" size={15} /></button>
@@ -351,6 +351,6 @@ export function Composer({ tab }: { tab: Tab }) {
 				<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />
 			</div>
 			{tab.folder && !tab.items.length ? <div className="faint" style={{ fontSize: 11.5, padding: "6px 4px 0" }}>{tab.agent}'s tools start in {tilde(tab.folder)} and may read and change what is in it.</div> : null}
-		</>
+		</TriggerMenu>
 	);
 }
