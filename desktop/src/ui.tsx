@@ -1,8 +1,10 @@
 // The small parts everything else is built from: icons, buttons, fields, a dialog, a menu.
 import { type ButtonHTMLAttributes, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { AlertDialog, AlertDialogBackdrop, AlertDialogClose, AlertDialogContent, AlertDialogDescription, AlertDialogTitle } from "@ui-sdk/react/alert-dialog";
+import { Command, CommandEmpty, CommandGroup, CommandGroupLabel, CommandInput, CommandItem, CommandList } from "@ui-sdk/react/command";
 import { Dialog as UiDialog, DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/react/dialog";
 import { FieldDescription, FieldLabel, Field as UiField } from "@ui-sdk/react/field";
+import { Radio, RadioGroup } from "@ui-sdk/react/radio";
 import { SelectContent, SelectItem, SelectItemIndicator, SelectTrigger, Select as UiSelect, SelectValue } from "@ui-sdk/react/select";
 import { SegmentedControl, SegmentedControlItem } from "@ui-sdk/react/segmented-control";
 import { SwitchThumb, Switch as UiSwitch } from "@ui-sdk/react/switch";
@@ -170,18 +172,98 @@ export function Select({ value, options, onChange, placeholder, className }: { v
 
 /**
  * A window over the page that asks for one thing, open while it is rendered. Escape and a press
- * beside it close it when there is an `onClose`; focus stays inside and returns where it was.
+ * beside it close it when there is an `onClose`; focus stays inside and returns where it was. It
+ * starts on the first control inside, or on what `initialFocus` (a selector) names.
  */
-export function Dialog({ title, children, onClose, width = 520, tone, footer }: { title?: ReactNode; children: ReactNode; onClose?: () => void; width?: number; tone?: "warn" | "accent"; footer?: ReactNode }) {
+export function Dialog({ title, children, onClose, width = 520, tone, footer, initialFocus }: { title?: ReactNode; children: ReactNode; onClose?: () => void; width?: number; tone?: "warn" | "accent"; footer?: ReactNode; initialFocus?: string }) {
 	return (
 		<UiDialog open dismissible={Boolean(onClose)} onOpenChange={(open) => !open && onClose?.()}>
 			<DialogBackdrop className="scrim" />
-			<DialogContent className={`dialog${tone ? ` dialog-${tone}` : ""}`} style={{ width }} aria-label={title ? undefined : "Dialog"}>
+			<DialogContent className={`dialog${tone ? ` dialog-${tone}` : ""}`} style={{ width }} aria-label={title ? undefined : "Dialog"} initialFocus={initialFocus}>
 				{title ? <DialogTitle render={<div className="dialog-title" />}>{title}</DialogTitle> : null}
 				<div className="dialog-body">{children}</div>
 				{footer ? <div className="dialog-foot">{footer}</div> : null}
 			</DialogContent>
 		</UiDialog>
+	);
+}
+
+/** One line of a `Pick`: what choosing it reports, what it shows, and the header of the group it sits in. */
+export type PickRow = { value: string; label: ReactNode; about?: ReactNode; keys?: string; group?: string; current?: boolean; bad?: boolean };
+
+/**
+ * A list to choose one thing from, over the page under a field that narrows it, open while it is
+ * rendered: the arrows move, Enter chooses, Escape closes, focus stays inside and returns where it
+ * was. The caller narrows `rows` from `query` itself; consecutive rows of a `group` sit under its
+ * header. `onEnter` takes Enter before the list when it returns true (words of the owner's own).
+ */
+export function Pick({ title, label, rows, query, onQuery, onChoose, onClose, initial, placeholder, width = 560, hideField, empty = "Nothing fits.", onEnter }: { title?: ReactNode; label: string; rows: PickRow[]; query: string; onQuery: (q: string) => void; onChoose: (value: string) => void; onClose: () => void; initial?: string; placeholder?: string; width?: number; hideField?: boolean; empty?: ReactNode; onEnter?: (query: string) => boolean }) {
+	const groups: Array<{ name?: string; rows: PickRow[] }> = [];
+	for (const r of rows) {
+		const last = groups.at(-1);
+		if (last && last.name === r.group) last.rows.push(r);
+		else groups.push({ name: r.group, rows: [r] });
+	}
+	const item = (r: PickRow) => (
+		<CommandItem key={r.value} value={r.value} className={`pick-item${r.bad ? " bad" : ""}`}>
+			<span className="label">{r.label}</span>
+			{r.about ? <span className="about">{r.about}</span> : null}
+			{r.keys ? <kbd style={{ marginLeft: "auto", flex: "none" }}>{r.keys}</kbd> : null}
+			{r.current ? <span className="cur"><Icon name="check" size={13} /></span> : null}
+		</CommandItem>
+	);
+	return (
+		<UiDialog open onOpenChange={(open) => !open && onClose()}>
+			<DialogBackdrop className="scrim" />
+			<DialogContent className="dialog" style={{ width }} aria-label={title ? undefined : label}>
+				{title ? <DialogTitle render={<div className="pick-title" />}>{title}</DialogTitle> : null}
+				<Command filter={false} query={query} onQueryChange={(q) => onQuery(q)} defaultValue={initial && rows.some((r) => r.value === initial) ? initial : undefined} onAction={(value) => onChoose(value)}>
+					<CommandInput
+						className="pick-input"
+						aria-label={label}
+						placeholder={placeholder}
+						style={hideField ? { position: "absolute", opacity: 0, pointerEvents: "none" } : undefined}
+						onKeyDown={(e) => {
+							// Escape closes at once, whatever is typed, as it always has here.
+							if (e.key === "Escape") return (e.preventDefault(), onClose());
+							if (e.key === "Enter" && onEnter?.(query)) e.preventDefault();
+						}}
+					/>
+					{rows.length ? (
+						<CommandList className="pick-list">
+							{groups.map((g, n) =>
+								g.name ? (
+									<CommandGroup key={`${g.name}:${n}`}>
+										<CommandGroupLabel className="pick-group">{g.name}</CommandGroupLabel>
+										{g.rows.map(item)}
+									</CommandGroup>
+								) : (
+									g.rows.map(item)
+								),
+							)}
+						</CommandList>
+					) : empty ? (
+						<div className="empty" style={{ padding: 24 }}>{empty}</div>
+					) : null}
+				</Command>
+			</DialogContent>
+		</UiDialog>
+	);
+}
+
+/**
+ * Answers to choose one of, a radio group: the marked one is `at`, the arrows move the mark once it
+ * has focus, and a click or Enter on one chooses it.
+ */
+export function Choices({ label, choices, at, onAt, onChoose }: { label: string; choices: ReactNode[]; at: number | null; onAt: (i: number) => void; onChoose: (i: number) => void }) {
+	return (
+		<RadioGroup className="pick-list" style={{ padding: 0 }} aria-label={label} value={at === null ? null : String(at)} onValueChange={(v) => v !== null && onAt(Number(v))}>
+			{choices.map((c, i) => (
+				<Radio key={i} value={String(i)} className="pick-item" onMouseMove={() => at !== i && onAt(i)} onClick={() => onChoose(i)} onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), onChoose(i))}>
+					{c}
+				</Radio>
+			))}
+		</RadioGroup>
 	);
 }
 

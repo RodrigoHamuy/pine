@@ -11,7 +11,7 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Confirm, Dialog, Icon, Lightbox, Logo, Pulse, Toasts } from "./ui.tsx";
+import { Button, Choices, Confirm, Dialog, Icon, Lightbox, Logo, Pick, Pulse, Toasts } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -248,62 +248,28 @@ function TitleBar() {
 function PickDialog({ p }: { p: Picker }) {
 	const [query, setQuery] = useState("");
 	const shown = useMemo(() => (query && !p.free ? p.items.map((i) => ({ i, rank: Math.min(...[fuzzy(query, i.label), fuzzy(query, i.about ?? "") + 10].filter((r) => r >= 0), 99) })).filter((x) => x.rank < 99).sort((a, b) => a.rank - b.rank).map((x) => x.i) : p.items), [query, p]);
-	const [at, setAt] = useState(() => Math.max(0, p.items.findIndex((i) => i.value === p.current)));
-	const list = useRef<HTMLDivElement>(null);
-	useEffect(() => setAt(0), [query]);
-	useEffect(() => {
-		// (In a block: scrolling answers with a promise, and an effect may only give back a function.)
-		list.current?.querySelector(".on")?.scrollIntoView({ block: "nearest" });
-	}, [at]);
-	const typing = p.free || p.items.length > 7;
 	return (
-		<div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && p.done(undefined)}>
-			<div className="dialog" style={{ width: 560 }}>
-				<div className="pick-title">{p.title}</div>
-				<input
-					autoFocus
-					className="pick-input"
-					style={typing ? undefined : { position: "absolute", opacity: 0, pointerEvents: "none" }}
-					placeholder={p.placeholder ?? "Type to narrow the list"}
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Escape") return p.done(undefined);
-						if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-							e.preventDefault();
-							return setAt((at + (e.key === "ArrowDown" ? 1 : Math.max(1, shown.length) - 1)) % Math.max(1, shown.length));
-						}
-						if (e.key === "Enter") {
-							e.preventDefault();
-							// Words of the owner's own count before the list where both are possible.
-							if (p.free && query.trim()) return p.done(query.trim());
-							if (shown[at]) p.done(shown[at].value);
-						}
-					}}
-				/>
-				{shown.length ? (
-					<div className="pick-list" ref={list}>
-						{shown.map((i, n) => (
-							<div key={i.value} className={`pick-item${n === at ? " on" : ""}${i.tone === "bad" ? " bad" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => p.done(i.value)}>
-								<span className="label">{i.label}</span>
-								{i.about ? <span className="about">{i.about}</span> : null}
-								{i.value === p.current ? <span className="cur"><Icon name="check" size={13} /></span> : null}
-							</div>
-						))}
-					</div>
-				) : p.free ? null : (
-					<div className="empty" style={{ padding: 24 }}>Nothing fits.</div>
-				)}
-			</div>
-		</div>
+		<Pick
+			title={p.title}
+			label={p.title}
+			rows={shown.map((i) => ({ value: i.value, label: i.label, about: i.about, current: i.value === p.current, bad: i.tone === "bad" }))}
+			query={query}
+			onQuery={setQuery}
+			initial={p.current}
+			onChoose={(value) => p.done(value)}
+			onClose={() => p.done(undefined)}
+			placeholder={p.placeholder ?? "Type to narrow the list"}
+			hideField={!p.free && p.items.length <= 7}
+			empty={p.free ? null : undefined}
+			// Words of the owner's own count before the list where both are possible.
+			onEnter={(q) => Boolean(p.free && q.trim() && (p.done(q.trim()), true))}
+		/>
 	);
 }
 
 function Palette() {
 	const s = store;
 	const [query, setQuery] = useState("");
-	const [at, setAt] = useState(0);
-	const list = useRef<HTMLDivElement>(null);
 	useModel(s);
 	type Row = { id: string; group: string; label: string; about?: string; keys?: string; run: () => void; conv?: { agent: string; session: string } };
 	const all = useMemo(() => {
@@ -345,46 +311,22 @@ function Palette() {
 		return [...byName, ...said, ...described.filter((r) => !holds(r) || !listed.has(`${r.conv!.agent}:${r.conv!.session}`)), ...loose.filter((r) => !r.conv || !listed.has(`${r.conv.agent}:${r.conv.session}`))].slice(0, 80);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [query, all, s.said]);
-	useEffect(() => setAt(0), [query]);
-	useEffect(() => {
-		// (In a block: scrolling answers with a promise, and an effect may only give back a function.)
-		list.current?.querySelector(".on")?.scrollIntoView({ block: "nearest" });
-	}, [at]);
 	const close = () => ((s.palette = false), s.touch());
-	const run = (r: (typeof all)[number]) => (close(), r.run());
 	return (
-		<div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-			<div className="dialog" style={{ width: 620 }}>
-				<input
-					autoFocus
-					className="pick-input"
-					placeholder="Search conversations (by name or by what was said), commands, agents"
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Escape") return close();
-						if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-							e.preventDefault();
-							return setAt((at + (e.key === "ArrowDown" ? 1 : Math.max(1, shown.length) - 1)) % Math.max(1, shown.length));
-						}
-						if (e.key === "Enter" && shown[at]) run(shown[at]);
-					}}
-				/>
-				<div className="pick-list" ref={list}>
-					{shown.map((r, n) => (
-						<div key={r.id}>
-							{n === 0 || shown[n - 1].group !== r.group ? <div className="pick-group">{r.group}</div> : null}
-							<div className={`pick-item${n === at ? " on" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => run(r)}>
-								<span className="label">{r.label}</span>
-								{r.about ? <span className="about">{r.about}</span> : null}
-								{r.keys ? <kbd style={{ marginLeft: "auto", flex: "none" }}>{r.keys}</kbd> : null}
-							</div>
-						</div>
-					))}
-					{shown.length ? null : <div className="empty" style={{ padding: 24 }}>Nothing fits.</div>}
-				</div>
-			</div>
-		</div>
+		<Pick
+			label="Search"
+			width={620}
+			rows={shown.map((r) => ({ value: r.id, label: r.label, about: r.about, keys: r.keys, group: r.group }))}
+			query={query}
+			onQuery={setQuery}
+			onChoose={(id) => {
+				const r = shown.find((x) => x.id === id);
+				close();
+				r?.run();
+			}}
+			onClose={close}
+			placeholder="Search conversations (by name or by what was said), commands, agents"
+		/>
 	);
 }
 
@@ -473,22 +415,25 @@ function QuestionDialog({ req }: { req: Approval }) {
 	const [at, setAt] = useState(0);
 	const answer = (text: string) => void s.decide(req.id, true, false, { answer: text });
 	return (
-		<Dialog tone="accent" width={560} onClose={() => s.closeAsking()} title={<><Icon name="chat" /> {req.agent} asks</>} footer={<><Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button><span className="grow" /><Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button><Button variant="primary" disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button></>}>
+		<Dialog tone="accent" width={560} initialFocus=".own-answer" onClose={() => s.closeAsking()} title={<><Icon name="chat" /> {req.agent} asks</>} footer={<><Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button><span className="grow" /><Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button><Button variant="primary" disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button></>}>
 			<div style={{ whiteSpace: "pre-wrap" }}>{req.summary}</div>
 			{choices.length ? (
-				<div className="pick-list" style={{ padding: 0 }}>
-					{choices.map((c, i) => (
-						<div key={i} className={`pick-item${i === at && !own ? " on" : ""}`} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
+				<Choices
+					label="Answers offered"
+					at={own ? null : at}
+					onAt={setAt}
+					onChoose={(i) => answer(choices[i])}
+					choices={choices.map((c, i) => (
+						<>
 							<kbd>{i + 1}</kbd>
 							<span style={{ whiteSpace: "normal" }}>{c}</span>
 							{i === 0 ? <span className="tag good" style={{ marginLeft: "auto" }}>recommended</span> : null}
-						</div>
+						</>
 					))}
-				</div>
+				/>
 			) : null}
 			<input
-				autoFocus
-				className="input"
+				className="input own-answer"
 				placeholder={choices.length ? "Or answer in your own words" : "Your answer"}
 				value={own}
 				onChange={(e) => setOwn(e.target.value)}

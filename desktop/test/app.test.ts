@@ -332,6 +332,46 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	await shot("02-answer");
 });
 
+/** Where focus is: the field's role, and the option it marks active, as a screen reader hears them. */
+const activeOption = () =>
+	page.evaluate(() => {
+		const field = document.activeElement as HTMLElement;
+		const id = field.getAttribute("aria-activedescendant");
+		const option = id ? document.getElementById(id) : null;
+		return { inDialog: Boolean(field.closest("[role=dialog]")), role: field.getAttribute("role"), option: option?.getAttribute("role"), selected: option?.getAttribute("aria-selected"), text: option?.textContent ?? "", list: Boolean(option?.closest("[role=listbox]")) };
+	});
+
+test("a model is chosen from its picker with the keyboard alone, and focus goes back to the chip", async () => {
+	const chip = ".composer .chip.model";
+	const focused = () => page.evaluate((s: string) => document.activeElement === document.querySelector(s), chip);
+	await page.focus(chip);
+	await page.keyboard.press("Enter");
+	await sees(".dialog [role=listbox] [role=option]");
+	// Its models are options in a list, the one in use marked active, and Tab stays inside.
+	let at = await activeOption();
+	assert.deepEqual([at.inDialog, at.role, at.option, at.selected, at.list], [true, "combobox", "option", "true", true], JSON.stringify(at));
+	assert.match(at.text, /mock\/m/);
+	await page.keyboard.press("Tab");
+	assert.equal((await activeOption()).inDialog, true);
+	// Escape closes it, and focus is back on the chip.
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(".dialog", { state: "detached" });
+	assert.equal(await focused(), true);
+	// Arrows move, Enter chooses.
+	await page.keyboard.press("Enter");
+	await sees(".dialog [role=listbox] [role=option]");
+	const count = await page.$$eval(".dialog [role=option]", (els: Element[]) => els.length);
+	await page.keyboard.press("ArrowDown");
+	if (count > 1) assert.doesNotMatch((await activeOption()).text, /^mock\/m/);
+	await page.keyboard.press("ArrowUp");
+	at = await activeOption();
+	assert.match(at.text, /mock\/m/);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector(".dialog", { state: "detached" });
+	assert.equal(await focused(), true);
+	assert.match((await page.getAttribute(chip, "title")) ?? "", /mock\/m/);
+});
+
 test("what an answer points at on the web is not fetched by itself", async () => {
 	await page.fill(".composer textarea", mockMsg([{ text: 'Look: ![a cat](https://example.com/cat.png)\n\n<img src="https://example.com/dog.png">\n\n<script>window.hacked = 1</script><a href="javascript:window.hacked=2">x</a>' }], "pictures "));
 	await page.keyboard.press("Enter");
@@ -751,6 +791,30 @@ test("a right click on an agent offers to remove it, and never the main agent", 
 	// Asked for the main agent all the same (the palette, another road), the app says no and asks the daemon for nothing.
 	await page.evaluate(() => (window as any).pine.call("POST", "/agents/main/erase", { agent: "main", keepFiles: false })).then((r: any) => assert.equal(r.ok, false));
 	assert.ok(fs.existsSync(path.join(home, "agents", "main", "agent.json")));
+});
+
+test("a conversation is opened from the palette with the keyboard alone", async () => {
+	await menu("palette");
+	await sees(".dialog [role=listbox]");
+	assert.equal((await activeOption()).role, "combobox");
+	await page.keyboard.press("Tab");
+	assert.equal((await activeOption()).inDialog, true);
+	await page.keyboard.press("Shift+Tab");
+	assert.equal((await activeOption()).role, "combobox");
+	await page.keyboard.type("where is the okapi");
+	// Its results keep their group headers.
+	await sees(".pick-group >> text=Conversations");
+	await sees("[role=option] >> text=scout · where is the okapi invoice");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowUp");
+	const at = await activeOption();
+	assert.deepEqual([at.option, at.selected, at.list], ["option", "true", true], JSON.stringify(at));
+	assert.match(at.text, /scout · where is the okapi invoice/);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector(".dialog", { state: "detached" });
+	await sees(".tab.on .name >> text=where is the okapi invoice");
+	await page.keyboard.press("Escape");
+	await page.click(".tab.on .close");
 });
 
 test("the palette finds things by name, and the event log follows", async () => {

@@ -1033,7 +1033,18 @@ textarea.input {
 	padding: 7px 12px;
 	border-radius: var(--r-s);
 }
-.pick-item.on {
+button.pick-item {
+	width: 100%;
+	border: none;
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: left;
+	cursor: default;
+}
+.pick-item.on,
+.pick-item[data-highlighted],
+.pick-item[data-checked] {
 	background: var(--hover);
 }
 .pick-item .label {
