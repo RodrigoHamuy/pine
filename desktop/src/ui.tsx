@@ -1,4 +1,4 @@
-// The small parts everything else is built from: icons, buttons, fields, a dialog, a menu.
+// The small parts everything else is built from: icons, buttons, fields.
 import { type ButtonHTMLAttributes, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 
 const PATHS: Record<string, string> = {
@@ -129,29 +129,6 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 	);
 }
 
-/** A window over the page that asks for one thing. Escape and a click beside it close it. */
-export function Dialog({ title, children, onClose, width = 520, tone, footer }: { title?: ReactNode; children: ReactNode; onClose?: () => void; width?: number; tone?: "warn" | "accent"; footer?: ReactNode }) {
-	useEffect(() => {
-		const key = (e: KeyboardEvent) => {
-			if (e.key === "Escape" && onClose) {
-				e.stopPropagation();
-				onClose();
-			}
-		};
-		window.addEventListener("keydown", key, true);
-		return () => window.removeEventListener("keydown", key, true);
-	}, [onClose]);
-	return (
-		<div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-			<div className={`dialog${tone ? ` dialog-${tone}` : ""}`} style={{ width }} role="dialog" aria-modal="true">
-				{title ? <div className="dialog-title">{title}</div> : null}
-				<div className="dialog-body">{children}</div>
-				{footer ? <div className="dialog-foot">{footer}</div> : null}
-			</div>
-		</div>
-	);
-}
-
 /** A text field that grows with what is typed into it. */
 export function AutoText({ value, onChange, minRows = 3, maxRows = 24, mono, ...rest }: { value: string; onChange: (v: string) => void; minRows?: number; maxRows?: number; mono?: boolean } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value">) {
 	const ref = useRef<HTMLTextAreaElement>(null);
@@ -172,31 +149,6 @@ export function Empty({ icon, title, children }: { icon?: string; title: string;
 			<div className="empty-title">{title}</div>
 			{children ? <div className="empty-text">{children}</div> : null}
 		</div>
-	);
-}
-
-/** Ask twice before something that cannot be taken back: the first click arms the button, the second does it. */
-export function Confirm({ label, sure = "Sure?", onConfirm, icon, small = true }: { label?: string; sure?: string; onConfirm: () => void; icon?: string; small?: boolean }) {
-	const [armed, setArmed] = useState(false);
-	useEffect(() => {
-		if (!armed) return;
-		const t = window.setTimeout(() => setArmed(false), 3000);
-		return () => window.clearTimeout(t);
-	}, [armed]);
-	return (
-		<Button
-			small={small}
-			variant={armed ? "danger" : "ghost"}
-			icon={armed ? undefined : icon}
-			title={label}
-			onClick={(e) => {
-				e.stopPropagation();
-				if (armed) onConfirm();
-				setArmed(!armed);
-			}}
-		>
-			{armed ? sure : icon ? undefined : label}
-		</Button>
 	);
 }
 

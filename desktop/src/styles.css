@@ -888,86 +888,13 @@ select.input {
 	font-size: 12.5px;
 }
 
-/* ---- dialogs, lists to pick from, toasts ----------------------------------------------------------- */
+/* ---- lists to pick from, toasts ----------------------------------------------------------------- */
 
-.scrim {
-	position: fixed;
-	inset: 0;
-	z-index: 50;
-	background: var(--scrim);
-	display: flex;
-	align-items: flex-start;
-	justify-content: center;
-	padding-top: 12vh;
-	animation: fade 0.12s ease-out;
-}
-@keyframes fade {
-	from {
-		opacity: 0;
-	}
-}
-.dialog {
-	max-width: calc(100vw - 48px);
-	max-height: 76vh;
-	display: flex;
-	flex-direction: column;
-	background: var(--surface);
-	border: 1px solid var(--line);
-	border-radius: var(--r-l);
-	box-shadow: var(--shadow-l);
-	overflow: hidden;
-	animation: rise 0.14s ease-out;
-}
 @keyframes rise {
 	from {
 		transform: translateY(6px) scale(0.985);
 		opacity: 0;
 	}
-}
-.dialog-warn {
-	border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
-}
-.dialog-accent {
-	border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
-}
-.dialog-title {
-	padding: 16px 20px 0;
-	font-weight: 600;
-	font-size: 14.5px;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.dialog-body {
-	padding: 14px 20px 18px;
-	overflow-y: auto;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	user-select: text;
-}
-.dialog-foot {
-	padding: 12px 20px;
-	border-top: 1px solid var(--line-soft);
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-	background: var(--raised);
-}
-.pick-input {
-	width: 100%;
-	border: none;
-	outline: none;
-	background: transparent;
-	padding: 14px 18px;
-	font-size: 14.5px;
-	border-bottom: 1px solid var(--line-soft);
-}
-.pick-title {
-	padding: 12px 18px 0;
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--text-muted);
 }
 .pick-list {
 	overflow-y: auto;
@@ -1007,14 +934,6 @@ select.input {
 .pick-item.bad .label {
 	color: var(--bad);
 }
-.pick-group {
-	padding: 8px 12px 3px;
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--faint);
-}
 .toasts {
 	position: fixed;
 	bottom: 18px;
@@ -1045,22 +964,6 @@ select.input {
 	background: var(--brand);
 	color: var(--on-accent);
 }
-.lightbox {
-	position: fixed;
-	inset: 0;
-	z-index: 90;
-	background: rgba(0, 0, 0, 0.82);
-	display: grid;
-	place-items: center;
-	padding: 32px;
-}
-.lightbox img {
-	max-width: 100%;
-	max-height: 100%;
-	border-radius: 6px;
-	box-shadow: var(--shadow-l);
-}
-
 /* ---- the conversation ------------------------------------------------------------------------------- */
 
 .conv {
@@ -1967,8 +1870,7 @@ select.input {
 	user-select: text;
 }
 .composer textarea::placeholder,
-.input::placeholder,
-.pick-input::placeholder {
+.input::placeholder {
 	color: var(--faint);
 }
 /* One line, cut at the end: a hint that wraps in a narrow input would give it a scroll bar. */

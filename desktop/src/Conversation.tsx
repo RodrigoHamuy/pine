@@ -8,6 +8,13 @@ import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal }
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
 import { Button, Icon, Pulse } from "./ui.tsx";
 
+/** A picture that opens larger over the page, with a click or, focused, with Enter. */
+const zoomable = {
+	tabIndex: 0,
+	onClick: (e: React.MouseEvent<HTMLImageElement>) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
+	onKeyDown: (e: React.KeyboardEvent<HTMLImageElement>) => e.key === "Enter" && window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
+};
+
 const TONE_ICON: Record<Tone, string> = { muted: "info", warn: "alert", bad: "alert", good: "check", accent: "undo" };
 
 function Status({ status }: { status: "run" | "ok" | "fail" | "done" | "failed" | "cancelled" }) {
@@ -123,7 +130,7 @@ function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
 			</div>
 			{entry.result ? <div className="entry-result" style={entry.ok === false ? { color: "var(--bad)" } : undefined}>{short(entry.result, 4000)}</div> : null}
 			{(entry.images ?? []).map((id) => (
-				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" onClick={(e) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: (e.target as HTMLImageElement).src }))} /></div>
+				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} /></div>
 			))}
 		</div>
 	);
@@ -170,7 +177,6 @@ export function Steps({ items }: { items: Array<{ text: string; status: string }
 	);
 }
 
-const zoom = (src: string) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
 
 const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
 	switch (item.t) {
@@ -214,7 +220,7 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 		case "media":
 			return (
 				<div className="it-media">
-					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} onClick={() => zoom(item.url)} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
+					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} {...zoomable} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
 					<div className="cap">{item.name}</div>
 				</div>
 			);
