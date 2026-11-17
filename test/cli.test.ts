@@ -199,7 +199,7 @@ test("the key prompt stays visible, says the input is hidden, and never echoes i
 });
 
 test("pine update knows how pine was installed and which version is newer; pine version says both", async () => {
-	const { appNews, installKind, newer, outcome, whatChanged, whatCame } = await import("../src/update.ts");
+	const { appNews, channelOf, installKind, newer, newestOf, noteChannel, notedChannel, outcome, upToDate, whatChanged, whatCame } = await import("../src/update.ts");
 	const root = path.resolve(import.meta.dirname, "..");
 	// A git clone that runs its sources is a checkout, wherever npm keeps its global packages.
 	assert.equal(installKind(root, "/usr/local/lib/node_modules"), "checkout");
@@ -220,6 +220,33 @@ test("pine update knows how pine was installed and which version is newer; pine 
 	fs.rmSync(global, { recursive: true, force: true });
 
 	assert.deepEqual([newer("0.1.1", "0.1.0"), newer("0.10.0", "0.9.9"), newer("1.0.0", "0.99.99"), newer("0.1.0", "0.1.0"), newer("0.1.0", "0.2.0")], [true, true, true, false, false]);
+	// The channel sticks. A pine that is a preview follows previews; once that is noted for its home, it
+	// still does after it was moved to a release that passed them, until the owner says otherwise.
+	const channelHome = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-channel-")));
+	assert.equal(noteChannel(channelHome, "next"), false, "a folder that is no pine home keeps nothing");
+	assert.equal(notedChannel(channelHome), undefined);
+	fs.writeFileSync(path.join(channelHome, "pine.json"), "{}");
+	assert.deepEqual([channelOf("0.2.0", notedChannel(channelHome)), channelOf("0.2.0-next.3", notedChannel(channelHome))], ["release", "next"]);
+	assert.equal(noteChannel(channelHome, "next"), true);
+	assert.equal(fs.readFileSync(path.join(channelHome, "data", "update-channel"), "utf8"), "next\n");
+	assert.equal(channelOf("0.2.0", notedChannel(channelHome)), "next", "a release on disk does not end the previews");
+	assert.equal(noteChannel(channelHome, "release"), true);
+	assert.equal(channelOf("0.3.0-next.1", notedChannel(channelHome)), "release", "the owner's choice wins over the version on disk");
+	fs.writeFileSync(path.join(channelHome, "data", "update-channel"), "whatever an agent might wish\n");
+	assert.equal(notedChannel(channelHome), undefined, "anything else in the file is no choice");
+	assert.equal(notedChannel(undefined), undefined);
+	fs.rmSync(channelHome, { recursive: true, force: true });
+	// What a channel calls for: on previews the newest preview, or the release that has passed it.
+	assert.equal(newestOf("release", "0.2.0", "0.3.0-next.2"), "0.2.0");
+	assert.equal(newestOf("next", "0.2.0", "0.3.0-next.2"), "0.3.0-next.2");
+	assert.equal(newestOf("next", "0.3.0", "0.3.0-next.2"), "0.3.0", "the release has passed its previews");
+	assert.equal(newestOf("next", "0.3.0", undefined), "0.3.0", "no preview was ever published");
+	assert.equal(newestOf("next", undefined, "0.3.0-next.2"), "0.3.0-next.2");
+	assert.equal(upToDate("@pmndre/pine", "0.3.0-next.2", "next", "0.3.0-next.2"), "pine 0.3.0-next.2 is the newest preview.");
+	assert.match(upToDate("@pmndre/pine", "0.3.0", "next", "0.3.0"), /is the latest version\. It follows previews, and none is ahead of it\./);
+	assert.equal(upToDate("@pmndre/pine", "0.3.0", "release", "0.3.0"), "pine 0.3.0 is the latest version.");
+	// Back on releases with a preview on disk: nothing is taken back by itself, and it says how to.
+	assert.match(upToDate("@pmndre/pine", "0.3.0-next.2", "release", "0.2.0"), /is a preview, ahead of the last release \(0\.2\.0\).*npm install -g @pmndre\/pine@0\.2\.0$/s);
 	// The next channel: its versions come before the release they lead up to, in the order of their numbers.
 	assert.deepEqual([newer("0.2.0", "0.2.0-next.3"), newer("0.2.0-next.3", "0.2.0"), newer("0.2.0-next.10", "0.2.0-next.9"), newer("0.2.0-next.1", "0.1.9"), newer("0.2.0-next.1", "0.2.0-next.1"), newer("0.1.9", "0.2.0-next.1")], [true, false, true, true, false, false]);
 

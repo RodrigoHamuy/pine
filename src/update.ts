@@ -47,6 +47,59 @@ export function newer(a: string, b: string): boolean {
 	return preview(a) > preview(b);
 }
 
+/** What a pine follows: the releases, or the previews that lead up to them ("0.40.0-next.3", npm's tag "next"). */
+export type Channel = "next" | "release";
+
+/** Where a home notes the channel of its pine: in pine's data, which no agent writes. */
+const channelFile = (home: string) => path.join(home, "data", "update-channel");
+
+/** The channel that was chosen for the pine of this home, if one was. */
+export function notedChannel(home: string | undefined): Channel | undefined {
+	if (!home) return undefined;
+	try {
+		const said = fs.readFileSync(channelFile(home), "utf8").trim();
+		return said === "next" || said === "release" ? said : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** Notes the channel for a home that exists. False: there is no home to note it in. */
+export function noteChannel(home: string | undefined, channel: Channel): boolean {
+	if (!home || !fs.existsSync(path.join(home, "pine.json"))) return false;
+	try {
+		fs.mkdirSync(path.dirname(channelFile(home)), { recursive: true });
+		fs.writeFileSync(channelFile(home), `${channel}\n`);
+		return true;
+	} catch {
+		return false;
+	}
+}
+
+/**
+ * The channel a pine follows. Once chosen it stays: what was noted wins, also when the version
+ * on disk is a release. (A pine on previews is moved to a release that has passed them, and that
+ * must not end its previews.) Nothing noted: a pine that is a preview follows previews.
+ */
+export function channelOf(version: string, noted?: Channel): Channel {
+	return noted ?? (/-next\./.test(version) ? "next" : "release");
+}
+
+/** The version a channel calls for: the last release, or on previews the newer of that and the newest preview. */
+export function newestOf(channel: Channel, release: string | undefined, preview: string | undefined): string | undefined {
+	if (channel === "next" && preview && (!release || newer(preview, release))) return preview;
+	return release;
+}
+
+/** What to say when there is nothing newer to install. */
+export function upToDate(name: string, version: string, channel: Channel, newest: string): string {
+	const isPreview = version.includes("-");
+	if (channel === "next") return isPreview ? `pine ${version} is the newest preview.` : `pine ${version} is the latest version. It follows previews, and none is ahead of it.`;
+	// On releases with a preview on disk: nothing is taken back by itself.
+	if (isPreview && newer(version, newest)) return `pine ${version} is a preview, ahead of the last release (${newest}). It stays until the next release, which "pine update" installs. To go back to ${newest} now:\n\n  npm install -g ${name}@${newest}`;
+	return `pine ${version} is the latest version.`;
+}
+
 export function installed(root = PINE_ROOT): { name: string; version: string; kind: InstallKind; root: string } {
 	const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 	// Asked without npm first: a Mac that has pine from the app may have no npm at all.
@@ -155,11 +208,13 @@ export const appNews = (latest: string, mine: string) => `pine ${latest} is avai
 
 /**
  * Update pine, or with `check` only say whether there is something newer. Returns the exit code.
- * `browser` fetches the browser build of the version that is on disk afterwards.
+ * `browser` fetches the browser build of the version that is on disk afterwards. `channel` is
+ * the owner's choice (`--next`, `--release`), kept for `home` from then on.
  */
-export async function update(opts: { check: boolean; out: (line: string) => void; browser: boolean }): Promise<number> {
+export async function update(opts: { check: boolean; out: (line: string) => void; browser: boolean; home?: string; channel?: Channel }): Promise<number> {
 	const { out } = opts;
 	const me = installed();
+	if (opts.channel && (me.kind === "checkout" || me.kind === "app")) out(me.kind === "checkout" ? "A checkout follows the branch it is on; --next and --release are for a pine that was installed with npm." : "The Pine app is built for releases only. A preview is installed with npm:\n\n  npm install -g " + me.name + "@next\n");
 	let wanted: string | undefined;
 	/** Where a checkout stood before it was moved forward. */
 	let was: string | undefined;
@@ -205,17 +260,22 @@ export async function update(opts: { check: boolean; out: (line: string) => void
 		out(appNews(latest, me.version));
 		return opts.check ? 0 : 1;
 	} else {
-		// A pine of the `next` channel ("-next." in its version) stays on it: the newest of that channel, or a release that has passed it.
-		const onNext = /-next\./.test(me.version);
-		let latest = capture("npm", ["view", me.name, "version"]);
-		const next = onNext ? capture("npm", ["view", `${me.name}@next`, "version"]) : undefined;
-		if (next && (!latest || newer(next, latest))) latest = next;
+		// The channel sticks: what was chosen for this home, or else what the version on disk says.
+		const noted = notedChannel(opts.home);
+		const channel = opts.channel ?? channelOf(me.version, noted);
+		// Noted when the owner chose, and the first time a preview is found on disk. Releases are what a pine follows unasked.
+		if (!opts.check && channel !== noted && (opts.channel || channel === "next")) {
+			const kept = noteChannel(opts.home, channel);
+			if (opts.channel) out(`pine follows ${channel === "next" ? "previews" : "releases"} from now on.${kept ? "" : " (There is no pine home yet to keep that in: say it again after pine init.)"}`);
+		}
+		const onNext = channel === "next";
+		const latest = newestOf(channel, capture("npm", ["view", me.name, "version"]), onNext ? capture("npm", ["view", `${me.name}@next`, "version"]) : undefined);
 		if (!latest) {
 			out(`Could not ask npm for the latest version of ${me.name}. You may be offline.`);
 			return 1;
 		}
 		if (!newer(latest, me.version)) {
-			out(`pine ${me.version} is the latest version${onNext ? " of the next channel" : ""}.`);
+			out(upToDate(me.name, me.version, channel, latest));
 			return 0;
 		}
 		if (me.kind === "local") {

@@ -37,6 +37,7 @@ Daemon
                                   OpenAI-compatible model server backed by "claude -p" (development only)
   pine update [--check]           bring pine up to date (npm for an install, git for a checkout) with what the
                                   new version needs; --check only says whether there is something newer
+  pine update --next | --release  follow previews of the next release, or releases only; the choice is kept
   pine version                    which version this is and how it is installed
   pine browser-install            fetch the browser again (pine init and pine update do this)
 
@@ -108,7 +109,7 @@ function parseArgs(argv: string[]) {
 		const a = argv[i];
 		if (a === "-f") flags.follow = true;
 		else if (a.startsWith("--no-")) flags[a.slice(5)] = false;
-		else if (a.startsWith("--")) flags[a.slice(2)] = argv[i + 1] !== undefined && !argv[i + 1].startsWith("--") && !["follow", "json", "api-key", "oauth", "taints", "offline", "always", "separate", "fresh", "global", "yes", "keep-files", "network", "keep", "detach-stdin"].includes(a.slice(2)) ? argv[++i] : true;
+		else if (a.startsWith("--")) flags[a.slice(2)] = argv[i + 1] !== undefined && !argv[i + 1].startsWith("--") && !["follow", "json", "api-key", "oauth", "taints", "offline", "always", "separate", "fresh", "global", "yes", "keep-files", "network", "keep", "detach-stdin", "next", "release", "check"].includes(a.slice(2)) ? argv[++i] : true;
 		else rest.push(a);
 	}
 	return { flags, rest };
@@ -447,14 +448,15 @@ async function main(): Promise<void> {
 	if (cmd === "browser-install") process.exit(await installBrowser());
 
 	if (cmd === "version" || flags.version === true) {
-		const { installed } = await import("./update.ts");
+		const { channelOf, installed, notedChannel } = await import("./update.ts");
 		const me = installed();
-		return out(`pine ${me.version} (${me.kind === "checkout" ? `checkout in ${me.root}` : me.kind === "global" ? "installed with npm" : me.kind === "app" ? "came with the Pine app" : `a dependency in ${me.root}`})`);
+		const previews = (me.kind === "global" || me.kind === "local") && channelOf(me.version, notedChannel(home)) === "next" ? ", follows previews" : "";
+		return out(`pine ${me.version} (${me.kind === "checkout" ? `checkout in ${me.root}` : me.kind === "global" ? "installed with npm" : me.kind === "app" ? "came with the Pine app" : `a dependency in ${me.root}`}${previews})`);
 	}
 
 	if (cmd === "update") {
 		const { update } = await import("./update.ts");
-		process.exit(await update({ check: flags.check === true, out, browser: !process.env.PINE_SKIP_DOWNLOADS }));
+		process.exit(await update({ check: flags.check === true, out, browser: !process.env.PINE_SKIP_DOWNLOADS, home, channel: flags.next === true ? "next" : flags.release === true ? "release" : undefined }));
 	}
 
 	if (cmd === "dev-model") {

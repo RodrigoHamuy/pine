@@ -222,8 +222,21 @@ What is being worked on is published ahead of a release, as a preview: a version
 | `@pmndre/pine@next` | The newest preview: `npm install -g @pmndre/pine@next`. It can be older than the last release when nothing new is being tried |
 | `@pmndre/pine` | The last release, as always: `npm install -g @pmndre/pine` goes back to it |
 
-A pine that is a preview stays on previews: `pine update` installs the newest one, or the
-release once that has passed it. Previews are for npm only; the Pine app is built for releases.
+Which of the two a pine follows is a choice that is kept: `pine update` stays on it.
+
+| | |
+|---|---|
+| `pine update --next` | Follow previews from now on. Installs the newest preview, or the last release when that has passed it |
+| `pine update --release` | Follow releases again. A preview that is installed stays until the next release; nothing is taken back by itself |
+
+A pine that was installed from `@next` follows previews without being told: the first
+`pine update` sees that it is a preview and keeps that. It still follows previews after it was
+moved to a release that passed them, so the previews of the release after that are offered
+too. Everything that is in a preview goes into the release it leads up to.
+
+The choice is kept in pine's home (`data/update-channel`), and `pine version` says "follows
+previews" when it is so. A checkout follows the branch it is on instead. Previews are for npm
+only; the Pine app is built for releases.
 
 A pine that is running keeps the old version until it is restarted: quit the terminal UI and
 open it again, or restart the daemon (if it runs at login as a LaunchAgent:
@@ -242,7 +255,7 @@ What you type in a shell. Every command is the `pine` program with a word after 
 | `pine login <provider>`, `pine logout <provider>` | Sign in to a model provider. `--api-key` or `--oauth` force the kind of sign-in |
 | `pine model add <name> <address>`, `pine model list`, `pine model remove <name>` | Add a model server of your own by its address, list them, take one out. `--context <tokens>`, `--reasoning`, `--no-reasoning` for what the server does not say. See "With a model server of your own" |
 | `pine init [dir] [--yes]` | Set pine up: a home directory from the example, the browser its web tools drive and, on Linux, the sandbox (asks before running anything as administrator; `--yes` skips the question). Safe to run again |
-| `pine update [--check]` | Bring pine up to date. `--check` only says whether there is something newer. See "Updating" |
+| `pine update [--check]` | Bring pine up to date. `--check` only says whether there is something newer. `--next` and `--release` choose between previews and releases, and the choice is kept. See "Updating" |
 | `pine version`, `pine --version` | Which version this is and how it is installed |
 | `pine help`, `pine --help` | Prints the list of commands |
 | `pine browser-install` | Fetch the browser again. `pine init` and `pine update` do this already |
