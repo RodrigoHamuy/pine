@@ -2,6 +2,10 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+/* Streamdown draws answers with utilities of its own, which Tailwind finds only where it is told to look. */
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+
 /* Dark is a class on the root element, which theme.ts keeps in step with the system's appearance. */
 @custom-variant dark (&:is(.dark *));
 

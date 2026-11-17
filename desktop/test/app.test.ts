@@ -314,7 +314,7 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	const steps = [{ tools: [{ name: "read", args: { path: "notes.md" } }], text: "Let me look at the notes first." }, { text: "The notes say **first line**.\n\n```ts\nconst a = 1;\n```\n\n<details><summary>Full file</summary>\n\nfirst line\n\n</details>\n\n[the docs](https://example.com/docs)" }];
 	await page.fill(".composer textarea", mockMsg(steps, "What do the notes say? "));
 	await page.keyboard.press("Enter");
-	await sees(".md strong");
+	await sees('.md [data-streamdown="strong"]');
 	assert.match(await page.textContent(".md"), /first line/);
 	// The work of the turn (what it said on the way, and the tool call) is one line, which a click opens.
 	await page.waitForFunction(() => /1 tool call · read/.test(document.querySelector(".work-head")?.textContent ?? ""));
@@ -323,23 +323,72 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	await sees(".work .part .tool");
 	assert.equal(await page.textContent(".work .part .tool"), "read");
 	// A link says where it leads, and is not an address the page itself would follow.
-	assert.equal(await page.textContent(".md-link"), "the docs");
-	assert.match(await page.textContent(".md-link + .md-target"), /example\.com\/docs/);
-	assert.equal(await page.getAttribute(".md-link", "href"), null);
+	assert.equal(await page.textContent(".md [data-href]"), "the docs");
+	assert.equal(await page.getAttribute(".md [data-href]", "data-href"), "https://example.com/docs");
+	assert.match(await page.textContent(".md [data-href] + [data-target]"), /example\.com\/docs/);
+	assert.equal(await page.$$eval(".md a[href]", (els: Element[]) => els.length), 0);
 	// A folded part is there and closed.
 	assert.equal(await page.$eval(".md details", (d: HTMLDetailsElement) => d.open), false);
-	assert.ok(await page.$(".md-code .hljs-keyword"));
+	// Code is coloured on the page, with its language and a copy button, and nothing to download.
+	await page.waitForFunction(() => document.querySelectorAll('.md [data-streamdown="code-block"] span[style]').length > 0);
+	assert.match(await page.textContent('.md [data-streamdown="code-block-header"]'), /ts/);
+	assert.ok(await page.$('.md [data-streamdown="code-block"] button[title="Copy Code"], .md [data-streamdown="code-block"] button[aria-label="Copy Code"]'));
+	assert.equal(await page.$$eval('.md [data-streamdown="code-block"] button[title*="ownload"], .md [data-streamdown="code-block"] button[aria-label*="ownload"]', (els: Element[]) => els.length), 0);
 	await shot("02-answer");
 });
 
-test("what an answer points at on the web is not fetched by itself", async () => {
-	await page.fill(".composer textarea", mockMsg([{ text: 'Look: ![a cat](https://example.com/cat.png)\n\n<img src="https://example.com/dog.png">\n\n<script>window.hacked = 1</script><a href="javascript:window.hacked=2">x</a>' }], "pictures "));
+test("what an answer points at on the web is not fetched by itself, and what it writes as HTML is cleaned", async () => {
+	// A picture the page tried to load from an address the policy refuses would be said here.
+	await page.evaluate(() => {
+		(window as any).refused = [];
+		document.addEventListener("securitypolicyviolation", (e) => (window as any).refused.push(e.blockedURI));
+	});
+	const dot = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+	const text = [
+		"Look: ![a cat](https://example.com/cat.png)",
+		'<img src="https://example.com/dog.png">',
+		`A dot: ![dot](data:image/png;base64,${dot})`,
+		"In the workspace: ![the plan](plan.png)",
+		'<script>window.hacked = 1</script><a href="javascript:window.hacked=2">x</a> and [y](javascript:window.hacked=3)',
+		'<div style="color: red" class="evil" id="evil" data-x="1" aria-label="evil" onclick="window.hacked=4">styled</div>',
+		'<style>body { display: none }</style><form action="https://example.com"><input name="q"><button>go</button></form>',
+		'<iframe src="https://example.com"></iframe><svg><circle r="5"></circle></svg><video src="https://example.com/v.mp4"></video><object data="x"></object>',
+		"| a | b |\n|---|---|\n| 1 | 2 |",
+	].join("\n\n");
+	await page.fill(".composer textarea", mockMsg([{ text }], "pictures "));
 	await page.keyboard.press("Enter");
-	await sees(".md-remote");
-	assert.equal(await page.$$eval(".md img", (els: Element[]) => els.length), 0);
-	assert.equal(await page.$$eval(".md-remote", (els: Element[]) => els.length), 2);
+	await sees(".md [data-remote]");
+	const md = page.locator(".md", { hasText: "A dot" }).last();
+	// A picture on the web is a line to click, with its address, and the page asks for nothing.
+	assert.equal(await md.locator("[data-remote]").count(), 2);
+	assert.match(await md.locator("[data-remote]").first().textContent(), /Load picture · https:\/\/example\.com\/cat\.png/);
+	assert.equal(await md.locator('img[src^="http"]').count(), 0);
+	// A small picture in the text itself is shown, and one in the workspace comes from the daemon.
+	assert.equal(await md.locator('img[src^="data:image/png"]').count(), 1);
+	assert.match((await md.locator('img[alt="the plan"]').getAttribute("src")) ?? "", /^pine-media:\/\/daemon\/.*plan\.png/);
+	// Nothing to download a picture with.
+	assert.equal(await md.locator('button[title*="ownload"], button[aria-label*="ownload"]').count(), 0);
+	// What could act or restyle is gone, and the words stay.
 	assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
-	assert.equal(await page.$$eval(".md script, .md a[href]", (els: Element[]) => els.length), 0);
+	assert.equal(await md.locator("script, style, form, input, button:not([data-remote]), iframe, svg, video, object, a[href]").count(), 0);
+	assert.equal(await md.locator('[class~="evil"], #evil, [data-x], [aria-label="evil"], [onclick]').count(), 0);
+	assert.equal(await md.getByText("styled", { exact: true }).evaluate((el: HTMLElement) => el.getAttribute("style")), null);
+	assert.doesNotMatch(await md.textContent(), /display: none/);
+	// A table is kept in a box of its own that scrolls sideways.
+	assert.equal(await md.locator("table").evaluate((t: HTMLElement) => getComputedStyle(t.parentElement!).overflowX), "auto");
+	assert.deepEqual(await page.evaluate(() => (window as any).refused), []);
+	await shot("02b-pictures");
+});
+
+test("a folded part that was opened stays open while the answer goes on", async () => {
+	const text = "<details><summary>More</summary>\n\nhidden part\n\n</details>\n\n" + "and the answer goes on. ".repeat(40);
+	await page.fill(".composer textarea", mockMsg([{ text, chunkDelayMs: 40 }], "fold "));
+	await page.keyboard.press("Enter");
+	await sees(".md-live details summary");
+	await page.click(".md-live details summary");
+	await page.waitForSelector(".md details[open]");
+	await page.waitForFunction(() => !document.querySelector(".md-live"), undefined, { timeout: 20_000 });
+	assert.equal(await page.locator(".md", { hasText: "hidden part" }).last().locator("details").evaluate((d: HTMLDetailsElement) => d.open), true);
 });
 
 test("an approval is asked in a dialog and answered from it, and so is a question", async () => {
