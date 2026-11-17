@@ -651,7 +651,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// Signed out again, that model cannot answer: the page says so for each agent it leaves without
 	// one, and so does the welcome of such an agent's conversation, with the way to this page.
 	const signedIn = page.locator(".item", { has: page.locator(".tag.mono", { hasText: /^opencode$/ }) }).first();
-	await signedIn.locator("[data-slot=button] >> text=Sign out").click();
+	await signedIn.locator("[data-slot=alert-dialog-trigger] >> text=Sign out").click();
 	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=/^Sign out of /");
 	await page.click("[data-slot=alert-dialog-action] >> text=Sign out");
 	await sees(".item .notice >> text=/main cannot answer: .* needs a sign-in to opencode/");
@@ -683,15 +683,15 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 		await shot("09-settings-mcp-sign-in");
 		assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"notes"/);
 		// And taken out again: the file is as it was.
-		await server.locator("[data-slot=button] >> text=Remove").click();
+		await server.locator("[data-slot=alert-dialog-trigger] >> text=Remove").click();
 		await sees("[role=alertdialog] >> text=Remove the MCP server notes?");
 		// Asked in an alert dialog, announced by its question; Escape closes it onto the button, and nothing is removed.
 		assert.equal(await announced("[role=alertdialog]"), "Remove the MCP server notes?");
 		await page.keyboard.press("Escape");
 		await page.waitForSelector("[role=alertdialog]", { state: "detached" });
-		assert.equal(await server.locator("[data-slot=button] >> text=Remove").evaluate((b: Element) => b === document.activeElement), true);
+		assert.equal(await server.locator("[data-slot=alert-dialog-trigger] >> text=Remove").evaluate((b: Element) => b === document.activeElement), true);
 		assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"notes"/);
-		await server.locator("[data-slot=button] >> text=Remove").click();
+		await server.locator("[data-slot=alert-dialog-trigger] >> text=Remove").click();
 		await sees("[role=alertdialog] >> text=Remove the MCP server notes?");
 		await page.click("[data-slot=alert-dialog-action] >> text=Remove");
 		await server.waitFor({ state: "detached", timeout: 15_000 });

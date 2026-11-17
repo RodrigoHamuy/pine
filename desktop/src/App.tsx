@@ -261,7 +261,7 @@ function TitleBar() {
  * the line it picks by itself when the list is drawn or the text changes is shown but never named.
  * So once the list is drawn (`redo` changed) the line is chosen again as the pointer would choose it:
  * `start` the first time, then the first line. The value is let go of first, since cmdk ignores a
- * choice of the line it already has: both in one go, so that no key can come between.
+ * choice of the line it already has: both drawn at once, so that no key comes between.
  */
 function useActiveLine(root: React.RefObject<HTMLDivElement | null>, redo: unknown, start?: string) {
 	const [value, setValue] = useState(start ?? "");
@@ -272,7 +272,7 @@ function useActiveLine(root: React.RefObject<HTMLDivElement | null>, redo: unkno
 		const frame = requestAnimationFrame(() => {
 			flushSync(() => setValue(""));
 			const line = root.current?.querySelector(target === undefined ? "[cmdk-item]" : `[cmdk-item][data-value="${CSS.escape(target)}"]`);
-			line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+			flushSync(() => line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true })));
 		});
 		return () => cancelAnimationFrame(frame);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
