@@ -123,6 +123,15 @@ test("starts a daemon of its own and shows the main agent", async () => {
 		return { top: tab.top - row.top, bottom: row.bottom - tab.bottom, left: tab.left - row.left };
 	});
 	assert.ok(room.top >= 1 && room.bottom >= 1 && room.left >= 1, `the row cuts off the line around the tab in front: ${JSON.stringify(room)}`);
+	// At the foot of the side bar the dot of the status stands under the icons of the rows above
+	// it, and what is written beside it under their names.
+	const foot = await page.evaluate(() => {
+		const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
+		const middle = (r: DOMRect) => r.left + r.width / 2;
+		return { icon: middle(box(".side-foot .side-row .icon")), dot: middle(box(".side-status .dot")), name: box(".side-foot .side-row .grow").left, status: box(".side-status .cut").left };
+	});
+	assert.equal(foot.dot, foot.icon, `the dot of the status is not under the icons above it: ${JSON.stringify(foot)}`);
+	assert.equal(foot.status, foot.name, `the status is not written under the names above it: ${JSON.stringify(foot)}`);
 	await shot("01-welcome");
 });
 

@@ -364,6 +364,11 @@ html:not([data-platform="darwin"]) .side-top {
 	font-size: 11.5px;
 	color: var(--faint);
 }
+/* The dot stands in the place of the icons in the rows above it (14px wide): its middle under
+   theirs, and what is written beside it under their names. */
+.side-status .dot {
+	margin: 0 3.5px;
+}
 .dot {
 	width: 7px;
 	height: 7px;
