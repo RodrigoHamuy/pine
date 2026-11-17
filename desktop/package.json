@@ -32,6 +32,8 @@
     "@codemirror/search": "^6.5.0",
     "@codemirror/state": "^6.5.0",
     "@codemirror/view": "^6.36.0",
+    "@emnapi/core": "^1.11.3",
+    "@emnapi/runtime": "^1.11.3",
     "@lezer/highlight": "^1.2.0",
     "@storybook/react-vite": "^10.6.7",
     "@types/node": "^26.6.6",
