@@ -1,10 +1,13 @@
 // The agent, beside its conversation: who it is, what it runs on, what it is doing, and what it
 // has been given (what it listens to, its schedules, skills and servers, what it remembers).
 // A conversation in pine is a conversation with an agent; this is the agent.
+import { CheckIcon, CpuIcon, SettingsIcon, ShieldIcon, SparkleIcon, BookIcon, ClockIcon, PlugIcon, ZapIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
-import { Button, Icon, Pulse, useLoad } from "./ui.tsx";
+import { Pulse, useLoad } from "./ui.tsx";
 
 function Section({ title, count, children, action }: { title: string; count?: number; children: React.ReactNode; action?: React.ReactNode }) {
 	return (
@@ -20,9 +23,9 @@ function Section({ title, count, children, action }: { title: string; count?: nu
 	);
 }
 
-const Line = ({ icon, name, about, tag, run }: { icon: string; name: string; about?: string; tag?: string; run?: () => void }) => (
+const Line = ({ icon: Icon, name, about, tag, run }: { icon: LucideIcon; name: string; about?: string; tag?: string; run?: () => void }) => (
 	<div className={`agent-line${run ? " click" : ""}`} onClick={run} title={about}>
-		<Icon name={icon} size={13} className="faint" />
+		<Icon size={13} className="faint" />
 		<span className="name">{name}</span>
 		<span className="about cut">{about}</span>
 		{tag ? <span className="tag">{tag}</span> : null}
@@ -58,12 +61,12 @@ export function AgentView({ tab }: { tab: Tab }) {
 					<div className="agent-name">{tab.agent}{info.main ? <span className="tag good">main</span> : null}</div>
 					<div className="muted">{info.description || "no description"}</div>
 				</div>
-				<Button small icon="gear" onClick={() => s.openSettings("agents", tab.agent)}>Settings</Button>
+				<Button variant="outline" size="xs" onClick={() => s.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Settings</Button>
 			</div>
 			<div className="facts" style={{ padding: "0 14px" }}>
-				<button type="button" className="fact click" title="The model it runs on" onClick={() => void s.pickModel(tab)}><Icon name="cpu" size={12} /><b>{info.model}</b></button>
-				<button type="button" className="fact click" title="How much its model thinks before it answers" onClick={() => void s.pickReasoning(tab)}><Icon name="spark" size={12} />reasoning <b>{info.thinking}</b></button>
-				<button type="button" className="fact click" title={mode?.about} onClick={() => void s.pickMode(tab)}><Icon name="shield" size={12} /><b>{info.mode}</b>{info.mode === "auto" || info.mode === "bypass" ? "your account" : "in its sandbox"}</button>
+				<button type="button" className="fact click" title="The model it runs on" onClick={() => void s.pickModel(tab)}><CpuIcon size={12} /><b>{info.model}</b></button>
+				<button type="button" className="fact click" title="How much its model thinks before it answers" onClick={() => void s.pickReasoning(tab)}><SparkleIcon size={12} />reasoning <b>{info.thinking}</b></button>
+				<button type="button" className="fact click" title={mode?.about} onClick={() => void s.pickMode(tab)}><ShieldIcon size={12} /><b>{info.mode}</b>{info.mode === "auto" || info.mode === "bypass" ? "your account" : "in its sandbox"}</button>
 				{info.delegates.length ? <span className="fact" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></span> : null}
 			</div>
 
@@ -72,7 +75,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					{tab.busy ? <div className="agent-line"><Pulse size={11} /><span className="name">this conversation</span><span className="about cut">{tab.thinking ? "thinking" : "working"}{tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}</span></div> : null}
 					{helpers.map(([id, c]) => (
 						<div key={id} className="agent-line click" onClick={() => void s.openTask(id)}>
-							{c.running ? <Pulse size={11} /> : <Icon name="check" size={13} className="faint" />}
+							{c.running ? <Pulse size={11} /> : <CheckIcon size={13} className="faint" />}
 							<span className="name">{c.agent}</span>
 							<span className="about cut">{childKind(c.kind)} #{id}: {c.label}</span>
 							<span className="tag">open</span>
@@ -83,23 +86,23 @@ export function AgentView({ tab }: { tab: Tab }) {
 			) : null}
 
 			{sources.data ? (
-				<Section title="Listens to" count={listens.length} action={<Button small variant="ghost" onClick={() => s.openSettings("events")}>Events</Button>}>
-					{listens.length ? listens.map((x) => <Line key={x.name} icon="bolt" name={x.name} about={(x.local ?? x.agent ?? x.global)?.note || x.description || x.type} tag={x.local ? "this conversation" : x.agent ? "as an agent" : "all agents"} />) : <div className="agent-none">Nothing wakes it by itself.{could > 0 ? ` ${could} event source${could === 1 ? "" : "s"} could: ask it to watch one, or subscribe it under Events.` : " Ask it to watch something (“tell me when a file lands in ~/Scans”)."}</div>}
+				<Section title="Listens to" count={listens.length} action={<Button variant="ghost" size="xs" onClick={() => s.openSettings("events")}>Events</Button>}>
+					{listens.length ? listens.map((x) => <Line key={x.name} icon={ZapIcon} name={x.name} about={(x.local ?? x.agent ?? x.global)?.note || x.description || x.type} tag={x.local ? "this conversation" : x.agent ? "as an agent" : "all agents"} />) : <div className="agent-none">Nothing wakes it by itself.{could > 0 ? ` ${could} event source${could === 1 ? "" : "s"} could: ask it to watch one, or subscribe it under Events.` : " Ask it to watch something (“tell me when a file lands in ~/Scans”)."}</div>}
 				</Section>
 			) : null}
 			{schedules.data ? (
 				<Section title="Schedules" count={timed.length}>
-					{timed.length ? timed.map((x) => <Line key={`${x.scope}:${x.name}`} icon="clock" name={x.name} about={`${x.when}${x.task ? ` · ${oneLine(x.task)}` : ""}`} tag={x.scope === "global" ? "all agents" : x.session && x.session !== "main" ? x.session : undefined} />) : <div className="agent-none">Nothing is scheduled. Ask it (“every morning at seven …”).</div>}
+					{timed.length ? timed.map((x) => <Line key={`${x.scope}:${x.name}`} icon={ClockIcon} name={x.name} about={`${x.when}${x.task ? ` · ${oneLine(x.task)}` : ""}`} tag={x.scope === "global" ? "all agents" : x.session && x.session !== "main" ? x.session : undefined} />) : <div className="agent-none">Nothing is scheduled. Ask it (“every morning at seven …”).</div>}
 				</Section>
 			) : null}
 			{skills.data ? (
-				<Section title="Skills" count={knows.length} action={<Button small variant="ghost" onClick={() => s.openSettings("skills")}>Skills</Button>}>
-					{knows.length ? knows.map((x) => <Line key={x.dir} icon="book" name={x.name} about={x.description} tag={x.scope === "global" ? "all agents" : x.scope === "local" ? "this conversation" : undefined} />) : <div className="agent-none">No skills yet. Ask it to “make a skill for this”.</div>}
+				<Section title="Skills" count={knows.length} action={<Button variant="ghost" size="xs" onClick={() => s.openSettings("skills")}>Skills</Button>}>
+					{knows.length ? knows.map((x) => <Line key={x.dir} icon={BookIcon} name={x.name} about={x.description} tag={x.scope === "global" ? "all agents" : x.scope === "local" ? "this conversation" : undefined} />) : <div className="agent-none">No skills yet. Ask it to “make a skill for this”.</div>}
 				</Section>
 			) : null}
 			{servers.data ? (
-				<Section title="MCP servers" count={tools.length} action={<Button small variant="ghost" onClick={() => s.openSettings("mcp")}>Servers</Button>}>
-					{tools.length ? tools.map((x) => <Line key={`${x.scope}:${x.name}`} icon="plug" name={x.name} about={x.target} tag={x.scope === "global" ? "all agents" : x.session ? "this conversation" : undefined} />) : <div className="agent-none">No MCP servers.</div>}
+				<Section title="MCP servers" count={tools.length} action={<Button variant="ghost" size="xs" onClick={() => s.openSettings("mcp")}>Servers</Button>}>
+					{tools.length ? tools.map((x) => <Line key={`${x.scope}:${x.name}`} icon={PlugIcon} name={x.name} about={x.target} tag={x.scope === "global" ? "all agents" : x.session ? "this conversation" : undefined} />) : <div className="agent-none">No MCP servers.</div>}
 				</Section>
 			) : null}
 			{memory !== undefined ? (

@@ -2,6 +2,9 @@
 // with an editor, what changed in the folder (git), what the last message changed, what the
 // agent's tool calls printed, and what its commands left running. Everything is read through the control API; a file is written through it too, by
 // the daemon, inside a sandbox that reaches only this folder.
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
@@ -24,7 +27,7 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { Button, Confirm, Empty, Icon, Segmented, Pulse, useLoad } from "./ui.tsx";
+import { Confirm, Empty, Pulse, useLoad } from "./ui.tsx";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -164,16 +167,16 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		const prefix = top && root && root !== top && root.startsWith(`${top}/`) ? `${root.slice(top.length + 1)}/` : "";
 		return prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
 	};
-	if (list.error) return <Empty icon={turn ? "undo" : "branch"} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</Empty>;
+	if (list.error) return <Empty icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</Empty>;
 	if (!data) return <Empty title=""><Pulse /></Empty>;
-	if (!turn && !data.repo) return <Empty icon="branch" title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</Empty>;
+	if (!turn && !data.repo) return <Empty icon={GitBranchIcon} title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</Empty>;
 	if (file)
 		return (
 			<>
 				<div className="code-sub">
-					<Button small variant="ghost" icon="back" onClick={() => setFile(undefined)} title="Back to the list" />
+					<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} title="Back to the list"><ChevronLeftIcon /></Button>
 					<span className="cut grow mono" title={file}>{file}</span>
-					<Button small variant="ghost" icon="edit" onClick={() => openFile(inFolder(file))}>Edit</Button>
+					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
 				<div className="code-body">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className="out">… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</div>
 			</>
@@ -181,12 +184,12 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 	return (
 		<>
 			<div className="code-sub">
-				{turn ? <><Icon name="undo" size={13} /><span className="cut grow">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button small onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><Icon name="branch" size={13} /><span className="cut grow">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
-				<Button small variant="ghost" icon="refresh" onClick={list.reload} title="Read again" />
+				{turn ? <><Undo2Icon size={13} /><span className="cut grow">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon size={13} /><span className="cut grow">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
+				<Button variant="ghost" size="icon-xs" onClick={list.reload} title="Read again"><RotateCwIcon /></Button>
 			</div>
 			<div className="code-body">
 				{data.note ? <div className="out">{data.note}</div> : null}
-				{data.files.length ? data.files.map((c) => <ChangeRow key={c.path} c={c} on={false} pick={() => setFile(c.path)} />) : <Empty icon="check" title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
+				{data.files.length ? data.files.map((c) => <ChangeRow key={c.path} c={c} on={false} pick={() => setFile(c.path)} />) : <Empty icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
 				{data.more ? <div className="out">… and more.</div> : null}
 			</div>
 		</>
@@ -217,7 +220,7 @@ function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: n
 	}, [tab.key, dir, tick]);
 	const entries = state.dirs.get(dir);
 	if (!entries) return depth ? null : <Empty title=""><Pulse /></Empty>;
-	if (!entries.length && !depth) return <Empty icon="folder" title="This folder is empty" />;
+	if (!entries.length && !depth) return <Empty icon={FolderIcon} title="This folder is empty" />;
 	return (
 		<>
 			{entries.map((e) => {
@@ -235,8 +238,8 @@ function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: n
 								redraw((n) => n + 1);
 							}}
 						>
-							{e.dir ? <Icon name={open ? "down" : "right"} size={11} className="faint" /> : <span style={{ width: 11 }} />}
-							<Icon name={e.dir ? "folder" : "file"} size={13} className="faint" />
+							{e.dir ? (open ? <ChevronDownIcon size={11} className="faint" /> : <ChevronRightIcon size={11} className="faint" />) : <span style={{ width: 11 }} />}
+							{e.dir ? <FolderIcon size={13} className="faint" /> : <FileIcon size={13} className="faint" />}
 							<span className="cut grow">{e.name}</span>
 							{!e.dir ? <span className="faint" style={{ fontSize: 11 }}>{size(e.size)}</span> : null}
 						</div>
@@ -283,11 +286,11 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	return (
 		<>
 			<div className="code-sub">
-				<Button small variant="ghost" icon="back" onClick={() => (dirty && !window.confirm(`Leave ${file} without saving what you typed?`) ? undefined : close())} title="Back to the files" />
+				<Button variant="ghost" size="icon-xs" onClick={() => (dirty && !window.confirm(`Leave ${file} without saving what you typed?`) ? undefined : close())} title="Back to the files"><ChevronLeftIcon /></Button>
 				<span className="cut grow mono" title={file}>{file}{dirty ? <span style={{ color: "var(--warn)" }}> ●</span> : null}</span>
 				{disk.data?.truncated ? <span className="tag warn">too large to edit</span> : null}
-				{root ? <Button small variant="ghost" icon="external" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)} /> : null}
-				{kind || disk.data?.binary ? null : <Button small variant={dirty ? "primary" : "ghost"} icon="save" disabled={!dirty || saving} onClick={() => void save()}>Save</Button>}
+				{root ? <Button variant="ghost" size="icon-xs" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button> : null}
+				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
 			</div>
 			{changedOnDisk ? (
 				<div className="banner warn" style={{ margin: 8 }}>
@@ -299,11 +302,11 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				{kind ? (
 					<div className="it-media" style={{ padding: 14 }}>{kind === "image" ? <img src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
 				) : disk.error ? (
-					<Empty icon="file" title="This file cannot be shown">{disk.error}</Empty>
+					<Empty icon={FileIcon} title="This file cannot be shown">{disk.error}</Empty>
 				) : !disk.data ? (
 					<Empty title=""><Pulse /></Empty>
 				) : disk.data.binary ? (
-					<Empty icon="file" title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
+					<Empty icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
 				) : (
 					<Editor file={file} text={dirty ? draft! : (base ?? text ?? "")} readOnly={disk.data.truncated} onChange={setDraft} onSave={() => void save()} />
 				)}
@@ -322,13 +325,13 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 	return (
 		<>
 			<div className="code-sub">
-				<Icon name="search" size={13} />
+				<SearchIcon size={13} />
 				<input className="grow" style={{ border: "none", outline: "none", background: "transparent", userSelect: "text" }} placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
-				<Button small variant="ghost" icon="refresh" onClick={() => setTick((n) => n + 1)} title="Read again" />
+				<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} title="Read again"><RotateCwIcon /></Button>
 			</div>
 			<div className="code-body">
 				{query.trim() ? (
-					found.data?.length ? found.data.map((f) => <div key={f} className="frow" onClick={() => setFile(f)}><Icon name="file" size={13} className="faint" /><span className="cut">{f}</span></div>) : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
+					found.data?.length ? found.data.map((f) => <div key={f} className="frow" onClick={() => setFile(f)}><FileIcon size={13} className="faint" /><span className="cut">{f}</span></div>) : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
 				) : (
 					<Tree tab={tab} dir="" depth={0} pick={setFile} tick={tick} />
 				)}
@@ -350,16 +353,16 @@ function Output({ tab }: { tab: Tab }) {
 	}, [tab.key, tab.codeTick]);
 	const [open, setOpen] = useState<string>();
 	if (!calls.data) return <Empty title="">{calls.error ?? <Pulse />}</Empty>;
-	if (!calls.data.length) return <Empty icon="terminal" title="No tool calls yet">What the agent's commands and tools print appears here.</Empty>;
+	if (!calls.data.length) return <Empty icon={SquareTerminalIcon} title="No tool calls yet">What the agent's commands and tools print appears here.</Empty>;
 	const shown = calls.data.find((c) => `${c.task}:${c.n}` === open);
 	if (shown)
 		return (
 			<>
 				<div className="code-sub">
-					<Button small variant="ghost" icon="back" onClick={() => setOpen(undefined)} />
+					<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)}><ChevronLeftIcon /></Button>
 					<span className="mono">{shown.entry.tool}</span>
 					<span className="cut grow mono faint">{shown.entry.subject}</span>
-					<Button small variant="ghost" icon="copy" title="Copy the output" onClick={() => void navigator.clipboard.writeText(shown.entry.result ?? "")} />
+					<Button variant="ghost" size="icon-xs" title="Copy the output" onClick={() => void navigator.clipboard.writeText(shown.entry.result ?? "")}><CopyIcon /></Button>
 				</div>
 				<div className="code-body">
 					<div className="out" style={shown.entry.ok === false ? { color: "var(--bad)" } : undefined}>{shown.entry.result || "(it printed nothing)"}</div>
@@ -383,7 +386,7 @@ function Output({ tab }: { tab: Tab }) {
 
 /** What the conversation's commands left running, and the way to stop each. */
 function Running({ tab }: { tab: Tab }) {
-	if (!tab.programs.length) return <Empty icon="play" title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</Empty>;
+	if (!tab.programs.length) return <Empty icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</Empty>;
 	return (
 		<div className="code-body">
 			{tab.programs.map((p) => (
@@ -444,21 +447,22 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			/>
 			<div className="code" style={{ width }}>
 				<div className="code-head">
-					<Segmented
-						value={view}
-						onChange={setView}
-						options={[
-							{ value: "agent", label: "Agent" },
-							{ value: "files", label: "Files" },
-							{ value: "changes", label: "Changes" },
-							{ value: "turn", label: "Last turn" },
-							{ value: "browser", label: "Browser" },
-							{ value: "output", label: "Output" },
-							{ value: "running", label: "Running", badge: tab.programs.length || undefined },
-						]}
-					/>
+					<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+						<TabsList variant="line" activateOnFocus className="max-w-full overflow-x-auto">
+							<TabsTrigger value="agent">Agent</TabsTrigger>
+							<TabsTrigger value="files">Files</TabsTrigger>
+							<TabsTrigger value="changes">Changes</TabsTrigger>
+							<TabsTrigger value="turn">Last turn</TabsTrigger>
+							<TabsTrigger value="browser">Browser</TabsTrigger>
+							<TabsTrigger value="output">Output</TabsTrigger>
+							<TabsTrigger value="running">
+								Running
+								{tab.programs.length ? <span className="badge">{tab.programs.length}</span> : null}
+							</TabsTrigger>
+						</TabsList>
+					</Tabs>
 					<span className="grow" />
-					<Button small variant="ghost" icon="x" title="Close the panel" onClick={() => void store.command("code")} />
+					<Button variant="ghost" size="icon-xs" title="Close the panel" onClick={() => void store.command("code")}><XIcon /></Button>
 				</div>
 				{steps ? <div className="code-steps"><Steps items={steps} /></div> : null}
 				{view === "agent" ? (

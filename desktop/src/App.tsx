@@ -1,6 +1,10 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, ListIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AgentInfo, api, type Approval, type Conversation as Conv } from "./api.ts";
 import { bridge } from "./bridge.ts";
@@ -11,7 +15,7 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Confirm, Dialog, Icon, Logo, Pulse } from "./ui.tsx";
+import { Confirm, Dialog, Logo, Pulse } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -43,8 +47,8 @@ function Gate() {
 						<p>pine keeps its agents, their workspaces and its settings in a home folder ({s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).</p>
 						{s.initLines.length ? <pre className="log" style={{ width: "100%" }}>{s.initLines.slice(-40).join("\n")}</pre> : null}
 						<div className="row">
-							<Button variant="primary" disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Pulse size={12} /> Setting up…</> : "Set up pine"}</Button>
-							<Button disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
+							<Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Pulse size={12} /> Setting up…</> : "Set up pine"}</Button>
+							<Button variant="outline" disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
 						</div>
 					</>
 				) : state.status === "error" ? (
@@ -52,8 +56,8 @@ function Gate() {
 						<h1>{state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : "pine did not start"}</h1>
 						<p>{state.message}</p>
 						<div className="row">
-							<Button variant="primary" onClick={() => void bridge.retry()}>Try again</Button>
-							{state.kind === "no-node" ? <Button onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
+							<Button onClick={() => void bridge.retry()}>Try again</Button>
+							{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
 						</div>
 					</>
 				) : (
@@ -102,12 +106,12 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
 		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
-			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
+			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <StarIcon size={12} className="faint" /> : c.folder ? <FolderIcon size={12} className="faint" /> : <MessageSquareIcon size={12} className="faint" />}</span>
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
 				<span className="acts" onClick={(e) => e.stopPropagation()}>
-					<Confirm icon="trash" label="Remove this conversation for good" sure="Remove?" onConfirm={() => void s.removeConversation(agent, c.session)} />
+					<Confirm icon={Trash2Icon} label="Remove this conversation for good" sure="Remove?" onConfirm={() => void s.removeConversation(agent, c.session)} />
 				</span>
 			)}
 		</div>
@@ -148,7 +152,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 	return (
 		<div className="side-group">
 			<div className="side-agent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onClick={() => s.toggleFold(a.id)} onContextMenu={(e) => (e.preventDefault(), void menu())}>
-				<Icon name={folded ? "right" : "down"} size={10} className="faint" />
+				{folded ? <ChevronRightIcon size={10} className="faint" /> : <ChevronDownIcon size={10} className="faint" />}
 				<span className="avatar">{a.id.slice(0, 1).toUpperCase()}</span>
 				<span className="who">
 					<span className="cut">{a.id}</span>
@@ -156,11 +160,11 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 				</span>
 				{waits ? <span className="needs">!</span> : working ? <Pulse size={11} /> : unread && folded ? <span className="dot unread" /> : null}
 				<span className="agent-acts" onClick={(e) => e.stopPropagation()}>
-					<Button small variant="ghost" icon="gear" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)} />
-					<Button small variant="ghost" icon="folder" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()} />
+					<Button variant="ghost" size="icon-xs" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></Button>
+					<Button variant="ghost" size="icon-xs" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()}><FolderIcon /></Button>
 				</span>
 				<span onClick={(e) => e.stopPropagation()}>
-					<Button small variant="ghost" icon="plus" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)} />
+					<Button variant="ghost" size="icon-xs" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)}><PlusIcon /></Button>
 				</span>
 			</div>
 			{folded ? null : rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
@@ -176,17 +180,17 @@ function Sidebar() {
 	return (
 		<aside className="sidebar">
 			<div className="side-top">
-				<Button variant="ghost" icon="sidebar" title="Hide the sidebar (⌘B)" onClick={() => void s.command("sidebar")} />
+				<Button variant="ghost" size="icon" title="Hide the sidebar (⌘B)" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button>
 			</div>
 			<div className="side-scroll">
-				<div className="side-row" onClick={() => void s.command("palette")} title="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page"><Icon name="search" size={14} /><span className="grow">Search</span><kbd>⌘K</kbd></div>
-				<div className="side-label">Agents<span className="grow" /><Button small variant="ghost" icon="plus" title="New agent" onClick={() => s.openSettings("agents", "+")} /></div>
+				<div className="side-row" onClick={() => void s.command("palette")} title="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page"><SearchIcon size={14} /><span className="grow">Search</span><kbd>⌘K</kbd></div>
+				<div className="side-label">Agents<span className="grow" /><Button variant="ghost" size="icon-xs" title="New agent" onClick={() => s.openSettings("agents", "+")}><PlusIcon /></Button></div>
 				{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}
 			</div>
 			<div className="side-foot">
-				{newer ? <div className="side-row side-update" onClick={() => void bridge.open(newer.url)} title={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}><Icon name="up" size={14} /><span className="grow cut">Pine {newer.version} is available</span><Icon name="external" size={12} /></div> : null}
-				<div className={`side-row${front?.kind === "events" ? " on" : ""}`} onClick={() => void s.openEvents()}><Icon name="wave" size={14} /><span className="grow">Events</span></div>
-				<div className={`side-row${front?.kind === "settings" ? " on" : ""}`} onClick={() => s.openSettings()}><Icon name="gear" size={14} /><span className="grow">Settings</span><kbd>⌘,</kbd></div>
+				{newer ? <div className="side-row side-update" onClick={() => void bridge.open(newer.url)} title={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}><ArrowUpIcon size={14} /><span className="grow cut">Pine {newer.version} is available</span><ExternalLinkIcon size={12} /></div> : null}
+				<div className={`side-row${front?.kind === "events" ? " on" : ""}`} onClick={() => void s.openEvents()}><AudioLinesIcon size={14} /><span className="grow">Events</span></div>
+				<div className={`side-row${front?.kind === "settings" ? " on" : ""}`} onClick={() => s.openSettings()}><SettingsIcon size={14} /><span className="grow">Settings</span><kbd>⌘,</kbd></div>
 				<div className="side-status" title={s.service.status === "ready" ? `${s.service.home} · ${s.service.started ? "started by this app" : "a pine that was already running"}` : ""}>
 					<span className={`dot ${!ready ? "warn" : s.connected ? "good" : "bad"}`} />
 					<span className="cut">{!ready ? "starting" : !s.connected ? "pine does not answer" : `pine${s.service.status === "ready" && s.service.version ? ` ${s.service.version}` : ""} · ${s.service.status === "ready" && s.service.started ? "started here" : "attached"}`}</span>
@@ -217,13 +221,13 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 		>
 			<span className="mark">
-				{tab.approvals.size ? <span className="needs">!</span> : tab.busy ? <Pulse size={11} /> : tab.unread ? <span className="dot unread" /> : tab.kind === "events" ? <Icon name="wave" size={12} /> : tab.kind === "settings" ? <Icon name="gear" size={12} /> : tab.kind === "task" ? <Icon name="list" size={12} /> : <span className="avatar small">{tab.agent.slice(0, 1).toUpperCase()}</span>}
+				{tab.approvals.size ? <span className="needs">!</span> : tab.busy ? <Pulse size={11} /> : tab.unread ? <span className="dot unread" /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <span className="avatar small">{tab.agent.slice(0, 1).toUpperCase()}</span>}
 			</span>
 			<span className="name">
 				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
 			</span>
-			{kept && tab.session !== "main" ? <Icon name="star" size={10} className="star" /> : null}
-			<span className="close" onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><Icon name="x" size={11} /></span>
+			{kept && tab.session !== "main" ? <StarIcon size={10} className="star" /> : null}
+			<span className="close" onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><XIcon size={11} /></span>
 		</div>
 	);
 }
@@ -233,11 +237,11 @@ function TitleBar() {
 	const with_ = s.agentInFront();
 	return (
 		<header className="titlebar">
-			{s.sidebar ? null : <Button variant="ghost" icon="sidebar" title="Show the sidebar (⌘B)" onClick={() => void s.command("sidebar")} />}
+			{s.sidebar ? null : <Button variant="ghost" size="icon" title="Show the sidebar (⌘B)" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button>}
 			<div className="tabs">
 				{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
 			</div>
-			<Button variant="ghost" icon="plus" title={with_ ? `New conversation with ${with_} (⌘T)` : "New conversation (⌘T): you are asked with which agent"} onClick={() => void s.newConversation()} />
+			<Button variant="ghost" size="icon" title={with_ ? `New conversation with ${with_} (⌘T)` : "New conversation (⌘T): you are asked with which agent"} onClick={() => void s.newConversation()}><PlusIcon /></Button>
 			<span className="grow" />
 		</header>
 	);
@@ -287,7 +291,7 @@ function PickDialog({ p }: { p: Picker }) {
 							<div key={i.value} className={`pick-item${n === at ? " on" : ""}${i.tone === "bad" ? " bad" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => p.done(i.value)}>
 								<span className="label">{i.label}</span>
 								{i.about ? <span className="about">{i.about}</span> : null}
-								{i.value === p.current ? <span className="cur"><Icon name="check" size={13} /></span> : null}
+								{i.value === p.current ? <span className="cur"><CheckIcon size={13} /></span> : null}
 							</div>
 						))}
 					</div>
@@ -427,14 +431,14 @@ function ApprovalDialog({ req }: { req: Approval }) {
 			tone="warn"
 			width={560}
 			onClose={() => s.closeAsking()}
-			title={<><Icon name="alert" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</>}
+			title={<><TriangleAlertIcon /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</>}
 			footer={
 				<>
 					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button>
 					<span className="grow" />
-					<Button variant="danger" onClick={() => void s.decide(req.id, false)}>Deny{fields.length ? "" : <kbd>d</kbd>}</Button>
-					{req.remember && !fields.length ? <Button onClick={() => allow(true)}>Always here <kbd>s</kbd></Button> : null}
-					<Button variant="primary" onClick={() => allow()}>{fields.length ? "Save and allow" : req.holds ? "Allow" : "Allow once"}{fields.length ? "" : <kbd>a</kbd>}</Button>
+					<Button variant="destructive" onClick={() => void s.decide(req.id, false)}>Deny{fields.length ? "" : <kbd>d</kbd>}</Button>
+					{req.remember && !fields.length ? <Button variant="outline" onClick={() => allow(true)}>Always here <kbd>s</kbd></Button> : null}
+					<Button onClick={() => allow()}>{fields.length ? "Save and allow" : req.holds ? "Allow" : "Allow once"}{fields.length ? "" : <kbd>a</kbd>}</Button>
 				</>
 			}
 		>
@@ -453,11 +457,11 @@ function ApprovalDialog({ req }: { req: Approval }) {
 			{fields.map((f, i) => {
 				const [name, about] = labelParts(f.label ?? f.name);
 				return (
-					<label className="field" key={f.name}>
-						<span className="field-label" style={{ color: "var(--text)" }}>{name}{fields.length > 1 ? <span className="faint"> · {i + 1} of {fields.length}</span> : null}</span>
-						{about ? <span className="field-hint">{about}</span> : null}
-						<input id={`ap-${f.name}`} autoFocus={i === 0} className="input mono" type={f.secret !== false ? "password" : "text"} autoComplete="off" spellCheck={false} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && allow()} />
-					</label>
+					<Field key={f.name}>
+						<FieldLabel htmlFor={`ap-${f.name}`}>{name}{fields.length > 1 ? <span className="faint"> · {i + 1} of {fields.length}</span> : null}</FieldLabel>
+						{about ? <FieldDescription>{about}</FieldDescription> : null}
+						<Input id={`ap-${f.name}`} autoFocus={i === 0} className="mono" type={f.secret !== false ? "password" : "text"} autoComplete="off" spellCheck={false} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && allow()} />
+					</Field>
 				);
 			})}
 			{fields.length ? <div className="faint" style={{ fontSize: 12 }}>{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</div> : null}
@@ -473,7 +477,7 @@ function QuestionDialog({ req }: { req: Approval }) {
 	const [at, setAt] = useState(0);
 	const answer = (text: string) => void s.decide(req.id, true, false, { answer: text });
 	return (
-		<Dialog tone="accent" width={560} onClose={() => s.closeAsking()} title={<><Icon name="chat" /> {req.agent} asks</>} footer={<><Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button><span className="grow" /><Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button><Button variant="primary" disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button></>}>
+		<Dialog tone="accent" width={560} onClose={() => s.closeAsking()} title={<><MessageSquareIcon /> {req.agent} asks</>} footer={<><Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button><span className="grow" /><Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button><Button disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button></>}>
 			<div style={{ whiteSpace: "pre-wrap" }}>{req.summary}</div>
 			{choices.length ? (
 				<div className="pick-list" style={{ padding: 0 }}>
@@ -486,9 +490,8 @@ function QuestionDialog({ req }: { req: Approval }) {
 					))}
 				</div>
 			) : null}
-			<input
+			<Input
 				autoFocus
-				className="input"
 				placeholder={choices.length ? "Or answer in your own words" : "Your answer"}
 				value={own}
 				onChange={(e) => setOwn(e.target.value)}
@@ -525,7 +528,7 @@ function Help({ close }: { close: () => void }) {
 		["⌃⇥", "Next tab"],
 	];
 	return (
-		<Dialog title="Keys and commands" width={640} onClose={close} footer={<Button onClick={close}>Close</Button>}>
+		<Dialog title="Keys and commands" width={640} onClose={close} footer={<Button variant="outline" onClick={close}>Close</Button>}>
 			<div style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: "6px 14px", fontSize: 12.5 }}>
 				{keys.map(([k, about]) => [<span key={k}><kbd>{k}</kbd></span>, <span key={`${k}-a`} className="muted">{about}</span>])}
 				{COMMANDS.map((c) => [<span key={c.name} className="mono">/{c.name}</span>, <span key={`${c.name}-a`} className="muted">{c.about}{c.keys ? <> <kbd>{c.keys}</kbd></> : null}</span>])}
@@ -563,8 +566,8 @@ function UpdateAsk() {
 			onClose={close}
 			footer={
 				<>
-					<Button onClick={close}>Not now</Button>
-					<Button variant="primary" icon="external" onClick={() => (void bridge.open(u.url), close())}>Open the release page</Button>
+					<Button variant="outline" onClick={close}>Not now</Button>
+					<Button onClick={() => (void bridge.open(u.url), close())}><ExternalLinkIcon data-icon="inline-start" />Open the release page</Button>
 				</>
 			}
 		>
@@ -584,8 +587,8 @@ function BrowserAsk() {
 			onClose={s.browserFetching ? undefined : later}
 			footer={
 				<>
-					<Button disabled={s.browserFetching} onClick={later}>Not now</Button>
-					<Button variant="primary" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={12} /> Fetching…</> : "Fetch it"}</Button>
+					<Button variant="outline" disabled={s.browserFetching} onClick={later}>Not now</Button>
+					<Button disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={12} /> Fetching…</> : "Fetch it"}</Button>
 				</>
 			}
 		>

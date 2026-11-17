@@ -130,7 +130,7 @@ test("starts a daemon of its own and shows the main agent", async () => {
 	// is empty): that is asked once, at the start, and "Not now" is remembered.
 	await sees(".dialog-title >> text=The browser for the web tools is not on this Mac");
 	await shot("00-browser");
-	await page.click(".dialog-foot .btn >> text=Not now");
+	await page.click(".dialog-foot [data-slot=button] >> text=Not now");
 	await page.waitForSelector(".dialog", { state: "detached" });
 	assert.match(await page.textContent(".side-status"), /started here/);
 	const agents = await page.$$eval(".side-agent .who > :first-child", (els: Element[]) => els.map((e) => e.textContent?.trim()));
@@ -150,7 +150,7 @@ test("starts a daemon of its own and shows the main agent", async () => {
 	const foot = await page.evaluate(() => {
 		const box = (selector: string) => document.querySelector(selector)!.getBoundingClientRect();
 		const middle = (r: DOMRect) => r.left + r.width / 2;
-		return { icon: middle(box(".side-foot .side-row .icon")), dot: middle(box(".side-status .dot")), name: box(".side-foot .side-row .grow").left, status: box(".side-status .cut").left };
+		return { icon: middle(box(".side-foot .side-row .lucide")), dot: middle(box(".side-status .dot")), name: box(".side-foot .side-row .grow").left, status: box(".side-status .cut").left };
 	});
 	assert.equal(foot.dot, foot.icon, `the dot of the status is not under the icons above it: ${JSON.stringify(foot)}`);
 	assert.equal(foot.status, foot.name, `the status is not written under the names above it: ${JSON.stringify(foot)}`);
@@ -183,7 +183,7 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	const body = await page.textContent(".dialog-body");
 	assert.ok(body.includes(`This is Pine ${mine}.`) && body.includes(link), body);
 	await shot("01-update-asked");
-	await page.click(".dialog-foot .btn >> text=Open the release page");
+	await page.click(".dialog-foot [data-slot=button] >> text=Open the release page");
 	await page.waitForSelector(".dialog", { state: "detached" });
 	// The link is GitHub's page of that release, not the address the answer named.
 	assert.deepEqual(await opened(), [link, link]);
@@ -202,16 +202,19 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	await page.click(".set-nav .side-row >> text=App");
 	await sees(".item.updates .tag.good >> text=the latest version");
 	releases.tag = "v9.9.9";
-	await page.click(".item.updates .btn >> text=Check now");
+	await page.click(".item.updates [data-slot=button] >> text=Check now");
 	await sees(".item.updates .tag.warn >> text=9.9.9 is available");
-	await page.click(".dialog-foot .btn >> text=Not now");
-	await page.click(".item.updates .btn >> text=Release page");
+	await page.click(".dialog-foot [data-slot=button] >> text=Not now");
+	await page.click(".item.updates [data-slot=button] >> text=Release page");
 	assert.deepEqual(await opened(), [link, link, link]);
 	const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
-	await page.click(".item:has-text('Look for a newer version at the start') .switch");
+	await page.click(".item:has-text('Look for a newer version at the start') [data-slot=switch]");
 	for (let i = 0; i < 50 && prefs().updates !== false; i++) await new Promise((r) => setTimeout(r, 40));
 	assert.equal(prefs().updates, false);
-	await page.click(".item:has-text('Look for a newer version at the start') .switch");
+	// It is a switch to assistive technology too, and Space turns it back on.
+	await sees(".item:has-text('Look for a newer version at the start') [role=switch][aria-checked=false]");
+	await page.keyboard.press("Space");
+	await sees(".item:has-text('Look for a newer version at the start') [role=switch][aria-checked=true]");
 	// (The settings open where they were left: back to their first page for the tests that follow.)
 	await page.click(".set-nav .side-row >> text=General");
 	await menu("settings");
@@ -278,10 +281,10 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		await page.mouse.wheel(0, 120);
 		await page.click(".browser-tab >> nth=1");
 		// A tab of the owner's own, and one closed.
-		await page.click(".browser-tabs .btn[title='A new tab']");
+		await page.click(".browser-tabs [data-slot=button][title='A new tab']");
 		await page.click(".browser-tab >> nth=1 >> .browser-tab-close", { force: true });
 		await waitFor("a new tab and a closed one arrived", () => ops().some((o) => o.do === "newtab") && ops().some((o) => o.do === "closetab" && o.index === 1));
-		await page.click(".browser-bar .btn[title='Back']");
+		await page.click(".browser-bar [data-slot=button][title='Back']");
 		await waitFor("wheel, tab and back arrived", () => ["wheel", "tab", "back"].every((d) => ops().some((o) => o.do === d)));
 		// (How far a turn of the wheel goes is the system's to say; that it went down, and all of it, is what counts.)
 		assert.ok(ops().filter((o) => o.do === "wheel").reduce((sum, o) => sum + o.dy, 0) >= 240, JSON.stringify(ops().filter((o) => o.do === "wheel")));
@@ -352,7 +355,7 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	assert.ok(breaths.length >= 2, `${breaths.length} dots at work`);
 	assert.deepEqual([...new Set(breaths.map((b: any) => `${b.start}/${b.every}`))], ["0/2000"], JSON.stringify(breaths));
 	assert.equal(await page.$$eval(".spinner", (els: Element[]) => els.length), 0);
-	await page.click(".dialog-warn .btn-primary");
+	await page.click(".dialog-warn [data-slot=button] >> text=/^Allow/");
 	await sees(".it-approval.allowed");
 	// Then the agent asks something: the answers it offers, the recommended one first.
 	await sees(".dialog-accent");
@@ -371,13 +374,19 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await sees(".pick-title >> text=Which agent works in");
 	await page.keyboard.press("Enter");
 	await sees(".tab.on .name >> text=pine-desktop-folder");
-	await page.click(".conv-head .btn[title*='workspace']");
+	await page.click(".conv-head [data-slot=button][title*='workspace']");
 	// The panel begins with the agent: who it is and what it runs on.
 	await sees(".agent-view .agent-name >> text=main");
 	assert.match(await page.textContent(".agent-view"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
 	// However narrow the panel is, the names of its views stay whole on one line.
-	assert.ok((await page.$eval(".code .segmented button >> text=Last turn", (b: Element) => b.getBoundingClientRect().height)) <= 26);
-	await page.click(".code .segmented button >> text=Changes");
+	// (On one line: no taller than the control's own height, 32 pixels.)
+	assert.ok((await page.$eval(".code [data-slot=tabs-trigger] >> text=Last turn", (b: Element) => b.getBoundingClientRect().height)) <= 32);
+	await page.click(".code [data-slot=tabs-trigger] >> text=Changes");
+	// Its views are a tab list: the arrow keys move the choice, as in any segmented control.
+	await page.keyboard.press("ArrowLeft");
+	await sees(".code [role=tab][aria-selected=true] >> text=Files");
+	await page.keyboard.press("ArrowRight");
+	await sees(".code [role=tab][aria-selected=true] >> text=Changes");
 	await sees(".code .frow");
 	assert.match(await page.textContent(".code .frow"), /index\.ts/);
 	await page.click(".code .frow");
@@ -385,7 +394,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	assert.match(await page.textContent(".diff .add"), /answer = 42/);
 	await shot("04-changes");
 	// The editor: change the file and save it through the daemon.
-	await page.click(".code-sub .btn >> text=Edit");
+	await page.click(".code-sub [data-slot=button] >> text=Edit");
 	await sees(".editor .cm-content");
 	await page.click(".editor .cm-content");
 	await page.keyboard.press("Meta+A");
@@ -418,12 +427,32 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await limit.press("Enter");
 	await page.waitForFunction(() => [...document.querySelectorAll(".toast.bad")].some((t) => /whole number from 1/.test(t.textContent ?? "")));
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).limits.maxDownloadMb, 123);
+	// A setting chosen from a list is chosen with the keyboard alone: Escape closes the list and gives
+	// focus back to it, Enter opens it, the arrows move, Enter chooses.
+	const reasoning = page.locator(".item", { has: page.locator(".mono", { hasText: /^defaults\.thinking$/ }) }).locator("[role=combobox]");
+	const list = "[data-slot=select-content][data-open]";
+	await reasoning.focus();
+	await page.keyboard.press("Enter");
+	await sees(`${list} [role=option][data-highlighted]`);
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(list, { state: "detached" });
+	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
+	await page.keyboard.press("Enter");
+	await sees(`${list} [role=option][data-highlighted]`);
+	const before = await page.textContent(`${list} [role=option][data-highlighted]`);
+	await page.keyboard.press(before?.trim() === "off" ? "ArrowDown" : "Home");
+	const chosen = (await page.textContent(`${list} [role=option][data-highlighted]`))?.trim();
+	assert.notEqual(chosen, before?.trim());
+	await page.keyboard.press("Enter");
+	await page.waitForFunction((v) => [...document.querySelectorAll(".toast")].some((t) => t.textContent?.includes(`defaults.thinking is now ${v}`)), chosen);
+	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.thinking, chosen);
+	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
 	// Agents: make one.
 	await page.click(".set-nav .side-row >> text=Agents");
-	await page.click(".btn-primary >> text=New agent");
+	await page.click("[data-slot=button] >> text=New agent");
 	await page.fill(".dialog input.mono", "books");
-	await page.fill(".dialog .field:nth-of-type(2) input", "Keeps the books");
-	await page.click(".dialog .btn-primary >> text=Create agent");
+	await page.fill(".dialog [data-slot=field]:nth-of-type(2) input", "Keeps the books");
+	await page.click(".dialog [data-slot=button] >> text=Create agent");
 	await sees(".set-in h1 >> text=books");
 	assert.ok(fs.existsSync(path.join(home, "agents", "books", "agent.json")));
 	// It is in the side bar at once, with the others.
@@ -431,28 +460,28 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await shot("07-settings-agent");
 	// Events: a schedule.
 	await page.click(".set-nav .side-row >> text=Events");
-	await page.click(".segmented button >> text=Schedules");
+	await page.click("[data-slot=tabs-trigger] >> text=Schedules");
 	await page.fill("input[placeholder='morning']", "morning");
-	await page.fill(".form .field:nth-of-type(4) input", "0 7 * * *");
+	await page.fill(".form [data-slot=field]:nth-of-type(4) input", "0 7 * * *");
 	await page.fill(".form textarea", "Say good morning.");
-	await page.click(".btn-primary >> text=Add schedule");
+	await page.click("[data-slot=button] >> text=Add schedule");
 	await sees(".item .name >> text=morning");
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"morning"/);
 	await shot("08-settings-schedules");
 	// Models: sign in to a provider with a key. It is typed into a field of its own and not shown.
 	await page.click(".set-nav .side-row >> text=Models");
-	await page.click(".set-in h2 .btn >> text=/Show all/");
+	await page.click(".set-in h2 [data-slot=button] >> text=/Show all/");
 	const row = page.locator(".item", { has: page.locator(".tag.mono", { hasText: /^opencode$/ }) }).first();
-	await row.locator(".btn >> text=API key").click();
+	await row.locator("[data-slot=button] >> text=API key").click();
 	await sees(".dialog input[type=password]");
 	await page.fill(".dialog input[type=password]", "sk-test-not-a-real-key-0123456789");
-	await page.click(".dialog .btn-primary >> text=Continue");
+	await page.click(".dialog [data-slot=button] >> text=Continue");
 	await sees(".dialog .notice.plain");
 	assert.doesNotMatch(await page.textContent(".dialog"), /sk-test-not-a-real-key/);
 	await shot("09-settings-sign-in");
 	assert.match(fs.readFileSync(path.join(home, "auth.json"), "utf8"), /opencode/);
 	// A sign-in changes no agent's model, so the dialog offers the new ones for all agents.
-	await page.click(".dialog .btn-primary >> text=Choose the model your agents run on");
+	await page.click(".dialog [data-slot=button] >> text=Choose the model your agents run on");
 	await sees(".pick-title >> text=Model for every agent that has none of its own");
 	const offered = await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent ?? ""));
 	assert.ok(offered.length > 0 && offered.every((m) => m.startsWith("opencode/")), JSON.stringify(offered.slice(0, 5)));
@@ -463,16 +492,16 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// Signed out again, that model cannot answer: the page says so for each agent it leaves without
 	// one, and so does the welcome of such an agent's conversation, with the way to this page.
 	const signedIn = page.locator(".item", { has: page.locator(".tag.mono", { hasText: /^opencode$/ }) }).first();
-	await signedIn.locator(".btn >> text=Sign out").click();
-	await signedIn.locator(".btn >> text=Sign out?").click();
+	await signedIn.locator("[data-slot=button] >> text=Sign out").click();
+	await signedIn.locator("[data-slot=button] >> text=Sign out?").click();
 	await sees(".item .notice >> text=/main cannot answer: .* needs a sign-in to opencode/");
 	await page.click(".tab:has-text('pine-desktop-folder')");
 	await sees(".welcome .notice >> text=/needs a sign-in to opencode/");
 	await shot("09-no-model");
-	await page.click(".welcome .notice .btn >> text=Models");
+	await page.click(".welcome .notice [data-slot=button] >> text=Models");
 	await sees(".set-in h1 >> text=Models");
 	// "Change" offers every model that can be used now.
-	await page.click(".item.fallback-model .btn >> text=Change");
+	await page.click(".item.fallback-model [data-slot=button] >> text=Change");
 	await sees(".pick-title >> text=Model for every agent that has none of its own");
 	await page.click(".pick-item >> text=mock/m");
 	await sees(".toast >> text=Your agents now run on mock/m");
@@ -485,17 +514,17 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 		await page.click(".set-nav .side-row >> text=MCP servers");
 		await page.fill("input[placeholder='home_link']", "notes");
 		await page.fill("input[placeholder='https://mcp.example.com/mcp']", remote.url);
-		await page.click(".btn-primary >> text=Add server");
+		await page.click("[data-slot=button] >> text=Add server");
 		const server = page.locator(".item", { has: page.locator(".name", { hasText: /^notes/ }) });
 		await server.waitFor({ timeout: 15_000 });
 		await page.waitForFunction(() => /connected, 1 tool/.test(document.querySelector(".set-in .group")?.textContent ?? ""), undefined, { timeout: 30_000 });
-		await server.locator(".btn >> text=Sign in").click();
+		await server.locator("[data-slot=button] >> text=Sign in").click();
 		await sees("pre.log >> text=/signed in to MCP server .notes./i", 40_000);
 		await shot("09-settings-mcp-sign-in");
 		assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"notes"/);
 		// And taken out again: the file is as it was.
-		await server.locator(".btn >> text=Remove").click();
-		await server.locator(".btn >> text=Remove it?").click();
+		await server.locator("[data-slot=button] >> text=Remove").click();
+		await server.locator("[data-slot=button] >> text=Remove it?").click();
 		await server.waitFor({ state: "detached", timeout: 15_000 });
 		assert.doesNotMatch(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"notes"/);
 	} finally {
@@ -503,26 +532,29 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	}
 	// Skills: one is written down for all agents.
 	await page.click(".set-nav .side-row >> text=Skills");
-	await page.click(".btn-primary >> text=New skill");
+	await page.click("[data-slot=button] >> text=New skill");
 	await page.fill("input[placeholder='invoices']", "invoices");
 	await page.fill(".form textarea", "File an invoice. Use when a bill arrives.");
 	await page.click(".editor .cm-content");
 	await page.keyboard.type("1. Read the bill.");
-	await page.click(".btn-primary >> text=Save skill");
+	await page.click("[data-slot=button] >> text=Save skill");
 	await sees(".item .name >> text=invoices");
 	assert.match(fs.readFileSync(path.join(home, "skills", "invoices", "SKILL.md"), "utf8"), /Read the bill/);
 	// Events: a folder to watch, set up from the type's own options.
 	await page.click(".set-nav .side-row >> text=Events");
-	await page.click(".btn-primary >> text=New source");
+	await page.click("[data-slot=button] >> text=New source");
 	await page.fill(".dialog input[placeholder='scans']", "scans");
-	await page.selectOption(".dialog select >> nth=1", "folder");
+	await page.locator(".dialog [data-slot=field]", { has: page.locator("[data-slot=field-label]", { hasText: /^Type$/ }) }).locator("[role=combobox]").click();
+	await page.click("[role=option] >> text=/^folder:/");
+	// Chosen with a click, the list closes and stays closed.
+	await page.waitForSelector("[data-slot=select-content][data-open]", { state: "detached" });
 	const watched = path.join(folder, "scans");
 	fs.mkdirSync(watched, { recursive: true });
-	await page.locator(".dialog .field", { has: page.locator(".field-label", { hasText: /^dir/ }) }).locator("input").fill(watched);
+	await page.locator(".dialog [data-slot=field]", { has: page.locator("[data-slot=field-label]", { hasText: /^dir/ }) }).locator("input").fill(watched);
 	await shot("09-settings-new-source");
-	await page.click(".dialog .btn-primary >> text=Continue");
+	await page.click(".dialog [data-slot=button] >> text=Continue");
 	await sees(".dialog >> text=will:");
-	await page.click(".dialog .btn-primary >> text=Add source");
+	await page.click(".dialog [data-slot=button] >> text=Add source");
 	await sees(".item .name >> text=scans");
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"scans"/);
 	await shot("09-settings-sources");
@@ -535,7 +567,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// App: the browser of the web tools is still not there, and can be fetched from here. (The
 	// test fetches nothing: PINE_SKIP_DOWNLOADS. What the command printed is shown.)
 	await sees(".item.browser .tag.warn >> text=not on this Mac");
-	await page.click(".item.browser .btn >> text=Fetch it");
+	await page.click(".item.browser [data-slot=button] >> text=Fetch it");
 	await sees(".item.browser pre.log >> text=Not fetched: PINE_SKIP_DOWNLOADS is set.");
 	// Fetched some other way (a terminal): the page says so when it is opened again.
 	const { browserPlaces } = await import("../../src/browser-build.ts");
@@ -588,8 +620,8 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.match((await page.locator(".side-agent", { has: page.locator(".who > :first-child", { hasText: /^test$/ }) }).textContent()) ?? "", /Made outside the app/);
 	// Beside a conversation, the panel's Agent view says what the agent has been given: here what was set up for all agents above.
 	await page.click(".tab >> nth=0");
-	if (!(await page.$(".code"))) await page.click(".conv-head .btn[title*='workspace']");
-	await page.click(".code .segmented button >> text=Agent");
+	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	await page.click(".code [data-slot=tabs-trigger] >> text=Agent");
 	await sees(".agent-view .agent-line .name >> text=invoices");
 	await sees(".agent-view .agent-line .name >> text=morning");
 	assert.match(await page.textContent(".agent-view"), /Nothing wakes it by itself\. 1 event source could/);
@@ -643,7 +675,7 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await group.locator(".side-agent .who").click();
 	assert.equal(await group.locator(".side-conv").count(), 1);
 	// The plus on an agent's own line starts a conversation with that agent.
-	await group.locator(".side-agent .btn[title='New conversation with scout']").click();
+	await group.locator(".side-agent [data-slot=button][title='New conversation with scout']").click();
 	await sees(".tab.on .name >> text=scout");
 	assert.equal(await page.textContent(".welcome h1"), "scout");
 	assert.match(await page.textContent(".welcome"), /Looks things up on the web/);

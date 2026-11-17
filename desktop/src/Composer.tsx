@@ -1,12 +1,13 @@
 // Where the owner writes: the message, the files that go with it, and under it what the
 // conversation runs on (folder, model, reasoning, mode), each a click away.
+import { ArrowUpIcon, ClockIcon, CpuIcon, EyeIcon, FileIcon, FolderIcon, MicIcon, PlusIcon, ShieldIcon, SparkleIcon, SquareIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
 import { type Attachment, store, type Tab, useModel, useSignal } from "./model.ts";
 import { baseName, size, tilde } from "./text.ts";
-import { Icon } from "./ui.tsx";
 
 const MAX_FILE = 20 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -256,7 +257,7 @@ export function Composer({ tab }: { tab: Tab }) {
 		<>
 			{goal && goal.status !== "active" ? (
 				<div className="banner warn">
-					<Icon name="clock" size={14} />
+					<ClockIcon size={14} />
 					<span className="grow cut">Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}: {goal.note}</span>
 					<button type="button" className="open-link" onClick={() => void store.setGoal(tab, "resume")}>Resume</button>
 					<button type="button" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</button>
@@ -292,10 +293,10 @@ export function Composer({ tab }: { tab: Tab }) {
 					<div className="attachments">
 						{tab.attachments.map((f, i) => (
 							<span className="attachment" key={`${f.name}:${i}`}>
-								{f.preview ? <img src={f.preview} alt="" /> : <Icon name="file" size={13} />}
+								{f.preview ? <img src={f.preview} alt="" /> : <FileIcon size={13} />}
 								<span className="cut" style={{ maxWidth: 180 }}>{f.name}</span>
 								<span className="faint">{size(f.size)}</span>
-								<button type="button" className="btn btn-ghost btn-small btn-icon" title="Remove" onClick={() => (tab.attachments.splice(i, 1), tab.touch())}><Icon name="x" size={12} /></button>
+								<Button variant="ghost" size="icon-xs" title="Remove" onClick={() => (tab.attachments.splice(i, 1), tab.touch())}><XIcon /></Button>
 							</span>
 						))}
 					</div>
@@ -322,30 +323,30 @@ export function Composer({ tab }: { tab: Tab }) {
 					onBlur={() => window.setTimeout(() => setItems([]), 120)}
 				/>
 				<div className="composer-bar">
-					<button type="button" className="chip plus-btn" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><Icon name="plus" size={15} /></button>
+					<button type="button" className="chip plus-btn" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><PlusIcon size={15} /></button>
 					<button type="button" className="chip gives model" title={`Model: ${info?.model ?? "none"}`} onClick={() => void store.pickModel(tab)}>
-						<Icon name="cpu" size={13} />
+						<CpuIcon size={13} />
 						<span className="cut">{info?.model?.split("/").pop() ?? "model"}</span>
 					</button>
 					<button type="button" className="chip thinks" title={`How much the model thinks before it answers: ${info?.thinking ?? "off"}`} onClick={() => void store.pickReasoning(tab)}>
-						<Icon name="spark" size={13} />
+						<SparkleIcon size={13} />
 						<span>{info?.thinking ?? "off"}</span>
 					</button>
 					<button type="button" className={`chip ${modeTone}`} title="How much this agent does without asking" onClick={() => void store.pickMode(tab)}>
-						<Icon name="shield" size={13} />
+						<ShieldIcon size={13} />
 						<span>{mode}{paused ? " (paused)" : ""}</span>
 					</button>
 					<button type="button" className="chip gives" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
-						<Icon name="folder" size={13} />
+						<FolderIcon size={13} />
 						<span className="cut">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
 					</button>
-					{tainted ? <span className="chip warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><Icon name="eye" size={13} /><span className="label">outside content</span></span> : null}
+					{tainted ? <span className="chip warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><EyeIcon size={13} /><span className="label">outside content</span></span> : null}
 					<span className="grow" />
-					{store.platform === "darwin" ? <button type="button" className={`chip${voice !== "off" ? " bad" : ""}`} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><Icon name="mic" size={14} /></button> : null}
+					{store.platform === "darwin" ? <button type="button" className={`chip${voice !== "off" ? " bad" : ""}`} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><MicIcon size={14} /></button> : null}
 					{tab.busy && !text.trim() ? (
-						<button type="button" className="send stop" title="Stop (esc)" onClick={() => void store.stop(tab)}><Icon name="stop" size={12} /></button>
+						<button type="button" className="send stop" title="Stop (esc)" onClick={() => void store.stop(tab)}><SquareIcon size={12} /></button>
 					) : (
-						<button type="button" className="send" title={tab.busy ? "Give it to the agent while it works (↩) · ⌥↩ waits its turn" : "Send (↩)"} disabled={!text.trim()} onClick={() => void send("steer")}><Icon name="up" size={15} /></button>
+						<button type="button" className="send" title={tab.busy ? "Give it to the agent while it works (↩) · ⌥↩ waits its turn" : "Send (↩)"} disabled={!text.trim()} onClick={() => void send("steer")}><ArrowUpIcon size={15} /></button>
 					)}
 				</div>
 				<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />

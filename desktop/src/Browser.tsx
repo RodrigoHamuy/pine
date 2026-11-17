@@ -3,11 +3,14 @@
 // page that the daemon hands over again and again, and what is done in the picture (a click, the
 // wheel, keys, an address) goes back to it through the daemon. Nothing of a web page is loaded
 // into this window: the picture is drawn, and its address and title are text.
+import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, PlusIcon, RotateCwIcon, ShieldIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
-import { Button, Empty, Icon, Pulse } from "./ui.tsx";
+import { Empty, Pulse } from "./ui.tsx";
 
 type Op = Record<string, unknown> & { do: string };
 
@@ -162,18 +165,18 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						<div key={i} className={`browser-tab${i === state.current ? " on" : ""}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
 							<span className="cut grow">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
 							{/* (The last tab stays: a browser without one would open one again.) */}
-							{state.tabs.length > 1 ? <button type="button" className="browser-tab-close" title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><Icon name="x" size={10} /></button> : null}
+							{state.tabs.length > 1 ? <button type="button" className="browser-tab-close" title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><XIcon size={10} /></button> : null}
 						</div>
 					))}
-					<Button small variant="ghost" icon="plus" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />
+					<Button variant="ghost" size="icon-xs" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())}><PlusIcon /></Button>
 				</div>
 			) : null}
 			<div className="browser-bar">
-				<Button small variant="ghost" icon="back" title="Back" disabled={!open} onClick={() => act({ do: "back" })} />
-				<Button small variant="ghost" icon="right" title="Forward" disabled={!open} onClick={() => act({ do: "forward" })} />
-				<Button small variant="ghost" icon="refresh" title="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })} />
-				<input
-					className="input browser-address"
+				<Button variant="ghost" size="icon-xs" title="Back" disabled={!open} onClick={() => act({ do: "back" })}><ChevronLeftIcon /></Button>
+				<Button variant="ghost" size="icon-xs" title="Forward" disabled={!open} onClick={() => act({ do: "forward" })}><ChevronRightIcon /></Button>
+				<Button variant="ghost" size="icon-xs" title="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })}><RotateCwIcon /></Button>
+				<Input
+					className="browser-address"
 					spellCheck={false}
 					placeholder="An address: example.com, or localhost:3000"
 					ref={line}
@@ -227,11 +230,11 @@ export function BrowserView({ tab }: { tab: Tab }) {
 					{drawn ? null : <div className="browser-wait"><Pulse size={14} /></div>}
 				</div>
 			) : (
-				<Empty icon="eye" title={state ? "No page is open" : "Looking for the browser…"}>
+				<Empty icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
 					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}
 				</Empty>
 			)}
-			{open ? <div className="browser-foot faint"><Icon name="shield" size={11} /><span className="cut">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
+			{open ? <div className="browser-foot faint"><ShieldIcon size={11} /><span className="cut">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
 		</div>
 	);
 }

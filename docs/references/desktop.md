@@ -424,6 +424,8 @@ desktop/
     Browser.tsx    the agent's browser in the panel: its page as a picture, and what is done in it handed back
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
+    components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
+    ui.tsx         pine's own small parts, made of shadcn's components
     index.css      Tailwind and shadcn's tokens, set from the colours of styles.css (components.json
                    is shadcn's configuration: Base UI, lucide icons)
     styles.css     the colours, light in `:root` and poimandres in `:root.dark`, and the rest of the look
@@ -446,10 +448,13 @@ desktop/
 
 ### Stories and Chromatic
 
-The parts the page is built from (`src/ui.tsx`: buttons, fields, switches, the segmented
-control, dialogs) have stories beside them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need neither Electron
-nor a daemon. Story only parts that take everything as props; a part that calls `api.ts` or
-the bridge has no story.
+Buttons, switches, inputs, fields, tabs (the segmented controls) and selects are shadcn's own
+components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
+are lucide's. They have no stories of their own. pine's own parts (`src/ui.tsx`: the logo, a
+labelled field and a choice made of shadcn's pieces, dialogs, an empty view) have stories beside
+them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need
+neither Electron nor a daemon. Story only parts that take everything as props; a part that calls
+`api.ts` or the bridge has no story.
 
 | Command (in `desktop/`) | What it does |
 |---|---|

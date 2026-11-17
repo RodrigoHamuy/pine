@@ -1,9 +1,12 @@
 // The event log: everything pine publishes, as it happens. A line opens to its whole payload.
+import { AudioLinesIcon, PlayIcon, SearchIcon, SquareIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { short } from "./text.ts";
-import { Button, Empty, Icon } from "./ui.tsx";
+import { Empty } from "./ui.tsx";
 
 /** "agent/#" fits every topic under agent; "+" fits one level; a word without either is looked for anywhere. */
 function fits(pattern: string, e: PineEvent): boolean {
@@ -54,13 +57,13 @@ export function Events({ tab }: { tab: Tab }) {
 	return (
 		<div className="events">
 			<div className="events-bar">
-				<Icon name="search" size={14} className="faint" />
-				<input className="input" style={{ maxWidth: 360 }} placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
+				<SearchIcon size={14} className="faint" />
+				<Input style={{ maxWidth: 360 }} placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
 				<span className="faint">{shown.length} shown · text deltas are left out</span>
 				<span className="grow" />
-				<Button small icon={paused ? "play" : "stop"} onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? "Follow" : "Pause"}</Button>
-				<Button small icon="bolt" onClick={() => void emit()}>Publish…</Button>
-				<Button small variant="ghost" icon="trash" title="Clear the view" onClick={() => ((tab.log = []), tab.touch())} />
+				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
+				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>
+				<Button variant="ghost" size="icon-xs" title="Clear the view" onClick={() => ((tab.log = []), tab.touch())}><Trash2Icon /></Button>
 			</div>
 			<div
 				className="events-list selectable"
@@ -83,7 +86,7 @@ export function Events({ tab }: { tab: Tab }) {
 						</div>
 					))
 				) : (
-					<Empty icon="wave" title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</Empty>
+					<Empty icon={AudioLinesIcon} title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</Empty>
 				)}
 			</div>
 		</div>
