@@ -521,8 +521,8 @@ upgrade pi (`npm run baseline`, then `npm test`).
 
 ## Releases
 
-Every push to `main` is a release, and every push to `next` a preview of the release it leads
-up to. A release's version follows from the commit messages since the last one
+Work goes to `next`, the repository's default branch, and `main` is what was released. Every
+push to `next` is a preview of the release it leads up to, and every push to `main` a release. A release's version follows from the commit messages since the last one
 (`scripts/version.mjs`, tested in `test/release.test.ts`):
 
 | A commit since the last release | Raises |
@@ -541,7 +541,15 @@ what the commits call for. A commit message that contains `[skip release]` publi
 A push to `next` is published as `<the release it would be>-next.<N>` under npm's tag `next`
 (`previewOf`), and as a pre-release on GitHub: `npm install -g @pmndre/pine` never gets one,
 and a pine that is a preview follows that tag (`pine update`). To release what was tried,
-merge `next` into `main`.
+move `main` forward to `next`:
+
+```bash
+git push origin next:main
+```
+
+Always forward and never with a merge commit: what a release changed is read from `main`'s
+own line of commits (`git log --first-parent` in `scripts/build.mjs`), and a merge commit
+there would stand in for all the commits it brought.
 
 A release from `main` also gets the Pine app, attached to its GitHub release as a disk image
 for each kind of Mac (the job `app` in `release.yml`: `desktop/scripts/pack.mjs --dmg`, then
