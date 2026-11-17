@@ -12,7 +12,53 @@ it shows and changes goes through the control API ([operations.md](operations.md
 the terminal UI and the `pine` commands. A conversation you have in the app is the same one
 the terminal UI or Telegram shows.
 
-## Starting it
+## Getting it
+
+Every release of pine has the app attached, as a disk image for each kind of Mac:
+<https://github.com/pmndre/pine/releases/latest>
+
+| File | For |
+|---|---|
+| `Pine-<version>-arm64.dmg` | A Mac with Apple silicon (M1 and later) |
+| `Pine-<version>-x64.dmg` | A Mac with an Intel processor |
+
+Open the image and drag Pine into Applications. Nothing else has to be installed: no Node, no
+`npm install`, no developer tools. The app is signed and notarised, and it carries
+
+| | |
+|---|---|
+| pine | The same package that goes to npm, with what it depends on. The app and the pine inside it have one version |
+| Node | The Node that pine runs on, as nodejs.org hands it out. The pine of the app runs on it, whatever Node the Mac has or lacks |
+| pine's helpers | The small programs for dictating, app control and the `system` event source, built for both kinds of Mac. Elsewhere pine builds them on first use, which needs Apple's command line developer tools |
+| `pine` for a terminal | See below |
+
+The first start offers to set pine up (`pine init`), which also fetches the browser the web
+tools drive. That download is the one thing the app does not carry.
+
+To get a newer version, download the new image and put the app in place of the old one. The
+app does not update itself, and `pine update` in a pine that came with the app says where the
+new app is. Your pine home (`~/.pine`: agents, conversations, settings) is not in the app and
+stays as it is.
+
+### `pine` in a terminal
+
+If you installed only the app, your shell has no `pine` command until the app puts one
+there. With it, everything in [operations.md](operations.md) works in a terminal on that Mac:
+the terminal UI, `pine status`, `pine agent add`. The command is a link in a folder of your
+shell's PATH to a small launcher inside the app, which runs the app's pine on the app's Node.
+
+| When | What happens |
+|---|---|
+| The first start of the app from Applications | The link is made by itself where that needs no password: in `~/.local/bin` or `~/bin` if your PATH has one of them, else in `/usr/local/bin` or `/opt/homebrew/bin` if you may write there |
+| No such folder | Nothing is done by itself. **Pine > pine in a Terminal…** in the menu, or Settings > App, sets it up in `/usr/local/bin`; macOS asks for your password |
+| Your shell already has a `pine` (from npm, from a checkout) | It is left alone, and the app says where it is. The app still runs its own |
+| The app was opened from the disk image or from Downloads | Nothing is set up: macOS runs it from a place that changes. Move it into Applications first |
+| The app was moved | The old link leads nowhere. Set it up again in Settings > App |
+
+Settings > App shows where the link is and takes it away again (Remove). Only a link the app
+made is ever removed or replaced.
+
+## Starting it from a checkout
 
 From a checkout of pine:
 
@@ -35,9 +81,9 @@ put into Applications:
 npm run pack
 ```
 
-That writes `desktop/release/mac-<arch>/Pine.app` (`npm run dist` also makes a disk image).
-The app carries a pine of its own and is signed for the Mac it was built on; to hand it to
-others it has to be signed with a Developer ID (`CSC_NAME`) and notarised.
+That writes `desktop/release/mac-arm64/Pine.app` (on an Intel Mac `release/mac/Pine.app`;
+`npm run dist` also makes a disk image). It is the app as it is handed out, signed for the Mac
+it was built on. See "Packing and signing" for what it carries and how it is signed for others.
 
 | Command (in `desktop/`) | What it does |
 |---|---|
@@ -45,13 +91,15 @@ others it has to be signed with a Developer ID (`CSC_NAME`) and notarised.
 | `npm run dev` | Opens it with the page served by Vite, reloading on every change |
 | `npm run check` | Type check |
 | `npm test` | The app from end to end: the real app on a pine home of its own with a scripted model. Needs a screen. With `PINE_LIVE=1` on a Mac it also dictates with the real voice helper, from a recording |
-| `npm run pack` | `release/mac-<arch>/Pine.app`, with pine inside. `--no-pine` leaves pine out |
+| `npm run pack` | `release/mac-arm64/Pine.app`, with pine, Node and the helpers inside |
 | `npm run dist` | The same, and a disk image |
-| `node scripts/smoke.mjs` | Starts a packed app on a home of its own and checks that it comes up with the pine it carries |
+| `node scripts/smoke.mjs` | Starts a packed app from a folder of its own, on a home of its own, and checks that it answers a message with the pine and the Node it carries, that `pine` works through a link, and that pine finds the helpers in the app |
 
-pine itself runs on Node 24 or newer, also when the app starts it: the app looks for `node` the
-way your shell finds it (it asks your login shell for its environment, since an app started
-from the Finder has none of it).
+pine itself runs on Node 24 or newer, also when the app starts it, and never on the app's own
+Electron. The pine of a packed app runs on the Node the app carries. From a checkout the app
+looks for `node` the way your shell finds it (it asks your login shell for its environment,
+since an app started from the Finder has none of it); a packed app does the same for a pine
+that is not its own, and falls back to its own Node where the Mac has none.
 
 ## The daemon: started or reused
 
@@ -72,6 +120,7 @@ pine packed into the app; the `pine` of your shell.
 |---|---|
 | Keep pine running after the app quits | A pine the app starts goes on in the background when the app is closed: schedules fire, sources report and Telegram answers. It then runs until it is stopped (`pine status` finds it; the next start of the app attaches to it) |
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
+| pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
@@ -229,7 +278,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
 | Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: add (at set times, every so often, once), remove. **Routes**: add, remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
-| App | The app's own settings, and the pine it talks to: started here or attached, restart, home folder |  |
+| App | The app's own settings, and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal |  |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
 key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is
@@ -267,6 +316,41 @@ the agent to write. So:
 The app does not reach into pine's home: it reads no configuration file and no token file
 itself. What it knows, the daemon told it.
 
+## Packing and signing
+
+`node scripts/pack.mjs` (in `desktop/`; `npm run pack`) makes the app that is handed out.
+
+| Flag | What it does |
+|---|---|
+| `--dmg` | Also a disk image, `release/Pine-<version>-<arch>.dmg` |
+| `--arch` | `arm64` or `x64`: the kind of Mac the app is for. Without it, the kind it is packed on. The helpers are built for both either way |
+| `--no-pine` | Without pine, Node and the helpers: the app then uses the `pine` of the owner's shell |
+| `--out` | Into another folder than `release/`, for a build beside one that is open |
+
+What goes into `Pine.app/Contents/Resources`:
+
+| Folder | What it is |
+|---|---|
+| `pine/` | The package `npm run build` makes, with its dependencies installed, and the helpers built by `scripts/helpers.mjs` in `prebuilt/` folders beside their sources (pine looks there before it builds one: `src/prebuilt.ts`) |
+| `node/` | `bin/node` and its licence from nodejs.org, in the version of the Node that runs the pack script, checked against the checksums nodejs.org publishes |
+| `bin/pine` | The launcher for a terminal (`scripts/pine.sh`) |
+
+The app is always signed with the hardened runtime, so that what is tried on the Mac it was
+built on is what is shipped. Whom it is signed for is set in the environment:
+
+| Variable | What it is |
+|---|---|
+| (none) | Signed for this Mac only ("ad hoc"). Another Mac refuses to open it |
+| `CSC_NAME` | The name of a "Developer ID Application" identity in the keychain |
+| `CSC_LINK` | The same certificate with its key as a `.p12` file: a path, or the file as base64. With `CSC_KEY_PASSWORD`, its password |
+| `APPLE_API_KEY` | The path of an App Store Connect API key (`.p8`). With `APPLE_API_KEY_ID` and `APPLE_API_ISSUER` the signed app is notarised by Apple, which a downloaded app needs to open |
+| `PINE_VERSION` | The version of the app and of the pine inside it. Without it, the version in the checkout's `package.json` |
+
+The Release workflow (`.github/workflows/release.yml`) does this for every release from
+`main`, on a runner for each kind of Mac, and attaches the two disk images to the GitHub
+release. It takes the five values from secrets of an environment named `release`. Without
+them it builds no app and says so.
+
 ## For changing the app
 
 ```
@@ -276,6 +360,7 @@ desktop/
                    and every call of the control API; the two addresses the page may load from
     preload.ts     the bridge: the short list of things the page may ask the main process for
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
+    command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
   src/             the page (React)
     model.ts       what the page knows: tabs, what each conversation shows, the daemon's live events
     api.ts         the control API, typed
@@ -284,8 +369,10 @@ desktop/
     CodePanel.tsx  changes, files and the editor, output, what is running
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
-  scripts/         build, dev, pack, the icon, the smoke test of a packed app
-  test/            the app from end to end, driven through its real window
+  scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
+                   launcher that becomes Resources/bin/pine)
+  test/            the app from end to end, driven through its real window; command.test.ts
+                   needs no window
 ```
 
 - The page asks for something new through `preload.ts` and a handler in `main.ts`, never by

@@ -1,0 +1,80 @@
+// Builds pine's helpers (voice, app control, the `system` source) for both kinds of Mac and puts
+// them into a pine folder, beside their sources, where pine looks for them (src/prebuilt.ts).
+// For the Pine app, which carries pine whole: a Mac without Apple's developer tools then has them.
+//   node scripts/helpers.mjs <pine folder>      the package `npm run build` makes, or a copy of it
+//
+// Each helper is built by pine's own function, as it would be on first use, so its name and what
+// goes into it are decided in one place. The only difference: every compiler call is made once
+// for each processor, and the two results are joined into one program.
+import { execFile } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { buildHelper as buildComputer } from "../mcp/computer.ts";
+import { buildHelper as buildSystem } from "../src/sources/system.ts";
+import { buildVoice } from "../src/tui/voice.ts";
+
+/** The oldest macOS the helpers are to start on: the oldest one the app's Electron runs on. */
+const OLDEST = "13.0";
+const KINDS = ["arm64", "x86_64"];
+
+const tree = process.argv[2] && path.resolve(process.argv[2]);
+if (!tree || !fs.existsSync(path.join(tree, "package.json"))) {
+	console.error("usage: node scripts/helpers.mjs <pine folder>");
+	process.exit(2);
+}
+if (process.platform !== "darwin") {
+	console.error("The helpers are Swift programs for macOS: they are built on a Mac.");
+	process.exit(1);
+}
+
+const run = (file, args, ms) =>
+	new Promise((resolve) => {
+		execFile(file, args, { timeout: ms, maxBuffer: 16 * 1024 * 1024 }, (err, stdout, stderr) => resolve({ code: err ? (typeof err.code === "number" ? err.code : 1) : 0, stdout: String(stdout), stderr: String(stderr) }));
+	});
+
+/** What a build function runs, with the compiler called for every processor. */
+const forBoth = async (file, args, ms) => {
+	const at = args.indexOf("-o");
+	if (file !== "/usr/bin/swiftc" || at < 0) return run(file, args, ms);
+	const out = args[at + 1];
+	const parts = [];
+	try {
+		for (const kind of KINDS) {
+			const part = `${out}.${kind}`;
+			parts.push(part);
+			const built = await run(file, [...args.slice(0, at), "-o", part, ...args.slice(at + 2), "-target", `${kind}-apple-macos${OLDEST}`], ms);
+			if (built.code !== 0) return built;
+		}
+		return await run("/usr/bin/lipo", ["-create", "-output", out, ...parts], 60_000);
+	} finally {
+		for (const part of parts) fs.rmSync(part, { force: true });
+	}
+};
+
+const work = fs.mkdtempSync(path.join(os.tmpdir(), "pine-helpers-"));
+try {
+	for (const [source, build] of [
+		["src/tui/voice.swift", buildVoice],
+		["mcp/computer.swift", buildComputer],
+		["src/sources/system.swift", buildSystem],
+	]) {
+		const from = path.join(tree, source);
+		const dir = path.join(path.dirname(from), "prebuilt");
+		// One of an earlier run would be handed back as it is, whatever it was built for.
+		fs.rmSync(dir, { recursive: true, force: true });
+		const built = await build(path.join(work, path.basename(source)), from, forBoth);
+		fs.mkdirSync(dir, { recursive: true });
+		const to = path.join(dir, path.basename(built));
+		fs.copyFileSync(built, to);
+		fs.chmodSync(to, 0o755);
+		const kinds = (await run("/usr/bin/lipo", ["-archs", to], 10_000)).stdout.trim();
+		if (KINDS.some((k) => !kinds.split(" ").includes(k))) throw new Error(`${to} is for "${kinds}", not for both kinds of Mac`);
+		console.log(`${path.relative(tree, to)} (${kinds})`);
+	}
+} catch (e) {
+	console.error(e.message);
+	process.exitCode = 1;
+} finally {
+	fs.rmSync(work, { recursive: true, force: true });
+}

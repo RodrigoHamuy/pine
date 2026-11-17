@@ -22,6 +22,16 @@ export function bumpOf(messages) {
 }
 
 /**
+ * The version a push to the `next` branch gets: what the next release would be called, with
+ * "-next.N" behind it. N counts up from what npm already has for that release, so every push is
+ * a version of its own, and they start again at 1 once the release they led up to is out.
+ */
+export function previewOf(release, versions, channel = "next") {
+	const taken = versions.map((v) => (v.startsWith(`${release}-${channel}.`) ? Number(v.slice(release.length + channel.length + 2)) : 0)).filter((n) => Number.isInteger(n) && n > 0);
+	return `${release}-${channel}.${Math.max(0, ...taken) + 1}`;
+}
+
+/**
  * The next version. `published` is what npm has now (undefined before the first release), `inFile`
  * the version in package.json, `kind` what the commits call for. Below 1.0.0 a breaking change
  * raises the minor number, as semver allows. The version in package.json is used as it is for

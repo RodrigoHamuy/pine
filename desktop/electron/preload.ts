@@ -23,6 +23,8 @@ const bridge = {
 	notify: (title: string, body: string, tab?: string) => ipcRenderer.invoke("pine:notify", title, body, tab),
 	badge: (count: number) => ipcRenderer.invoke("pine:badge", count),
 	contextMenu: (items: unknown[]) => ipcRenderer.invoke("pine:context-menu", items),
+	/** `pine` for a terminal: what the shell has; with "install" or "remove", after doing that. */
+	command: (action?: "install" | "remove") => ipcRenderer.invoke("pine:command", action),
 	voiceStart: (language?: string) => ipcRenderer.invoke("pine:voice-start", language),
 	voiceStop: (cancel?: boolean) => ipcRenderer.invoke("pine:voice-stop", cancel),
 	/** Where a file that was dropped on the window lies: a folder is opened by its path, not read. */

@@ -38,6 +38,7 @@ import path from "node:path";
 import readline from "node:readline";
 import { type McpContent, type McpTool, options, serve } from "./lib.ts";
 import { APP_LOOK, WHOLE_SCREEN } from "../src/computer.ts";
+import { prebuilt } from "../src/prebuilt.ts";
 
 export interface ComputerOptions {
 	/** false: for a model that cannot see. app_screenshot and the tools that take positions in a picture are not offered. Default true. */
@@ -753,6 +754,9 @@ const runProgram: Run = (file, args, ms) =>
  */
 export async function buildHelper(dir: string, source: string = HELPER_SOURCE, run: Run = runProgram): Promise<string> {
 	const file = path.join(dir, `pine-computer-${createHash("sha256").update(fs.readFileSync(source)).digest("hex").slice(0, 12)}`);
+	// The Pine app carries it built (src/prebuilt.ts): then nothing is compiled here.
+	const carried = prebuilt(source, path.basename(file));
+	if (carried) return carried;
 	if (fs.existsSync(file)) return file;
 	// /usr/bin/swiftc exists on every Mac, but without the tools it only opens a window that offers to install them.
 	const tools = await run("/usr/bin/xcode-select", ["-p"], 10_000);

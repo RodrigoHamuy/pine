@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { Type } from "typebox";
+import { prebuilt } from "../prebuilt.ts";
 import type { SourceType } from "../source-types.ts";
 import type { SourceApi } from "../sources.ts";
 import { errText } from "../util.ts";
@@ -75,14 +76,19 @@ export const type: SourceType = {
 	},
 };
 
-const run = (file: string, args: string[], ms: number) =>
-	new Promise<{ code: number; stdout: string; stderr: string }>((resolve) => {
+type Run = (file: string, args: string[], ms: number) => Promise<{ code: number; stdout: string; stderr: string }>;
+
+const runProgram: Run = (file, args, ms) =>
+	new Promise((resolve) => {
 		execFile(file, args, { timeout: ms, maxBuffer: 4 * 1024 * 1024 }, (err, stdout, stderr) => resolve({ code: err ? (typeof (err as any).code === "number" ? (err as any).code : 1) : 0, stdout: String(stdout), stderr: String(stderr) }));
 	});
 
 /** The helper as a program: built from its source the first time, then found again by the source's hash. */
-export async function buildHelper(dir: string, source = SWIFT): Promise<string> {
+export async function buildHelper(dir: string, source = SWIFT, run: Run = runProgram): Promise<string> {
 	const file = path.join(dir, `pine-system-${createHash("sha256").update(fs.readFileSync(source)).digest("hex").slice(0, 12)}`);
+	// The Pine app carries it built (src/prebuilt.ts), in pine's own code: then nothing is compiled here.
+	const carried = prebuilt(source, path.basename(file));
+	if (carried) return carried;
 	if (fs.existsSync(file)) return file;
 	// /usr/bin/swiftc exists on every Mac, but without the tools it only opens a window that offers to install them.
 	const tools = await run("/usr/bin/xcode-select", ["-p"], 10_000);

@@ -199,7 +199,7 @@ test("the key prompt stays visible, says the input is hidden, and never echoes i
 });
 
 test("pine update knows how pine was installed and which version is newer; pine version says both", async () => {
-	const { installKind, newer, outcome, whatChanged, whatCame } = await import("../src/update.ts");
+	const { appNews, installKind, newer, outcome, whatChanged, whatCame } = await import("../src/update.ts");
 	const root = path.resolve(import.meta.dirname, "..");
 	// A git clone that runs its sources is a checkout, wherever npm keeps its global packages.
 	assert.equal(installKind(root, "/usr/local/lib/node_modules"), "checkout");
@@ -211,9 +211,17 @@ test("pine update knows how pine was installed and which version is newer; pine 
 	assert.equal(installKind(pkg, global), "global");
 	assert.equal(installKind(pkg, path.join(global, "elsewhere")), "local");
 	assert.equal(installKind(pkg, undefined), "local");
+	// Inside the Pine app it is the app's: no npm is asked, and a new app is what updates it.
+	const carried = path.join(global, "Pine.app", "Contents", "Resources", "pine");
+	fs.mkdirSync(carried, { recursive: true });
+	assert.equal(installKind(carried, global), "app");
+	assert.equal(installKind(carried), "app");
+	assert.match(appNews("0.14.0", "0.13.0"), /pine 0\.14\.0 is available \(this is 0\.13\.0\)\. This pine came with the Pine app.*\n\n  https:\/\/github\.com\/pmndre\/pine\/releases\/latest$/s);
 	fs.rmSync(global, { recursive: true, force: true });
 
 	assert.deepEqual([newer("0.1.1", "0.1.0"), newer("0.10.0", "0.9.9"), newer("1.0.0", "0.99.99"), newer("0.1.0", "0.1.0"), newer("0.1.0", "0.2.0")], [true, true, true, false, false]);
+	// The next channel: its versions come before the release they lead up to, in the order of their numbers.
+	assert.deepEqual([newer("0.2.0", "0.2.0-next.3"), newer("0.2.0-next.3", "0.2.0"), newer("0.2.0-next.10", "0.2.0-next.9"), newer("0.2.0-next.1", "0.1.9"), newer("0.2.0-next.1", "0.2.0-next.1"), newer("0.1.9", "0.2.0-next.1")], [true, false, true, true, false, false]);
 
 	// What is on disk afterwards decides whether it worked. npm can name a new version and install the old one.
 	assert.deepEqual(outcome("@pmndre/pine", "0.13.0", "0.13.0").ok, true);

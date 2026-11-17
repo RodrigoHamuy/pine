@@ -10,17 +10,18 @@ to change the code.
 |---|---|
 | `npm test` | All tests against the scripted model server. About ten seconds. Run it after every change. |
 | `npm run build` | Makes the npm package in `build/`: the sources compiled to JavaScript at the same paths, plus docs and examples. Node runs TypeScript directly in a checkout but not inside `node_modules`, so only the package is compiled. Code that names one of pine's own module files at run time uses `EXT` from `src/config.ts` (".ts" or ".js"). |
-| `npm run release` | What the Release workflow runs on every push to `main` (`.github/workflows/release.yml`): works out the next version, builds, publishes to npm, and marks the release with a tag. `node scripts/release.mjs --dry-run` shows the version and checks the package without publishing. The checkout's `package.json` is marked private so that the sources are never published uncompiled. |
+| `npm run release` | What the Release workflow runs on every push to `main` and to `next` (`.github/workflows/release.yml`): works out the next version, builds, publishes to npm, and marks the release with a tag. From `next` it is a preview (`--next` by hand). `node scripts/release.mjs --dry-run` shows the version and checks the package without publishing. The checkout's `package.json` is marked private so that the sources are never published uncompiled. |
 | `npm run check` | Type check (`tsc --noEmit`). |
 | `npm run test:live` | End-to-end through `claude -p`, plus the real browser and, on a Mac, the real app control helper and the helper of the `system` source. Slow, uses a Claude plan and the network. Run it when you change prompts, tool descriptions, `src/dev/claude-model.ts`, `mcp/browser.ts`, `mcp/computer.ts` or `mcp/computer.swift`. The tests that operate TextEdit skip themselves unless the terminal app they run in has the Accessibility and Screen Recording grants. |
 | `npm run baseline` | The 59 pi SDK checks in `baseline/`. Run it after upgrading pi. |
 | `node src/cli.ts <command>` | The CLI without installing it. |
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
 | `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
-| `npm run desktop:pack` | `desktop/release/mac-<arch>/Pine.app`, with the package of `npm run build` and its dependencies inside. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine it carries. |
+| `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`. |
 
-There is no build step. Node runs the TypeScript directly (the one compiled part, the app
-control helper `mcp/computer.swift`, is built by pine on the Mac it runs on, on first use), so:
+There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
+helpers such as `mcp/computer.swift`, are built by pine on the Mac it runs on, on first use;
+only the Pine app carries them built), so:
 
 - only erasable syntax: no `enum`, no `namespace`, no constructor parameter properties;
 - relative imports carry the `.ts` extension;
@@ -61,7 +62,9 @@ src/
                     selector, a number), line differences, a page's text; and `capped`, the limit on how often a type that is told may report
   mime.ts           an e-mail message read into sender, subject, text and attachments, for the mail and smtp types
   env-file.ts       sets and removes entries in .env (secrets of sources that agents set up)
-  update.ts         `pine update`: brings pine up to date the way it was installed (git or npm) and fetches what the new version needs
+  update.ts         `pine update`: brings pine up to date the way it was installed (git or npm) and fetches what the new version needs;
+                    a pine inside the Pine app says where the new app is
+  prebuilt.ts       where a helper that was built with pine lies (beside its source, in prebuilt/), for the Pine app
   net.ts            address guard (no private ranges) and fetchToFile, used by the download tool and mcp/web.ts
   router.ts         routes: filter, debounce, set / publish / call / agent
   timers.ts         the scheduler: cron, intervals and one-offs; a schedule with a task wakes an agent
@@ -109,8 +112,8 @@ test/               node:test files; support/harness.ts builds a temp home and a
 baseline/           pi SDK behaviour checks and their results; the mock model server lives here
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
-                    main process (the window, the daemon's token, `pine service`), src/ the page (React), test/ the
-                    app driven through its real window. docs/references/desktop.md describes it and its layout
+                    main process (the window, the daemon's token, `pine service`, `pine` for a terminal), src/ the
+                    page (React), test/ the app driven through its real window, scripts/ what packs it. docs/references/desktop.md describes it and its layout
 ```
 
 ## What agents know about pine
@@ -343,7 +346,9 @@ These are invariants. A change that breaks one needs a test that shows why it is
    network can write to it.
    A type that needs a program of its own (system) builds it from pine's source into the
    source's folder in pine's data, where no agent writes, and starts it by its path with
-   fixed arguments. Which program the daemon runs is never an option of a source: a test puts
+   fixed arguments. Where pine carries the program built (the Pine app: `src/prebuilt.ts`),
+   it is the one beside the source in pine's own code, found by the source's hash, and no
+   other place is looked in. Which program the daemon runs is never an option of a source: a test puts
    its stand-in into the module (`standIn` in `src/sources/system.ts`). The same holds for
    the system's own tools a type starts (`ping`, `stty`): an absolute path, a fixed list of
    arguments, and what comes from the options checked to be exactly what it claims.
@@ -516,8 +521,9 @@ upgrade pi (`npm run baseline`, then `npm test`).
 
 ## Releases
 
-Every push to `main` is a release. Its version follows from the commit messages since the last
-one (`scripts/version.mjs`, tested in `test/release.test.ts`):
+Every push to `main` is a release, and every push to `next` a preview of the release it leads
+up to. A release's version follows from the commit messages since the last one
+(`scripts/version.mjs`, tested in `test/release.test.ts`):
 
 | A commit since the last release | Raises |
 |---|---|
@@ -531,6 +537,19 @@ the package carries the subjects of its last releases (`scripts/changes.mjs` wri
 `changes.json` when it is built). Write it as a sentence that says what is different for them.
 To pick a version by hand, set it in `package.json`: it is used as it is while it is ahead of
 what the commits call for. A commit message that contains `[skip release]` publishes nothing.
+
+A push to `next` is published as `<the release it would be>-next.<N>` under npm's tag `next`
+(`previewOf`), and as a pre-release on GitHub: `npm install -g @pmndre/pine` never gets one,
+and a pine that is a preview follows that tag (`pine update`). To release what was tried,
+merge `next` into `main`.
+
+A release from `main` also gets the Pine app, attached to its GitHub release as a disk image
+for each kind of Mac (the job `app` in `release.yml`: `desktop/scripts/pack.mjs --dmg`, then
+Apple's own check and `smoke.mjs` on the signed app, then the upload). Signing and notarising
+take five secrets in an environment `release`, which the top of `release.yml` lists; without
+them the job builds nothing and says so. An app that is not signed and notarised is never
+uploaded. npm does not wait for the app: a release has no disk images for the minutes Apple
+takes, and a failed `app` job is run again by itself.
 
 Publishing needs no stored secret: on npmjs.com the package names this repository and
 `release.yml` as a trusted publisher. A repository secret `NPM_TOKEN` is used instead if one exists.
@@ -590,6 +609,9 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   listening to a recording. No test shows the app's real window with its title bar: after a
   change to the frame (`.side-top`, `.titlebar`, the window's options in `main.ts`), look at
   it once in light and dark.
+- `pine` for a terminal (`desktop/electron/command.ts`) is tested without a window
+  (`desktop/test/command.test.ts`), on folders of the test's own as the PATH and the home:
+  no test writes into a folder of the real PATH, and none runs what asks for a password.
 - A new security property needs a test that fails without the code that provides it.
 
 ## Style

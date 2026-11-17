@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 // @ts-ignore: a plain script, without types
-import { ahead, bumpOf, nextVersion } from "../scripts/version.mjs";
+import { ahead, bumpOf, nextVersion, previewOf } from "../scripts/version.mjs";
 // @ts-ignore: a plain script, without types
 import { changesOf } from "../scripts/changes.mjs";
 
@@ -28,6 +28,17 @@ test("release: the next version follows from the commits since the last one", ()
 	assert.equal(nextVersion("1.0.0", "1.0.0", "patch").version, "1.0.1");
 	assert.equal(ahead("0.10.0", "0.9.9"), true);
 	assert.equal(ahead("1.0.0", "1.0.0"), false);
+});
+
+test("release: a push to next is a preview of the release it leads up to, with a number of its own", () => {
+	// The first one for a release, then one more with every push.
+	assert.equal(previewOf("0.4.0", ["0.3.0", "0.3.1"]), "0.4.0-next.1");
+	assert.equal(previewOf("0.4.0", ["0.3.1", "0.4.0-next.1", "0.4.0-next.2"]), "0.4.0-next.3");
+	assert.equal(previewOf("0.4.0", ["0.4.0-next.9", "0.4.0-next.10", "0.4.0-next.2"]), "0.4.0-next.11", "by number, not by how it sorts as text");
+	// Previews of another release, or of another channel, do not count; nor does anything that is not a number.
+	assert.equal(previewOf("0.4.1", ["0.4.0-next.7", "0.4.0", "0.4.10-next.3", "0.4.1-beta.5", "0.4.1-next.x", "0.4.1-next.2.1"]), "0.4.1-next.1");
+	// What the release would be called is worked out as for main: from the last release and the commits since.
+	assert.equal(previewOf(nextVersion("0.3.1", "0.1.0", bumpOf("feat: a list\n--")).version, ["0.3.1"]), "0.4.0-next.1");
 });
 
 test("release: the package says what each version changed, from the commits between its tags", () => {

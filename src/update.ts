@@ -11,8 +11,12 @@ import { PINE_ROOT } from "./config.ts";
  * checkout: a git clone, which runs the sources directly. It is updated with git.
  * global:   installed with "npm install -g". It is updated with npm.
  * local:    a dependency inside some project's node_modules. That project decides its version.
+ * app:      the pine the Pine app carries, inside the app. A new app brings a new pine.
  */
-export type InstallKind = "checkout" | "global" | "local";
+export type InstallKind = "checkout" | "global" | "local" | "app";
+
+/** Where a new Pine app is fetched from. */
+export const APP_RELEASES = "https://github.com/pmndre/pine/releases/latest";
 
 const real = (p: string) => {
 	try {
@@ -24,22 +28,30 @@ const real = (p: string) => {
 
 export function installKind(root: string, globalRoot?: string): InstallKind {
 	if (fs.existsSync(path.join(root, ".git")) && fs.existsSync(path.join(root, "src", "cli.ts"))) return "checkout";
+	if (/\.app\/Contents\/Resources\/pine$/.test(real(root))) return "app";
 	if (globalRoot && (real(root) + path.sep).startsWith(real(globalRoot) + path.sep)) return "global";
 	return "local";
 }
 
-/** Whether version a is higher than version b ("1.10.0" is higher than "1.9.3"). */
+/**
+ * Whether version a is higher than version b ("1.10.0" is higher than "1.9.3"). A version of the
+ * `next` channel ("1.10.0-next.4") comes before the release it leads up to, and after the ones
+ * of that channel with a lower number.
+ */
 export function newer(a: string, b: string): boolean {
 	const parse = (v: string) => v.split("-")[0].split(".").map((n) => Number(n) || 0);
+	// A release counts as later than any of its previews.
+	const preview = (v: string) => (v.includes("-") ? Number(/(\d+)$/.exec(v)?.[1] ?? 0) : Number.POSITIVE_INFINITY);
 	const [x, y] = [parse(a), parse(b)];
 	for (let i = 0; i < 3; i++) if ((x[i] ?? 0) !== (y[i] ?? 0)) return (x[i] ?? 0) > (y[i] ?? 0);
-	return false;
+	return preview(a) > preview(b);
 }
 
 export function installed(root = PINE_ROOT): { name: string; version: string; kind: InstallKind; root: string } {
 	const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
-	const globalRoot = capture("npm", ["root", "-g"]);
-	return { name: pkg.name, version: pkg.version, kind: installKind(root, globalRoot), root };
+	// Asked without npm first: a Mac that has pine from the app may have no npm at all.
+	const kind = installKind(root);
+	return { name: pkg.name, version: pkg.version, kind: kind === "local" ? installKind(root, capture("npm", ["root", "-g"])) : kind, root };
 }
 
 function capture(cmd: string, args: string[], cwd?: string): string | undefined {
@@ -127,6 +139,20 @@ export function outcome(name: string, wanted: string | undefined, now: string, n
 	return { ok: true, text: news ? `\npine is now ${now}.\n\n${news}\n\n${RESTART}` : `\npine is now ${now}. ${RESTART}` };
 }
 
+/** What npm's registry says the newest version is, asked without npm: the pine of the app has none. */
+async function fromRegistry(name: string): Promise<string | undefined> {
+	try {
+		const res = await fetch(`https://registry.npmjs.org/${name.replace("/", "%2f")}/latest`, { signal: AbortSignal.timeout(15_000) });
+		const version = res.ok ? ((await res.json()) as { version?: unknown }).version : undefined;
+		return typeof version === "string" && /^\d+\.\d+\.\d+$/.test(version) ? version : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** What a pine of the app says about a newer version: the app is what is replaced, not pine inside it. */
+export const appNews = (latest: string, mine: string) => `pine ${latest} is available (this is ${mine}). This pine came with the Pine app, and a new app brings the new pine. Download it and put it in place of the old one:\n\n  ${APP_RELEASES}`;
+
 /**
  * Update pine, or with `check` only say whether there is something newer. Returns the exit code.
  * `browser` fetches the browser build of the version that is on disk afterwards.
@@ -166,18 +192,34 @@ export async function update(opts: { check: boolean; out: (line: string) => void
 		}
 		out("Installing what the new version depends on ...");
 		if (show("npm", ["install", "--no-audit", "--no-fund"], me.root) !== 0) return 1;
-	} else {
-		const latest = capture("npm", ["view", me.name, "version"]);
+	} else if (me.kind === "app") {
+		const latest = await fromRegistry(me.name);
 		if (!latest) {
-			out(`Could not ask npm for the latest version of ${me.name}. You may be offline.`);
+			out("Could not ask for the latest version of pine. You may be offline.");
 			return 1;
 		}
 		if (!newer(latest, me.version)) {
 			out(`pine ${me.version} is the latest version.`);
 			return 0;
 		}
+		out(appNews(latest, me.version));
+		return opts.check ? 0 : 1;
+	} else {
+		// A pine of the `next` channel ("-next." in its version) stays on it: the newest of that channel, or a release that has passed it.
+		const onNext = /-next\./.test(me.version);
+		let latest = capture("npm", ["view", me.name, "version"]);
+		const next = onNext ? capture("npm", ["view", `${me.name}@next`, "version"]) : undefined;
+		if (next && (!latest || newer(next, latest))) latest = next;
+		if (!latest) {
+			out(`Could not ask npm for the latest version of ${me.name}. You may be offline.`);
+			return 1;
+		}
+		if (!newer(latest, me.version)) {
+			out(`pine ${me.version} is the latest version${onNext ? " of the next channel" : ""}.`);
+			return 0;
+		}
 		if (me.kind === "local") {
-			out(`pine ${latest} is available (this is ${me.version}). This copy is a dependency of the project it is installed in (${me.root}); update it there:\n\n  npm install ${me.name}@latest`);
+			out(`pine ${latest} is available (this is ${me.version}). This copy is a dependency of the project it is installed in (${me.root}); update it there:\n\n  npm install ${me.name}@${onNext ? latest : "latest"}`);
 			return opts.check ? 0 : 1;
 		}
 		if (opts.check) {

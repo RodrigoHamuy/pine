@@ -28,6 +28,10 @@ npm install -g @pmndre/pine
 That puts the `pine` command on your PATH. The package holds pine compiled to JavaScript,
 because Node does not run TypeScript from inside `node_modules`.
 
+On a Mac there is a second way that needs neither Node nor npm: the Pine app
+([desktop.md](desktop.md), "Getting it"). It carries pine and the Node it runs on, and gives
+your shell the `pine` command.
+
 To work on pine itself, use a checkout instead. `bin/pine` runs the sources as they are and
 installs the dependencies the first time; `npm link` puts that copy on your PATH:
 
@@ -197,6 +201,7 @@ how pine got onto the machine, which `pine version` tells you:
 | with `npm install -g` | Asks npm for the latest version. If there is one, installs it (`npm install -g @pmndre/pine@latest`). |
 | as a checkout (`git clone`) | Fetches from the repository the checkout follows and moves it forward, then runs `npm install`. Only ever a fast-forward: if commits or changes of your own are in the way, nothing is changed and it says so. |
 | as a dependency inside a project | Tells you the command to run in that project; that project decides its version. |
+| with the Pine app | Says whether there is a newer version and where the new app is. The pine inside the app is not replaced by itself: a new app brings it ([desktop.md](desktop.md), "Getting it"). |
 
 Afterwards it makes sure the browser the web tools drive matches the new version, which is a
 download only when that version changed.
@@ -206,6 +211,19 @@ the one you have now, the newest first, with a line for each change under it (af
 checkout was moved forward, a line for every commit that came). The list travels with the package, so nothing is fetched for it.
 
 `pine update --check` changes nothing and says whether there is something newer.
+
+### Trying a version before it is released
+
+What is being worked on is published ahead of a release, as a preview: a version like
+`0.40.0-next.3`, the third preview of what will be 0.40.0.
+
+| | |
+|---|---|
+| `@pmndre/pine@next` | The newest preview: `npm install -g @pmndre/pine@next`. It can be older than the last release when nothing new is being tried |
+| `@pmndre/pine` | The last release, as always: `npm install -g @pmndre/pine` goes back to it |
+
+A pine that is a preview stays on previews: `pine update` installs the newest one, or the
+release once that has passed it. Previews are for npm only; the Pine app is built for releases.
 
 A pine that is running keeps the old version until it is restarted: quit the terminal UI and
 open it again, or restart the daemon (if it runs at login as a LaunchAgent:

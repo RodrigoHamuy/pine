@@ -963,6 +963,9 @@ function AppPage() {
 		s.touch();
 	};
 	const service = s.service.status === "ready" ? s.service : undefined;
+	// `pine` for a terminal: what the shell has, as the app's main process sees it.
+	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
+	useEffect(() => void bridge.command().then(setCommand), []);
 	return (
 		<Page title="App" lead="How this window behaves, and the pine it talks to.">
 			<h2>This app</h2>
@@ -974,6 +977,9 @@ function AppPage() {
 			<div className="group">
 				<div className="item"><div className="info"><div className="name">{service ? `pine ${service.version ?? ""}` : "pine"}<span className={`tag ${s.connected ? "good" : "warn"}`}>{s.connected ? "connected" : "not connected"}</span></div><div className="about">{service ? (service.started ? `Started by this app (${service.mode}), from ${service.from}. It stops when the app quits unless the switch below is on.` : "Attached to a pine that was already running. It goes on when this app quits.") : "Not running."}</div></div><div className="ctl">{service?.started ? <Button small icon="refresh" onClick={() => void s.attempt(() => bridge.restart())}>Restart</Button> : null}</div></div>
 				<div className="item"><div className="info"><div className="name">Keep pine running after the app quits</div><div className="about">A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</div></div><div className="ctl"><Switch on={s.prefs.keepRunning} onChange={(keepRunning) => void set({ keepRunning })} /></div></div>
+				{command && (command.state !== "unavailable" || command.why) ? (
+					<div className="item command"><div className="info"><div className="name">pine in a terminal{command.state === "here" ? <span className="tag good">set up</span> : null}</div><div className="about">{command.text}</div></div><div className="ctl">{command.state === "none" ? <Button small onClick={() => void bridge.command("install").then(setCommand)}>Set up</Button> : command.state === "here" ? <Button small onClick={() => void bridge.command("remove").then(setCommand)}>Remove</Button> : null}</div></div>
+				) : null}
 				<div className="item">
 					<div className="info"><div className="name">Home folder</div><div className="about mono">{tilde(service?.home ?? s.prefs.home ?? "~/.pine")}</div><div className="about">Where pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.</div></div>
 					<div className="ctl">

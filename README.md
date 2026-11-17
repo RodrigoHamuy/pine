@@ -159,7 +159,9 @@ pine .
 There is also a desktop app for macOS, with the same conversations in a window, an editor for
 a conversation's folder and a settings panel for agents, models, MCP servers, skills and
 events. It starts pine itself, or uses the one that runs ([desktop.md](docs/references/desktop.md)).
-From a checkout:
+Each [release](https://github.com/pmndre/pine/releases/latest) has it as a disk image, for
+Apple silicon and for Intel. It carries pine and the Node it runs on, so nothing else has to
+be installed, and it gives your shell the `pine` command. From a checkout:
 
 ```bash
 npm run desktop

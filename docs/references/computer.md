@@ -164,7 +164,8 @@ that: `mcp/computer.swift`, which ships with pine as source. The first time app 
 used pine compiles it with Apple's `swiftc` and keeps the result in its home
 (`data/computer/`); that takes up to half a minute, once, and again after an update of pine
 that changes the helper. A call that arrives while it is being built is answered with "try
-again in a moment".
+again in a moment". The Pine app ([desktop.md](desktop.md)) carries the helper built: its pine
+compiles nothing and needs no compiler.
 
 The compiler comes with Apple's command line developer tools, which a Mac that has `git`
 already has. Where they are missing, the tool's answer says so and what to type:

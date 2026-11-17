@@ -1897,7 +1897,8 @@ The system tells a small helper program, which pine builds from its own source w
 the first time the source starts (a few seconds, and Apple's command line developer tools have
 to be installed: `xcode-select --install`). The helper lies in the source's folder in pine's
 data folder, where no agent can write, gets none of pine's environment, and only repeats what
-the system says. It needs no permission from you: none of this is behind a privacy grant.
+the system says. A pine that came with the Pine app carries the helper built, inside the app,
+and builds nothing. It needs no permission from you: none of this is behind a privacy grant.
 
 What it does not report: the name of the Wi-Fi network (macOS gives that only to an app with
 access to your location), other apps' notifications, and what you type or look at. A disk's

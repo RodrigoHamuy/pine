@@ -12,6 +12,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { prebuilt } from "../prebuilt.ts";
 
 export const VOICE_SOURCE = path.join(import.meta.dirname, "voice.swift");
 
@@ -45,6 +46,9 @@ const runProgram: Run = (file, args, ms) =>
  */
 export async function buildVoice(dir: string, source: string = VOICE_SOURCE, run: Run = runProgram): Promise<string> {
 	const file = path.join(dir, `pine-voice-${createHash("sha256").update(fs.readFileSync(source)).update(INFO).digest("hex").slice(0, 12)}`);
+	// The Pine app carries it built (src/prebuilt.ts): then nothing is compiled here.
+	const carried = prebuilt(source, path.basename(file));
+	if (carried) return carried;
 	if (fs.existsSync(file)) return file;
 	// /usr/bin/swiftc exists on every Mac, but without the tools it only opens a window that offers to install them.
 	const tools = await run("/usr/bin/xcode-select", ["-p"], 10_000);

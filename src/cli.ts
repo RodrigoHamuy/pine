@@ -449,7 +449,7 @@ async function main(): Promise<void> {
 	if (cmd === "version" || flags.version === true) {
 		const { installed } = await import("./update.ts");
 		const me = installed();
-		return out(`pine ${me.version} (${me.kind === "checkout" ? `checkout in ${me.root}` : me.kind === "global" ? "installed with npm" : `a dependency in ${me.root}`})`);
+		return out(`pine ${me.version} (${me.kind === "checkout" ? `checkout in ${me.root}` : me.kind === "global" ? "installed with npm" : me.kind === "app" ? "came with the Pine app" : `a dependency in ${me.root}`})`);
 	}
 
 	if (cmd === "update") {

@@ -94,7 +94,9 @@ async function nodeVersion(file: string, env: NodeJS.ProcessEnv): Promise<number
  * How to run pine's command line from here, in this order: what PINE_CLI names; the checkout this
  * app lies in (development); the copy that was packed into the app; the `pine` command of the
  * owner's shell. pine runs on Node, never on the app's own Electron: its children are started
- * with `process.execPath`, which has to be a plain Node.
+ * with `process.execPath`, which has to be a plain Node. The pine the app carries runs on the
+ * Node the app carries, so that it is the pair that was made and tried together; another pine
+ * runs on the owner's Node, and on the app's only where there is no other.
  */
 export async function findPine(appRoot: string, resources?: string): Promise<Launch> {
 	const env = await loginEnv();
@@ -105,7 +107,9 @@ export async function findPine(appRoot: string, resources?: string): Promise<Lau
 	];
 	const script = places.find((p) => fs.existsSync(p.file) && (p.from !== "this checkout" || fs.existsSync(path.join(appRoot, "..", "src", "cli.ts"))));
 	if (script) {
-		const candidates = [process.env.PINE_NODE, onPath("node", env), "/opt/homebrew/bin/node", "/usr/local/bin/node", path.join(os.homedir(), ".volta", "bin", "node")].filter((x): x is string => Boolean(x && fs.existsSync(x)));
+		const own = resources ? path.join(resources, "node", "bin", "node") : undefined;
+		const theirs = [onPath("node", env), "/opt/homebrew/bin/node", "/usr/local/bin/node", path.join(os.homedir(), ".volta", "bin", "node")];
+		const candidates = [process.env.PINE_NODE, ...(script.from === "the app" ? [own, ...theirs] : [...theirs, own])].filter((x): x is string => Boolean(x && fs.existsSync(x)));
 		for (const node of candidates) if ((await nodeVersion(node, env)) >= 24) return { argv: [node, script.file], env, from: script.from };
 		throw new ServiceError("no-node", candidates.length ? `pine needs Node 24 or newer, and the node found on this computer (${candidates[0]}) is older. Install a current one from https://nodejs.org, then try again.` : "pine runs on Node, and no node was found on this computer. Install Node 24 or newer from https://nodejs.org, then try again.");
 	}

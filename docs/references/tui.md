@@ -316,7 +316,8 @@ The first time, macOS asks whether **pine voice** may use the microphone. That i
 helper pine builds on your Mac with Apple's command line developer tools (`xcode-select
 --install` if they are missing; pine says so), and it is all the dialog is about: your
 terminal app is not given the microphone. After an update of pine the helper is built anew,
-and macOS may ask once more.
+and macOS may ask once more. A pine that came with the Pine app has the helper built already
+and needs no developer tools.
 
 **On Linux, and anywhere that is not macOS, there is no voice input.** The input has no
 microphone there, `ctrl+r` and `/voice` answer with one line that says so, and everything

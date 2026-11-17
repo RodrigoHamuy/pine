@@ -6,7 +6,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
-import { connect, findPine, type Launch, pineRoot, runPine, type Service, ServiceError } from "./service.ts";
+import { type Command, install, look, remove, said } from "./command.ts";
+import { connect, findPine, type Launch, loginEnv, pineRoot, runPine, type Service, ServiceError } from "./service.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(HERE, "..");
@@ -41,11 +42,13 @@ interface Prefs {
 	keepRunning: boolean;
 	theme: "system" | "light" | "dark";
 	notify: boolean;
+	/** `pine` for a terminal was looked after once (see firstCommand): a link the owner removed stays removed. */
+	commandTried: boolean;
 	bounds?: { x?: number; y?: number; width: number; height: number };
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, theme: "system", notify: true };
+let prefs: Prefs = { keepRunning: false, theme: "system", notify: true, commandTried: false };
 
 function loadPrefs(): void {
 	try {
@@ -55,6 +58,7 @@ function loadPrefs(): void {
 			keepRunning: raw.keepRunning === true,
 			theme: raw.theme === "light" || raw.theme === "dark" ? raw.theme : "system",
 			notify: raw.notify !== false,
+			commandTried: raw.commandTried === true,
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
 		};
 	} catch {
@@ -302,6 +306,40 @@ function show(): void {
 	}
 }
 
+// ---- `pine` for a terminal -----------------------------------------------------------------------
+
+/** What the packed app carries; a checkout has none of it. */
+const RESOURCES = app.isPackaged ? process.resourcesPath : undefined;
+
+const worded = (c: Command) => ({ ...c, text: said(c) });
+
+/**
+ * Once, the first time an app that carries pine is started from where it will stay: the link is
+ * made where that takes no password. Where it takes one, nothing is asked out of nowhere; the
+ * menu and Settings > App offer it. Not in a second set of data for tests and trying things out.
+ */
+async function firstCommand(): Promise<void> {
+	if (prefs.commandTried || process.env.PINE_DESKTOP_DATA) return;
+	const env = await loginEnv();
+	const now = look(RESOURCES, env);
+	if (now.state === "unavailable") return;
+	prefs.commandTried = true;
+	savePrefs();
+	if (now.state === "none" && !now.password) await install(RESOURCES, env);
+}
+
+/** The menu's way to the same thing: asks before it sets the command up, and says what is so. */
+async function commandFromMenu(): Promise<void> {
+	const env = await loginEnv();
+	let now = look(RESOURCES, env);
+	if (now.state === "none") {
+		const answer = await dialog.showMessageBox({ type: "question", message: "Use pine in a terminal too?", detail: said(now).replace(/^Not set up\. /, ""), buttons: ["Set Up", "Not Now"], defaultId: 0, cancelId: 1 });
+		if (answer.response !== 0) return;
+		now = await install(RESOURCES, env);
+	}
+	await dialog.showMessageBox({ type: "info", message: "pine in a terminal", detail: said(now) });
+}
+
 // ---- menus -------------------------------------------------------------------------------------
 
 /** A menu item that asks the page to do something: the page knows which conversation is in front. */
@@ -313,7 +351,7 @@ function buildMenu(): void {
 			? [
 					{
 						label: "Pine",
-						submenu: [{ role: "about" as const }, { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
+						submenu: [{ role: "about" as const }, { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), ...(RESOURCES && fs.existsSync(path.join(RESOURCES, "bin", "pine")) ? [{ label: "pine in a Terminal…", click: () => void commandFromMenu() }] : []), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
 					},
 				]
 			: []),
@@ -406,6 +444,10 @@ function wire(): void {
 		launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
 		const args = ["init", ...(prefs.home ? [prefs.home] : []), "--yes"];
 		return runPine(launch, args, (line) => send("pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
+	});
+	handle("pine:command", async (action?: string) => {
+		const env = await loginEnv();
+		return worded(action === "install" ? await install(RESOURCES, env) : action === "remove" ? await remove(RESOURCES, env) : look(RESOURCES, env));
 	});
 	handle("pine:prefs", (change: Partial<Prefs>) => {
 		if (change.theme === "system" || change.theme === "light" || change.theme === "dark") nativeTheme.themeSource = prefs.theme = change.theme;
@@ -534,6 +576,7 @@ else {
 		buildMenu();
 		createWindow();
 		void startService();
+		void firstCommand();
 		app.on("activate", show);
 	});
 	app.on("window-all-closed", () => {
