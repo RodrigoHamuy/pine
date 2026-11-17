@@ -522,7 +522,8 @@ upgrade pi (`npm run baseline`, then `npm test`).
 ## Releases
 
 Work goes to `next`, the repository's default branch, and `main` is what was released. Every
-push to `next` is a preview of the release it leads up to, and every push to `main` a release. A release's version follows from the commit messages since the last one
+push to `next` is a preview of the release it leads up to, and every push to `main` a release.
+A release's version follows from the commit messages since the last one
 (`scripts/version.mjs`, tested in `test/release.test.ts`):
 
 | A commit since the last release | Raises |
