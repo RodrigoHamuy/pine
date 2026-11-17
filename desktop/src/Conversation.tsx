@@ -1,6 +1,6 @@
 // One tab's conversation: what was said, the work of each turn folded into a line, and what
 // waits for the owner. Each kind of line is a small component; the list only draws what changed.
-import { BrainIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ListChecksIcon, MessageCircleQuestionIcon, PaperclipIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, BrainIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Confirmation, ConfirmationAction, ConfirmationActions, ConfirmationRequest, ConfirmationTitle } from "@/components/ai-elements/confirmation";
 import { Message, MessageContent } from "@/components/ai-elements/message";
@@ -11,14 +11,15 @@ import { Tool, ToolContent, ToolOutput } from "@/components/ai-elements/tool";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
-import { Button, Icon, Pulse } from "./ui.tsx";
+import { Pulse } from "./ui.tsx";
 
-const TONE_ICON: Record<Tone, string> = { muted: "info", warn: "alert", bad: "alert", good: "check", accent: "undo" };
+const TONE_ICON: Record<Tone, LucideIcon> = { muted: InfoIcon, warn: TriangleAlertIcon, bad: TriangleAlertIcon, good: CheckIcon, accent: Undo2Icon };
 
 function Status({ status }: { status: "run" | "ok" | "fail" | "done" | "failed" | "cancelled" }) {
 	if (status === "run") return <span className="inline-flex size-4 shrink-0 items-center justify-center"><Pulse size={11} /></span>;
@@ -256,10 +257,11 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 			);
 		case "work":
 			return <Work item={item} />;
-		case "note":
+		case "note": {
+			const ToneIcon = TONE_ICON[item.tone];
 			return (
 				<div className={`it-note ${item.tone}`}>
-					<Icon name={TONE_ICON[item.tone]} size={14} />
+					<ToneIcon size={14} />
 					<div className="grow">
 						<span className="head">{item.text}</span>
 						{item.action ? <button type="button" className="open-link" style={{ marginLeft: 8 }} onClick={item.action.run}>{item.action.label}</button> : null}
@@ -267,10 +269,11 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 					</div>
 				</div>
 			);
+		}
 		case "event":
 			return (
 				<div className="it-event">
-					<Icon name="bolt" size={14} />
+					<ZapIcon size={14} />
 					<div className="grow">
 						<b>{item.label}</b>
 						<div className="body">{short(oneLine(tilde(item.body)), 400)}</div>
@@ -293,7 +296,7 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 			const wait = g.status !== "met" && g.status !== "active";
 			return (
 				<div className={`it-goal${wait ? " wait" : ""}`}>
-					<span className="mark"><Icon name={g.status === "met" ? "check" : wait ? "clock" : "target"} size={14} /></span>
+					<span className="mark">{g.status === "met" ? "check" : wait ? <ClockIcon size={14} /> : <TargetIcon size={14} />}</span>
 					<div>
 						<b>goal</b> <span className="muted">{g.note}</span>
 						{g.reason ? <div className="reason">{short(oneLine(g.reason), 240)}</div> : null}
@@ -336,27 +339,27 @@ function Welcome({ tab }: { tab: Tab }) {
 			<h1>{tab.agent}</h1>
 			<p>{info?.description || "An agent of yours."}</p>
 			<div className="facts">
-				<span className="fact" title="The model it runs on"><Icon name="cpu" size={12} /><b>{info?.model ?? "no model"}</b></span>
-				<span className="fact" title={mode?.about}><Icon name="shield" size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</span>
+				<span className="fact" title="The model it runs on"><CpuIcon size={12} /><b>{info?.model ?? "no model"}</b></span>
+				<span className="fact" title={mode?.about}><ShieldIcon size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</span>
 				{info?.main ? <span className="fact" title="It creates and changes the other agents and pine's settings when you ask it to">administers pine</span> : null}
 				{info?.delegates.length ? <span className="fact" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></span> : null}
 				{counts.filter(([, n]) => n > 0).map(([what, n]) => <span className="fact" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</span>)}
 			</div>
 			{info?.modelProblem ? (
 				<div className="notice no-model">
-					<Icon name="alert" />
+					<TriangleAlertIcon />
 					<div className="grow">{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</div>
-					<Button small onClick={() => store.openSettings("models")}>Models…</Button>
+					<Button variant="outline" size="xs" onClick={() => store.openSettings("models")}>Models…</Button>
 				</div>
 			) : null}
 			<p className="faint">
 				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 			</p>
 			<div className="hints">
-				<Suggestion suggestion="What can you do for me, and what are you set up with?" onClick={say}>What can you do?</Suggestion>
-				<Button small icon="gear" onClick={() => store.openSettings("agents", tab.agent)}>Agent settings</Button>
-				<Button small icon="folder" onClick={() => void store.pickFolder(tab)}>Give it a folder</Button>
-				<Button small icon="command" onClick={() => void store.command("palette")}>Commands <kbd>⌘K</kbd></Button>
+				<Suggestion size="xs" suggestion="What can you do for me, and what are you set up with?" onClick={say}>What can you do?</Suggestion>
+				<Button variant="outline" size="xs" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
+				<Button variant="outline" size="xs" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" />Give it a folder</Button>
+				<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <kbd>⌘K</kbd></Button>
 			</div>
 		</div>
 	);
@@ -406,7 +409,7 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 	const step = (by: number) => count && setAt((at + by + count) % count);
 	return (
 		<div className="find">
-			<Icon name="search" size={13} className="faint" />
+			<SearchIcon size={13} className="faint" />
 			<input
 				autoFocus
 				placeholder="Find in this conversation"
@@ -418,9 +421,9 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 				}}
 			/>
 			<span className="faint">{query ? (count ? `${at + 1} of ${count}` : "nothing") : ""}</span>
-			<Button small variant="ghost" icon="up" title="Earlier (↩)" onClick={() => step(-1)} />
-			<Button small variant="ghost" icon="down" title="Later (⇧↩)" onClick={() => step(1)} />
-			<Button small variant="ghost" icon="x" onClick={close} />
+			<Button variant="ghost" size="icon-xs" title="Earlier (↩)" onClick={() => step(-1)}><ArrowUpIcon /></Button>
+			<Button variant="ghost" size="icon-xs" title="Later (⇧↩)" onClick={() => step(1)}><ChevronDownIcon /></Button>
+			<Button variant="ghost" size="icon-xs" onClick={close}><XIcon /></Button>
 		</div>
 	);
 }
@@ -437,10 +440,10 @@ function StatusLine({ tab }: { tab: Tab }) {
 	const elsewhere = store.tabs.find((t) => t !== tab && t.approvals.size > 0);
 	const goal = tab.goal?.status === "active" ? tab.goal : undefined;
 	if (!tab.busy) {
-		if (waiting.length) return <div className="status warn"><Icon name="alert" size={14} /><span>{waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval."}</span><Button small onClick={() => store.ask(waiting[0].req.id)}>Open</Button></div>;
-		if (goal) return <div className="status"><Icon name="target" size={14} /><span>goal · round {goal.round} of {goal.until} · checking whether it is met</span><Button small onClick={() => void store.setGoal(tab, "pause")}>Pause</Button></div>;
-		if (elsewhere) return <div className="status warn"><Icon name="alert" size={14} /><span>{elsewhere.agent} · {elsewhere.session} waits for you.</span><Button small onClick={() => store.activate(elsewhere)}>Go there</Button></div>;
-		if (tab.programs.length) return <div className="status"><Icon name="play" size={13} /><span>{plural(tab.programs.length, "program")} still running</span><Button small variant="ghost" onClick={() => void store.command("code-running")}>Show</Button></div>;
+		if (waiting.length) return <div className="status warn"><TriangleAlertIcon size={14} /><span>{waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval."}</span><Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button></div>;
+		if (goal) return <div className="status"><TargetIcon size={14} /><span>goal · round {goal.round} of {goal.until} · checking whether it is met</span><Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button></div>;
+		if (elsewhere) return <div className="status warn"><TriangleAlertIcon size={14} /><span>{elsewhere.agent} · {elsewhere.session} waits for you.</span><Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button></div>;
+		if (tab.programs.length) return <div className="status"><PlayIcon size={13} /><span>{plural(tab.programs.length, "program")} still running</span><Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button></div>;
 		return <div className="status" />;
 	}
 	const secs = Math.max(0, Math.round((Date.now() - tab.startedAt) / 1000));
@@ -463,7 +466,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 			{goal ? <span>goal · round {goal.round} of {goal.until}</span> : null}
 			{parts.map((p, i) => <span key={i} className={i || goal ? "sep" : ""}>{p}</span>)}
 			<span className="grow" />
-			{waiting.length ? <Button small onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null}
+			{waiting.length ? <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null}
 		</div>
 	);
 }
@@ -479,8 +482,8 @@ function ConvHead({ tab }: { tab: Tab }) {
 			<span className="muted">{tab.agent}</span>
 			<span className="faint">/</span>
 			<b className="cut" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
-			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><Icon name="folder" size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
-			{chat && store.pins.has(tab.key) ? <Icon name="star" size={12} className="faint" /> : null}
+			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><FolderIcon size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
+			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="faint" /> : null}
 			<span className="grow" />
 			{tab.context !== undefined ? (
 				<span className="conv-meta" title={`Context ${tab.context}% full${tab.cacheShare !== undefined ? ` · ${tab.cacheShare}% of the last request came from the model server's cache` : ""}${speedText(tab.speed) ? ` · ${speedText(tab.speed)}` : ""}`}>
@@ -488,7 +491,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 					{total ? `${count(total)} · ` : ""}{Math.round(tab.context)}%
 				</span>
 			) : null}
-			{chat ? <Button small variant="ghost" className={store.code ? "on" : ""} icon="panel" title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")} /> : null}
+			{chat ? <Button variant="ghost" size="icon-xs" aria-pressed={store.code} title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")}><PanelRightIcon /></Button> : null}
 		</div>
 	);
 }
@@ -566,14 +569,14 @@ export function Conversation({ tab }: { tab: Tab }) {
 					{!tab.loaded ? <div className="empty"><Pulse /></div> : !tab.items.length && chat ? <Welcome tab={tab} /> : tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
 				</div>
 			</div>
-			{away ? <Button className="jump" small icon="down" onClick={() => ((stick.current = true), toEnd(), setAway(false))}>Latest</Button> : null}
+			{away ? <Button variant="outline" size="xs" className="jump" onClick={() => ((stick.current = true), toEnd(), setAway(false))}><ChevronDownIcon data-icon="inline-start" />Latest</Button> : null}
 			<div className="dock">
 				<div className="dock-in">
 					<StatusLine tab={tab} />
 					{chat ? (
 						<Composer tab={tab} />
 					) : tab.busy ? (
-						<div className="row"><span className="muted grow">This tab shows one task's work and takes no messages.</span><Button small icon="stop" onClick={() => void store.stop(tab)}>Stop this task</Button></div>
+						<div className="row"><span className="muted grow">This tab shows one task's work and takes no messages.</span><Button variant="outline" size="xs" onClick={() => void store.stop(tab)}><SquareIcon data-icon="inline-start" />Stop this task</Button></div>
 					) : null}
 				</div>
 			</div>

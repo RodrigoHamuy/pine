@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { Button, Dialog, Field } from "../ui.tsx";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, LabeledField } from "../ui.tsx";
 
 const meta = {
 	component: Dialog,
@@ -9,14 +11,14 @@ const meta = {
 		onClose: () => {},
 		footer: (
 			<>
-				<Button>Cancel</Button>
-				<Button variant="primary">Rename</Button>
+				<Button variant="outline">Cancel</Button>
+				<Button>Rename</Button>
 			</>
 		),
 		children: (
-			<Field label="Name">
-				<input className="input" defaultValue="Morning check" />
-			</Field>
+			<LabeledField label="Name">
+				<Input defaultValue="Morning check" />
+			</LabeledField>
 		),
 	},
 } satisfies Meta<typeof Dialog>;
@@ -32,8 +34,8 @@ export const Warn: Story = {
 		onClose: undefined,
 		footer: (
 			<>
-				<Button>No</Button>
-				<Button variant="primary">Yes, once</Button>
+				<Button variant="outline">No</Button>
+				<Button>Yes, once</Button>
 			</>
 		),
 		children: <p>The agent wants to run a command outside its sandbox.</p>,
