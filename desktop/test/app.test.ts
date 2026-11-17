@@ -123,6 +123,10 @@ after(async () => {
 	for (const dir of [home, folder]) if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
+/** The edge between the side bar and the rest of the window, and the one before the panel beside a conversation. */
+const SIDE_EDGE = "[data-slot=resizable-panel]:has(.sidebar) + [data-slot=resizable-handle]";
+const CODE_EDGE = "[data-slot=resizable-handle]:has(+ [data-slot=resizable-panel] > * > .code)";
+
 test("starts a daemon of its own and shows the main agent", async () => {
 	await sees(".welcome h1");
 	assert.equal(await page.textContent(".welcome h1"), "main");
@@ -427,6 +431,24 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	// The panel begins with the agent: who it is and what it runs on.
 	await sees(".agent-view .agent-name >> text=main");
 	assert.match(await page.textContent(".agent-view"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
+	// The panel is as wide as it is dragged, by the edge before it, and the keyboard moves that edge too.
+	const was = await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width);
+	const edge = await page.$eval(CODE_EDGE, (el: Element) => el.getBoundingClientRect());
+	await page.mouse.move(edge.x + edge.width / 2, 300);
+	await page.mouse.down();
+	await page.mouse.move(edge.x + edge.width / 2 - 60, 300, { steps: 4 });
+	await page.mouse.up();
+	assert.equal(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width), was + 60);
+	await page.focus(`${CODE_EDGE}[role='separator']`);
+	await page.keyboard.press("ArrowLeft");
+	await page.waitForFunction((w) => document.querySelector(".code")!.getBoundingClientRect().width > w, was + 60);
+	// Loaded again, it is as wide as it was left (to the pixel).
+	const wide = Math.round(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width));
+	await page.reload();
+	await sees(".tab.on .name >> text=pine-desktop-folder");
+	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	await sees(".code");
+	assert.equal(Math.round(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width)), wide);
 	// However narrow the panel is, the names of its views stay whole on one line.
 	// (On one line: no taller than the control's own height, 32 pixels.)
 	assert.ok((await page.$eval(".code [data-slot=tabs-trigger] >> text=Last turn", (b: Element) => b.getBoundingClientRect().height)) <= 32);
@@ -452,6 +474,61 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	for (let i = 0; i < 50 && !fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8").includes("43"); i++) await new Promise((r) => setTimeout(r, 100));
 	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n");
 	await shot("05-editor");
+});
+
+const focused = () =>
+	page.evaluate(() => {
+		const el = document.activeElement as HTMLElement;
+		return { role: el.getAttribute("role"), expanded: el.getAttribute("aria-expanded"), text: (el.querySelector("[data-slot=tree-label]") ?? el).textContent ?? "" };
+	});
+
+test("a file is opened from the panel's tree, its changes and its search with the keyboard alone", async () => {
+	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	// The test before left a file open in the editor.
+	if (await page.$(".editor")) await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.click(".code [data-slot=tabs-trigger] >> text=Files");
+	await sees(".code [role=tree] [role=treeitem]");
+	// From the find field, Tab reaches the tree after the refresh button: one stop.
+	await page.focus(".code-sub input");
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Tab");
+	assert.equal((await focused()).role, "treeitem");
+	// Typing finds the folder, the right arrow opens it and goes in, Enter opens the file.
+	await page.keyboard.type("src");
+	assert.deepEqual([(await focused()).text.trim(), (await focused()).expanded], ["src", "false"]);
+	await page.keyboard.press("ArrowRight");
+	await page.waitForFunction(() => document.activeElement?.getAttribute("aria-expanded") === "true");
+	await sees(".code [role=treeitem] >> text=index.ts");
+	await page.keyboard.press("ArrowRight");
+	assert.match((await focused()).text, /index\.ts/);
+	await page.keyboard.press("ArrowLeft");
+	assert.deepEqual([(await focused()).text.trim(), (await focused()).expanded], ["src", "true"]);
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await sees(".editor .cm-content");
+	assert.match(await page.textContent(".editor .cm-content"), /answer = 43/);
+	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	// The file search's results are a list: Tab reaches it, Enter opens one.
+	await page.fill(".code-sub input", "index");
+	await sees(".code [role=listbox] [role=option] >> text=src/index.ts");
+	await page.focus(".code-sub input");
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Tab");
+	assert.equal((await focused()).role, "option");
+	await page.keyboard.press("Enter");
+	await sees(".editor .cm-content");
+	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.fill(".code-sub input", "");
+	// So are the changes: Tab from the refresh button, Enter opens the diff.
+	await page.click(".code [data-slot=tabs-trigger] >> text=Changes");
+	await sees(".code [role=listbox] [role=option]");
+	await page.focus(".code-sub [data-slot=button][title='Read again']");
+	await page.keyboard.press("Tab");
+	assert.equal((await focused()).role, "option");
+	await page.keyboard.press("Enter");
+	await sees(".diff");
+	await page.click(".code-sub [data-slot=button][title='Back to the list']");
+	await page.click(".code [data-slot=tabs-trigger] >> text=Files");
 });
 
 test("settings: a setting is changed, an agent made, a schedule added, a provider signed in to, a skill and a source added", async () => {
@@ -698,14 +775,20 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(one.row, 30, "an agent's line is as high as a conversation's");
 	// The side bar is as wide as it is dragged.
 	const before = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
-	const edge = await page.$eval(".splitter.side", (el: Element) => el.getBoundingClientRect());
+	const edge = await page.$eval(SIDE_EDGE, (el: Element) => el.getBoundingClientRect());
 	await page.mouse.move(edge.x + edge.width / 2, 300);
 	await page.mouse.down();
 	await page.mouse.move(edge.x + edge.width / 2 + 80, 300, { steps: 4 });
 	await page.mouse.up();
 	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), before + 80);
-	// Hidden, the side bar is still hidden when the page is loaded again, and shown it is as wide as it was.
-	const wide = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
+	// The edge is a separator the keyboard moves too: focused, an arrow key makes the side bar wider.
+	await page.focus(`${SIDE_EDGE}[role='separator']`);
+	assert.ok(await page.getAttribute(SIDE_EDGE, "aria-valuenow"), "the edge says how far it is");
+	await page.keyboard.press("ArrowRight");
+	await page.waitForFunction((was) => document.querySelector(".sidebar")!.getBoundingClientRect().width > was, before + 80);
+	// Hidden, the side bar is still hidden when the page is loaded again, and shown it is as wide as it was
+	// (to the pixel: the edges place panels by fractions of the window, a few hundredths of a pixel apart).
+	const wide = Math.round(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width));
 	await menu("sidebar");
 	await page.waitForSelector(".sidebar", { state: "detached" });
 	await page.reload();
@@ -713,7 +796,7 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(await page.locator(".sidebar").count(), 0);
 	await menu("sidebar");
 	await sees(".sidebar");
-	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), wide);
+	assert.equal(Math.round(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width)), wide);
 	await page.reload();
 	await sees(".sidebar .side-agent");
 	// A group folds away on a click on its agent, and comes back.
@@ -761,6 +844,30 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await sees(".pick-title >> text=New conversation with");
 	assert.deepEqual(await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent)), ["main", "scout", "books", "test"]);
 	await page.keyboard.press("Escape");
+	await page.click(".tab.on .close");
+});
+
+test("a conversation is opened from the side bar with the keyboard alone, and a group folds from it", async () => {
+	const group = page.locator(".side-group", { has: page.locator(".who > :first-child", { hasText: /^scout$/ }) });
+	const fold = group.locator("[data-slot=collapsible-trigger]");
+	await fold.focus();
+	assert.equal(await fold.getAttribute("aria-expanded"), "true");
+	await page.keyboard.press("Enter");
+	await page.waitForFunction(() => document.activeElement?.getAttribute("aria-expanded") === "false");
+	assert.equal(await group.locator(".side-conv").count(), 0);
+	await page.keyboard.press("Space");
+	await page.waitForFunction(() => document.activeElement?.getAttribute("aria-expanded") === "true");
+	assert.ok((await group.locator(".side-conv").count()) > 0);
+	// Its conversations are one stop after the agent's plus: Tab goes in, the arrows move, Enter opens.
+	await page.keyboard.press("Tab");
+	assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("title")), "New conversation with scout");
+	await page.keyboard.press("Tab");
+	const at = () => page.evaluate(() => ({ role: document.activeElement?.getAttribute("role"), text: document.activeElement?.textContent ?? "" }));
+	assert.equal((await at()).role, "option");
+	for (let i = 0; i < 6 && !/where is the okapi invoice/.test((await at()).text); i++) await page.keyboard.press("ArrowDown");
+	assert.match((await at()).text, /where is the okapi invoice/);
+	await page.keyboard.press("Enter");
+	await sees(".tab.on .name >> text=where is the okapi invoice");
 	await page.click(".tab.on .close");
 });
 

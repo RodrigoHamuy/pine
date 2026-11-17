@@ -3,18 +3,22 @@
 // to pick from, a question, the palette).
 import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, ListIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import { usePanelRef } from "react-resizable-panels";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AgentInfo, api, type Approval, type Conversation as Conv } from "./api.ts";
 import { bridge } from "./bridge.ts";
-import { CodePanel } from "./CodePanel.tsx";
+import { CODE_KEY, CodePanel } from "./CodePanel.tsx";
 import { COMMANDS } from "./commands.ts";
 import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
+import { List, ListRow } from "./lists.tsx";
 import { Confirm, Dialog, Logo, Pulse } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
@@ -105,16 +109,16 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
-		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
+		<ListRow value={c.session} label={s.titleOf(agent, c.session)} className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
 			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <StarIcon size={12} className="faint" /> : c.folder ? <FolderIcon size={12} className="faint" /> : <MessageSquareIcon size={12} className="faint" />}</span>
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
-				<span className="acts" onClick={(e) => e.stopPropagation()}>
+				<span className="acts" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
 					<Confirm icon={Trash2Icon} label="Remove this conversation for good" sure="Remove?" onConfirm={() => void s.removeConversation(agent, c.session)} />
 				</span>
 			)}
-		</div>
+		</ListRow>
 	);
 }
 
@@ -150,25 +154,29 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		if (picked === "remove") await s.removeAgent(a.id);
 	};
 	return (
-		<div className="side-group">
-			<div className="side-agent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onClick={() => s.toggleFold(a.id)} onContextMenu={(e) => (e.preventDefault(), void menu())}>
-				{folded ? <ChevronRightIcon size={10} className="faint" /> : <ChevronDownIcon size={10} className="faint" />}
-				<span className="avatar">{a.id.slice(0, 1).toUpperCase()}</span>
-				<span className="who">
-					<span className="cut">{a.id}</span>
-					<span className="what"><span>{a.description || a.model}</span></span>
-				</span>
-				{waits ? <span className="needs">!</span> : working ? <Pulse size={11} /> : unread && folded ? <span className="dot unread" /> : null}
-				<span className="agent-acts" onClick={(e) => e.stopPropagation()}>
+		<Collapsible className="side-group" open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
+			<div className="side-agent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
+				<CollapsibleTrigger className="fold-trigger">
+					{folded ? <ChevronRightIcon size={10} className="faint" /> : <ChevronDownIcon size={10} className="faint" />}
+					<span className="avatar">{a.id.slice(0, 1).toUpperCase()}</span>
+					<span className="who">
+						<span className="cut">{a.id}</span>
+						<span className="what"><span>{a.description || a.model}</span></span>
+					</span>
+					{waits ? <span className="needs">!</span> : working ? <Pulse size={11} /> : unread && folded ? <span className="dot unread" /> : null}
+				</CollapsibleTrigger>
+				<span className="agent-acts">
 					<Button variant="ghost" size="icon-xs" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></Button>
 					<Button variant="ghost" size="icon-xs" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()}><FolderIcon /></Button>
 				</span>
-				<span onClick={(e) => e.stopPropagation()}>
-					<Button variant="ghost" size="icon-xs" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)}><PlusIcon /></Button>
-				</span>
+				<Button variant="ghost" size="icon-xs" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)}><PlusIcon /></Button>
 			</div>
-			{folded ? null : rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
-		</div>
+			<CollapsibleContent>
+				<List label={`Conversations with ${a.id}`} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onOpen={(session) => void s.openTab(a.id, session)}>
+					{rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
+				</List>
+			</CollapsibleContent>
+		</Collapsible>
 	);
 }
 
@@ -598,6 +606,17 @@ function BrowserAsk() {
 	);
 }
 
+const SIDE_KEY = "pine.sidebar.width";
+const SIDE_WIDTH = 248;
+
+/** Remembers how wide a panel is, in pixels, for the next start. Only what the owner did is kept: a narrow window squeezes a panel without changing what it is set to. */
+const keepWidth = (panel: string, key: string) =>
+	// After a key the layout is told before the panel is drawn at its new width: measure in the next frame.
+	requestAnimationFrame(() => {
+		const width = document.getElementById(panel)?.offsetWidth;
+		if (width) localStorage.setItem(key, String(width));
+	});
+
 export function App() {
 	const s = useModel(store);
 	const [help, setHelp] = useState(false);
@@ -612,40 +631,35 @@ export function App() {
 	}, []);
 	const ready = s.service.status === "ready" && s.agents.length > 0 && s.active;
 	const tab = s.active;
-	// The side bar is as wide as it was dragged, as the panel on the other side is.
-	const [sideWidth, setSideWidth] = useState(() => Number(localStorage.getItem("pine.sidebar.width")) || 248);
-	const [sideDrag, setSideDrag] = useState(false);
-	const dragSide = (e: React.MouseEvent) => {
-		e.preventDefault();
-		setSideDrag(true);
-		const from = e.clientX;
-		const was = sideWidth;
-		let now = was;
-		const move = (m: MouseEvent) => setSideWidth((now = Math.max(190, Math.min(460, was + m.clientX - from))));
-		const up = () => {
-			setSideDrag(false);
-			localStorage.setItem("pine.sidebar.width", String(now));
-			window.removeEventListener("mousemove", move);
-			window.removeEventListener("mouseup", up);
-		};
-		window.addEventListener("mousemove", move);
-		window.addEventListener("mouseup", up);
-	};
+	const side = usePanelRef();
 	return (
-		<div className={`app${s.sidebar && ready ? "" : " no-sidebar"}${s.fullscreen ? " fullscreen" : ""}`} style={{ "--sidebar-w": `${sideWidth}px` } as React.CSSProperties}>
+		<div className={`app${s.sidebar && ready ? "" : " no-sidebar"}${s.fullscreen ? " fullscreen" : ""}`}>
 			{!ready ? (
 				<Gate />
 			) : (
-				<>
-					{s.sidebar ? <><Sidebar /><div className={`splitter side${sideDrag ? " drag" : ""}`} onMouseDown={dragSide} onDoubleClick={() => (setSideWidth(248), localStorage.setItem("pine.sidebar.width", "248"))} title="Drag to make the side bar wider or narrower" /></> : null}
-					<div className="main">
-						<TitleBar />
-						<div className="body">
-							{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
-							{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+				<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(_, meta) => meta.isUserInteraction && keepWidth("sidebar-panel", SIDE_KEY)}>
+					{s.sidebar ? (
+						<>
+							<ResizablePanel id="sidebar-panel" className="flex" panelRef={side} defaultSize={Number(localStorage.getItem(SIDE_KEY)) || SIDE_WIDTH} minSize={190} maxSize={460} groupResizeBehavior="preserve-pixel-size">
+								<Sidebar />
+							</ResizablePanel>
+							<ResizableHandle className="bg-transparent" disableDoubleClick onDoubleClick={() => (side.current?.resize(SIDE_WIDTH), localStorage.setItem(SIDE_KEY, String(SIDE_WIDTH)))} title="Drag to make the side bar wider or narrower" />
+						</>
+					) : null}
+					<ResizablePanel id="main" className="flex">
+						<div className="main">
+							<TitleBar />
+							<div className="body">
+								<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(_, meta) => meta.isUserInteraction && keepWidth("code-panel", CODE_KEY)}>
+									<ResizablePanel id="view" className="flex" minSize={420}>
+										{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
+									</ResizablePanel>
+									{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+								</ResizablePanelGroup>
+							</div>
 						</div>
-					</div>
-				</>
+					</ResizablePanel>
+				</ResizablePanelGroup>
 			)}
 			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.updateAsk ? <UpdateAsk /> : null}
