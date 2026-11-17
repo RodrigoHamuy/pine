@@ -353,7 +353,7 @@ the agent to write. So:
 | | |
 |---|---|
 | The page has no token and no Node | The daemon's token stays in the app's main process, which makes each call for the page. The page runs in the browser's sandbox, without access to files or programs |
-| An answer is content, not a page | It is drawn from markdown and cleaned of everything that could act: scripts, styles, forms, frames. The window's own policy lets it load nothing from the web |
+| An answer is content, not a page | It is drawn from markdown (Streamdown, with code coloured on the page by Shiki) and cleaned of everything that could act or restyle: scripts, styles, forms, frames, svg, media tags, style, class and id attributes, `javascript:` links. A small picture written into the text (`data:` png, jpeg, gif, webp) is shown. The window's own policy lets it load nothing from the web |
 | A link says where it leads | The address stands next to a link whose words are not the address, and only `http` and `https` addresses open, in your browser |
 | Nothing is fetched because an answer contains it | A picture at a web address is a line to click (`Load picture · https://…`); the daemon then fetches it, with its guard against addresses in your network. A picture at a path in the agent's workspace is shown from there |
 | What is drawn straight from the daemon | Only pictures, video and sound, by fixed addresses of the control API |
@@ -424,6 +424,8 @@ desktop/
     Browser.tsx    the agent's browser in the panel: its page as a picture, and what is done in it handed back
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
+    components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
+    ui.tsx         pine's own small parts, made of shadcn's components
     index.css      Tailwind and shadcn's tokens, set from the colours of styles.css (components.json
                    is shadcn's configuration: Base UI, lucide icons)
     styles.css     the colours, light in `:root` and poimandres in `:root.dark`, and the rest of the look
@@ -440,16 +442,22 @@ desktop/
 - What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a
   test there, then to `api.ts`. The app never does a daemon's work itself.
 - Text an answer or a tool produced is drawn through `markdown.tsx` or as plain text, never
-  set as HTML anywhere else.
+  set as HTML anywhere else. `markdown.tsx` replaces three of Streamdown's defaults, which are
+  not safe here: the cleaning rules (`CLEAN`), links and pictures. After an upgrade of
+  Streamdown, read its defaults again and run the desktop suite: its markdown test fails
+  without each of the three.
 - A new thing the owner can see or do gets a test in `desktop/test/`, which starts the real
   app on a home of its own.
 
 ### Stories and Chromatic
 
-The parts the page is built from (`src/ui.tsx`: buttons, fields, switches, the segmented
-control, dialogs) have stories beside them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need neither Electron
-nor a daemon. Story only parts that take everything as props; a part that calls `api.ts` or
-the bridge has no story.
+Buttons, switches, inputs, fields, tabs (the segmented controls) and selects are shadcn's own
+components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
+are lucide's. They have no stories of their own. pine's own parts (`src/ui.tsx`: the logo, a
+labelled field and a choice made of shadcn's pieces, dialogs, an empty view) have stories beside
+them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need
+neither Electron nor a daemon. Story only parts that take everything as props; a part that calls
+`api.ts` or the bridge has no story.
 
 | Command (in `desktop/`) | What it does |
 |---|---|

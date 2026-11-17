@@ -1,12 +1,23 @@
 // One tab's conversation: what was said, the work of each turn folded into a line, and what
 // waits for the owner. Each kind of line is a small component; the list only draws what changed.
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { ArrowUpIcon, BrainIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
+import { memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Confirmation, ConfirmationAction, ConfirmationActions, ConfirmationRequest, ConfirmationTitle } from "@/components/ai-elements/confirmation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Reasoning, ReasoningTrigger } from "@/components/ai-elements/reasoning";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { Task, TaskContent, TaskItem, TaskTrigger } from "@/components/ai-elements/task";
+import { Tool, ToolContent, ToolOutput } from "@/components/ai-elements/tool";
+import { Badge } from "@/components/ui/badge";
+import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
-import { Button, Icon, Pulse } from "./ui.tsx";
+import { Pulse } from "./ui.tsx";
 
 /** A picture that opens larger over the page, with a click or, focused, with Enter. */
 const zoomable = {
@@ -15,52 +26,70 @@ const zoomable = {
 	onKeyDown: (e: React.KeyboardEvent<HTMLImageElement>) => e.key === "Enter" && window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
 };
 
-const TONE_ICON: Record<Tone, string> = { muted: "info", warn: "alert", bad: "alert", good: "check", accent: "undo" };
+const TONE_ICON: Record<Tone, LucideIcon> = { muted: InfoIcon, warn: TriangleAlertIcon, bad: TriangleAlertIcon, good: CheckIcon, accent: Undo2Icon };
 
 function Status({ status }: { status: "run" | "ok" | "fail" | "done" | "failed" | "cancelled" }) {
-	if (status === "run") return <span className="st"><Pulse size={11} /></span>;
+	if (status === "run") return <span className="inline-flex size-4 shrink-0 items-center justify-center"><Pulse size={11} /></span>;
 	const ok = status === "ok" || status === "done";
-	return <span className={`st ${ok ? "ok" : "fail"}`}><Icon name={ok ? "check" : "x"} size={12} /></span>;
+	return <span className={cn("inline-flex size-4 shrink-0 items-center justify-center", ok ? "text-primary" : "text-destructive")}>{ok ? <CheckIcon className="size-3" /> : <XIcon className="size-3" />}</span>;
 }
 
-function Thought({ part, live }: { part: Extract<Part, { p: "thought" }>; live: boolean }) {
+/** Thinking, folded into a line. Its text is shown as it is, never drawn as markdown: it is the model's own words. */
+function Thought({ text, head, peek }: { text: string; head: ReactNode; peek?: boolean }) {
 	const [open, setOpen] = useState(false);
-	const secs = part.done ? undefined : Math.round((Date.now() - part.startedAt) / 1000);
 	return (
-		<div className="thought">
-			<button type="button" className="thought-head" onClick={() => setOpen(!open)}>
-				<span className="st"><Icon name={open ? "down" : "right"} size={11} /></span>
-				{part.done ? `thought for ${took(part.ms)}` : `thinking ${secs}s`}
-				{part.speed ? <span className="faint" style={{ fontStyle: "normal" }}>{part.speed}</span> : null}
-			</button>
-			{open ? <div className="thought-text" onClick={() => !window.getSelection()?.toString() && setOpen(false)}>{part.text}</div> : live && !part.done ? <div className="thought-text peek"><span>{part.text.slice(-600)}</span></div> : null}
-		</div>
+		<Reasoning className="mb-0" open={open} onOpenChange={setOpen} data-part="thought">
+			<ReasoningTrigger className="py-0.5 text-xs italic">
+				<BrainIcon className="size-3.5" />
+				{head}
+				<ChevronDownIcon className={cn("size-3.5 transition-transform", open ? "rotate-180" : "rotate-0")} />
+			</ReasoningTrigger>
+			<CollapsibleContent className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap border-l-2 pl-3 text-muted-foreground text-xs select-text">{text}</CollapsibleContent>
+			{!open && peek ? <div className="mt-1 line-clamp-3 border-l-2 pl-3 text-muted-foreground text-xs">{text.slice(-600)}</div> : null}
+		</Reasoning>
+	);
+}
+
+/** One tool call: a line with what it did, which opens on what it returned or why it failed. */
+function Call({ tool, subject, status, ms, depth = 0, output, error, images }: { tool: string; subject?: string; status: "run" | "ok" | "fail"; ms?: number; depth?: number; output?: string; error?: string; images?: string[] }) {
+	const more = Boolean(output || error || images?.length);
+	return (
+		<Tool className="mb-0 border-0" style={{ paddingLeft: depth * 14 }} data-part="tool" data-status={status}>
+			<CollapsibleTrigger disabled={!more} className="flex w-full min-w-0 items-center gap-2 rounded-sm py-0.5 text-left text-xs enabled:cursor-pointer enabled:hover:bg-hover">
+				<Status status={status} />
+				<span className="shrink-0 font-mono text-foreground" data-tool>{tool}</span>
+				<span className="truncate font-mono text-muted-foreground" title={subject}>{subject}</span>
+				<span className="grow" />
+				{ms !== undefined ? <span className="shrink-0 text-faint">{took(ms)}</span> : null}
+			</CollapsibleTrigger>
+			{more ? (
+				<ToolContent className="p-2 pl-6">
+					<ToolOutput output={output ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-2 font-mono select-text">{output}</pre> : undefined} errorText={error} />
+					{(images ?? []).map((id) => (
+						<div className="it-media" key={id}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} /></div>
+					))}
+				</ToolContent>
+			) : null}
+		</Tool>
 	);
 }
 
 function PartLine({ part, live }: { part: Part; live: boolean }) {
-	if (part.p === "thought") return <Thought part={part} live={live} />;
-	if (part.p === "words") return <div className="part-words">{part.text}</div>;
+	if (part.p === "thought") {
+		const secs = part.done ? undefined : Math.round((Date.now() - part.startedAt) / 1000);
+		return <Thought text={part.text} peek={live && !part.done} head={<>{part.done ? `thought for ${took(part.ms)}` : `thinking ${secs}s`}{part.speed ? <span className="text-faint not-italic">{part.speed}</span> : null}</>} />;
+	}
+	if (part.p === "words") return <TaskItem className="whitespace-pre-wrap text-xs" data-part="words">{part.text}</TaskItem>;
 	if (part.p === "child")
 		return (
-			<div className="part" style={{ paddingLeft: Math.max(0, part.depth - 1) * 14 }}>
+			<TaskItem className="flex min-w-0 items-center gap-2 text-xs" style={{ paddingLeft: Math.max(0, part.depth - 1) * 14 }} data-part="child">
 				<Status status={part.status} />
-				<span className="tool">↳ {part.agent}</span>
-				<span className="subject" style={{ fontFamily: "inherit" }}>{childKind(part.kind)} #{part.task}{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}</span>
+				<span className="shrink-0 font-mono text-foreground">↳ {part.agent}</span>
+				<span className="truncate">{childKind(part.kind)} #{part.task}{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}</span>
 				<button type="button" className="open-link" onClick={() => void store.openTask(part.task)}>open</button>
-			</div>
+			</TaskItem>
 		);
-	return (
-		<>
-			<div className="part" style={{ paddingLeft: part.depth * 14 }}>
-				<Status status={part.status} />
-				<span className="tool">{part.tool}</span>
-				<span className="subject" title={part.subject}>{part.subject}</span>
-				{part.ms !== undefined ? <span className="ms">{took(part.ms)}</span> : null}
-			</div>
-			{part.status === "fail" && part.preview ? <div className="part-err" style={{ marginLeft: 22 + part.depth * 14 }}>{part.preview}</div> : null}
-		</>
-	);
+	return <Call tool={part.tool} subject={part.subject} status={part.status} ms={part.ms} depth={part.depth} error={part.status === "fail" ? part.preview : undefined} />;
 }
 
 /** "12 tool calls · bash ×6 · read ×4 · edit · +1 more · 2 thoughts · 1 failed · 48s" */
@@ -89,113 +118,156 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 	const [open, setOpen] = useState(item.open);
 	const parts = item.parts;
 	// A turn with a single call or thought is that call or thought itself, with no line above it.
-	if (parts.length === 1 && item.done) return <div className="work"><div className="work-parts" style={{ borderTop: "none", paddingTop: 6 }}><PartLine part={parts[0]} live={false} /></div></div>;
+	if (parts.length === 1 && item.done) return <div className="py-1" data-item="work"><PartLine part={parts[0]} live={false} /></div>;
 	const shown = open ? parts : item.done ? [] : parts.slice(-6);
+	// While the turn runs its last lines show under the head; a click shows all of them, another folds it.
 	return (
-		<div className={`work${open ? " open" : ""}`}>
-			<button type="button" className="work-head" onClick={() => ((item.open = !open), setOpen(!open))}>
-				{item.done ? <Icon name="right" size={12} className="chev" /> : <Pulse size={12} />}
-				<span className="grow cut">{workHead(parts, item.done, item.ms) || "working"}</span>
-				{!item.done && !open && parts.length > 6 ? <span className="faint">show all</span> : null}
-			</button>
-			{shown.length ? (
-				<div className="work-parts">
-					{shown.map((p, i) => (
-						<PartLine key={open ? i : parts.length - shown.length + i} part={p} live={!item.done} />
-					))}
+		<Task open={shown.length > 0} onOpenChange={() => ((item.open = !open), setOpen(!open))} className="py-1" data-item="work" data-open={open || undefined}>
+			<TaskTrigger title={workHead(parts, item.done, item.ms) || "working"}>
+				<div className="flex w-full min-w-0 cursor-pointer items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground">
+					{item.done ? <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} /> : <Pulse size={12} />}
+					<span className="grow truncate text-left">{workHead(parts, item.done, item.ms) || "working"}</span>
+					{!item.done && !open && parts.length > 6 ? <span className="text-faint">show all</span> : null}
 				</div>
-			) : null}
-		</div>
+			</TaskTrigger>
+			<TaskContent className="[&>div]:mt-1 [&>div]:space-y-0.5">
+				{shown.map((p, i) => (
+					<PartLine key={open ? i : parts.length - shown.length + i} part={p} live={!item.done} />
+				))}
+			</TaskContent>
+		</Task>
 	);
 }
 
 function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
-	const [open, setOpen] = useState(false);
-	if (entry.kind === "user") return <div className="it-user"><span className="from">task</span>{entry.text}</div>;
-	if (entry.kind === "text") return <Markdown text={entry.text ?? ""} where={{ agent }} />;
-	if (entry.kind === "thinking")
+	if (entry.kind === "user")
 		return (
-			<div className="thought">
-				<button type="button" className="thought-head" onClick={() => setOpen(!open)}><span className="st"><Icon name={open ? "down" : "right"} size={11} /></span>thought</button>
-				{open ? <div className="thought-text">{entry.text}</div> : null}
-			</div>
+			<Message from="user" data-item="user">
+				<MessageContent className="whitespace-pre-wrap select-text"><span className="text-faint text-xs">task</span>{entry.text}</MessageContent>
+			</Message>
 		);
-	return (
-		<div style={{ fontSize: 12.5 }}>
-			<div className="part">
-				<Status status={entry.ok === undefined ? "run" : entry.ok ? "ok" : "fail"} />
-				<span className="tool">{entry.tool}</span>
-				<span className="subject">{entry.subject ? oneLine(entry.subject) : ""}</span>
-				{entry.ms !== undefined ? <span className="ms">{took(entry.ms)}</span> : null}
-			</div>
-			{entry.result ? <div className="entry-result" style={entry.ok === false ? { color: "var(--bad)" } : undefined}>{short(entry.result, 4000)}</div> : null}
-			{(entry.images ?? []).map((id) => (
-				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} /></div>
-			))}
-		</div>
-	);
+	if (entry.kind === "text")
+		return (
+			<Message from="assistant" className="max-w-full">
+				<MessageContent className="w-full"><Markdown text={entry.text ?? ""} where={{ agent }} /></MessageContent>
+			</Message>
+		);
+	if (entry.kind === "thinking") return <Thought text={entry.text ?? ""} head="thought" />;
+	const ok = entry.ok === undefined ? "run" : entry.ok ? "ok" : "fail";
+	const result = entry.result ? short(entry.result, 4000) : undefined;
+	return <Call tool={entry.tool ?? ""} subject={entry.subject ? oneLine(entry.subject) : ""} status={ok} ms={entry.ms} output={ok === "fail" ? undefined : result} error={ok === "fail" ? result : undefined} images={entry.images} />;
 }
 
+/**
+ * A request of the agent's, in the conversation: what it wants and why, answered right here or
+ * in the dialog. What needs typing (a secret, the owner's own words) opens the dialog.
+ */
 function ApprovalCard({ item }: { item: Extract<Item, { t: "approval" }> }) {
 	const { req, state } = item;
 	const question = req.tool === "question";
-	const head =
-		state === "open" ? (question ? `${req.agent} asks` : "Approval needed") : state === "gone" ? "No longer open" : question ? (state === "allowed" ? "Answered" : "No answer") : state === "allowed" ? "Allowed" : "Denied";
+	const choices = req.choices ?? [];
+	const typed = Boolean(req.inputs?.length);
+	const head = state === "open" ? (question ? `${req.agent} asks` : "Approval needed") : state === "gone" ? "No longer open" : question ? (state === "allowed" ? "Answered" : "No answer") : state === "allowed" ? "Allowed" : "Denied";
+	const by = state !== "open" && item.by ? <span className="text-faint"> ({item.by}){item.always && req.remember ? ` · ${req.remember} will not ask again in this conversation` : ""}</span> : null;
 	return (
-		<div className={`card it-approval ${state}`}>
-			<Icon name={state === "open" ? (question ? "chat" : "alert") : state === "allowed" ? "check" : "x"} className={state === "open" ? "" : "faint"} />
-			<div className="what">
-				<div>
-					<b>{head}</b>
-					{question ? null : <> · <span className="mono">{req.tool}</span></>}
-					{state !== "open" && item.by ? <span className="faint"> ({item.by}){item.always && req.remember ? ` · ${req.remember} will not ask again in this conversation` : ""}</span> : null}
-					{state === "gone" ? <span className="faint"> · pine was restarted, or the question ran out of time</span> : null}
-				</div>
-				<div className="sum">{req.summary}</div>
-				{state === "open" && !question ? <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>{req.why}</div> : null}
-			</div>
-			{state === "open" ? <Button variant="primary" small onClick={() => store.ask(req.id)}>{question ? "Answer" : "Decide"}</Button> : null}
+		<div className="py-1" data-item="approval" data-state={state}>
+			<Confirmation approval={state === "open" ? { id: req.id } : { id: req.id, approved: state === "allowed" }} state={state === "open" ? "approval-requested" : state === "gone" ? "output-denied" : "approval-responded"} className={cn(state !== "open" && "py-2 text-muted-foreground")}>
+				<ConfirmationTitle className="flex items-start gap-2">
+					{state === "open" ? question ? <MessageCircleQuestionIcon className="mt-0.5 size-4 shrink-0" /> : <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warn" /> : state === "allowed" ? <CheckIcon className="mt-0.5 size-4 shrink-0" /> : <XIcon className="mt-0.5 size-4 shrink-0" />}
+					<span className="min-w-0">
+						<b className="text-foreground">{head}</b>
+						{question ? null : <> · <span className="font-mono">{req.tool}</span></>}
+						{by}
+						{state === "gone" ? <span className="text-faint"> · pine was restarted, or the question ran out of time</span> : null}
+						<span className="block whitespace-pre-wrap break-words text-foreground select-text">{req.summary}</span>
+					</span>
+				</ConfirmationTitle>
+				<ConfirmationRequest>
+					{question ? null : <div className="pl-6 text-muted-foreground text-xs">{req.why}</div>}
+					{question && choices.length ? (
+						<Suggestions className="pl-6">
+							{choices.map((c, i) => <Suggestion key={i} suggestion={c} variant={i === 0 ? "default" : "outline"} title={i === 0 ? "recommended" : undefined} onClick={(text) => void store.decide(req.id, true, false, { answer: text })} />)}
+						</Suggestions>
+					) : null}
+				</ConfirmationRequest>
+				<ConfirmationActions>
+					{question ? (
+						<>
+							<ConfirmationAction variant="ghost" onClick={() => void store.decide(req.id, false)}>No answer</ConfirmationAction>
+							<ConfirmationAction variant="outline" onClick={() => store.ask(req.id)}>{choices.length ? "In my own words…" : "Answer…"}</ConfirmationAction>
+						</>
+					) : typed ? (
+						<>
+							<ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</ConfirmationAction>
+							<ConfirmationAction onClick={() => store.ask(req.id)}>Decide…</ConfirmationAction>
+						</>
+					) : (
+						<>
+							<ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</ConfirmationAction>
+							{req.remember ? <ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, true, true)}>Always here</ConfirmationAction> : null}
+							<ConfirmationAction onClick={() => void store.decide(req.id, true)}>{req.holds ? "Allow" : "Allow once"}</ConfirmationAction>
+						</>
+					)}
+				</ConfirmationActions>
+			</Confirmation>
 		</div>
 	);
 }
 
+/** The agent's list of steps (its todo tool): how far it is, and each step. */
 export function Steps({ items }: { items: Array<{ text: string; status: string }> }) {
 	const done = items.filter((t) => t.status === "done").length;
 	return (
-		<div className="steps">
-			<div className="head">
-				steps · {done} of {items.length} done
-				<span className="bar"><i style={{ width: `${(100 * done) / Math.max(1, items.length)}%` }} /></span>
-			</div>
-			{items.map((t, i) => (
-				<div key={i} className={`step ${t.status}`}>
-					<span className="box">{t.status === "done" ? <Icon name="check" size={10} /> : null}</span>
-					<span className="selectable">{t.text}</span>
+		<Task data-item="steps">
+			<TaskTrigger title={`steps · ${done} of ${items.length} done`}>
+				<div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-xs hover:text-foreground">
+					<ListChecksIcon className="size-3.5" />
+					<span>steps · {done} of {items.length} done</span>
+					<span className="h-1 w-16 overflow-hidden rounded-full bg-press"><i className="block h-full bg-primary" style={{ width: `${(100 * done) / Math.max(1, items.length)}%` }} /></span>
+					<ChevronDownIcon className="size-3.5 transition-transform group-data-[panel-open]:rotate-180" />
 				</div>
-			))}
-		</div>
+			</TaskTrigger>
+			<TaskContent className="[&>div]:mt-2 [&>div]:space-y-1">
+				{items.map((t, i) => (
+					<TaskItem key={i} className={cn("flex items-start gap-2 text-xs", t.status === "done" && "line-through", t.status === "in_progress" && "text-foreground")} data-status={t.status}>
+						<span className={cn("mt-0.5 inline-flex size-3 shrink-0 items-center justify-center rounded-sm border", t.status === "done" && "border-primary bg-primary text-primary-foreground")}>{t.status === "done" ? <CheckIcon className="size-2.5" /> : null}</span>
+						<span className="select-text">{t.text}</span>
+					</TaskItem>
+				))}
+			</TaskContent>
+		</Task>
 	);
 }
 
 
-const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
+/** One item of a conversation, drawn as what it is. */
+export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
 	switch (item.t) {
 		case "user":
 			return (
-				<div className="it-user">
-					{item.from ? <span className="from">{item.from}</span> : null}
-					{item.text}
-					{item.files?.length ? <div className="files">{item.files.map((f) => <span className="tag" key={f}><Icon name="clip" size={11} />{f}</span>)}</div> : null}
-				</div>
+				<Message from="user" className="py-1" data-item="user">
+					<MessageContent className="whitespace-pre-wrap break-words select-text">
+						{item.from ? <span className="text-faint text-xs">{item.from}</span> : null}
+						{item.text}
+						{item.files?.length ? <div className="flex flex-wrap gap-1">{item.files.map((f) => <Badge variant="outline" key={f}><PaperclipIcon data-icon="inline-start" />{f}</Badge>)}</div> : null}
+					</MessageContent>
+				</Message>
 			);
 		case "answer":
-			return <Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined }} />;
+			return (
+				<Message from="assistant" className="max-w-full py-1" data-item="answer">
+					<MessageContent className="w-full">
+						<Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined }} />
+					</MessageContent>
+				</Message>
+			);
 		case "work":
 			return <Work item={item} />;
-		case "note":
+		case "note": {
+			const ToneIcon = TONE_ICON[item.tone];
 			return (
 				<div className={`it-note ${item.tone}`}>
-					<Icon name={TONE_ICON[item.tone]} size={14} />
+					<ToneIcon size={14} />
 					<div className="grow">
 						<span className="head">{item.text}</span>
 						{item.action ? <button type="button" className="open-link" style={{ marginLeft: 8 }} onClick={item.action.run}>{item.action.label}</button> : null}
@@ -203,10 +275,11 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 					</div>
 				</div>
 			);
+		}
 		case "event":
 			return (
 				<div className="it-event">
-					<Icon name="bolt" size={14} />
+					<ZapIcon size={14} />
 					<div className="grow">
 						<b>{item.label}</b>
 						<div className="body">{short(oneLine(tilde(item.body)), 400)}</div>
@@ -216,7 +289,7 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 		case "approval":
 			return <ApprovalCard item={item} />;
 		case "steps":
-			return <div className="card"><Steps items={item.items} /></div>;
+			return <div className="my-1 rounded-lg border p-3"><Steps items={item.items} /></div>;
 		case "media":
 			return (
 				<div className="it-media">
@@ -229,7 +302,7 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 			const wait = g.status !== "met" && g.status !== "active";
 			return (
 				<div className={`it-goal${wait ? " wait" : ""}`}>
-					<span className="mark"><Icon name={g.status === "met" ? "check" : wait ? "clock" : "target"} size={14} /></span>
+					<span className="mark">{g.status === "met" ? "check" : wait ? <ClockIcon size={14} /> : <TargetIcon size={14} />}</span>
 					<div>
 						<b>goal</b> <span className="muted">{g.note}</span>
 						{g.reason ? <div className="reason">{short(oneLine(g.reason), 240)}</div> : null}
@@ -272,27 +345,27 @@ function Welcome({ tab }: { tab: Tab }) {
 			<h1>{tab.agent}</h1>
 			<p>{info?.description || "An agent of yours."}</p>
 			<div className="facts">
-				<span className="fact" title="The model it runs on"><Icon name="cpu" size={12} /><b>{info?.model ?? "no model"}</b></span>
-				<span className="fact" title={mode?.about}><Icon name="shield" size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</span>
+				<span className="fact" title="The model it runs on"><CpuIcon size={12} /><b>{info?.model ?? "no model"}</b></span>
+				<span className="fact" title={mode?.about}><ShieldIcon size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</span>
 				{info?.main ? <span className="fact" title="It creates and changes the other agents and pine's settings when you ask it to">administers pine</span> : null}
 				{info?.delegates.length ? <span className="fact" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></span> : null}
 				{counts.filter(([, n]) => n > 0).map(([what, n]) => <span className="fact" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</span>)}
 			</div>
 			{info?.modelProblem ? (
 				<div className="notice no-model">
-					<Icon name="alert" />
+					<TriangleAlertIcon />
 					<div className="grow">{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</div>
-					<Button small onClick={() => store.openSettings("models")}>Models…</Button>
+					<Button variant="outline" size="xs" onClick={() => store.openSettings("models")}>Models…</Button>
 				</div>
 			) : null}
 			<p className="faint">
 				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 			</p>
 			<div className="hints">
-				<Button small onClick={() => say("What can you do for me, and what are you set up with?")}>What can you do?</Button>
-				<Button small icon="gear" onClick={() => store.openSettings("agents", tab.agent)}>Agent settings</Button>
-				<Button small icon="folder" onClick={() => void store.pickFolder(tab)}>Give it a folder</Button>
-				<Button small icon="command" onClick={() => void store.command("palette")}>Commands <kbd>⌘K</kbd></Button>
+				<Suggestion size="xs" suggestion="What can you do for me, and what are you set up with?" onClick={say}>What can you do?</Suggestion>
+				<Button variant="outline" size="xs" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
+				<Button variant="outline" size="xs" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" />Give it a folder</Button>
+				<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <kbd>⌘K</kbd></Button>
 			</div>
 		</div>
 	);
@@ -342,7 +415,7 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 	const step = (by: number) => count && setAt((at + by + count) % count);
 	return (
 		<div className="find">
-			<Icon name="search" size={13} className="faint" />
+			<SearchIcon size={13} className="faint" />
 			<input
 				autoFocus
 				placeholder="Find in this conversation"
@@ -354,9 +427,9 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 				}}
 			/>
 			<span className="faint">{query ? (count ? `${at + 1} of ${count}` : "nothing") : ""}</span>
-			<Button small variant="ghost" icon="up" title="Earlier (↩)" onClick={() => step(-1)} />
-			<Button small variant="ghost" icon="down" title="Later (⇧↩)" onClick={() => step(1)} />
-			<Button small variant="ghost" icon="x" onClick={close} />
+			<Button variant="ghost" size="icon-xs" title="Earlier (↩)" onClick={() => step(-1)}><ArrowUpIcon /></Button>
+			<Button variant="ghost" size="icon-xs" title="Later (⇧↩)" onClick={() => step(1)}><ChevronDownIcon /></Button>
+			<Button variant="ghost" size="icon-xs" onClick={close}><XIcon /></Button>
 		</div>
 	);
 }
@@ -373,10 +446,10 @@ function StatusLine({ tab }: { tab: Tab }) {
 	const elsewhere = store.tabs.find((t) => t !== tab && t.approvals.size > 0);
 	const goal = tab.goal?.status === "active" ? tab.goal : undefined;
 	if (!tab.busy) {
-		if (waiting.length) return <div className="status warn"><Icon name="alert" size={14} /><span>{waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval."}</span><Button small onClick={() => store.ask(waiting[0].req.id)}>Open</Button></div>;
-		if (goal) return <div className="status"><Icon name="target" size={14} /><span>goal · round {goal.round} of {goal.until} · checking whether it is met</span><Button small onClick={() => void store.setGoal(tab, "pause")}>Pause</Button></div>;
-		if (elsewhere) return <div className="status warn"><Icon name="alert" size={14} /><span>{elsewhere.agent} · {elsewhere.session} waits for you.</span><Button small onClick={() => store.activate(elsewhere)}>Go there</Button></div>;
-		if (tab.programs.length) return <div className="status"><Icon name="play" size={13} /><span>{plural(tab.programs.length, "program")} still running</span><Button small variant="ghost" onClick={() => void store.command("code-running")}>Show</Button></div>;
+		if (waiting.length) return <div className="status warn"><TriangleAlertIcon size={14} /><span>{waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval."}</span><Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button></div>;
+		if (goal) return <div className="status"><TargetIcon size={14} /><span>goal · round {goal.round} of {goal.until} · checking whether it is met</span><Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button></div>;
+		if (elsewhere) return <div className="status warn"><TriangleAlertIcon size={14} /><span>{elsewhere.agent} · {elsewhere.session} waits for you.</span><Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button></div>;
+		if (tab.programs.length) return <div className="status"><PlayIcon size={13} /><span>{plural(tab.programs.length, "program")} still running</span><Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button></div>;
 		return <div className="status" />;
 	}
 	const secs = Math.max(0, Math.round((Date.now() - tab.startedAt) / 1000));
@@ -399,7 +472,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 			{goal ? <span>goal · round {goal.round} of {goal.until}</span> : null}
 			{parts.map((p, i) => <span key={i} className={i || goal ? "sep" : ""}>{p}</span>)}
 			<span className="grow" />
-			{waiting.length ? <Button small onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null}
+			{waiting.length ? <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null}
 		</div>
 	);
 }
@@ -415,8 +488,8 @@ function ConvHead({ tab }: { tab: Tab }) {
 			<span className="muted">{tab.agent}</span>
 			<span className="faint">/</span>
 			<b className="cut" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
-			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><Icon name="folder" size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
-			{chat && store.pins.has(tab.key) ? <Icon name="star" size={12} className="faint" /> : null}
+			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><FolderIcon size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
+			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="faint" /> : null}
 			<span className="grow" />
 			{tab.context !== undefined ? (
 				<span className="conv-meta" title={`Context ${tab.context}% full${tab.cacheShare !== undefined ? ` · ${tab.cacheShare}% of the last request came from the model server's cache` : ""}${speedText(tab.speed) ? ` · ${speedText(tab.speed)}` : ""}`}>
@@ -424,7 +497,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 					{total ? `${count(total)} · ` : ""}{Math.round(tab.context)}%
 				</span>
 			) : null}
-			{chat ? <Button small variant="ghost" className={store.code ? "on" : ""} icon="panel" title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")} /> : null}
+			{chat ? <Button variant="ghost" size="icon-xs" aria-pressed={store.code} title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")}><PanelRightIcon /></Button> : null}
 		</div>
 	);
 }
@@ -502,14 +575,14 @@ export function Conversation({ tab }: { tab: Tab }) {
 					{!tab.loaded ? <div className="empty"><Pulse /></div> : !tab.items.length && chat ? <Welcome tab={tab} /> : tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
 				</div>
 			</div>
-			{away ? <Button className="jump" small icon="down" onClick={() => ((stick.current = true), toEnd(), setAway(false))}>Latest</Button> : null}
+			{away ? <Button variant="outline" size="xs" className="jump" onClick={() => ((stick.current = true), toEnd(), setAway(false))}><ChevronDownIcon data-icon="inline-start" />Latest</Button> : null}
 			<div className="dock">
 				<div className="dock-in">
 					<StatusLine tab={tab} />
 					{chat ? (
 						<Composer tab={tab} />
 					) : tab.busy ? (
-						<div className="row"><span className="muted grow">This tab shows one task's work and takes no messages.</span><Button small icon="stop" onClick={() => void store.stop(tab)}>Stop this task</Button></div>
+						<div className="row"><span className="muted grow">This tab shows one task's work and takes no messages.</span><Button variant="outline" size="xs" onClick={() => void store.stop(tab)}><SquareIcon data-icon="inline-start" />Stop this task</Button></div>
 					) : null}
 				</div>
 			</div>
