@@ -218,7 +218,8 @@ export class Store extends Model {
 	pendingFind?: { key: string; query: string };
 	/** Agents whose list of conversations is folded away in the side bar. */
 	folded = new Set<string>(JSON.parse(localStorage.getItem("pine.folded") ?? "[]"));
-	sidebar = true;
+	/** Whether the side bar shows. Kept like its width, so that it is after a restart as it was left. */
+	sidebar = localStorage.getItem("pine.sidebar") !== "hidden";
 	code = false;
 	codeView: CodeView = "agent";
 	palette = false;
@@ -1154,6 +1155,7 @@ export class Store extends Model {
 				return this.touch();
 			case "sidebar":
 				this.sidebar = !this.sidebar;
+				localStorage.setItem("pine.sidebar", this.sidebar ? "shown" : "hidden");
 				return this.touch();
 			case "code":
 				this.code = !this.code;

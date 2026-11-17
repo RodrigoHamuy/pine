@@ -338,6 +338,18 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await page.mouse.move(edge.x + edge.width / 2 + 80, 300, { steps: 4 });
 	await page.mouse.up();
 	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), before + 80);
+	// Hidden, the side bar is still hidden when the page is loaded again, and shown it is as wide as it was.
+	const wide = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
+	await menu("sidebar");
+	await page.waitForSelector(".sidebar", { state: "detached" });
+	await page.reload();
+	await sees(".tab.on");
+	assert.equal(await page.locator(".sidebar").count(), 0);
+	await menu("sidebar");
+	await sees(".sidebar");
+	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), wide);
+	await page.reload();
+	await sees(".sidebar .side-agent");
 	// A group folds away on a click on its agent, and comes back.
 	const group = page.locator(".side-group", { has: page.locator(".who > :first-child", { hasText: /^scout$/ }) });
 	assert.equal(await group.locator(".side-conv").count(), 1);
