@@ -412,6 +412,11 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	min-width: 0;
 	overflow-x: auto;
 	scrollbar-width: none;
+	/* A row that scrolls cuts off what a tab draws outside itself: the line around the tab in
+	   front, the mark where a dragged tab would land. The padding is the room for both, and the
+	   margin keeps the tabs where they were. */
+	padding: 1px 2px;
+	margin: 0 -2px;
 }
 .tabs::-webkit-scrollbar {
 	display: none;

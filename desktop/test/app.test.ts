@@ -115,6 +115,14 @@ test("starts a daemon of its own and shows the main agent", async () => {
 	assert.deepEqual(agents, ["main", "scout"]);
 	// The daemon it started is the one of this home, on a port of its own.
 	assert.ok(fs.existsSync(path.join(home, "data", "http-token")));
+	// The line around the tab in front is drawn outside the tab, and the row of tabs scrolls: what
+	// lies outside the row is cut off. So the row has to leave the line its pixel on every side.
+	const room = await page.evaluate(() => {
+		const row = document.querySelector(".tabs")!.getBoundingClientRect();
+		const tab = document.querySelector(".tab.on")!.getBoundingClientRect();
+		return { top: tab.top - row.top, bottom: row.bottom - tab.bottom, left: tab.left - row.left };
+	});
+	assert.ok(room.top >= 1 && room.bottom >= 1 && room.left >= 1, `the row cuts off the line around the tab in front: ${JSON.stringify(room)}`);
 	await shot("01-welcome");
 });
 
