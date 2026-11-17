@@ -426,6 +426,25 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await limit.press("Enter");
 	await page.waitForFunction(() => [...document.querySelectorAll(".toast.bad")].some((t) => /whole number from 1/.test(t.textContent ?? "")));
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).limits.maxDownloadMb, 123);
+	// A setting chosen from a list is chosen with the keyboard alone: Escape closes the list and gives
+	// focus back to it, Enter opens it, the arrows move, Enter chooses.
+	const reasoning = page.locator(".item", { has: page.locator(".mono", { hasText: /^defaults\.thinking$/ }) }).locator("[role=combobox]");
+	await reasoning.focus();
+	await page.keyboard.press("Enter");
+	await sees("[role=listbox][data-open] [role=option][data-highlighted]");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[role=listbox][data-open]", { state: "detached" });
+	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
+	await page.keyboard.press("Enter");
+	await sees("[role=listbox][data-open] [role=option][data-highlighted]");
+	const before = await page.textContent("[role=listbox][data-open] [role=option][data-highlighted]");
+	await page.keyboard.press(before?.trim() === "off" ? "ArrowDown" : "Home");
+	const chosen = (await page.textContent("[role=listbox][data-open] [role=option][data-highlighted]"))?.trim();
+	assert.notEqual(chosen, before?.trim());
+	await page.keyboard.press("Enter");
+	await page.waitForFunction((v) => [...document.querySelectorAll(".toast")].some((t) => t.textContent?.includes(`defaults.thinking is now ${v}`)), chosen);
+	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.thinking, chosen);
+	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
 	// Agents: make one.
 	await page.click(".set-nav .side-row >> text=Agents");
 	await page.click(".btn-primary >> text=New agent");
@@ -523,7 +542,10 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.click(".set-nav .side-row >> text=Events");
 	await page.click(".btn-primary >> text=New source");
 	await page.fill(".dialog input[placeholder='scans']", "scans");
-	await page.selectOption(".dialog select >> nth=1", "folder");
+	await page.locator(".dialog .field", { has: page.locator(".field-label", { hasText: /^Type$/ }) }).locator("[role=combobox]").click();
+	await page.click("[role=option] >> text=/^folder:/");
+	// Chosen with a click, the list closes and stays closed.
+	await page.waitForSelector("[role=listbox][data-open]", { state: "detached" });
 	const watched = path.join(folder, "scans");
 	fs.mkdirSync(watched, { recursive: true });
 	await page.locator(".dialog .field", { has: page.locator(".field-label", { hasText: /^dir/ }) }).locator("input").fill(watched);

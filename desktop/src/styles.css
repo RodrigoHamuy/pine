@@ -687,17 +687,61 @@ textarea.input {
 	line-height: 1.5;
 	display: block;
 }
-select.input {
-	appearance: none;
-	padding-right: 26px;
-	background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-	background-position:
-		calc(100% - 14px) 13px,
-		calc(100% - 9px) 13px;
-	background-size:
-		5px 5px,
-		5px 5px;
-	background-repeat: no-repeat;
+.input.select {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	text-align: start;
+	color: inherit;
+	font: inherit;
+	user-select: none;
+	cursor: default;
+}
+.select .select-value {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+.select[data-placeholder] .select-value {
+	color: var(--faint);
+}
+.select > .icon {
+	flex: none;
+	color: var(--muted);
+}
+.select-list {
+	min-width: var(--anchor-width);
+	max-height: min(320px, var(--available-height));
+	overflow-y: auto;
+	padding: 4px;
+	border: 1px solid var(--line);
+	border-radius: var(--r-s);
+	background: var(--surface);
+	box-shadow: var(--shadow);
+	outline: none;
+	color: var(--text);
+}
+.select-item {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 8px;
+	border-radius: 5px;
+	cursor: default;
+	white-space: nowrap;
+}
+.select-item[data-highlighted] {
+	background: var(--hover);
+}
+.select-item[data-disabled] {
+	opacity: 0.45;
+}
+.select-check {
+	margin-inline-start: auto;
+	color: var(--accent);
+	display: flex;
 }
 .field {
 	display: flex;

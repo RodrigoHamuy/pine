@@ -7,7 +7,7 @@ import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
-import { AutoText, Button, Confirm, Dialog, Empty, Field, Icon, Segmented, Pulse, Switch, useLoad } from "./ui.tsx";
+import { AutoText, Button, Confirm, Dialog, Empty, Field, Icon, Segmented, Pulse, Select, Switch, useLoad } from "./ui.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: string }> = [
 	{ id: "general", label: "General", icon: "sliders" },
@@ -43,10 +43,7 @@ function Loading({ state }: { state: { error?: string; loading: boolean } }) {
 function Whom({ value, onChange, all = "all agents" }: { value: string; onChange: (v: string) => void; all?: string }) {
 	const s = useModel(store);
 	return (
-		<select className="input" value={value} onChange={(e) => onChange(e.target.value)}>
-			<option value="">{all}</option>
-			{s.agents.map((a) => <option key={a.id} value={a.id}>{a.id}</option>)}
-		</select>
+		<Select value={value} onChange={onChange} options={[{ value: "", label: all }, ...s.agents.map((a) => a.id)]} />
 	);
 }
 
@@ -73,18 +70,11 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 	if (k === "boolean") control = <Switch on={s.now === "true"} onChange={(on) => void set(on)} />;
 	else if (k === "model")
 		control = (
-			<select className="input" value={unset ? "" : s.now} onChange={(e) => void set(e.target.value || "default")}>
-				<option value="">{unset ? s.now : "pine's default"}</option>
-				{!unset && !models.includes(s.now) ? <option value={s.now}>{s.now}</option> : null}
-				{models.map((m) => <option key={m} value={m}>{m}</option>)}
-			</select>
+			<Select value={unset ? "" : s.now} onChange={(v) => void set(v || "default")} options={[{ value: "", label: unset ? s.now : "pine's default" }, ...(!unset && !models.includes(s.now) ? [s.now] : []), ...models]} />
 		);
 	else if (typeof k === "object" && "one" in k)
 		control = (
-			<select className="input" value={k.one.includes(s.now) ? s.now : ""} onChange={(e) => void set(e.target.value || "default")}>
-				{k.one.includes(s.now) ? null : <option value="">{s.now}</option>}
-				{k.one.map((v) => <option key={v} value={v}>{v}</option>)}
-			</select>
+			<Select value={s.now} placeholder={s.now} onChange={(v) => void set(v)} options={k.one} />
 		);
 	else
 		control = (
@@ -218,14 +208,14 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 						<input className="input" value={now("description")} onChange={(e) => put("description", e.target.value)} />
 					</Field>
 					<Field label="Model">
-						<select className="input" value={(change.model as string) ?? d.model ?? ""} onChange={(e) => put("model", e.target.value || "default")}>
-							<option value="">{d.defaultModel ? `${d.defaultModel} (the default)` : "the default"}</option>
-							{d.model && !(models.data ?? []).includes(d.model) ? <option value={d.model}>{d.model}</option> : null}
-							{(models.data ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
-						</select>
+						<Select
+							value={(change.model as string) ?? d.model ?? ""}
+							onChange={(v) => put("model", v || "default")}
+							options={[{ value: "", label: d.defaultModel ? `${d.defaultModel} (the default)` : "the default" }, ...(d.model && !(models.data ?? []).includes(d.model) ? [d.model] : []), ...(models.data ?? [])]}
+						/>
 					</Field>
 					<Field label="Reasoning" hint="How much its model thinks before it answers.">
-						<select className="input" value={now("thinking")} onChange={(e) => put("thinking", e.target.value)}>{REASONING.map((r) => <option key={r} value={r}>{r}</option>)}</select>
+						<Select value={now("thinking")} onChange={(v) => put("thinking", v)} options={[...REASONING]} />
 					</Field>
 					<Field label="Mode" hint={MODES.find((m) => m.value === mode)?.about} wide>
 						<Segmented value={mode} options={MODES.map((m) => ({ value: m.value as AgentDetail["mode"], label: m.label }))} onChange={(v) => put("mode", v)} />
@@ -320,10 +310,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 			<Field label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to."><input className="input" value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field>
 			<Field label="Instructions" hint="Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on."><AutoText value={f.instructions} onChange={(v) => setF({ ...f, instructions: v })} minRows={4} maxRows={12} placeholder="You are …" /></Field>
 			<Field label="Model">
-				<select className="input" value={f.model} onChange={(e) => setF({ ...f, model: e.target.value })}>
-					<option value="">pine's default</option>
-					{(models.data ?? []).map((m) => <option key={m} value={m}>{m}</option>)}
-				</select>
+				<Select value={f.model} onChange={(model) => setF({ ...f, model })} options={[{ value: "", label: "pine's default" }, ...(models.data ?? [])]} />
 			</Field>
 		</Dialog>
 	);
@@ -675,7 +662,7 @@ function OptionField({ name, schema, required, value, onChange }: { name: string
 	const label = `${name}${required ? " *" : ""}`;
 	const hint = schema?.description;
 	if (type === "boolean") return <Field label={label} hint={hint}><Switch on={value === true} onChange={onChange} /></Field>;
-	if (Array.isArray(schema?.enum)) return <Field label={label} hint={hint}><select className="input" value={String(value ?? "")} onChange={(e) => onChange(e.target.value || undefined)}><option value="">not set</option>{schema.enum.map((v: string) => <option key={v} value={v}>{v}</option>)}</select></Field>;
+	if (Array.isArray(schema?.enum)) return <Field label={label} hint={hint}><Select value={String(value ?? "")} onChange={(v) => onChange(v || undefined)} options={[{ value: "", label: "not set" }, ...schema.enum.map(String)]} /></Field>;
 	if (type === "number" || type === "integer") return <Field label={label} hint={hint}><input className="input mono" value={value === undefined ? "" : String(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} inputMode="decimal" /></Field>;
 	if (type === "array") return <Field label={label} hint={<>{hint} <span className="faint">Several: separate them with commas.</span></>} wide><input className="input mono" value={Array.isArray(value) ? value.join(", ") : ""} onChange={(e) => onChange(e.target.value.trim() ? e.target.value.split(",").map((x) => x.trim()).filter(Boolean) : undefined)} /></Field>;
 	if (type === "object" || type === "any") return <Field label={label} hint={<>{hint} <span className="faint">As JSON.</span></>} wide><input className="input mono" value={typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} /></Field>;
@@ -740,10 +727,7 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 						<Field label="Name" hint="Lowercase letters, digits, - and _."><input autoFocus className="input mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></Field>
 						<Field label="For"><Whom value={f.agent} onChange={(agent) => setF({ ...f, agent })} /></Field>
 						<Field label="Type" wide hint={type?.summary}>
-							<select className="input" value={f.type} onChange={(e) => (setF({ ...f, type: e.target.value }), setOptions({}))}>
-								<option value="">Choose what it watches…</option>
-								{types.map((t) => <option key={t.name} value={t.name}>{t.name}: {short(t.summary, 80)}</option>)}
-							</select>
+							<Select value={f.type} placeholder="Choose what it watches…" onChange={(type) => (setF({ ...f, type }), setOptions({}))} options={types.map((t) => ({ value: t.name, label: `${t.name}: ${short(t.summary, 80)}` }))} />
 						</Field>
 						{type ? <Field label="What it reports" wide><input className="input" placeholder={type.summary} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></Field> : null}
 						{props.map(([name, schema]) => <OptionField key={name} name={name} schema={schema} required={required.has(name)} value={options[name]} onChange={(v) => setOptions({ ...options, [name]: v })} />)}
@@ -895,7 +879,7 @@ function Routes() {
 					<Field label="Only when" hint="Optional, as JSON."><input className="input mono" placeholder={'{"payload.open": true}'} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} /></Field>
 					<Field label="At most one per" hint="Optional, a time such as 5m."><input className="input mono" value={f.throttle} onChange={(e) => setF({ ...f, throttle: e.target.value })} /></Field>
 					<Field label="Wake the agent">
-						<select className="input" value={f.agent} onChange={(e) => setF({ ...f, agent: e.target.value })}><option value="">nobody</option>{s.agents.map((a) => <option key={a.id} value={a.id}>{a.id}</option>)}</select>
+						<Select value={f.agent} onChange={(agent) => setF({ ...f, agent })} options={[{ value: "", label: "nobody" }, ...s.agents.map((a) => a.id)]} />
 					</Field>
 					<Field label="In the conversation" hint="Empty: its main one. “new”: a fresh one for every event."><input className="input mono" disabled={!f.agent} value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} /></Field>
 					<Field label="With" wide hint="What it is told. {{payload.field}} stands for a value of the event."><input className="input" disabled={!f.agent} value={f.prompt} onChange={(e) => setF({ ...f, prompt: e.target.value })} /></Field>
