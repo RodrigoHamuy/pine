@@ -1,3 +1,5 @@
+@layer ui-sdk;
+
 /* Pine's look: panels that lie as cards on the window, neutral surfaces, one green, and type that does the
    work. Light and dark follow the system. Dark is the poimandres theme (github.com/drcmda/poimandres-theme):
    its colours are the --p-* values below, the app's own names are set from them, and code is coloured the
@@ -726,8 +728,7 @@ select.input {
 	flex: none;
 	transition: background 0.15s;
 }
-.switch::after {
-	content: "";
+.switch-thumb {
 	position: absolute;
 	top: 2px;
 	left: 2px;
@@ -738,10 +739,10 @@ select.input {
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
 	transition: transform 0.15s;
 }
-.switch.on {
+.switch[data-checked] {
 	background: var(--accent);
 }
-.switch.on::after {
+.switch[data-checked] .switch-thumb {
 	transform: translateX(14px);
 }
 .segmented {
@@ -774,7 +775,7 @@ select.input {
 	white-space: nowrap;
 	flex: none;
 }
-.segmented button.on {
+.segmented button[data-checked] {
 	background: var(--surface);
 	color: var(--text);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.12);
@@ -2151,11 +2152,11 @@ select.input {
 	border-radius: 0;
 	background: none;
 }
-.code-head .segmented button.on {
+.code-head .segmented button[data-checked] {
 	background: var(--press);
 	box-shadow: none;
 }
-.code-head .segmented button:not(.on):hover {
+.code-head .segmented button:not([data-checked]):hover {
 	background: var(--hover);
 	color: var(--text);
 }

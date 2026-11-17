@@ -211,7 +211,10 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	await page.click(".item:has-text('Look for a newer version at the start') .switch");
 	for (let i = 0; i < 50 && prefs().updates !== false; i++) await new Promise((r) => setTimeout(r, 40));
 	assert.equal(prefs().updates, false);
-	await page.click(".item:has-text('Look for a newer version at the start') .switch");
+	// It is a switch to assistive technology too, and Space turns it back on.
+	await sees(".item:has-text('Look for a newer version at the start') [role=switch][aria-checked=false]");
+	await page.keyboard.press("Space");
+	await sees(".item:has-text('Look for a newer version at the start') [role=switch][aria-checked=true]");
 	// (The settings open where they were left: back to their first page for the tests that follow.)
 	await page.click(".set-nav .side-row >> text=General");
 	await menu("settings");
@@ -378,6 +381,11 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	// However narrow the panel is, the names of its views stay whole on one line.
 	assert.ok((await page.$eval(".code .segmented button >> text=Last turn", (b: Element) => b.getBoundingClientRect().height)) <= 26);
 	await page.click(".code .segmented button >> text=Changes");
+	// Its views are a radio group: the arrow keys move the choice, as in any segmented control.
+	await page.keyboard.press("ArrowLeft");
+	await sees(".code .segmented [role=radio][aria-checked=true] >> text=Files");
+	await page.keyboard.press("ArrowRight");
+	await sees(".code .segmented [role=radio][aria-checked=true] >> text=Changes");
 	await sees(".code .frow");
 	assert.match(await page.textContent(".code .frow"), /index\.ts/);
 	await page.click(".code .frow");

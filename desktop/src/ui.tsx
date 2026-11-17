@@ -1,6 +1,9 @@
 // The small parts everything else is built from: icons, buttons, fields, a dialog, a menu.
 import { type ButtonHTMLAttributes, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Dialog as UiDialog, DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/react/dialog";
+import { FieldDescription, FieldLabel, Field as UiField } from "@ui-sdk/react/field";
+import { SegmentedControl, SegmentedControlItem } from "@ui-sdk/react/segmented-control";
+import { SwitchThumb, Switch as UiSwitch } from "@ui-sdk/react/switch";
 
 const PATHS: Record<string, string> = {
 	plus: "M8 3v10M3 8h10",
@@ -102,31 +105,39 @@ export function Button({ variant = "plain", icon, small, className, children, ..
 	);
 }
 
+// The field is a <label> around its control, so a native input or select is named by nesting; ui-sdk's
+// controls (switch, segmented control) are named by the field itself.
 export function Field({ label, hint, children, wide }: { label: string; hint?: ReactNode; children: ReactNode; wide?: boolean }) {
 	return (
-		<label className={`field${wide ? " field-wide" : ""}`}>
-			<span className="field-label">{label}</span>
+		<UiField render={<label />} className={`field${wide ? " field-wide" : ""}`}>
+			<FieldLabel render={<span />} className="field-label">
+				{label}
+			</FieldLabel>
 			{children}
-			{hint ? <span className="field-hint">{hint}</span> : null}
-		</label>
+			{hint ? <FieldDescription render={<span />} className="field-hint">{hint}</FieldDescription> : null}
+		</UiField>
 	);
 }
 
 export function Switch({ on, onChange, disabled }: { on: boolean; onChange: (on: boolean) => void; disabled?: boolean }) {
-	return <button type="button" role="switch" aria-checked={on} disabled={disabled} className={`switch${on ? " on" : ""}`} onClick={() => onChange(!on)} />;
+	return (
+		<UiSwitch checked={on} onCheckedChange={(next) => onChange(next)} disabled={disabled} className="switch">
+			<SwitchThumb className="switch-thumb" />
+		</UiSwitch>
+	);
 }
 
 export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: Array<{ value: T; label: string; icon?: string; badge?: number }>; onChange: (v: T) => void }) {
 	return (
-		<div className="segmented" role="tablist">
+		<SegmentedControl className="segmented" value={value} onValueChange={(next) => next !== null && onChange(next as T)}>
 			{options.map((o) => (
-				<button key={o.value} type="button" role="tab" aria-selected={o.value === value} className={o.value === value ? "on" : ""} onClick={() => onChange(o.value)}>
+				<SegmentedControlItem key={o.value} value={o.value}>
 					{o.icon ? <Icon name={o.icon} size={14} /> : null}
 					{o.label}
 					{o.badge ? <span className="badge">{o.badge}</span> : null}
-				</button>
+				</SegmentedControlItem>
 			))}
-		</div>
+		</SegmentedControl>
 	);
 }
 

@@ -119,7 +119,7 @@ docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
                     page (React), test/ the app driven through its real window, scripts/ what packs it. docs/references/desktop.md describes it and its layout.
-                    Its dialog is built on ui-sdk, whose agent skill comes with the package: desktop/.agents/skills and
+                    Its primitives (ui.tsx) are built on ui-sdk, pinned to an exact version while it is in beta, whose agent skill comes with the package: desktop/.agents/skills and
                     desktop/.claude/skills link to it in node_modules (`npx skills sync` in desktop/ after a ui-sdk update)
 ```
 
