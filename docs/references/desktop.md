@@ -32,10 +32,24 @@ Open the image and drag Pine into Applications. Nothing else has to be installed
 | pine's helpers | The small programs for dictating, app control and the `system` event source, built for both kinds of Mac. Elsewhere pine builds them on first use, which needs Apple's command line developer tools |
 | `pine` for a terminal | See below |
 
-To get a newer version, download the new image and put the app in place of the old one. The
-app does not update itself, and `pine update` in a pine that came with the app says where the
-new app is. Your pine home (`~/.pine`: agents, conversations, settings) is not in the app and
+### A newer version
+
+The app does not update itself: it says when there is a newer one and where it is. To get it,
+download the new image from the release's page, quit Pine and put the new app in place of the
+old one. Your pine home (`~/.pine`: agents, conversations, settings) is not in the app and
 stays as it is.
+
+| | |
+|---|---|
+| At the start | The app asks GitHub once for pine's last release. When that is newer than the app, a line at the foot of the side bar says so (`Pine <version> is available`); a click opens the release's page on GitHub in your browser. Nothing is said when the app is the latest, or when nobody answers |
+| `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found, with the link to the release's page when there is a newer app |
+| Settings > App | The app's version and whether it is the latest, **Check now**, and the switch **Look for a newer version at the start** for the question at the start. The menu asks whatever the switch says |
+
+A release counts as a newer app once its disk image for your kind of Mac is attached to it,
+which is some minutes after pine itself is published. A preview of pine is not a release, and
+the app never points at one. The app fetches and installs nothing. `pine update` in a pine that
+came with the app says the same in a terminal. An app started from a checkout is no release
+and asks nobody.
 
 ### The first start
 
@@ -165,7 +179,7 @@ it is never a question whom it is for.
 | `+` | A new conversation with that agent |
 | The folder (when the pointer is on the line) | Opens a folder of yours for a new conversation with that agent |
 | The gear (when the pointer is on the line) | That agent's page in the settings |
-| A right click | The same as a menu |
+| A right click | A new conversation, a folder and the settings as a menu, and **Remove** for every agent but the main one, which administers pine and stays. Remove asks first, and how: with everything the agent has, or with its folder kept |
 | `+` beside "Agents" | A new agent |
 
 An agent that somebody else makes while the app is open (the main agent when you ask it to,
@@ -287,7 +301,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
 | Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: add (at set times, every so often, once), remove. **Routes**: add, remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
-| App | The app's own settings, and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
+| App | The app's own settings (appearance, notifications, whether there is a newer app and whether that is asked at the start), and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
 key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is
@@ -321,6 +335,7 @@ the agent to write. So:
 | Notifications and the window's title | pine's own words only |
 | What is heard | Text for the input: never sent by itself |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
+| What the app itself asks the web | One thing: GitHub, for pine's last release (see "A newer version"). The question carries nothing about this Mac, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
 itself. What it knows, the daemon told it.
@@ -373,6 +388,7 @@ desktop/
     preload.ts     the bridge: the short list of things the page may ask the main process for
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
+    updates.ts     whether there is a newer app: GitHub asked for the last release, the link to its page
   src/             the page (React)
     model.ts       what the page knows: tabs, what each conversation shows, the daemon's live events
     api.ts         the control API, typed
@@ -384,7 +400,7 @@ desktop/
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
                    launcher that becomes Resources/bin/pine)
   test/            the app from end to end, driven through its real window; command.test.ts
-                   needs no window
+                   and updates.test.ts need no window
 ```
 
 - The page asks for something new through `preload.ts` and a handler in `main.ts`, never by

@@ -114,7 +114,7 @@ test/               node:test files; support/harness.ts builds a temp home and a
 baseline/           pi SDK behaviour checks and their results; the mock model server lives here
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
-                    main process (the window, the daemon's token, `pine service`, `pine` for a terminal), src/ the
+                    main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
                     page (React), test/ the app driven through its real window, scripts/ what packs it. docs/references/desktop.md describes it and its layout
 ```
 
@@ -623,6 +623,10 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   listening to a recording. No test shows the app's real window with its title bar: after a
   change to the frame (`.side-top`, `.titlebar`, the window's options in `main.ts`), look at
   it once in light and dark.
+- Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
+  on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
+  `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).
+  No test reaches GitHub, and what would open in a browser is noted instead (`shell.openExternal`).
 - `pine` for a terminal (`desktop/electron/command.ts`) is tested without a window
   (`desktop/test/command.test.ts`), on folders of the test's own as the PATH and the home:
   no test writes into a folder of the real PATH, and none runs what asks for a password.

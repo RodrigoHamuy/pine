@@ -252,6 +252,7 @@ export const COMMANDS: Command[] = [
 	{ name: "settings", title: "Settings", about: "Agents, models, MCP servers, skills, events and pine's own settings", keys: "⌘,", run: menu("settings") },
 	{ name: "sidebar", title: "Toggle sidebar", about: "Show or hide the list of agents and conversations", keys: "⌘B", run: menu("sidebar") },
 	{ name: "open", title: "Open a folder", about: "A conversation that works in a folder of yours", keys: "⌘O", run: menu("open-folder") },
+	{ name: "updates", title: "Check for updates", about: "Ask GitHub whether there is a newer Pine app", run: menu("updates") },
 	{ name: "help", title: "Keys and commands", about: "What can be typed and pressed", run: menu("help") },
 ];
 

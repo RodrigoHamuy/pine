@@ -194,26 +194,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 		store.touch();
 	};
 	const remove = async () => {
-		const how = await store.pick({
-			title: `Remove the agent ${id}?`,
-			items: [
-				{ value: "erase", label: "Remove it with everything it has", about: `its ${plural(d.holdings.conversations.length, "conversation")}, sources, schedules, servers, skills and its folder. This cannot be undone`, tone: "bad" },
-				{ value: "keep", label: "Remove it, but keep its folder", about: "the folder is moved to removed/ in pine's home" },
-				{ value: "no", label: "Cancel" },
-			],
-		});
-		if (how !== "erase" && how !== "keep") return;
-		const gone = await store.attempt(() => api.eraseAgent(id, how === "keep"));
-		if (!gone) return;
-		if (gone.problem) store.flash(`${id} is taken out, but what is left of the configuration does not load: ${gone.problem}`, "bad", 12_000);
-		else store.flash(`Removed the agent ${id}.${gone.kept ? ` Its folder is kept at ${tilde(gone.kept)}.` : ""}`, "good");
-		store.agents = await store.askAgents().catch(() => store.agents);
-		store.tabs = store.tabs.filter((t) => t.agent !== id || t.kind === "events");
-		if (store.active?.agent === id) store.active = store.tabs[0];
-		if (!store.tabs.length && store.agents[0]) await store.openTab((store.agents.find((a) => a.main) ?? store.agents[0]).id, "main", false);
-		store.conversations.delete(id);
-		store.touch();
-		back();
+		if (await store.removeAgent(id)) back();
 	};
 	const addFolder = async (kind: "read" | "write") => {
 		const dir = await bridge.pickFolder(kind === "write" ? `A folder ${id} may read and change` : `A folder ${id} may read`);
@@ -980,6 +961,7 @@ function AppPage() {
 		s.touch();
 	};
 	const service = s.service.status === "ready" ? s.service : undefined;
+	const newer = s.update?.status === "newer" ? s.update : undefined;
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
 	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
 	useEffect(() => void bridge.command().then(setCommand), []);
@@ -990,6 +972,19 @@ function AppPage() {
 			<h2>This app</h2>
 			<div className="group">
 				<div className="item"><div className="info"><div className="name">Appearance</div><div className="about">Light, dark, or what the system is set to.</div></div><div className="ctl"><Segmented value={s.prefs.theme} onChange={(theme) => void set({ theme })} options={[{ value: "system", label: "System" }, { value: "light", label: "Light" }, { value: "dark", label: "Dark" }]} /></div></div>
+				{s.updates ? (
+					<div className="item updates">
+						<div className="info">
+							<div className="name">Pine {s.versions.app}{newer ? <span className="tag warn">{newer.version} is available</span> : s.update?.status === "latest" ? <span className="tag good">the latest version</span> : null}</div>
+							<div className="about">{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</div>
+						</div>
+						<div className="ctl">
+							{newer ? <Button small icon="external" onClick={() => void bridge.open(newer.url)}>Release page</Button> : null}
+							<Button small icon="refresh" disabled={s.updateLooking} onClick={() => void s.lookForUpdate(true)}>Check now</Button>
+						</div>
+					</div>
+				) : null}
+				{s.updates ? <div className="item"><div className="info"><div className="name">Look for a newer version at the start</div><div className="about">One question to GitHub each time the app starts. It says nothing about this Mac or your pine.</div></div><div className="ctl"><Switch on={s.prefs.updates} onChange={(updates) => void set({ updates })} /></div></div> : null}
 				<div className="item"><div className="info"><div className="name">Notifications</div><div className="about">When an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The text is pine's own, never the agent's.</div></div><div className="ctl"><Switch on={s.prefs.notify} onChange={(notify) => void set({ notify })} /></div></div>
 			</div>
 			<h2>pine</h2>

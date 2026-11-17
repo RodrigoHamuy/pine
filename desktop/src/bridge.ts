@@ -14,6 +14,9 @@ export interface Prefs {
 	keepRunning: boolean;
 	theme: "system" | "light" | "dark";
 	notify: boolean;
+	updates: boolean;
 }
+
+export type { Update } from "../electron/updates.ts";
 
 export const bridge = window.pine;

@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { connect, findPine, type Launch, loginEnv, pineRoot, runPine, type Service, ServiceError } from "./service.ts";
+import { LATEST, lookForUpdate, type Update } from "./updates.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(HERE, "..");
@@ -42,13 +43,15 @@ interface Prefs {
 	keepRunning: boolean;
 	theme: "system" | "light" | "dark";
 	notify: boolean;
+	/** Whether GitHub is asked for a newer app when this one starts. */
+	updates: boolean;
 	/** `pine` for a terminal was looked after once (see firstCommand): a link the owner removed stays removed. */
 	commandTried: boolean;
 	bounds?: { x?: number; y?: number; width: number; height: number };
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, theme: "system", notify: true, commandTried: false };
+let prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true, commandTried: false };
 
 function loadPrefs(): void {
 	try {
@@ -58,6 +61,7 @@ function loadPrefs(): void {
 			keepRunning: raw.keepRunning === true,
 			theme: raw.theme === "light" || raw.theme === "dark" ? raw.theme : "system",
 			notify: raw.notify !== false,
+			updates: raw.updates !== false,
 			commandTried: raw.commandTried === true,
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
 		};
@@ -340,6 +344,38 @@ async function commandFromMenu(): Promise<void> {
 	await dialog.showMessageBox({ type: "info", message: "pine in a terminal", detail: said(now) });
 }
 
+// ---- a newer app ---------------------------------------------------------------------------------
+
+/**
+ * Whom this app asks for the last release. An app from a checkout is no release and has no
+ * version to compare: it asks nobody. PINE_DESKTOP_RELEASES is for tests, which name a stand-in
+ * for GitHub (and with nothing in it, nobody is asked). Whatever answers there, the link the
+ * owner gets leads to GitHub.
+ */
+const RELEASE_API = process.env.PINE_DESKTOP_RELEASES !== undefined ? process.env.PINE_DESKTOP_RELEASES || undefined : app.isPackaged ? LATEST : undefined;
+
+/** The last answer that said something, for a page that is opened again. */
+let known: Update | undefined;
+/** The question of this start, asked once. */
+let atStart: Promise<Update> | undefined;
+
+async function askForUpdate(): Promise<Update> {
+	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API);
+	if (said.status !== "unknown") known = said;
+	return said;
+}
+
+/**
+ * What the page is told: with `again` (the menu, the settings) what GitHub says now, without it
+ * what the start found. A start that got no answer asks again when the window is next opened.
+ */
+async function update(again?: boolean): Promise<Update | undefined> {
+	if (!RELEASE_API) return undefined;
+	if (again) return askForUpdate();
+	if (prefs.updates) await (atStart ??= askForUpdate().then((said) => (said.status === "unknown" && (atStart = undefined), said)));
+	return known;
+}
+
 // ---- menus -------------------------------------------------------------------------------------
 
 /** A menu item that asks the page to do something: the page knows which conversation is in front. */
@@ -351,7 +387,7 @@ function buildMenu(): void {
 			? [
 					{
 						label: "Pine",
-						submenu: [{ role: "about" as const }, { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), ...(RESOURCES && fs.existsSync(path.join(RESOURCES, "bin", "pine")) ? [{ label: "pine in a Terminal…", click: () => void commandFromMenu() }] : []), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
+						submenu: [{ role: "about" as const }, ...(RELEASE_API ? [item("Check for Updates…", "updates")] : []), { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), ...(RESOURCES && fs.existsSync(path.join(RESOURCES, "bin", "pine")) ? [{ label: "pine in a Terminal…", click: () => void commandFromMenu() }] : []), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
 					},
 				]
 			: []),
@@ -415,7 +451,7 @@ function buildMenu(): void {
 			],
 		},
 		{ role: "windowMenu" },
-		{ role: "help", submenu: [item("Keys and Commands", "help"), { label: "pine on GitHub", click: () => openOutside("https://github.com/pmndre/pine") }] },
+		{ role: "help", submenu: [item("Keys and Commands", "help"), ...(RELEASE_API && !isMac ? [item("Check for Updates…", "updates")] : []), { label: "pine on GitHub", click: () => openOutside("https://github.com/pmndre/pine") }] },
 	];
 	Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
@@ -430,9 +466,10 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 }
 
 function wire(): void {
-	handle("pine:state", () => ({ state, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, fullscreen: Boolean(win?.isFullScreen()), focused: Boolean(win?.isFocused()), versions: { app: app.getVersion(), electron: process.versions.electron } }));
+	handle("pine:state", () => ({ state, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, fullscreen: Boolean(win?.isFullScreen()), focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
 	handle("pine:call", (method: string, url: string, body?: unknown) => call(method, url, body));
 	handle("pine:retry", () => startService());
+	handle("pine:update", (again?: boolean) => update(again === true));
 	handle("pine:restart", async () => {
 		// Only a daemon of this app's own is its to restart; another one is somebody's terminal.
 		if (!service?.started) throw new Error("this pine was started somewhere else (a terminal, a service). Restart it there.");
@@ -458,6 +495,7 @@ function wire(): void {
 	handle("pine:prefs", (change: Partial<Prefs>) => {
 		if (change.theme === "system" || change.theme === "light" || change.theme === "dark") nativeTheme.themeSource = prefs.theme = change.theme;
 		if (typeof change.notify === "boolean") prefs.notify = change.notify;
+		if (typeof change.updates === "boolean") prefs.updates = change.updates;
 		if (typeof change.keepRunning === "boolean") prefs.keepRunning = change.keepRunning;
 		if ("home" in change) prefs.home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
 		savePrefs();

@@ -102,7 +102,7 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
 		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
-			{tab?.approvals.size ? <span className="needs">!</span> : working ? <Spinner size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}
+			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Spinner size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
@@ -137,12 +137,13 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 			{ id: "folder", label: `Open a folder with ${a.id}…` },
 			{ id: "sep", label: "", separator: true },
 			{ id: "settings", label: "Agent settings…" },
-			{ id: "fold", label: folded ? "Show its conversations" : "Hide its conversations" },
+			// The main agent administers pine and stays.
+			...(a.main ? [] : [{ id: "sep2", label: "", separator: true }, { id: "remove", label: `Remove ${a.id}…` }]),
 		]);
 		if (picked === "new") await s.newConversation(a.id);
 		if (picked === "folder") await pickFolder();
 		if (picked === "settings") s.openSettings("agents", a.id);
-		if (picked === "fold") s.toggleFold(a.id);
+		if (picked === "remove") await s.removeAgent(a.id);
 	};
 	return (
 		<div className="side-group">
@@ -171,6 +172,7 @@ function Sidebar() {
 	const s = useModel(store);
 	const ready = s.service.status === "ready";
 	const front = s.active;
+	const newer = s.update?.status === "newer" ? s.update : undefined;
 	return (
 		<aside className="sidebar">
 			<div className="side-top">
@@ -182,6 +184,7 @@ function Sidebar() {
 				{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}
 			</div>
 			<div className="side-foot">
+				{newer ? <div className="side-row side-update" onClick={() => void bridge.open(newer.url)} title={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}><Icon name="up" size={14} /><span className="grow cut">Pine {newer.version} is available</span><Icon name="external" size={12} /></div> : null}
 				<div className={`side-row${front?.kind === "events" ? " on" : ""}`} onClick={() => void s.openEvents()}><Icon name="wave" size={14} /><span className="grow">Events</span></div>
 				<div className={`side-row${front?.kind === "settings" ? " on" : ""}`} onClick={() => s.openSettings()}><Icon name="gear" size={14} /><span className="grow">Settings</span><kbd>⌘,</kbd></div>
 				<div className="side-status" title={s.service.status === "ready" ? `${s.service.home} · ${s.service.started ? "started by this app" : "a pine that was already running"}` : ""}>
@@ -547,6 +550,30 @@ function Lightbox() {
  * The browser the web tools drive is not on this Mac in the build this pine needs: asked at the
  * start, once for a version of pine. Settings > App offers the same at any time.
  */
+/** After "Check for Updates…" found a newer app: where it is. The app fetches and installs nothing itself. */
+function UpdateAsk() {
+	const s = useModel(store);
+	const u = s.update;
+	const close = () => ((s.updateAsk = false), s.touch());
+	if (u?.status !== "newer") return null;
+	return (
+		<Dialog
+			title={`Pine ${u.version} is available`}
+			width={520}
+			onClose={close}
+			footer={
+				<>
+					<Button onClick={close}>Not now</Button>
+					<Button variant="primary" icon="external" onClick={() => (void bridge.open(u.url), close())}>Open the release page</Button>
+				</>
+			}
+		>
+			<p className="muted" style={{ margin: 0 }}>This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
+			<p className="faint mono selectable update-link" style={{ margin: "10px 0 0", fontSize: 12 }}>{u.url}</p>
+		</Dialog>
+	);
+}
+
 function BrowserAsk() {
 	const s = useModel(store);
 	const later = () => void s.browserLater();
@@ -618,6 +645,7 @@ export function App() {
 				</>
 			)}
 			{s.browserAsk ? <BrowserAsk /> : null}
+			{s.updateAsk ? <UpdateAsk /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
 			{s.palette ? <Palette /> : null}
 			<Asking />

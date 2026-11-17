@@ -35,7 +35,8 @@ write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the 
 
 const port = await freePort();
 // PINE_CLI and PINE_NODE are taken out: the app is to find the pine and the Node it carries.
-const env = { ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data") };
+// (A packed app asks GitHub for a newer one at its start. Not this one: with nothing named, nobody is asked.)
+const env = { ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_DESKTOP_RELEASES: "" };
 delete env.PINE_CLI;
 delete env.PINE_NODE;
 const resources = path.join(away, "Pine.app", "Contents", "Resources");

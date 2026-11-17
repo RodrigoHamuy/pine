@@ -7,7 +7,7 @@
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
-import { bridge, type Prefs, type ServiceState } from "./bridge.ts";
+import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 
 export class Model {
@@ -187,11 +187,18 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
 	connected = false;
-	prefs: Prefs = { keepRunning: false, theme: "system", notify: true };
+	prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true };
 	platform = "darwin";
 	focused = true;
 	fullscreen = false;
 	versions = { app: "", electron: "" };
+	/** Whether this app asks for a newer one at all: an app from a checkout is no release and does not. */
+	updates = false;
+	/** What GitHub said about a newer app, once it said something. */
+	update?: Update;
+	/** The dialog that says there is a newer app, after the owner asked. */
+	updateAsk = false;
+	updateLooking = false;
 	/** The pine home the app was told to use, when it is not the usual one. */
 	home?: string;
 
@@ -277,10 +284,62 @@ export class Store extends Model {
 		this.fullscreen = first.fullscreen;
 		this.focused = first.focused;
 		this.versions = first.versions;
+		this.updates = first.updates;
+		void this.lookForUpdate();
 		this.home = first.home;
 		document.documentElement.dataset.platform = this.platform;
 		bridge.ready();
 		await this.onService(first.state);
+	}
+
+	/**
+	 * Remove an agent, after asking how: with everything it has, or with its folder kept. The
+	 * settings page and the side bar's menu both come here. Says whether it is gone.
+	 */
+	async removeAgent(id: string): Promise<boolean> {
+		const d = await this.attempt(() => api.agentDetail(id));
+		if (!d) return false;
+		if (d.main) return this.flash("The main agent administers pine and cannot be removed."), false;
+		const how = await this.pick({
+			title: `Remove the agent ${id}?`,
+			items: [
+				{ value: "erase", label: "Remove it with everything it has", about: `its ${plural(d.holdings.conversations.length, "conversation")}, sources, schedules, servers, skills and its folder. This cannot be undone`, tone: "bad" },
+				{ value: "keep", label: "Remove it, but keep its folder", about: "the folder is moved to removed/ in pine's home" },
+				{ value: "no", label: "Cancel" },
+			],
+		});
+		if (how !== "erase" && how !== "keep") return false;
+		const gone = await this.attempt(() => api.eraseAgent(id, how === "keep"));
+		if (!gone) return false;
+		if (gone.problem) this.flash(`${id} is taken out, but what is left of the configuration does not load: ${gone.problem}`, "bad", 12_000);
+		else this.flash(`Removed the agent ${id}.${gone.kept ? ` Its folder is kept at ${tilde(gone.kept)}.` : ""}`, "good");
+		this.agents = await this.askAgents().catch(() => this.agents);
+		this.tabs = this.tabs.filter((t) => t.agent !== id || t.kind === "events");
+		if (this.active?.agent === id) this.active = this.tabs[0];
+		if (!this.tabs.length && this.agents[0]) await this.openTab((this.agents.find((a) => a.main) ?? this.agents[0]).id, "main", false);
+		this.conversations.delete(id);
+		this.touch();
+		return true;
+	}
+
+	/**
+	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > App
+	 * show it); when the owner asked (the menu, the settings), the answer is said too.
+	 */
+	async lookForUpdate(asked = false): Promise<void> {
+		if (!this.updates) return asked ? this.flash("This Pine runs from a checkout and is no release: update the checkout.") : undefined;
+		if (this.updateLooking) return;
+		this.updateLooking = asked;
+		this.touch();
+		const said: Update | undefined = await bridge.update(asked).catch(() => undefined);
+		this.updateLooking = false;
+		if (said && said.status !== "unknown") this.update = said;
+		this.touch();
+		if (!asked) return;
+		if (said?.status === "newer") this.updateAsk = true;
+		else if (said?.status === "latest") this.flash(`Pine ${said.mine} is the latest version.`, "good");
+		else this.flash("Could not ask GitHub for the latest version. You may be offline.", "warn", 6000);
+		this.touch();
 	}
 
 	private async onService(s: ServiceState): Promise<void> {
@@ -1231,6 +1290,8 @@ export class Store extends Model {
 				return this.touch();
 			case "events":
 				return this.openEvents();
+			case "updates":
+				return this.lookForUpdate(true);
 			case "new":
 				return this.newConversation();
 			case "agent": {

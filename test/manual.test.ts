@@ -64,6 +64,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["does the mac app start pine or do I have to start it first", /^desktop#the-daemon-started-or-reused/],
 		["where do I download the mac app, and do I have to install node first", /^desktop#getting-it/],
 		["I only installed the app, how do I get the pine command in my shell", /^desktop#pine-in-a-terminal/],
+		["does the mac app tell me when there is a newer version, or do I have to look myself", /^desktop#a-newer-version/],
+		["check for updates", /^desktop#a-newer-version/],
 		["I installed the mac app, how do I use my ChatGPT or Claude subscription with it", /^desktop#the-first-start/],
 		["the app says the browser for the web tools is not on this Mac", /^(desktop#the-first-start|desktop#settings|operations#problems)/],
 		["my agent says its model cannot answer because the claude command is missing", /^(desktop#the-first-start|operations#problems)/],

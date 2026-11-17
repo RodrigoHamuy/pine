@@ -8,6 +8,7 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
@@ -25,6 +26,9 @@ let home: string;
 let folder: string;
 /** Where the browser of the web tools would lie (Playwright's own variable for it): a folder of the test's, empty at the start. */
 let browsers: string;
+/** A stand-in for GitHub, which the app asks for pine's last release: what it answers, and how often it was asked. */
+let github: http.Server;
+const releases = { status: 200, tag: "v9.9.9", asked: 0 };
 /** What went wrong in the page itself, said with a failure. */
 const pageErrors: string[] = [];
 
@@ -90,6 +94,13 @@ process.stdin.resume();
 `);
 	fs.chmodSync(voice, 0o755);
 
+	github = http.createServer((_req, res) => {
+		releases.asked++;
+		const version = releases.tag.slice(1);
+		res.writeHead(releases.status, { "content-type": "application/json" }).end(JSON.stringify({ tag_name: releases.tag, html_url: "https://example.invalid/elsewhere", assets: ["arm64", "x64"].map((arch) => ({ name: `Pine-${version}-${arch}.dmg` })) }));
+	});
+	await new Promise<void>((r) => github.listen(0, "127.0.0.1", r));
+
 	// PINE_DESKTOP_THEME=dark|light: the pictures in that appearance, whatever the system is set to.
 	if (process.env.PINE_DESKTOP_THEME) write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ theme: process.env.PINE_DESKTOP_THEME }));
 
@@ -97,7 +108,7 @@ process.stdin.resume();
 		// (The driver shows every page in light unless it is told otherwise, whatever the app says.)
 		colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light",
 		args: [root],
-		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice },
+		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest` },
 	});
 	page = await app.firstWindow();
 	page.on("pageerror", (e: Error) => pageErrors.push(String(e.stack ?? e.message).slice(0, 600)));
@@ -108,6 +119,7 @@ process.stdin.resume();
 after(async () => {
 	await app?.close().catch(() => {});
 	await mock?.close?.().catch(() => {});
+	github?.close();
 	for (const dir of [home, folder]) if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -143,6 +155,67 @@ test("starts a daemon of its own and shows the main agent", async () => {
 	assert.equal(foot.dot, foot.icon, `the dot of the status is not under the icons above it: ${JSON.stringify(foot)}`);
 	assert.equal(foot.status, foot.name, `the status is not written under the names above it: ${JSON.stringify(foot)}`);
 	await shot("01-welcome");
+});
+
+test("a newer app is said at the start and when asked, with a link to its page on GitHub and nothing fetched", async () => {
+	const mine = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
+	const link = "https://github.com/pmndre/pine/releases/tag/v9.9.9";
+	// The start asked once, and the side bar says what it found.
+	await sees(".side-update >> text=Pine 9.9.9 is available");
+	assert.equal(releases.asked, 1);
+	await shot("01-update");
+	// What would open in the owner's browser is noted instead.
+	await app.evaluate(({ shell }: any) => {
+		(globalThis as any).opened = [];
+		shell.openExternal = async (url: string) => void (globalThis as any).opened.push(url);
+	});
+	const opened = () => app.evaluate(() => (globalThis as any).opened);
+	await page.click(".side-update");
+	// "Check for Updates…" in the menu asks again and says where the new app is.
+	const inMenu = await app.evaluate(({ Menu }: any) => {
+		const found = Menu.getApplicationMenu().items.flatMap((m: any) => m.submenu?.items ?? []).filter((i: any) => i.label === "Check for Updates…");
+		found[0]?.click();
+		return found.length;
+	});
+	assert.equal(inMenu, 1);
+	await sees(".dialog-title >> text=Pine 9.9.9 is available");
+	assert.equal(releases.asked, 2);
+	const body = await page.textContent(".dialog-body");
+	assert.ok(body.includes(`This is Pine ${mine}.`) && body.includes(link), body);
+	await shot("01-update-asked");
+	await page.click(".dialog-foot .btn >> text=Open the release page");
+	await page.waitForSelector(".dialog", { state: "detached" });
+	// The link is GitHub's page of that release, not the address the answer named.
+	assert.deepEqual(await opened(), [link, link]);
+	// Nobody answers: that is said, and what was found before stays.
+	releases.status = 503;
+	await menu("updates");
+	await sees(".toast >> text=Could not ask GitHub for the latest version");
+	await sees(".side-update");
+	// This app is the last release: said once, and the side bar's line is gone.
+	Object.assign(releases, { status: 200, tag: `v${mine}` });
+	await menu("updates");
+	await sees(`.toast >> text=Pine ${mine} is the latest version.`);
+	await page.waitForSelector(".side-update", { state: "detached" });
+	// Settings > App has the same, and the switch for the question at the start.
+	await menu("settings");
+	await page.click(".set-nav .side-row >> text=App");
+	await sees(".item.updates .tag.good >> text=the latest version");
+	releases.tag = "v9.9.9";
+	await page.click(".item.updates .btn >> text=Check now");
+	await sees(".item.updates .tag.warn >> text=9.9.9 is available");
+	await page.click(".dialog-foot .btn >> text=Not now");
+	await page.click(".item.updates .btn >> text=Release page");
+	assert.deepEqual(await opened(), [link, link, link]);
+	const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
+	await page.click(".item:has-text('Look for a newer version at the start') .switch");
+	for (let i = 0; i < 50 && prefs().updates !== false; i++) await new Promise((r) => setTimeout(r, 40));
+	assert.equal(prefs().updates, false);
+	await page.click(".item:has-text('Look for a newer version at the start') .switch");
+	// (The settings open where they were left: back to their first page for the tests that follow.)
+	await page.click(".set-nav .side-row >> text=General");
+	await menu("settings");
+	await sees(".side-update >> text=Pine 9.9.9 is available");
 });
 
 test("a message is answered, with the turn's work folded into a line", async () => {
@@ -395,6 +468,10 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	// On an agent's line, its initial stands beside its name, not half-way down to its description.
 	const line = await page.$eval(".side-agent", (el: Element) => ({ avatar: el.querySelector(".avatar")!.getBoundingClientRect(), name: el.querySelector(".who > :first-child")!.getBoundingClientRect() }));
 	assert.ok(Math.abs(line.avatar.y + line.avatar.height / 2 - (line.name.y + line.name.height / 2)) <= 2, JSON.stringify(line));
+	// A conversation's name begins where its agent's name begins, whatever leads its row.
+	const under = await page.$$eval(".side-group", (groups: Element[]) => groups.map((g) => ({ agent: g.querySelector(".side-agent .who > :first-child")!.getBoundingClientRect().left, names: [...g.querySelectorAll(".side-conv .cut")].map((c) => c.getBoundingClientRect().left) })));
+	assert.ok(under.some((g: any) => g.names.length));
+	for (const g of under) for (const left of g.names) assert.equal(left, g.agent, `a conversation's name is not under its agent's: ${JSON.stringify(under)}`);
 	// What the agent is for stands on that line too, after the name and on the line its letters stand on.
 	const one = await page.$eval(".side-agent", (el: Element) => {
 		const stands = (node: Element) => {
@@ -475,6 +552,47 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.deepEqual(await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent)), ["main", "scout", "books", "test"]);
 	await page.keyboard.press("Escape");
 	await page.click(".tab.on .close");
+});
+
+test("a right click on an agent offers to remove it, and never the main agent", async () => {
+	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(fs.readFileSync(path.join(home, "data", "pine.log"), "utf8"))![1];
+	const token = fs.readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
+	const made = await fetch(`http://127.0.0.1:${port}/agents`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ id: "spare", description: "Not needed for long", instructions: "You are spare." }) });
+	assert.equal(made.status, 200);
+	await sees(".side-agent .who >> text=spare", 20_000);
+	// The menu is the system's, which the driver cannot click in: what it would show is noted, and the test says what is picked.
+	await app.evaluate(({ ipcMain }: any) => {
+		const g = globalThis as any;
+		g.menus = [];
+		ipcMain.removeHandler("pine:context-menu");
+		ipcMain.handle("pine:context-menu", (_e: unknown, items: Array<{ id: string; label: string; separator?: boolean }>) => {
+			g.menus.push(items.filter((i) => !i.separator).map((i) => i.label));
+			return g.pick;
+		});
+	});
+	const shown = async (agent: string, pick?: string): Promise<string[]> => {
+		const before = await app.evaluate((_e: unknown, p: string | undefined) => (((globalThis as any).pick = p), (globalThis as any).menus.length), pick);
+		await page.locator(".side-agent", { has: page.locator(".who > :first-child", { hasText: new RegExp(`^${agent}$`) }) }).click({ button: "right" });
+		for (let i = 0; i < 100; i++) {
+			const menus = await app.evaluate(() => (globalThis as any).menus);
+			if (menus.length > before) return menus.at(-1);
+			await new Promise((r) => setTimeout(r, 30));
+		}
+		throw new Error(`no menu for ${agent}`);
+	};
+	// Folding is a click on the line and no menu item; the main agent has nothing to remove it with.
+	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "Agent settings…"]);
+	assert.deepEqual(await shown("spare", "remove"), ["New conversation with spare", "Open a folder with spare…", "Agent settings…", "Remove spare…"]);
+	// It asks first, and how: nothing is removed by the menu alone.
+	await sees(".pick-title >> text=Remove the agent spare?");
+	assert.ok(fs.existsSync(path.join(home, "agents", "spare", "agent.json")));
+	await page.click(".pick-item:has-text('Remove it with everything it has')");
+	await sees(".toast >> text=Removed the agent spare.");
+	await page.waitForFunction(() => ![...document.querySelectorAll(".side-agent .who > :first-child")].some((e) => e.textContent?.trim() === "spare"));
+	assert.equal(fs.existsSync(path.join(home, "agents", "spare")), false);
+	// Asked for the main agent all the same (the palette, another road), the app says no and asks the daemon for nothing.
+	await page.evaluate(() => (window as any).pine.call("POST", "/agents/main/erase", { agent: "main", keepFiles: false })).then((r: any) => assert.equal(r.ok, false));
+	assert.ok(fs.existsSync(path.join(home, "agents", "main", "agent.json")));
 });
 
 test("the palette finds things by name, and the event log follows", async () => {

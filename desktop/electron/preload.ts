@@ -13,6 +13,8 @@ const bridge = {
 	ready: () => ipcRenderer.send("pine:ready"),
 	call: (method: "GET" | "POST", url: string, body?: unknown) => ipcRenderer.invoke("pine:call", method, url, body),
 	retry: () => ipcRenderer.invoke("pine:retry"),
+	/** Whether there is a newer app: what the start found, or with `again` what GitHub says now. Nothing where nobody is asked. */
+	update: (again?: boolean) => ipcRenderer.invoke("pine:update", again),
 	restart: () => ipcRenderer.invoke("pine:restart"),
 	init: () => ipcRenderer.invoke("pine:init"),
 	/** Fetch the browser build this pine drives (`pine browser-install`); what it prints comes as init lines. */
