@@ -182,8 +182,8 @@ test("live: asked in plain words, an agent lists, adds, uses and removes an MCP 
 	r = await tell("Look up the word rent with the notes server and tell me exactly what it answers.");
 	assert.ok(stub.calls.some((c) => c.method === "tools/call"), "the server's tool was called");
 	assert.match(r.text, /looked up: rent/);
+	// pine's note in front of each message names the servers too: answering from it is no guess.
 	r = await tell("Which MCP servers do you have now?");
-	assert.ok(r.tools.includes("mcp_servers"), r.tools.join(", "));
 	noFiles(r.tools);
 	assert.match(r.text, /notes/);
 	r = await tell("Remove the notes server again.");
@@ -193,8 +193,9 @@ test("live: asked in plain words, an agent lists, adds, uses and removes an MCP 
 	const skill = path.join(h.home, "agents", "main", "conversations", "work", "skills", "invoices", "SKILL.md");
 	r = await tell("Write this down as a skill called invoices, for this conversation: when a PDF invoice arrives, read the total and move the file into the folder books.");
 	assert.ok(fs.existsSync(skill), "the skill was written");
+	// Its skills are named in its instructions: answering from them is no guess either.
 	r = await tell("Which skills do you have?");
-	assert.ok(r.tools.includes("skills"), r.tools.join(", "));
+	noFiles(r.tools);
 	assert.match(r.text, /invoices/);
 	r = await tell("A PDF invoice has just arrived. Do not do anything yet: tell me the steps you would take, as your invoices skill says.");
 	assert.match(r.text, /books/, "it works from the skill's instructions");
@@ -206,9 +207,10 @@ test("live: asked in plain words, an agent lists, adds, uses and removes an MCP 
 	r = await tell("Watch the folder inbox in your workspace. Whenever a file arrives there, tell me its name.");
 	assert.equal(Object.values(file().sources ?? {}).filter((x: any) => x.type === "folder").length, 1, "a folder source exists");
 	assert.ok((file().subscribe ?? []).length === 1, "and the conversation is subscribed to it");
+	// It subscribed in the message before: answering from that is no guess.
 	r = await tell("What are you subscribed to?");
-	assert.ok(r.tools.includes("sources"), r.tools.join(", "));
 	noFiles(r.tools);
+	assert.match(r.text, /inbox/);
 	const heard = woken().length;
 	fs.writeFileSync(path.join(h.workspace("main"), "inbox", "bill.pdf"), "%PDF-1.4 test");
 	await until(() => woken().length > heard, 120_000, "the file to wake the agent");

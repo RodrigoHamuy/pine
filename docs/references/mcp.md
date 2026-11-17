@@ -1,9 +1,13 @@
 # MCP servers
 
-pi has MCP built in; pine decides which agent gets which server. Tools appear to the model as
-`mcp__<server>__<tool>`. Characters such as `-` in a server's name become `_` there: the server
-`home-link` offers `mcp__home_link__status`. Use the tool-name form in `approve`
-patterns; the server's own `taints` and `approve` settings apply either way.
+pi has MCP built in; pine decides which agent gets which server. In your own conversations a
+server is one tool, named after it, and each of its tools is an action of that tool: the server
+`notes` is the tool `notes` with the action `lookup`. Characters such as `-` in a server's name
+become `_` (`home-link` is the tool `home_link`), and a server named like one of pine's own tools
+gets `mcp_` in front (`manual` is `mcp_manual`). Each of its tools also has a name of its own,
+`mcp__<server>__<tool>` (`mcp__home_link__status`): runs started from outside are given the tools
+under those names, and `approve` patterns use them. The server's own `taints` and `approve`
+settings apply either way.
 
 ## Global and per agent
 

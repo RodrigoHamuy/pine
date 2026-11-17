@@ -7,7 +7,7 @@ import { AGENT_TOOLS, checkNewAgent, createAgent } from "./agent-admin.ts";
 import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkRoute, checkSetting, dropRoute, routesText, SETTINGS, settingsText } from "./admin.ts";
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
 import { finish as finishWorktree, type Worktree, worktreeName } from "./worktrees.ts";
-import { SUBAGENT_CANNOT_ASK } from "./catalogue.ts";
+import { SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
 import type { PineEvent, TaskResult } from "./types.ts";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { addServer, mcpEnvName, removeServer, splitCommand, validateServer } from "./mcp-config.ts";
@@ -66,6 +66,9 @@ function readOwn(file: string, max: number): string | undefined {
 }
 
 /** The tools pine adds to a session, according to what this run's profile allows. */
+/** A conversation named as the owner names the one they are in. */
+const THIS_ONE = /^(this|current|here|the same|this[ _-]?(one|conversation|chat|thread|session)|current[ _-]?(conversation|chat|thread|session)|the[ _-]?current[ _-]?(conversation|chat|thread|session)|same[ _-]?(conversation|chat))$/i;
+
 export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live, profile: Profile, behalf?: { asker: string }): any[] {
 	const { cfg, bus, state } = manager;
 	const tools: any[] = [];
@@ -709,8 +712,8 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const taken = (name: string): string => {
 			const own = agent.mcp[name];
 			if (own?.session && own.session !== here()) return `a server named "${name}" exists already, but only your conversation "${own.session}" has it, not this one. To have it in all your conversations, call add_mcp_server again with the same name and scope "agent": your owner is asked, and it takes the place of that one. For this conversation alone, give it another name.`;
-			if (own) return `a server named "${name}" exists already: ${own.session ? "this conversation has it" : "you have it, in all your conversations"}. Its tools start with ${mcpNamespace(name)}__; mcp_servers shows whether it is connected. ${own.session ? `To have it in all your conversations, call add_mcp_server again with the same name and scope "agent": your owner is asked. To change it otherwise` : "To change it"}, remove it first.`;
-			if (name in cfg.mcp) return `a server named "${name}" exists already, for all agents${name in effectiveMcp(cfg, agent, here()) ? `, you included: its tools start with ${mcpNamespace(name)}__` : ""}. Pick another name.`;
+			if (own) return `a server named "${name}" exists already: ${own.session ? "this conversation has it" : "you have it, in all your conversations"}. Its tools are the actions of your tool "${serverTool(mcpNamespace(name))}"; mcp_servers shows whether it is connected. ${own.session ? `To have it in all your conversations, call add_mcp_server again with the same name and scope "agent": your owner is asked. To change it otherwise` : "To change it"}, remove it first.`;
+			if (name in cfg.mcp) return `a server named "${name}" exists already, for all agents${name in effectiveMcp(cfg, agent, here()) ? `, you included: its tools are the actions of your tool "${serverTool(mcpNamespace(name))}"` : ""}. Pick another name.`;
 			return `a server named "${name}" exists already; pick another name`;
 		};
 		tools.push(
@@ -729,10 +732,12 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					}
 					const mine = Object.entries(effectiveMcp(cfg, agent, session));
 					const lines = mine.map(([name, sv]) => {
+						// The session knows a server's tools by their own names; the model, as the actions of one tool.
 						const prefix = `${mcpNamespace(name)}__`;
+						const tool = serverTool(mcpNamespace(name));
 						const count = names.filter((n) => n.startsWith(prefix)).length;
 						const whom = name in agent.mcp ? (sv.session ? "only this conversation has it" : "yours as an agent, in all your conversations") : "for all agents";
-						const state = !names.length ? `tools start with ${prefix}` : count ? `connected, ${count} ${count === 1 ? "tool" : "tools"} in your tool list, starting with ${prefix}` : `NOT connected: no tool starting with ${prefix} is in your tool list. It did not start, or it needs a sign-in`;
+						const state = !names.length ? `its tools are the actions of your tool "${tool}"` : count ? `connected: your tool "${tool}" has its ${count} ${count === 1 ? "tool" : "tools"} as actions` : `NOT connected: there is no tool "${tool}" in your tool list. It did not start, or it needs a sign-in`;
 						return `- ${name} (${targetOf(sv)})${sv.description ? `: ${sv.description}` : ""}\n    ${whom}; ${state}`;
 					});
 					const elsewhere = Object.entries(agent.mcp).filter(([, sv]) => sv.session && sv.session !== session && sv.enabled !== false);
@@ -745,7 +750,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 				label: "Add MCP server",
 				description: `Propose an MCP server to be added to pine: a remote one (its https URL) or a local one (the command that starts it, for example "npx -y some-package"). It is added for this conversation, for yourself as an agent${isMain ? ", or for all agents" : ""}. Your owner sees the proposal and decides; you cannot add it without them. Use it when your owner asks you to install or connect an MCP server: do not tell them to type a command instead.${isMain ? "" : ` A server for all agents is the main agent's to add (${mainId}).`}`,
 				parameters: Type.Object({
-					name: Type.String({ description: "Short name: lowercase letters, digits and _ (for example home_link). Tools will appear as mcp__<name>__<tool>" }),
+					name: Type.String({ description: "Short name: lowercase letters, digits and _ (for example home_link). Its tools will be the actions of a tool with this name" }),
 					url: Type.Optional(Type.String({ description: "For a remote server: its https URL" })),
 					command: Type.Optional(Type.String({ description: 'For a local server: the program and its arguments, as its documentation gives them, for example "npx -y @example/mcp@latest". One program, no shell operators' })),
 					secrets: Type.Optional(Type.Array(Type.String(), { description: 'For a local server that needs a key or token: the NAMES of the environment variables it reads them from, as its documentation gives them (for example ["EXAMPLE_API_KEY"]). Never a value: pine asks your owner to type each one' })),
@@ -818,7 +823,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 								kind: "notify",
 								trust: "owner",
 								reply: r.task.reply,
-								prompt: `[pine: the MCP server "${p.name}" that you added is connected now. Its tools are in your tool list; their names start with ${mcpNamespace(p.name)}__. Go on with what your owner asked for. If no tool with that prefix is in your list, the server did not start or still needs its sign-in: say that plainly${p.command ? ", and run its command in your shell to see what it prints" : ""}.]`,
+								prompt: `[pine: the MCP server "${p.name}" that you added is connected now. Its tools are in your tool list, as the actions of the tool "${serverTool(mcpNamespace(p.name))}". Go on with what your owner asked for. If there is no tool "${serverTool(mcpNamespace(p.name))}" in your list, the server did not start or still needs its sign-in: say that plainly${p.command ? ", and run its command in your shell to see what it prints" : ""}.]`,
 							});
 							goesOn = true;
 						} catch {
@@ -831,14 +836,14 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					const when = goesOn
 						? `You do not have its tools in this turn yet. Finish what else there is to do now (a sign-in, if it needs one) and end your turn with one short line: pine calls you again at once, in this same conversation, and then the tools are in your tool list. Do not tell your owner to start a new chat or to send another message`
 						: `Its tools are available from your next message on, in this same conversation`;
-					return ok(`Your owner confirmed it. Added "${p.name}" for ${whose(scope)}. ${when}; their names start with ${mcpNamespace(p.name)}__ (look at your tool list for the exact names, do not guess them). ${signIn}`);
+					return ok(`Your owner confirmed it. Added "${p.name}" for ${whose(scope)}. ${when}; they are the actions of a tool called "${serverTool(mcpNamespace(p.name))}" (take the actions' names from that tool, do not guess them). ${signIn}`);
 				},
 			}),
 			defineTool({
 				name: "remove_mcp_server",
 				label: "Remove MCP server",
 				description: `Remove an MCP server from pine's configuration, when your owner no longer wants it. You can remove a server of this conversation or of your own agent${isMain ? ", and as the main agent one that is for all agents" : "; one that is for all agents is the main agent's to remove"}. Your owner confirms it unless it is this conversation's own.`,
-				parameters: Type.Object({ name: Type.String({ description: "The server's name, as in your tool names: mcp__<name>__..." }) }),
+				parameters: Type.Object({ name: Type.String({ description: "The server's name: the name of the tool its tools are actions of" }) }),
 				execute: async (_id, p, signal) => {
 					run();
 					const known = [...Object.keys(agent.mcp), ...Object.keys(cfg.mcp)];
@@ -1536,7 +1541,8 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				execute: async (id: string, p: any, signal: any, onUpdate: any) => {
 					const { agent: who, conversation, ...rest } = p ?? {};
 					const targetId = typeof who === "string" && who.trim() ? who.trim() : agent.id;
-					const session = typeof conversation === "string" && conversation.trim() ? safeName(conversation.trim()) : undefined;
+					// "This conversation" is the owner's words for where they are, not a conversation's name.
+					const session = typeof conversation === "string" && conversation.trim() && !THIS_ONE.test(conversation.trim()) ? safeName(conversation.trim()) : undefined;
 					const r = run();
 					if (targetId === agent.id && (session === undefined || session === here())) return tool.execute(id, rest, signal, onUpdate);
 					const target = cfg.agents[targetId];

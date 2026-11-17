@@ -46,9 +46,13 @@ test("given: an MCP server, a skill, an event source and a schedule are each lis
 	// ---- an MCP server
 	r = await run([call("add_mcp_server", { name: "notes", url: stub.url, description: "the owner's notes" })]);
 	assert.match(r.text, /Added "notes" for this conversation/);
+	assert.match(r.results.at(-1)!, /they are the actions of a tool called "notes"/);
 	await idle();
 	r = await run([call("mcp_servers"), call("mcp__notes__lookup", { q: "rent" })]);
-	assert.match(r.results.at(-2)!, /^Your MCP servers in this conversation:\n- notes \(http[^)]*\): the owner's notes\n    only this conversation has it; connected, 1 tool in your tool list, starting with mcp__notes__/);
+	assert.match(r.results.at(-2)!, /^Your MCP servers in this conversation:\n- notes \(http[^)]*\): the owner's notes\n    only this conversation has it; connected: your tool "notes" has its 1 tool as actions/);
+	// The tool the agent is told about is the one the model is declared: a model looks for the name it was given.
+	assert.ok(h.toolsOffered(h.mock.state.requests.at(-1)).includes("mcp__notes__lookup"), "its tool is declared as an action of \"notes\"");
+	assert.ok((h.mock.state.requests.at(-1).body.tools ?? []).some((x: any) => (x.function ?? x).name === "notes"), "under the name the agent was told");
 	assert.match(r.results.at(-1)!, /looked up: rent/);
 	r = await run([call("remove_mcp_server", { name: "notes" })]);
 	assert.match(r.results.at(-1)!, /Removed the MCP server "notes"\./);
@@ -113,4 +117,18 @@ test("given: an MCP server, a skill, an event source and a schedule are each lis
 		'remove_schedule: remove the schedule "ping" of agent main',
 	]);
 	await h.close();
+});
+
+// The main agent's tools take "conversation" for another one. A model told "for this conversation"
+// fills it with those words: they are where the owner is, not a conversation's name.
+test("given: the main agent's \"this conversation\" is the conversation it is in", async (t) => {
+	const h = await harness({ pine: { main: "main" }, agents: { main: {} } });
+	t.after(() => h.close());
+	await h.pine.agents.run({ agent: "main", session: "work", prompt: mockMsg([{ tools: [call("add_skill", { name: "invoices", description: "File an invoice.", instructions: "Read the total.", conversation: "this conversation" })] }]), ...owner });
+	assert.match(h.toolResults().at(-1)!, /invoices/);
+	const conversations = path.join(h.home, "agents", "main", "conversations");
+	assert.ok(fs.existsSync(path.join(conversations, "work", "skills", "invoices", "SKILL.md")), `in the conversation it was said in: ${fs.readdirSync(conversations).join(", ")}`);
+	assert.ok(!fs.existsSync(path.join(conversations, "this_conversation")));
+	const skills = (h.mock.state.requests.at(-1).body.tools ?? []).map((x: any) => x.function ?? x).find((f: any) => f.parameters?.properties?.conversation);
+	assert.match(String(skills?.parameters.properties.conversation.description ?? skills?.description), /another conversation's name; leave out for this one/, "and the argument says what it is for");
 });

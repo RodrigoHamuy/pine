@@ -21,7 +21,7 @@ import { dropConversationSkills, renameConversationSkills, skillDirs } from "./s
 import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, sharedFiles, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import { Limiter, type Slot } from "./limiter.ts";
 import { modelRuntime } from "./models.ts";
-import { families, NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK } from "./catalogue.ts";
+import { families, NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
 import { type Occupant, type Page, SlotBook } from "./slots.ts";
 import { type Approvals, checkPath, denialTools, globMatch, grantable, grantPath, isInside, isOpen, levelOf, matchesToolPattern, outsidePath, ownFileOf, realish, received, type Roots, bin, rootsFor, sandboxArgv, sandboxAvailable, sandboxGuard, type SandboxVariant, shellEnv, shellRefuses, shq, toolSubject } from "./security.ts";
 import { type AgentChange, applyAgentChange, checkAgentChange, countFiles, eraseAgent } from "./admin.ts";
@@ -99,7 +99,7 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
   - ${rules}: traits and behaviour for all agents: how every agent is to be and to act.
   - ${tools}: tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup.
   - ${user}: what all agents know about your owner.
-- So you have two TOOLS.md and two AGENTS.md to tell apart: those in pine's home hold for every agent, you too; those in your workspace are yours alone and say what is different for you. A default or a preference for a tool that your owner tells you is for all agents unless they say otherwise: write it into the TOOLS.md in pine's home right away, without being asked where. Only what they say is for you alone goes into the TOOLS.md in your workspace; for another agent alone, change that agent ("tooling"). How to be or to behave goes into the AGENTS.md in pine's home when your owner says it is for all agents, and into your own AGENTS.md otherwise.`
+- So you have two TOOLS.md and two AGENTS.md to tell apart: those in pine's home hold for every agent, you too; those in your workspace are yours alone and say what is different for you. A default or a preference for a tool that your owner tells you ("default to ...", "always use ...", "from now on ...", even without naming the tool) is for all agents unless they say otherwise: write it into the TOOLS.md in pine's home right away, without being asked where, and do not run the tool to try it unless they ask. Only what they say is for you alone goes into the TOOLS.md in your workspace; for another agent alone, change that agent ("tooling"). How to be or to behave goes into the AGENTS.md in pine's home when your owner says it is for all agents, and into your own AGENTS.md otherwise.`
 			: `Three files are the same for all agents and are in your instructions: ${rules} (traits and behaviour for all agents), ${tools} (tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup) and ${user} (what is known about your owner). They hold for you; your own AGENTS.md and TOOLS.md say what is different or more for you. ${mainId} keeps them and you cannot change them: what your owner tells you goes into your own files, and what is meant for all agents they tell ${mainId}.`;
 	if (short(trust)) {
 		// How far the tools reach is said in the note, which changes with the mode; these instructions do not.
@@ -3168,7 +3168,7 @@ export class AgentManager {
 	private contextBlock(agent: AgentConfig, profile: Profile, download: boolean, families = false): string {
 		const lines = ["<pine>", `You are the agent "${agent.id}"${agent.description ? ` (${agent.description})` : ""}, one of several agents run by the pine daemon.`];
 		const servers = Object.keys(profile.mcp);
-		if (servers.length && families) lines.push(`Your MCP servers: ${servers.map((n) => (profile.mcp[n].pine === "web" ? `${n} (tools ${mcpNamespace(n)}__...)` : `${n} (one tool, "${mcpNamespace(n).replace(/^mcp__/, "")}", with an action for each of its tools)`)).join(", ")}.`);
+		if (servers.length && families) lines.push(`Your MCP servers: ${servers.map((n) => (profile.mcp[n].pine === "web" ? `${n} (tools ${mcpNamespace(n)}__...)` : `${n} (one tool, "${serverTool(mcpNamespace(n))}", with an action for each of its tools)`)).join(", ")}.`);
 		else if (servers.length) lines.push(`Your MCP servers, with the prefix their tool names start with: ${servers.map((n) => `${n} (${mcpNamespace(n)}__)`).join(", ")}. Use the exact names from your tool list.`);
 		// A server reached over the network keeps its files where it runs. A small model takes a
 		// path in an answer for a path on its own disk unless it is told.

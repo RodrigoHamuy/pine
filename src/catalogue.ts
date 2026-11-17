@@ -92,7 +92,7 @@ const BRIEF: Record<string, string> = {
 	add_source_type: "bring in a new kind of event source (a module)",
 	remove_source_type: "remove a kind of event source",
 	schedules: "what is scheduled for you, and when each is next due",
-	add_schedule: "do a task at a time, once or again and again (reminders, daily checks); give exactly one of cron, every, at, in",
+	add_schedule: "do a task at a time, once or again and again (reminders, daily checks); give exactly one of cron, every, at, in. For what should happen when a thing arrives or changes (a file in a folder, a page), not at a time: add_source",
 	remove_schedule: "remove a schedule (to change one: remove it and add it again)",
 	mcp_servers: "your MCP servers, whom each is for and whether its tools are in your tool list",
 	add_mcp_server: "propose an MCP server when your owner asks to install or connect one, by web address or by command; your owner decides",
@@ -525,6 +525,17 @@ interface Family {
 }
 
 /**
+ * The one tool an MCP server's tools are declared as in an owner's conversation, whose actions they
+ * are: named as the server's tools are, "my-notes" (tools mcp__my_notes__...) is "my_notes", and
+ * "mcp_<name>" where one of pine's own tools has that name. What pine tells an agent about a server
+ * names this tool: a model looks for the name it was given, and mcp__my_notes__ is in no declaration.
+ */
+export function serverTool(namespace: string): string {
+	const plain = namespace.replace(/^mcp__/, "");
+	return [...DECLARED, ...GROUPS.map(([, name]) => name)].includes(plain) ? `mcp_${plain}` : plain;
+}
+
+/**
  * The families of a session: one tool per group, the tool that gives a tool's whole text, and
  * the extension that puts them into the request. `leaf`: the session is a sub-agent, which is
  * declared what its conversation is declared (so that the model server reads on from what it
@@ -536,9 +547,8 @@ export function families(opts: { servers: Array<{ name: string; namespace: strin
 	for (const [id, name, about] of GROUPS) fams.set(id, { id, name, about, members: [], action: new Map(), key: "action", schema: undefined, description: "" });
 	for (const sv of opts.servers) {
 		if (DECLARED_SERVERS.includes(sv.kind ?? "")) continue;
-		// Named as the server's tools are: "my-notes", whose tools are mcp__my_notes__..., is "my_notes".
 		const plain = sv.namespace.replace(/^mcp__/, "");
-		const name = taken.has(plain) ? `mcp_${plain}` : plain;
+		const name = taken.has(plain) ? `mcp_${plain}` : serverTool(sv.namespace);
 		taken.add(name);
 		fams.set(`server:${sv.name}`, { id: `server:${sv.name}`, name, about: sv.about ?? `The MCP server ${sv.name}.`, prefix: `${sv.namespace}__`, kind: sv.kind, members: [], action: new Map(), key: "action", schema: undefined, description: "" });
 	}
@@ -558,7 +568,8 @@ export function families(opts: { servers: Array<{ name: string; namespace: strin
 		const oneOf = typeof v?.description === "string" && v.type === "string" ? v.description.match(/^One of: ([\w, -]+)$/) : null;
 		if (oneOf) return { type: "string", enum: oneOf[1].split(",").map((x: string) => x.trim()) };
 		if (!f.prefix && k === "agent" && t.name !== "add_route" && !ARG_HINT[`${t.name}.agent`]) return { type: "string", description: "another agent's id: do it for that agent, not for yourself" };
-		if (!f.prefix && k === "conversation") return { type: "string" };
+		// Without a word a model fills it with what the owner said ("for this conversation"), which names no conversation.
+		if (!f.prefix && k === "conversation") return { type: "string", description: "another conversation's name; leave out for this one" };
 		// Whom something is for is one of a few, and the tools say so in words that change with the conversation.
 		// Only the main agent sets things up for all agents: the choice is there for whom the tool itself names it to.
 		if (!f.prefix && k === "scope") {
