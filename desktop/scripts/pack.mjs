@@ -120,6 +120,40 @@ ${["com.apple.security.cs.allow-jit", "com.apple.security.cs.allow-unsigned-exec
 `,
 );
 
+// Notarising, with an App Store Connect key, is done here and not by the packer. Apple checks the
+// app, and then its answer (the "ticket") is attached to the app, which asks another server of
+// Apple's. That server drops a connection now and then, and the packer gives up at the first one:
+// a release then had no app although Apple had long said yes. Here that step is tried again.
+const key = { file: process.env.APPLE_API_KEY, id: process.env.APPLE_API_KEY_ID, issuer: process.env.APPLE_API_ISSUER };
+const notariseHere = !adhoc && process.platform === "darwin" && Boolean(key.file && key.id && key.issuer);
+const STAPLE_TRIES = 10;
+
+async function notarise(app) {
+	const zip = `${app}.zip`;
+	run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, zip]);
+	let answer;
+	try {
+		console.log(`sending ${path.basename(app)} to Apple to be notarised, and waiting for the answer ...`);
+		const said = execFileSync("/usr/bin/xcrun", ["notarytool", "submit", zip, "--key", key.file, "--key-id", key.id, "--issuer", key.issuer, "--wait", "--output-format", "json"], { encoding: "utf8", stdio: ["ignore", "pipe", "inherit"], maxBuffer: 16 * 1024 * 1024 });
+		answer = JSON.parse(said);
+	} finally {
+		fs.rmSync(zip, { force: true });
+	}
+	if (answer.status !== "Accepted") throw new Error(`Apple did not notarise the app: its answer is "${answer.status}". What it found: xcrun notarytool log ${answer.id} --key <file> --key-id <id> --issuer <issuer>`);
+	console.log(`Apple notarised it (${answer.id})`);
+	for (let i = 1; ; i++) {
+		try {
+			run("/usr/bin/xcrun", ["stapler", "staple", app]);
+			return;
+		} catch (e) {
+			if (i >= STAPLE_TRIES) throw new Error(`Apple notarised the app, but its ticket could not be attached in ${STAPLE_TRIES} tries (xcrun stapler staple). Run this again later: the app need not be sent to Apple anew for that.`);
+			const wait = Math.min(15 * i, 60);
+			console.log(`the ticket could not be attached (try ${i} of ${STAPLE_TRIES}); again in ${wait} seconds`);
+			await new Promise((r) => setTimeout(r, wait * 1000));
+		}
+	}
+}
+
 // What an earlier run left is taken away first: the packer does not always manage to itself.
 // (Tried a few times: the Finder and the system's index write into a folder that is being looked at.)
 fs.rmSync(out, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
@@ -149,6 +183,11 @@ await packApp({
 			fs.copyFileSync(path.join(root, "scripts", "pine.sh"), path.join(resources, "bin", "pine"));
 			fs.chmodSync(path.join(resources, "bin", "pine"), 0o755);
 		},
+		// After the app is signed and before a disk image is made of it: the image then holds the app with its ticket.
+		afterSign: async (context) => {
+			if (!notariseHere || context.electronPlatformName !== "darwin") return;
+			await notarise(path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`));
+		},
 		asar: true,
 		npmRebuild: false,
 		mac: {
@@ -162,8 +201,9 @@ await packApp({
 			hardenedRuntime: true,
 			entitlements,
 			entitlementsInherit: entitlements,
-			// Notarised when a signature Apple knows and an App Store Connect key are both there.
-			notarize: !adhoc,
+			// Notarised when a signature Apple knows and an App Store Connect key are both there: by
+			// `notarise` above. With another kind of sign-in (APPLE_ID, a keychain profile) by the packer.
+			notarize: !adhoc && !notariseHere,
 			extendInfo: {
 				// Dictating a message: the helper that listens asks under its own name, and the app says why too.
 				NSMicrophoneUsageDescription: "Pine listens while you dictate a message.",
