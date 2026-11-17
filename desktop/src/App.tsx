@@ -543,6 +543,31 @@ function Lightbox() {
 	return src ? <div className="lightbox" onClick={() => setSrc(undefined)}><img src={src} alt="" /></div> : null;
 }
 
+/**
+ * The browser the web tools drive is not on this Mac in the build this pine needs: asked at the
+ * start, once for a version of pine. Settings > App offers the same at any time.
+ */
+function BrowserAsk() {
+	const s = useModel(store);
+	const later = () => void s.browserLater();
+	return (
+		<Dialog
+			title="The browser for the web tools is not on this Mac"
+			width={560}
+			onClose={s.browserFetching ? undefined : later}
+			footer={
+				<>
+					<Button disabled={s.browserFetching} onClick={later}>Not now</Button>
+					<Button variant="primary" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner size={12} /> Fetching…</> : "Fetch it"}</Button>
+				</>
+			}
+		>
+			<p className="muted" style={{ margin: 0 }}>Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
+			{s.initLines.length ? <pre className="log">{s.initLines.slice(-12).join("\n")}</pre> : null}
+		</Dialog>
+	);
+}
+
 export function App() {
 	const s = useModel(store);
 	const [help, setHelp] = useState(false);
@@ -592,6 +617,7 @@ export function App() {
 					</div>
 				</>
 			)}
+			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
 			{s.palette ? <Palette /> : null}
 			<Asking />

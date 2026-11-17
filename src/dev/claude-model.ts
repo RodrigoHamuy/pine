@@ -122,7 +122,8 @@ export async function startClaudeModel(opts: ClaudeModelOptions = {}) {
 			child.stderr.on("data", (d) => (err += d));
 			const onAbort = () => child.kill("SIGKILL");
 			signal.addEventListener("abort", onAbort, { once: true });
-			child.on("error", reject);
+			// (No such command: said in words the owner can act on, since this is what a home made by "pine init" starts with.)
+			child.on("error", (e) => reject((e as NodeJS.ErrnoException).code === "ENOENT" ? new Error('this model is Claude through the "claude" command of Claude Code, and this computer has no such command. Sign in to a provider instead (pine login <provider>, or Settings > Models in the Pine app) and choose one of its models') : e));
 			child.on("close", (code) => {
 				signal.removeEventListener("abort", onAbort);
 				if (signal.aborted) return reject(new Error("aborted"));

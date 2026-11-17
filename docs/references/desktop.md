@@ -32,13 +32,22 @@ Open the image and drag Pine into Applications. Nothing else has to be installed
 | pine's helpers | The small programs for dictating, app control and the `system` event source, built for both kinds of Mac. Elsewhere pine builds them on first use, which needs Apple's command line developer tools |
 | `pine` for a terminal | See below |
 
-The first start offers to set pine up (`pine init`), which also fetches the browser the web
-tools drive. That download is the one thing the app does not carry.
-
 To get a newer version, download the new image and put the app in place of the old one. The
 app does not update itself, and `pine update` in a pine that came with the app says where the
 new app is. Your pine home (`~/.pine`: agents, conversations, settings) is not in the app and
 stays as it is.
+
+### The first start
+
+Two things the app does not carry: a sign-in to whoever does the thinking, and the browser the
+web tools drive. It asks for each where it is missing.
+
+| What the app finds | What it does |
+|---|---|
+| No pine home | It offers to set pine up (`pine init`): the example home is copied, and the browser is fetched (about 600 MB, once) |
+| Nothing to answer with | A conversation in which nothing was said yet says why and has a button to Settings > Models; that page lists everyone it holds for. Two reasons are found without sending anything: nobody is signed in to the provider, or it is `dev/claude-haiku`, what the example home starts with (Claude through the `claude` command of Claude Code, on the subscription Claude Code is signed in to), on a Mac that has no such command |
+| A sign-in in Settings > Models | A Claude, ChatGPT or Copilot subscription is signed in to through the browser (**Sign in**), any provider with an API key. Nothing switches by itself, so the dialog then offers **Choose the model your agents run on**, from what the sign-in brought. The page keeps that choice (`defaults.model`) with **Change** |
+| The browser is not there in the build this pine drives | Each version of pine drives a browser build of its own. A home that an older pine set up, or a new app in place of an old one, has the old build or none. The app asks once for each version of pine whether to fetch it, and Settings > App shows whether it is there, with **Fetch it** (`pine browser-install`, run by the app's pine). Until then the browser tools do not work; web search and reading a page do |
 
 ### `pine` in a terminal
 
@@ -273,12 +282,12 @@ of pine's: the app is your own hand, like a `pine` command.
 |---|---|---|
 | General | pine's settings (`defaults.model`, `defaults.mode`, `limits.*`, `security.*`), and the notes `pine check` would print about this setup | `set_setting`; `pine check` |
 | Agents | Every agent. On an agent's page: what it is for, its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). New agent; Remove, with or without its folder | `create_agent`, `update_agent`, `remove_agent`; `pine agent …` |
-| Models | Model servers of your own (add by name and address, with its key when it wants one; remove). Providers: sign in through the browser or with an API key, sign out. The models you can use now | `add_model_server`; `pine model …`, `pine login`, `pine logout` |
+| Models | Model servers of your own (add by name and address, with its key when it wants one; remove). Providers: sign in through the browser or with an API key, sign out; after a sign-in, the choice of the model your agents run on. That model (`defaults.model`) with Change, and each agent whose model cannot answer with the reason. The models you can use now | `add_model_server`; `pine model …`, `pine login`, `pine logout`; `set_setting` |
 | MCP servers | Every server with whom it is for and whether it connects. Add a remote one (its https address) or a program on this computer, for all agents or one. Sign in to a remote one through the browser. Remove | `add_mcp_server`; `pine mcp …` |
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
 | Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: add (at set times, every so often, once), remove. **Routes**: add, remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
-| App | The app's own settings, and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal |  |
+| App | The app's own settings, and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
 key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is

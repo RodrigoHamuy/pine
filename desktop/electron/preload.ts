@@ -15,6 +15,8 @@ const bridge = {
 	retry: () => ipcRenderer.invoke("pine:retry"),
 	restart: () => ipcRenderer.invoke("pine:restart"),
 	init: () => ipcRenderer.invoke("pine:init"),
+	/** Fetch the browser build this pine drives (`pine browser-install`); what it prints comes as init lines. */
+	browserInstall: () => ipcRenderer.invoke("pine:browser"),
 	prefs: (change: Record<string, unknown>) => ipcRenderer.invoke("pine:prefs", change),
 	pickFolder: (title?: string) => ipcRenderer.invoke("pine:pick-folder", title),
 	saveText: (name: string, text: string) => ipcRenderer.invoke("pine:save-text", name, text),

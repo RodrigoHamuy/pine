@@ -65,6 +65,8 @@ src/
   update.ts         `pine update`: brings pine up to date the way it was installed (git or npm) and fetches what the new version needs;
                     a pine inside the Pine app says where the new app is
   prebuilt.ts       where a helper that was built with pine lies (beside its source, in prebuilt/), for the Pine app
+  browser-build.ts  whether the browser build pine's Playwright drives is on this computer: Playwright's installer is asked where
+                    it would put it, and told to fetch nothing. For `pine check`, the control API's overview and the Pine app
   net.ts            address guard (no private ranges) and fetchToFile, used by the download tool and mcp/web.ts
   router.ts         routes: filter, debounce, set / publish / call / agent
   timers.ts         the scheduler: cron, intervals and one-offs; a schedule with a task wakes an agent

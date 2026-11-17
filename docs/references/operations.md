@@ -259,7 +259,7 @@ What you type in a shell. Every command is the `pine` program with a word after 
 | `pine version`, `pine --version` | Which version this is and how it is installed |
 | `pine help`, `pine --help` | Prints the list of commands |
 | `pine browser-install` | Fetch the browser again. `pine init` and `pine update` do this already |
-| `pine check` | Validate the configuration; show each agent's workspace, model, tools, MCP servers; list security notes |
+| `pine check` | Validate the configuration; show each agent's workspace, model, tools, MCP servers; list security notes; say when the browser of the web tools is not there in the build this pine drives |
 | `pine start` | Run the daemon in the foreground. Ctrl-C or SIGTERM stops it cleanly |
 | `pine service [--keep]` | For a UI that is a program of its own (a desktop app): finds the daemon of this home or starts one, and prints one line of JSON saying where it answers and with which token. See "A UI of its own" |
 | `pine dev-model [--port 7464] [--model haiku]` | The `claude -p` model server |
@@ -349,7 +349,7 @@ are JSON with `Content-Type: application/json`.
 | Request | Purpose |
 |---|---|
 | `GET /health` | Liveness (no token) |
-| `GET /status`, `/agents`, `/approvals` | As the CLI commands |
+| `GET /status`, `/agents`, `/approvals` | As the CLI commands. An agent in `/agents` whose model cannot answer has `modelProblem`, a sentence that says why: nobody is signed in to its provider, or it is `dev/…` (Claude through the `claude` command) and this computer has no such command |
 | `GET /models` | Models that have credentials, as `provider/id` |
 | `GET /mcp` | Configured MCP servers |
 | `POST /mcp` `{ name, server, agent? }` or `{ name, remove: true, agent? }` | Add or remove a server while the daemon runs |
@@ -402,7 +402,7 @@ has the token is you. An error is answered with `{ "error": "..." }` and what to
 
 | Request | Purpose |
 |---|---|
-| `GET /overview` | Where this pine stands: `{ version, home, main, platform, sandbox, warnings, modelNotes, log }`. `warnings` are the security notes of `pine check`, `modelNotes` what is wrong with model keys, `log` the path of the log file |
+| `GET /overview` | Where this pine stands: `{ version, home, main, platform, sandbox, browser, warnings, modelNotes, log }`. `browser` says whether the browser build this pine drives is on the computer (left out when pine could not tell), `warnings` are the security notes of `pine check`, `modelNotes` what is wrong with model keys, `log` the path of the log file |
 | `GET /settings` | The settings of `pine.json` that can be changed while pine runs, each as `{ key, about, kind, now, live }`: what is in force (`now`), what a value has to be (`kind`: `"model"`, `"boolean"`, `"duration"`, `{ one: [...] }` or `{ from, to }`), and whether a change holds at once (`live`). `saved` is there when the file holds another value that takes effect at the next start. The same list as the main agent's `settings` tool |
 | `POST /settings` `{ key, value }` | Change one of them, as `set_setting` does. `"default"` as the value takes the entry out. Answers `{ key, now, live }` |
 | `GET /agents/<id>/detail` | One agent in full: `{ id, main, description, workspace, dir, model?, defaultModel, thinking, mode, tools, allTools, delegates, network, read, write, holdings, files }`. `model` is missing when it runs on the default. `holdings` is what it has (conversations, sources, servers, schedules, skills, routes, files in its workspace). `files` holds the text of its `instructions` (AGENTS.md), `soul`, `tooling`, `memory` and your `rules` for it, each only when the file exists. Changes go through `POST /agents/<id>/update` |
@@ -463,7 +463,8 @@ has the token is you. An error is answered with `{ "error": "..." }` and what to
 | An answer starts late: the model reads the whole conversation again after you were in another tab or conversation, or after a restart | The model server has kept nothing of the conversation. With a llama.cpp server pine keeps each conversation in a slot of its own; give the server enough slots (`-np`), and a folder for them (`--slot-save-path`), so that a conversation that has to leave its slot is read back from a file (`limits.slotPages`). A scheduler that stops and starts the model makes it forget everything unless it saves the slots. See [agents.md](agents.md), "What the model server keeps". |
 | The first message of a new conversation takes long, and the tools take too many tokens of the prompt | The model reads every tool's declaration first. `defaults.catalogue` `families` (the default) declares them grouped and short; `limits.warmSlots` has an idle slot read that beginning ahead of time. See [agents.md](agents.md), "How tools are declared". |
 | A task fails with 401 or "API key" | The provider's credential is missing or expired. `pine login <provider>` again. |
-| The browser tools fail with "Executable doesn't exist" | Run `pine init` again (or `pine browser-install`): the browser is missing or pine was updated to a newer one. |
+| The browser tools fail with "Executable doesn't exist" | Run `pine init` again (or `pine browser-install`): the browser is missing or pine was updated to a newer one. `pine check` says so on its `browser` line, and the Pine app asks at its start and fetches it from Settings > App. |
+| The first message fails with "this computer has no such command" | `dev/claude-haiku`, what the example home starts with, is Claude through the `claude` command of Claude Code, and that is not installed. Sign in to a provider (`pine login <provider>`, or Settings > Models in the Pine app) and pick one of what it offers with `/model`. |
 | The browser cannot open `localhost` or a page says "not reachable from the browser" | Local addresses need your yes. The agent opens the address with `browser_navigate` and you are asked; see "Local addresses" in [mcp.md](mcp.md). A server the agent started itself also needs network access for its shell. |
 | The agent says macOS does not let pine operate apps, or take pictures of the screen | macOS has to be told once: System Settings > Privacy & Security > Accessibility (and Screen & System Audio Recording for pictures), switch on the terminal app pine runs in. See "What macOS has to be told, once" in [computer.md](computer.md). |
 | The agent has no tools to click or type in apps | App control is for an agent that reaches your whole account, in your own conversations, on macOS. `pine check` says which under `apps`. See [computer.md](computer.md). |

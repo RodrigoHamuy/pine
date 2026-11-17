@@ -377,7 +377,7 @@ function Agents() {
 // ---- models -----------------------------------------------------------------------------------------
 
 /** pi's sign-in, shown step by step: a page to open, a code to type there, or a key to paste here. */
-function SignIn({ provider, type, close }: { provider: string; type?: "api_key" | "oauth"; close: (done: boolean) => void }) {
+function SignIn({ provider, type, close }: { provider: string; type?: "api_key" | "oauth"; close: (done: boolean, choose?: string[]) => void }) {
 	const [id, setId] = useState<string>();
 	const [state, setState] = useState<LoginState>();
 	const [answer, setAnswer] = useState("");
@@ -444,6 +444,8 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 				<div className="row muted"><Spinner /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
 			) : null}
 			{state?.done && !state.error ? <div className="notice plain"><Icon name="check" />{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</div> : null}
+			{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
+			{state?.done && !state.error && state.models?.length ? <div className="row"><Button variant="primary" onClick={() => close(true, state.models)}>Choose the model your agents run on…</Button><span className="muted">Or later: Change, on the Models page.</span></div> : null}
 		</Dialog>
 	);
 }
@@ -457,7 +459,13 @@ function Models() {
 	const [locked, setLocked] = useState(false);
 	const [busy, setBusy] = useState(false);
 	const [all, setAll] = useState(false);
-	const reload = () => (providers.reload(), servers.reload(), models.reload());
+	const s = useModel(store);
+	// The model of every agent that has none of its own, and the agents whose model cannot answer.
+	const fallback = useLoad(() => api.settings().then((all) => all.find((x) => x.key === "defaults.model")?.now ?? "none"));
+	const details = useLoad(() => Promise.all(store.agents.map((a) => api.agentDetail(a.id))));
+	const own = (details.data ?? []).filter((d) => d.model).map((d) => `${d.id} (${d.model})`);
+	const stuck = s.agents.filter((a) => a.modelProblem);
+	const reload = () => (providers.reload(), servers.reload(), models.reload(), fallback.reload(), details.reload(), void store.refreshAgents());
 	const add = async () => {
 		setBusy(true);
 		try {
@@ -528,9 +536,18 @@ function Models() {
 				)}
 			</div>
 
+			<h2>The model your agents run on</h2>
+			<div className="group">
+				<div className="item fallback-model">
+					<div className="info"><div className="name mono">{fallback.data ?? "…"}</div><div className="about">Every agent that has no model of its own runs on it{own.length ? `. With a model of their own: ${own.join(", ")}` : ""}.</div></div>
+					<Button small onClick={() => void store.chooseDefaultModel().then(reload)}>Change…</Button>
+				</div>
+				{stuck.map((a) => <div className="item" key={a.id}><div className="notice grow"><Icon name="alert" /><div><b>{a.id}</b> cannot answer: {a.modelProblem}</div></div></div>)}
+			</div>
+
 			<h2>Models you can use now</h2>
 			<div className="group"><div className="item"><div className="about mono selectable" style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.7 }}>{models.data ? models.data.join("   ") || "none: sign in to a provider or add a server" : "…"}</div></div></div>
-			{signIn ? <SignIn provider={signIn.provider} type={signIn.type} close={() => (setSignIn(undefined), reload())} /> : null}
+			{signIn ? <SignIn provider={signIn.provider} type={signIn.type} close={(_done, choose) => (setSignIn(undefined), reload(), choose ? void store.chooseDefaultModel(choose).then(reload) : undefined)} /> : null}
 		</Page>
 	);
 }
@@ -966,6 +983,8 @@ function AppPage() {
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
 	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
 	useEffect(() => void bridge.command().then(setCommand), []);
+	// (Looked at again whenever this page is opened: the browser may have been fetched in a terminal.)
+	useEffect(() => void store.checkBrowser(), []);
 	return (
 		<Page title="App" lead="How this window behaves, and the pine it talks to.">
 			<h2>This app</h2>
@@ -979,6 +998,16 @@ function AppPage() {
 				<div className="item"><div className="info"><div className="name">Keep pine running after the app quits</div><div className="about">A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</div></div><div className="ctl"><Switch on={s.prefs.keepRunning} onChange={(keepRunning) => void set({ keepRunning })} /></div></div>
 				{command && (command.state !== "unavailable" || command.why) ? (
 					<div className="item command"><div className="info"><div className="name">pine in a terminal{command.state === "here" ? <span className="tag good">set up</span> : null}</div><div className="about">{command.text}</div></div><div className="ctl">{command.state === "none" ? <Button small onClick={() => void bridge.command("install").then(setCommand)}>Set up</Button> : command.state === "here" ? <Button small onClick={() => void bridge.command("remove").then(setCommand)}>Remove</Button> : null}</div></div>
+				) : null}
+				{s.browser !== undefined || s.browserFetching ? (
+					<div className="item browser">
+						<div className="info">
+							<div className="name">Browser for the web tools<span className={`tag ${s.browser ? "good" : "warn"}`}>{s.browser ? "on this Mac" : "not on this Mac"}</span></div>
+							<div className="about">{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</div>
+							{!s.browser && s.initLines.length ? <pre className="log">{s.initLines.slice(-12).join("\n")}</pre> : null}
+						</div>
+						{s.browser ? null : <div className="ctl"><Button small disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner size={11} /> Fetching…</> : "Fetch it"}</Button></div>}
+					</div>
 				) : null}
 				<div className="item">
 					<div className="info"><div className="name">Home folder</div><div className="about mono">{tilde(service?.home ?? s.prefs.home ?? "~/.pine")}</div><div className="about">Where pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.</div></div>

@@ -272,6 +272,13 @@ function Welcome({ tab }: { tab: Tab }) {
 				{info?.delegates.length ? <span className="fact" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></span> : null}
 				{counts.filter(([, n]) => n > 0).map(([what, n]) => <span className="fact" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</span>)}
 			</div>
+			{info?.modelProblem ? (
+				<div className="notice no-model">
+					<Icon name="alert" />
+					<div className="grow">{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</div>
+					<Button small onClick={() => store.openSettings("models")}>Models…</Button>
+				</div>
+			) : null}
 			<p className="faint">
 				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 			</p>

@@ -87,6 +87,8 @@ export interface AgentInfo {
 	mode: Mode;
 	thinking: string;
 	delegates: string[];
+	/** Why its model cannot answer, where the daemon can tell: no sign-in, or the stand-in's command is missing. */
+	modelProblem?: string;
 }
 
 export type Mode = "manual" | "safe" | "auto" | "bypass" | "plan";
@@ -290,6 +292,8 @@ export interface Overview {
 	main: string;
 	platform: string;
 	sandbox: boolean;
+	/** Whether the browser build this pine drives is on the computer. Not said when pine could not tell. */
+	browser?: boolean;
 	warnings: string[];
 	modelNotes: string[];
 	log: string;

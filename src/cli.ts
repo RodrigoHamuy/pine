@@ -445,7 +445,11 @@ async function main(): Promise<void> {
 		return;
 	}
 
-	if (cmd === "browser-install") process.exit(await installBrowser());
+	if (cmd === "browser-install") {
+		// (PINE_SKIP_DOWNLOADS is for pine's own tests, which must not fetch 600 MB.)
+		if (process.env.PINE_SKIP_DOWNLOADS) return out("Not fetched: PINE_SKIP_DOWNLOADS is set.");
+		process.exit(await installBrowser());
+	}
 
 	if (cmd === "version" || flags.version === true) {
 		const { channelOf, installed, notedChannel } = await import("./update.ts");
@@ -608,6 +612,8 @@ async function main(): Promise<void> {
 		out(`http       ${cfg.http ? `${cfg.http.host}:${cfg.http.port}, hooks: ${Object.keys(cfg.http.hooks).join(", ") || "none"}` : "off"}`);
 		out(`global mcp ${Object.keys(cfg.mcp).join(", ") || "none"}`);
 		out(`routes     ${cfg.routes.length}, schedules ${cfg.schedules.length}`);
+		const { browserReady } = await import("./browser-build.ts");
+		if ((await browserReady()) === false) out("browser    not on this computer in the build this pine drives: the browser tools do not work until you run: pine browser-install");
 		for (const a of Object.values(cfg.agents)) {
 			out(`\nagent ${a.id}${a.id === mainAgentId(cfg) ? " (main)" : ""}: ${a.description || "no description"}`);
 			out(`  workspace  ${a.workspace}`);

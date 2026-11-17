@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 
@@ -6,6 +7,21 @@ export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms))
 
 export function expandHome(p: string): string {
 	return p === "~" || p.startsWith("~/") ? path.join(os.homedir(), p.slice(1)) : p;
+}
+
+/** Where a command lies on the PATH, as a shell would find it; nothing where there is none. */
+export function onPath(name: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
+	for (const dir of (env.PATH ?? "").split(path.delimiter)) {
+		if (!dir) continue;
+		const file = path.join(dir, name);
+		try {
+			fs.accessSync(file, fs.constants.X_OK);
+			if (fs.statSync(file).isFile()) return file;
+		} catch {
+			// Not in this folder.
+		}
+	}
+	return undefined;
 }
 
 /** Resolve a config path: `~` expands, relative paths are relative to `base`. */

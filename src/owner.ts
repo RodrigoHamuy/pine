@@ -12,6 +12,7 @@ import path from "node:path";
 import { addRoute, applySetting, checkRoute, checkSetting, dropRoute, type RouteInput, SETTINGS } from "./admin.ts";
 import { AGENT_TOOLS } from "./agent-admin.ts";
 import type { AgentManager } from "./agents.ts";
+import { browserReady } from "./browser-build.ts";
 import { type AgentConfig, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, SHARED_FILES } from "./config.ts";
 import { login, logout, type Prompter } from "./login.ts";
 import { findServer, piMcp, serverStates } from "./mcp-config.ts";
@@ -259,7 +260,7 @@ export class OwnerApi {
 		const at = parts.join("/");
 		if (at === "overview") {
 			const pkg = JSON.parse(fs.readFileSync(path.join(PINE_ROOT, "package.json"), "utf8"));
-			return { version: String(pkg.version), home: cfg.home, main: mainAgentId(cfg), platform: process.platform, sandbox: sandboxAvailable(), warnings: audit(cfg), modelNotes: modelKeys(cfg.home).problems, log: path.join(cfg.dataDir, "pine.log") };
+			return { version: String(pkg.version), home: cfg.home, main: mainAgentId(cfg), platform: process.platform, sandbox: sandboxAvailable(), browser: await browserReady(), warnings: audit(cfg), modelNotes: modelKeys(cfg.home).problems, log: path.join(cfg.dataDir, "pine.log") };
 		}
 		if (at === "settings") {
 			// What is saved and holds only from the next start is said beside what is in force.

@@ -445,6 +445,12 @@ function wire(): void {
 		const args = ["init", ...(prefs.home ? [prefs.home] : []), "--yes"];
 		return runPine(launch, args, (line) => send("pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
 	});
+	// The browser the web tools drive, fetched by the pine the app runs: each pine wants the build
+	// of its own Playwright, and a home that was set up by another pine has an older one.
+	handle("pine:browser", async () => {
+		launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
+		return runPine(launch, ["browser-install"], (line) => send("pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
+	});
 	handle("pine:command", async (action?: string) => {
 		const env = await loginEnv();
 		return worded(action === "install" ? await install(RESOURCES, env) : action === "remove" ? await remove(RESOURCES, env) : look(RESOURCES, env));

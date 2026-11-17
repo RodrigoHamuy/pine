@@ -45,7 +45,7 @@ import { onBranch, redoMessage, Turns, type TurnView, type UndoHost, undoMessage
 import { classify, LOOK_TOOLS, pineOwn, pineOwnRefusal, PLAN_REFUSAL, SETUP_TOOLS, ROUTERS } from "./actions.ts";
 import { Type } from "typebox";
 import type { ContextUse, ImageRef, PineEvent, ReplyTarget, Task, TaskKind, TaskResult, TaskStatus, Todo, TranscriptEntry, Trust } from "./types.ts";
-import { callTiming, errText, expandHome, type Logger, programName, safeName, since, sleep, speedOf, speedText, truncate } from "./util.ts";
+import { callTiming, errText, expandHome, type Logger, onPath, programName, safeName, since, sleep, speedOf, speedText, truncate } from "./util.ts";
 
 const BUILTIN_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"];
 const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
@@ -525,6 +525,33 @@ export class AgentManager {
 	/** Models that have credentials (or need none), as "provider/id". */
 	async availableModels(): Promise<string[]> {
 		return [...(await this.modelRuntime.getAvailable())].map((m: any) => `${m.provider}/${m.id}`).sort();
+	}
+
+	/**
+	 * Why an agent's model cannot answer, for every agent of which pine can tell without asking
+	 * the model: nobody signed in to its provider, or it is the stand-in that runs the `claude`
+	 * command (the provider "dev") and this computer has no such command. A UI says it before
+	 * the first message fails, and says where a model is chosen.
+	 */
+	async modelProblems(): Promise<Record<string, string>> {
+		const available = new Set(await this.availableModels());
+		const claude = onPath("claude");
+		const problems: Record<string, string> = {};
+		for (const agent of Object.values(this.cfg.agents)) {
+			const ref = agent.model ?? this.cfg.defaults.model;
+			const provider = ref?.slice(0, Math.max(0, ref.indexOf("/")));
+			const problem = !ref
+				? "No model is set."
+				: !provider || !this.modelRuntime.getModel(provider, ref.slice(provider.length + 1))
+					? `${ref} is not a model pine knows.`
+					: !available.has(ref)
+						? `${ref} needs a sign-in to ${provider} or a key for it, and there is none.`
+						: provider === "dev" && !claude
+							? `${ref} is Claude through the "claude" command of Claude Code, and this computer has no such command.`
+							: undefined;
+			if (problem) problems[agent.id] = problem;
+		}
+		return problems;
 	}
 
 	/**

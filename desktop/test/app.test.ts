@@ -23,6 +23,8 @@ let page: any;
 let mock: any;
 let home: string;
 let folder: string;
+/** Where the browser of the web tools would lie (Playwright's own variable for it): a folder of the test's, empty at the start. */
+let browsers: string;
 /** What went wrong in the page itself, said with a failure. */
 const pageErrors: string[] = [];
 
@@ -65,6 +67,8 @@ before(async () => {
 	write(path.join(home, "agents", "main", "workspace", "notes.md"), "# Notes\n\nfirst line\n");
 	write(path.join(home, "agents", "scout", "agent.json"), JSON.stringify({ description: "Looks things up on the web" }));
 	write(path.join(home, "agents", "scout", "workspace", "AGENTS.md"), "You are scout.\n");
+	browsers = path.join(home, "browsers");
+	fs.mkdirSync(browsers, { recursive: true });
 	// A folder of the owner's, with a git history, to open for a conversation.
 	folder = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-folder-")));
 	write(path.join(folder, "README.md"), "# Okapi\n\nA small project.\n");
@@ -93,7 +97,7 @@ process.stdin.resume();
 		// (The driver shows every page in light unless it is told otherwise, whatever the app says.)
 		colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light",
 		args: [root],
-		env: { ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice },
+		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice },
 	});
 	page = await app.firstWindow();
 	page.on("pageerror", (e: Error) => pageErrors.push(String(e.stack ?? e.message).slice(0, 600)));
@@ -110,6 +114,12 @@ after(async () => {
 test("starts a daemon of its own and shows the main agent", async () => {
 	await sees(".welcome h1");
 	assert.equal(await page.textContent(".welcome h1"), "main");
+	// This home has no browser for the web tools in the build its pine drives (the folder for it
+	// is empty): that is asked once, at the start, and "Not now" is remembered.
+	await sees(".dialog-title >> text=The browser for the web tools is not on this Mac");
+	await shot("00-browser");
+	await page.click(".dialog-foot .btn >> text=Not now");
+	await page.waitForSelector(".dialog", { state: "detached" });
 	assert.match(await page.textContent(".side-status"), /started here/);
 	const agents = await page.$$eval(".side-agent .who > :first-child", (els: Element[]) => els.map((e) => e.textContent?.trim()));
 	assert.deepEqual(agents, ["main", "scout"]);
@@ -269,8 +279,34 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees(".dialog .notice.plain");
 	assert.doesNotMatch(await page.textContent(".dialog"), /sk-test-not-a-real-key/);
 	await shot("09-settings-sign-in");
-	await page.click(".dialog-foot .btn >> text=Done");
 	assert.match(fs.readFileSync(path.join(home, "auth.json"), "utf8"), /opencode/);
+	// A sign-in changes no agent's model, so the dialog offers the new ones for all agents.
+	await page.click(".dialog .btn-primary >> text=Choose the model your agents run on");
+	await sees(".pick-title >> text=Model for every agent that has none of its own");
+	const offered = await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent ?? ""));
+	assert.ok(offered.length > 0 && offered.every((m) => m.startsWith("opencode/")), JSON.stringify(offered.slice(0, 5)));
+	await page.click(".pick-item >> nth=0");
+	await sees(`.toast >> text=Your agents now run on ${offered[0]}`);
+	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, offered[0]);
+	await sees(`.item.fallback-model .name >> text=${offered[0]}`);
+	// Signed out again, that model cannot answer: the page says so for each agent it leaves without
+	// one, and so does the welcome of such an agent's conversation, with the way to this page.
+	const signedIn = page.locator(".item", { has: page.locator(".tag.mono", { hasText: /^opencode$/ }) }).first();
+	await signedIn.locator(".btn >> text=Sign out").click();
+	await signedIn.locator(".btn >> text=Sign out?").click();
+	await sees(".item .notice >> text=/main cannot answer: .* needs a sign-in to opencode/");
+	await page.click(".tab:has-text('pine-desktop-folder')");
+	await sees(".welcome .notice >> text=/needs a sign-in to opencode/");
+	await shot("09-no-model");
+	await page.click(".welcome .notice .btn >> text=Models");
+	await sees(".set-in h1 >> text=Models");
+	// "Change" offers every model that can be used now.
+	await page.click(".item.fallback-model .btn >> text=Change");
+	await sees(".pick-title >> text=Model for every agent that has none of its own");
+	await page.click(".pick-item >> text=mock/m");
+	await sees(".toast >> text=Your agents now run on mock/m");
+	await page.waitForSelector(".item .notice", { state: "detached" });
+	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, "mock/m");
 	// MCP servers: a remote one is added, pine says whether it connects, and "Sign in" runs pi's own
 	// sign-in for it (which for a server that wants none says so; a browser opens only where one is needed).
 	const remote = await httpMcp({});
@@ -325,6 +361,18 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 		await page.waitForTimeout(400);
 		await shot(`09-settings-${nav.toLowerCase().replace(/\s+/g, "-")}`);
 	}
+	// App: the browser of the web tools is still not there, and can be fetched from here. (The
+	// test fetches nothing: PINE_SKIP_DOWNLOADS. What the command printed is shown.)
+	await sees(".item.browser .tag.warn >> text=not on this Mac");
+	await page.click(".item.browser .btn >> text=Fetch it");
+	await sees(".item.browser pre.log >> text=Not fetched: PINE_SKIP_DOWNLOADS is set.");
+	// Fetched some other way (a terminal): the page says so when it is opened again.
+	const { browserPlaces } = await import("../../src/browser-build.ts");
+	const places = (await browserPlaces()) ?? [];
+	for (const place of places) write(path.join(browsers, path.basename(place), "INSTALLATION_COMPLETE"), "");
+	await page.click(".set-nav .side-row >> text=Models");
+	await page.click(".set-nav .side-row >> text=App");
+	await sees(".item.browser .tag.good >> text=on this Mac");
 	await menu("settings");
 });
 

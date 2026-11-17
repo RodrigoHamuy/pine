@@ -4,6 +4,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { browserPlaces } from "../src/browser-build.ts";
 import { Logins } from "../src/owner.ts";
 import { sandboxAvailable } from "../src/security.ts";
 import { putInto } from "../src/workspace-view.ts";
@@ -382,6 +383,71 @@ test("a sign-in to a model provider is driven over several requests: its questio
 	const local = await a.post("/mcp/login", { name: "local_one" });
 	assert.equal(local.status, 400);
 	assert.match(local.body.error, /local server/);
+	await h.close();
+});
+
+test("the overview says whether the browser build this pine drives is on the computer", async (t) => {
+	// (Playwright's own variable for where its browsers lie: here a folder of the test's.)
+	const dir = tmp(t, "pine-browsers-");
+	const before = process.env.PLAYWRIGHT_BROWSERS_PATH;
+	t.after(() => void (before === undefined ? delete process.env.PLAYWRIGHT_BROWSERS_PATH : (process.env.PLAYWRIGHT_BROWSERS_PATH = before)));
+	process.env.PLAYWRIGHT_BROWSERS_PATH = dir;
+	const h = await harness({ pine: { http: { port: 0 } }, agents: { main: {} } });
+	const a = api(h);
+	assert.equal((await a.get("/overview")).body.browser, false, "an empty folder has no browser");
+
+	const places = (await browserPlaces()) ?? [];
+	assert.ok(places.length > 0 && places.every((p) => p.startsWith(dir)), JSON.stringify(places));
+	// A build of another Playwright beside it is not the one this pine drives.
+	fs.mkdirSync(path.join(dir, "chromium-1"), { recursive: true });
+	fs.writeFileSync(path.join(dir, "chromium-1", "INSTALLATION_COMPLETE"), "");
+	assert.equal((await a.get("/overview")).body.browser, false);
+	for (const place of places) {
+		fs.mkdirSync(place, { recursive: true });
+		fs.writeFileSync(path.join(place, "INSTALLATION_COMPLETE"), "");
+	}
+	assert.equal((await a.get("/overview")).body.browser, true);
+	// A download that did not finish has left a folder without Playwright's mark.
+	fs.rmSync(path.join(places[0], "INSTALLATION_COMPLETE"));
+	assert.equal((await a.get("/overview")).body.browser, false);
+	await h.close();
+});
+
+test("the list of agents says why an agent's model cannot answer: no sign-in, or the claude command is not there", async (t) => {
+	const h = await harness({ pine: { http: { port: 0 } }, agents: { main: {}, books: { agent: { description: "Keeps the books" } }, scout: { agent: { description: "Looks things up" } } } });
+	const a = api(h);
+	const problem = async (agent: string) => ((await a.get("/agents")).body as any[]).find((x) => x.id === agent).modelProblem as string | undefined;
+	assert.equal(await problem("main"), undefined, "a model that answers has nothing said about it");
+	assert.ok(!("modelProblem" in (await a.get("/agents")).body[0]));
+
+	// The stand-in of the example home: Claude through the `claude` command, which a computer has or has not.
+	const file = path.join(h.home, "models.json");
+	const models = json(file);
+	models.providers.dev = { name: "claude -p", baseUrl: "http://127.0.0.1:9/v1", api: "openai-completions", apiKey: "none", models: [{ id: "claude-haiku", name: "Claude Haiku", contextWindow: 180000, maxTokens: 8192, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] };
+	fs.writeFileSync(file, JSON.stringify(models));
+	await h.pine.agents.reloadModels();
+	assert.equal((await a.post("/agents/scout/model", { model: "dev/claude-haiku" })).status, 200);
+	const bin = tmp(t, "pine-path-");
+	const before = process.env.PATH;
+	t.after(() => void (process.env.PATH = before));
+	process.env.PATH = bin;
+	assert.match((await problem("scout")) ?? "", /dev\/claude-haiku is Claude through the "claude" command.*no such command/);
+	assert.equal(await problem("main"), undefined);
+	fs.writeFileSync(path.join(bin, "claude"), "#!/bin/sh\n", { mode: 0o755 });
+	assert.equal(await problem("scout"), undefined, "with the command there, nothing is said");
+	process.env.PATH = before;
+
+	// A provider's model: it answers while there is a sign-in or a key, and not after.
+	const started = (await a.post("/models/login", { provider: "opencode", type: "api_key" })).body;
+	let view: any;
+	await until(async () => (view = (await a.get(`/models/login/${started.id}`)).body).question || view.done, 5000, "pi's question for the key");
+	await a.post(`/models/login/${started.id}`, { answer: "sk-opencode-test-61377" });
+	await until(async () => (view = (await a.get(`/models/login/${started.id}`)).body).done, 5000, "the sign-in to end");
+	const model = view.models[0] as string;
+	assert.equal((await a.post("/agents/books/model", { model })).status, 200);
+	assert.equal(await problem("books"), undefined);
+	await a.post("/models/logout", { provider: "opencode" });
+	assert.equal(await problem("books"), `${model} needs a sign-in to opencode or a key for it, and there is none.`);
 	await h.close();
 });
 

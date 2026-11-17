@@ -230,6 +230,11 @@ export class Store extends Model {
 	toasts: Toast[] = [];
 	initLines: string[] = [];
 	initRunning = false;
+	/** Whether the browser build this pine drives is on this computer; nothing while it is not known. */
+	browser?: boolean;
+	/** The question at the start, when it is not: fetch it now, or later. */
+	browserAsk = false;
+	browserFetching = false;
 	/** Something a menu asked for that only a part of the page can do (save the file in the editor, focus the input). */
 	signal = new Model();
 	/** The name of what was asked for last. Read with `useSignal`, which several parts can do for the same asking. */
@@ -293,6 +298,7 @@ export class Store extends Model {
 			return this.flash(errText(e), "bad");
 		}
 		for (const a of this.agents) learnHome(a.workspace);
+		void this.checkBrowser(true);
 		for (const t of this.timers) clearInterval(t);
 		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000), window.setInterval(() => void this.refreshAgents(), 8000)];
 		const first = this.agents.find((a) => a.main) ?? this.agents[0];
@@ -336,8 +342,8 @@ export class Store extends Model {
 		if (this.service.status !== "ready") return;
 		const list = await this.askAgents().catch(() => undefined);
 		if (!list) return;
-		const was = this.agents.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}`).join("\n");
-		const now = list.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}`).join("\n");
+		const was = this.agents.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}|${a.modelProblem ?? ""}`).join("\n");
+		const now = list.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}|${a.modelProblem ?? ""}`).join("\n");
 		if (was === now) return;
 		const fresh = list.filter((a) => !this.agents.some((x) => x.id === a.id)).map((a) => a.id);
 		const gone = this.agents.filter((a) => !list.some((x) => x.id === a.id)).map((a) => a.id);
@@ -477,6 +483,68 @@ export class Store extends Model {
 			this.flash(errText(e), "bad");
 			return undefined;
 		}
+	}
+
+	/**
+	 * Ask whether the browser the web tools drive is there. A home that another pine set up, or a
+	 * new app in place of an old one, has a browser on disk and not the build this pine needs:
+	 * with `ask` that is put to the owner once for each version of pine, at the start.
+	 */
+	async checkBrowser(ask = false): Promise<void> {
+		const over = await api.overview().catch(() => undefined);
+		if (!over) return;
+		this.browser = over.browser;
+		let later: string | null = null;
+		try {
+			later = localStorage.getItem("pine.browser.later");
+		} catch {
+			// No storage: it is asked again next time.
+		}
+		if (ask && over.browser === false && later !== over.version) this.browserAsk = true;
+		if (over.browser !== false) this.browserAsk = this.browserFetching;
+		this.touch();
+	}
+
+	/** Not now: it is not asked again until pine is another version. Settings > App still offers it. */
+	async browserLater(): Promise<void> {
+		this.browserAsk = false;
+		this.touch();
+		const over = await api.overview().catch(() => undefined);
+		try {
+			if (over) localStorage.setItem("pine.browser.later", over.version);
+		} catch {
+			// Then it is asked again next time.
+		}
+	}
+
+	/** Fetch the browser build with the pine this app runs; what it prints is shown as it comes. */
+	async fetchBrowser(): Promise<void> {
+		if (this.browserFetching) return;
+		this.browserFetching = true;
+		this.initLines = [];
+		this.touch();
+		const code = await bridge.browserInstall().catch(() => 1);
+		this.browserFetching = false;
+		await this.checkBrowser();
+		if (this.browser) this.flash("The browser of the web tools is on this Mac now.", "good");
+		else this.flash(code === 0 ? "The browser is still not there. What was said is shown in Settings > App." : "The browser could not be fetched. What was said is shown in Settings > App; try again when you are online.", "bad", 8000);
+		this.touch();
+	}
+
+	/**
+	 * Choose the model of every agent that has none of its own (`defaults.model`), from `among` or
+	 * from all that can be used now. Offered where a model was just made available, and where an
+	 * agent's model cannot answer.
+	 */
+	async chooseDefaultModel(among?: string[]): Promise<void> {
+		const models = among?.length ? among : await this.attempt(() => api.models());
+		if (!models?.length) return this.flash("There is no model to choose yet: sign in to a provider or add a model server first.", "warn");
+		const now = (await this.attempt(() => api.settings()))?.find((x) => x.key === "defaults.model")?.now;
+		const model = await this.pick({ title: "Model for every agent that has none of its own", items: models.map((m) => ({ value: m, label: m })), current: now, placeholder: "Search models" });
+		if (!model || model === now) return;
+		if (!(await this.attempt(() => api.setSetting("defaults.model", model)))) return;
+		await this.refreshAgents();
+		this.flash(`Your agents now run on ${model}. An agent with a model of its own keeps it.`, "good", 6000);
 	}
 
 	pick(p: Omit<Picker, "done">): Promise<string | undefined> {

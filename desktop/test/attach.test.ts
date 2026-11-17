@@ -9,6 +9,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import { _electron as electron } from "playwright-core";
 import { startMock } from "../../baseline/tests/mock.mjs";
+import { browserPlaces } from "../../src/browser-build.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 let app: any;
@@ -41,6 +42,12 @@ before(async () => {
 	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port }, defaults: { model: "mock/m", mode: "safe" } }));
 	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent" }));
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
+	// The browser of the web tools counts as there, whatever this machine has: Playwright's own
+	// variable names a folder that carries its marks. (What the app asks when it is missing is
+	// app.test.ts's to test, and its question would stand in front of what is clicked here.)
+	const browsers = path.join(home, "browsers");
+	for (const place of (await browserPlaces()) ?? []) write(path.join(browsers, path.basename(place), "INSTALLATION_COMPLETE"), "");
+	process.env.PLAYWRIGHT_BROWSERS_PATH = browsers;
 	// A pine as somebody would have started it in a terminal.
 	daemon = spawn(process.execPath, [path.join(root, "..", "bin", "pine.js"), "start", "--home", home], { stdio: "ignore" });
 	for (let i = 0; i < 150 && !(await healthy()); i++) await new Promise((r) => setTimeout(r, 100));
