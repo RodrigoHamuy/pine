@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
-import { usePanelRef } from "react-resizable-panels";
+import { type Layout, usePanelRef } from "react-resizable-panels";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { type AgentInfo, api, type Approval, type Conversation as Conv } from "./api.ts";
@@ -610,12 +610,15 @@ const SIDE_KEY = "pine.sidebar.width";
 const SIDE_WIDTH = 248;
 
 /** Remembers how wide a panel is, in pixels, for the next start. Only what the owner did is kept: a narrow window squeezes a panel without changing what it is set to. */
-const keepWidth = (panel: string, key: string) =>
-	// After a key the layout is told before the panel is drawn at its new width: measure in the next frame.
-	requestAnimationFrame(() => {
-		const width = document.getElementById(panel)?.offsetWidth;
-		if (width) localStorage.setItem(key, String(width));
-	});
+const keepWidth = (layout: Layout, panel: string, key: string) => {
+	// The layout is in shares of the room the panels have together, and is told before the panels are
+	// drawn at their new widths (after a key): the room is the same before and after.
+	const group = document.getElementById(panel)?.parentElement;
+	const share = layout[panel];
+	if (!group || share === undefined) return;
+	const room = [...group.children].filter((el) => el.hasAttribute("data-panel")).reduce((sum, el) => sum + el.getBoundingClientRect().width, 0);
+	localStorage.setItem(key, String(Math.round((share * room) / 100)));
+};
 
 export function App() {
 	const s = useModel(store);
@@ -637,7 +640,7 @@ export function App() {
 			{!ready ? (
 				<Gate />
 			) : (
-				<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(_, meta) => meta.isUserInteraction && keepWidth("sidebar-panel", SIDE_KEY)}>
+				<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "sidebar-panel", SIDE_KEY)}>
 					{s.sidebar ? (
 						<>
 							<ResizablePanel id="sidebar-panel" className="flex" panelRef={side} defaultSize={Number(localStorage.getItem(SIDE_KEY)) || SIDE_WIDTH} minSize={190} maxSize={460} groupResizeBehavior="preserve-pixel-size">
@@ -650,7 +653,7 @@ export function App() {
 						<div className="main">
 							<TitleBar />
 							<div className="body">
-								<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(_, meta) => meta.isUserInteraction && keepWidth("code-panel", CODE_KEY)}>
+								<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "code-panel", CODE_KEY)}>
 									<ResizablePanel id="view" className="flex" minSize={420}>
 										{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
 									</ResizablePanel>
