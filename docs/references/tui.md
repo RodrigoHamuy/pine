@@ -144,6 +144,7 @@ spinner that the agent is working, `!` that it waits for your approval.
 | Go to tab n | `alt+1` ... `alt+9`, or `/tab n` |
 | Close a tab | `ctrl+w` or `/close` (the conversation stays in the list; the last tab stays open) |
 | Give a conversation, and its tab, another name | `/rename <name>` |
+| Go on in a copy of the conversation from one of your messages, leaving it as it is | `/branch` (pick the message), `/branch <name>` (all of it) |
 | Keep a conversation for good | `/pin`, or `pin` in the list |
 | Watch everything that happens | `/events` |
 
@@ -191,6 +192,7 @@ Type `/` and the list appears; keep typing to narrow it, `enter` runs the comman
 | `/sessions [name]` | Open one of this agent's conversations; without a name, choose from a list |
 | `/tab <n>`, `/close` | Switch to, or close, a tab |
 | `/rename <name>` | Another name for this conversation and its tab. Its history, pin and subscriptions go with it. Not for an agent's main conversation |
+| `/branch [name]` | A new conversation that goes its own way from one of your messages; this one stays as it is. Without a name it lists your messages, the latest first, and "all of it": the branch has what was said up to the end of the one you pick. With a name it takes all of it. See [agents.md](agents.md#branching-a-conversation) |
 | `/pin`, `/unpin` | Keep this conversation however long it is unused, or let it go again |
 | `/reset` | Forget this conversation and start fresh (also clears "has seen outside content") |
 | `/undo` | Take back your last message: what it started is stopped, the files it changed in the conversation's folder are restored, the conversation forgets it and what followed, and its text is in the input again to change and send. Again for the message before it. See [coding.md](coding.md) for what is and is not restored |

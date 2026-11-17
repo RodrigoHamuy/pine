@@ -2521,6 +2521,27 @@ export class PineTui {
 					this.freshen(t);
 				},
 			},
+			{
+				name: "branch", description: "Go on in a new conversation from one of your messages, or from all of this one; this one stays as it is", argumentHint: "[name]",
+				run: async (args) => {
+					const t = chat();
+					if (!t) return;
+					// With a name: all of it. Without: which message to go on from, the latest first.
+					let at: number | undefined;
+					if (!args.trim()) {
+						const mine = (await this.client.history(t.agent, t.session, 200).catch(() => [] as Task[])).filter((x) => x.kind === "prompt" && x.parent === undefined && x.meta?.trust === "owner" && x.meta?.steered === undefined && x.status !== "pending" && x.status !== "running");
+						if (!mine.length) return this.flash("nothing of yours was said in this conversation yet");
+						const items = [{ value: "all", label: "all of it", description: "everything said so far" }, ...mine.map((x) => ({ value: String(x.id), label: short(oneLine(x.prompt.replace(/[\x00-\x1f\x7f]/g, " ")), 70), description: `after this message and its answer · ${new Date(x.created).toLocaleString()}` }))];
+						const chosen = await this.pick(`Branch ${t.session} from`, items, "all");
+						if (!chosen) return;
+						at = chosen === "all" ? undefined : Number(chosen);
+					}
+					const r = await this.client.branch(t.agent, t.session, at, args.trim() || undefined);
+					await this.openTab(t.agent, r.session);
+					await this.refreshTaints();
+					this.say(this.active, c.gray(`a branch of ${c.bold(t.session)}${at !== undefined ? ", from the message you picked" : ""}: what was said there up to it is here too, what you say here stays here${r.outside ? ". It holds outside content, as that conversation did" : ""}`));
+				},
+			},
 			{ name: "undo", description: "Take back your last message: its files are restored, the conversation forgets it, its text returns to the input", run: () => this.undo(false) },
 			{ name: "redo", description: "Bring back what the last /undo took, until you send a new message", run: () => this.undo(true) },
 			{

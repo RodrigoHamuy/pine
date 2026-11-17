@@ -373,6 +373,16 @@ export class HttpServer {
 					throw new HttpError(409, errText(e));
 				}
 			}
+			// A new conversation that goes on from a message of the owner's. Only here, like undo: no agent has a tool for it.
+			if (parts[0] === "agents" && parts[2] === "branch" && parts.length === 3) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				if (body.at !== undefined && !Number.isInteger(body.at)) throw new HttpError(400, "at: the number of the message to branch after");
+				try {
+					return send(200, await this.manager.branchSession(parts[1], String(body.session ?? "main"), body.at as number | undefined, typeof body.to === "string" ? body.to : undefined));
+				} catch (e) {
+					throw new HttpError(409, errText(e));
+				}
+			}
 			if (parts[0] === "agents" && parts[2] === "reset" && parts.length === 3) return send(200, { reset: await this.manager.resetSession(parts[1], body.session) });
 			if (parts[0] === "tasks" && parts[2] === "cancel" && parts.length === 3) return send(200, { cancelled: this.manager.cancel(Number(parts[1])) });
 			if (parts[0] === "approvals" && parts.length === 2) {

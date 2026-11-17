@@ -407,6 +407,34 @@ conversations in the terminal UI; see [tui.md](tui.md)), or set `limits.conversa
 `0` to keep them all. Everything that was set up for one conversation alone goes with it: its
 event sources and subscriptions, schedules, MCP servers and skills ([setup.md](setup.md)).
 
+## Branching a conversation
+
+A branch is a new conversation that goes on from a point in another one: to try a second
+way without losing the first, or to ask something on the side without filling the
+conversation with it. It holds what was said up to the end of the message you branched from
+(your message, the agent's answer and the work in between); what came after stays in the
+original only. The two go their own ways from then on: what is said in one is not in the
+other. The original is left exactly as it was.
+
+| Where | How |
+|---|---|
+| Pine app | "Branch from here" beside one of your messages (it shows when the pointer is on it, or a right click), or Branch in the menu of a conversation in the side bar, or the command Branch conversation, which takes all of it |
+| Terminal UI | `/branch`: pick one of your messages, or all of it, from a list; `/branch <name>`: all of it, under that name |
+| Control API | `POST /agents/<id>/branch` `{ session, at?, to? }` ([operations.md](operations.md)) |
+
+A branch is called after the conversation it came from (`notes-branch`, `notes-branch-2`)
+unless you give it a name. The Pine app shows it under that conversation in the side bar.
+
+What a branch takes along: the history up to that point, the folder opened for the
+conversation, and the mark of outside content as the conversation had it at that point (a
+branch from before the outside content was read is clean, one from after it is marked). What
+stays with the original: what you allowed it without asking (access, local addresses, apps),
+what was set up for it alone (event sources, subscriptions, schedules, MCP servers, skills),
+its goal, its pin. In the branch the agent asks for those again. `/undo` in a branch takes
+back messages said in the branch with their files; a message that came with the branch is
+taken back from the conversation only, without restoring files. Only you branch; no agent has
+a tool for it.
+
 ## Goal mode
 
 Normally an agent ends its turn and waits for your next message, also when the work is not

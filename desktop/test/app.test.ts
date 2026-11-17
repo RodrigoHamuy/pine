@@ -732,6 +732,41 @@ test("the last message is taken back, and its text is in the input again", async
 	await page.fill(".composer textarea", "");
 });
 
+test("a message is branched from: a new conversation with what was said up to it, under the original in the side bar", async () => {
+	await page.click(".tab >> nth=0");
+	await menu("new");
+	await sees(".tab.on .name >> text=new conversation");
+	for (const word of ["BRANCH-ONE", "BRANCH-TWO"]) {
+		await page.fill(".composer textarea", mockMsg([{ text: `answer to ${word}` }], `${word} `));
+		await page.keyboard.press("Enter");
+		await sees(`.md >> text=answer to ${word}`);
+	}
+	const from = await page.textContent(".tab.on .name");
+	// The button stands beside a message of the owner's while the pointer is on it.
+	await page.hover(".it-user:has-text('BRANCH-ONE')");
+	await page.click(".it-user:has-text('BRANCH-ONE') .branch-from button");
+	await sees(".toast >> text=from that message");
+	await sees(".tab.on .name >> text=· branch");
+	assert.ok((await page.textContent(".tab.on .name")).startsWith(`${from!.trim()} · branch`));
+	await sees(".md >> text=answer to BRANCH-ONE");
+	assert.doesNotMatch(await page.textContent(".column"), /BRANCH-TWO/);
+	// In the side bar it is under the conversation it was made from, one step in.
+	await page.waitForFunction(() => [...document.querySelectorAll(".side-conv")].some((r) => /a branch of/.test(r.getAttribute("title") ?? "")));
+	const rows = await page.$$eval(".side-conv", (els: Element[]) => els.map((e) => ({ title: e.getAttribute("title") ?? "", indent: (e as HTMLElement).style.paddingLeft })));
+	const at = rows.findIndex((r) => /a branch of/.test(r.title));
+	assert.equal(rows[at].indent, "45px");
+	assert.match(rows[at].title, new RegExp(`a branch of ${rows[at - 1].title.split(" · ")[1]}`), JSON.stringify(rows));
+	await shot("15-branch");
+	// What is said in the branch stays there.
+	await page.fill(".composer textarea", mockMsg([{ text: "only in the branch" }], "BRANCH-THREE "));
+	await page.keyboard.press("Enter");
+	await sees(".md >> text=only in the branch");
+	await page.click(".tab.on .close");
+	await page.click(".tab.on .close");
+	await page.click(".tab >> nth=0");
+	await sees(".composer textarea");
+});
+
 test("dictating puts what is heard into the input and sends nothing", async () => {
 	const sent = await page.$$eval(".it-user", (els: Element[]) => els.length);
 	await page.fill(".composer textarea", "Typed first:");

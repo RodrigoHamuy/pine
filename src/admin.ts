@@ -247,7 +247,7 @@ export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore },
 	const routes = cfg.routes.filter((r) => r.agent === id).map((r) => r.name);
 	for (const name of routes) dropRoute(cfg, name);
 	unname(cfg, id);
-	for (const prefix of ["taint", "keep", "folder", "todos", "turns", "undone", "prefix", "note"]) store.kv.forget(`${prefix}:${id}:`);
+	for (const prefix of ["taint", "keep", "folder", "todos", "turns", "undone", "prefix", "note", "branch"]) store.kv.forget(`${prefix}:${id}:`);
 	// Which slot of a model server held one of its conversations (src/slots.ts).
 	const slots = store.kv.get<Record<string, Array<{ who?: string } | null | undefined>>>("slots");
 	if (slots) store.kv.set("slots", Object.fromEntries(Object.entries(slots).map(([server, held]) => [server, held.map((o) => (o && String(o.who).startsWith(`${id}:`) ? null : o))])));

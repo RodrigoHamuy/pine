@@ -49,7 +49,7 @@ interface Base {
 
 export type Item = Base &
 	(
-		| { t: "user"; text: string; from?: string; files?: string[] }
+		| { t: "user"; text: string; from?: string; files?: string[]; /** The owner's message as a task, to branch from. */ task?: number }
 		| { t: "answer"; task: number; agent: string; text: string; live: boolean }
 		| { t: "work"; parts: Part[]; done: boolean; open: boolean; startedAt: number; ms?: number }
 		| { t: "note"; tone: Tone; text: string; lines?: Array<{ text: string; tone?: Tone }>; action?: { label: string; run: () => void } }
@@ -453,6 +453,9 @@ export class Store extends Model {
 	 */
 	titleOf(agent: string, session: string): string {
 		if (session === "main") return "main conversation";
+		// A branch of a conversation that has no name of its own is called after that one's title.
+		const branch = /^(s[0-9a-z]{6,10})-branch(?:-(\d+))?$/.exec(session);
+		if (branch) return `${this.titleOf(agent, branch[1])} · branch${branch[2] ? ` ${branch[2]}` : ""}`;
 		if (!/^s[0-9a-z]{6,10}$/.test(session)) return session;
 		return this.titles.get(`${agent}:${session}`) ?? "new conversation";
 	}
@@ -732,7 +735,7 @@ export class Store extends Model {
 		if (t.meta?.compact) return void tab.note(t.status === "done" ? (t.result ?? "The earlier part of the conversation was summarised.") : `Shortening the conversation: ${t.status}${t.error ? ` (${t.error})` : ""}`);
 		if (t.kind === "event" && t.meta?.label) tab.add({ t: "event", label: t.meta.label, body: eventBody(t.prompt) });
 		else if (isGoalRound(t.kind, t.meta?.label)) tab.note(`↻ ${t.meta.label}`);
-		else tab.add({ t: "user", text: t.prompt, from: t.kind === "prompt" ? undefined : t.kind });
+		else tab.add({ t: "user", text: t.prompt, from: t.kind === "prompt" ? undefined : t.kind, task: t.kind === "prompt" && t.meta?.trust === "owner" && t.meta?.steered === undefined ? t.id : undefined });
 		(t.meta?.images ?? []).forEach((_, i) => tab.add({ t: "media", kind: "image", name: `attached picture ${i + 1}`, url: `pine-media://daemon/tasks/${t.id}/images/${i}` }));
 		// It was read by work that was already running; the answer is that work's.
 		if (t.meta?.steered !== undefined) return;
@@ -928,6 +931,7 @@ export class Store extends Model {
 			const mentions = [...text.matchAll(/(?:^|\s)@([^\s@]+)/g)].map((m) => m[1]).filter((m) => tab.files.has(m.split("#")[0]));
 			const { task, steered } = await api.prompt(tab.agent, text, tab.session, files.length ? files.map((f) => ({ name: f.name, data: f.data })) : undefined, whenBusy, mentions.length ? mentions : undefined);
 			tab.roots.add(task);
+			if (steered === undefined) (mine.task = task), mine.v++;
 			if (steered !== undefined) {
 				tab.awaiting = tab.awaiting.filter((p) => p !== text);
 				this.flash("Given to the agent while it works. ⌥↩ makes a message wait its turn instead.", "muted", 3000);
@@ -969,6 +973,16 @@ export class Store extends Model {
 		if (!redo) tab.draft = r.prompt;
 		tab.codeTick++;
 		tab.touch();
+		void this.refreshTaints();
+	}
+
+	/** Go on in a new conversation from message `at` of this one, or from all of it; this one stays as it is. */
+	async branch(agent: string, session: string, at?: number): Promise<void> {
+		const r = await this.attempt(() => api.branch(agent, session, at));
+		if (!r) return;
+		await this.openTab(agent, r.session);
+		this.flash(`A branch of ${this.titleOf(agent, session)}${at !== undefined ? " from that message" : ""}: what you say here stays here.${r.outside ? " It holds outside content, as that conversation did." : ""}`, "muted", 5000);
+		void this.refreshConversations(agent);
 		void this.refreshTaints();
 	}
 
@@ -1326,6 +1340,8 @@ export class Store extends Model {
 				return this.stop(chat);
 			case "undo":
 				return this.undo(chat, false);
+			case "branch":
+				return this.branch(chat.agent, chat.session);
 			case "redo":
 				return this.undo(chat, true);
 			case "compact":

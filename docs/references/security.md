@@ -432,6 +432,10 @@ in the context. `/reset` in the terminal UI, or `pine reset`, clears it along wi
 conversation. `/undo` clears it only when the message that is taken back is the one that
 brought the outside content in: that text then leaves the context with the message, and
 what you allowed the conversation while the message was worked on is taken back too.
+A branch of a conversation ([agents.md](agents.md#branching-a-conversation)) starts with the
+mark the conversation had at the point it was branched from, never without it; when pine has
+no record of that point it takes the mark the conversation has now. What you allowed the
+conversation is not carried into a branch.
 `"run"` forgets it after each task, which is more convenient and weaker. `"off"` means no tool
 call marks a conversation at all: what a subscribed source reports then arrives with full tools
 and no questions. Runs that an outside event started stay restricted in every setting.

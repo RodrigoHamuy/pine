@@ -42,7 +42,7 @@ import { type BrowserState, BrowserViews } from "./browser-view.ts";
 import { Goals } from "./goals.ts";
 import { BACKGROUND_HELP, BACKGROUND_NOT_HERE, BACKGROUND_PARAM, backgroundRefused, endedNotice, startedText, tailOf, TIMEOUT_HINT } from "./background.ts";
 import { Snapshots } from "./snapshots.ts";
-import { onBranch, redoMessage, Turns, type TurnView, type UndoHost, undoMessage, type UndoResult } from "./undo.ts";
+import { branchFile, onBranch, ownerMessage, redoMessage, sessionFile, standingBefore, Turns, type TurnView, type UndoHost, undoMessage, type UndoResult } from "./undo.ts";
 import { classify, LOOK_TOOLS, pineOwn, pineOwnRefusal, PLAN_REFUSAL, SETUP_TOOLS, ROUTERS } from "./actions.ts";
 import { Type } from "typebox";
 import type { ContextUse, ImageRef, PineEvent, ReplyTarget, Task, TaskKind, TaskResult, TaskStatus, Todo, TranscriptEntry, Trust } from "./types.ts";
@@ -966,6 +966,7 @@ export class AgentManager {
 			this.kv.set(`keep:${agentId}:${key}`, null);
 			this.kv.set(`prefix:${agentId}:${key}`, null);
 			this.kv.set(`note:${agentId}:${key}`, null);
+			this.kv.set(`branch:${agentId}:${key}`, null);
 			this.slots.forget(`${agentId}:${key}`);
 			this.goals.drop(agentId, key);
 			this.bypassAnyway.delete(`${agentId}:${key}`);
@@ -1162,7 +1163,7 @@ export class AgentManager {
 	 * An agent's conversations: pinned ones first, then the most recently used. `expires` is when
 	 * one is removed by itself if nothing more is said in it; one without it stays.
 	 */
-	conversations(agentId: string): Array<{ session: string; tasks: number; last: number; pinned: boolean; open: boolean; working: boolean; outside?: string; expires?: number; folder?: string }> {
+	conversations(agentId: string): Array<{ session: string; tasks: number; last: number; pinned: boolean; open: boolean; working: boolean; outside?: string; expires?: number; folder?: string; branch?: { from: string; at?: number } }> {
 		const agent = this.cfg.agents[agentId];
 		if (!agent) throw new Error(`unknown agent "${agentId}"`);
 		const pinned = this.pinned();
@@ -1172,8 +1173,11 @@ export class AgentManager {
 			const base = s.session.replace(/~u$/, "");
 			const stays = base === "main" || pinned.includes(`${agentId}:${s.session}`) || open.includes(s.session) || agent.subscribe.some((x) => x.session === base) || agent.schedules.some((x) => x.session === base) || !(days > 0);
 			const working = [...this.running.values()].some((r) => r.task.agent === agentId && r.task.session === s.session);
-			return { ...s, pinned: pinned.includes(`${agentId}:${s.session}`), open: open.includes(s.session), working, outside: this.outsideMark(agentId, s.session), expires: stays ? undefined : s.last + days * 86_400_000, folder: this.folderOf(agentId, s.session) };
+			return { ...s, pinned: pinned.includes(`${agentId}:${s.session}`), open: open.includes(s.session), working, outside: this.outsideMark(agentId, s.session), expires: stays ? undefined : s.last + days * 86_400_000, folder: this.folderOf(agentId, s.session), branch: s.session.endsWith("~u") ? undefined : this.branchOf(agentId, s.session) };
 		});
+		// A branch whose conversation is gone is a conversation like any other.
+		const names = new Set(list.map((s) => s.session));
+		for (const s of list) if (s.branch && !names.has(s.branch.from)) s.branch = undefined;
 		return [...list.filter((s) => s.pinned), ...list.filter((s) => !s.pinned)];
 	}
 
@@ -1310,6 +1314,7 @@ export class AgentManager {
 			this.kv.set(`keep:${agentId}:${key}`, null);
 			this.kv.set(`prefix:${agentId}:${key}`, null);
 			this.kv.set(`note:${agentId}:${key}`, null);
+			this.kv.set(`branch:${agentId}:${key}`, null);
 			this.slots.forget(`${agentId}:${key}`);
 			this.kv.set(`folder:${agentId}:${key}`, null);
 			this.goals.drop(agentId, key);
@@ -1465,8 +1470,79 @@ export class AgentManager {
 			});
 			for (const [, server] of servers) server.session = b;
 		}
+		for (const key of this.kv.keys(`branch:${agentId}:`)) {
+			const was = this.kv.get<{ from: string; at?: number }>(key);
+			if (was?.from === a) this.kv.set(key, { ...was, from: b });
+		}
+		const own = this.kv.get(`branch:${agentId}:${a}`);
+		this.kv.set(`branch:${agentId}:${a}`, null);
+		if (own) this.kv.set(`branch:${agentId}:${b}`, own);
 		this.log.info(`the conversation ${from} of ${agentId} is now called ${b}`);
 		return { session: b };
+	}
+
+	/**
+	 * A new conversation that goes on from a message of the owner's in another one: it holds what
+	 * was said up to the end of that message's turn, the original stays as it is. Without `at`, all
+	 * of it. Like undo it is the owner's alone (the control API): no agent has a tool for it.
+	 *
+	 * What the branch takes along is its history, its folder and the outside-content mark the
+	 * conversation had at that point, never less: a branch must not be a way to lose the mark.
+	 * What the owner allowed in the original, what it set up for itself (sources, servers, skills,
+	 * schedules), its goal and its pin stay with the original.
+	 */
+	async branchSession(agentId: string, session: string, at?: number, wanted?: string): Promise<{ session: string; tasks: number; outside?: string }> {
+		const agent = this.cfg.agents[agentId];
+		if (!agent) throw new Error(`unknown agent "${agentId}"`);
+		if (session.endsWith("~u")) throw new Error("this conversation holds what came from outside; branch the conversation it belongs to");
+		const from = sessionKey(session);
+		if (this.lives.get(`${agentId}:${from}`)?.current) throw new Error(`the conversation ${from} of ${agentId} is working; branch it when it is done`);
+		const rows = this.tasks.list({ agent: agentId, session: from, limit: 1000 }).reverse();
+		const said = rows.filter(ownerMessage);
+		const msg = at === undefined ? said.at(-1) : said.find((t) => t.id === at);
+		if (!msg) throw new Error(at === undefined ? "nothing of yours was said in this conversation yet, so there is nothing to branch" : `message #${at} is not one of yours in the conversation ${from}`);
+		if (msg.status === "pending" || msg.status === "running") throw new Error("that message is not done yet; branch from it when it is");
+		// The turn ends where the owner's next message begins: where the conversation stood before it is the end of this one.
+		const next = said.find((t) => t.id > msg.id && t.status !== "pending");
+		const dir = path.join(agent.dir, "sessions", from);
+		const turn = next && this.turns.of(agentId, from).find((t) => t.task === next.id);
+		const file = turn?.file ? path.join(dir, turn.file) : sessionFile(dir);
+		const leaf = !next ? undefined : turn ? turn.leaf : standingBefore(file, next.prompt);
+		if (next && leaf === undefined) throw new Error(`pine has no record of where the conversation stood after message #${msg.id}; branch from a later message`);
+		// The mark at that point: the one recorded before the next message, else the one it has now, which is never less.
+		const now = { taint: this.outsideMark(agentId, from), keep: this.kv.get(`keep:${agentId}:${from}`) === true };
+		const marks = turn ? turn.marks : now;
+
+		const root = path.join(agent.dir, "sessions");
+		const taken = (k: string) => k === "main" || k === "new" || fs.existsSync(path.join(root, k)) || fs.existsSync(path.join(root, `${k}~u`)) || this.tasks.sessions(agentId).some((s) => s.session.replace(/~u$/, "") === k);
+		let to = wanted?.trim() ? sessionKey(wanted.trim()) : `${from}-branch`;
+		if (wanted?.trim() && taken(to)) throw new Error(`${agentId} already has a conversation called ${to}`);
+		for (let n = 2; taken(to); n++) to = `${from}-branch-${n}`;
+
+		const copied = branchFile(file, leaf, path.join(root, to));
+		if (!copied) throw new Error(`the conversation ${from} has no history pine could copy`);
+		const ids = this.tasks.copy(rows.filter((t) => (!next || t.id < next.id) && t.status !== "pending" && t.status !== "running"), to);
+		// The pictures a tool returned are kept by task number: the copies get theirs.
+		const media = path.join(this.cfg.dataDir, "media", "tool");
+		for (const name of fs.existsSync(media) ? fs.readdirSync(media) : []) {
+			const was = Number(name.split("-")[0]);
+			if (ids.has(was)) fs.copyFileSync(path.join(media, name), path.join(media, `${ids.get(was)}${name.slice(String(was).length)}`));
+		}
+		if (marks.taint) this.kv.set(`taint:${agentId}:${to}`, marks.taint);
+		if (marks.keep) this.kv.set(`keep:${agentId}:${to}`, true);
+		// The instruction files as the conversation was begun with: the branch's requests go on from the same beginning.
+		const prefix = this.kv.get(`prefix:${agentId}:${from}`);
+		if (prefix) this.kv.set(`prefix:${agentId}:${to}`, prefix);
+		const folder = this.kv.get<string>(`folder:${agentId}:${from}`);
+		if (folder) this.kv.set(`folder:${agentId}:${to}`, folder);
+		this.kv.set(`branch:${agentId}:${to}`, { from, at: msg.id });
+		this.log.info(`the conversation ${from} of ${agentId} was branched after message #${msg.id} into ${to}${marks.taint ? " (it holds outside content)" : ""}`);
+		return { session: to, tasks: ids.size, outside: marks.taint };
+	}
+
+	/** The conversation a branch was made from, and after which message, while that one is there. */
+	branchOf(agentId: string, session: string): { from: string; at?: number } | undefined {
+		return this.kv.get<{ from: string; at?: number }>(`branch:${agentId}:${sessionKey(session.replace(/~u$/, ""))}`) ?? undefined;
 	}
 
 	/**

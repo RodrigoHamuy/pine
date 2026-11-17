@@ -226,6 +226,14 @@ A conversation you only started (`+`) has no name of its own. The app calls it b
 began: the first thing you said in it, in the side bar, on its tab and in the search. Give it a
 name with Rename (a right click, or `/rename`) and that name is used.
 
+Beside each of your messages, while the pointer is on it, is a button that branches the
+conversation from there: a new conversation with what was said up to the end of that
+message's turn, opened in a tab, while the original stays as it was. A right click on the
+message, or Branch in the menu of a conversation in the side bar (all of it), does the same.
+A branch stands under the conversation it was made from in the side bar, with the branch
+sign, and is called after it ("… · branch") until you rename it. What a branch takes along
+and what it does not is in [agents.md](agents.md#branching-a-conversation).
+
 Everything in [tui.md](tui.md) about modes, goals, approvals, an agent's questions, its list
 of steps, sub-agents, `/undo` and what a conversation is holds here unchanged: it is the
 daemon's doing. What differs is how it is drawn and reached.

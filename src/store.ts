@@ -287,6 +287,25 @@ export class TaskStore {
 		for (const t of rows) insert.run(t.id, t.agent, t.session, t.kind, t.prompt, t.status, t.priority, t.created, t.started ?? null, t.finished ?? null, t.result ?? null, t.error ?? null, t.event ?? null, t.hops, t.parent ?? null, t.depth, t.reply ? JSON.stringify(t.reply) : null, JSON.stringify(t.meta ?? {}));
 	}
 
+	/**
+	 * Copies of tasks under new numbers in another conversation, for a branch. A copy points at
+	 * no task outside the copies (`parent`, `meta.root`), so that removing the conversation it
+	 * came from does not take the branch's history with it.
+	 */
+	copy(rows: Task[], session: string): Map<number, number> {
+		const ids = new Map<number, number>();
+		const insert = this.db.prepare("INSERT INTO tasks (agent, session, kind, prompt, status, priority, created, started, finished, result, error, event, hops, parent, depth, reply, meta) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+		for (const t of [...rows].sort((a, b) => a.id - b.id)) {
+			const meta = { ...(t.meta ?? {}) } as Task["meta"];
+			if (meta.root !== undefined) meta.root = ids.get(meta.root);
+			if (meta.root === undefined) delete meta.root;
+			const parent = t.parent !== undefined ? ids.get(t.parent) : undefined;
+			const r = insert.run(t.agent, session, t.kind, t.prompt, t.status, t.priority, t.created, t.started ?? null, t.finished ?? null, t.result ?? null, t.error ?? null, t.event ?? null, t.hops, parent ?? null, t.depth, t.reply ? JSON.stringify(t.reply) : null, JSON.stringify(meta));
+			ids.set(t.id, Number(r.lastInsertRowid));
+		}
+		return ids;
+	}
+
 	/** Give a conversation's tasks another conversation name. */
 	rename(agent: string, from: string, to: string): void {
 		this.db.prepare("UPDATE tasks SET session = ? WHERE agent = ? AND session = ?").run(to, agent, from);

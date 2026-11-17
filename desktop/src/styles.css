@@ -1131,6 +1131,21 @@ select.input {
 	color: var(--faint);
 	margin-bottom: 2px;
 }
+/* A message of the owner's can be branched from: a button beside it, there while the pointer is on it. */
+.it-user {
+	position: relative;
+}
+.it-user .branch-from {
+	position: absolute;
+	right: calc(100% + 4px);
+	top: 4px;
+	opacity: 0;
+	transition: opacity 0.12s;
+}
+.it-user:hover .branch-from,
+.it-user .branch-from:focus-within {
+	opacity: 1;
+}
 .it-user .files {
 	display: flex;
 	flex-wrap: wrap;

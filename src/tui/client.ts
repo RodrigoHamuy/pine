@@ -106,6 +106,8 @@ export class Client {
 	/** Take back the owner's last message in a conversation, and bring back what was taken back last. */
 	undo = (agent: string, session: string) => this.post<UndoResult>(`/agents/${agent}/undo`, { session });
 	redo = (agent: string, session: string) => this.post<UndoResult>(`/agents/${agent}/redo`, { session });
+	/** A new conversation that goes on from message `at` of this one (without it: from all of it). */
+	branch = (agent: string, session: string, at?: number, to?: string) => this.post<{ session: string; tasks: number; outside?: string }>(`/agents/${agent}/branch`, { session, ...(at !== undefined ? { at } : {}), ...(to ? { to } : {}) });
 	/** What the last message changed in the conversation's folder, and one file's difference over it. */
 	turn = (agent: string, session: string) => this.get<TurnView>(`/agents/${agent}/view/turn?session=${encodeURIComponent(session)}`);
 	turnDiff = (agent: string, session: string, file: string) => this.get<{ diff: string; truncated: boolean }>(`/agents/${agent}/view/turndiff?session=${encodeURIComponent(session)}&path=${encodeURIComponent(file)}`);

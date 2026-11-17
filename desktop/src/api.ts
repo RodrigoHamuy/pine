@@ -64,7 +64,7 @@ export interface Task {
 	error?: string;
 	parent?: number;
 	depth: number;
-	meta: { images?: unknown[]; label?: string; steered?: number; compact?: boolean; chain?: string[]; stats?: Stats };
+	meta: { images?: unknown[]; label?: string; steered?: number; compact?: boolean; chain?: string[]; stats?: Stats; trust?: string };
 }
 
 export interface TranscriptEntry {
@@ -101,6 +101,8 @@ export interface Conversation {
 	open: boolean;
 	expires?: number;
 	folder?: string;
+	/** A branch: the conversation it was made from, and after which message of the owner's. */
+	branch?: { from: string; at?: number };
 }
 
 export interface GoalInfo {
@@ -350,6 +352,8 @@ export const api = {
 	compact: (agent: string, session: string) => post<{ task: number }>(`${a(agent)}/compact`, { session }),
 	undo: (agent: string, session: string) => post<UndoResult>(`${a(agent)}/undo`, { session }),
 	redo: (agent: string, session: string) => post<UndoResult>(`${a(agent)}/redo`, { session }),
+	/** A new conversation that goes on from message `at` of this one (without it: from all of it). */
+	branch: (agent: string, session: string, at?: number) => post<{ session: string; tasks: number; outside?: string }>(`${a(agent)}/branch`, { session, ...(at !== undefined ? { at } : {}) }),
 	setThinking: (agent: string, level: string) => post<{ level: string }>(`${a(agent)}/thinking`, { level }),
 	setMode: (agent: string, mode: string, anyway?: string) => post<{ mode: string }>(`${a(agent)}/mode`, { mode, session: anyway, anyway: anyway !== undefined }),
 	setModel: (agent: string, model: string) => post<{ model: string }>(`${a(agent)}/model`, { model }),
