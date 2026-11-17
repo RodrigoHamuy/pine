@@ -427,7 +427,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 function Ring({ percent }: { percent: number }) {
 	const r = 6;
 	const c = 2 * Math.PI * r;
-	const colour = percent >= 85 ? "var(--bad)" : percent >= 65 ? "var(--warn)" : "var(--muted)";
+	const colour = percent >= 85 ? "var(--bad)" : percent >= 65 ? "var(--warn)" : "var(--text-muted)";
 	return (
 		<svg className="ring" width="16" height="16" viewBox="0 0 16 16">
 			<circle cx="8" cy="8" r={r} fill="none" stroke="var(--press)" strokeWidth="2" />

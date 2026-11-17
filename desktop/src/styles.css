@@ -1,10 +1,11 @@
 /* Pine's look: panels that lie as cards on the window, neutral surfaces, one green, and type that does the
-   work. Light and dark follow the system. Dark is the poimandres theme (github.com/drcmda/poimandres-theme):
-   its colours are the --p-* values below, the app's own names are set from them, and code is coloured the
-   way the theme colours it. Light has no poimandres and keeps its own colours. */
+   work. Light and dark follow the system, through the `.dark` class that theme.ts keeps on the root. Dark
+   is the poimandres theme (github.com/drcmda/poimandres-theme): its colours are the --p-* values below,
+   the app's own names are set from them, and code is coloured the way the theme colours it. Light has no
+   poimandres and keeps its own colours. index.css maps these names onto shadcn's tokens. */
 
 :root {
-	color-scheme: light dark;
+	color-scheme: light;
 	--font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
 	--r: 10px;
@@ -25,10 +26,10 @@
 	--line: #e1e3de;
 	--line-soft: #ecedea;
 	--text: #1a1d1b;
-	--muted: #666e68;
+	--text-muted: #666e68;
 	--faint: #99a19b;
-	--accent: #1f7a55;
-	--accent-soft: rgba(31, 122, 85, 0.1);
+	--brand: #1f7a55;
+	--brand-soft: rgba(31, 122, 85, 0.1);
 	--on-accent: #ffffff;
 	--warn: #a86a08;
 	--warn-soft: rgba(196, 136, 20, 0.12);
@@ -44,56 +45,55 @@
 	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.22);
 	--side: rgba(236, 237, 233, 0.86);
 	--scrim: rgba(20, 24, 22, 0.28);
-	--select: color-mix(in srgb, var(--accent) 28%, transparent);
+	--select: color-mix(in srgb, var(--brand) 28%, transparent);
 }
 
-@media (prefers-color-scheme: dark) {
-	:root {
-		--p-bg: #1b1e28;
-		--p-fg: #a6accd;
-		--p-bright: #e4f0fb;
-		--p-comment: #767c9d;
-		--p-mint: #5de4c7;
-		--p-teal: #5fb3a1;
-		--p-blue: #add7ff;
-		--p-sky: #89ddff;
-		--p-steel: #91b4d5;
-		--p-slate: #7390aa;
-		--p-yellow: #fffac2;
-		--p-pink: #d0679d;
-		--p-focus: #303340;
+:root.dark {
+	color-scheme: dark;
+	--p-bg: #1b1e28;
+	--p-fg: #a6accd;
+	--p-bright: #e4f0fb;
+	--p-comment: #767c9d;
+	--p-mint: #5de4c7;
+	--p-teal: #5fb3a1;
+	--p-blue: #add7ff;
+	--p-sky: #89ddff;
+	--p-steel: #91b4d5;
+	--p-slate: #7390aa;
+	--p-yellow: #fffac2;
+	--p-pink: #d0679d;
+	--p-focus: #303340;
 
-		--bg: var(--p-bg);
-		--surface: #1e212c;
-		--raised: #232633;
-		--sunk: #171922;
-		--composer: #1e212c;
-		--hover: rgba(166, 172, 205, 0.07);
-		--press: rgba(166, 172, 205, 0.12);
-		--line: #2b2e3c;
-		--line-soft: #242734;
-		--text: var(--p-bright);
-		--muted: var(--p-fg);
-		--faint: var(--p-comment);
-		--accent: var(--p-mint);
-		--accent-soft: rgba(93, 228, 199, 0.12);
-		--on-accent: #171922;
-		--warn: var(--p-yellow);
-		--warn-soft: rgba(255, 250, 194, 0.1);
-		--bad: var(--p-pink);
-		--bad-soft: rgba(208, 103, 157, 0.15);
-		--info: var(--p-blue);
-		--plan: var(--p-sky);
-		--add: var(--p-mint);
-		--add-bg: rgba(93, 228, 199, 0.1);
-		--del: var(--p-pink);
-		--del-bg: rgba(208, 103, 157, 0.14);
-		--select: rgba(113, 124, 180, 0.3);
-		--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);
-		--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
-		--side: rgba(19, 21, 29, 0.88);
-		--scrim: rgba(10, 11, 17, 0.55);
-	}
+	--bg: var(--p-bg);
+	--surface: #1e212c;
+	--raised: #232633;
+	--sunk: #171922;
+	--composer: #1e212c;
+	--hover: rgba(166, 172, 205, 0.07);
+	--press: rgba(166, 172, 205, 0.12);
+	--line: #2b2e3c;
+	--line-soft: #242734;
+	--text: var(--p-bright);
+	--text-muted: var(--p-fg);
+	--faint: var(--p-comment);
+	--brand: var(--p-mint);
+	--brand-soft: rgba(93, 228, 199, 0.12);
+	--on-accent: #171922;
+	--warn: var(--p-yellow);
+	--warn-soft: rgba(255, 250, 194, 0.1);
+	--bad: var(--p-pink);
+	--bad-soft: rgba(208, 103, 157, 0.15);
+	--info: var(--p-blue);
+	--plan: var(--p-sky);
+	--add: var(--p-mint);
+	--add-bg: rgba(93, 228, 199, 0.1);
+	--del: var(--p-pink);
+	--del-bg: rgba(208, 103, 157, 0.14);
+	--select: rgba(113, 124, 180, 0.3);
+	--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);
+	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
+	--side: rgba(19, 21, 29, 0.88);
+	--scrim: rgba(10, 11, 17, 0.55);
 }
 
 * {
@@ -147,7 +147,7 @@ select {
 	font-size: 12.5px;
 }
 .muted {
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .faint {
 	color: var(--faint);
@@ -328,7 +328,7 @@ html:not([data-platform="darwin"]) .side-top {
 	height: 20px;
 	border-radius: 6px;
 	background: var(--press);
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 11px;
 	font-weight: 650;
 	display: grid;
@@ -358,7 +358,7 @@ html:not([data-platform="darwin"]) .side-top {
 	height: 30px;
 	padding: 0 6px 0 8px;
 	border-radius: var(--r-s);
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .side-row:hover {
 	background: var(--hover);
@@ -392,7 +392,7 @@ html:not([data-platform="darwin"]) .side-top {
 }
 /* A newer app: the one row there that leads out of the window. */
 .side-row.side-update {
-	color: var(--accent);
+	color: var(--brand);
 }
 .side-status {
 	display: flex;
@@ -415,7 +415,7 @@ html:not([data-platform="darwin"]) .side-top {
 	flex: none;
 }
 .dot.good {
-	background: var(--accent);
+	background: var(--brand);
 }
 .dot.warn {
 	background: var(--warn);
@@ -473,7 +473,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	min-width: 64px;
 	padding: 0 6px 0 10px;
 	border-radius: var(--r-s);
-	color: var(--muted);
+	color: var(--text-muted);
 	flex: 0 1 auto;
 	position: relative;
 }
@@ -502,7 +502,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	border-radius: 5px;
 	opacity: 0;
 	flex: none;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .tab:hover .close,
 .tab.on .close {
@@ -530,7 +530,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	bottom: 5px;
 	width: 2px;
 	border-radius: 2px;
-	background: var(--accent);
+	background: var(--brand);
 }
 .needs {
 	font-size: 10px;
@@ -581,7 +581,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 12px;
 	font-variant-numeric: tabular-nums;
 	margin-right: 4px;
@@ -615,7 +615,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 .btn:focus-visible,
 .input:focus-visible,
 .switch:focus-visible {
-	outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+	outline: 2px solid color-mix(in srgb, var(--brand) 60%, transparent);
 	outline-offset: 1px;
 }
 .btn-small {
@@ -634,7 +634,7 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 .btn-ghost {
 	border-color: transparent;
 	background: transparent;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .btn-ghost:hover:not(:disabled) {
 	background: var(--hover);
@@ -646,13 +646,13 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 	color: var(--text);
 }
 .btn-primary {
-	background: var(--accent);
-	border-color: var(--accent);
+	background: var(--brand);
+	border-color: var(--brand);
 	color: var(--on-accent);
 	font-weight: 550;
 }
 .btn-primary:hover:not(:disabled) {
-	border-color: var(--accent);
+	border-color: var(--brand);
 	filter: brightness(1.07);
 }
 .btn-danger {
@@ -678,7 +678,7 @@ kbd {
 	user-select: text;
 }
 .input:focus {
-	border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+	border-color: color-mix(in srgb, var(--brand) 70%, var(--line));
 }
 textarea.input {
 	resize: none;
@@ -688,7 +688,7 @@ textarea.input {
 select.input {
 	appearance: none;
 	padding-right: 26px;
-	background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+	background-image: linear-gradient(45deg, transparent 50%, var(--text-muted) 50%), linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
 	background-position:
 		calc(100% - 14px) 13px,
 		calc(100% - 9px) 13px;
@@ -710,7 +710,7 @@ select.input {
 .field-label {
 	font-size: 12px;
 	font-weight: 550;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .field-hint {
 	font-size: 12px;
@@ -739,7 +739,7 @@ select.input {
 	transition: transform 0.15s;
 }
 .switch.on {
-	background: var(--accent);
+	background: var(--brand);
 }
 .switch.on::after {
 	transform: translateX(14px);
@@ -769,7 +769,7 @@ select.input {
 	border: none;
 	border-radius: 7px;
 	background: transparent;
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 12px;
 	white-space: nowrap;
 	flex: none;
@@ -784,7 +784,7 @@ select.input {
 	padding: 0 5px;
 	border-radius: 8px;
 	background: var(--press);
-	color: var(--muted);
+	color: var(--text-muted);
 	line-height: 15px;
 }
 .chip {
@@ -796,7 +796,7 @@ select.input {
 	border-radius: 6px;
 	border: none;
 	background: transparent;
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 12px;
 	max-width: 240px;
 	flex: 0 1 auto;
@@ -807,7 +807,7 @@ select.input {
 	color: var(--text);
 }
 .chip.good {
-	color: var(--accent);
+	color: var(--brand);
 }
 .chip.warn {
 	color: var(--warn);
@@ -827,12 +827,12 @@ select.input {
 	padding: 0 6px;
 	border-radius: 5px;
 	background: var(--sunk);
-	color: var(--muted);
+	color: var(--text-muted);
 	white-space: nowrap;
 }
 .tag.good {
-	background: var(--accent-soft);
-	color: var(--accent);
+	background: var(--brand-soft);
+	color: var(--brand);
 }
 .tag.warn {
 	background: var(--warn-soft);
@@ -850,7 +850,7 @@ select.input {
 }
 .pulse > span {
 	border-radius: 50%;
-	background: var(--accent);
+	background: var(--brand);
 	animation: pulse 2s ease-in-out infinite;
 }
 @keyframes pulse {
@@ -881,7 +881,7 @@ select.input {
 	max-width: 420px;
 }
 .empty-title {
-	color: var(--muted);
+	color: var(--text-muted);
 	font-weight: 550;
 }
 .empty-text {
@@ -928,7 +928,7 @@ select.input {
 	border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
 }
 .dialog-accent {
-	border-color: color-mix(in srgb, var(--accent) 45%, var(--line));
+	border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
 }
 .dialog-title {
 	padding: 16px 20px 0;
@@ -967,7 +967,7 @@ select.input {
 	padding: 12px 18px 0;
 	font-size: 12px;
 	font-weight: 600;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .pick-list {
 	overflow-y: auto;
@@ -1001,7 +1001,7 @@ select.input {
 }
 .pick-item .cur {
 	margin-left: auto;
-	color: var(--accent);
+	color: var(--brand);
 	flex: none;
 }
 .pick-item.bad .label {
@@ -1042,7 +1042,7 @@ select.input {
 	color: #fff;
 }
 .toast.good {
-	background: var(--accent);
+	background: var(--brand);
 	color: var(--on-accent);
 }
 .lightbox {
@@ -1102,7 +1102,7 @@ select.input {
 }
 .welcome p {
 	margin: 0;
-	color: var(--muted);
+	color: var(--text-muted);
 	max-width: 520px;
 	/* A long path is broken where the card ends, not pushed out of it. */
 	overflow-wrap: anywhere;
@@ -1141,7 +1141,7 @@ select.input {
 	display: flex;
 	gap: 8px;
 	font-size: 12.5px;
-	color: var(--muted);
+	color: var(--text-muted);
 	user-select: text;
 	cursor: auto;
 }
@@ -1155,20 +1155,20 @@ select.input {
 	color: var(--bad);
 }
 .it-note.good {
-	color: var(--accent);
+	color: var(--brand);
 }
 .it-note.accent .head {
-	color: var(--accent);
+	color: var(--brand);
 }
 .it-note .lines {
-	color: var(--muted);
+	color: var(--text-muted);
 	margin-top: 2px;
 	display: flex;
 	flex-direction: column;
 	gap: 1px;
 }
 .it-note .lines .good {
-	color: var(--accent);
+	color: var(--brand);
 }
 .it-note .lines .warn {
 	color: var(--warn);
@@ -1187,7 +1187,7 @@ select.input {
 	margin-top: 2px;
 }
 .it-event .body {
-	color: var(--muted);
+	color: var(--text-muted);
 	overflow-wrap: anywhere;
 }
 .it-divider {
@@ -1219,7 +1219,7 @@ select.input {
 	padding: 7px 10px;
 	border: none;
 	background: transparent;
-	color: var(--muted);
+	color: var(--text-muted);
 	text-align: left;
 }
 .work-head:hover {
@@ -1253,7 +1253,7 @@ select.input {
 	place-items: center;
 }
 .part .st.ok {
-	color: var(--accent);
+	color: var(--brand);
 }
 .part .st.fail {
 	color: var(--bad);
@@ -1265,7 +1265,7 @@ select.input {
 	color: var(--text);
 }
 .part .subject {
-	color: var(--muted);
+	color: var(--text-muted);
 	font-family: var(--mono);
 	font-size: 11.5px;
 	overflow: hidden;
@@ -1290,7 +1290,7 @@ select.input {
 }
 .part-words {
 	margin-left: 22px;
-	color: var(--muted);
+	color: var(--text-muted);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	user-select: text;
@@ -1305,7 +1305,7 @@ select.input {
 	border: none;
 	background: transparent;
 	padding: 3px 0;
-	color: var(--muted);
+	color: var(--text-muted);
 	font-style: italic;
 }
 .thought-head:hover {
@@ -1315,7 +1315,7 @@ select.input {
 	margin: 2px 0 4px 22px;
 	padding-left: 10px;
 	border-left: 2px solid var(--line);
-	color: var(--muted);
+	color: var(--text-muted);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	user-select: text;
@@ -1331,7 +1331,7 @@ select.input {
 .open-link {
 	border: none;
 	background: transparent;
-	color: var(--accent);
+	color: var(--brand);
 	padding: 0 2px;
 	flex: none;
 }
@@ -1359,7 +1359,7 @@ select.input {
 	min-width: 0;
 }
 .it-approval .sum {
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 12.5px;
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
@@ -1390,7 +1390,7 @@ select.input {
 .steps .bar i {
 	display: block;
 	height: 100%;
-	background: var(--accent);
+	background: var(--brand);
 	transition: width 0.3s;
 }
 .step {
@@ -1412,8 +1412,8 @@ select.input {
 	color: var(--faint);
 }
 .step.done .box {
-	background: var(--accent);
-	border-color: var(--accent);
+	background: var(--brand);
+	border-color: var(--brand);
 	color: var(--on-accent);
 }
 .step.in_progress {
@@ -1461,14 +1461,14 @@ select.input {
 	user-select: text;
 }
 .it-goal .mark {
-	color: var(--accent);
+	color: var(--brand);
 	flex: none;
 }
 .it-goal.wait .mark {
 	color: var(--warn);
 }
 .it-goal .reason {
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .entry-result {
 	margin: 2px 0 0 22px;
@@ -1476,7 +1476,7 @@ select.input {
 	border-radius: 6px;
 	background: var(--sunk);
 	font: 11.5px/1.45 var(--mono);
-	color: var(--muted);
+	color: var(--text-muted);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	max-height: 220px;
@@ -1531,7 +1531,7 @@ select.input {
 }
 .md h4 {
 	font-size: 1em;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .md ul,
 .md ol {
@@ -1548,7 +1548,7 @@ select.input {
 	margin: 0.8em 0;
 	padding: 0.1em 0 0.1em 14px;
 	border-left: 3px solid var(--line);
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .md hr {
 	border: none;
@@ -1624,10 +1624,10 @@ select.input {
 	border-bottom: none;
 }
 .md-link {
-	color: var(--accent);
+	color: var(--brand);
 	cursor: pointer;
 	text-decoration: underline;
-	text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+	text-decoration-color: color-mix(in srgb, var(--brand) 40%, transparent);
 	text-underline-offset: 2px;
 }
 .md-target {
@@ -1648,13 +1648,13 @@ select.input {
 	padding: 4px 10px;
 	border: 1px dashed var(--line);
 	border-radius: 7px;
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 12px;
 	cursor: pointer;
 	user-select: none;
 }
 .md-remote:hover {
-	border-color: var(--accent);
+	border-color: var(--brand);
 	color: var(--text);
 }
 .md details {
@@ -1670,7 +1670,7 @@ select.input {
 .md summary {
 	padding: 8px 0;
 	cursor: pointer;
-	color: var(--muted);
+	color: var(--text-muted);
 	font-weight: 550;
 	user-select: none;
 }
@@ -1687,7 +1687,7 @@ select.input {
 	height: 1em;
 	margin-left: 3px;
 	vertical-align: text-bottom;
-	background: var(--accent);
+	background: var(--brand);
 	border-radius: 2px;
 	animation: blink 1s steps(2) infinite;
 }
@@ -1737,7 +1737,7 @@ select.input {
 .hljs-meta,
 .hljs-attr,
 .hljs-params {
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .hljs-emphasis,
 .t-em {
@@ -1790,125 +1790,123 @@ select.input {
 }
 .t-punct,
 .t-op {
-	color: var(--muted);
+	color: var(--text-muted);
 }
 
 /* Code in dark: poimandres, token by token as the theme has them. A highlighted block in a message knows
    less than the editor does (one class for every keyword, none for a plain name), so `refine` in
    markdown.tsx tells its keywords and constants apart, and what it leaves unmarked reads as a name. */
-@media (prefers-color-scheme: dark) {
-	.md pre {
-		color: var(--p-fg);
-	}
-	.md pre code.hl,
-	.t-var,
-	.t-prop,
-	.hljs-variable,
-	.hljs-template-variable,
-	.hljs-params,
-	.hljs-property,
-	.hljs-subst,
-	.hljs-tag {
-		color: var(--p-bright);
-	}
-	.t-kw,
-	.t-meta,
-	.t-punct,
-	.hljs-keyword.kw-plain,
-	.hljs-punctuation,
-	.hljs-meta,
-	.hljs-doctag {
-		color: var(--p-fg);
-	}
-	.t-meta {
-		font-style: normal;
-	}
-	.t-comment,
-	.hljs-comment,
-	.hljs-quote {
-		color: color-mix(in srgb, var(--p-comment) 70%, transparent);
-	}
-	.t-kw-def,
-	.t-op,
-	.t-ns,
-	.hljs-keyword,
-	.hljs-operator,
-	.hljs-attr,
-	.hljs-selector-attr,
-	.hljs-selector-pseudo {
-		color: var(--p-steel);
-	}
-	.t-attr {
-		color: var(--p-steel);
-		font-style: italic;
-	}
-	.t-kw-mod,
-	.t-str,
-	.t-num,
-	.t-bool,
-	.t-tag,
-	.t-head,
-	.hljs-keyword.kw-mod,
-	.hljs-keyword.lit,
-	.hljs-string,
-	.hljs-meta .hljs-string,
-	.hljs-number,
-	.hljs-literal,
-	.hljs-symbol,
-	.hljs-bullet,
-	.hljs-name,
-	.hljs-selector-tag,
-	.hljs-section,
-	.hljs-addition {
-		color: var(--p-mint);
-	}
-	.t-kw-flow,
-	.hljs-keyword.kw-flow {
-		color: color-mix(in srgb, var(--p-mint) 75%, transparent);
-	}
-	.t-re,
-	.hljs-regexp,
-	.hljs-char.escape_,
-	.hljs-selector-class,
-	.hljs-selector-id {
-		color: var(--p-teal);
-	}
-	.t-fn,
-	.t-cls,
-	.t-link,
-	.t-ins,
-	.hljs-title,
-	.hljs-title.function_,
-	.hljs-title.class_,
-	.hljs-built_in,
-	.hljs-attribute,
-	.hljs-link {
-		color: var(--p-blue);
-	}
-	.t-call {
-		color: color-mix(in srgb, var(--p-bright) 82%, transparent);
-	}
-	.t-type,
-	.hljs-type {
-		color: color-mix(in srgb, var(--p-fg) 75%, transparent);
-	}
-	.t-nil,
-	.t-del,
-	.hljs-keyword.kw-bad,
-	.hljs-keyword.nil,
-	.hljs-literal.nil,
-	.hljs-deletion {
-		color: var(--p-pink);
-	}
-	.t-em,
-	.t-strong,
-	.hljs-emphasis,
-	.hljs-strong {
-		color: var(--p-slate);
-	}
-	.diff {
-		color: var(--p-fg);
-	}
+.dark .md pre {
+	color: var(--p-fg);
+}
+.dark .md pre code.hl,
+.dark .t-var,
+.dark .t-prop,
+.dark .hljs-variable,
+.dark .hljs-template-variable,
+.dark .hljs-params,
+.dark .hljs-property,
+.dark .hljs-subst,
+.dark .hljs-tag {
+	color: var(--p-bright);
+}
+.dark .t-kw,
+.dark .t-meta,
+.dark .t-punct,
+.dark .hljs-keyword.kw-plain,
+.dark .hljs-punctuation,
+.dark .hljs-meta,
+.dark .hljs-doctag {
+	color: var(--p-fg);
+}
+.dark .t-meta {
+	font-style: normal;
+}
+.dark .t-comment,
+.dark .hljs-comment,
+.dark .hljs-quote {
+	color: color-mix(in srgb, var(--p-comment) 70%, transparent);
+}
+.dark .t-kw-def,
+.dark .t-op,
+.dark .t-ns,
+.dark .hljs-keyword,
+.dark .hljs-operator,
+.dark .hljs-attr,
+.dark .hljs-selector-attr,
+.dark .hljs-selector-pseudo {
+	color: var(--p-steel);
+}
+.dark .t-attr {
+	color: var(--p-steel);
+	font-style: italic;
+}
+.dark .t-kw-mod,
+.dark .t-str,
+.dark .t-num,
+.dark .t-bool,
+.dark .t-tag,
+.dark .t-head,
+.dark .hljs-keyword.kw-mod,
+.dark .hljs-keyword.lit,
+.dark .hljs-string,
+.dark .hljs-meta .hljs-string,
+.dark .hljs-number,
+.dark .hljs-literal,
+.dark .hljs-symbol,
+.dark .hljs-bullet,
+.dark .hljs-name,
+.dark .hljs-selector-tag,
+.dark .hljs-section,
+.dark .hljs-addition {
+	color: var(--p-mint);
+}
+.dark .t-kw-flow,
+.dark .hljs-keyword.kw-flow {
+	color: color-mix(in srgb, var(--p-mint) 75%, transparent);
+}
+.dark .t-re,
+.dark .hljs-regexp,
+.dark .hljs-char.escape_,
+.dark .hljs-selector-class,
+.dark .hljs-selector-id {
+	color: var(--p-teal);
+}
+.dark .t-fn,
+.dark .t-cls,
+.dark .t-link,
+.dark .t-ins,
+.dark .hljs-title,
+.dark .hljs-title.function_,
+.dark .hljs-title.class_,
+.dark .hljs-built_in,
+.dark .hljs-attribute,
+.dark .hljs-link {
+	color: var(--p-blue);
+}
+.dark .t-call {
+	color: color-mix(in srgb, var(--p-bright) 82%, transparent);
+}
+.dark .t-type,
+.dark .hljs-type {
+	color: color-mix(in srgb, var(--p-fg) 75%, transparent);
+}
+.dark .t-nil,
+.dark .t-del,
+.dark .hljs-keyword.kw-bad,
+.dark .hljs-keyword.nil,
+.dark .hljs-literal.nil,
+.dark .hljs-deletion {
+	color: var(--p-pink);
+}
+.dark .t-em,
+.dark .t-strong,
+.dark .hljs-emphasis,
+.dark .hljs-strong {
+	color: var(--p-slate);
+}
+.dark .diff {
+	color: var(--p-fg);
 }
 
 /* ---- the composer --------------------------------------------------------------------------------------- */
@@ -1928,7 +1926,7 @@ select.input {
 	gap: 8px;
 	padding: 6px 4px;
 	font-size: 12px;
-	color: var(--muted);
+	color: var(--text-muted);
 	min-height: 30px;
 }
 .status .sep::before {
@@ -1947,13 +1945,13 @@ select.input {
 	transition: border-color 0.12s, box-shadow 0.12s;
 }
 .composer:focus-within {
-	border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-	box-shadow: 0 0 0 3px var(--accent-soft);
+	border-color: color-mix(in srgb, var(--brand) 55%, var(--line));
+	box-shadow: 0 0 0 3px var(--brand-soft);
 }
 .composer.over {
 	border-style: dashed;
-	border-color: var(--accent);
-	background: var(--accent-soft);
+	border-color: var(--brand);
+	background: var(--brand-soft);
 }
 .composer textarea {
 	display: block;
@@ -2026,7 +2024,7 @@ select.input {
 	height: 28px;
 	border-radius: 8px;
 	border: none;
-	background: var(--accent);
+	background: var(--brand);
 	color: var(--on-accent);
 	display: grid;
 	place-items: center;
@@ -2089,7 +2087,7 @@ select.input {
 	padding: 8px 12px;
 	margin-bottom: 8px;
 	border-radius: var(--r);
-	background: var(--accent-soft);
+	background: var(--brand-soft);
 	font-size: 12.5px;
 }
 .banner.warn {
@@ -2117,7 +2115,7 @@ select.input {
 }
 .splitter:hover::after,
 .splitter.drag::after {
-	background: var(--accent);
+	background: var(--brand);
 }
 /* The panel gives way before the conversation does: in a narrow window it is the panel that gets narrower. */
 .code {
@@ -2160,7 +2158,7 @@ select.input {
 	padding: 6px 10px;
 	border-bottom: 1px solid var(--line-soft);
 	font-size: 12px;
-	color: var(--muted);
+	color: var(--text-muted);
 	min-height: 36px;
 }
 .code-body {
@@ -2204,7 +2202,7 @@ select.input {
 	gap: 4px;
 	padding: 0 4px 0 8px;
 	border-radius: var(--r-s);
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 12px;
 }
 .browser-tab-close {
@@ -2377,7 +2375,7 @@ select.input {
 	background: var(--select) !important;
 }
 .editor .cm-cursor {
-	border-left-color: var(--accent);
+	border-left-color: var(--brand);
 }
 .editor .cm-panels {
 	background: var(--raised);
@@ -2397,27 +2395,25 @@ select.input {
 	background: var(--warn-soft);
 	outline: 1px solid color-mix(in srgb, var(--warn) 50%, transparent);
 }
-@media (prefers-color-scheme: dark) {
-	.editor .cm-editor {
-		color: var(--p-fg);
-	}
-	.editor .cm-cursor {
-		border-left-color: var(--p-fg);
-	}
-	.editor .cm-activeLine,
-	.editor .cm-activeLineGutter {
-		background: rgba(113, 124, 180, 0.08);
-	}
-	.editor .cm-gutters {
-		color: color-mix(in srgb, var(--p-comment) 55%, transparent);
-	}
-	.editor .cm-activeLineGutter {
-		color: var(--p-fg);
-	}
-	.editor .cm-searchMatch {
-		background: color-mix(in srgb, var(--p-blue) 25%, transparent);
-		outline-color: color-mix(in srgb, var(--p-blue) 50%, transparent);
-	}
+.dark .editor .cm-editor {
+	color: var(--p-fg);
+}
+.dark .editor .cm-cursor {
+	border-left-color: var(--p-fg);
+}
+.dark .editor .cm-activeLine,
+.dark .editor .cm-activeLineGutter {
+	background: rgba(113, 124, 180, 0.08);
+}
+.dark .editor .cm-gutters {
+	color: color-mix(in srgb, var(--p-comment) 55%, transparent);
+}
+.dark .editor .cm-activeLineGutter {
+	color: var(--p-fg);
+}
+.dark .editor .cm-searchMatch {
+	background: color-mix(in srgb, var(--p-blue) 25%, transparent);
+	outline-color: color-mix(in srgb, var(--p-blue) 50%, transparent);
 }
 .prog {
 	padding: 10px 12px;
@@ -2431,7 +2427,7 @@ select.input {
 	font: 11.5px/1.5 var(--mono);
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
-	color: var(--muted);
+	color: var(--text-muted);
 	padding: 10px 12px;
 	user-select: text;
 	cursor: text;
@@ -2481,14 +2477,14 @@ select.input {
 	color: var(--faint);
 }
 .ev .who.owner {
-	color: var(--accent);
+	color: var(--brand);
 }
 .ev .topic {
 	flex: none;
 	font-weight: 600;
 }
 .ev .pl {
-	color: var(--muted);
+	color: var(--text-muted);
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
@@ -2500,7 +2496,7 @@ select.input {
 	white-space: pre-wrap;
 	overflow-wrap: anywhere;
 	user-select: text;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 
 /* ---- settings ----------------------------------------------------------------------------------------------- */
@@ -2545,7 +2541,7 @@ select.input {
 }
 .set-in .lead {
 	margin: 4px 0 0;
-	color: var(--muted);
+	color: var(--text-muted);
 	max-width: 640px;
 }
 .set-in h2 {
@@ -2600,7 +2596,7 @@ select.input {
 	white-space: pre-line;
 }
 .item .about {
-	color: var(--muted);
+	color: var(--text-muted);
 	font-size: 12.5px;
 	margin-top: 1px;
 	overflow-wrap: anywhere;
@@ -2650,9 +2646,9 @@ select.input {
 	background: var(--surface);
 }
 .check.on {
-	border-color: var(--accent);
-	background: var(--accent-soft);
-	color: var(--accent);
+	border-color: var(--brand);
+	background: var(--brand-soft);
+	color: var(--brand);
 }
 .notice {
 	display: flex;
@@ -2681,7 +2677,7 @@ select.input {
 }
 .notice.plain {
 	background: var(--raised);
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .back {
 	align-self: flex-start;
@@ -2698,7 +2694,7 @@ pre.log {
 	max-height: 240px;
 	overflow: auto;
 	user-select: text;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 
 /* ---- before pine answers ------------------------------------------------------------------------------------- */
@@ -2730,7 +2726,7 @@ pre.log {
 }
 .gate p {
 	margin: 0;
-	color: var(--muted);
+	color: var(--text-muted);
 	user-select: text;
 }
 
@@ -2783,7 +2779,7 @@ pre.log {
 	background: var(--raised);
 	border: 1px solid var(--line-soft);
 	font-size: 12px;
-	color: var(--muted);
+	color: var(--text-muted);
 }
 .fact b {
 	color: var(--text);
@@ -2849,7 +2845,7 @@ button.fact {
 	white-space: nowrap;
 }
 .agent-line .about {
-	color: var(--muted);
+	color: var(--text-muted);
 	flex: 1;
 	min-width: 0;
 }

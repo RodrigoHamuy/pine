@@ -371,7 +371,7 @@ function Output({ tab }: { tab: Tab }) {
 		<div className="code-body">
 			{calls.data.map((c) => (
 				<div key={`${c.task}:${c.n}`} className="frow" onClick={() => setOpen(`${c.task}:${c.n}`)}>
-					<span className="st" style={{ color: c.entry.ok === false ? "var(--bad)" : c.entry.ok ? "var(--accent)" : "var(--warn)" }}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
+					<span className="st" style={{ color: c.entry.ok === false ? "var(--bad)" : c.entry.ok ? "var(--brand)" : "var(--warn)" }}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
 					<span className="mono">{c.entry.tool}</span>
 					<span className="cut grow mono faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="faint" style={{ fontSize: 11 }}>{took(c.entry.ms)}</span> : null}

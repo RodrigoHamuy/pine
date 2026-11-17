@@ -270,7 +270,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 			<div className="group">
 				<div className="item" style={{ alignItems: "flex-start", flexDirection: "column", gap: 8 }}>
 					<Segmented value={file} options={FILES.filter((f) => f.edit || d.files[f.key] !== undefined).map((f) => ({ value: f.key, label: f.label }))} onChange={setFile} />
-					<div className="about" style={{ color: "var(--muted)", fontSize: 12.5 }}>{meta.about}</div>
+					<div className="about" style={{ color: "var(--text-muted)", fontSize: 12.5 }}>{meta.about}</div>
 				</div>
 				<div style={{ height: 380, display: "flex" }}>
 					<Editor key={`${id}:${file}`} file={`${file}.md`} text={text} readOnly={!meta.edit} onChange={(v) => setTexts((was) => ({ ...was, [file]: v }))} onSave={() => void save()} />
@@ -528,7 +528,7 @@ function Models() {
 			</div>
 
 			<h2>Models you can use now</h2>
-			<div className="group"><div className="item"><div className="about mono selectable" style={{ color: "var(--muted)", fontSize: 12, lineHeight: 1.7 }}>{models.data ? models.data.join("   ") || "none: sign in to a provider or add a server" : "…"}</div></div></div>
+			<div className="group"><div className="item"><div className="about mono selectable" style={{ color: "var(--text-muted)", fontSize: 12, lineHeight: 1.7 }}>{models.data ? models.data.join("   ") || "none: sign in to a provider or add a server" : "…"}</div></div></div>
 			{signIn ? <SignIn provider={signIn.provider} type={signIn.type} close={(_done, choose) => (setSignIn(undefined), reload(), choose ? void store.chooseDefaultModel(choose).then(reload) : undefined)} /> : null}
 		</Page>
 	);
@@ -941,7 +941,7 @@ function Instructions() {
 				<div className="group">
 					<div className="item" style={{ flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
 						<Segmented value={name} onChange={setName} options={files.data.map((f) => ({ value: f.name, label: f.name }))} />
-						<div style={{ color: "var(--muted)", fontSize: 12.5 }}>{file?.about}</div>
+						<div style={{ color: "var(--text-muted)", fontSize: 12.5 }}>{file?.about}</div>
 					</div>
 					<div style={{ height: 460, display: "flex" }}><Editor key={name} file={name} text={text} onChange={(v) => setTexts((was) => ({ ...was, [name]: v }))} onSave={() => void save()} /></div>
 				</div>

@@ -424,6 +424,11 @@ desktop/
     Browser.tsx    the agent's browser in the panel: its page as a picture, and what is done in it handed back
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
+    index.css      Tailwind and shadcn's tokens, set from the colours of styles.css (components.json
+                   is shadcn's configuration: Base UI, lucide icons)
+    styles.css     the colours, light in `:root` and poimandres in `:root.dark`, and the rest of the look
+    theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
+                   which the Appearance setting decides
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
                    launcher that becomes Resources/bin/pine)
   test/            the app from end to end, driven through its real window; command.test.ts
@@ -448,7 +453,7 @@ the bridge has no story.
 
 | Command (in `desktop/`) | What it does |
 |---|---|
-| `npm run storybook` | Storybook at http://localhost:6006. The Theme menu in its toolbar shows light or dark whatever the system says. |
+| `npm run storybook` | Storybook at http://localhost:6006. The Theme menu in its toolbar shows light or dark whatever the system says (it sets the `.dark` class), or follows the system. |
 | `npm run build-storybook` | The stories built into `storybook-static/`. |
 
 Every pull request and every push to `next` publishes the stories to Chromatic

@@ -547,6 +547,37 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await menu("settings");
 });
 
+test("the appearance setting puts the page in dark or light, and System follows the system", async () => {
+	// The driver forces light on every page; here the app's own setting has to decide, as it does
+	// for the owner (Electron's native theme drives the page's prefers-color-scheme).
+	await page.emulateMedia({ colorScheme: null });
+	const dark = () => page.evaluate(() => document.documentElement.classList.contains("dark"));
+	const appearance = (label: string) => page.click(`.item:has(.name:text-is("Appearance")) [role=tab]:text-is("${label}")`);
+	const waitDark = (want: boolean) => page.waitForFunction((w) => document.documentElement.classList.contains("dark") === w, want);
+	try {
+		await menu("settings");
+		await page.click(".set-nav .side-row >> text=App");
+		await appearance("Dark");
+		await waitDark(true);
+		// What the stylesheet draws follows the class: the tab in front is poimandres' background, then the light one.
+		const tab = () => page.evaluate(() => getComputedStyle(document.querySelector(".tab.on")!).backgroundColor);
+		assert.equal(await tab(), "rgb(27, 30, 40)");
+		await appearance("Light");
+		await waitDark(false);
+		assert.equal(await dark(), false);
+		assert.equal(await tab(), "rgb(253, 253, 252)");
+		// System: whatever the system says, the class says the same.
+		await appearance("System");
+		await page.emulateMedia({ colorScheme: "dark" });
+		await waitDark(true);
+		await page.emulateMedia({ colorScheme: "light" });
+		await waitDark(false);
+		await menu("settings");
+	} finally {
+		await page.emulateMedia({ colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light" });
+	}
+});
+
 test("the side bar is the agents: one made elsewhere appears, a group folds away, and what is new says for whom", async () => {
 	// An agent that another hand makes (the main agent, a `pine agent add`): asked of the daemon directly, not through the app.
 	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(fs.readFileSync(path.join(home, "data", "pine.log"), "utf8"))![1];

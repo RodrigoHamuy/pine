@@ -12,7 +12,8 @@
     "allowImportingTsExtensions": true,
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    "paths": { "@/*": ["./src/*"] }
   },
   "include": ["src", "electron", "test", "vite.config.ts", ".storybook"]
 }
