@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
-import { AutoText, Button, Confirm, Dialog, Empty, Field, Icon, Logo, Pulse, Segmented, Switch } from "./ui.tsx";
+import { useLayoutEffect, useState } from "react";
+import { expect, userEvent, within } from "storybook/test";
+import { Ask, AutoText, Button, Choices, Confirm, Dialog, Empty, Field, Icon, Lightbox, Logo, Pick, type PickRow, Pulse, Segmented, Select, Switch, Toasts, toast } from "./ui.tsx";
 
 const meta: Meta = { title: "UI" };
 export default meta;
@@ -165,3 +166,82 @@ export const DialogAccent: Story = {
 		</Dialog>
 	),
 };
+
+function SelectDemo() {
+	const [value, setValue] = useState("sonnet");
+	return (
+		<Field label="Model">
+			<Select value={value} onChange={setValue} options={[{ value: "opus", label: "Opus" }, { value: "sonnet", label: "Sonnet" }, { value: "haiku", label: "Haiku" }]} />
+		</Field>
+	);
+}
+
+export const SelectClosed: Story = { render: () => <SelectDemo /> };
+
+// Opened by a click, as a user would: the list shows under the trigger, the current value checked.
+export const SelectOpen: Story = {
+	parameters: { layout: "padded" },
+	render: () => <SelectDemo />,
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await userEvent.click(canvas.getByRole("combobox"));
+		await expect(await within(document.body).findByRole("listbox")).toBeVisible();
+	},
+};
+
+// Each toast stays until dismissed, so the snapshot does not race a timer.
+function ToastsDemo() {
+	useLayoutEffect(() => {
+		toast.dismiss();
+		toast({ title: "Saved the settings.", duration: Infinity });
+		toast.success({ title: "The agent is back.", duration: Infinity });
+		toast.error({ title: "The daemon could not be reached.", duration: Infinity });
+		return () => toast.dismiss();
+	}, []);
+	return <Toasts />;
+}
+
+export const ToastMessages: Story = { parameters: { layout: "fullscreen" }, render: () => <ToastsDemo /> };
+
+const PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320"><rect width="480" height="320" fill="#2f6f4f"/><circle cx="240" cy="160" r="90" fill="#f2efe6"/></svg>')}`;
+
+export const LightboxPicture: Story = {
+	parameters: { layout: "fullscreen" },
+	render: () => <Lightbox src={PICTURE} onClose={() => {}} />,
+};
+
+export const AskQuestion: Story = {
+	parameters: { layout: "fullscreen" },
+	render: () => (
+		<Ask title="Leave without saving?" yes="Leave" no="Stay" onAnswer={() => {}}>
+			<p>The changes to settings.json will be lost.</p>
+		</Ask>
+	),
+};
+
+const ROWS: PickRow[] = [
+	{ value: "new", label: "New conversation", keys: "N", group: "Conversations" },
+	{ value: "rename", label: "Rename the conversation", group: "Conversations", current: true },
+	{ value: "settings", label: "Settings", about: "Models, tools, the sandbox", keys: ",", group: "App" },
+	{ value: "quit", label: "Stop the daemon", about: "Every agent stops", group: "App", bad: true },
+];
+
+function PickDemo() {
+	const [query, setQuery] = useState("");
+	const rows = ROWS.filter((r) => String(r.label).toLowerCase().includes(query.toLowerCase()));
+	return <Pick title="Commands" label="Search commands" placeholder="Type a command" rows={rows} query={query} onQuery={setQuery} initial="settings" onChoose={() => {}} onClose={() => {}} />;
+}
+
+// `initial` highlights a row of the second group.
+export const PickList: Story = { parameters: { layout: "fullscreen" }, render: () => <PickDemo /> };
+
+function ChoicesDemo() {
+	const [at, setAt] = useState<number | null>(1);
+	return (
+		<div style={{ width: 360 }}>
+			<Choices label="How to go on" choices={["Run the tests first", "Ship it as it is", "Ask the reviewer"]} at={at} onAt={setAt} onChoose={setAt} />
+		</div>
+	);
+}
+
+export const ChoicesGroup: Story = { render: () => <ChoicesDemo /> };
