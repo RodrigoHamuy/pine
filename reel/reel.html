@@ -176,8 +176,10 @@ html, body { margin: 0; background: #08090c; }
 #clip img { display: block; width: 100%; height: 100%; object-fit: cover; transform-origin: 50% 50%; }
 
 
-/* ---- the short film for the README (story-front.js): a backdrop of our own, and words that can be read small ---- */
-body[data-story="front"] #desk { background: radial-gradient(1300px 900px at 24% 18%, #1c3b2c 0%, rgba(28,59,44,0) 62%), radial-gradient(1200px 1000px at 86% 92%, #25365a 0%, rgba(37,54,90,0) 60%), #0b0d12; }
+/* ---- the short film for the README (story-front.js): words that can be read small, and a plain backdrop. A soft
+   gradient behind the windows breaks into blocks when the film is made a small picture; one colour does not, and
+   this one is the dark page it is shown on. ---- */
+body[data-story="front"] #desk, body[data-story="front"] #desk2 { background: #0d1117; }
 body[data-story="front"] #caption { top: 962px; }
 body[data-story="front"] #caption span { font-size: 44px; padding: 12px 34px 15px; border-radius: 40px; }
 body[data-story="front"] #outro p { font-size: 40px; color: rgba(236,238,245,.82); }

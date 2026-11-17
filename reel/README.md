@@ -55,7 +55,8 @@ close on the event as it arrives, and out again while the agent works:
 | a letter goes through the scanner | reads it and puts what is due on a TODO list, in the desktop app |
 
 It is made to be read small and without sound, so each step says what it shows in a line of its
-own. Its backdrops are drawn, and it shows no picture that is other people's work.
+own. Its backdrop is one dark colour (a soft gradient breaks into blocks in a small picture),
+and it shows no picture that is other people's work.
 
 The terminal, the team chat and the phone are drawn like in the other films. Three things are
 not, and their pictures are not kept in the repository:
@@ -82,8 +83,8 @@ scenes.
 node reel/render.mjs --story front --webp
 ```
 
-writes `reel/pine-reel-front.mp4` and, from it, `reel/pine-reel-front.webp`: 880 pixels wide,
-15 pictures a second, no sound, about 1.5 MB. That file is copied to `docs/images/reel.webp`. `--webp` needs
+writes `reel/pine-reel-front.mp4` and, from it, `reel/pine-reel-front.webp`: 1280 pixels wide,
+15 pictures a second, no sound, about 4 MB. That file is copied to `docs/images/reel.webp`. `--webp` needs
 `img2webp` (libwebp).
 
 It is an animated WebP because that is what a README can show by itself: a picture in the

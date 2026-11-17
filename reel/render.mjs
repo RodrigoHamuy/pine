@@ -7,7 +7,7 @@
 //   node reel/render.mjs --story scans      another script: story-scans.js -> reel/pine-reel-scans.mp4
 //   node reel/render.mjs --scale 1          1920×1080 instead of 3840×2160
 //   node reel/render.mjs --story front --webp   also reel/pine-reel-front.webp: the film as a picture that
-//                                           moves, 880 wide and without sound, for a README (needs img2webp)
+//                                           moves, 1280 wide and without sound, for a README (needs img2webp)
 // The whole film also gets its sound: one small sound per key and click, made by sound.py.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -92,14 +92,15 @@ if (arg("at")) {
 	}
 	if (process.argv.includes("--webp")) {
 		// An animated WebP and not a GIF: every colour instead of 256, and a fraction of the size.
-		// img2webp takes pictures, so the film is cut into them first: 15 a second, 67 ms each, as wide as
-		// a README shows them. A whole picture at least every two seconds (-kmax), so that what a fade
-		// leaves behind on a dark ground goes. Smaller than this, the text in it starts to suffer.
+		// img2webp takes pictures, so the film is cut into them first: 15 a second, 67 ms each, and wide
+		// enough for a README on a screen with small pixels. A whole picture at least every two seconds
+		// (-kmax), so that what a fade leaves behind on a dark ground goes. Narrower or at a lower quality
+		// it is a third of the size, and soft, with blocks in every dark area: tried, and taken back.
 		const run = (cmd, args) => new Promise((done, fail) => spawn(cmd, args, { stdio: ["ignore", "ignore", "inherit"] }).on("error", fail).on("close", (code) => (code ? fail(new Error(`${cmd} ended with ${code}`)) : done())));
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pine-reel-"));
-		await run("ffmpeg", ["-y", "-loglevel", "error", "-i", out, "-vf", "fps=15,scale=880:-1:flags=lanczos", path.join(tmp, "%04d.png")]);
+		await run("ffmpeg", ["-y", "-loglevel", "error", "-i", out, "-vf", "fps=15,scale=1280:-1:flags=lanczos", path.join(tmp, "%04d.png")]);
 		const webp = out.replace(/\.mp4$/, ".webp");
-		await run("img2webp", ["-loop", "0", "-lossy", "-q", "30", "-m", "6", "-sharp_yuv", "-d", "67", "-kmin", "15", "-kmax", "30", ...fs.readdirSync(tmp).sort().map((n) => path.join(tmp, n)), "-o", webp]);
+		await run("img2webp", ["-loop", "0", "-lossy", "-q", "70", "-m", "6", "-sharp_yuv", "-d", "67", "-kmin", "15", "-kmax", "30", ...fs.readdirSync(tmp).sort().map((n) => path.join(tmp, n)), "-o", webp]);
 		fs.rmSync(tmp, { recursive: true, force: true });
 		console.log(`${webp}  ${(fs.statSync(webp).size / 1e6).toFixed(1)} MB`);
 	}

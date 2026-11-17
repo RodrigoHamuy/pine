@@ -237,17 +237,18 @@ if (HAS_APP) {
 	// then the whole window while the agent works.
 	const n = SHOTS.seqs.letter.length, half = Math.round(n * 0.55);
 	appCut(SHOTS.seqs.before[0][0]);
-	focus(inApp(410, 372), 2.05, 0.01);
+	focus(inApp(430, 360), 1.7, 0.01);
 	cap("The scan is an event", 1.4);
 	wait(0.3);
 	sound("click");
 	inst((st) => { st.app.shot = SHOTS.seqs.letter[1][0]; });
 	wait(0.95);
+	// Out to the conversation and the list beside it, whole, and there it stays: what the agent answers
+	// ends at the foot of the conversation, just above the words under the picture.
 	cap("The agent reads the letter", 1.8);
-	focus(inApp(600, 330), 1.42, 0.8);
+	focus(inApp(590, 330), 1.3, 0.8);
 	appPlay("letter", 2, half, 1.4);
 	cap("and puts what is due on your TODO list", 3.2);
-	focus(inApp(700, 300), 1.42, 0.8);
 	appPlay("letter", half - 1, n, 1.6);
 	wait(1.3);
 }
