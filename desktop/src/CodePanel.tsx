@@ -205,10 +205,12 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 interface TreeState {
 	open: Set<string>;
 	dirs: Map<string, Array<{ name: string; dir: boolean; size: number }>>;
+	/** Why a folder could not be read, by folder, so a failed read is not taken for an empty folder. */
+	failed: Map<string, string>;
 	file?: string;
 }
 const trees = new Map<string, TreeState>();
-const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map() }), trees.get(key)!);
+const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map(), failed: new Map() }), trees.get(key)!);
 
 /** The folder's files as a tree: a folder opens and closes, a file opens in the editor. */
 function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void; tick: number }) {
@@ -219,10 +221,12 @@ function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void;
 		return Boolean(state.dirs.get(at > 0 ? full.slice(0, at) : "")?.find((e) => e.name === full.slice(at + 1))?.dir);
 	};
 	const entries = state.dirs.get("");
+	const failed = state.failed.get("");
 	return (
 		<>
+			{failed ? <Empty icon="folder" title="This folder cannot be read">{failed}</Empty> : null}
 			{entries && !entries.length ? <Empty icon="folder" title="This folder is empty" /> : null}
-			{entries ? null : <Empty title=""><Pulse /></Empty>}
+			{entries || failed ? null : <Empty title=""><Pulse /></Empty>}
 			<Tree label="Files" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} onOpen={(full) => !isDir(full) && pick(full)}>
 				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
 			</Tree>
@@ -233,17 +237,16 @@ function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void;
 /** A folder's rows in the tree, read when it opens; `onLoad` redraws the tree around once they are read. */
 function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: number; tick: number; onLoad: () => void }) {
 	const state = treeOf(tab.key);
+	const read = useLoad(() => api.tree(tab.agent, tab.session, dir), [tab.key, dir, tick]);
 	useEffect(() => {
-		let live = true;
-		api.tree(tab.agent, tab.session, dir).then(
-			(r) => live && (state.dirs.set(dir, r.entries), onLoad()),
-			() => live && (state.dirs.set(dir, []), onLoad()),
-		);
-		return () => {
-			live = false;
-		};
+		if (read.loading) return;
+		if (read.data) state.dirs.set(dir, read.data.entries), state.failed.delete(dir);
+		else state.failed.set(dir, read.error ?? ""), state.dirs.delete(dir);
+		onLoad();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [tab.key, dir, tick]);
+	}, [read.loading, read.data, read.error]);
+	const failed = state.failed.get(dir);
+	if (failed && dir) return <div className="out faint" style={{ paddingLeft: 10 + depth * 14 }}>{failed}</div>;
 	const entries = state.dirs.get(dir);
 	if (!entries) return null;
 	return (

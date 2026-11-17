@@ -1,6 +1,6 @@
 // One tab's conversation: what was said, the work of each turn folded into a line, and what
 // waits for the owner. Each kind of line is a small component; the list only draws what changed.
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./markdown.tsx";
@@ -125,7 +125,7 @@ function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
 			</div>
 			{entry.result ? <div className="entry-result" style={entry.ok === false ? { color: "var(--bad)" } : undefined}>{short(entry.result, 4000)}</div> : null}
 			{(entry.images ?? []).map((id) => (
-				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" tabIndex={0} onClick={(e) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: (e.target as HTMLImageElement).src }))} /></div>
+				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" role="button" aria-label="Open picture" tabIndex={0} onClick={(e) => zoom(e.currentTarget.src)} onKeyDown={(e) => zoomKey(e, e.currentTarget.src)} /></div>
 			))}
 		</div>
 	);
@@ -172,7 +172,16 @@ export function Steps({ items }: { items: Array<{ text: string; status: string }
 	);
 }
 
-const zoom = (src: string) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
+function zoom(src: string) {
+	window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
+}
+
+/** Enter or Space on a focused picture opens it, as a click does; focus stays on it so the lightbox returns there. */
+function zoomKey(e: KeyboardEvent, src: string) {
+	if (e.key !== "Enter" && e.key !== " ") return;
+	e.preventDefault();
+	zoom(src);
+}
 
 const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
 	switch (item.t) {
@@ -216,7 +225,7 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 		case "media":
 			return (
 				<div className="it-media">
-					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} tabIndex={0} onClick={() => zoom(item.url)} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
+					{item.kind === "image" ? <img src={item.url} alt={item.name} aria-label={item.name || "Open picture"} role="button" draggable={false} tabIndex={0} onClick={() => zoom(item.url)} onKeyDown={(e) => zoomKey(e, item.url)} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
 					<div className="cap">{item.name}</div>
 				</div>
 			);

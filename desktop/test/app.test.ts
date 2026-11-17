@@ -436,6 +436,13 @@ test("a picture opens over the page, and Escape closes it back onto the picture"
 	await sees(".lightbox[role=dialog] img");
 	await page.mouse.click(5, 5);
 	await page.waitForFunction(() => !document.querySelector(".lightbox"));
+	// From the keyboard: Enter on the focused picture opens it, and Escape gives focus back to it.
+	await page.focus(img);
+	await page.keyboard.press("Enter");
+	await sees(".lightbox[role=dialog] img");
+	await page.keyboard.press("Escape");
+	await page.waitForFunction(() => !document.querySelector(".lightbox"));
+	assert.equal(await page.evaluate((s: string) => document.activeElement === document.querySelector(s), img), true);
 });
 
 test("an approval is asked in a dialog and answered from it, and so is a question", async () => {

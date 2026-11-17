@@ -56,6 +56,8 @@ function player(kind: "image" | "video" | "audio", src: string, alt: string): HT
 		el.setAttribute("draggable", "false");
 		el.dataset.zoom = "1";
 		el.tabIndex = 0;
+		el.setAttribute("role", "button");
+		el.setAttribute("aria-label", alt || "Open picture");
 	} else {
 		el.setAttribute("controls", "");
 		el.setAttribute("preload", "metadata");
@@ -219,6 +221,15 @@ async function onClick(e: MouseEvent): Promise<void> {
 	if (img) window.dispatchEvent(new CustomEvent("pine:zoom", { detail: img.src }));
 }
 
+/** Enter or Space on a focused picture opens it, as a click does; focus stays on it so the lightbox returns there. */
+function onKeyDown(e: KeyboardEvent): void {
+	if (e.key !== "Enter" && e.key !== " ") return;
+	const img = (e.target as HTMLElement).closest?.<HTMLImageElement>("img[data-zoom]");
+	if (!img) return;
+	e.preventDefault();
+	window.dispatchEvent(new CustomEvent("pine:zoom", { detail: img.src }));
+}
+
 /** Markdown, drawn into the page. While `live`, the text grows and is drawn at most once a frame. */
 export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }) {
 	const ref = useRef<HTMLDivElement>(null);
@@ -240,5 +251,5 @@ export const Markdown = memo(function Markdown({ text, where, live }: { text: st
 			pending.current = 0;
 		};
 	}, [text, where?.agent, where?.session, live]);
-	return <div ref={ref} className={`md${live ? " md-live" : ""}`} onClick={(e) => void onClick(e.nativeEvent)} />;
+	return <div ref={ref} className={`md${live ? " md-live" : ""}`} onClick={(e) => void onClick(e.nativeEvent)} onKeyDown={(e) => onKeyDown(e.nativeEvent)} />;
 });
