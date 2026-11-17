@@ -2,22 +2,30 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 import { Icon, StripTab, TabStrip } from "../ui.tsx";
 
-const meta: Meta<typeof TabStrip> = { component: TabStrip };
-export default meta;
-type Story = StoryObj<typeof TabStrip>;
+const TABS = ["main", "scout", "Settings"];
 
-function Strip({ initial }: { initial: string }) {
-	const [tabs, setTabs] = useState(["main", "scout", "Settings"]);
-	const [value, setValue] = useState(initial);
-	const move = (from: number, to: number) =>
-		setTabs((all) => {
-			const next = [...all];
-			next.splice(to, 0, ...next.splice(from, 1));
-			return next;
-		});
-	return (
-		<div className="titlebar">
-			<TabStrip label="Open tabs" value={value} onSelect={setValue} onMove={move}>
+const meta = {
+	component: TabStrip,
+	args: { label: "Open tabs", value: "main", onSelect: () => {}, onMove: () => {}, children: null },
+	decorators: [
+		(Story) => (
+			<div className="titlebar">
+				<Story />
+			</div>
+		),
+	],
+	// Controlled: the story keeps the selection and the order so that a click or a drag sticks.
+	render: function Render(args) {
+		const [tabs, setTabs] = useState(TABS);
+		const [value, setValue] = useState(args.value);
+		const move = (from: number, to: number) =>
+			setTabs((all) => {
+				const next = [...all];
+				next.splice(to, 0, ...next.splice(from, 1));
+				return next;
+			});
+		return (
+			<TabStrip {...args} value={value} onSelect={setValue} onMove={move}>
 				{tabs.map((t) => (
 					<StripTab key={t} value={t} className="tab">
 						<span className="mark">
@@ -32,9 +40,12 @@ function Strip({ initial }: { initial: string }) {
 					</StripTab>
 				))}
 			</TabStrip>
-		</div>
-	);
-}
+		);
+	},
+} satisfies Meta<typeof TabStrip>;
+export default meta;
+type Story = StoryObj<typeof meta>;
 
-export const FirstSelected: Story = { render: () => <Strip initial="main" /> };
-export const LastSelected: Story = { render: () => <Strip initial="Settings" /> };
+export const FirstSelected: Story = {};
+
+export const LastSelected: Story = { args: { value: "Settings" } };

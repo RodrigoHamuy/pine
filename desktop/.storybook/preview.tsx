@@ -60,6 +60,7 @@ const preview: Preview = {
 	initialGlobals: { theme: "light" },
 	decorators: [withTheme],
 	parameters: { layout: "centered" },
+	tags: ["autodocs"],
 };
 
 export default preview;
