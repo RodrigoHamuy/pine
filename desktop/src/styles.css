@@ -1446,12 +1446,14 @@ select.input {
 	display: block;
 }
 .it-media .cap,
-.md-media figcaption {
+.md-media .cap {
+	display: block;
 	font-size: 11.5px;
 	color: var(--faint);
 	margin-top: 4px;
 }
 .md-media {
+	display: block;
 	margin: 10px 0;
 }
 .it-goal {
@@ -1562,29 +1564,6 @@ select.input {
 	background: var(--raised);
 	border: 1px solid var(--line-soft);
 }
-.md-code {
-	margin: 0.9em 0;
-	border: 1px solid var(--line);
-	border-radius: var(--r);
-	overflow: hidden;
-	background: var(--surface);
-}
-.md-code-head {
-	display: flex;
-	justify-content: space-between;
-	padding: 5px 12px;
-	font-size: 11.5px;
-	color: var(--faint);
-	border-bottom: 1px solid var(--line-soft);
-	background: var(--raised);
-	user-select: none;
-}
-.md-copy {
-	cursor: pointer;
-}
-.md-copy:hover {
-	color: var(--text);
-}
 .md pre {
 	margin: 0;
 	padding: 12px 14px;
@@ -1596,12 +1575,6 @@ select.input {
 	border: none;
 	background: none;
 	font-size: inherit;
-}
-.md-table {
-	overflow-x: auto;
-	margin: 0.9em 0;
-	border: 1px solid var(--line);
-	border-radius: var(--r);
 }
 .md table {
 	border-collapse: collapse;
@@ -1696,54 +1669,9 @@ select.input {
 		opacity: 0.15;
 	}
 }
-.hljs-comment,
-.hljs-quote {
-	color: var(--faint);
-	font-style: italic;
-}
-.hljs-keyword,
-.hljs-selector-tag,
-.hljs-literal,
-.hljs-section,
-.hljs-doctag,
-.hljs-name {
-	color: var(--plan);
-}
-.hljs-string,
-.hljs-regexp,
-.hljs-addition,
-.hljs-attribute,
-.hljs-meta .hljs-string {
-	color: var(--add);
-}
-.hljs-number,
-.hljs-symbol,
-.hljs-bullet,
-.hljs-variable,
-.hljs-template-variable,
-.hljs-link {
-	color: var(--warn);
-}
-.hljs-title,
-.hljs-title.function_,
-.hljs-title.class_,
-.hljs-built_in,
-.hljs-type {
-	color: var(--info);
-}
-.hljs-deletion {
-	color: var(--del);
-}
-.hljs-meta,
-.hljs-attr,
-.hljs-params {
-	color: var(--text-muted);
-}
-.hljs-emphasis,
 .t-em {
 	font-style: italic;
 }
-.hljs-strong,
 .t-strong,
 .t-head {
 	font-weight: 600;
@@ -1793,48 +1721,26 @@ select.input {
 	color: var(--text-muted);
 }
 
-/* Code in dark: poimandres, token by token as the theme has them. A highlighted block in a message knows
-   less than the editor does (one class for every keyword, none for a plain name), so `refine` in
-   markdown.tsx tells its keywords and constants apart, and what it leaves unmarked reads as a name. */
-.dark .md pre {
-	color: var(--p-fg);
-}
-.dark .md pre code.hl,
+/* The editor's code in dark: poimandres, token by token as the theme has them. Code in a message is
+   coloured by Shiki's own poimandres theme (markdown.tsx). */
 .dark .t-var,
-.dark .t-prop,
-.dark .hljs-variable,
-.dark .hljs-template-variable,
-.dark .hljs-params,
-.dark .hljs-property,
-.dark .hljs-subst,
-.dark .hljs-tag {
+.dark .t-prop {
 	color: var(--p-bright);
 }
 .dark .t-kw,
 .dark .t-meta,
-.dark .t-punct,
-.dark .hljs-keyword.kw-plain,
-.dark .hljs-punctuation,
-.dark .hljs-meta,
-.dark .hljs-doctag {
+.dark .t-punct {
 	color: var(--p-fg);
 }
 .dark .t-meta {
 	font-style: normal;
 }
-.dark .t-comment,
-.dark .hljs-comment,
-.dark .hljs-quote {
+.dark .t-comment {
 	color: color-mix(in srgb, var(--p-comment) 70%, transparent);
 }
 .dark .t-kw-def,
 .dark .t-op,
-.dark .t-ns,
-.dark .hljs-keyword,
-.dark .hljs-operator,
-.dark .hljs-attr,
-.dark .hljs-selector-attr,
-.dark .hljs-selector-pseudo {
+.dark .t-ns {
 	color: var(--p-steel);
 }
 .dark .t-attr {
@@ -1846,63 +1752,33 @@ select.input {
 .dark .t-num,
 .dark .t-bool,
 .dark .t-tag,
-.dark .t-head,
-.dark .hljs-keyword.kw-mod,
-.dark .hljs-keyword.lit,
-.dark .hljs-string,
-.dark .hljs-meta .hljs-string,
-.dark .hljs-number,
-.dark .hljs-literal,
-.dark .hljs-symbol,
-.dark .hljs-bullet,
-.dark .hljs-name,
-.dark .hljs-selector-tag,
-.dark .hljs-section,
-.dark .hljs-addition {
+.dark .t-head {
 	color: var(--p-mint);
 }
-.dark .t-kw-flow,
-.dark .hljs-keyword.kw-flow {
+.dark .t-kw-flow {
 	color: color-mix(in srgb, var(--p-mint) 75%, transparent);
 }
-.dark .t-re,
-.dark .hljs-regexp,
-.dark .hljs-char.escape_,
-.dark .hljs-selector-class,
-.dark .hljs-selector-id {
+.dark .t-re {
 	color: var(--p-teal);
 }
 .dark .t-fn,
 .dark .t-cls,
 .dark .t-link,
-.dark .t-ins,
-.dark .hljs-title,
-.dark .hljs-title.function_,
-.dark .hljs-title.class_,
-.dark .hljs-built_in,
-.dark .hljs-attribute,
-.dark .hljs-link {
+.dark .t-ins {
 	color: var(--p-blue);
 }
 .dark .t-call {
 	color: color-mix(in srgb, var(--p-bright) 82%, transparent);
 }
-.dark .t-type,
-.dark .hljs-type {
+.dark .t-type {
 	color: color-mix(in srgb, var(--p-fg) 75%, transparent);
 }
 .dark .t-nil,
-.dark .t-del,
-.dark .hljs-keyword.kw-bad,
-.dark .hljs-keyword.nil,
-.dark .hljs-literal.nil,
-.dark .hljs-deletion {
+.dark .t-del {
 	color: var(--p-pink);
 }
 .dark .t-em,
-.dark .t-strong,
-.dark .hljs-emphasis,
-.dark .hljs-strong {
+.dark .t-strong {
 	color: var(--p-slate);
 }
 .dark .diff {
