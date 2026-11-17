@@ -192,6 +192,8 @@ export interface McpServer {
 
 export interface Setting {
 	key: string;
+	/** A few words that name it. (A pine older than the app has none: the key stands in.) */
+	title?: string;
 	about: string;
 	kind: "model" | "boolean" | "duration" | { one: string[] } | { from: number; to: number };
 	now: string;

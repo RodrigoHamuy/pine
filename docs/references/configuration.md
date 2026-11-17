@@ -89,7 +89,6 @@ asked you for it (`pine model add`, `add_model_server`); `models.json` names it 
 | `dataDir` | `data` | Where the database, media and control token live. |
 | `defaults.model` | none | `provider/model-id` from `models.json`: the model of every agent whose `agent.json` names none. There is no built-in fallback: an agent with neither is a configuration error, which `pine check` and the start of pine report. |
 | `defaults.judge` | not set | The model of the judge of goal mode (`/goal`), as `provider/model-id`. Not set: the agent's own model. A second, small model keeps the judge's call from pushing the agent's conversation out of a model server's cache. See "Goal mode" in [agents.md](agents.md). |
-| `defaults.catalogue` | `families` | How tools are declared to the model, for every agent that names nothing: `families` (grouped, a short line for each tool; about 11 500 tokens for the main agent) or `full` (every tool by itself with its whole description; about 25 000). See [agents.md](agents.md), "How tools are declared". |
 | `defaults.thinking` | `off` | Reasoning level for models that can reason: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 | `defaults.mode` | not set | The mode of every agent that names none: `auto`, `safe`, `manual`, `bypass` or `plan` (see `mode` below). Not set: `auto` for the main agent, `safe` for all others. Set it to `safe` to keep every agent, the main one too, in its sandbox. See "Modes" in [security.md](security.md). |
 | `defaults.bashTimeoutSec` | `900` | Longest a shell command may run (15 minutes: a build, an install). The model cannot raise it. A server or another program that should keep running, and whatever needs longer, is started in the background, which is not held to it ([coding.md](coding.md)). |
@@ -164,7 +163,6 @@ Every key is optional; `{}` is a valid agent.
 | `workspace` | `agents/<id>/workspace` | The agent's working folder. `AGENTS.md`, `SOUL.md`, `TOOLS.md` and `MEMORY.md` at its top are the agent's instructions and are loaded into its prompt. Must exist when you set it. |
 | `context` | `[]` | Further instruction files to load into the system prompt. |
 | `model`, `thinking` | from `defaults` | Per-agent model and thinking level. |
-| `catalogue` | from `defaults.catalogue` | How this agent's tools are declared to the model: `families` or `full`. See [agents.md](agents.md), "How tools are declared". |
 | `settings` | from `defaults.settings` | pi settings for this agent, key by key on top of `defaults.settings`. `agents/<id>/settings.json` is honoured as well; where both set a key, the one here counts. |
 | `taskTimeoutSec`, `idleMs` | from `defaults` | Per-agent overrides. |
 

@@ -82,8 +82,6 @@ export interface Harness {
 	requestsFor(marker: string): any[];
 	toolResults(req?: any): string[];
 	toolsOffered(req: any): string[];
-	/** Whether tools are declared as families (defaults.catalogue), which is pine's default; PINE_TEST_CATALOGUE=full runs the suite the other way. */
-	families: boolean;
 	/** Everything an agent can read about one of its tools: its declaration, or, where the tool is an action of a family, what find_tools says about it. As JSON text. */
 	about(tool: string, agent?: string): Promise<string>;
 	system(req: any): string;
@@ -120,8 +118,7 @@ export async function harness(spec: { pine?: Record<string, unknown>; agents: Re
 	);
 	// Tests script the model, and a scripted command must not reach the account of whoever runs
 	// them: every agent works in safe mode, in its sandbox, unless a test asks for another by name.
-	// PINE_TEST_CATALOGUE=full runs the whole suite with every tool declared by itself, as an owner can set it (defaults.catalogue).
-	const defaults = { model: "mock/m", mode: "safe", ...(process.env.PINE_TEST_CATALOGUE ? { catalogue: process.env.PINE_TEST_CATALOGUE } : {}), ...((spec.pine?.defaults as Record<string, unknown> | undefined) ?? {}) };
+	const defaults = { model: "mock/m", mode: "safe", ...((spec.pine?.defaults as Record<string, unknown> | undefined) ?? {}) };
 	// For the question pine asks itself when a call needs something outside the sandbox: a
 	// test that is not about it gets the plain refusal, which is what it is about (test/access.test.ts asks for it).
 	const security = { askAccess: false, ...((spec.pine?.security as Record<string, unknown> | undefined) ?? {}) };
@@ -150,12 +147,7 @@ export async function harness(spec: { pine?: Record<string, unknown>; agents: Re
 		requestsFor: (marker) => mock.state.requests.filter((r: any) => h.system(r).includes(marker)),
 		toolResults: (req = mock.state.requests.at(-1)) => req.body.messages.filter((m: any) => m.role === "tool").map((m: any) => textOf(m.content)),
 		toolsOffered: (req) => offered(req),
-		families: (defaults as any).catalogue !== "full",
 		about: async (tool, agent = "main") => {
-			if (!h.families) {
-				const last = [...mock.state.requests].reverse().find((r: any) => (r.body.tools ?? []).some((t: any) => (t.function?.name ?? t.name) === tool));
-				return JSON.stringify((last?.body.tools ?? []).find((t: any) => (t.function?.name ?? t.name) === tool) ?? null);
-			}
 			await h.pine.agents.run({ agent, session: "new", prompt: mockMsg([{ tools: [{ name: "find_tools", args: { names: [tool] } }] }]), trust: "owner" } as any);
 			return JSON.stringify(h.toolResults()[0] ?? "");
 		},

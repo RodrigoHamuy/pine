@@ -201,14 +201,6 @@ export type Level = "manual" | "safe" | "auto" | "bypass";
 export type Mode = Level | "plan";
 export const LEVELS: Level[] = ["auto", "safe", "manual", "bypass"];
 export const MODES: Mode[] = [...LEVELS, "plan"];
-/**
- * How an agent's tools are declared to the model. "families": a group of tools is one declared
- * tool, and everything before a conversation's first message is the same for all conversations
- * of the agent, so that a model server keeps what it has read (src/catalogue.ts, steady() in
- * agents.ts). "full": every tool by itself with its whole description, as pi does it.
- */
-export type Catalogue = "families" | "full";
-export const CATALOGUES: Catalogue[] = ["families", "full"];
 /** Whether a level leaves the sandbox off: the owner's whole account and the network. */
 export const unsandboxed = (level: Level) => level === "auto" || level === "bypass";
 
@@ -241,8 +233,6 @@ export interface AgentConfig {
 	workspace: string;
 	model?: string;
 	thinking: string;
-	/** How its tools are declared to the model. */
-	catalogue: Catalogue;
 	/** Allowlist of pi built-in tools. Undefined keeps pi's default set. */
 	tools?: string[];
 	mcp: Record<string, McpServerConfig>;
@@ -290,7 +280,7 @@ export interface PineConfig {
 	logLevel: LogLevel;
 	main?: string;
 	/** `mode`: for every agent that names none. Not set: auto for the main agent, safe for the others. */
-	defaults: { model?: string; /** The model that judges whether a goal is met, as "provider/id". Not set: the agent's own. */ judge?: string; thinking: string; /** How tools are declared to the model, for agents that do not say. */ catalogue: Catalogue; mode?: Mode; bashTimeoutSec: number; taskTimeoutSec: number; idleMs: number; settings: Record<string, unknown> };
+	defaults: { model?: string; /** The model that judges whether a goal is met, as "provider/id". Not set: the agent's own. */ judge?: string; thinking: string; mode?: Mode; bashTimeoutSec: number; taskTimeoutSec: number; idleMs: number; settings: Record<string, unknown> };
 	limits: {
 		maxConcurrentRuns: number;
 		maxDelegationDepth: number;
@@ -437,7 +427,6 @@ function loadAgent(id: string, dir: string, raw: any, cfg: PineConfig, problems:
 		workspace,
 		model: raw.model,
 		thinking: raw.thinking ?? cfg.defaults.thinking,
-		catalogue: raw.catalogue ?? cfg.defaults.catalogue,
 		tools: Array.isArray(raw.tools) ? raw.tools.map(String) : undefined,
 		mcp: raw.mcp ?? {},
 		globalMcp: raw.globalMcp ?? true,
@@ -580,7 +569,6 @@ export function loadConfig(home = defaultHome()): PineConfig {
 			model: d.model,
 			judge: typeof d.judge === "string" && d.judge ? d.judge : undefined,
 			thinking: d.thinking ?? "off",
-			catalogue: d.catalogue ?? "families",
 			mode: d.mode,
 			bashTimeoutSec: d.bashTimeoutSec ?? 900,
 			taskTimeoutSec: d.taskTimeoutSec ?? 7200,
@@ -660,7 +648,6 @@ export function loadConfig(home = defaultHome()): PineConfig {
 		if (!a.modeSet) a.mode = plain;
 		a.level = a.mode === "plan" || !MODES.includes(a.mode) ? plain : a.mode;
 		if (!MODES.includes(a.mode)) problems.push(`agents/${a.id}/agent.json: mode must be one of ${MODES.join(", ")} (got "${a.mode}")`);
-		if (!CATALOGUES.includes(a.catalogue)) problems.push(`agents/${a.id}/agent.json: catalogue must be one of ${CATALOGUES.join(", ")} (got "${a.catalogue}")`);
 		if (!(a.model ?? cfg.defaults.model)) problems.push(`agents/${a.id}/agent.json: no model (set "model" or defaults.model in pine.json)`);
 		for (const t of a.delegates) if (t !== "*" && !cfg.agents[t]) problems.push(`agents/${a.id}/agent.json: delegates names unknown agent "${t}"`);
 		if (Array.isArray(a.globalMcp)) for (const n of a.globalMcp) if (!cfg.mcp[n]) problems.push(`agents/${a.id}/agent.json: globalMcp names unknown server "${n}"`);

@@ -49,7 +49,7 @@ test("the owner reads how pine is set up: overview, settings, an agent in full, 
 	const settings = (await a.get("/settings")).body as any[];
 	const thinking = settings.find((s) => s.key === "defaults.thinking");
 	assert.deepEqual({ now: thinking.now, live: thinking.live, one: thinking.kind.one.includes("high") }, { now: "off", live: true, one: true });
-	assert.ok(settings.every((s) => s.key && s.about && s.kind && typeof s.now === "string" && typeof s.live === "boolean"));
+	assert.ok(settings.every((s) => s.key && s.title && s.about && s.kind && typeof s.now === "string" && typeof s.live === "boolean"));
 
 	const main = (await a.get("/agents/main/detail")).body;
 	assert.equal(main.main, true);

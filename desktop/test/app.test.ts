@@ -308,6 +308,9 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	assert.equal(await page.textContent(".tab.on .name"), "Settings");
 	assert.ok((await page.$$eval(".tab", (els: Element[]) => els.length)) >= 3);
 	await sees(".item .mono >> text=limits.maxDownloadMb");
+	// A setting is called by a few words; its key stands beside them. What only tunes pine is not on the page.
+	assert.match(await page.locator(".item", { has: page.locator(".mono", { hasText: /^limits\.maxDownloadMb$/ }) }).locator(".name").textContent(), /^Largest download/);
+	assert.doesNotMatch(await page.textContent(".set-page"), /warmSlots|slotPages|catalogue|maxDelegationDepth/);
 	await shot("06-settings-general");
 	// A setting of pine's: checked by the daemon, written into pine.json, in force at once.
 	const limit = page.locator(".item", { has: page.locator(".mono", { hasText: /^limits\.maxDownloadMb$/ }) }).locator(".ctl input");

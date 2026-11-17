@@ -74,8 +74,12 @@ const MEMORY_LONG = 6000;
 /** What stands in the conversation after the instruction files that open it (steady()). */
 const HEAD_READ = "I have read my instruction files and work by them.";
 
-/** Whether an agent's tools are declared as families, with requests made for a model server to keep (config.ts: Catalogue). */
-const short = (agent: AgentConfig, trust: Trust = "owner"): boolean => agent.catalogue === "families" && trust === "owner";
+/**
+ * Whether a conversation's tools are declared as families (src/catalogue.ts), with requests made
+ * for a model server to keep (steady()): every conversation of the owner's. A run started from
+ * outside has the few tools its profile lists, each declared by itself.
+ */
+const short = (trust: Trust): boolean => trust === "owner";
 /** What every agent is told first. Short and concrete: it has to work for a small local model. */
 /** The fixed part of every agent's instructions. It says who may change what, which depends on whether this is the main agent. */
 function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner"): string {
@@ -95,13 +99,7 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
   - ${user}: what all agents know about your owner.
 - So you have two TOOLS.md and two AGENTS.md to tell apart: those in pine's home hold for every agent, you too; those in your workspace are yours alone and say what is different for you. A default or a preference for a tool that your owner tells you is for all agents unless they say otherwise: write it into the TOOLS.md in pine's home right away, without being asked where. Only what they say is for you alone goes into the TOOLS.md in your workspace; for another agent alone, change that agent ("tooling"). How to be or to behave goes into the AGENTS.md in pine's home when your owner says it is for all agents, and into your own AGENTS.md otherwise.`
 			: `Three files are the same for all agents and are in your instructions: ${rules} (traits and behaviour for all agents), ${tools} (tooling for all agents: defaults and preferences for the tools, and other technical or functional details of this setup) and ${user} (what is known about your owner). They hold for you; your own AGENTS.md and TOOLS.md say what is different or more for you. ${mainId} keeps them and you cannot change them: what your owner tells you goes into your own files, and what is meant for all agents they tell ${mainId}.`;
-	// How far its tools reach is fixed for an agent and its kind of run, so it is said here. What a
-	// conversation loses or gets on the way is said in the notes.
-	const reach =
-		trust === "owner" && unsandboxed(levelOf(agent))
-			? "Your shell and file tools reach your owner's whole user account and the network, as if your owner sat at their own terminal: their projects, their programs, their git and ssh setup. Work in your workspace unless the task is somewhere else. pine's own configuration and code are closed to you. A pine-note tells you when a conversation is limited to your workspace instead."
-			: "Your shell and file tools work inside your workspace and a private home folder. The rest of the computer, including pine's own configuration, is closed to you.";
-	if (short(agent, trust)) {
+	if (short(trust)) {
 		// How far the tools reach is said in the note, which changes with the mode; these instructions do not.
 		const reach = "How far your shell and file tools reach is said in the pine-note at the start of a message: your workspace and a private home folder, or your owner's whole account. pine's own configuration and code are closed to you in every case.";
 		const shortRole =
@@ -110,6 +108,8 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
 				: role;
 		return SHORT_PROMPT.replace("{{ROLE}}", shortRole).replace("{{OWNER}}", owner).replace("{{REACH}}", reach);
 	}
+	// A run started from outside: it is held to the sandbox whatever the agent's mode, so how far its tools reach is said here.
+	const reach = "Your shell and file tools work inside your workspace and a private home folder. The rest of the computer, including pine's own configuration, is closed to you.";
 	return BASE_PROMPT.replace("{{ROLE}}", role).replace("{{OWNER}}", owner).replace("{{REACH}}", reach);
 }
 
@@ -1612,13 +1612,13 @@ export class AgentManager {
 					// The note that was last said is remembered beyond a restart: the conversation still has it,
 					// and saying it again would only make the conversation longer.
 					const noteName = `note:${agent.id}:${live.key}`;
-					if (short(agent, live.trust) && !live.ephemeral) live.noteKey ??= this.kv.get<string>(noteName) ?? undefined;
+					if (short(live.trust) && !live.ephemeral) live.noteKey ??= this.kv.get<string>(noteName) ?? undefined;
 					// What was added to the instruction files since the conversation was last told: said once, in the
 					// note that is due anyway, or in a short one of its own.
-					const news = short(agent, live.trust) ? this.changedFiles(agent, live) : [];
+					const news = short(live.trust) ? this.changedFiles(agent, live) : [];
 					if (note.key !== live.noteKey) {
 						prompt = `${news.length ? note.text.replace(/\n<\/pine-note>$/, `\n${news.join("\n")}\n</pine-note>`) : note.text}\n\n${prompt}`;
-						if (short(agent, live.trust) && !live.ephemeral) this.kv.set(noteName, note.key);
+						if (short(live.trust) && !live.ephemeral) this.kv.set(noteName, note.key);
 					} else if (news.length) prompt = `<pine-note>\n${news.join("\n")}\n</pine-note>\n\n${prompt}`;
 					if (news.length) this.toldFiles(agent, live);
 					live.noteKey = note.key;
@@ -1825,7 +1825,7 @@ export class AgentManager {
 		const core = this.coreExtension(agent, live, profile, roots);
 		const hasMcp = Object.keys(profile.mcp).length > 0;
 		// Families (src/catalogue.ts): one declared tool per group of tools.
-		const fam = short(agent, live.trust) ? families({ servers: Object.entries(profile.mcp).map(([name, server]) => ({ name, namespace: mcpNamespace(name), kind: server.pine, about: server.description })), leaf: profile.leaf }) : undefined;
+		const fam = short(live.trust) ? families({ servers: Object.entries(profile.mcp).map(([name, server]) => ({ name, namespace: mcpNamespace(name), kind: server.pine, about: server.description })), leaf: profile.leaf }) : undefined;
 		const extensionFactories: any[] = [...(fam ? [fam.extension] : []), ...(hasMcp ? [createCodemodeExtension(), createToolSearchExtension(), createMcpExtension({ loadConfig: () => ({ servers: [], errors: [] }), openUrl: () => {} } as any)] : []), core];
 		const excludeTools = BUILTIN_TOOLS.filter((t) => !profile.tools.includes(t));
 		const own = pineTools(this, agent, live, profile);
@@ -2527,7 +2527,7 @@ export class AgentManager {
 
 			// Every session says which slot of a llama.cpp server its request is for (src/slots.ts), a run started from
 			// outside too: left to the server, it would be given the slot of the conversation the owner is in.
-			pi.on("before_provider_request", (event: any, ctx: any) => (short(agent, live.trust) ? this.steady(agent, live, event.payload, ctx) : this.slotted(agent, live, event.payload, ctx)));
+			pi.on("before_provider_request", (event: any, ctx: any) => (short(live.trust) ? this.steady(agent, live, event.payload, ctx) : this.slotted(agent, live, event.payload, ctx)));
 			{
 				// The model call is over: its slot is free, and holds what was sent and what was answered.
 				pi.on("message_end", (event: any) => {
@@ -2549,12 +2549,12 @@ export class AgentManager {
 				});
 			}
 			// A conversation that was shortened no longer has its notes: the next message brings one again.
-			if (short(agent, live.trust))
+			if (short(live.trust))
 				pi.on("session_compact", () => {
 					live.noteKey = undefined;
 					if (!live.ephemeral) this.kv.set(`note:${agent.id}:${live.key}`, null);
 				});
-			const fixed = this.contextBlock(agent, profile, live.trust === "owner", short(agent, live.trust));
+			const fixed = this.contextBlock(agent, profile, live.trust === "owner", short(live.trust));
 			pi.on("before_agent_start", async (event: any) => ({ systemPrompt: `${event.systemPrompt}\n\n${fixed}` }));
 
 			// How many tool calls ago the conversation last sent its list of steps (stepsReminder).
@@ -2577,7 +2577,7 @@ export class AgentManager {
 				const reminded = () => (remind && Array.isArray(event.content) ? { content: [...event.content, { type: "text", text: remind }], structuredContent: event.structuredContent } : undefined);
 				if (event.isError) return reminded();
 				// What the conversation writes into its own instruction files it knows: it is not told again in a note.
-				if (short(agent, live.trust) && (tool === "write" || tool === "edit") && typeof event.input?.path === "string") this.wroteOwn(agent, live, event.input.path);
+				if (short(live.trust) && (tool === "write" || tool === "edit") && typeof event.input?.path === "string") this.wroteOwn(agent, live, event.input.path);
 				noteLinks(tool, event.content);
 				// A picture a server made is drawn for the owner where the tool ran (keepToolImages). A
 				// model that reads text sees only a file name and a link in the answer, and would fetch
@@ -2877,7 +2877,7 @@ export class AgentManager {
 		// The shell's home is the agent's own, and the owner says "~/Documents": the two are not the same folder.
 		if (mode !== "bypass" && live.sandboxed && !live.wide() && agent.tools?.includes("bash") !== false) lines.push(`In your shell, ~ and $HOME are a private home of your own (${path.join(this.cfg.home, "sandbox", agent.id)}), not your owner's home (${os.homedir()}). A folder of your owner's is written out in full, for example ${path.join(os.homedir(), "Documents")}.`);
 		if (mode !== "bypass" && live.wide()) lines.push(`Your shell and file tools reach your owner's whole user account and the network, like your owner at their terminal: their projects, their programs, their git and ssh setup. A path starting with ~ is your owner's home folder. Only pine's own configuration and code are closed. Your own workspace is ${agent.workspace}. Act with the care this deserves.`);
-		if (short(agent, live.trust)) {
+		if (short(live.trust)) {
 			if (live.leaf) lines.push("You are a sub-agent of a conversation: do the task you are given and answer. Starting sub-agents, handing work to other agents and setting things up are not yours to do. Your owner is not asked anything on your behalf: where something needs their yes, say so in your answer.");
 			// Which agents there are changes; the instructions do not. So it is said here.
 			const to = this.profileFor(agent, live.trust).delegates;
@@ -3416,7 +3416,6 @@ export class AgentManager {
 		const all = [rules, path.join(agent.dir, "AGENTS.md"), own("AGENTS.md"), own("CLAUDE.md"), own("SOUL.md"), tools, own("TOOLS.md"), user, own("MEMORY.md"), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context];
 		const seen = new Set<string>();
 		const found = all.filter((f) => fs.existsSync(f) && fs.statSync(f).isFile() && !seen.has(realish(f)) && Boolean(seen.add(realish(f))));
-		if (!short(agent)) return found;
 		// A file that still says what pine started it with says nothing: it is left out, which a small model reads faster.
 		const untouched = (f: string) => {
 			const name = path.basename(f);

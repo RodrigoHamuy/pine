@@ -283,7 +283,7 @@ test("source types: the main agent brings in a new kind of source, with the owne
 	await until(() => h.pine.tasks.list({}).some((x: any) => x.kind === "event" && x.status === "done"), 6000, "the agent to be woken by it");
 	// Every conversation knows the type from its next message on.
 	await run([{ tools: [call("sources", {})] }], "helper");
-	assert.ok(h.families ? notesOf(h.mock.state.requests.at(-1)).join("\n").includes("blinker (a test light: reports a blink. Options: word (required)") : JSON.stringify(h.mock.state.requests.at(-1).body.tools).includes("- blinker: a test light: reports a blink. Options: word (required)"));
+	assert.ok(notesOf(h.mock.state.requests.at(-1)).join("\n").includes("blinker (a test light: reports a blink. Options: word (required)"));
 
 	// What was confirmed is what runs: the agent's file is not looked at again, and a second type of that name is not slipped in.
 	fs.writeFileSync(path.join(ws, "types", "blinker.ts"), BLINKER.replace("version: 1", "version: 2"));

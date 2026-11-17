@@ -97,11 +97,12 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 		<div className="item">
 			<div className="info">
 				<div className="name">
-					<span className="mono">{s.key}</span>
+					<span>{s.title ?? s.key}</span>
+					{s.title ? <span className="mono faint setting-key" title="Its name in pine.json, and for the main agent">{s.key}</span> : null}
 					{s.live ? null : <span className="tag">from the next start</span>}
 					{saved ? <span className="tag warn">saved: {saved}</span> : null}
 				</div>
-				<div className="about">{s.about}</div>
+				<div className="about lines">{s.about}</div>
 			</div>
 			<div className="ctl">{control}</div>
 		</div>

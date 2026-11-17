@@ -1171,7 +1171,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						const checked = checkSetting(cfg, String(p.key), p.value, setting?.kind === "model" ? await manager.availableModels() : []);
 						const now = checked.setting.now(cfg);
 						if (checked.value !== undefined && checked.text === now) return ok(`${checked.key} is ${now} already. Nothing changed.`);
-						const decision = await confirm("set_setting", `set ${checked.key} to ${checked.text} (now: ${now})\n${checked.setting.about}`, `this changes pine's configuration, for all agents${checked.wider ? `. Note: ${checked.wider}` : ""}`, signal);
+						const decision = await confirm("set_setting", `set ${checked.key} to ${checked.text} (now: ${now})\n${checked.setting.title}. ${checked.setting.about}`, `this changes pine's configuration, for all agents${checked.wider ? `. Note: ${checked.wider}` : ""}`, signal);
 						if (!decision.allow) throw new Error(`not changed (${decision.by}). Do not retry; tell your owner what you proposed.`);
 						applySetting(cfg, checked);
 						if (checked.setting.live) await manager.refreshSessions();

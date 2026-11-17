@@ -371,22 +371,31 @@ What holds for them:
 
 | Setting | What it is |
 |---|---|
-| `defaults.model`, `defaults.thinking`, `defaults.mode` | What an agent gets that does not say otherwise: model, reasoning, mode (and with the mode, how far it reaches). A rule or a preference for all agents (how to behave, a default for a tool) is not a setting: the main agent writes it into `AGENTS.md` or `TOOLS.md` in pine's home ([agents.md](agents.md), "What holds for all agents") |
-| `defaults.bashTimeoutSec`, `defaults.taskTimeoutSec` | Seconds a shell call and a task may run. From the next start |
-| `limits.maxConcurrentRuns` | How many agents work at the same time. From the next start |
-| `defaults.catalogue` | How tools are declared to the model: `families` (grouped, short) or `full` (every tool by itself). From the next start. See [agents.md](agents.md), "How tools are declared" |
-| `limits.warmSlots` | Whether the idle slots of a llama.cpp model server are filled in the background, so that a new conversation starts at once |
-| `limits.slotPages` | How many conversations beyond the model server's slots are kept in files there and read back, instead of being read again by the model |
-| `limits.maxDelegationDepth`, `limits.maxDownloadMb` | How often a task is handed on, and the largest download |
-| `defaults.judge` | The model of the judge of goal mode. Not set: the agent's own |
-| `security.askAccess` | Whether pine asks you itself when a call needs something outside the sandbox |
-| `security.taint`, `security.bypassWhenTainted`, `security.approvalTimeout` | How long outside content counts, whether bypass survives it, and how long a question to you waits (from the next start) |
+| `defaults.model` | Model: the model every agent runs on, unless the agent has one of its own |
+| `defaults.thinking` | Reasoning: how much a model thinks before it answers, for every agent that does not set its own |
+| `defaults.mode` | Mode: how freely agents work, and with that how far they reach, for every agent that does not set its own. A rule or a preference for all agents (how to behave, a default for a tool) is not a setting: the main agent writes it into `AGENTS.md` or `TOOLS.md` in pine's home ([agents.md](agents.md), "What holds for all agents") |
+| `defaults.judge` | Judge of goal mode: the model that says after each round whether a goal is met. Not set: the agent's own |
+| `defaults.bashTimeoutSec` | Longest shell command, in seconds. From the next start |
+| `defaults.taskTimeoutSec` | Longest task, in seconds: how long an agent may work on one message or event. From the next start |
+| `limits.maxConcurrentRuns` | Agents at work at once; the others wait their turn. From the next start |
+| `limits.maxDownloadMb` | Largest download, in megabytes |
+| `security.askAccess` | Ask when an agent needs more: whether pine asks you when an agent in the sandbox needs a file or folder outside it, or the network |
+| `security.approvalTimeout` | How long a question waits for your answer before it counts as a no. From the next start |
+| `security.taint` | Outside content: how long pine asks before an agent sends something out, after its conversation has read something from outside |
+| `security.bypassWhenTainted` | Bypass after outside content: whether bypass mode stays in force in such a conversation |
 
 A value is checked for what it has to be (a model that exists, one of a few words, a number in
 a range, a time), you see the old and the new value, and where the new one gives something up
 the question says so. `"default"` as the value takes the entry out of `pine.json`. Most
 settings hold at once; the ones marked hold from the next start of pine, and the agent tells
 you so. Not settable by any agent: the control API (address, port, token) and secrets.
+
+These are the settings an owner decides. The other keys of `pine.json` tune pine to a model
+server or guard against a loop (`limits.warmSlots`, `limits.slotPages`,
+`limits.maxDelegationDepth` and the rest of `limits`). Their defaults are right for nearly
+everybody; they are no settings, no agent changes them, and the settings page of the app does
+not show them. Who needs another value writes it into `pine.json` by hand and restarts pine
+([configuration.md](configuration.md)).
 
 ## What is written
 

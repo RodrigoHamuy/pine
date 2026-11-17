@@ -2477,6 +2477,15 @@ select.input {
 	gap: 7px;
 	flex-wrap: wrap;
 }
+/* A setting's key, beside the words that name it: for looking it up, not for reading. */
+.item .name .setting-key {
+	font-size: 11px;
+	font-weight: 400;
+}
+/* (A setting that takes one of a few words says each on a line of its own.) */
+.item .about.lines {
+	white-space: pre-line;
+}
 .item .about {
 	color: var(--muted);
 	font-size: 12.5px;

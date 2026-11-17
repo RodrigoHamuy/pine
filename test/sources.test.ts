@@ -55,7 +55,7 @@ test("sources: a configured source does nothing until an agent subscribes; then 
 	assert.ok(firstLook.startsWith("1 event source; 0 wake this conversation.\nscans (folder: what the scanner saves) - idle\n    nobody of yours is subscribed\n"), firstLook);
 	assert.match(h.toolResults(h.mock.state.requests[1]).join("\n"), /Subscribed to scans \(agent\)\. It is running\. Each event it reports \(source\/scans\/\.\.\.\) will arrive in your main conversation \(this one\)/);
 	assert.match(h.toolResults(h.mock.state.requests[1]).join("\n"), /"nope" is not an event source main can use\. Available: scans/);
-	assert.ok(h.families ? notesOf(h.mock.state.requests[0]).join("\n").includes("Event sources you can subscribe to: scans (folder: what the scanner saves)") : JSON.stringify(h.mock.state.requests[0].body.tools).includes("Sources right now: scans (folder: what the scanner saves)."), "the agent is told what it can subscribe to");
+	assert.ok(notesOf(h.mock.state.requests[0]).join("\n").includes("Event sources you can subscribe to: scans (folder: what the scanner saves)"), "the agent is told what it can subscribe to");
 	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(h.home, "agents", "main", "agent.json"), "utf8")).subscribe, [{ source: "scans", note: "Tell the owner on Telegram which document arrived.", throttle: "150ms" }]);
 	assert.deepEqual([info().running, info().subscribers], [true, ["main"]]);
 
@@ -492,7 +492,7 @@ test("sources: a subscription is for one conversation, for the agent, or for all
 	let r = await run("main", "side", [{ tools: [call("subscribe", { source: "beep", note: "only here", throttle: "1h" }), call("subscribe", { source: "beep", scope: "everywhere", note: "x" })] }]);
 	assert.match(h.toolResults()[0], /Subscribed to beep \(local\)\. It is running\. Each event it reports \(source\/beep\/\.\.\.\) will arrive here, in this conversation, as a message that starts a turn of yours\. The subscription ends when this conversation is closed or reset/);
 	assert.match(h.toolResults()[1], /"scope" must be local, agent or global; leave it out for this conversation\./);
-	assert.ok(JSON.stringify(h.mock.state.requests[0].body.tools).includes(h.families ? "whom it is for; leave it out unless your owner says it is for you as an agent, or for all agents" : "If you think they might want more than this conversation, ask them, do not decide it."));
+	assert.ok(JSON.stringify(h.mock.state.requests[0].body.tools).includes("whom it is for; leave it out unless your owner says it is for you as an agent, or for all agents"));
 	await settle();
 	assert.deepEqual(woken(), ["main/side"], "the main conversation is not woken by what a side conversation subscribed to");
 	assert.deepEqual(h.pine.sources.list()[0].subscribers, ["main/side"]);
@@ -528,8 +528,8 @@ test("sources: a subscription is for one conversation, for the agent, or for all
 	r = await run("gonzo", "main", [{ tools: [call("subscribe", { source: "beep", scope: "global", note: "x" }), call("unsubscribe", { source: "beep", scope: "global" })] }]);
 	assert.match(h.toolResults()[0], /Only the main agent \(main\) can subscribe or set up sources for all agents\. Tell your owner/);
 	assert.match(h.toolResults()[1], /Only the main agent \(main\) can end a subscription for all agents\./);
-	const itsTool = h.mock.state.requests.at(-1).body.tools.find((t: any) => (t.function?.name ?? t.name) === (h.families ? "pine_sources" : "subscribe"));
-	assert.ok(itsTool && !JSON.stringify(h.families ? itsTool.function.parameters.properties.scope : itsTool).includes("global"), "an agent that cannot do it is not offered it");
+	const itsTool = h.mock.state.requests.at(-1).body.tools.find((t: any) => (t.function?.name ?? t.name) === "pine_sources");
+	assert.ok(itsTool && !JSON.stringify(itsTool.function.parameters.properties.scope).includes("global"), "an agent that cannot do it is not offered it");
 	assert.equal(asked.length, 2);
 	r = await run("main", "main", [{ tools: [call("subscribe", { source: "beep", scope: "global", note: "for everyone", throttle: "1h" })] }]);
 	assert.match(r.text, /Subscribed to beep \(global\)\. .* will wake gonzo, each in its main conversation/);

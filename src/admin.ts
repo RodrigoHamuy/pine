@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AGENT_TOOLS } from "./agent-admin.ts";
-import { type AgentConfig, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed, CATALOGUES } from "./config.ts";
+import { type AgentConfig, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
 import { unsetEnv } from "./env-file.ts";
 import { editJson } from "./mcp-config.ts";
 import { isInside, realish } from "./security.ts";
@@ -486,6 +486,9 @@ export function countFiles(dir: string, limit = 5000): number {
 // ---- pine's settings -----------------------------------------------------------------------------
 
 interface Setting {
+	/** A few words that name it, for a list an owner reads. */
+	title: string;
+	/** What it does, in a sentence or two that need no other page to be understood. One that takes one of a few words says each on a line of its own. */
 	about: string;
 	/** What a value has to be. */
 	kind: "model" | "boolean" | "duration" | { one: string[] } | { from: number; to: number };
@@ -500,45 +503,46 @@ interface Setting {
 const ms = (n: number) => (n % 60_000 === 0 ? `${n / 60_000}m` : n % 1000 === 0 ? `${n / 1000}s` : `${n}ms`);
 
 /**
- * The settings in pine.json that the main agent can change. Not here on purpose: the control
- * API (address, port, token), secrets, and the lists that have tools of their own (sources, MCP
- * servers, skills, schedules, source types, model servers, agents).
+ * The settings in pine.json that the main agent and the owner's settings page can change: what
+ * an owner decides. Each has a few words that name it (`title`) and a sentence or two anybody
+ * can read (`about`), addressed to nobody, since the agent and the owner both read them.
+ *
+ * Not here on purpose: the control API (address, port, token), secrets, the lists that have
+ * tools of their own (sources, MCP servers, skills, schedules, source types, model servers,
+ * agents), and what tunes pine to a model server or guards against a loop
+ * (`limits.warmSlots`, `limits.slotPages`, `limits.maxDelegationDepth` and the other
+ * limits). Those have defaults that are right for nearly everybody, and are
+ * changed in pine.json by hand (docs/references/configuration.md).
  */
 export const SETTINGS: Record<string, Setting> = {
-	"defaults.model": { about: "The model of every agent that has none of its own, as provider/model.", kind: "model", now: (c) => String(c.defaults.model ?? "none"), live: true },
-	"defaults.thinking": { about: "How much an agent reasons before it answers, unless it says otherwise.", kind: { one: THINKING }, now: (c) => c.defaults.thinking, live: true },
-	"defaults.catalogue": {
-		about: "How an agent's tools are declared to the model, unless the agent says otherwise: families (a group of tools is one declared tool, requests are short and a model server keeps what it has read) or full (every tool by itself with its whole description, as before).",
-		kind: { one: [...CATALOGUES] },
-		now: (c) => c.defaults.catalogue,
-		live: false,
-	},
+	"defaults.model": { title: "Model", about: "The model every agent runs on, unless the agent has one of its own.", kind: "model", now: (c) => String(c.defaults.model ?? "none"), live: true },
+	"defaults.thinking": { title: "Reasoning", about: "How much a model thinks before it answers, for every agent that does not set its own. A higher level takes longer. A model that cannot reason ignores it.", kind: { one: THINKING }, now: (c) => c.defaults.thinking, live: true },
 	"defaults.mode": {
-		about: "The mode of every agent that names none: auto (no sandbox: your whole account and the network; critical actions are checked), safe (in the sandbox: its own folders), manual (in the sandbox, every action waits), bypass (no sandbox, nothing waits), plan (nothing is done). Not set: auto for the main agent, safe for the others.",
+		title: "Mode",
+		about: "How freely agents work, for every agent that does not set its own.\nauto: no sandbox, the whole account and the network; only critical actions ask.\nsafe: in the sandbox, only the agent's own folders.\nmanual: like safe, and every action asks.\nbypass: like auto, and nothing asks.\nplan: it reads and plans and changes nothing.\nNot set: auto for the main agent, safe for the others.",
 		kind: { one: [...MODES] },
 		now: (c) => c.defaults.mode ?? "not set (main: auto, others: safe)",
 		live: true,
 		wider: (v) => (v === "bypass" ? "in bypass mode no agent asks, and every agent's shell reaches your whole account and the network" : v === "auto" ? "every agent that names no mode then works without a sandbox: its shell and file tools reach your whole account and the network" : undefined),
 	},
-	"defaults.bashTimeoutSec": { about: "Seconds after which a shell command is ended.", kind: { from: 5, to: 86_400 }, now: (c) => String(c.defaults.bashTimeoutSec), live: false },
-	"defaults.taskTimeoutSec": { about: "Seconds after which a task is ended.", kind: { from: 30, to: 604_800 }, now: (c) => String(c.defaults.taskTimeoutSec), live: false },
-	"limits.maxConcurrentRuns": { about: "How many agents work at the same time. On one local model, more than it can serve side by side only makes each slower.", kind: { from: 1, to: 64 }, now: (c) => String(c.limits.maxConcurrentRuns), live: false },
-	"limits.maxDelegationDepth": { about: "How many times a task can be handed on from agent to agent.", kind: { from: 0, to: 10 }, now: (c) => String(c.limits.maxDelegationDepth), live: true },
-	"limits.maxDownloadMb": { about: "The largest file the download tool fetches, in megabytes.", kind: { from: 1, to: 100_000 }, now: (c) => String(c.limits.maxDownloadMb), live: true },
-	"defaults.judge": { about: "The model that judges whether a goal is met, as provider/model. Not set: the agent's own.", kind: "model", now: (c) => c.defaults.judge ?? "not set (the agent's own model)", live: true },
-	"limits.slotPages": { about: "How many conversations that had to leave their slot on a llama.cpp model server are kept in files there and read back when they come again, instead of being read from their first word. Needs a server started with --slot-save-path. 0 turns it off.", kind: { from: 0, to: 64 }, now: (c) => String(c.limits.slotPages), live: true },
-	"limits.warmSlots": { about: "Whether pine has the idle slots of a llama.cpp model server read the beginning that all conversations of an agent share, in the background after you have used the model, so that a new conversation or a sub-agent starts at once.", kind: "boolean", now: (c) => String(c.limits.warmSlots), live: true },
-	"security.askAccess": { about: "Whether pine asks your owner itself when a call of an agent needs a file or folder outside its sandbox, or the network.", kind: "boolean", now: (c) => String(c.security.askAccess), live: true },
-	"security.approvalTimeout": { about: "How long a question to your owner waits before it counts as not answered, for example 5m.", kind: "duration", now: (c) => ms(c.security.approvalTimeoutMs), live: false },
+	"defaults.judge": { title: "Judge of goal mode", about: "In goal mode (/goal) a model says after each round whether the goal is met. This is that model. Not set: the agent's own model.", kind: "model", now: (c) => c.defaults.judge ?? "not set (the agent's own model)", live: true },
+	"defaults.bashTimeoutSec": { title: "Longest shell command", about: "Seconds a shell command may run before it is ended. 900 is 15 minutes. A command started in the background is not held to it.", kind: { from: 5, to: 86_400 }, now: (c) => String(c.defaults.bashTimeoutSec), live: false },
+	"defaults.taskTimeoutSec": { title: "Longest task", about: "Seconds an agent may work on one message or event before it is stopped. 7200 is two hours.", kind: { from: 30, to: 604_800 }, now: (c) => String(c.defaults.taskTimeoutSec), live: false },
+	"limits.maxConcurrentRuns": { title: "Agents at work at once", about: "How many agents and sub-agents work at the same time; the others wait their turn. With a local model server, set it to the number of requests the server answers side by side: more only makes each slower.", kind: { from: 1, to: 64 }, now: (c) => String(c.limits.maxConcurrentRuns), live: false },
+	"limits.maxDownloadMb": { title: "Largest download", about: "The largest file an agent may download, in megabytes.", kind: { from: 1, to: 100_000 }, now: (c) => String(c.limits.maxDownloadMb), live: true },
+	"security.askAccess": { title: "Ask when an agent needs more", about: "When an agent in the sandbox needs a file or folder outside it, or the network, pine asks the owner whether to allow it. Off: nothing is asked, and the agent gets more only by asking for it itself.", kind: "boolean", now: (c) => String(c.security.askAccess), live: true },
+	"security.approvalTimeout": { title: "How long a question waits", about: "How long a request for approval waits for an answer, for example 5m. After that it counts as a no.", kind: "duration", now: (c) => ms(c.security.approvalTimeoutMs), live: false },
 	"security.taint": {
-		about: "How long a conversation counts as having read outside content: session (until it is reset), run (for that one task), off (never).",
+		title: "Outside content",
+		about: "After a conversation has read something from outside (a web page, a mail, somebody else's message), pine asks before the agent sends anything out. This says how long that lasts.\nsession: until the conversation is reset.\nrun: only until that one task is done.\noff: never, which takes this protection away.",
 		kind: { one: ["session", "run", "off"] },
 		now: (c) => c.security.taint,
 		live: true,
 		wider: (v) => (v === "off" ? "with off, outside content is never marked, and nothing that depends on the mark protects you" : v === "run" ? "with run, the mark is gone with the next message although what was read is still in the conversation" : undefined),
 	},
 	"security.bypassWhenTainted": {
-		about: "Whether bypass mode stays in force in a conversation that has read outside content.",
+		title: "Bypass after outside content",
+		about: "Off: an agent in bypass mode works as in auto mode once its conversation has read something from outside, so critical actions ask again. On: bypass stays, and nothing asks.",
 		kind: "boolean",
 		now: (c) => String(c.security.bypassWhenTainted),
 		live: true,
@@ -551,7 +555,7 @@ const kindText = (k: Setting["kind"]) => (k === "model" ? "a model, as provider/
 /** The settings as a list for the agent: name, what is in force, what it is. */
 export function settingsText(cfg: PineConfig): string {
 	return Object.entries(SETTINGS)
-		.map(([key, s]) => `${key} = ${s.now(cfg)}\n    ${s.about} Value: ${kindText(s.kind)}.${s.live ? "" : " A change holds from the next start of pine."}`)
+		.map(([key, s]) => `${key} = ${s.now(cfg)}\n    ${s.title}. ${s.about.replaceAll("\n", "\n    ")} Value: ${kindText(s.kind)}.${s.live ? "" : " A change holds from the next start of pine."}`)
 		.join("\n");
 }
 

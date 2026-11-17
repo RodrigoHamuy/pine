@@ -4,10 +4,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { ease, fit, shortDeclarations } from "../src/catalogue.ts";
 import { SOURCE_TYPES } from "../src/config.ts";
-import { harness as plain, MCP_STUB, mockMsg, rawTextOf, textOf, until } from "./support/harness.ts";
-
-// These tests are about families (defaults.catalogue), whatever the rest of the suite is run with.
-const harness = (spec: any) => plain({ ...spec, pine: { ...(spec.pine ?? {}), defaults: { catalogue: "families", ...(spec.pine?.defaults ?? {}) } } });
+import { harness, MCP_STUB, mockMsg, rawTextOf, textOf, until } from "./support/harness.ts";
 
 // What these tests look at is the request as it goes out: `wire`, beside the form the harness gives the others.
 const owner = { trust: "owner" as const };
@@ -679,15 +676,16 @@ test("a sub-agent is declared what its conversation is declared, and what is not
 	await h.close();
 });
 
-test("the setting: families by default, every tool by itself when the owner says so, for all agents or for one", async () => {
-	const h = await plain({ pine: { main: "main", defaults: { catalogue: "full" } }, agents: { main: {}, helper: { agent: { catalogue: "families" } } } });
-	await h.pine.agents.run({ agent: "main", prompt: "hi", ...owner });
-	assert.ok(named(h.mock.state.requests.at(-1)).includes("add_schedule") && !named(h.mock.state.requests.at(-1)).includes("pine_schedules"));
-	await h.pine.agents.run({ agent: "helper", prompt: "hi", ...owner });
-	assert.ok(named(h.mock.state.requests.at(-1)).includes("pine_schedules") && !named(h.mock.state.requests.at(-1)).includes("add_schedule"));
+test("families are for every conversation of the owner's, whatever an old configuration says; a run started from outside has its few tools each by itself", async () => {
+	// `catalogue` was a setting once ("full": every tool by itself). A file that still has it starts, and it changes nothing.
+	const h = await harness({ pine: { main: "main", defaults: { catalogue: "full" } }, agents: { main: {}, helper: { agent: { catalogue: "full" } } } });
+	for (const agent of ["main", "helper"]) {
+		await h.pine.agents.run({ agent, prompt: "hi", ...owner });
+		assert.ok(named(h.mock.state.requests.at(-1)).includes("pine_schedules") && !named(h.mock.state.requests.at(-1)).includes("add_schedule"), agent);
+	}
+	// From outside there is nothing to group: what the profile lists is declared as it is, and no family reaches further.
+	await h.pine.agents.run({ agent: "main", session: "door", prompt: "from outside", trust: "untrusted" });
+	const outside = named(h.mock.state.requests.at(-1));
+	assert.ok(outside.length > 0 && !outside.some((n: string) => n.startsWith("pine_") || n === "find_tools"), outside.join(", "));
 	await h.close();
-	// A value that is none is said at the start, with the ones there are.
-	const bad = await plain({ agents: { main: { agent: { catalogue: "tiny" } } }, start: false });
-	await assert.rejects(bad.restart(), /catalogue must be one of families, full \(got "tiny"\)/);
-	await bad.close();
 });

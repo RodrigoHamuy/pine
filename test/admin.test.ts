@@ -300,7 +300,7 @@ test("admin: the main agent does for another agent what that agent can do for it
 	assert.match(out[2], /^1 schedule\.\nmine /);
 	// The other agent's tools take no "agent": it sets things up for itself alone.
 	const req = h.mock.state.requests.find((r: any) => h.system(r).includes("PERSONA-HELPER"));
-	const tool = (req.body.tools ?? []).find((x: any) => (x.function?.name ?? x.name) === (h.families ? "pine_schedules" : "add_schedule"));
+	const tool = (req.body.tools ?? []).find((x: any) => (x.function?.name ?? x.name) === "pine_schedules");
 	assert.ok(tool, "its tool for schedules");
 	assert.ok(!("agent" in ((tool.function ?? tool).parameters?.properties ?? {})), "no such parameter for an agent that is not the main one");
 	await h.close();
@@ -312,11 +312,17 @@ test("admin: pine's settings are listed and changed by tool call, each value che
 	const file = path.join(h.home, "pine.json");
 	let out = await main(call("settings"));
 	for (const key of Object.keys(SETTINGS)) assert.ok(out[0].includes(`${key} = `), key);
-	assert.match(out[0], /defaults\.mode = safe\n    The mode of every agent that names none: auto \(no sandbox/);
+	assert.match(out[0], /defaults\.mode = safe\n    Mode\. How freely agents work, for every agent that does not set its own\.\n    auto: no sandbox/);
 	assert.match(out[0], /limits\.maxConcurrentRuns = 2\n[^\n]*A change holds from the next start of pine\./);
 
 	// What is wrong is said, and nobody is asked.
 	const before = fs.readFileSync(file, "utf8");
+	// What tunes pine to a model server or guards against a loop is no setting: it is not listed, and not changed by an agent.
+	const internal = ["limits.warmSlots", "limits.slotPages", "limits.maxDelegationDepth", "limits.warmAfterMs", "limits.maxEventHops"];
+	for (const key of internal) assert.ok(!out[0].includes(key), key);
+	const refused = await main(...internal.map((key) => call("set_setting", { key, value: "default" })));
+	for (const said of refused) assert.match(said, /there is no setting "[a-zA-Z.]+" that you can change/);
+	assert.equal(asked.length, 0);
 	out = await main(call("set_setting", { key: "defaults.mode", value: "sometimes" }), call("set_setting", { key: "http.port", value: "80" }), call("set_setting", { key: "limits.maxConcurrentRuns", value: "0" }), call("set_setting", { key: "defaults.model", value: "mock/none" }), call("set_setting", { key: "security.askAccess", value: "maybe" }), call("set_setting", { key: "security.approvalTimeout", value: "soon" }), call("set_setting", { key: "defaults.mode", value: "safe" }));
 	assert.match(out[0], /defaults\.mode is one of: auto, safe, manual, bypass, plan/);
 	assert.match(out[1], /there is no setting "http\.port" that you can change/);
@@ -331,7 +337,7 @@ test("admin: pine's settings are listed and changed by tool call, each value che
 	// One that holds at once, with what it gives up said to the owner.
 	out = await main(call("set_setting", { key: "defaults.mode", value: "auto" }));
 	assert.equal(asked[0].tool, "set_setting");
-	assert.match(asked[0].summary, /^set defaults\.mode to auto \(now: safe\)\nThe mode of every agent that names none/);
+	assert.match(asked[0].summary, /^set defaults\.mode to auto \(now: safe\)\nMode\. How freely agents work/);
 	assert.match(asked[0].why, /this changes pine's configuration, for all agents\. Note: every agent that names no mode then works without a sandbox/);
 	assert.match(out[0], /Your owner confirmed it\. defaults\.mode is now auto\.$/);
 	assert.equal(json(file).defaults.mode, "auto");
@@ -350,9 +356,14 @@ test("admin: pine's settings are listed and changed by tool call, each value che
 	assert.equal(h.pine.cfg.defaults.mode, undefined);
 	assert.equal(asked.length, 4);
 	assert.equal(loadConfig(h.home).limits.maxConcurrentRuns, 3);
-	// Every setting says what it is and takes its own present value.
+	// Every setting has a few words that name it and says what it is in words anybody can read:
+	// short, to nobody in particular (the agent and the owner both read it), and without the
+	// names of pine's insides. And it takes its own present value.
 	for (const [key, s] of Object.entries(SETTINGS)) {
-		assert.ok(s.about.length > 20, key);
+		assert.ok(s.title.length >= 4 && s.title.length <= 32 && !/[.:]/.test(s.title), `${key}: "${s.title}" is no name for a list`);
+		assert.ok(s.about.length > 20 && s.about.length <= 420, `${key}: ${s.about.length} characters`);
+		assert.doesNotMatch(s.about, /\byour?\b|\btaint|\bslot|llama|catalogue|\bsession\b(?!:)/i, key);
+		for (const sentence of s.about.split(/(?<=[.!?])\s+/)) assert.ok(sentence.split(/\s+/).length <= 32, `${key}: a sentence of ${sentence.split(/\s+/).length} words: ${sentence}`);
 		if (s.kind === "model") continue;
 		const now = s.now(h.pine.cfg);
 		if (!now.startsWith("not set")) assert.doesNotThrow(() => checkSetting(h.pine.cfg, key, now, []), `${key} = ${now}`);

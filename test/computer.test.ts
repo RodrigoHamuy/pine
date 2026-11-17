@@ -636,7 +636,7 @@ test("computer: only the owner's own conversations of an agent that reaches the 
 	await h.pine.agents.run({ agent: "clerk", prompt: mockMsg([{ tools: [{ name: "mcp__computer__app_type", args: { app: "TextEdit", text: "hello" } }] }]), trust: "owner" } as any);
 	const clerk = h.requestsFor("PERSONA-CLERK").at(-1);
 	assert.deepEqual(offered(clerk), []);
-	const told = h.families ? 'computer (one tool, "computer"' : "computer (mcp__computer__)";
+	const told = 'computer (one tool, "computer"';
 	assert.ok(!h.system(clerk).includes(told) && h.system(h.requestsFor("PERSONA-MAIN")[0]).includes(told), "nor is it told about a server it does not have");
 	assert.deepEqual(did(), [], "nothing was typed anywhere");
 	await h.close();

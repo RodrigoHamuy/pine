@@ -273,7 +273,7 @@ export class OwnerApi {
 			return Object.entries(SETTINGS).map(([key, s]) => {
 				const now = s.now(cfg);
 				const next = saved ? s.now(saved) : now;
-				return { key, about: s.about, kind: s.kind, now, live: s.live, ...(next !== now ? { saved: next } : {}) };
+				return { key, title: s.title, about: s.about, kind: s.kind, now, live: s.live, ...(next !== now ? { saved: next } : {}) };
 			});
 		}
 		if (parts[0] === "agents" && parts[2] === "detail" && parts.length === 3) {

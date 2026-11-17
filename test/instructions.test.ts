@@ -50,9 +50,9 @@ test("instructions: an agent writes its own files and sees them from its next me
 	assert.equal(fs.readFileSync(rules, "utf8"), "RULE-FOR-ALL: answer in English\n", h.toolResults().join(" | "));
 	assert.match(fs.readFileSync(tools, "utf8"), /VOICE-FOR-ALL: F2, fast/, h.toolResults().join(" | "));
 	await h.pine.agents.run({ agent: "main", prompt: "and now?", ...owner });
-	// With families a conversation keeps the instructions it began with (it knows what it wrote itself): the next
+	// A conversation keeps the instructions it began with (it knows what it wrote itself): the next
 	// conversation is the one that begins with the files as they are now.
-	if (h.families) await h.pine.agents.run({ agent: "main", session: "next", prompt: "hello", ...owner });
+	await h.pine.agents.run({ agent: "main", session: "next", prompt: "hello", ...owner });
 	const now = h.system(h.mock.state.requests.at(-1));
 	for (const part of ["PURPOSE: keep the books", "REMEMBERED: the tax year ends in June", "SOUL: dry humour", "OWNER: Alex, prefers tables", "RULE-FOR-ALL: answer in English", "VOICE-FOR-ALL: F2, fast", "TOOLING-FOR-MAIN: search with ripgrep"]) assert.ok(now.includes(part), part);
 	assert.ok(now.indexOf("VOICE-FOR-ALL") < now.indexOf("TOOLING-FOR-MAIN"), "its own tooling comes after the tooling for all agents");
@@ -105,7 +105,7 @@ test("instructions: an agent is reminded to tidy a memory that has grown long", 
 });
 
 test("instructions: a home from before gets the files for all agents; as pine started them they say nothing, and a line the main agent adds reaches a conversation that has begun", async () => {
-	const h = await harness({ pine: { defaults: { catalogue: "families" } }, agents: { main: {}, gonzo: {} } });
+	const h = await harness({ agents: { main: {}, gonzo: {} } });
 	const rules = path.join(h.home, "AGENTS.md"), tools = path.join(h.home, "TOOLS.md");
 	for (const f of [rules, tools, path.join(h.home, "USER.md")]) assert.equal(fs.statSync(f).mode & 0o777, 0o600, f);
 	assert.match(fs.readFileSync(tools, "utf8"), /^# Tools\n/);

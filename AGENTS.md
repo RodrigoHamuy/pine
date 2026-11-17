@@ -87,7 +87,7 @@ src/
   service.ts        `ensureDaemon`: the daemon of a home, found or started in this process. The terminal UI uses it
                     directly, another program through `pine service`
   limiter.ts        model slots with priority
-  catalogue.ts      how tools are declared to the model (`defaults.catalogue`): families (one declared tool for a group, an
+  catalogue.ts      how tools are declared to the model in the owner's conversations: families (one declared tool for a group, an
                     action for each tool, the call carried out by the tool itself), short declarations, arguments that are
                     nearly right taken as meant (`ease`, `fit`), `find_tools`
   slots.ts          which slot of a llama.cpp server a conversation's requests go to (`SlotBook`), and the idle ones pine fills
@@ -657,7 +657,7 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   gate under its own name. A new tool of pine's goes into a group in `GROUPS` with a line in `BRIEF`
   that is true to its description; one for every task is added to `DECLARED` instead; a new list
   (what there is of a kind, no arguments) goes into `LISTS`, the one tool that takes several at once.
-- A request names its slot on a llama.cpp server (`takeSlot`, `src/slots.ts`), in either catalogue and
+- A request names its slot on a llama.cpp server (`takeSlot`, `src/slots.ts`), with families and
   for a run started from outside too. Filling idle slots (`warm()`) sends a request of pine's own: only
   while nobody works with that model, only when the server says its model is loaded (never what loads
   one), and with nothing in it but what a conversation begins with. What the server says its slots

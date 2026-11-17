@@ -242,7 +242,7 @@ test("live: asked in plain words, an agent lists, adds, uses and removes an MCP 
 // The figures are the server's own: tokens it read anew, and tokens it had kept.
 test("live: on a llama.cpp server a conversation is read once, and a new conversation, a sub-agent and a restart begin where the server was", { skip: !live || !process.env.PINE_LIVE_URL, timeout: 900_000 }, async (t) => {
 	const m = await liveModel(t);
-	const h = await harness({ mock: m.mock, model: m.model, pine: { main: "main", defaults: { model: m.ref, catalogue: "families" }, limits: { warmAfterMs: 500 } }, agents: { main: { agent: { description: "the owner's assistant" } } } });
+	const h = await harness({ mock: m.mock, model: m.model, pine: { main: "main", defaults: { model: m.ref }, limits: { warmAfterMs: 500 } }, agents: { main: { agent: { description: "the owner's assistant" } } } });
 	t.after(() => h.close());
 	// Figures in a message event are running totals of its task: the last one of a task is the task's.
 	let tasks = new Map<number, { read: number; kept: number }>();

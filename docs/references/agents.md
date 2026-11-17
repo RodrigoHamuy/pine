@@ -205,7 +205,7 @@ searches when a question calls for it. That keeps the prompt short for small mod
 Every tool an agent has is declared to the model with each request: its name, what it does and
 what it takes. The main agent has about eighty tools, and declared one by one they are about
 25 000 tokens, which a local model reads before the first word of a new conversation. So pine
-declares them in **families** (`catalogue`), which is about 11 500:
+declares them in **families**, which is about 11 500:
 
 - What nearly every task uses is declared by itself, with a short description: `read`, `bash`,
   `edit`, `write`, `grep`, `find`, `ls`, `download`, `delegate`, `subagent`, `todo`,
@@ -236,11 +236,13 @@ out by the tool that is meant, so modes, approvals, an `approve` or `deny` list,
 the rules after outside content all see `add_source` or `mcp__browser__browser_navigate`, and
 so does the terminal UI.
 
+Families are how every conversation of yours is declared; there is no setting for it. A run
+started from outside (an event from an untrusted source) has only the few tools its profile
+lists, and those are declared one by one.
+
 | Name | What it is |
 |---|---|
-| `catalogue` | In `agent.json`: `families` or `full`, for that agent. Not set: `defaults.catalogue`. |
-| `defaults.catalogue` | In `pine.json`: how the tools of every agent that names nothing are declared. `families` (the default): grouped, as above. `full`: every tool by itself with its whole description, as before; about two and a half times as much to read at the start of a conversation. The main agent changes it with `set_setting`; it holds from the next start of pine. |
-| `find_tools` | A tool every agent with families has. `names`: actions or a whole family. Answers with everything about them: each argument, its limits, examples. For the rare case that the line in the family is not enough. |
+| `find_tools` | A tool every agent has in a conversation of yours. `names`: actions or a whole family. Answers with everything about them: each argument, its limits, examples. For the rare case that the line in the family is not enough. |
 
 What keeps a short declaration from costing calls:
 
@@ -296,7 +298,7 @@ Another kind of server is never sent a slot.
 
 | Setting | Default | Meaning |
 |---|---|---|
-| `limits.warmSlots` | `true` | Filling idle slots. When pine has left a llama.cpp server alone for a moment, it has each slot that holds nothing read what a conversation of the agent that used the server last begins with: its tools, pine's text, its instruction files as they are now. The next new conversation of that agent, and a sub-agent, is given such a slot and has only its own message to be read. One slot at a time, only while no agent is at work with that model, and never when the model is not loaded (so it is never what loads a model). A filled slot is filled again when the instruction files changed. `false` turns it off. The main agent changes it with `set_setting`, at once. |
+| `limits.warmSlots` | `true` | Filling idle slots. When pine has left a llama.cpp server alone for a moment, it has each slot that holds nothing read what a conversation of the agent that used the server last begins with: its tools, pine's text, its instruction files as they are now. The next new conversation of that agent, and a sub-agent, is given such a slot and has only its own message to be read. One slot at a time, only while no agent is at work with that model, and never when the model is not loaded (so it is never what loads a model). A filled slot is filled again when the instruction files changed. `false` turns it off (in `pine.json`, by hand; it holds from the next start of pine). |
 | `limits.warmAfterMs` | `3000` | How long the model server has to have been left alone before a slot is filled, in milliseconds. |
 | `limits.slotPages` | `6` | More conversations than slots. A conversation whose slot another one takes is first written into a file of the model server, and read back from it when it comes again: that takes about as long as copying the file, not as long as reading the conversation. So conversations beyond the server's slots keep what was read of them, also across a restart of the server. Needs a llama.cpp server that was started with a folder for it (`--slot-save-path <folder>`); one that has none says so once and is not asked again. This many files are kept for each model server, with fixed names (`pine-<id>-<n>.bin`), used again and again; a conversation of 10 000 tokens is about a gigabyte on a large model. A sub-agent's conversation is not kept. `0` turns it off. |
 

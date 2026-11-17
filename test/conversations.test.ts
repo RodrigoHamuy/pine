@@ -180,9 +180,8 @@ async function pine_reads(h: any, ...tools: any[]) {
 	return h.toolResults().slice(-tools.length) as string[];
 }
 
-test("conversations: through the family and the list tool the same calls are carried out", async (t) => {
+test("conversations: through the family and the list tool the same calls are carried out", async () => {
 	const { h, main, talk, conv } = await pine();
-	if (!h.families) return void (await h.close(), t.skip("every tool is declared by itself in this run"));
 	await talk("notes", "Read.");
 	await h.pine.agents.run({ agent: "main", session: "tools", prompt: "hello", ...owner });
 	const declared = h.mock.state.requests.at(-1).body.tools.map((x: any) => x.function);
