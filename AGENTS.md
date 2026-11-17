@@ -549,7 +549,10 @@ Apple's own check and `smoke.mjs` on the signed app, then the upload). Signing a
 take five secrets in an environment `release`, which the top of `release.yml` lists; without
 them the job builds nothing and says so. An app that is not signed and notarised is never
 uploaded. npm does not wait for the app: a release has no disk images for the minutes Apple
-takes, and a failed `app` job is run again by itself.
+takes. The app of a release can be built again by hand, without publishing anything
+(`gh workflow run release.yml -f version=0.38.0`, from `main`): from that release's tag, with
+the workflow as it is on `main` now, which is the way to repair a release whose `app` job
+failed. The helpers need the macOS 26 SDK, so the job selects the newest Xcode on the runner.
 
 Publishing needs no stored secret: on npmjs.com the package names this repository and
 `release.yml` as a trusted publisher. A repository secret `NPM_TOKEN` is used instead if one exists.

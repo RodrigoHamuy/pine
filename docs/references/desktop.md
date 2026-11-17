@@ -349,7 +349,10 @@ built on is what is shipped. Whom it is signed for is set in the environment:
 The Release workflow (`.github/workflows/release.yml`) does this for every release from
 `main`, on a runner for each kind of Mac, and attaches the two disk images to the GitHub
 release. It takes the five values from secrets of an environment named `release`. Without
-them it builds no app and says so.
+them it builds no app and says so. To build the app of a release again (after a job that
+failed), run the workflow by hand from `main` with that release's version:
+`gh workflow run release.yml -f version=0.38.0`. Nothing is published; the disk images are
+attached to that release. Building the helpers takes the macOS 26 SDK or a newer one.
 
 ## For changing the app
 

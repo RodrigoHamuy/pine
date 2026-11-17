@@ -20,6 +20,10 @@ name: Release
 # Without them the app is not built, and the job says so: an app that is not signed and notarised
 # is one macOS refuses to open, so none is handed out.
 #
+# The app of a release can be built again by hand, without publishing anything: Actions > Release >
+# Run workflow, from main, with the release's version (gh workflow run release.yml -f version=0.38.0).
+# It is built from that release's tag and attached to that release, in place of what is there.
+#
 # Publishing uses npm's trusted publishing: on npmjs.com, the package's settings name this
 # repository and this workflow file as a trusted publisher, and no token is stored anywhere.
 # A repository secret NPM_TOKEN, if there is one, is used instead.
@@ -27,6 +31,11 @@ name: Release
 on:
   push:
     branches: [main, next]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Build the Pine app again for this release and attach it (a version that has a release, like 0.38.0)
+        required: true
 
 permissions:
   contents: read
@@ -37,6 +46,7 @@ concurrency:
 
 jobs:
   release:
+    if: github.event_name == 'push'
     runs-on: ubuntu-latest
     permissions:
       contents: write # the release and its tag
@@ -66,7 +76,8 @@ jobs:
   # started there before it is uploaded.
   app:
     needs: release
-    if: needs.release.outputs.channel == 'latest'
+    # After a release from main, or by hand for a release there already is (the release job is then skipped).
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
     strategy:
       fail-fast: false
       matrix:
@@ -80,7 +91,7 @@ jobs:
     permissions:
       contents: write # the disk image goes to the release
     env:
-      VERSION: ${{ needs.release.outputs.version }}
+      VERSION: ${{ inputs.version || needs.release.outputs.version }}
     steps:
       - id: signing
         env:
@@ -90,6 +101,10 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
         run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::\"$VERSION\" is not the version of a release (like 0.38.0)."
+            exit 1
+          fi
           missing=""
           for name in CSC_LINK CSC_KEY_PASSWORD APPLE_API_KEY_TEXT APPLE_API_KEY_ID APPLE_API_ISSUER; do
             if [ -z "$(printenv "$name")" ]; then missing="$missing ${name%_TEXT}"; fi
@@ -107,6 +122,9 @@ jobs:
       - if: steps.signing.outputs.ready == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
+          # By hand: the release's own commit. The history goes along, for what the package says each version changed.
+          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.sha }}
+          fetch-depth: 0
           persist-credentials: false
       - if: steps.signing.outputs.ready == 'true'
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
@@ -114,12 +132,25 @@ jobs:
           node-version: 24 # also the Node the app carries
           package-manager-cache: false
       - if: steps.signing.outputs.ready == 'true'
+        name: Use the newest Xcode on the runner
+        # pine's helpers are built here, and the voice helper uses the speech recognition of macOS 26
+        # where a Mac has it: that takes the macOS 26 SDK, which the runner's default Xcode is too old for.
+        run: |
+          xcode="$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)"
+          echo "DEVELOPER_DIR=$xcode/Contents/Developer" >> "$GITHUB_ENV"
+          sdk="$(DEVELOPER_DIR="$xcode/Contents/Developer" xcrun --sdk macosx --show-sdk-version)"
+          echo "$xcode, macOS SDK $sdk"
+          if [ "${sdk%%.*}" -lt 26 ]; then
+            echo "::error::The newest Xcode on this runner has the macOS $sdk SDK; pine's helpers need 26 or newer."
+            exit 1
+          fi
+      - if: steps.signing.outputs.ready == 'true'
         run: npm ci && npm ci --prefix desktop
       - if: steps.signing.outputs.ready == 'true'
         name: Pack, sign and notarise
         run: node desktop/scripts/pack.mjs --dmg --arch ${{ matrix.arch }}
         env:
-          PINE_VERSION: ${{ needs.release.outputs.version }}
+          PINE_VERSION: ${{ env.VERSION }}
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           APPLE_API_KEY: ${{ runner.temp }}/app-store-connect.p8
