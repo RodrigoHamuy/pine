@@ -1,0 +1,12 @@
+{
+  "version": 2,
+  "skills": {
+    "ui-sdk": {
+      "source": "@ui-sdk/core",
+      "sourceType": "node_modules",
+      "skillPath": "skills/ui-sdk/SKILL.md",
+      "version": "0.1.0-beta.6",
+      "computedHash": "7353586d36e12a3895bcec7d6d589ad26a18e7acff95b014ea63ccb12cfafc38"
+    }
+  }
+}

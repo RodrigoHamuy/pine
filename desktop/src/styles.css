@@ -907,6 +907,13 @@ select.input {
 	}
 }
 .dialog {
+	/* The content opens in the top layer apart from the scrim, so it places itself and drops the popover UA box. */
+	position: fixed;
+	inset: 12vh 0 auto;
+	margin: 0 auto;
+	padding: 0;
+	color: inherit;
+	outline: none;
 	max-width: calc(100vw - 48px);
 	max-height: 76vh;
 	display: flex;

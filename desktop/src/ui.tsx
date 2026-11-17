@@ -1,5 +1,6 @@
 // The small parts everything else is built from: icons, buttons, fields, a dialog, a menu.
 import { type ButtonHTMLAttributes, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Dialog as UiDialog, DialogBackdrop, DialogContent, DialogTitle } from "@ui-sdk/react/dialog";
 
 const PATHS: Record<string, string> = {
 	plus: "M8 3v10M3 8h10",
@@ -129,26 +130,20 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 	);
 }
 
-/** A window over the page that asks for one thing. Escape and a click beside it close it. */
+/**
+ * A window over the page that asks for one thing, open while it is rendered. Escape and a press
+ * beside it close it when there is an `onClose`; focus stays inside and returns where it was.
+ */
 export function Dialog({ title, children, onClose, width = 520, tone, footer }: { title?: ReactNode; children: ReactNode; onClose?: () => void; width?: number; tone?: "warn" | "accent"; footer?: ReactNode }) {
-	useEffect(() => {
-		const key = (e: KeyboardEvent) => {
-			if (e.key === "Escape" && onClose) {
-				e.stopPropagation();
-				onClose();
-			}
-		};
-		window.addEventListener("keydown", key, true);
-		return () => window.removeEventListener("keydown", key, true);
-	}, [onClose]);
 	return (
-		<div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-			<div className={`dialog${tone ? ` dialog-${tone}` : ""}`} style={{ width }} role="dialog" aria-modal="true">
-				{title ? <div className="dialog-title">{title}</div> : null}
+		<UiDialog open dismissible={Boolean(onClose)} onOpenChange={(open) => !open && onClose?.()}>
+			<DialogBackdrop className="scrim" />
+			<DialogContent className={`dialog${tone ? ` dialog-${tone}` : ""}`} style={{ width }} aria-label={title ? undefined : "Dialog"}>
+				{title ? <DialogTitle render={<div className="dialog-title" />}>{title}</DialogTitle> : null}
 				<div className="dialog-body">{children}</div>
 				{footer ? <div className="dialog-foot">{footer}</div> : null}
-			</div>
-		</div>
+			</DialogContent>
+		</UiDialog>
 	);
 }
 
