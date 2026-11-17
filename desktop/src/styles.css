@@ -12,7 +12,6 @@
 	--r: 10px;
 	--r-s: 7px;
 	--r-l: 14px;
-	--sidebar-w: 248px;
 	--bar-h: 44px;
 	--gap: 6px;
 	--col: 780px;
@@ -191,8 +190,18 @@ select {
 html:not([data-platform="darwin"]) .app {
 	background: var(--sunk);
 }
+/* The side bar and the rest of the window, with the edge between them that sizes the side bar. */
+.split {
+	flex: 1;
+	min-width: 0;
+}
+.split-pane {
+	display: flex;
+	min-width: 0;
+	min-height: 0;
+}
 .sidebar {
-	width: var(--sidebar-w);
+	width: 100%;
 	flex: none;
 	display: flex;
 	flex-direction: column;
@@ -2202,13 +2211,17 @@ button.pick-item {
 	background: transparent;
 	transition: background 0.12s;
 }
-.splitter:hover::after,
-.splitter.drag::after {
+.splitter:focus-visible {
+	outline: none;
+}
+.splitter[data-hovering]::after,
+.splitter[data-dragging]::after,
+.splitter:focus-visible::after {
 	background: var(--accent);
 }
-/* The panel gives way before the conversation does: in a narrow window it is the panel that gets narrower. */
+/* The panel fills its side of the split; the conversation beside it keeps a width of its own. */
 .code {
-	flex: 0 1 auto;
+	flex: 1;
 	display: flex;
 	flex-direction: column;
 	min-width: 240px;

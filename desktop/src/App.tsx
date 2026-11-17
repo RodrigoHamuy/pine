@@ -11,7 +11,7 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { Button, Choices, Confirm, Dialog, Icon, Lightbox, Logo, Pick, Pulse, StripTab, TabStrip, Toasts } from "./ui.tsx";
+import { Button, Choices, Confirm, Dialog, Icon, Lightbox, Logo, Pick, Pulse, Split, StripTab, TabStrip, Toasts } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -546,39 +546,20 @@ export function App() {
 	}, []);
 	const ready = s.service.status === "ready" && s.agents.length > 0 && s.active;
 	const tab = s.active;
-	// The side bar is as wide as it was dragged, as the panel on the other side is.
-	const [sideWidth, setSideWidth] = useState(() => Number(localStorage.getItem("pine.sidebar.width")) || 248);
-	const [sideDrag, setSideDrag] = useState(false);
-	const dragSide = (e: React.MouseEvent) => {
-		e.preventDefault();
-		setSideDrag(true);
-		const from = e.clientX;
-		const was = sideWidth;
-		let now = was;
-		const move = (m: MouseEvent) => setSideWidth((now = Math.max(190, Math.min(460, was + m.clientX - from))));
-		const up = () => {
-			setSideDrag(false);
-			localStorage.setItem("pine.sidebar.width", String(now));
-			window.removeEventListener("mousemove", move);
-			window.removeEventListener("mouseup", up);
-		};
-		window.addEventListener("mousemove", move);
-		window.addEventListener("mouseup", up);
-	};
 	return (
-		<div className={`app${s.sidebar && ready ? "" : " no-sidebar"}${s.fullscreen ? " fullscreen" : ""}`} style={{ "--sidebar-w": `${sideWidth}px` } as React.CSSProperties}>
+		<div className={`app${s.sidebar && ready ? "" : " no-sidebar"}${s.fullscreen ? " fullscreen" : ""}`}>
 			{!ready ? (
 				<Gate />
 			) : (
 				<>
-					{s.sidebar ? <><Sidebar /><div className={`splitter side${sideDrag ? " drag" : ""}`} onMouseDown={dragSide} onDoubleClick={() => (setSideWidth(248), localStorage.setItem("pine.sidebar.width", "248"))} title="Drag to make the side bar wider or narrower" /></> : null}
-					<div className="main">
-						<TitleBar />
-						<div className="body">
-							{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
-							{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+					<Split id="sidebar" label="Resize side bar" side="start" pane={s.sidebar ? <Sidebar /> : null} width={248} min={190} max={460} restMin={420} className="split">
+						<div className="main">
+							<TitleBar />
+							<Split id="code" label="Resize code panel" side="end" pane={s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null} width={520} min={320} max={2000} restMin={420} className="body">
+								{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
+							</Split>
 						</div>
-					</div>
+					</Split>
 				</>
 			)}
 			{s.browserAsk ? <BrowserAsk /> : null}

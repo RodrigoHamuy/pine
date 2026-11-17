@@ -729,6 +729,11 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await page.mouse.move(edge.x + edge.width / 2 + 80, 300, { steps: 4 });
 	await page.mouse.up();
 	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), before + 80);
+	// The edge is a separator the keyboard moves too: focused, an arrow key makes the side bar wider.
+	await page.focus(".splitter.side[role='separator']");
+	assert.ok(await page.getAttribute(".splitter.side", "aria-valuenow"), "the edge says how far it is");
+	await page.keyboard.press("ArrowRight");
+	await page.waitForFunction((was) => document.querySelector(".sidebar")!.getBoundingClientRect().width > was, before + 80);
 	// Hidden, the side bar is still hidden when the page is loaded again, and shown it is as wide as it was.
 	const wide = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
 	await menu("sidebar");

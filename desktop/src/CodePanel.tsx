@@ -410,13 +410,9 @@ function Running({ tab }: { tab: Tab }) {
 	);
 }
 
-const WIDTH_KEY = "pine.code.width";
-
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
-	const [width, setWidth] = useState(() => Number(localStorage.getItem(WIDTH_KEY)) || 520);
-	const [drag, setDrag] = useState(false);
 	const state = treeOf(tab.key);
 	const [, redraw] = useState(0);
 	const view = store.codeView;
@@ -425,26 +421,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
 	return (
 		<>
-			<div
-				className={`splitter${drag ? " drag" : ""}`}
-				onMouseDown={(e) => {
-					e.preventDefault();
-					setDrag(true);
-					const from = e.clientX;
-					const was = width;
-					let now = was;
-					const move = (m: MouseEvent) => setWidth((now = Math.max(320, Math.min(window.innerWidth - 420, was + from - m.clientX))));
-					const up = () => {
-						setDrag(false);
-						localStorage.setItem(WIDTH_KEY, String(now));
-						window.removeEventListener("mousemove", move);
-						window.removeEventListener("mouseup", up);
-					};
-					window.addEventListener("mousemove", move);
-					window.addEventListener("mouseup", up);
-				}}
-			/>
-			<div className="code" style={{ width }}>
+<div className="code">
 				<div className="code-head">
 					<Segmented
 						value={view}
