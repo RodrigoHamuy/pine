@@ -321,11 +321,11 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	await sees('.md [data-streamdown="strong"]');
 	assert.match(await page.textContent(".md"), /first line/);
 	// The work of the turn (what it said on the way, and the tool call) is one line, which a click opens.
-	await page.waitForFunction(() => /1 tool call · read/.test(document.querySelector(".work-head")?.textContent ?? ""));
-	assert.equal(await page.$(".work .part .tool"), null);
-	await page.click(".work-head");
-	await sees(".work .part .tool");
-	assert.equal(await page.textContent(".work .part .tool"), "read");
+	await page.waitForFunction(() => /1 tool call · read/.test(document.querySelector("[data-item=work] > [data-slot=collapsible-trigger]")?.textContent ?? ""));
+	assert.equal(await page.$("[data-item=work] [data-tool]"), null);
+	await page.click("[data-item=work] > [data-slot=collapsible-trigger]");
+	await sees("[data-item=work] [data-tool]");
+	assert.equal(await page.textContent("[data-item=work] [data-tool]"), "read");
 	// A link says where it leads, and is not an address the page itself would follow.
 	assert.equal(await page.textContent(".md [data-href]"), "the docs");
 	assert.equal(await page.getAttribute(".md [data-href]", "data-href"), "https://example.com/docs");
@@ -409,15 +409,38 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	assert.deepEqual([...new Set(breaths.map((b: any) => `${b.start}/${b.every}`))], ["0/2000"], JSON.stringify(breaths));
 	assert.equal(await page.$$eval(".spinner", (els: Element[]) => els.length), 0);
 	await page.click(".dialog-warn [data-slot=button] >> text=/^Allow/");
-	await sees(".it-approval.allowed");
+	await sees('[data-item="approval"][data-state="allowed"]');
 	// Then the agent asks something: the answers it offers, the recommended one first.
 	await sees(".dialog-accent");
 	assert.match(await page.textContent(".dialog-accent"), /Which database\?[\s\S]*the old one[\s\S]*the new one/);
 	await shot("03-question");
 	await page.keyboard.press("2");
-	await sees(".it-approval.allowed >> text=Answered");
+	await sees('[data-item="approval"][data-state="allowed"] >> text=Answered');
 	await page.waitForSelector(".dialog", { state: "detached" });
 	await sees(".md >> text=done");
+});
+
+test("what is asked is answered from the conversation too: an approval by its buttons, a question by one of its answers", async () => {
+	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo again" } }] }, { tools: [{ name: "question", args: { question: "Which colour?", choices: ["green", "blue"] } }] }, { text: "answered from the line" }], "ask in line "));
+	await page.keyboard.press("Enter");
+	// The dialog is put off ("Later"); the request stays in the conversation, with what it is and why.
+	await sees(".dialog-warn");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(".dialog", { state: "detached" });
+	const asked = '[data-item="approval"][data-state="open"] [data-slot="alert"]';
+	await sees(`${asked} >> text=Approval needed`);
+	assert.match(await page.textContent(asked), /echo again/);
+	await shot("03-confirmation");
+	await page.click(`${asked} button:has-text("Allow once")`);
+	await sees('[data-item="approval"][data-state="allowed"] >> text=Allowed');
+	// The question offers its answers as suggestions; one click answers.
+	await sees(".dialog-accent");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(".dialog", { state: "detached" });
+	await sees(`${asked} >> text=Which colour?`);
+	await page.click(`${asked} button:has-text("blue")`);
+	await sees('[data-item="approval"][data-state="allowed"] >> text=Answered');
+	await sees(".md >> text=answered from the line");
 });
 
 test("a folder is opened for a conversation: changes, and a file edited and saved", async () => {
@@ -931,9 +954,9 @@ test("a sub-agent's work opens in a tab of its own", async () => {
 	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "subagent", args: { tasks: ["@@REF:child@@ say hi"] } }] }, { text: "the sub-agent answered" }], "ask a helper "));
 	await page.keyboard.press("Enter");
 	await sees(".md >> text=the sub-agent answered");
-	await page.click(".work-head >> nth=-1");
-	await sees(".work .part .open-link");
-	await page.click(".work .part .open-link >> nth=0");
+	await page.click("[data-item=work] > [data-slot=collapsible-trigger] >> nth=-1");
+	await sees("[data-part=child] .open-link");
+	await page.click("[data-part=child] .open-link >> nth=0");
 	await sees(".tab.on .name >> text=#");
 	await sees(".md >> text=hi from the child");
 	assert.match(await page.textContent(".column"), /sub-agent of main/);
@@ -943,16 +966,16 @@ test("a sub-agent's work opens in a tab of its own", async () => {
 
 test("the last message is taken back, and its text is in the input again", async () => {
 	await page.click(".tab >> nth=0");
-	const before = await page.$$eval(".it-user", (els: Element[]) => els.length);
+	const before = await page.$$eval("[data-item=user]", (els: Element[]) => els.length);
 	await menu("undo");
 	await sees(".it-note.accent >> text=Taken back");
-	assert.equal(await page.$$eval(".it-user", (els: Element[]) => els.length), before - 1);
+	assert.equal(await page.$$eval("[data-item=user]", (els: Element[]) => els.length), before - 1);
 	assert.match(await page.inputValue(".composer textarea"), /^ask a helper /);
 	await page.fill(".composer textarea", "");
 });
 
 test("dictating puts what is heard into the input and sends nothing", async () => {
-	const sent = await page.$$eval(".it-user", (els: Element[]) => els.length);
+	const sent = await page.$$eval("[data-item=user]", (els: Element[]) => els.length);
 	await page.fill(".composer textarea", "Typed first:");
 	await menu("voice");
 	await sees(".banner >> text=listening");
@@ -964,7 +987,7 @@ test("dictating puts what is heard into the input and sends nothing", async () =
 	await page.keyboard.press("Enter");
 	await page.waitForFunction(() => (document.querySelector(".composer textarea") as HTMLTextAreaElement).value === "Typed first: about the scans please");
 	await page.waitForSelector(".banner >> text=listening", { state: "detached" });
-	assert.equal(await page.$$eval(".it-user", (els: Element[]) => els.length), sent);
+	assert.equal(await page.$$eval("[data-item=user]", (els: Element[]) => els.length), sent);
 	await page.fill(".composer textarea", "");
 });
 

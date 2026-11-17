@@ -21,6 +21,7 @@ import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { useEffect, useRef, useState } from "react";
+import { Terminal } from "@/components/ai-elements/terminal";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
@@ -379,10 +380,9 @@ function Output({ tab }: { tab: Tab }) {
 					<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)}><ChevronLeftIcon /></Button>
 					<span className="mono">{shown.entry.tool}</span>
 					<span className="cut grow mono faint">{shown.entry.subject}</span>
-					<Button variant="ghost" size="icon-xs" title="Copy the output" onClick={() => void navigator.clipboard.writeText(shown.entry.result ?? "")}><CopyIcon /></Button>
 				</div>
 				<div className="code-body">
-					<div className="out" style={shown.entry.ok === false ? { color: "var(--bad)" } : undefined}>{shown.entry.result || "(it printed nothing)"}</div>
+					<Terminal output={shown.entry.result || "(it printed nothing)"} className="m-2" data-status={shown.entry.ok === false ? "fail" : "ok"} />
 					{(shown.entry.images ?? []).map((id) => <div className="it-media" key={id} style={{ padding: 12 }}><img src={media.tool(id)} alt="" /></div>)}
 				</div>
 			</>
@@ -421,7 +421,7 @@ function Running({ tab }: { tab: Tab }) {
 							<button key={port} type="button" className="open-link" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</button>
 						))}
 					</div>
-					{p.output ? <div className="entry-result" style={{ marginLeft: 0 }}>{p.output}</div> : null}
+					{p.output ? <Terminal output={p.output} className="mt-1" /> : null}
 				</div>
 			))}
 		</div>
