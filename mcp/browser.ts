@@ -16,6 +16,12 @@
 //     can put it on the owner's screen and take it off again (browser_show, browser_hide): the
 //     browser is started anew, on the same page, with the same logins.
 //
+//   - A window of the owner's own that shows the browser itself (the Pine app, beside a
+//     conversation) gets it as pictures and hands back what the owner does in them: clicks, keys,
+//     an address. That goes through a door for the daemon alone (startViewDoor), and only in the
+//     owner's own conversations. The browser stays the same one, behind the same guard, without
+//     a window; browser_show then opens none.
+//
 // Everything a browser returns is outside content; pine marks sessions that use it as tainted.
 //
 // options: {
@@ -23,6 +29,7 @@
 //   allowHosts?, denyHosts?, allowPrivate?, browser?, executablePath?, caps?, viewport?, extraArgs?
 // }
 import { type ChildProcess, spawn } from "node:child_process";
+import crypto from "node:crypto";
 import dns from "node:dns";
 import fs from "node:fs";
 import http from "node:http";
@@ -30,8 +37,7 @@ import { createRequire } from "node:module";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
-import readline from "node:readline";
-import { options } from "./lib.ts";
+import { onLines, options } from "./lib.ts";
 import { hostPort, isLocalName, isPrivateAddress } from "../src/net.ts";
 
 interface BrowserOptions {
@@ -55,6 +61,11 @@ interface BrowserOptions {
 	 * put the browser on the owner's screen (browser_show, browser_hide).
 	 */
 	window?: boolean;
+	/**
+	 * Set by pine, not by the owner: a file in pine's home in which this server says where its door
+	 * for the owner's own window is (startViewDoor). Only an owner's conversation has one.
+	 */
+	viewFile?: string;
 	browser?: string;
 	executablePath?: string;
 	caps?: string;
@@ -69,6 +80,12 @@ export const ALWAYS_BLOCKED = ["browser_run_code_unsafe", "browser_file_upload",
  * visible one. To an agent they are offered only where the owner asked for them (`caps`).
  */
 const STORAGE_TOOLS = /^browser_(cookie|localstorage|sessionstorage)_/;
+/**
+ * And for its tools that act at a place in the picture ("vision"), to turn the wheel where the
+ * owner turns it in their own window. To an agent they are offered only where the owner asked for them.
+ */
+const VISION_TOOLS = /^browser_mouse_/;
+const hasCap = (caps: string | undefined, cap: string) => (caps ?? "").split(",").some((c) => c.trim() === cap);
 /** pine's own: the browser as a window on the owner's screen. */
 export const WINDOW_TOOLS = [
 	{
@@ -95,7 +112,8 @@ export const CORE_TOOLS = [
 export function toolAllowed(name: string, o: Pick<BrowserOptions, "tools" | "block" | "window" | "caps">): boolean {
 	if (ALWAYS_BLOCKED.includes(name) || (o.block ?? []).includes(name)) return false;
 	if (isWindowTool(name)) return o.window === true;
-	if (STORAGE_TOOLS.test(name) && !(o.caps ?? "").split(",").some((c) => c.trim() === "storage")) return false;
+	if (STORAGE_TOOLS.test(name) && !hasCap(o.caps, "storage")) return false;
+	if (VISION_TOOLS.test(name) && !hasCap(o.caps, "vision")) return false;
 	const tools = o.tools ?? "core";
 	return tools === "all" ? true : (tools === "core" ? CORE_TOOLS : tools).includes(name);
 }
@@ -268,6 +286,174 @@ export function changedTab(before: Tabs, now: Tabs): number | undefined {
 const LOOKS = ["browser_snapshot", "browser_take_screenshot", "browser_console_messages", "browser_find", "browser_network_requests", "browser_network_request"];
 const looksOnly = (params: any) => LOOKS.includes(String(params?.name)) || (params?.name === "browser_tabs" && params?.arguments?.action === "list");
 
+// ---- the owner's own window: what it is shown, and what the owner does in it ------------------------
+
+/** What the owner did in the picture of a page. Places are in the picture's own points, which are the page's. */
+export type ViewOp =
+	| { do: "click"; x: number; y: number; button: "left" | "right" | "middle"; count: number }
+	| { do: "move"; x: number; y: number }
+	| { do: "drag"; x: number; y: number; x2: number; y2: number }
+	| { do: "wheel"; dx: number; dy: number }
+	| { do: "text"; text: string }
+	| { do: "key"; key: string }
+	| { do: "back" | "forward" | "reload" }
+	| { do: "tab"; index: number }
+	| { do: "newtab" }
+	| { do: "closetab"; index: number }
+	/** The room the picture has in the owner's window: the page is laid out for it, so that it is shown point for point. */
+	| { do: "size"; w: number; h: number };
+
+export interface ViewState {
+	/** A page is open. Without one there is no picture, and nothing is opened to make one. */
+	open: boolean;
+	tabs: Array<{ title: string; url: string }>;
+	current: number;
+	/** The browser is a window on the owner's screen as well. */
+	window: boolean;
+	/** Why the last thing the owner asked for was not done. */
+	error?: string;
+}
+
+export interface BrowserView {
+	state(): Promise<ViewState>;
+	/** The page as a picture (JPEG), or nothing while no page is open. */
+	frame(): Promise<Buffer | undefined>;
+	input(ops: unknown): Promise<ViewState>;
+	/** The owner opens an address. It goes through the guard like any other. */
+	open(address: unknown): Promise<ViewState>;
+	/** The owner's own window shows this browser from now on (or no longer). */
+	embed(on: boolean): void;
+}
+
+/** A page's own words (a title, an address) for a line in the owner's window: one line, and not endless. */
+const shown = (text: unknown, max: number) => String(text ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").slice(0, max);
+
+/** What is typed into an address line, as an address of the web; nothing else is opened. */
+export function webAddress(given: unknown): string | undefined {
+	const text = typeof given === "string" ? given.trim() : "";
+	if (!text || text.length > 2000 || /\s/.test(text)) return undefined;
+	try {
+		const url = new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(text) ? text : `${/^(localhost|127\.|\[::1\])/i.test(text) ? "http" : "https"}://${text}`);
+		return url.protocol === "http:" || url.protocol === "https:" ? url.href : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/** What the owner did, checked piece by piece: only what is known, numbers that are places, keys that are names of keys. */
+export function cleanOps(given: unknown): ViewOp[] {
+	const ops: ViewOp[] = [];
+	const place = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(20_000, Math.max(0, Math.round(v))) : undefined);
+	const turn = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? Math.min(5000, Math.max(-5000, Math.round(v))) : 0);
+	for (const raw of Array.isArray(given) ? given.slice(0, 60) : []) {
+		const op = (raw ?? {}) as Record<string, unknown>;
+		const [x, y] = [place(op.x), place(op.y)];
+		if (op.do === "click" && x !== undefined && y !== undefined) ops.push({ do: "click", x, y, button: op.button === "right" || op.button === "middle" ? op.button : "left", count: op.count === 2 || op.count === 3 ? op.count : 1 });
+		else if (op.do === "move" && x !== undefined && y !== undefined) ops.push({ do: "move", x, y });
+		else if (op.do === "drag" && x !== undefined && y !== undefined && place(op.x2) !== undefined && place(op.y2) !== undefined) ops.push({ do: "drag", x, y, x2: place(op.x2)!, y2: place(op.y2)! });
+		else if (op.do === "wheel" && (turn(op.dx) || turn(op.dy))) ops.push({ do: "wheel", dx: turn(op.dx), dy: turn(op.dy) });
+		else if (op.do === "text" && typeof op.text === "string" && op.text) ops.push({ do: "text", text: op.text.slice(0, 4000) });
+		// A key by its name, with what is held down with it: "Enter", "Shift+Tab", "Meta+KeyA".
+		else if (op.do === "key" && typeof op.key === "string" && /^[A-Za-z0-9]{1,20}(\+[A-Za-z0-9]{1,20}){0,4}$/.test(op.key)) ops.push({ do: "key", key: op.key });
+		else if (op.do === "back" || op.do === "forward" || op.do === "reload") ops.push({ do: op.do });
+		else if ((op.do === "tab" || op.do === "closetab") && Number.isInteger(op.index) && (op.index as number) >= 0 && (op.index as number) < 100) ops.push({ do: op.do, index: op.index as number });
+		else if (op.do === "newtab") ops.push({ do: "newtab" });
+		else if (op.do === "size" && place(op.w) !== undefined && place(op.h) !== undefined) ops.push({ do: "size", w: Math.min(2560, Math.max(320, place(op.w)!)), h: Math.min(2000, Math.max(240, place(op.h)!)) });
+	}
+	return ops;
+}
+
+/** A value as it is written in code. (JSON, with the two line ends JSON leaves as they are written out.) */
+const literal = (value: unknown) => JSON.stringify(value).replace(/\u2028/g, "\\u2028").replace(/\u2029/g, "\\u2029");
+
+/**
+ * The owner's hand in the page: run by Playwright's server, in the tab the agent works in. The
+ * text is fixed; __OPS__ is replaced by what cleanOps let through, as a value. Nothing a page or
+ * an agent wrote is part of it, and it hands nothing of the page back.
+ */
+const OWNER_HAND = `async (page) => {
+	const ops = __OPS__;
+	for (const o of ops) {
+		if (o.do === "click") await page.mouse.click(o.x, o.y, { button: o.button, clickCount: o.count });
+		else if (o.do === "drag") {
+			await page.mouse.move(o.x, o.y);
+			await page.mouse.down();
+			await page.mouse.move(o.x2, o.y2, { steps: 12 });
+			await page.mouse.up();
+		} else if (o.do === "text") await page.keyboard.type(o.text);
+		else if (o.do === "key") await page.keyboard.press(o.key);
+		else if (o.do === "back") await page.goBack({ timeout: 10000 }).catch(() => {});
+		else if (o.do === "forward") await page.goForward({ timeout: 10000 }).catch(() => {});
+		else if (o.do === "reload") await page.reload({ timeout: 15000 }).catch(() => {});
+		else if (o.do === "size") await page.setViewportSize({ width: o.w, height: o.h });
+	}
+	return true;
+}`;
+
+/**
+ * The door for the owner's own window. A small server on the loopback that answers the daemon
+ * and nobody else: it writes where it listens and the word to say into `file`, which lies in
+ * pine's home where no agent reads, and whoever does not say the word gets nothing. The browser
+ * itself cannot come here either: its guard refuses the loopback.
+ */
+export async function startViewDoor(view: BrowserView, file: string): Promise<{ port: number; token: string; close(): void }> {
+	const token = crypto.randomBytes(32).toString("hex");
+	const allowed = (said: string | undefined) => {
+		const [a, b] = [Buffer.from(said ?? ""), Buffer.from(`Bearer ${token}`)];
+		return a.length === b.length && crypto.timingSafeEqual(a, b);
+	};
+	const body = (req: http.IncomingMessage) =>
+		new Promise<any>((resolve, reject) => {
+			let text = "";
+			req.on("data", (chunk) => {
+				text += chunk;
+				if (text.length > 200_000) reject(new Error("too long"));
+			});
+			req.on("end", () => {
+				try {
+					resolve(JSON.parse(text || "{}"));
+				} catch (e) {
+					reject(e);
+				}
+			});
+			req.on("error", reject);
+		});
+	const server = http.createServer(async (req, res) => {
+		const json = (value: unknown, status = 200) => res.writeHead(status, { "content-type": "application/json", "cache-control": "no-store" }).end(JSON.stringify(value));
+		// A page in some browser never gets here with the word; one that tries says where it comes from.
+		if (!allowed(req.headers.authorization) || req.headers.origin !== undefined) return json({ error: "not for you" }, 401);
+		try {
+			const at = `${req.method} ${(req.url ?? "").split("?")[0]}`;
+			if (at === "GET /state") return json(await view.state());
+			if (at === "GET /frame") {
+				const picture = await view.frame();
+				return picture ? res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" }).end(picture) : res.writeHead(204).end();
+			}
+			if (at === "POST /input") return json(await view.input((await body(req)).ops));
+			if (at === "POST /open") return json(await view.open((await body(req)).url));
+			if (at === "POST /embed") return view.embed((await body(req)).on === true), json({ ok: true });
+			json({ error: "not found" }, 404);
+		} catch (e) {
+			json({ error: e instanceof Error ? e.message : String(e) }, 400);
+		}
+	});
+	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
+	const port = (server.address() as net.AddressInfo).port;
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	// Whole or not at all: the daemon may be reading at this moment.
+	fs.writeFileSync(`${file}.tmp`, JSON.stringify({ port, token, pid: process.pid }), { mode: 0o600 });
+	fs.renameSync(`${file}.tmp`, file);
+	return {
+		port,
+		token,
+		close: () => {
+			fs.rmSync(file, { force: true });
+			server.closeAllConnections();
+			server.close();
+		},
+	};
+}
+
 export interface BrowserServer {
 	/** Starts Playwright's server, with a window or without. */
 	launch(headed: boolean): ChildProcess;
@@ -286,8 +472,12 @@ export interface BrowserServer {
  * are refused, calls run one after another, and the browser is restarted when its window is to
  * appear or to go. Returns what takes the client's lines.
  */
-export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string): void; close(): void; child(): ChildProcess } {
+export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string): void; close(): void; child(): ChildProcess; view: BrowserView } {
 	let headed = !!o.headed;
+	/** The owner's own window shows this browser (the Pine app): browser_show opens no other. */
+	let embedded = false;
+	/** The owner's hand was in the browser since the agent last looked. */
+	let shared = false;
 	/** The address of the page that is open, to open it again after a restart. */
 	let page: string | undefined;
 	/** The client's first message, said again to a browser that is started later. */
@@ -310,7 +500,7 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 			for (const answer of own.values()) answer({ error: { message: "the browser ended" } });
 			io.ended();
 		});
-		readline.createInterface({ input: c.stdout! }).on("line", (line) => fromBrowser(c, line));
+		onLines(c.stdout!, (line) => fromBrowser(c, line));
 		return c;
 	};
 	let child = start();
@@ -372,10 +562,17 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 	const next = () => {
 		if (inFlight !== undefined || !waiting.length) return;
 		inFlight = waiting.shift();
+		if (inFlight.job) return void inFlight.job().finally(() => ((inFlight = undefined), next()));
 		if (isWindowTool(String(inFlight.params?.name))) return void turn(inFlight);
-		if (headed) return void guarded(inFlight);
+		if (headed || shared) return void guarded(inFlight);
 		write(inFlight);
 	};
+	/** Something this server does itself (a picture for the owner, what the owner did): it waits its turn like a call of the agent's. */
+	const between = <T>(job: () => Promise<T>): Promise<T> =>
+		new Promise<T>((resolve, reject) => {
+			waiting.push({ job: () => job().then(resolve, reject) });
+			next();
+		});
 	const answered = (msg: unknown) => {
 		io.send(msg);
 		inFlight = undefined;
@@ -402,7 +599,15 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 	const turn = async (msg: any) => {
 		const show = msg.params.name === "browser_show";
 		const say = (text: string, isError = false) => answered({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text }], ...(isError ? { isError: true } : {}) } });
-		if (headed === show) return say(show ? "The browser is already a window on your owner's screen." : "The browser has no window.");
+		if (headed === show) return say(show ? "The browser is already a window on your owner's screen." : embedded ? "The browser has no window of its own. Your owner sees it in the Pine app, beside this conversation." : "The browser has no window.");
+		// The owner's own window shows the browser already: nothing is started anew, and no second window opens.
+		if (show && embedded) {
+			if (page !== undefined) seen ??= await tabsNow();
+			shared = true;
+			return say(
+				`Your owner sees the browser in the Pine app, in the Browser view beside this conversation, and uses it there too: they open pages in it, log in, solve a captcha, confirm something. Tell them to look there. From now on, what they ask you to find or do on the web, do on the page they are on; look at it first (browser_snapshot), because they may have changed it. When they have to do something themselves, wait until they say they are done.${page === undefined ? " No page is open yet: open the one they are to see." : ""}`,
+			);
+		}
 		const at = page;
 		const state = path.join(io.scratch, `state-${process.pid}-${Date.now()}.json`);
 		try {
@@ -460,11 +665,89 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 		if (current?.notice && Array.isArray(msg.result?.content)) msg.result.content.unshift({ type: "text", text: current.notice });
 		if (!current) return io.send(msg);
 		// What the tabs are after the agent's own call is what it has seen. (A closed browser is not asked: asking would open it again.)
-		if (!headed || closed) return (seen = undefined), answered(msg);
+		// Without a window the agent has now seen what the owner's hand left: nothing is compared again until it moves.
+		if (!headed || closed) return (seen = undefined), (shared = false), answered(msg);
 		void tabsNow().then((tabs) => ((seen = tabs), answered(msg)));
 	};
 
+	// ---- the owner's own window ------------------------------------------------------------------
+
+	/** Where the browser is, without waking one that has no page: asking a closed browser would open it. */
+	const where = async (error?: string): Promise<ViewState> => {
+		const tabs = page === undefined ? undefined : await tabsNow();
+		const front = tabs?.tabs[tabs.current];
+		if (front && front.url !== "about:blank") page = front.url;
+		return { open: page !== undefined, tabs: (tabs?.tabs ?? []).map((t) => ({ title: shown(t.title, 200), url: shown(t.url, 2000) })), current: tabs?.current ?? 0, window: headed, ...(error ? { error: shown(error, 300) } : {}) };
+	};
+	/** Before the owner's hand moves: what the agent last saw is kept, so that its next call notices. */
+	const touch = async () => {
+		// (With no page open the agent saw no tab at all: one the owner opens is new to it.)
+		if (!headed && !shared) seen = page === undefined ? { tabs: [], current: 0 } : await tabsNow();
+		shared = true;
+	};
+	const failure = (msg: any) => (msg.error || msg.result?.isError ? (textOf(msg).split("\n").find((l) => l.trim() && !l.startsWith("###")) ?? "the browser did not do it").replace(/^Error: /, "") : undefined);
+	let framing: Promise<Buffer | undefined> | undefined;
+	const shot = `pine-view-${process.pid}.jpeg`;
+	const view: BrowserView = {
+		embed: (on) => void (embedded = on),
+		state: () => between(() => where()),
+		frame: () =>
+			(framing ??= between(async () => {
+				if (page === undefined) return undefined;
+				const msg = await ask("tools/call", { name: "browser_take_screenshot", arguments: { type: "jpeg", filename: shot } }, 10_000);
+				const file = failure(msg) ? undefined : textOf(msg).match(/\]\((\/[^)\s#]+)\)/)?.[1];
+				if (!file) return undefined;
+				try {
+					// Only a picture this server asked for, where it asked for it.
+					const real = fs.realpathSync(file);
+					return real.startsWith(fs.realpathSync(io.scratch) + path.sep) && path.basename(real) === shot ? fs.readFileSync(real) : undefined;
+				} catch {
+					return undefined;
+				}
+			}).finally(() => (framing = undefined))),
+		input: (given) =>
+			between(async () => {
+				const ops = cleanOps(given);
+				if (page === undefined || !ops.length) return where();
+				// Looking is not touching: the pointer over the page, the wheel and the size of the room leave the agent's page where it was.
+				if (ops.some((op) => !["move", "wheel", "size"].includes(op.do))) await touch();
+				let error: string | undefined;
+				const tool = async (name: string, args: unknown, ms = 10_000) => void (error = failure(await ask("tools/call", { name, arguments: args }, ms)) ?? error);
+				// In the order they were done. What clicks and types goes together, as values into code that is this
+				// server's own and fixed. The wheel and the pointer move often and change no page: they go the
+				// short way, which does not wait for a page to settle.
+				let hand: ViewOp[] = [];
+				const done = async () => {
+					if (hand.length) await tool("browser_run_code_unsafe", { code: OWNER_HAND.replace("__OPS__", () => literal(hand)) }, 40_000);
+					hand = [];
+				};
+				for (const op of ops) {
+					if (op.do !== "wheel" && op.do !== "move" && op.do !== "tab" && op.do !== "newtab" && op.do !== "closetab") {
+						hand.push(op);
+						continue;
+					}
+					await done();
+					if (op.do === "wheel") await tool("browser_mouse_wheel", { deltaX: op.dx, deltaY: op.dy });
+					else if (op.do === "move") await tool("browser_mouse_move_xy", { x: op.x, y: op.y });
+					else if (op.do === "newtab") await tool("browser_tabs", { action: "new" });
+					else await tool("browser_tabs", { action: op.do === "tab" ? "select" : "close", index: op.index });
+				}
+				await done();
+				return where(error);
+			}),
+		open: (address) =>
+			between(async () => {
+				const url = webAddress(address);
+				if (!url) return where("That is no web address.");
+				await touch();
+				const msg = await ask("tools/call", { name: "browser_navigate", arguments: { url } }, 60_000);
+				const error = failure(msg);
+				return where(error && io.refused.length ? `the browser was refused ${io.refused.at(-1)}` : error);
+			}),
+	};
+
 	return {
+		view,
 		child: () => child,
 		close: () => child.stdin!.end(),
 		line(line: string) {
@@ -494,7 +777,7 @@ if (import.meta.main) {
 	const cli = path.join(path.dirname(createRequire(import.meta.url).resolve("@playwright/mcp")), "cli.js");
 	const scratch = fs.mkdtempSync(path.join(os.tmpdir(), "pine-browser-"));
 	const proxy = await startGuardProxy(o, (line) => process.stderr.write(`[pine browser] ${line}\n`));
-	const caps = [...new Set(["storage", ...(o.caps ?? "").split(",").map((c) => c.trim()).filter(Boolean)])].join(",");
+	const caps = [...new Set(["storage", "vision", ...(o.caps ?? "").split(",").map((c) => c.trim()).filter(Boolean)])].join(",");
 	// Playwright's server takes switches for the browser from a configuration file only.
 	const sealed = path.join(scratch, "pine-browser.json");
 	fs.writeFileSync(sealed, JSON.stringify({ browser: { launchOptions: { args: NO_WAY_AROUND } } }));
@@ -518,7 +801,9 @@ if (import.meta.main) {
 		...(o.viewport ? ["--viewport-size", o.viewport] : []),
 		...(o.extraArgs ?? []),
 	];
+	let door: { close(): void } | undefined;
 	const stop = () => {
+		door?.close();
 		server.child().kill();
 		fs.rmSync(scratch, { recursive: true, force: true });
 		process.exit(0);
@@ -532,5 +817,6 @@ if (import.meta.main) {
 	});
 	process.on("SIGTERM", stop);
 	process.on("SIGINT", stop);
-	readline.createInterface({ input: process.stdin }).on("line", (line) => server.line(line)).on("close", () => server.close());
+	if (o.viewFile && o.window) door = await startViewDoor(server.view, o.viewFile).catch(() => undefined);
+	onLines(process.stdin, (line) => server.line(line), () => server.close());
 }

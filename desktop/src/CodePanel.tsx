@@ -20,6 +20,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
+import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
@@ -451,6 +452,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 							{ value: "files", label: "Files" },
 							{ value: "changes", label: "Changes" },
 							{ value: "turn", label: "Last turn" },
+							{ value: "browser", label: "Browser" },
 							{ value: "output", label: "Output" },
 							{ value: "running", label: "Running", badge: tab.programs.length || undefined },
 						]}
@@ -465,6 +467,8 @@ export function CodePanel({ tab }: { tab: Tab }) {
 					<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
 				) : view === "files" ? (
 					<Files tab={tab} file={state.file} setFile={setFile} />
+				) : view === "browser" ? (
+					<BrowserView tab={tab} />
 				) : view === "output" ? (
 					<Output tab={tab} />
 				) : (

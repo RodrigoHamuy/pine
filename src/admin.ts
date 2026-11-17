@@ -273,7 +273,7 @@ export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore },
 		}
 		if (isInside(workspace, root) || isInside(dir, root)) fs.rmSync(path.join(snapshots, name), { recursive: true, force: true });
 	}
-	for (const base of [path.join(cfg.dataDir, "programs"), path.join(cfg.dataDir, "browser-local")]) {
+	for (const base of [path.join(cfg.dataDir, "programs"), path.join(cfg.dataDir, "browser-local"), path.join(cfg.dataDir, "browser-view")]) {
 		for (const name of fs.existsSync(base) ? fs.readdirSync(base) : []) if (decodeURIComponent(name).startsWith(`${id}:`)) fs.rmSync(path.join(base, name), { recursive: true, force: true });
 	}
 	// What its event sources kept on disk ("name@agent").

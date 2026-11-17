@@ -267,6 +267,7 @@ agent's workspace):
 | Files | The folder as a tree, a search by name, and the editor |
 | Changes | What differs from the last commit (git): each file with its counts, and its diff on a click |
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
+| Browser | The browser the agent of this conversation works in, live, and yours to use too. See "The browser" below |
 | Output | The tool calls of the last messages, each with all it printed |
 | Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop |
 
@@ -282,6 +283,27 @@ Saving goes through the daemon like everything else (`POST /agents/<id>/view/wri
 daemon writes the file inside a sandbox that reaches only that folder, so that a link an agent
 planted in its folder cannot make your save land somewhere else ([security.md](security.md)).
 On a system without a sandbox the daemon does not write, and the app says so.
+
+### The browser
+
+The Browser view (`⇧⌘B`) shows the browser of the conversation: the same one the agent opens
+pages in, with its logins. In the terminal UI that browser has no window until the agent puts
+one on your screen (`browser_show`); in the app it is in the panel, and no other window opens.
+
+| | |
+|---|---|
+| What you see | The page the agent is on, as it is right now, a few times a second. The page is laid out for the room the panel has, so it is shown at its real size; make the panel wider and the page gets wider. The browser's tabs are a row of tabs above the page, the agent's and yours alike |
+| What you can do | Click, type, turn the wheel, drag, paste (`⌘V` types what is in your clipboard), go back and forward, load again, open a tab (`+`), choose one, close one (the last one stays), and type an address into the line above the page. Enough to log in, solve a captcha or confirm something yourself |
+| An address of your own | Opened like any other, through pine's guard. One on this computer or your network (`localhost:3000`) is allowed for this conversation by your typing it, as a yes to the agent's question would. pine's own control port stays closed |
+| When the agent wants you to look | It calls `browser_show`: the panel opens on the Browser view. While the app runs, that call opens no window on your screen |
+| What the agent knows | What you do there, it sees when it next looks at the page. When you took the browser to another page, the agent is told so before it acts, and does not act on a page it has not seen ([mcp.md](mcp.md), "Seeing the browser, and logging in yourself") |
+| No page | Until the agent opens one, or you type an address, there is nothing to show. A conversation whose agent has not worked yet since pine started has no browser running: send it a message first |
+
+It is a picture of the page, and not the page: nothing of a web page is loaded into the app's
+window. So what a browser does around a page is not there: no downloads to your disk, no file
+to choose for an upload, no passkey or system dialog, no copying out of the page, and text is
+typed without an input method. For those, close the app's Browser view and ask the agent in
+the terminal UI to show the browser, or set `"headed": true` for the browser.
 
 ## Settings
 
@@ -335,6 +357,7 @@ the agent to write. So:
 | Notifications and the window's title | pine's own words only |
 | What is heard | Text for the input: never sent by itself |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
+| The agent's browser in the panel | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | What the app itself asks the web | One thing: GitHub, for pine's last release (see "A newer version"). The question carries nothing about this Mac, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
@@ -395,6 +418,7 @@ desktop/
     App.tsx        the window: side bar, tabs, palette, the dialogs for approvals and questions
     Conversation.tsx, Composer.tsx, markdown.tsx     a conversation, the input, an answer drawn
     CodePanel.tsx  changes, files and the editor, output, what is running
+    Browser.tsx    the agent's browser in the panel: its page as a picture, and what is done in it handed back
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the

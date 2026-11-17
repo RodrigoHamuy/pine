@@ -218,6 +218,95 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	await sees(".side-update >> text=Pine 9.9.9 is available");
 });
 
+test("the agent's browser is shown in the panel as a picture, and what is done in it goes back through the daemon", async () => {
+	// A stand-in for the door of the browser of main's own conversation: it says where it is in pine's data,
+	// as the real one does, hands out one picture and notes what it is asked.
+	const picture = Buffer.from(await app.evaluate(({ nativeImage }: any) => nativeImage.createFromBitmap(Buffer.alloc(400 * 300 * 4, 180), { width: 400, height: 300 }).toJPEG(70).toString("base64")), "base64");
+	const word = "cd".repeat(32);
+	const asked: Array<{ at: string; body: any }> = [];
+	const where = { open: true, tabs: [{ title: "<img src=x onerror=window.hacked=3>Okapi shop", url: "https://shop.example/" }, { title: "Second", url: "https://shop.example/two" }], current: 0, window: false };
+	const door = http.createServer(async (req, res) => {
+		if (req.headers.authorization !== `Bearer ${word}`) return void res.writeHead(401).end();
+		let text = "";
+		for await (const chunk of req) text += chunk;
+		if (req.url === "/frame") return void res.writeHead(200, { "content-type": "image/jpeg" }).end(picture);
+		if (req.method === "POST") asked.push({ at: req.url!, body: JSON.parse(text || "{}") });
+		res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify(req.url === "/open" ? { ...where, error: "the browser was refused that address" } : where));
+	});
+	await new Promise<void>((r) => door.listen(0, "127.0.0.1", r));
+	const file = path.join(home, "data", "browser-view", `${encodeURIComponent("main:main")}.json`);
+	write(file, JSON.stringify({ port: (door.address() as any).port, token: word, pid: 1 }));
+	const ops = () => asked.filter((a) => a.at === "/input").flatMap((a) => a.body.ops as any[]);
+	const waitFor = async (what: string, test: () => boolean) => {
+		for (let i = 0; i < 100 && !test(); i++) await new Promise((r) => setTimeout(r, 50));
+		assert.ok(test(), `${what}. Asked: ${JSON.stringify(asked)}`);
+	};
+	await page.click(".tab >> nth=0");
+	const had = Boolean(await page.$(".code"));
+	try {
+		await menu("code-browser");
+		// The page is a picture, drawn when it is whole; its address is text in the line above it.
+		await sees(".browser-page canvas:not(.blank)");
+		assert.equal(await page.inputValue(".browser-address"), "https://shop.example/");
+		assert.deepEqual(await page.$eval(".browser-page canvas", (c: HTMLCanvasElement) => [c.width, c.height]), [400, 300]);
+		// The app said that it shows the browser itself, so the agent's browser opens no window.
+		await waitFor("the door was told that the app shows the browser", () => asked.some((a) => a.at === "/input" && a.body.ops.some((o: any) => o.do === "size")));
+		const size = ops().find((o) => o.do === "size");
+		const room = await page.$eval(".browser-page", (el: Element) => ({ w: Math.round(el.getBoundingClientRect().width), h: Math.round(el.getBoundingClientRect().height) }));
+		assert.deepEqual([size.w, size.h], [room.w, room.h], "the page is laid out for the room the panel has");
+		// A page's title is text wherever it stands: nothing of it becomes part of this window.
+		assert.match(await page.textContent(".browser-tab.on"), /<img src=x onerror=window\.hacked=3>Okapi shop/);
+		assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
+		await shot("05-browser");
+
+		// A click in the picture is a click at that place in the page, whatever size the picture is drawn at.
+		const box = await page.$eval(".browser-page canvas", (c: HTMLCanvasElement) => ({ x: c.getBoundingClientRect().left, y: c.getBoundingClientRect().top, k: c.width / c.getBoundingClientRect().width }));
+		await page.mouse.click(box.x + 100, box.y + 60);
+		await waitFor("the click arrived", () => ops().some((o) => o.do === "click"));
+		const click = ops().find((o) => o.do === "click");
+		assert.ok(Math.abs(click.x - 100 * box.k) <= 1 && Math.abs(click.y - 60 * box.k) <= 1 && click.button === "left", JSON.stringify(click));
+		// Letters typed in a row go as one text, a key by its name, and what is pasted as text too.
+		await page.keyboard.type("okapi");
+		await page.keyboard.press("Enter");
+		await page.keyboard.press("Meta+KeyA");
+		await waitFor("what was typed arrived", () => ops().some((o) => o.do === "key" && o.key === "Meta+KeyA"));
+		assert.equal(ops().filter((o) => o.do === "text").map((o) => o.text).join(""), "okapi");
+		assert.ok(ops().filter((o) => o.do === "text").length < 5, "letters are not sent one by one");
+		assert.deepEqual(ops().filter((o) => o.do === "key").map((o) => o.key), ["Enter", "Meta+KeyA"]);
+		// The wheel adds up, a tab is chosen by a click, back is a button.
+		await page.mouse.wheel(0, 120);
+		await page.mouse.wheel(0, 120);
+		await page.click(".browser-tab >> nth=1");
+		// A tab of the owner's own, and one closed.
+		await page.click(".browser-tabs .btn[title='A new tab']");
+		await page.click(".browser-tab >> nth=1 >> .browser-tab-close", { force: true });
+		await waitFor("a new tab and a closed one arrived", () => ops().some((o) => o.do === "newtab") && ops().some((o) => o.do === "closetab" && o.index === 1));
+		await page.click(".browser-bar .btn[title='Back']");
+		await waitFor("wheel, tab and back arrived", () => ["wheel", "tab", "back"].every((d) => ops().some((o) => o.do === d)));
+		// (How far a turn of the wheel goes is the system's to say; that it went down, and all of it, is what counts.)
+		assert.ok(ops().filter((o) => o.do === "wheel").reduce((sum, o) => sum + o.dy, 0) >= 240, JSON.stringify(ops().filter((o) => o.do === "wheel")));
+		assert.equal(ops().find((o) => o.do === "tab").index, 1);
+		// An address typed above the picture is opened by the daemon's hand, and a no is said.
+		await page.fill(".browser-address", "localhost:5173");
+		await page.press(".browser-address", "Enter");
+		await waitFor("the address arrived", () => asked.some((a) => a.at === "/open"));
+		assert.deepEqual(asked.find((a) => a.at === "/open")!.body, { url: "localhost:5173" });
+		await sees(".toast >> text=the browser was refused that address");
+		// The picture came through the app's own road for pictures, and the page asked the web for nothing.
+		assert.equal(await page.evaluate(() => performance.getEntriesByType("resource").filter((r) => /^https?:/.test(r.name)).length), 0);
+
+		// Without a browser the view says so and draws nothing.
+		fs.rmSync(file);
+		await sees(".browser .empty >> text=No page is open");
+	} finally {
+		// (The panel as it was, for the tests that follow.)
+		await menu("code-agent");
+		if (!had) await menu("code");
+		fs.rmSync(file, { force: true });
+		door.close();
+	}
+});
+
 test("a message is answered, with the turn's work folded into a line", async () => {
 	const steps = [{ tools: [{ name: "read", args: { path: "notes.md" } }], text: "Let me look at the notes first." }, { text: "The notes say **first line**.\n\n```ts\nconst a = 1;\n```\n\n<details><summary>Full file</summary>\n\nfirst line\n\n</details>\n\n[the docs](https://example.com/docs)" }];
 	await page.fill(".composer textarea", mockMsg(steps, "What do the notes say? "));

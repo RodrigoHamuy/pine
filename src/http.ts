@@ -138,6 +138,14 @@ export class HttpServer {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, { folder: this.manager.folderOf(parts[1], q.get("session") ?? "main"), workspace: this.cfg.agents[parts[1]].workspace });
 				}
+				// The browser of a conversation, for a UI that shows it itself: where it is, and the page as a picture.
+				if (parts[0] === "agents" && parts[2] === "browser" && (parts.length === 3 || (parts[3] === "frame" && parts.length === 4))) {
+					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+					const session = q.get("session") ?? "main";
+					if (parts.length === 3) return send(200, await this.manager.browserState(parts[1], session));
+					const bytes = await this.manager.browserFrame(parts[1], session);
+					return sendPicture(bytes ? { mime: "image/jpeg", bytes } : undefined);
+				}
 				// What a conversation's commands left running, for a UI to show and to stop.
 				if (parts[0] === "agents" && parts[2] === "programs" && parts.length === 3) {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
@@ -341,6 +349,17 @@ export class HttpServer {
 					throw new HttpError(400, errText(e));
 				}
 			}
+			// What the owner does in a conversation's browser, in a UI that shows it: clicks and keys, or an address.
+			// Only here: no agent has a tool for it, and the browser's own server checks every piece.
+			if (parts[0] === "agents" && parts[2] === "browser" && (parts[3] === "input" || parts[3] === "open") && parts.length === 4) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				const session = String(body.session ?? "main");
+				if (parts[3] === "input") return send(200, await this.manager.browserInput(parts[1], session, body.ops));
+				if (typeof body.url !== "string" || !body.url.trim()) throw new HttpError(400, "url required");
+				return send(200, await this.manager.browserOpen(parts[1], session, body.url));
+			}
+			// A UI that shows the browser itself says so, again and again while it runs: browser_show then opens no window.
+			if (url.pathname === "/browser/embedded") return this.manager.browserEmbedded(), send(200, { ok: true });
 			if (parts[0] === "agents" && parts[2] === "programs" && parts[3] === "stop" && parts.length === 4) {
 				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 				return send(200, { stopped: this.manager.stopProgram(parts[1], String(body.session ?? "main"), Number(body.id)) });

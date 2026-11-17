@@ -2156,6 +2156,105 @@ select.input {
 	display: flex;
 	flex-direction: column;
 }
+/* ---- the agent's browser, in the panel ------------------------------------------------------------- */
+.browser-bar {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 6px 8px;
+	border-bottom: 1px solid var(--line-soft);
+}
+.browser-address {
+	flex: 1;
+	min-width: 0;
+	height: 26px;
+	margin-left: 4px;
+	font-size: 12.5px;
+}
+.browser-tabs {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 2px;
+	padding: 4px 8px;
+	overflow-x: auto;
+	border-bottom: 1px solid var(--line-soft);
+}
+.browser-tab {
+	flex: 0 1 180px;
+	min-width: 60px;
+	height: 24px;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 0 4px 0 8px;
+	border-radius: var(--r-s);
+	color: var(--muted);
+	font-size: 12px;
+}
+.browser-tab-close {
+	flex: none;
+	width: 16px;
+	height: 16px;
+	display: grid;
+	place-items: center;
+	padding: 0;
+	border: none;
+	border-radius: 4px;
+	background: none;
+	color: var(--faint);
+	visibility: hidden;
+}
+.browser-tab:hover .browser-tab-close,
+.browser-tab.on .browser-tab-close {
+	visibility: visible;
+}
+.browser-tab-close:hover {
+	background: var(--press);
+	color: var(--text);
+}
+.browser-tab:hover {
+	background: var(--hover);
+}
+.browser-tab.on {
+	background: var(--press);
+	color: var(--text);
+}
+/* The page keeps its shape: as wide as the panel, and scrolled down to when it is taller than the room. */
+.browser-page {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	position: relative;
+	background: var(--press);
+}
+.browser-page canvas {
+	display: block;
+	width: 100%;
+	height: auto;
+	background: #fff;
+	outline: none;
+	cursor: default;
+}
+.browser-page canvas.blank {
+	visibility: hidden;
+}
+.browser-wait {
+	position: absolute;
+	inset: 0;
+	display: grid;
+	place-items: center;
+}
+.browser-foot {
+	flex: none;
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 5px 10px;
+	font-size: 11.5px;
+	border-top: 1px solid var(--line-soft);
+}
 .code-steps {
 	flex: none;
 	padding: 10px 12px;

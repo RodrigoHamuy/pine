@@ -935,7 +935,8 @@ itself can be fooled by a page, but it has nothing to give away and cannot act.
 - **A signed-in browser.** With a persistent `profile`, the bundled browser acts as you on every
   site you signed in to. A hostile page can ask the agent to click things there. Keep signed-in
   profiles for tasks you start and watch yourself. The same goes, without a `profile`, for
-  what you log in to in a window the agent opened for you (`browser_show`): the agent is
+  what you log in to in a window the agent opened for you (`browser_show`), or in the Browser
+  view of the Pine app: the agent is
   logged in there too, for as long as that conversation's browser runs ([mcp.md](mcp.md)).
 - **The sandbox is the operating system's.** On macOS, `sandbox-exec` is deprecated but is
   what Apple's own tools and other agent runtimes use. On Linux, bubblewrap is what Flatpak

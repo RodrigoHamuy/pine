@@ -38,6 +38,7 @@ import { describeOptions } from "./sources.ts";
 import type { Scheduler } from "./timers.ts";
 import { pineTools } from "./tools.ts";
 import { type Program, Programs } from "./programs.ts";
+import { type BrowserState, BrowserViews } from "./browser-view.ts";
 import { Goals } from "./goals.ts";
 import { BACKGROUND_HELP, BACKGROUND_NOT_HERE, BACKGROUND_PARAM, backgroundRefused, endedNotice, startedText, tailOf, TIMEOUT_HINT } from "./background.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -56,7 +57,7 @@ const SILENT = /^\s*(NO_REPLY|SILENT)\s*$/;
  * say. Only an owner's conversation has local addresses the owner allowed, and only there may the
  * browser be put on the owner's screen.
  */
-export const browserSession = (owner: boolean, localFile: string): Record<string, unknown> => (owner ? { localFile, window: true } : { localFile: null, window: false });
+export const browserSession = (owner: boolean, localFile: string, viewFile?: string): Record<string, unknown> => (owner ? { localFile, window: true, viewFile: viewFile ?? null } : { localFile: null, window: false, viewFile: null });
 
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -350,6 +351,9 @@ export class AgentManager {
 	private warnedNoSandbox = new Set<string>();
 	/** Conversations ("agent:session") where the owner chose bypass although they have read outside content. */
 	private bypassAnyway = new Set<string>();
+	private readonly views: BrowserViews;
+	/** Until when a UI of the owner's counts as showing the browser itself (browserEmbedded). */
+	private embedUntil = 0;
 	/**
 	 * What the owner allowed "always" in a conversation ("agent:session" -> "server:<name>" or
 	 * "tool:<name>"), with the state the conversation was in. A yes given before the conversation
@@ -419,11 +423,60 @@ export class AgentManager {
 			(all) => this.kv.set("slot-pages", all),
 		);
 		this.programs = new Programs(path.join(deps.cfg.dataDir, "programs"));
+		this.views = new BrowserViews(path.join(deps.cfg.dataDir, "browser-view"));
 		this.denials = new Denials(deps.log, denialTools());
 		this.goals = new Goals(this, deps.log, sessionKey);
 		this.programs.onEnded = (conversation) => void this.tellEnded(conversation);
 		this.snapshots = new Snapshots(path.join(deps.cfg.dataDir, "snapshots"));
 		this.turns = new Turns({ kv: deps.kv, tasks: deps.tasks, snapshots: this.snapshots, log: deps.log });
+	}
+
+	// ---- the browser of a conversation, in a window of the owner's own (src/browser-view.ts) -------
+	// Reached from the control API only: the owner's own hand. No agent has a tool for any of it.
+
+	private browserOf(agentId: string, session: string): string {
+		if (!this.cfg.agents[agentId]) throw new Error(`unknown agent "${agentId}"`);
+		// A UI that asks about a conversation's browser is one that shows it.
+		this.browserEmbedded();
+		return `${agentId}:${sessionKey(session)}`;
+	}
+
+	/**
+	 * A UI of the owner's says that it shows the browser itself (the Pine app, again and again
+	 * while it runs). While that holds, browser_show opens no window: the owner is looking already.
+	 */
+	browserEmbedded(): void {
+		this.embedUntil = Date.now() + 90_000;
+	}
+
+	browserState(agentId: string, session: string): Promise<BrowserState> {
+		return this.views.state(this.browserOf(agentId, session));
+	}
+
+	/** The page as a picture (JPEG). Nothing while the conversation has no browser or no page open. */
+	browserFrame(agentId: string, session: string): Promise<Buffer | undefined> {
+		return this.views.frame(this.browserOf(agentId, session));
+	}
+
+	/** What the owner did in the picture: clicks, keys, the wheel. Checked by the browser's server, piece by piece. */
+	browserInput(agentId: string, session: string, ops: unknown): Promise<BrowserState> {
+		return this.views.input(this.browserOf(agentId, session), ops);
+	}
+
+	/**
+	 * The owner opens an address in a conversation's browser. One on this computer or the local
+	 * network is allowed for the conversation by that: the owner typed it into their own window,
+	 * which is the yes an agent's call would have to ask for. pine's control port stays closed.
+	 */
+	async browserOpen(agentId: string, session: string, url: string): Promise<BrowserState> {
+		const perm = this.browserOf(agentId, session);
+		if (!this.views.has(perm)) return { open: false, tabs: [], current: 0, window: false, error: "This conversation has no browser running. It starts when the agent first uses it." };
+		const local = localTarget(url);
+		if (local) {
+			if (this.cfg.http && local.port === this.cfg.http.port) return { ...(await this.views.state(perm)), error: `${local.key} is pine's own control port. It stays closed to the browser.` };
+			this.allowLocal(perm, local.key);
+		}
+		return this.views.open(perm, url);
 	}
 
 	/** The programs a conversation's commands left running (a development server, a watcher). */
@@ -489,6 +542,7 @@ export class AgentManager {
 		for (const a of Object.values(this.cfg.agents)) this.modelFor(a); // fail early on unknown models
 		// What the owner allowed a conversation holds until the daemon restarts: nothing is left over from the last run.
 		fs.rmSync(path.join(this.cfg.dataDir, "browser-local"), { recursive: true, force: true });
+		this.views.clear();
 		// Whatever was running when the daemon stopped is not resumed: its tool calls may have had effects.
 		for (const t of this.tasks.byStatus("running")) this.finish(t, "failed", "", "interrupted by a daemon restart", undefined);
 		for (const t of this.tasks.byStatus("pending")) this.enqueue(t);
@@ -2410,7 +2464,7 @@ export class AgentManager {
 				// The browser of an owner's conversation learns which local addresses the owner allowed there,
 				// and may be put on the owner's screen. A run started from outside gets neither, whatever the options say.
 				// App control: the profile holds this server only where the session may have it; here it learns where its helper is kept.
-				const extra = server.pine === "commands" ? { cwd: roots.cwd, sandbox: jail?.("restricted"), env: shellEnv(agent, roots, {}) } : server.pine === "browser" ? browserSession(live.trust === "owner", this.localFile(live.perm)) : server.pine === "computer" ? (this.computerFor(agent, live.trust, server) ?? {}) : {};
+				const extra = server.pine === "commands" ? { cwd: roots.cwd, sandbox: jail?.("restricted"), env: shellEnv(agent, roots, {}) } : server.pine === "browser" ? browserSession(live.trust === "owner", this.localFile(live.perm), profile.leaf ? undefined : this.views.file(live.perm)) : server.pine === "computer" ? (this.computerFor(agent, live.trust, server) ?? {}) : {};
 				pi.registerMcpServer(name, toPiMcp(name, server, extra));
 			}
 
@@ -2688,6 +2742,9 @@ export class AgentManager {
 				// host and port for the conversation. Nothing a page links or redirects to is asked about,
 				// and a run started from outside cannot ask at all.
 				const browser = server !== undefined && profile.mcp[server]?.pine === "browser" ? ((profile.mcp[server].options ?? {}) as { allowHosts?: string[]; denyHosts?: string[]; allowPrivate?: boolean }) : undefined;
+				// The agent wants the owner to see the browser. Where a window of the owner's own shows it already
+				// (the Pine app), the browser's server is told so, and opens no second one.
+				if (browser && tool.endsWith("__browser_show") && live.trust === "owner" && !profile.leaf) await this.views.embed(live.perm, Date.now() < this.embedUntil);
 				const local = browser && !browser.allowPrivate && live.trust === "owner" ? localTarget(input.url) : undefined;
 				if (local && !listed(browser!.denyHosts, local.host) && (!browser!.allowHosts?.length || listed(browser!.allowHosts, local.host)) && !this.grants.get(sessionId)?.local.includes(local.key)) {
 					if (cfg.http && local.port === cfg.http.port) return { block: true, reason: `${local.key} is pine's own control port. It stays closed to the browser; do not ask for it.` };

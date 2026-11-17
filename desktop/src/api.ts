@@ -331,6 +331,12 @@ export const api = {
 	folders: (agent: string) => get<Array<{ session: string; folder: string }>>(`${a(agent)}/folders`),
 	setFolder: (agent: string, session: string, folder: string | null) => post<{ folder?: string }>(`${a(agent)}/folder`, { session, folder }),
 	programs: (agent: string, session: string) => get<Program[]>(`${a(agent)}/programs${s(session)}`),
+	/** The browser of a conversation, for the panel beside it: where it is, what the owner does in it, an address the owner opens. */
+	browser: (agent: string, session: string) => get<BrowserState>(`${a(agent)}/browser${s(session)}`),
+	browserInput: (agent: string, session: string, ops: unknown[]) => post<BrowserState>(`${a(agent)}/browser/input`, { session, ops }),
+	browserOpen: (agent: string, session: string, url: string) => post<BrowserState>(`${a(agent)}/browser/open`, { session, url }),
+	/** This app shows the browser itself: said again and again, so that the agent's browser opens no window of its own. */
+	browserEmbedded: () => post<{ ok: boolean }>("/browser/embedded"),
 	stopProgram: (agent: string, session: string, id: number) => post<{ stopped: boolean }>(`${a(agent)}/programs/stop`, { session, id }),
 	goal: (agent: string, session: string) => get<{ goal?: GoalInfo }>(`${a(agent)}/goal${s(session)}`),
 	setGoal: (agent: string, session: string, what: { objective: string } | { action: "pause" | "resume" | "clear" }) => post<{ goal?: GoalInfo; cleared?: boolean }>(`${a(agent)}/goal`, { session, ...what }),
@@ -415,7 +421,19 @@ export const api = {
 };
 
 /** Addresses of pictures, videos and sounds the daemon serves. The main process adds the token. */
+/** Where a conversation's browser is. `open`: a page is open and there is a picture of it. */
+export interface BrowserState {
+	open: boolean;
+	tabs: Array<{ title: string; url: string }>;
+	current: number;
+	window: boolean;
+	/** Why the last thing asked for was not done. */
+	error?: string;
+}
+
 export const media = {
+	/** The page of a conversation's browser as a picture; `n` only makes each address a new one. */
+	browser: (agent: string, session: string, n: number) => `pine-media://daemon${a(agent)}/browser/frame?session=${e(session)}&n=${n}`,
 	tool: (id: string) => `pine-media://daemon/media/tool/${e(id)}`,
 	task: (task: number, n: number) => `pine-media://daemon/tasks/${task}/images/${n}`,
 	workspace: (agent: string, file: string, session?: string) => `pine-media://daemon${a(agent)}/image?path=${e(file)}${session ? `&session=${e(session)}` : ""}`,

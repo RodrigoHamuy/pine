@@ -65,6 +65,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["I only installed the app, how do I get the pine command in my shell", /^desktop#pine-in-a-terminal/],
 		["does the mac app tell me when there is a newer version, or do I have to look myself", /^desktop#a-newer-version/],
 		["check for updates", /^desktop#a-newer-version/],
+		["can I watch the page the agent has open inside the app, and click in it myself", /^desktop#(the-browser|the-code-panel-and-the-editor)/],
+		["log in to a site for the agent in the mac app without a second window", /^(desktop#the-browser|mcp#)/],
 		["I installed the mac app, how do I use my ChatGPT or Claude subscription with it", /^desktop#the-first-start/],
 		["the app says the browser for the web tools is not on this Mac", /^(desktop#the-first-start|desktop#settings|operations#problems)/],
 		["my agent says its model cannot answer because the claude command is missing", /^(desktop#the-first-start|operations#problems)/],

@@ -73,7 +73,7 @@ export interface Attachment {
 	preview?: string;
 }
 
-export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running";
+export type CodeView = "agent" | "files" | "changes" | "turn" | "browser" | "output" | "running";
 
 const MEDIA_KIND = (name: string): "image" | "video" | "audio" | undefined => (/\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm|m4v)$/i.test(name) ? "video" : /\.(wav|mp3|m4a|ogg|flac|aiff?)$/i.test(name) ? "audio" : undefined);
 export const mediaKind = MEDIA_KIND;
@@ -359,7 +359,10 @@ export class Store extends Model {
 		for (const a of this.agents) learnHome(a.workspace);
 		void this.checkBrowser(true);
 		for (const t of this.timers) clearInterval(t);
-		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000), window.setInterval(() => void this.refreshAgents(), 8000)];
+		// The app shows an agent's browser itself, in the panel: the daemon is told so while the app runs, and the browser opens no window.
+		const embedded = () => void api.browserEmbedded().catch(() => {});
+		embedded();
+		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000), window.setInterval(() => void this.refreshAgents(), 8000), window.setInterval(embedded, 30_000)];
 		const first = this.agents.find((a) => a.main) ?? this.agents[0];
 		if (!first) return this.flash("this pine has no agents", "bad");
 		const saved = await api.tabs().catch(() => ({ tabs: [] as Array<{ agent: string; session: string }>, active: 0, code: false }));
@@ -1686,6 +1689,12 @@ export class Store extends Model {
 				tab.streamed.delete(p.task);
 				const key = `${p.task}:${p.call}`;
 				if (p.phase === "start") {
+					// The agent wants its owner to see the browser: it is in the panel beside the conversation.
+					if (/(^|_)browser_show$/.test(String(p.tool)) && tab === this.active && depth === 0) {
+						this.code = true;
+						this.codeView = "browser";
+						this.saveTabs();
+					}
 					tab.toolCalls++;
 					if (depth === 0) this.foldWords(tab, p.task);
 					const part: Extract<Part, { p: "tool" }> = { p: "tool", key, tool: p.tool, subject: p.subject ? short(oneLine(String(p.subject)), 200) : undefined, status: "run", depth };

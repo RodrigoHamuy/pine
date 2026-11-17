@@ -312,6 +312,10 @@ change:
 | `mcp__browser__browser_show` | The browser becomes a window on the screen of the computer pine runs on, on the page the agent is on, with the same logins. You can click and type in it; the agent goes on working in the same window. Takes about a second |
 | `mcp__browser__browser_hide` | The window closes and the browser goes on without one, on the same page, with the same logins |
 
+- In the Pine app there is no window to open: the browser is in the panel beside the
+  conversation, live, and yours to use there ([desktop.md](desktop.md), "The browser"). While
+  the app runs, `browser_show` opens the panel's Browser view and `browser_hide` has nothing
+  to close. What follows about sharing the browser holds there in the same way.
 - While the window is open you and the agent share one browser. The agent is told so, and that
   what you ask for on the web is to be done in that window, on the page you are on, not with a
   web search.

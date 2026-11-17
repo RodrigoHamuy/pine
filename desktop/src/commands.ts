@@ -64,7 +64,7 @@ export const COMMANDS: Command[] = [
 			const word = args.trim().toLowerCase();
 			if (!word) return store.command("code");
 			if (word === "off") return void ((store.code = false), store.touch());
-			if (!["agent", "changes", "turn", "files", "output", "running"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, output, running.");
+			if (!["agent", "changes", "turn", "files", "browser", "output", "running"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, browser, output, running.");
 			return store.command(`code-${word}`);
 		},
 	},

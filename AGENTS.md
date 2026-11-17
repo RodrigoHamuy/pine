@@ -71,6 +71,8 @@ src/
   router.ts         routes: filter, debounce, set / publish / call / agent
   timers.ts         the scheduler: cron, intervals and one-offs; a schedule with a task wakes an agent
   goals.ts          goal mode (`/goal`): a conversation's objective, the judge that says whether it is met, the task that calls the agent again
+  browser-view.ts   the bundled browser of a conversation for a UI that shows it itself (the Pine app's panel): the
+                    daemon's way through the door of the browser's server, for the control API alone
   programs.ts       what a conversation's commands left running: found by process group, listed, stopped;
                     commands in the background: started, found again after a restart, seen to end
   background.ts     what an agent reads about commands in the background: the shell tool's words, the message when one has ended
@@ -396,6 +398,26 @@ These are invariants. A change that breaks one needs a test that shows why it is
    "reaches nothing nearby" in `test/browser.test.ts` listens on a UDP port for anything that
    gets out: run it (`npm run test:live`) when Playwright MCP is upgraded, since the switches
    are Chromium's and a new build can rename one.
+   A UI of the owner's that shows the browser itself (the Pine app, in the panel beside a
+   conversation) gets it as pictures and hands back what the owner did in them. The browser stays
+   the one the agent has: the same process, the same guard proxy, the same blocked tools, no
+   window. `mcp/browser.ts` has a door for that (`startViewDoor`): a server on the loopback that
+   answers only who says the word it wrote into a file in pine's data (`viewFile`, which
+   `browserSession` hands to an owner's conversation and to nothing else: no run started from
+   outside, no sub-agent). The daemon goes through it for the control API alone
+   (`src/browser-view.ts`); no agent has a tool for it, and what the door says about a page (an
+   address, a title) is handed on as one line of text each. What the owner did is checked piece
+   by piece by the browser's server (`cleanOps`, `webAddress`) and goes into code of the server's
+   own as values (`OWNER_HAND`): `browser_run_code_unsafe` and the tools that act at a place in
+   the picture are used by the server for this and stay closed to the agent (`ALWAYS_BLOCKED`,
+   `VISION_TOOLS`). Never put text from a page, an agent or the owner into that code as code,
+   and never give the door a road that does more than look and act in the page. An address on
+   this computer that the owner types there is allowed for the conversation by it
+   (`browserOpen`: the control API is the owner); pine's control port is refused there too.
+   After the owner's hand was in the browser, the agent's next call is checked against what it
+   last saw, as with a window (`shared`, `guarded`). While such a UI says it is there
+   (`browserEmbedded`), the gate tells the browser's server before `browser_show`, which then
+   opens no window.
    The `http` source with `render` looks at a page with the same browser, in a helper of its
    own (`mcp/render.ts`, started by `rendered` in `src/watching.ts`), behind the same guard
    proxy, loopback included, and with what goes around a proxy switched off (QUIC, WebRTC
@@ -434,7 +456,8 @@ These are invariants. A change that breaks one needs a test that shows why it is
    app's page draws is content from outside (an answer can repeat a web page), so the page
    holds no token and has no Node: `desktop/electron/main.ts` makes every call for it, takes
    calls from the app's own page only, serves nothing but pictures, video and sound straight
-   from the daemon (`MEDIA`), opens only `http(s)` addresses and only in the owner's browser,
+   from the daemon (`MEDIA`; the page of an agent's browser is one of those pictures, drawn by
+   `desktop/src/Browser.tsx` and never loaded), opens only `http(s)` addresses and only in the owner's browser,
    and sets the policy that lets the page load nothing from the web. Text from an agent or a
    tool is drawn by `desktop/src/markdown.tsx` (parsed, cleaned, links with their address
    beside them, a picture on the web as a line to click) or as plain text, nowhere as HTML.
@@ -627,6 +650,12 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).
   No test reaches GitHub, and what would open in a browser is noted instead (`shell.openExternal`).
+- The browser in the app's panel is tested without a browser: the relay on its stand-in for
+  Playwright's server (`FAKE_BROWSER` in `test/browser.test.ts`, which also plays the owner's
+  hand), the control API and the app on a stand-in for the browser's door (a file in the test
+  home's `data/browser-view/` that names a server of the test's own). The `live:` test in
+  `desktop/test/browser-live.test.ts` (`PINE_LIVE=1`) puts the real browser behind the real
+  app, on a page of its own on the loopback.
 - `pine` for a terminal (`desktop/electron/command.ts`) is tested without a window
   (`desktop/test/command.test.ts`), on folders of the test's own as the PATH and the home:
   no test writes into a folder of the real PATH, and none runs what asks for a password.

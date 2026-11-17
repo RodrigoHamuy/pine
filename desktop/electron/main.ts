@@ -187,7 +187,7 @@ async function call(method: string, url: string, body?: unknown): Promise<{ ok: 
 }
 
 /** What the page may show straight from the daemon: pictures, videos and sounds. Nothing else is served this way. */
-const MEDIA = [/^\/media\/tool\/[^/]+$/, /^\/tasks\/\d+\/images\/\d+$/, /^\/agents\/[^/]+\/image$/];
+const MEDIA = [/^\/media\/tool\/[^/]+$/, /^\/tasks\/\d+\/images\/\d+$/, /^\/agents\/[^/]+\/image$/, /^\/agents\/[^/]+\/browser\/frame$/];
 
 async function media(request: Request): Promise<Response> {
 	const url = new URL(request.url);
@@ -417,6 +417,7 @@ function buildMenu(): void {
 				item("Agent", "code-agent", "CmdOrCtrl+Shift+I"),
 				item("Files", "code-files", "CmdOrCtrl+Shift+F"),
 				item("Changes", "code-changes", "CmdOrCtrl+Shift+G"),
+				item("Browser", "code-browser", "CmdOrCtrl+Shift+B"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
 				{ role: "resetZoom" },
