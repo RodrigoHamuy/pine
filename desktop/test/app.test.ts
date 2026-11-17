@@ -767,6 +767,50 @@ test("a message is branched from: a new conversation with what was said up to it
 	await sees(".composer textarea");
 });
 
+test("a conversation moves into a worktree of its folder: the chip names the branch, and its work is merged from the panel", async () => {
+	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
+	await sees(".pick-title >> text=Which agent works in");
+	await page.keyboard.press("Enter");
+	await sees(".tab.on .name >> text=pine-desktop-folder");
+	await menu("worktree");
+	await sees(".pick-title >> text=Work in a worktree?");
+	await page.keyboard.press("Enter");
+	await sees(".conv-head .chip.worktree >> text=pine/");
+	const branch = (await page.textContent(".conv-head .chip.worktree"))!.trim();
+	const tree = path.join(folder, ".pine", "worktrees", branch.slice(5));
+	assert.ok(fs.existsSync(path.join(tree, "README.md")), "a checkout of its own");
+	await sees(".column >> text=now works in the worktree");
+	// The side bar says where it works, once something was said in it.
+	await page.fill(".composer textarea", mockMsg([{ text: "working apart" }], "APART "));
+	await page.keyboard.press("Enter");
+	await sees(".md >> text=working apart");
+	await page.waitForFunction((b: string) => [...document.querySelectorAll(".side-conv")].some((r) => (r.getAttribute("title") ?? "").includes(`in the worktree ${b}`)), branch);
+
+	// Its work, committed there as an agent would, is merged from the panel into what the folder has checked out.
+	fs.writeFileSync(path.join(tree, "WORKTREE.md"), "made apart\n");
+	execFileSync("git", ["-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "add", "WORKTREE.md"], { stdio: "ignore" });
+	execFileSync("git", ["-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "apart"], { stdio: "ignore" });
+	await menu("code-changes");
+	await page.click(".code .segmented button >> text=Files");
+	await page.click(".code .segmented button >> text=Changes");
+	await sees(".code-sub >> text=1 ahead of");
+	await shot("16-worktree");
+	await page.click(".code-sub .btn >> text=Merge…");
+	await sees(".pick-title >> text=1 commit ahead of");
+	await page.keyboard.press("Enter");
+	await sees(".toast >> text=merged into");
+	assert.equal(fs.readFileSync(path.join(folder, "WORKTREE.md"), "utf8"), "made apart\n");
+	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n", "what was not committed in the folder stayed");
+
+	// Discarded once merged: the folder's chip is back.
+	await menu("worktree");
+	await sees(".pick-title >> text=ahead of");
+	await page.keyboard.press("Enter");
+	await sees(".conv-head .chip:not(.worktree) >> text=pine-desktop-folder");
+	assert.ok(!fs.existsSync(tree));
+	await page.click(".tab.on .close");
+});
+
 test("dictating puts what is heard into the input and sends nothing", async () => {
 	const sent = await page.$$eval(".it-user", (els: Element[]) => els.length);
 	await page.fill(".composer textarea", "Typed first:");

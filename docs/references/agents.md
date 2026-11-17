@@ -418,12 +418,17 @@ other. The original is left exactly as it was.
 
 | Where | How |
 |---|---|
-| Pine app | "Branch from here" beside one of your messages (it shows when the pointer is on it, or a right click), or Branch in the menu of a conversation in the side bar, or the command Branch conversation, which takes all of it |
-| Terminal UI | `/branch`: pick one of your messages, or all of it, from a list; `/branch <name>`: all of it, under that name |
-| Control API | `POST /agents/<id>/branch` `{ session, at?, to? }` ([operations.md](operations.md)) |
+| Pine app | "Branch from here" beside one of your messages (it shows when the pointer is on it, or a right click), or Branch in the menu of a conversation in the side bar, or the command Branch conversation, which takes all of it. "Branch from here into a worktree" and "Branch into a Worktree" do the same in a worktree |
+| Terminal UI | `/branch`: pick one of your messages, or all of it, from a list; `/branch <name>`: all of it, under that name; `--worktree` with either: in a worktree |
+| Control API | `POST /agents/<id>/branch` `{ session, at?, to?, worktree? }` ([operations.md](operations.md)) |
 
 A branch is called after the conversation it came from (`notes-branch`, `notes-branch-2`)
 unless you give it a name. The Pine app shows it under that conversation in the side bar.
+
+A branch shares the original's folder, so the two write the same files. Branched into a
+worktree, it works in a checkout of its own of the folder's repository instead, on a branch
+`pine/<name>`, and you merge what it did back ([coding.md](coding.md), "A worktree for a
+conversation").
 
 What a branch takes along: the history up to that point, the folder opened for the
 conversation, and the mark of outside content as the conversation had it at that point (a
@@ -514,7 +519,7 @@ The `delegate` tool exists for an agent when its `delegates` list is not empty. 
 What the model sees:
 
 ```
-delegate(agent, task, wait?, thread?)
+delegate(agent, task, wait?, thread?, worktree?)
 ```
 
 - The other agent gets only the task text, prefixed with who sent it. It runs in its own
@@ -526,6 +531,9 @@ delegate(agent, task, wait?, thread?)
   conversation with it, so it remembers earlier tasks of that thread.
 - An agent already waiting further up the chain cannot be called again, and chains stop at
   `limits.maxDelegationDepth`. The model gets an error it can act on.
+- `worktree: true` (in your own conversations, when they have a folder): the other agent does
+  the task in a worktree of its own of the conversation's folder, and its work comes back as a
+  branch to merge, as for sub-agents below. Not with `thread` or `wait: false`.
 
 Write `description` for the delegating model: it is the only thing it knows about the other
 agent. "Contract law; knows the case files in its workspace" works;
@@ -533,7 +541,7 @@ agent. "Contract law; knows the case files in its workspace" works;
 
 ## Sub-agents
 
-`subagent(tasks: string[], model?, thinking?)` runs up to `subagents.maxParallel` copies of the
+`subagent(tasks: string[], model?, thinking?, worktree?)` runs up to `subagents.maxParallel` copies of the
 same agent at once (4 unless the agent's `agent.json` says otherwise).
 Each copy has the agent's workspace, instructions and tools but an empty conversation, cannot
 delegate or spawn further, and returns only its final answer. Use it for searches and checks
@@ -546,6 +554,7 @@ that would otherwise fill the context:
 | `tasks` | One task per sub-agent. A sub-agent sees nothing of the conversation, so each task says everything it needs: what to do, which files (by their path), what to answer. |
 | `model` | Another model for these sub-agents than the agent's own, as `provider/model` (the id alone is enough where only one model has it). For work another model does better: one that sees pictures, a small fast one for many simple checks, a large one for a hard part. The `models` tool lists what there is. Left out: the agent's own model. |
 | `thinking` | How much these sub-agents reason: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. A model that cannot reason ignores it. Left out: the agent's own level. |
+| `worktree` | `true`: each sub-agent changes files in a worktree of its own of the conversation's folder (a git repository), made from its last commit, so that sub-agents that change the same files do not collide. When it is done, what it changed is committed on its branch (`pine/<conversation>-sub`, `-sub-2`, ...), its folder goes, and the answer names the branch: the conversation brings it in with `git merge` and deletes it with `git branch -d`. One that changed nothing leaves nothing. Only in your own conversations; what is not committed in the folder is not in the sub-agents' worktrees. See [coding.md](coding.md), "A worktree for a conversation". |
 
 A sub-agent on another model is still the same agent: the same workspace, files, tools,
 instructions and permissions. Only the model that reads and answers is another one. So a file is

@@ -77,12 +77,18 @@ function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; dept
 		const picked = await bridge.contextMenu([
 			{ id: "open", label: "Open" },
 			...(c.tasks ? [{ id: "branch", label: "Branch" }] : []),
+			...(c.tasks && c.folder ? [{ id: "branch-worktree", label: "Branch into a Worktree" }] : []),
+			...(c.worktree ? [{ id: "worktree", label: "Worktree…" }] : []),
 			...(main ? [] : [{ id: "pin", label: c.pinned ? "Unpin" : "Pin" }, { id: "rename", label: "Rename…" }]),
 			{ id: "sep", label: "", separator: true },
 			main ? { id: "reset", label: "Start over…" } : { id: "remove", label: "Remove…" },
 		]);
 		if (picked === "open") await s.openTab(agent, c.session);
-		if (picked === "branch") await s.branch(agent, c.session);
+		if (picked === "branch" || picked === "branch-worktree") await s.branch(agent, c.session, undefined, picked === "branch-worktree");
+		if (picked === "worktree") {
+			await s.openTab(agent, c.session);
+			if (s.active?.kind === "chat") await s.worktreeMenu(s.active);
+		}
 		if (picked === "pin") {
 			await s.attempt(() => api.pinSession(agent, c.session, !c.pinned));
 			await s.refreshConversations(agent);
@@ -103,8 +109,8 @@ function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; dept
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
-		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} style={depth ? { paddingLeft: 31 + 14 * Math.min(depth, 4) } : undefined} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.folder ? ` · works in ${c.folder}` : ""}`}>
-			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : depth ? <Icon name="branch" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
+		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} style={depth ? { paddingLeft: 31 + 14 * Math.min(depth, 4) } : undefined} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`}>
+			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : depth || c.worktree ? <Icon name="branch" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (

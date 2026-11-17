@@ -44,6 +44,8 @@ export interface Jail {
 	variant: "normal" | "restricted";
 	/** For a run that has read outside content: what exists and may not be changed, and repositories whose folder may not be moved aside. */
 	frozen?: { paths: string[]; repositories: string[] };
+	/** What exists and is never written, in any variant: a worktree's pointers to its git folder, other conversations' worktrees. */
+	fixed?: string[];
 }
 
 const isInside = (root: string, p: string) => p === root || p.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
@@ -197,11 +199,13 @@ export function bwrapArgs(jail: Jail): string[] {
 	// The services of the machine and of the desktop: what the macOS profile denies by name
 	// (keychain, clipboard, other programs) is reached through sockets here.
 	for (const p of sockets(jail.shared ?? SHARED, jail.closed)) if (!jail.closed.some((c) => isInside(c, p))) args.push("--ro-bind", "/dev/null", p);
+	const writable = (p: string) => (isInside(jail.pineHome, p) ? jail.ownedWrite : [...jail.write, ...jail.ownedWrite]).some((r) => isInside(r, p));
+	// Read-only where the agent writes otherwise; elsewhere a mount would open what is closed to it.
+	for (const p of shallowFirst(jail.fixed ?? [])) if (exists(p) && writable(p)) ro(p);
 	if (jail.variant === "restricted" && jail.frozen) {
 		// A repository's folder becomes a mount of its own, so that it cannot be moved aside and
 		// another put in its place. Then what exists and must not change is mounted read-only.
 		// Only where the agent can write at all: a mount would otherwise open what is closed to it.
-		const writable = (p: string) => (isInside(jail.pineHome, p) ? jail.ownedWrite : [...jail.write, ...jail.ownedWrite]).some((r) => isInside(r, p));
 		for (const p of shallowFirst(jail.frozen.repositories.filter(writable))) rw(p);
 		for (const p of shallowFirst(jail.frozen.paths.filter(writable))) ro(p);
 	}
@@ -253,7 +257,9 @@ export function protectedNow(p: Protected): { paths: string[]; repositories: str
 	const repositories = new Set<string>();
 	let seen = 0;
 	const repository = (git: string) => {
-		if (!isDir(git)) return; // a submodule's or worktree's ".git" is a file that points elsewhere
+		// A submodule's or worktree's ".git" is a file that points elsewhere: what it points at decides
+		// which configuration and hooks git uses there, so it may not change either.
+		if (!isDir(git)) return void (exists(git) && paths.add(git));
 		repositories.add(git);
 		for (const name of ["hooks", "config"]) if (exists(path.join(git, name))) paths.add(path.join(git, name));
 		// Submodules keep their own hooks and configuration under modules/.

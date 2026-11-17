@@ -192,7 +192,7 @@ Type `/` and the list appears; keep typing to narrow it, `enter` runs the comman
 | `/sessions [name]` | Open one of this agent's conversations; without a name, choose from a list |
 | `/tab <n>`, `/close` | Switch to, or close, a tab |
 | `/rename <name>` | Another name for this conversation and its tab. Its history, pin and subscriptions go with it. Not for an agent's main conversation |
-| `/branch [name]` | A new conversation that goes its own way from one of your messages; this one stays as it is. Without a name it lists your messages, the latest first, and "all of it": the branch has what was said up to the end of the one you pick. With a name it takes all of it. See [agents.md](agents.md#branching-a-conversation) |
+| `/branch [--worktree] [name]` | A new conversation that goes its own way from one of your messages; this one stays as it is. Without a name it lists your messages, the latest first, and "all of it": the branch has what was said up to the end of the one you pick. With a name it takes all of it. With `--worktree` (or `-w`) the branch works in a worktree of its own. See [agents.md](agents.md#branching-a-conversation) |
 | `/pin`, `/unpin` | Keep this conversation however long it is unused, or let it go again |
 | `/reset` | Forget this conversation and start fresh (also clears "has seen outside content") |
 | `/undo` | Take back your last message: what it started is stopped, the files it changed in the conversation's folder are restored, the conversation forgets it and what followed, and its text is in the input again to change and send. Again for the message before it. See [coding.md](coding.md) for what is and is not restored |
@@ -202,6 +202,8 @@ Type `/` and the list appears; keep typing to narrow it, `enter` runs the comman
 | `/copy` | Copy the agent's last answer to the clipboard, as it wrote it (Markdown) |
 | `/export [copy] [full]` | Save this conversation as a Markdown file in the folder pine was started in (`pine-<agent>-<conversation>-<date>.md`). `copy` puts it on the clipboard instead; `full` adds what the agent thought and which tools it called |
 | `/folder [path\|none]` | Open a folder of yours for this conversation: the agent's tools start there and may read and change it. `none` closes it again; without an argument, a list. See [coding.md](coding.md) |
+| `/worktree [name]` | Move this conversation into a worktree of its folder's repository: a checkout of its own on a branch `pine/<name>`, apart from other conversations. In one, a list: merge or squash it into what it was made from, update it, ask the agent to commit, discard it. The bottom bar shows `⎇ pine/<name>`. See [coding.md](coding.md#a-worktree-for-a-conversation) |
+| `/new --worktree [name]` | A new conversation in a worktree of the folder of the one in front |
 | `/code [changes\|turn\|files\|output\|running\|off]` | Open the code pane beside the conversation, on that view; without an argument it opens and closes. `turn` shows what your last message changed |
 | `/stop` | Stop what the agent is doing |
 | `/goal [objective\|pause\|resume\|clear]` | Goal mode: with an objective, the agent keeps working by itself, round after round, until a judge says the objective is met. Without an argument it shows the goal and where it stands; `pause`, `resume` and `clear` do what they say. See "Goals" below |

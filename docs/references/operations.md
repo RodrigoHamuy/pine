@@ -252,6 +252,7 @@ What you type in a shell. Every command is the `pine` program with a word after 
 |---|---|
 | `pine`, `pine tui` | The terminal UI; starts a daemon inside if none is running |
 | `pine .`, `pine <folder>` | The terminal UI with one more tab: a conversation of the main agent that works in that folder (the one from last time, if there is one). A first word that is a command stays a command. See [coding.md](coding.md) |
+| `pine <folder> --worktree [name]` | The same with a new conversation in a worktree of that folder's git repository: a checkout of its own on a branch `pine/<name>`. See [coding.md](coding.md#a-worktree-for-a-conversation) |
 | `pine login <provider>`, `pine logout <provider>` | Sign in to a model provider. `--api-key` or `--oauth` force the kind of sign-in |
 | `pine model add <name> <address>`, `pine model list`, `pine model remove <name>` | Add a model server of your own by its address, list them, take one out. `--context <tokens>`, `--reasoning`, `--no-reasoning` for what the server does not say. See "With a model server of your own" |
 | `pine init [dir] [--yes]` | Set pine up: a home directory from the example, the browser its web tools drive and, on Linux, the sandbox (asks before running anything as administrator; `--yes` skips the question). Safe to run again |
@@ -259,7 +260,7 @@ What you type in a shell. Every command is the `pine` program with a word after 
 | `pine version`, `pine --version` | Which version this is and how it is installed |
 | `pine help`, `pine --help` | Prints the list of commands |
 | `pine browser-install` | Fetch the browser again. `pine init` and `pine update` do this already |
-| `pine check` | Validate the configuration; show each agent's workspace, model, tools, MCP servers; list security notes; say when the browser of the web tools is not there in the build this pine drives |
+| `pine check` | Validate the configuration; show each agent's workspace, model, tools, MCP servers; list security notes; say when the browser of the web tools is not there in the build this pine drives; with the daemon running, list the worktrees of conversations and those no conversation holds any more |
 | `pine start` | Run the daemon in the foreground. Ctrl-C or SIGTERM stops it cleanly |
 | `pine service [--keep]` | For a UI that is a program of its own (a desktop app): finds the daemon of this home or starts one, and prints one line of JSON saying where it answers and with which token. See "A UI of its own" |
 | `pine dev-model [--port 7464] [--model haiku]` | The `claude -p` model server |
@@ -294,7 +295,7 @@ All take `--home <dir>`; the default is `$PINE_HOME` or `~/.pine`. The commands 
 down to `mode` talk to the running daemon over its control API on `127.0.0.1:7463`, using the
 token in `data/http-token`. The `pine mcp` and `pine model` commands work on the files, and `add` and `remove`
 also tell a running daemon, so the change applies at once. `pine schedules`, `pine skills`,
-`pine check` and `pine manual` only read the files and need no daemon. `pine help` prints the
+`pine check` and `pine manual` only read the files and need no daemon (`pine check` asks a running daemon which worktrees there are). `pine help` prints the
 list.
 
 ### A UI of its own
@@ -356,10 +357,16 @@ are JSON with `Content-Type: application/json`.
 | `POST /mcp/refresh` | Close idle sessions so they start again with the current servers |
 | `POST /agents` `{ id, description, instructions, model?, tools? }`, `POST /agents/<id>/update` `{ description?, instructions?, model?, thinking?, mode?, tools?, delegates?, scope?, network?, read?, write?, forget? }`, `POST /agents/<id>/erase` `{ agent, keepFiles? }` | Create an agent, change its settings, or remove one with everything it has, while the daemon runs (`erase` repeats the id in `agent`: removing an agent is not done by a mistyped address). What `pine agent add`, `pine agent update` and `pine agent remove` call |
 | `POST /models/refresh` | Read `models.json` and `.env` again, after a model server was added or removed in the files. `pine model add` and `pine model remove` call it |
-| `GET /agents/<id>/sessions` | The agent's conversations: name, number of messages, last use, whether pinned or open in a tab, the folder opened for it, when one will be removed by itself, and what a branch was made from (`branch`: `from`, `at`) |
+| `GET /agents/<id>/sessions` | The agent's conversations: name, number of messages, last use, whether pinned or open in a tab, the folder opened for it, when one will be removed by itself, what a branch was made from (`branch`: `from`, `at`), and the worktree it works in (`worktree`: `branch`, `base`, `path`, `repo`) |
 | `POST /agents/<id>/pin` `{ session, pinned? }` | Pin a conversation so that it is kept, or with `pinned: false` take the pin off |
 | `POST /agents/<id>/rename` `{ session, to }` | Give a conversation another name; its history, pin, subscriptions and what was set up for it follow |
-| `POST /agents/<id>/branch` `{ session, at?, to? }` | Branch `session` after your message `at` (its task number; without it, all of it) into `to`, or a name made from the original. Answers `session`, the `tasks` copied, and `outside` when the branch holds outside content. Not while it is working. See [agents.md](agents.md#branching-a-conversation) |
+| `POST /agents/<id>/branch` `{ session, at?, to?, worktree? }` | Branch `session` after your message `at` (its task number; without it, all of it) into `to`, or a name made from the original. Answers `session`, the `tasks` copied, and `outside` when the branch holds outside content. With `worktree: true` the branch works in a worktree of its own, and the answer has `worktree` (`branch`, `path`, `copied`). Not while it is working. See [agents.md](agents.md#branching-a-conversation) |
+| `GET /agents/<id>/worktree?session=` | The conversation's worktree (`worktree`, or `null`): its `branch`, the `base` it was made from, its `path` and `repo`, and how it stands: `ahead`, `behind`, `dirty` (files not committed), `merged`, `mergeable` (the base is a branch). See [coding.md](coding.md#a-worktree-for-a-conversation) |
+| `POST /agents/<id>/worktree` `{ session, name? }` | Move the conversation into a new worktree of its folder's repository. Answers `folder`, `branch`, `base`, `path` and the files `.worktreeinclude` had `copied`. Not while it is working, not without a folder, not twice |
+| `POST /agents/<id>/worktree/merge` `{ session, how?, message? }` | Merge the worktree's commits into its base: `how` is `merge` (a fast-forward where it can be) or `squash`. Answers `how`, `commit`, `commits` and where the base's files were brought up to date (`updated`). A conflict answers 409 with `conflicts` (the files) and changes nothing. Not while the conversation, or one that works in the base's checkout, is working |
+| `POST /agents/<id>/worktree/update` `{ session }` | Bring what the base got since into the worktree. Answers `merged` (commits), or `conflicts` and changes nothing |
+| `POST /agents/<id>/worktree/remove` `{ session, keepBranch? }` | Discard the worktree, with its branch unless `keepBranch`; the conversation works in the folder it came from again (`folder`) |
+| `GET /worktrees` | Every worktree of pine's: the conversation it belongs to (`agent`, `session`), its `path`, `branch` and `repo`; `orphan` for one that git still has and no conversation does |
 | `POST /agents/<id>/remove` `{ session }` | Remove a conversation for good, with its history and what was set up for it alone. Not the main one, and not while it is working |
 | `GET /ui/tabs`, `POST /ui/tabs` `{ tabs, active, code?, notify? }` | The tabs the terminal UI has open (`tabs` is a list of `{ agent, session }`, 50 at most), whether its code pane was open (`code`) and whether it calls for attention with a bell (`notify`, set with `/notify`), kept so that it opens the same way next time. `code` and `notify` stay as they were when left out. A conversation that is open in a tab is not removed for being unused |
 | `GET /agents/<id>/folder?session=`, `GET /agents/<id>/folders`, `POST /agents/<id>/folder` `{ session, folder }` | The folder a conversation works in; every conversation of the agent that has one; open a folder for a conversation (`folder: null` closes it). Refused for pine's home, pine's program and other agents' workspaces, and while the conversation is working |

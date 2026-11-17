@@ -103,6 +103,30 @@ export interface Conversation {
 	folder?: string;
 	/** A branch: the conversation it was made from, and after which message of the owner's. */
 	branch?: { from: string; at?: number };
+	/** The worktree it works in: a checkout of its own of its folder's repository, on a branch pine/<name>. */
+	worktree?: { branch: string; base: string; path: string; repo: string };
+}
+
+/** A conversation's worktree and where it stands against what it was made from. */
+export interface WorktreeInfo {
+	branch: string;
+	base: string;
+	path: string;
+	repo: string;
+	ahead: number;
+	behind: number;
+	dirty: number;
+	merged: boolean;
+	mergeable: boolean;
+	gone?: boolean;
+}
+
+export interface WorktreeMade {
+	folder?: string;
+	branch: string;
+	path: string;
+	base?: string;
+	copied: string[];
 }
 
 export interface GoalInfo {
@@ -353,7 +377,13 @@ export const api = {
 	undo: (agent: string, session: string) => post<UndoResult>(`${a(agent)}/undo`, { session }),
 	redo: (agent: string, session: string) => post<UndoResult>(`${a(agent)}/redo`, { session }),
 	/** A new conversation that goes on from message `at` of this one (without it: from all of it). */
-	branch: (agent: string, session: string, at?: number) => post<{ session: string; tasks: number; outside?: string }>(`${a(agent)}/branch`, { session, ...(at !== undefined ? { at } : {}) }),
+	branch: (agent: string, session: string, at?: number, worktree = false) => post<{ session: string; tasks: number; outside?: string; worktree?: WorktreeMade }>(`${a(agent)}/branch`, { session, ...(at !== undefined ? { at } : {}), ...(worktree ? { worktree } : {}) }),
+	/** A conversation's worktree: where it stands; make one; merge it into its base; bring its base in; discard it. */
+	worktree: (agent: string, session: string) => get<{ worktree: WorktreeInfo | null }>(`${a(agent)}/worktree${s(session)}`),
+	makeWorktree: (agent: string, session: string, name?: string) => post<WorktreeMade>(`${a(agent)}/worktree`, { session, ...(name ? { name } : {}) }),
+	mergeWorktree: (agent: string, session: string, how: "merge" | "squash" = "merge") => post<{ how: string; commit: string; commits: number; updated?: string }>(`${a(agent)}/worktree/merge`, { session, how }),
+	updateWorktree: (agent: string, session: string) => post<{ merged: number } | { conflicts: string[] }>(`${a(agent)}/worktree/update`, { session }),
+	discardWorktree: (agent: string, session: string, keepBranch = false) => post<{ folder?: string }>(`${a(agent)}/worktree/remove`, { session, keepBranch }),
 	setThinking: (agent: string, level: string) => post<{ level: string }>(`${a(agent)}/thinking`, { level }),
 	setMode: (agent: string, mode: string, anyway?: string) => post<{ mode: string }>(`${a(agent)}/mode`, { mode, session: anyway, anyway: anyway !== undefined }),
 	setModel: (agent: string, model: string) => post<{ model: string }>(`${a(agent)}/model`, { model }),
@@ -367,7 +397,7 @@ export const api = {
 	setState: (key: string, value: unknown) => post<{ ok: boolean }>("/state", { key, value }),
 
 	// the folder a conversation works in
-	changes: (agent: string, session: string) => get<{ root: string; repo: boolean; branch?: string; files: Change[]; more: boolean }>(`${a(agent)}/view/changes${s(session)}`),
+	changes: (agent: string, session: string) => get<{ root: string; repo: boolean; branch?: string; worktree?: { branch: string; base: string; ahead: number; behind: number; dirty: number; merged: boolean }; files: Change[]; more: boolean }>(`${a(agent)}/view/changes${s(session)}`),
 	diff: (agent: string, session: string, file: string) => get<{ diff: string; truncated: boolean }>(`${a(agent)}/view/diff${s(session)}&path=${e(file)}`),
 	tree: (agent: string, session: string, dir: string) => get<{ entries: Array<{ name: string; dir: boolean; size: number }>; more: boolean }>(`${a(agent)}/view/tree${s(session)}&path=${e(dir)}`),
 	file: (agent: string, session: string, file: string) => get<{ text?: string; size: number; binary: boolean; truncated: boolean }>(`${a(agent)}/view/file${s(session)}&path=${e(file)}&max=2000000`),

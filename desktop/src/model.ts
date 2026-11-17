@@ -6,7 +6,7 @@
 // (`touch`). A conversation gets a hundred events a second while a model writes; copying its
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
+import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 
@@ -116,6 +116,8 @@ export class Tab extends Model {
 	goal?: GoalInfo;
 	folder?: string;
 	workspace?: string;
+	/** The worktree it works in, if it has one: its branch and what it was made from. */
+	worktree?: { branch: string; base: string };
 	programs: Program[] = [];
 	stopped?: { at: number; waiting: number; spared: Set<number> };
 	pauseNoted = false;
@@ -174,6 +176,9 @@ export class Tab extends Model {
 
 const STOP_GRACE = 3000;
 const sessionName = () => `s${Date.now().toString(36)}`;
+/** What a conversation is told when it moves into a worktree. */
+const worktreeNote = (made: WorktreeMade) =>
+	`This conversation now works in the worktree ${made.branch} at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a checkout of its own, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} Merge it back from the folder's chip.`;
 
 export interface Toast {
 	id: number;
@@ -704,8 +709,9 @@ export class Store extends Model {
 	/** Ask for what a conversation holds and show it: the folder, the goal, the last messages, the open steps. */
 	private async fill(tab: Tab): Promise<void> {
 		const { agent, session } = tab;
-		const [folder, goal] = await Promise.all([api.folder(agent, session).catch(() => undefined), api.goal(agent, session).catch(() => undefined)]);
+		const [folder, goal, tree] = await Promise.all([api.folder(agent, session).catch(() => undefined), api.goal(agent, session).catch(() => undefined), api.worktree(agent, session).catch(() => undefined)]);
 		tab.folder = folder?.folder;
+		tab.worktree = tree?.worktree ? { branch: tree.worktree.branch, base: tree.worktree.base } : undefined;
 		tab.workspace = folder?.workspace;
 		learnHome(folder?.workspace);
 		tab.goal = goal?.goal;
@@ -839,18 +845,84 @@ export class Store extends Model {
 	}
 
 	/** A conversation that works in a folder of the owner's: the one that already does, or a new one named after it. */
-	async openFolder(dir: string, named?: string): Promise<void> {
-		const agent = await this.whichAgent(`Which agent works in ${baseName(dir)}?`, named);
+	async openFolder(dir: string, named?: string, worktree = false): Promise<void> {
+		const agent = await this.whichAgent(`Which agent works in ${worktree ? "a worktree of " : ""}${baseName(dir)}?`, named);
 		if (!agent) return;
 		const used = await api.folders(agent).catch(() => [] as Array<{ session: string; folder: string }>);
 		const have = used.find((u) => u.folder === dir);
-		if (have) return this.openTab(agent, have.session);
+		// In a worktree it is always a new conversation: one of its own, beside the others in that folder.
+		if (have && !worktree) return this.openTab(agent, have.session);
 		const taken = new Set(["main", ...used.map((u) => u.session), ...(await api.sessions(agent).catch(() => [] as Conversation[])).map((x) => x.session)]);
 		const base = (baseName(dir).replace(/[^A-Za-z0-9.-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "folder").slice(0, 24);
 		let name = base;
 		for (let n = 2; taken.has(name); n++) name = `${base}-${n}`;
 		const done = await this.attempt(() => api.setFolder(agent, name, dir));
-		if (done) await this.openTab(agent, name);
+		if (!done) return;
+		const made = worktree ? await this.attempt(() => api.makeWorktree(agent, name)) : undefined;
+		await this.openTab(agent, name);
+		if (made && this.active?.kind === "chat") this.active.note(worktreeNote(made));
+	}
+
+	/** A new conversation in a worktree: of the folder of the conversation in front, or of one the owner picks. */
+	async newInWorktree(): Promise<void> {
+		const front = this.active?.kind === "chat" ? this.active : undefined;
+		const dir = front?.folder && !front.worktree ? front.folder : await bridge.pickFolder("A new conversation in a worktree of which repository?");
+		if (dir) await this.openFolder(dir, front?.folder && !front.worktree ? front.agent : undefined, true);
+	}
+
+	/** What a conversation's tabs and the side bar show of its folder and worktree, as the daemon says now. */
+	private async followWorktree(agent: string, session: string): Promise<void> {
+		const [folder, tree] = await Promise.all([api.folder(agent, session).catch(() => undefined), api.worktree(agent, session).catch(() => undefined)]);
+		const worktree = tree?.worktree ? { branch: tree.worktree.branch, base: tree.worktree.base } : undefined;
+		for (const t of this.tabs) if (t.kind === "chat" && t.agent === agent && t.session === session) ((t.folder = folder?.folder), (t.worktree = worktree), t.codeTick++, t.touch());
+		await this.refreshConversations(agent);
+	}
+
+	/** Move a conversation into a worktree of its folder's repository. */
+	async makeWorktree(tab: Tab, name?: string): Promise<void> {
+		if (tab.kind !== "chat") return;
+		if (!tab.folder) return this.flash("This conversation has no folder to make a worktree of. Open one for it first.", "bad");
+		const made = await this.attempt(() => api.makeWorktree(tab.agent, tab.session, name));
+		if (!made) return;
+		await this.followWorktree(tab.agent, tab.session);
+		tab.note(worktreeNote(made));
+	}
+
+	/** What can be done with a conversation's worktree: merge it, bring its base in, discard it; or make one. */
+	async worktreeMenu(tab: Tab): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const w = (await this.attempt(() => api.worktree(tab.agent, tab.session)))?.worktree;
+		if (w === undefined) return;
+		if (!w) {
+			const make = await this.pick({ title: "Work in a worktree?", items: [{ value: "make", label: "Make a worktree of this folder", about: "A checkout of its own of the repository, on a branch pine/<name>: other conversations' files are not touched, and you merge it back when it is done." }, { value: "no", label: "Cancel" }] });
+			return make === "make" ? this.makeWorktree(tab) : undefined;
+		}
+		const stand = `${plural(w.ahead, "commit")} ahead of ${w.base}${w.behind ? `, ${w.behind} behind` : ""}${w.dirty ? `, ${plural(w.dirty, "file")} not committed` : ""}`;
+		const items: Array<{ value: string; label: string; about?: string; tone?: "bad" }> = [];
+		if (w.mergeable && w.ahead) items.push({ value: "merge", label: `Merge into ${w.base}`, about: stand }, { value: "squash", label: `Squash into ${w.base}`, about: "All of it as one commit" });
+		if (w.behind) items.push({ value: "update", label: `Update from ${w.base}`, about: `Bring the ${plural(w.behind, "new commit")} of ${w.base} into the worktree` });
+		if (w.dirty) items.push({ value: "commit", label: "Ask the agent to commit", about: "A merge takes what is committed" });
+		items.push({ value: "discard", label: "Discard the worktree…", about: w.merged && !w.dirty ? "Everything of it is merged" : "Its changes and its branch are deleted", tone: w.merged && !w.dirty ? undefined : "bad" });
+		items.push({ value: "keep", label: "Discard, keep the branch", about: `The folder goes, ${w.branch} stays for git` });
+		const chosen = await this.pick({ title: `${w.branch} · ${stand}`, items });
+		if (!chosen) return;
+		if (chosen === "merge" || chosen === "squash") {
+			const r = await this.attempt(() => api.mergeWorktree(tab.agent, tab.session, chosen));
+			if (r) this.flash(`${plural(r.commits, "commit")} of ${w.branch} ${r.how === "squash" ? "squashed into" : "merged into"} ${w.base}${r.how === "ff" ? " (a fast-forward)" : ""}.`, "good");
+		} else if (chosen === "update") {
+			const r = await this.attempt(() => api.updateWorktree(tab.agent, tab.session));
+			if (r) this.flash("conflicts" in r ? `${w.base} and the worktree both changed ${r.conflicts.join(", ")}; nothing was changed. Ask the agent to merge ${w.base} and settle it.` : `The worktree has the ${plural(r.merged, "new commit")} of ${w.base} now.`, "conflicts" in r ? "bad" : "good");
+		} else if (chosen === "commit") {
+			await this.submit(tab, "Commit what you changed in this worktree that is meant to stay, with a message that says what it does.", "queue");
+		} else {
+			if (chosen === "discard" && !(w.merged && !w.dirty)) {
+				const sure = await this.pick({ title: `Delete ${w.branch} and what is in it?`, items: [{ value: "yes", label: "Delete it", about: `${plural(w.ahead, "commit")} not merged${w.dirty ? `, ${plural(w.dirty, "changed file")}` : ""}. This cannot be undone.`, tone: "bad" }, { value: "no", label: "Cancel" }] });
+				if (sure !== "yes") return;
+			}
+			const r = await this.attempt(() => api.discardWorktree(tab.agent, tab.session, chosen === "keep"));
+			if (r) tab.note(`The worktree is gone${chosen === "keep" ? `; its branch ${w.branch} stays` : ""}. This conversation works in ${r.folder ? tilde(r.folder) : "its agent's workspace"} again.`);
+		}
+		await this.followWorktree(tab.agent, tab.session);
 	}
 
 	async refreshConversations(agent?: string): Promise<void> {
@@ -977,10 +1049,11 @@ export class Store extends Model {
 	}
 
 	/** Go on in a new conversation from message `at` of this one, or from all of it; this one stays as it is. */
-	async branch(agent: string, session: string, at?: number): Promise<void> {
-		const r = await this.attempt(() => api.branch(agent, session, at));
+	async branch(agent: string, session: string, at?: number, worktree = false): Promise<void> {
+		const r = await this.attempt(() => api.branch(agent, session, at, worktree));
 		if (!r) return;
 		await this.openTab(agent, r.session);
+		if (r.worktree && this.active?.kind === "chat") this.active.note(worktreeNote(r.worktree));
 		this.flash(`A branch of ${this.titleOf(agent, session)}${at !== undefined ? " from that message" : ""}: what you say here stays here.${r.outside ? " It holds outside content, as that conversation did." : ""}`, "muted", 5000);
 		void this.refreshConversations(agent);
 		void this.refreshTaints();
@@ -1316,6 +1389,8 @@ export class Store extends Model {
 				const id = await this.pick({ title: "New conversation with", items: this.agents.map((x) => ({ value: x.id, label: x.id, about: x.description || x.model })), current: chat?.agent });
 				return id ? this.openTab(id, sessionName()) : undefined;
 			}
+			case "new-worktree":
+				return this.newInWorktree();
 			case "open-folder": {
 				const dir = await bridge.pickFolder("Open a folder for a conversation");
 				return dir ? this.openFolder(dir) : undefined;
@@ -1342,6 +1417,10 @@ export class Store extends Model {
 				return this.undo(chat, false);
 			case "branch":
 				return this.branch(chat.agent, chat.session);
+			case "branch-worktree":
+				return this.branch(chat.agent, chat.session, undefined, true);
+			case "worktree":
+				return this.worktreeMenu(chat);
 			case "redo":
 				return this.undo(chat, true);
 			case "compact":

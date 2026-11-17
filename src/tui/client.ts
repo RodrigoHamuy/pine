@@ -11,6 +11,22 @@ export interface Conversation {
 	expires?: number;
 	/** The folder opened for it, if any. */
 	folder?: string;
+	/** The worktree it works in, if it has one: a checkout of its own on a branch pine/<name>. */
+	worktree?: { branch: string; base: string; path: string; repo: string };
+}
+
+/** A conversation's worktree and where it stands against what it was made from (src/worktrees.ts). */
+export interface WorktreeInfo {
+	branch: string;
+	base: string;
+	path: string;
+	repo: string;
+	ahead: number;
+	behind: number;
+	dirty: number;
+	merged: boolean;
+	mergeable: boolean;
+	gone?: boolean;
 }
 
 /** The goal of a conversation, as the daemon keeps it (src/goals.ts). `reason` is the judge's line: text to show, nothing more. */
@@ -99,7 +115,7 @@ export class Client {
 	stopProgram = (agent: string, session: string, id: number) => this.post<{ stopped: boolean }>(`/agents/${agent}/programs/stop`, { session, id });
 	folders = (agent: string) => this.get<Array<{ session: string; folder: string }>>(`/agents/${agent}/folders`);
 	setFolder = (agent: string, session: string, folder: string | null) => this.post<{ folder?: string }>(`/agents/${agent}/folder`, { session, folder });
-	changes = (agent: string, session: string) => this.get<{ root: string; repo: boolean; branch?: string; files: Array<{ path: string; status: string; added?: number; removed?: number }>; more: boolean }>(`/agents/${agent}/view/changes?session=${encodeURIComponent(session)}`);
+	changes = (agent: string, session: string) => this.get<{ root: string; repo: boolean; branch?: string; worktree?: { branch: string; base: string; ahead: number; behind: number; dirty: number; merged: boolean }; files: Array<{ path: string; status: string; added?: number; removed?: number }>; more: boolean }>(`/agents/${agent}/view/changes?session=${encodeURIComponent(session)}`);
 	diff = (agent: string, session: string, file: string) => this.get<{ diff: string; truncated: boolean }>(`/agents/${agent}/view/diff?session=${encodeURIComponent(session)}&path=${encodeURIComponent(file)}`);
 	tree = (agent: string, session: string, dir: string) => this.get<{ entries: Array<{ name: string; dir: boolean; size: number }>; more: boolean }>(`/agents/${agent}/view/tree?session=${encodeURIComponent(session)}&path=${encodeURIComponent(dir)}`);
 	file = (agent: string, session: string, file: string) => this.get<{ text?: string; size: number; binary: boolean; truncated: boolean }>(`/agents/${agent}/view/file?session=${encodeURIComponent(session)}&path=${encodeURIComponent(file)}`);
@@ -107,7 +123,13 @@ export class Client {
 	undo = (agent: string, session: string) => this.post<UndoResult>(`/agents/${agent}/undo`, { session });
 	redo = (agent: string, session: string) => this.post<UndoResult>(`/agents/${agent}/redo`, { session });
 	/** A new conversation that goes on from message `at` of this one (without it: from all of it). */
-	branch = (agent: string, session: string, at?: number, to?: string) => this.post<{ session: string; tasks: number; outside?: string }>(`/agents/${agent}/branch`, { session, ...(at !== undefined ? { at } : {}), ...(to ? { to } : {}) });
+	branch = (agent: string, session: string, at?: number, to?: string, worktree = false) => this.post<{ session: string; tasks: number; outside?: string; worktree?: { branch: string; path: string; copied: string[] } }>(`/agents/${agent}/branch`, { session, ...(at !== undefined ? { at } : {}), ...(to ? { to } : {}), ...(worktree ? { worktree } : {}) });
+	/** A conversation's worktree: where it stands; make one; merge it into its base; bring its base in; discard it. */
+	worktree = (agent: string, session: string) => this.get<{ worktree: WorktreeInfo | null }>(`/agents/${agent}/worktree?session=${encodeURIComponent(session)}`);
+	makeWorktree = (agent: string, session: string, name?: string) => this.post<{ folder: string; branch: string; base: string; path: string; copied: string[] }>(`/agents/${agent}/worktree`, { session, ...(name ? { name } : {}) });
+	mergeWorktree = (agent: string, session: string, how: "merge" | "squash" = "merge") => this.post<{ how: string; commit: string; commits: number; updated?: string }>(`/agents/${agent}/worktree/merge`, { session, how });
+	updateWorktree = (agent: string, session: string) => this.post<{ merged: number } | { conflicts: string[] }>(`/agents/${agent}/worktree/update`, { session });
+	discardWorktree = (agent: string, session: string, keepBranch = false) => this.post<{ folder?: string }>(`/agents/${agent}/worktree/remove`, { session, keepBranch });
 	/** What the last message changed in the conversation's folder, and one file's difference over it. */
 	turn = (agent: string, session: string) => this.get<TurnView>(`/agents/${agent}/view/turn?session=${encodeURIComponent(session)}`);
 	turnDiff = (agent: string, session: string, file: string) => this.get<{ diff: string; truncated: boolean }>(`/agents/${agent}/view/turndiff?session=${encodeURIComponent(session)}&path=${encodeURIComponent(file)}`);

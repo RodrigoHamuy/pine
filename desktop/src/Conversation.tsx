@@ -173,8 +173,8 @@ export function Steps({ items }: { items: Array<{ text: string; status: string }
 
 /** The menu of a message of the owner's: what can be done from it. */
 async function branchMenu(tab: Tab, task: number): Promise<void> {
-	const picked = await bridge.contextMenu([{ id: "branch", label: "Branch from here" }]);
-	if (picked === "branch") await store.branch(tab.agent, tab.session, task);
+	const picked = await bridge.contextMenu([{ id: "branch", label: "Branch from here" }, ...(tab.folder ? [{ id: "worktree", label: "Branch from here into a worktree" }] : [])]);
+	if (picked === "branch" || picked === "worktree") await store.branch(tab.agent, tab.session, task, picked === "worktree");
 }
 
 const zoom = (src: string) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
@@ -421,7 +421,14 @@ function ConvHead({ tab }: { tab: Tab }) {
 			<span className="muted">{tab.agent}</span>
 			<span className="faint">/</span>
 			<b className="cut" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
-			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><Icon name="folder" size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
+			{chat && tab.worktree ? (
+				<button type="button" className="chip worktree" title={`Works in the worktree ${tab.worktree.branch} of ${tab.worktree.base}${tab.folder ? `, at ${tab.folder}` : ""}: merge it, update it or discard it`} onClick={() => void store.worktreeMenu(tab)}>
+					<Icon name="branch" size={12} />
+					<span className="cut">{tab.worktree.branch}</span>
+				</button>
+			) : chat && tab.folder ? (
+				<button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><Icon name="folder" size={12} /><span className="cut">{tilde(tab.folder)}</span></button>
+			) : null}
 			{chat && store.pins.has(tab.key) ? <Icon name="star" size={12} className="faint" /> : null}
 			<span className="grow" />
 			{tab.context !== undefined ? (

@@ -45,6 +45,7 @@ const SYNONYMS: string[][] = [
 	["sandbox", "isolation", "confine", "restrict", "jail", "permission", "access"],
 	["conversation", "session", "tab", "chat", "thread"],
 	["branch", "fork", "split", "offshoot", "copy", "duplicate", "clone", "sidetrack", "tangent"],
+	["worktree", "worktrees", "checkout", "isolated", "collide", "clash", "interfere", "overwrite", "simultaneously"],
 	["interface", "ui", "gui", "frontend", "dashboard", "widget", "panel"],
 	["click", "press", "tap", "button", "pressed", "clicked"],
 	["preview", "beta", "prerelease", "nightly", "canary", "unreleased"],

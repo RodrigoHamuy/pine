@@ -59,6 +59,81 @@ changed while the conversation is working.
 For a project an agent should always work in, without opening anything, set `workspace` in its
 `agent.json` instead ([agents.md](agents.md)).
 
+## A worktree for a conversation
+
+Several conversations can work in the same folder, and then they get in each other's way: they
+write over each other's files, and taking back a message in one restores what another wrote. For
+conversations (or sub-agents) that work on the same repository at the same time, give each a
+**worktree**: a second checkout of the repository on a branch of its own, sharing its history. What one changes there is not in the
+folder, nor in another worktree, until you merge it.
+
+pine makes a worktree at `.pine/worktrees/<name>` at the top of the repository, on a new branch
+`pine/<name>`, from the last commit of what the folder has checked out. What is not committed in
+the folder stays there. `.pine` ignores itself (it holds a `.gitignore` of `*`), so git does not
+list it and nothing in the repository's own files changes. The conversation's folder becomes the
+same folder in the worktree (`src` of the repository becomes `src` of the worktree), and from its
+next message on it works there.
+
+| | |
+|---|---|
+| `/worktree [name]` | Moves the conversation into a new worktree of its folder's repository. In one already, it shows where it stands and what can be done: merge, squash, update, ask the agent to commit, discard. The bottom bar shows `⎇ pine/<name>` instead of the folder; a click opens the same list |
+| `/new --worktree [name]` | A new conversation in a worktree of the folder of the one in front |
+| `/branch --worktree [name]` | Branches the conversation into a worktree of its own ("Branching a conversation" in [agents.md](agents.md)) |
+| `pine <folder> --worktree [name]` | Starts the terminal UI with a new conversation in a worktree of that folder |
+| `.worktreeinclude` | A file at the top of the repository, in the patterns of `.gitignore`: the files it names that git ignores (`.env`, local settings) are copied into a new worktree. Never a file git tracks, never a link, at most 200 files of 1 MB each. The same file Claude Code reads |
+| `worktree` of `subagent` and `delegate` | `true`: each sub-agent (or the agent a task is handed to) works in a worktree of its own of the conversation's folder, made from its last commit. When it is done, what it changed is committed on its branch (`pine/<conversation>-sub`, `-sub-2`, ...), its folder is removed, and the agent that started it is told the branch to merge with `git merge`. One that changed nothing leaves nothing |
+
+In the Pine app: File › New Conversation in a Worktree… (⌥⌘T), Conversation › Worktree…, "Branch
+into a Worktree" on a conversation in the side bar and "Branch from here into a worktree" on a
+message of yours. The conversation's header shows the branch instead of the folder; a click opens
+the list. The Changes view of the panel shows how far the worktree is ahead of what it was made
+from, with a button to merge.
+
+### Merging, updating, discarding
+
+**Merge** brings the worktree's commits into the branch it was made from (`main`, say): as a
+fast-forward when that branch has not moved since, else as a merge commit. **Squash** makes all
+of it one commit. Only what is committed is merged: with changes that are not, pine says so and
+offers to ask the agent to commit. The merge is worked out without touching any files first, so a
+conflict changes nothing anywhere; pine names the files both sides changed. Where the base branch
+is checked out (usually your folder), its files move with it, and git refuses when that would
+overwrite a change of yours there; nothing is changed then either. A merge waits while a
+conversation that works in that folder is working.
+
+**Update** brings what the base got since into the worktree, as a merge commit there. When both
+changed the same lines, nothing is changed and pine says which files: ask the agent to merge the
+base itself and settle the conflict, then merge.
+
+**Discard** removes the worktree's folder and its branch, and the conversation works in the
+folder it came from again. "Discard, keep the branch" keeps the branch for git. A worktree with
+commits that are not merged or changes that are not committed is only discarded after you say so.
+
+A conversation in a worktree keeps it when it is renamed or started over. When it is removed,
+its worktree goes with it if everything of it is merged; one that holds work stays where it is,
+and `pine check` (with the daemon running) and the control API (`GET /worktrees`) list it as nobody's. Remove that one with
+`git worktree remove --force` and `git branch -D` yourself. pine forgets a worktree whose folder
+you removed by hand.
+
+Making, merging, updating and discarding a worktree are yours: there is no tool for any of them,
+and an agent cannot move a conversation into a worktree. A sub-agent's worktree is made from the
+folder you opened for its conversation.
+
+### What a worktree does not do
+
+- Merging and updating run git with the repository's hooks, filters and merge drivers turned off,
+  so files that Git LFS keeps arrive in a worktree as their pointers, and a file with a merge
+  driver of its own counts as a conflict. Commits pine makes are not signed.
+- Installed packages are not copied: `node_modules` and the like are installed in each worktree
+  (an agent does that by itself when it needs them).
+- Tools that read the whole repository without asking git what it ignores (a test runner, a type
+  checker, a file watcher in the folder) may see `.pine/worktrees`. Exclude `.pine` in their
+  settings.
+- A repository whose git folder is not a `.git` folder at its top (a bare one, or one made with
+  `--separate-git-dir`) gets no worktree, and neither does one without a commit.
+- Without a sandbox (`auto` and `bypass` mode) a worktree keeps conversations apart only by where
+  their tools start: nothing stops a command from writing elsewhere. In the sandbox it does: see
+  "Worktrees" in [security.md](security.md).
+
 ## The code pane
 
 `▤ code` at the right end of the tab bar, `ctrl+g` or `/code` opens a pane beside the

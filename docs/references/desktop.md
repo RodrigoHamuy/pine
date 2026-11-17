@@ -234,6 +234,18 @@ A branch stands under the conversation it was made from in the side bar, with th
 sign, and is called after it ("… · branch") until you rename it. What a branch takes along
 and what it does not is in [agents.md](agents.md#branching-a-conversation).
 
+A conversation can work in a worktree of its folder's repository: a checkout of its own, so
+that conversations working on one project at once do not write over each other's files
+([coding.md](coding.md#a-worktree-for-a-conversation)). File › New Conversation in a
+Worktree… (⌥⌘T) starts one, from the folder of the conversation in front or one you pick;
+Conversation › Worktree… moves the conversation in front into one, and "Branch from here into a
+worktree" (a right click on a message of yours) or "Branch into a Worktree" (the menu of a
+conversation in the side bar) branches into one. Its header shows the branch (`pine/<name>`)
+instead of the folder, and the side bar the branch sign. A click on the branch, Conversation ›
+Worktree… or "Worktree…" in the side bar's menu opens what can be done with it: merge or squash
+it into what it was made from, update it from there, ask the agent to commit, discard it. The
+Changes view of the panel says how many commits it is ahead, with a button to merge.
+
 Everything in [tui.md](tui.md) about modes, goals, approvals, an agent's questions, its list
 of steps, sub-agents, `/undo` and what a conversation is holds here unchanged: it is the
 daemon's doing. What differs is how it is drawn and reached.

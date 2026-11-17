@@ -47,7 +47,8 @@ export const COMMANDS: Command[] = [
 	{ name: "unpin", title: "Unpin conversation", about: "Let this conversation go when it has not been used for a while", chat: true, run: (_a, tab) => (chat(tab) ? store.pin(tab!, false) : undefined) },
 	{ name: "reset", title: "Start over", about: "Forget this conversation and start fresh", chat: true, run: menu("reset") },
 	{ name: "undo", title: "Take back last message", about: "Its files are restored, the conversation forgets it, its text returns to the input", keys: "⇧⌘Z", chat: true, run: menu("undo") },
-	{ name: "branch", title: "Branch conversation", about: "Go on in a new conversation that has all of this one; this one stays as it is. A message of yours branches from there", chat: true, run: menu("branch") },
+	{ name: "branch", title: "Branch conversation", about: "Go on in a new conversation that has all of this one; this one stays as it is. A message of yours branches from there. --worktree: the new one works in a worktree of its own", hint: "[--worktree]", chat: true, run: (args) => store.command(/(^|\s)(--worktree|-w)(\s|$)/.test(args) ? "branch-worktree" : "branch") },
+	{ name: "worktree", title: "Worktree", about: "Work in a checkout of the folder's repository of its own, apart from other conversations; in one: merge it, update it or discard it", chat: true, run: menu("worktree") },
 	{ name: "redo", title: "Bring back what was taken back", about: "Until you send a new message", keys: "⇧⌘Y", chat: true, run: menu("redo") },
 	{ name: "compact", title: "Shorten the conversation", about: "Its earlier part becomes a summary, which frees the model's context", chat: true, run: menu("compact") },
 	{

@@ -6,6 +6,7 @@ import { type AgentConfig, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpSe
 import { AGENT_TOOLS, checkNewAgent, createAgent } from "./agent-admin.ts";
 import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkRoute, checkSetting, dropRoute, routesText, SETTINGS, settingsText } from "./admin.ts";
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
+import { finish as finishWorktree, type Worktree, worktreeName } from "./worktrees.ts";
 import { SUBAGENT_CANNOT_ASK } from "./catalogue.ts";
 import type { PineEvent, TaskResult } from "./types.ts";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
@@ -43,6 +44,9 @@ function parseWhen(when: string | undefined): unknown {
  * The tools that are about what an agent has: event sources and subscriptions, MCP servers,
  * schedules, skills. The main agent calls each of them for another agent too (see the end of pineTools).
  */
+/** The `worktree` argument of subagent and delegate, said once. */
+const WORKTREE_PARAM = "true: each works on a checkout and branch of its own of your folder's git repository, from its last commit, so that changes do not collide. What it did comes back as a branch for you to merge";
+
 export const FOR_ANY_AGENT = ["sources", "subscribe", "unsubscribe", "add_source", "remove_source", "mcp_servers", "add_mcp_server", "remove_mcp_server", "schedules", "add_schedule", "remove_schedule", "skills", "add_skill", "remove_skill"];
 
 /** A file of an agent's, read without following a link: what lies there is the agent's to put. */
@@ -75,6 +79,32 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const t = run().task;
 		return t.event ? ({ id: t.event, hops: t.hops } as PineEvent) : ({ id: 0, hops: t.hops } as PineEvent);
 	};
+	/** Worktrees of the conversation's folder, one for each task of a call (`worktree` of subagent and delegate). */
+	const apart = async (n: number): Promise<Worktree[]> => {
+		if (!live.folder) throw new Error('"worktree": this conversation has no folder, so there is no repository to make a worktree of. Leave it out');
+		const made: Worktree[] = [];
+		try {
+			for (let i = 0; i < n; i++) made.push(await manager.taskWorktree(live.folder, worktreeName(`${live.key}-sub`)));
+		} catch (e) {
+			await gather(made, []);
+			throw new Error(`"worktree": ${errText(e)}`);
+		}
+		return made;
+	};
+	/** What became of each task's worktree: its work committed on its branch, the folder gone. Said to the agent that has to merge it. */
+	const gather = (trees: Worktree[], labels: string[]): Promise<string[]> =>
+		Promise.all(
+			trees.map(async (t, i) => {
+				try {
+					const f = await finishWorktree(t, truncate(labels[i] ?? "", 200));
+					if (!f.branch) return "It changed no file in its worktree.";
+					const files = `${f.files.slice(0, 12).join(", ")}${f.files.length > 12 ? `, and ${f.files.length - 12} more` : ""}`;
+					return `What it changed is on the branch ${f.branch} (${f.commits} commit${f.commits === 1 ? "" : "s"}; ${files}). It is not in your folder yet: bring it in with \`git merge ${f.branch}\`, then delete the branch with \`git branch -d ${f.branch}\`.`;
+				} catch (e) {
+					return `Its worktree ${t.path} could not be tidied (${errText(e)}). What it did is on the branch ${t.branch} or in that folder.`;
+				}
+			}),
+		);
 	const absorb = (from: string, res: TaskResult) => {
 		if (res.tainted) live.taint(`a result from ${from} (${res.tainted})`);
 	};
@@ -91,13 +121,16 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					task: Type.String({ description: "The complete task, self-contained" }),
 					wait: Type.Optional(Type.Boolean({ description: "false: do not wait; the answer arrives later as a message. Default true." })),
 					thread: Type.Optional(Type.String({ description: "Name of an ongoing thread with that agent, so it remembers earlier tasks of the same thread. Omit for a fresh start." })),
+					...(live.trust === "owner" ? { worktree: Type.Optional(Type.Boolean({ description: WORKTREE_PARAM })) } : {}),
 				}),
-				execute: async (_id, p, signal) => {
+				execute: async (_id, p: any, signal) => {
 					const r = run();
 					if (!profile.delegates.includes(p.agent)) throw new Error(`cannot delegate to "${p.agent}". Available: ${profile.delegates.join(", ")}`);
 					const chain = [...(r.task.meta.chain ?? []), agent.id];
 					if (chain.includes(p.agent)) throw new Error(`${p.agent} is already waiting in this chain (${chain.join(" -> ")}). Answer yourself or pick another agent.`);
 					if (r.task.depth + 1 > cfg.limits.maxDelegationDepth) throw new Error(`delegation depth limit (${cfg.limits.maxDelegationDepth}) reached; do the task yourself`);
+					if (p.worktree === true && (p.thread || p.wait === false)) throw new Error('"worktree" is for a task you wait for, without a thread: its work comes back as a branch for you to merge');
+					const [tree] = p.worktree === true ? await apart(1) : [];
 					const child = manager.submit({
 						agent: p.agent,
 						prompt: `[task from agent ${agent.id}]\n${p.task}`,
@@ -106,14 +139,19 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						parent: r.task,
 						tainted: live.tainted,
 						folder: live.folder,
+						worktree: tree,
 						notify: p.wait === false ? { agent: agent.id, session: r.task.session } : undefined,
 						label: truncate(p.task, 80),
 					});
 					if (p.wait === false) return ok(`Task #${child.id} handed to ${p.agent}. Its answer will arrive as a separate message later; do not wait for it now.`);
-					const res = await manager.awaitChildren(r, [child.id], signal);
+					const waited = await manager.awaitChildren(r, [child.id], signal).then((x) => ({ res: x }), (error) => ({ res: undefined, error }));
+					// Its worktree is tidied whatever became of the task: what it did stays on its branch.
+					const left = tree ? await gather([tree], [truncate(p.task, 200)]) : [];
+					if (!waited.res) throw waited.error;
+					const res = waited.res;
 					absorb(p.agent, res[0]);
-					if (res[0].status !== "done") throw new Error(`${p.agent} did not finish the task (${res[0].status}): ${res[0].error ?? "no details"}`);
-					return ok(`[${p.agent}] ${res[0].text || "(empty answer)"}`);
+					if (res[0].status !== "done") throw new Error(`${p.agent} did not finish the task (${res[0].status}): ${res[0].error ?? "no details"}${left.length ? `\n${left[0]}` : ""}`);
+					return ok(`[${p.agent}] ${res[0].text || "(empty answer)"}${left.length ? `\n\n${left[0]}` : ""}`);
 				},
 			}),
 		);
@@ -163,6 +201,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						? {
 								model: Type.Optional(Type.String({ description: "Another model for these sub-tasks, as provider/model. Leave out for your own. The models tool lists them" })),
 								thinking: Type.Optional(Type.String({ description: `Reasoning level for them, one of ${THINKING_LEVELS.join(", ")}. Leave out for your own` })),
+								worktree: Type.Optional(Type.Boolean({ description: WORKTREE_PARAM })),
 							}
 						: {}),
 				}),
@@ -173,13 +212,18 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					const model = p.model ? await pickModel(String(p.model)) : undefined;
 					const thinking = p.thinking ? String(p.thinking).trim().toLowerCase() : undefined;
 					if (thinking && !THINKING_LEVELS.includes(thinking)) throw new Error(`"thinking" is one of ${THINKING_LEVELS.join(", ")}`);
+					if (p.worktree === true && !choose) throw new Error('sub-agents of this run work where you do: leave out "worktree"');
+					const trees = p.worktree === true ? await apart(p.tasks.length) : [];
 					const ids = p.tasks.map(
-						(t: string) =>
-							manager.submit({ agent: agent.id, prompt: t, session: "new", kind: "subagent", parent: r.task, tainted: live.tainted, leaf: true, tools: agent.subagents.tools, model, thinking, label: truncate(t, 80) }).id,
+						(t: string, i: number) =>
+							manager.submit({ agent: agent.id, prompt: t, session: "new", kind: "subagent", parent: r.task, tainted: live.tainted, leaf: true, tools: agent.subagents.tools, model, thinking, label: truncate(t, 80), worktree: trees[i] }).id,
 					);
-					const res = await manager.awaitChildren(r, ids, signal);
+					const waited = await manager.awaitChildren(r, ids, signal).then((x) => ({ res: x }), (error) => ({ res: undefined, error }));
+					const left = await gather(trees, p.tasks);
+					if (!waited.res) throw waited.error;
+					const res = waited.res;
 					res.forEach((x, i) => absorb(`sub-agent ${i + 1}`, x));
-					return ok(res.map((x, i) => `## Sub-task ${i + 1}: ${x.status}\n${x.status === "done" ? x.text : (x.error ?? "")}`).join("\n\n"));
+					return ok(res.map((x, i) => `## Sub-task ${i + 1}: ${x.status}\n${x.status === "done" ? x.text : (x.error ?? "")}${left[i] ? `\n\n${left[i]}` : ""}`).join("\n\n"));
 				},
 			}),
 		);

@@ -806,6 +806,9 @@ select.input {
 	background: var(--hover);
 	color: var(--text);
 }
+.chip.worktree {
+	color: var(--accent);
+}
 .chip.good {
 	color: var(--accent);
 }
