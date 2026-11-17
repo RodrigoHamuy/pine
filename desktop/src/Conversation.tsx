@@ -1,6 +1,16 @@
 // One tab's conversation: what was said, the work of each turn folded into a line, and what
 // waits for the owner. Each kind of line is a small component; the list only draws what changed.
-import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { BrainIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ListChecksIcon, MessageCircleQuestionIcon, PaperclipIcon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Confirmation, ConfirmationAction, ConfirmationActions, ConfirmationRequest, ConfirmationTitle } from "@/components/ai-elements/confirmation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
+import { Reasoning, ReasoningTrigger } from "@/components/ai-elements/reasoning";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
+import { Task, TaskContent, TaskItem, TaskTrigger } from "@/components/ai-elements/task";
+import { Tool, ToolContent, ToolOutput } from "@/components/ai-elements/tool";
+import { Badge } from "@/components/ui/badge";
+import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { cn } from "@/lib/utils";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown } from "./markdown.tsx";
@@ -11,49 +21,67 @@ import { Button, Icon, Pulse } from "./ui.tsx";
 const TONE_ICON: Record<Tone, string> = { muted: "info", warn: "alert", bad: "alert", good: "check", accent: "undo" };
 
 function Status({ status }: { status: "run" | "ok" | "fail" | "done" | "failed" | "cancelled" }) {
-	if (status === "run") return <span className="st"><Pulse size={11} /></span>;
+	if (status === "run") return <span className="inline-flex size-4 shrink-0 items-center justify-center"><Pulse size={11} /></span>;
 	const ok = status === "ok" || status === "done";
-	return <span className={`st ${ok ? "ok" : "fail"}`}><Icon name={ok ? "check" : "x"} size={12} /></span>;
+	return <span className={cn("inline-flex size-4 shrink-0 items-center justify-center", ok ? "text-primary" : "text-destructive")}>{ok ? <CheckIcon className="size-3" /> : <XIcon className="size-3" />}</span>;
 }
 
-function Thought({ part, live }: { part: Extract<Part, { p: "thought" }>; live: boolean }) {
+/** Thinking, folded into a line. Its text is shown as it is, never drawn as markdown: it is the model's own words. */
+function Thought({ text, head, peek }: { text: string; head: ReactNode; peek?: boolean }) {
 	const [open, setOpen] = useState(false);
-	const secs = part.done ? undefined : Math.round((Date.now() - part.startedAt) / 1000);
 	return (
-		<div className="thought">
-			<button type="button" className="thought-head" onClick={() => setOpen(!open)}>
-				<span className="st"><Icon name={open ? "down" : "right"} size={11} /></span>
-				{part.done ? `thought for ${took(part.ms)}` : `thinking ${secs}s`}
-				{part.speed ? <span className="faint" style={{ fontStyle: "normal" }}>{part.speed}</span> : null}
-			</button>
-			{open ? <div className="thought-text" onClick={() => !window.getSelection()?.toString() && setOpen(false)}>{part.text}</div> : live && !part.done ? <div className="thought-text peek"><span>{part.text.slice(-600)}</span></div> : null}
-		</div>
+		<Reasoning className="mb-0" open={open} onOpenChange={setOpen} data-part="thought">
+			<ReasoningTrigger className="py-0.5 text-xs italic">
+				<BrainIcon className="size-3.5" />
+				{head}
+				<ChevronDownIcon className={cn("size-3.5 transition-transform", open ? "rotate-180" : "rotate-0")} />
+			</ReasoningTrigger>
+			<CollapsibleContent className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap border-l-2 pl-3 text-muted-foreground text-xs select-text">{text}</CollapsibleContent>
+			{!open && peek ? <div className="mt-1 line-clamp-3 border-l-2 pl-3 text-muted-foreground text-xs">{text.slice(-600)}</div> : null}
+		</Reasoning>
+	);
+}
+
+/** One tool call: a line with what it did, which opens on what it returned or why it failed. */
+function Call({ tool, subject, status, ms, depth = 0, output, error, images }: { tool: string; subject?: string; status: "run" | "ok" | "fail"; ms?: number; depth?: number; output?: string; error?: string; images?: string[] }) {
+	const more = Boolean(output || error || images?.length);
+	return (
+		<Tool className="mb-0 border-0" style={{ paddingLeft: depth * 14 }} data-part="tool" data-status={status}>
+			<CollapsibleTrigger disabled={!more} className="flex w-full min-w-0 items-center gap-2 rounded-sm py-0.5 text-left text-xs enabled:cursor-pointer enabled:hover:bg-hover">
+				<Status status={status} />
+				<span className="shrink-0 font-mono text-foreground" data-tool>{tool}</span>
+				<span className="truncate font-mono text-muted-foreground" title={subject}>{subject}</span>
+				<span className="grow" />
+				{ms !== undefined ? <span className="shrink-0 text-faint">{took(ms)}</span> : null}
+			</CollapsibleTrigger>
+			{more ? (
+				<ToolContent className="p-2 pl-6">
+					<ToolOutput output={output ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-2 font-mono select-text">{output}</pre> : undefined} errorText={error} />
+					{(images ?? []).map((id) => (
+						<div className="it-media" key={id}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" onClick={(e) => zoom((e.target as HTMLImageElement).src)} /></div>
+					))}
+				</ToolContent>
+			) : null}
+		</Tool>
 	);
 }
 
 function PartLine({ part, live }: { part: Part; live: boolean }) {
-	if (part.p === "thought") return <Thought part={part} live={live} />;
-	if (part.p === "words") return <div className="part-words">{part.text}</div>;
+	if (part.p === "thought") {
+		const secs = part.done ? undefined : Math.round((Date.now() - part.startedAt) / 1000);
+		return <Thought text={part.text} peek={live && !part.done} head={<>{part.done ? `thought for ${took(part.ms)}` : `thinking ${secs}s`}{part.speed ? <span className="text-faint not-italic">{part.speed}</span> : null}</>} />;
+	}
+	if (part.p === "words") return <TaskItem className="whitespace-pre-wrap text-xs" data-part="words">{part.text}</TaskItem>;
 	if (part.p === "child")
 		return (
-			<div className="part" style={{ paddingLeft: Math.max(0, part.depth - 1) * 14 }}>
+			<TaskItem className="flex min-w-0 items-center gap-2 text-xs" style={{ paddingLeft: Math.max(0, part.depth - 1) * 14 }} data-part="child">
 				<Status status={part.status} />
-				<span className="tool">↳ {part.agent}</span>
-				<span className="subject" style={{ fontFamily: "inherit" }}>{childKind(part.kind)} #{part.task}{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}</span>
+				<span className="shrink-0 font-mono text-foreground">↳ {part.agent}</span>
+				<span className="truncate">{childKind(part.kind)} #{part.task}{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}</span>
 				<button type="button" className="open-link" onClick={() => void store.openTask(part.task)}>open</button>
-			</div>
+			</TaskItem>
 		);
-	return (
-		<>
-			<div className="part" style={{ paddingLeft: part.depth * 14 }}>
-				<Status status={part.status} />
-				<span className="tool">{part.tool}</span>
-				<span className="subject" title={part.subject}>{part.subject}</span>
-				{part.ms !== undefined ? <span className="ms">{took(part.ms)}</span> : null}
-			</div>
-			{part.status === "fail" && part.preview ? <div className="part-err" style={{ marginLeft: 22 + part.depth * 14 }}>{part.preview}</div> : null}
-		</>
-	);
+	return <Call tool={part.tool} subject={part.subject} status={part.status} ms={part.ms} depth={part.depth} error={part.status === "fail" ? part.preview : undefined} />;
 }
 
 /** "12 tool calls · bash ×6 · read ×4 · edit · +1 more · 2 thoughts · 1 failed · 48s" */
@@ -82,108 +110,150 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 	const [open, setOpen] = useState(item.open);
 	const parts = item.parts;
 	// A turn with a single call or thought is that call or thought itself, with no line above it.
-	if (parts.length === 1 && item.done) return <div className="work"><div className="work-parts" style={{ borderTop: "none", paddingTop: 6 }}><PartLine part={parts[0]} live={false} /></div></div>;
+	if (parts.length === 1 && item.done) return <div className="py-1" data-item="work"><PartLine part={parts[0]} live={false} /></div>;
 	const shown = open ? parts : item.done ? [] : parts.slice(-6);
+	// While the turn runs its last lines show under the head; a click shows all of them, another folds it.
 	return (
-		<div className={`work${open ? " open" : ""}`}>
-			<button type="button" className="work-head" onClick={() => ((item.open = !open), setOpen(!open))}>
-				{item.done ? <Icon name="right" size={12} className="chev" /> : <Pulse size={12} />}
-				<span className="grow cut">{workHead(parts, item.done, item.ms) || "working"}</span>
-				{!item.done && !open && parts.length > 6 ? <span className="faint">show all</span> : null}
-			</button>
-			{shown.length ? (
-				<div className="work-parts">
-					{shown.map((p, i) => (
-						<PartLine key={open ? i : parts.length - shown.length + i} part={p} live={!item.done} />
-					))}
+		<Task open={shown.length > 0} onOpenChange={() => ((item.open = !open), setOpen(!open))} className="py-1" data-item="work" data-open={open || undefined}>
+			<TaskTrigger title={workHead(parts, item.done, item.ms) || "working"}>
+				<div className="flex w-full min-w-0 cursor-pointer items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground">
+					{item.done ? <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} /> : <Pulse size={12} />}
+					<span className="grow truncate text-left">{workHead(parts, item.done, item.ms) || "working"}</span>
+					{!item.done && !open && parts.length > 6 ? <span className="text-faint">show all</span> : null}
 				</div>
-			) : null}
-		</div>
+			</TaskTrigger>
+			<TaskContent className="[&>div]:mt-1 [&>div]:space-y-0.5">
+				{shown.map((p, i) => (
+					<PartLine key={open ? i : parts.length - shown.length + i} part={p} live={!item.done} />
+				))}
+			</TaskContent>
+		</Task>
 	);
 }
 
 function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
-	const [open, setOpen] = useState(false);
-	if (entry.kind === "user") return <div className="it-user"><span className="from">task</span>{entry.text}</div>;
-	if (entry.kind === "text") return <Markdown text={entry.text ?? ""} where={{ agent }} />;
-	if (entry.kind === "thinking")
+	if (entry.kind === "user")
 		return (
-			<div className="thought">
-				<button type="button" className="thought-head" onClick={() => setOpen(!open)}><span className="st"><Icon name={open ? "down" : "right"} size={11} /></span>thought</button>
-				{open ? <div className="thought-text">{entry.text}</div> : null}
-			</div>
+			<Message from="user" data-item="user">
+				<MessageContent className="whitespace-pre-wrap select-text"><span className="text-faint text-xs">task</span>{entry.text}</MessageContent>
+			</Message>
 		);
-	return (
-		<div style={{ fontSize: 12.5 }}>
-			<div className="part">
-				<Status status={entry.ok === undefined ? "run" : entry.ok ? "ok" : "fail"} />
-				<span className="tool">{entry.tool}</span>
-				<span className="subject">{entry.subject ? oneLine(entry.subject) : ""}</span>
-				{entry.ms !== undefined ? <span className="ms">{took(entry.ms)}</span> : null}
-			</div>
-			{entry.result ? <div className="entry-result" style={entry.ok === false ? { color: "var(--bad)" } : undefined}>{short(entry.result, 4000)}</div> : null}
-			{(entry.images ?? []).map((id) => (
-				<div className="it-media" key={id} style={{ marginTop: 6, marginLeft: 22 }}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" onClick={(e) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: (e.target as HTMLImageElement).src }))} /></div>
-			))}
-		</div>
-	);
+	if (entry.kind === "text")
+		return (
+			<Message from="assistant" className="max-w-full">
+				<MessageContent className="w-full"><Markdown text={entry.text ?? ""} where={{ agent }} /></MessageContent>
+			</Message>
+		);
+	if (entry.kind === "thinking") return <Thought text={entry.text ?? ""} head="thought" />;
+	const ok = entry.ok === undefined ? "run" : entry.ok ? "ok" : "fail";
+	const result = entry.result ? short(entry.result, 4000) : undefined;
+	return <Call tool={entry.tool ?? ""} subject={entry.subject ? oneLine(entry.subject) : ""} status={ok} ms={entry.ms} output={ok === "fail" ? undefined : result} error={ok === "fail" ? result : undefined} images={entry.images} />;
 }
 
+/**
+ * A request of the agent's, in the conversation: what it wants and why, answered right here or
+ * in the dialog. What needs typing (a secret, the owner's own words) opens the dialog.
+ */
 function ApprovalCard({ item }: { item: Extract<Item, { t: "approval" }> }) {
 	const { req, state } = item;
 	const question = req.tool === "question";
-	const head =
-		state === "open" ? (question ? `${req.agent} asks` : "Approval needed") : state === "gone" ? "No longer open" : question ? (state === "allowed" ? "Answered" : "No answer") : state === "allowed" ? "Allowed" : "Denied";
+	const choices = req.choices ?? [];
+	const typed = Boolean(req.inputs?.length);
+	const head = state === "open" ? (question ? `${req.agent} asks` : "Approval needed") : state === "gone" ? "No longer open" : question ? (state === "allowed" ? "Answered" : "No answer") : state === "allowed" ? "Allowed" : "Denied";
+	const by = state !== "open" && item.by ? <span className="text-faint"> ({item.by}){item.always && req.remember ? ` · ${req.remember} will not ask again in this conversation` : ""}</span> : null;
 	return (
-		<div className={`card it-approval ${state}`}>
-			<Icon name={state === "open" ? (question ? "chat" : "alert") : state === "allowed" ? "check" : "x"} className={state === "open" ? "" : "faint"} />
-			<div className="what">
-				<div>
-					<b>{head}</b>
-					{question ? null : <> · <span className="mono">{req.tool}</span></>}
-					{state !== "open" && item.by ? <span className="faint"> ({item.by}){item.always && req.remember ? ` · ${req.remember} will not ask again in this conversation` : ""}</span> : null}
-					{state === "gone" ? <span className="faint"> · pine was restarted, or the question ran out of time</span> : null}
-				</div>
-				<div className="sum">{req.summary}</div>
-				{state === "open" && !question ? <div className="faint" style={{ fontSize: 12, marginTop: 2 }}>{req.why}</div> : null}
-			</div>
-			{state === "open" ? <Button variant="primary" small onClick={() => store.ask(req.id)}>{question ? "Answer" : "Decide"}</Button> : null}
+		<div className="py-1" data-item="approval" data-state={state}>
+			<Confirmation approval={state === "open" ? { id: req.id } : { id: req.id, approved: state === "allowed" }} state={state === "open" ? "approval-requested" : state === "gone" ? "output-denied" : "approval-responded"} className={cn(state !== "open" && "py-2 text-muted-foreground")}>
+				<ConfirmationTitle className="flex items-start gap-2">
+					{state === "open" ? question ? <MessageCircleQuestionIcon className="mt-0.5 size-4 shrink-0" /> : <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warn" /> : state === "allowed" ? <CheckIcon className="mt-0.5 size-4 shrink-0" /> : <XIcon className="mt-0.5 size-4 shrink-0" />}
+					<span className="min-w-0">
+						<b className="text-foreground">{head}</b>
+						{question ? null : <> · <span className="font-mono">{req.tool}</span></>}
+						{by}
+						{state === "gone" ? <span className="text-faint"> · pine was restarted, or the question ran out of time</span> : null}
+						<span className="block whitespace-pre-wrap break-words text-foreground select-text">{req.summary}</span>
+					</span>
+				</ConfirmationTitle>
+				<ConfirmationRequest>
+					{question ? null : <div className="pl-6 text-muted-foreground text-xs">{req.why}</div>}
+					{question && choices.length ? (
+						<Suggestions className="pl-6">
+							{choices.map((c, i) => <Suggestion key={i} suggestion={c} variant={i === 0 ? "default" : "outline"} title={i === 0 ? "recommended" : undefined} onClick={(text) => void store.decide(req.id, true, false, { answer: text })} />)}
+						</Suggestions>
+					) : null}
+				</ConfirmationRequest>
+				<ConfirmationActions>
+					{question ? (
+						<>
+							<ConfirmationAction variant="ghost" onClick={() => void store.decide(req.id, false)}>No answer</ConfirmationAction>
+							<ConfirmationAction variant="outline" onClick={() => store.ask(req.id)}>{choices.length ? "In my own words…" : "Answer…"}</ConfirmationAction>
+						</>
+					) : typed ? (
+						<>
+							<ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</ConfirmationAction>
+							<ConfirmationAction onClick={() => store.ask(req.id)}>Decide…</ConfirmationAction>
+						</>
+					) : (
+						<>
+							<ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</ConfirmationAction>
+							{req.remember ? <ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, true, true)}>Always here</ConfirmationAction> : null}
+							<ConfirmationAction onClick={() => void store.decide(req.id, true)}>{req.holds ? "Allow" : "Allow once"}</ConfirmationAction>
+						</>
+					)}
+				</ConfirmationActions>
+			</Confirmation>
 		</div>
 	);
 }
 
+/** The agent's list of steps (its todo tool): how far it is, and each step. */
 export function Steps({ items }: { items: Array<{ text: string; status: string }> }) {
 	const done = items.filter((t) => t.status === "done").length;
 	return (
-		<div className="steps">
-			<div className="head">
-				steps · {done} of {items.length} done
-				<span className="bar"><i style={{ width: `${(100 * done) / Math.max(1, items.length)}%` }} /></span>
-			</div>
-			{items.map((t, i) => (
-				<div key={i} className={`step ${t.status}`}>
-					<span className="box">{t.status === "done" ? <Icon name="check" size={10} /> : null}</span>
-					<span className="selectable">{t.text}</span>
+		<Task data-item="steps">
+			<TaskTrigger title={`steps · ${done} of ${items.length} done`}>
+				<div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-xs hover:text-foreground">
+					<ListChecksIcon className="size-3.5" />
+					<span>steps · {done} of {items.length} done</span>
+					<span className="h-1 w-16 overflow-hidden rounded-full bg-press"><i className="block h-full bg-primary" style={{ width: `${(100 * done) / Math.max(1, items.length)}%` }} /></span>
+					<ChevronDownIcon className="size-3.5 transition-transform group-data-[panel-open]:rotate-180" />
 				</div>
-			))}
-		</div>
+			</TaskTrigger>
+			<TaskContent className="[&>div]:mt-2 [&>div]:space-y-1">
+				{items.map((t, i) => (
+					<TaskItem key={i} className={cn("flex items-start gap-2 text-xs", t.status === "done" && "line-through", t.status === "in_progress" && "text-foreground")} data-status={t.status}>
+						<span className={cn("mt-0.5 inline-flex size-3 shrink-0 items-center justify-center rounded-sm border", t.status === "done" && "border-primary bg-primary text-primary-foreground")}>{t.status === "done" ? <CheckIcon className="size-2.5" /> : null}</span>
+						<span className="select-text">{t.text}</span>
+					</TaskItem>
+				))}
+			</TaskContent>
+		</Task>
 	);
 }
 
 const zoom = (src: string) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
 
-const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
+/** One item of a conversation, drawn as what it is. */
+export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
 	switch (item.t) {
 		case "user":
 			return (
-				<div className="it-user">
-					{item.from ? <span className="from">{item.from}</span> : null}
-					{item.text}
-					{item.files?.length ? <div className="files">{item.files.map((f) => <span className="tag" key={f}><Icon name="clip" size={11} />{f}</span>)}</div> : null}
-				</div>
+				<Message from="user" className="py-1" data-item="user">
+					<MessageContent className="whitespace-pre-wrap break-words select-text">
+						{item.from ? <span className="text-faint text-xs">{item.from}</span> : null}
+						{item.text}
+						{item.files?.length ? <div className="flex flex-wrap gap-1">{item.files.map((f) => <Badge variant="outline" key={f}><PaperclipIcon data-icon="inline-start" />{f}</Badge>)}</div> : null}
+					</MessageContent>
+				</Message>
 			);
 		case "answer":
-			return <Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined }} />;
+			return (
+				<Message from="assistant" className="max-w-full py-1" data-item="answer">
+					<MessageContent className="w-full">
+						<Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined }} />
+					</MessageContent>
+				</Message>
+			);
 		case "work":
 			return <Work item={item} />;
 		case "note":
@@ -210,7 +280,7 @@ const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }
 		case "approval":
 			return <ApprovalCard item={item} />;
 		case "steps":
-			return <div className="card"><Steps items={item.items} /></div>;
+			return <div className="my-1 rounded-lg border p-3"><Steps items={item.items} /></div>;
 		case "media":
 			return (
 				<div className="it-media">
@@ -283,7 +353,7 @@ function Welcome({ tab }: { tab: Tab }) {
 				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 			</p>
 			<div className="hints">
-				<Button small onClick={() => say("What can you do for me, and what are you set up with?")}>What can you do?</Button>
+				<Suggestion suggestion="What can you do for me, and what are you set up with?" onClick={say}>What can you do?</Suggestion>
 				<Button small icon="gear" onClick={() => store.openSettings("agents", tab.agent)}>Agent settings</Button>
 				<Button small icon="folder" onClick={() => void store.pickFolder(tab)}>Give it a folder</Button>
 				<Button small icon="command" onClick={() => void store.command("palette")}>Commands <kbd>⌘K</kbd></Button>

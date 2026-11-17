@@ -16,7 +16,10 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
+import { FileIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { FileTree, FileTreeFile, FileTreeFolder, FileTreeIcon, FileTreeName } from "@/components/ai-elements/file-tree";
+import { Terminal } from "@/components/ai-elements/terminal";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
@@ -218,34 +221,48 @@ function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: n
 	const entries = state.dirs.get(dir);
 	if (!entries) return depth ? null : <Empty title=""><Pulse /></Empty>;
 	if (!entries.length && !depth) return <Empty icon="folder" title="This folder is empty" />;
+	const items = entries.map((e) => {
+		const full = dir ? `${dir}/${e.name}` : e.name;
+		// A folder's entries are asked for when it opens, and only then.
+		return e.dir ? (
+			<FileTreeFolder key={full} path={full} name={e.name}>
+				<Tree tab={tab} dir={full} depth={depth + 1} pick={pick} tick={tick} />
+			</FileTreeFolder>
+		) : (
+			<FileTreeFile key={full} path={full} name={e.name}>
+				<span className="size-4 shrink-0" />
+				<FileTreeIcon><FileIcon className="size-4 text-muted-foreground" /></FileTreeIcon>
+				<FileTreeName className="grow">{e.name}</FileTreeName>
+				<span className="shrink-0 text-faint text-xs">{size(e.size)}</span>
+			</FileTreeFile>
+		);
+	});
+	if (depth) return <>{items}</>;
+	const toggle = (path: string) => {
+		if (state.open.has(path)) state.open.delete(path);
+		else state.open.add(path);
+		redraw((n) => n + 1);
+	};
 	return (
-		<>
-			{entries.map((e) => {
-				const full = dir ? `${dir}/${e.name}` : e.name;
-				const open = state.open.has(full);
-				return (
-					<div key={full}>
-						<div
-							className={`frow${state.file === full ? " on" : ""}`}
-							style={{ paddingLeft: 10 + depth * 14 }}
-							onClick={() => {
-								if (!e.dir) return pick(full);
-								if (open) state.open.delete(full);
-								else state.open.add(full);
-								redraw((n) => n + 1);
-							}}
-						>
-							{e.dir ? <Icon name={open ? "down" : "right"} size={11} className="faint" /> : <span style={{ width: 11 }} />}
-							<Icon name={e.dir ? "folder" : "file"} size={13} className="faint" />
-							<span className="cut grow">{e.name}</span>
-							{!e.dir ? <span className="faint" style={{ fontSize: 11 }}>{size(e.size)}</span> : null}
-						</div>
-						{e.dir && open ? <Tree tab={tab} dir={full} depth={depth + 1} pick={pick} tick={tick} /> : null}
-					</div>
-				);
-			})}
-		</>
+		<FileTree
+			className="rounded-none border-0 bg-transparent font-sans"
+			expanded={state.open}
+			onExpandedChange={(open) => ((state.open = open), redraw((n) => n + 1))}
+			selectedPath={state.file}
+			// A click on a folder's name opens or closes it, as one on its arrow does.
+			onSelect={(path) => (isDir(state, path) ? toggle(path) : pick(path))}
+		>
+			{items}
+		</FileTree>
 	);
+}
+
+/** Whether a path of the tree is a folder, by what its parent folder listed. */
+function isDir(state: TreeState, path: string): boolean {
+	const cut = path.lastIndexOf("/");
+	const parent = cut < 0 ? "" : path.slice(0, cut);
+	const name = path.slice(cut + 1);
+	return Boolean(state.dirs.get(parent)?.some((e) => e.dir && e.name === name));
 }
 
 /** One file, to read and to change. What the agent changes meanwhile is shown unless the owner has typed. */
@@ -359,10 +376,9 @@ function Output({ tab }: { tab: Tab }) {
 					<Button small variant="ghost" icon="back" onClick={() => setOpen(undefined)} />
 					<span className="mono">{shown.entry.tool}</span>
 					<span className="cut grow mono faint">{shown.entry.subject}</span>
-					<Button small variant="ghost" icon="copy" title="Copy the output" onClick={() => void navigator.clipboard.writeText(shown.entry.result ?? "")} />
 				</div>
 				<div className="code-body">
-					<div className="out" style={shown.entry.ok === false ? { color: "var(--bad)" } : undefined}>{shown.entry.result || "(it printed nothing)"}</div>
+					<Terminal output={shown.entry.result || "(it printed nothing)"} className="m-2" data-status={shown.entry.ok === false ? "fail" : "ok"} />
 					{(shown.entry.images ?? []).map((id) => <div className="it-media" key={id} style={{ padding: 12 }}><img src={media.tool(id)} alt="" /></div>)}
 				</div>
 			</>
@@ -401,7 +417,7 @@ function Running({ tab }: { tab: Tab }) {
 							<button key={port} type="button" className="open-link" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</button>
 						))}
 					</div>
-					{p.output ? <div className="entry-result" style={{ marginLeft: 0 }}>{p.output}</div> : null}
+					{p.output ? <Terminal output={p.output} className="mt-1" /> : null}
 				</div>
 			))}
 		</div>
