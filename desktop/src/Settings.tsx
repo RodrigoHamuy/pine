@@ -26,6 +26,7 @@ import { Choice } from "@/components/choice";
 import { Hint } from "@/components/hint";
 import { LabeledField } from "@/components/labeled-field";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
+import { Log } from "@/components/log";
 import { AutoText, Empty, Loading, useLoad } from "./ui.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
@@ -85,15 +86,6 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
 			<FieldLegend>{title}</FieldLegend>
 			<FieldGroup className="set-group">{children}</FieldGroup>
 		</FieldSet>
-	);
-}
-
-/** What a command printed: kept as it was written, selectable, and scrolled when it is long. */
-function Log({ children }: { children: ReactNode }) {
-	return (
-		<ScrollFadeArea className="max-h-60 rounded-md bg-sunk text-muted-foreground">
-			<pre className="log m-0 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere">{children}</pre>
-		</ScrollFadeArea>
 	);
 }
 

@@ -20,6 +20,7 @@ import { createContext, memo, useContext, useEffect, useState, type ReactNode } 
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { type Options as Schema } from "rehype-sanitize";
 import { Streamdown, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
+import { Button } from "@/components/ui/button";
 import { api, media } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { mediaKind } from "./model.ts";
@@ -135,9 +136,9 @@ function Remote({ url, alt }: { url: string; alt: string }) {
 	};
 	const label = state.loading ? `Loading · ${short(url, 90)}` : state.error ? `Could not load ${short(url, 70)}: ${state.error}` : `Load ${kind === "image" ? "picture" : kind} · ${short(url, 90)}`;
 	return (
-		<button type="button" data-remote={url} title={url} className="inline-flex cursor-pointer rounded-md border border-dashed px-2.5 py-1 text-muted-foreground text-xs select-none hover:border-primary hover:text-foreground" onClick={() => void load()}>
-			{label}
-		</button>
+		<Button variant="outline" size="xs" data-remote={url} title={state.error ? `${url}: ${state.error}` : url} className="max-w-full" onClick={() => void load()}>
+			<span className="truncate">{label}</span>
+		</Button>
 	);
 }
 

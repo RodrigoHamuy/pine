@@ -40,6 +40,7 @@ import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
+import { LogText } from "@/components/log";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -102,7 +103,6 @@ function Body({ wide, children }: { wide?: boolean; children: React.ReactNode })
 }
 const SUB = "code-sub flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
 const PICTURE = "block max-h-80 max-w-full rounded-lg border sm:max-w-md";
-const OUT = "whitespace-pre-wrap wrap-anywhere px-3 py-2.5 font-mono text-xs text-muted-foreground select-text cursor-text";
 const STATUS: Record<string, string> = { M: "text-warn", A: "text-add", "?": "text-add", D: "text-del", R: "text-info" };
 
 function language(file: string): Extension {
@@ -185,11 +185,11 @@ function ChangeRow({ c }: { c: Change }) {
 	const at = c.path.lastIndexOf("/");
 	return (
 		<ListRow value={c.path} label={c.path.slice(at + 1)} className={rowClass()} title={c.path}>
-			<span className={`w-3.5 flex-none text-center font-mono text-xs font-semibold ${STATUS[c.status] ?? ""}`}>{c.status === "?" ? "U" : c.status}</span>
+			<span className={`w-3.5 flex-none text-center font-mono font-semibold ${STATUS[c.status] ?? ""}`}>{c.status === "?" ? "U" : c.status}</span>
 			<span className="truncate">{c.path.slice(at + 1)}</span>
 			<span className="min-w-0 flex-1 truncate text-faint">{at > 0 ? c.path.slice(0, at) : ""}</span>
-			{c.added ? <span className="font-mono text-xs text-add">+{c.added}</span> : null}
-			{c.removed ? <span className="font-mono text-xs text-del">−{c.removed}</span> : null}
+			{c.added ? <span className="font-mono text-add">+{c.added}</span> : null}
+			{c.removed ? <span className="font-mono text-del">−{c.removed}</span> : null}
 		</ListRow>
 	);
 }
@@ -219,7 +219,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 					<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}</span>
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className={OUT}>… the rest of this diff is too long to show.</div> : null}</> : diff.error ? <Empty icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</Empty> : <Loading />}</Body>
+				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <LogText className="cursor-text text-muted-foreground">… the rest of this diff is too long to show.</LogText> : null}</> : diff.error ? <Empty icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</Empty> : <Loading />}</Body>
 			</>
 		);
 	return (
@@ -229,9 +229,9 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 				<Hint label="Read again"><Button variant="ghost" size="icon-xs" onClick={list.reload}><RotateCwIcon /></Button></Hint>
 			</div>
 			<Body>
-				{data.note ? <div className={OUT}>{data.note}</div> : null}
+				{data.note ? <LogText className="cursor-text text-muted-foreground">{data.note}</LogText> : null}
 				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> : <Empty icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
-				{data.more ? <div className={OUT}>… and more.</div> : null}
+				{data.more ? <LogText className="cursor-text text-muted-foreground">… and more.</LogText> : null}
 			</Body>
 		</>
 	);
@@ -281,7 +281,7 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [read.loading, read.data, read.error]);
 	const failed = state.failed.get(dir);
-	if (failed && dir) return <div className={`${OUT} text-faint`} style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>{failed}</div>;
+	if (failed && dir) return <LogText className="cursor-text text-faint" style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>{failed}</LogText>;
 	const entries = state.dirs.get(dir);
 	if (!entries) return null;
 	return (
@@ -294,7 +294,7 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 						{e.dir ? (open ? <ChevronDownIcon size={12} className="text-faint" /> : <ChevronRightIcon size={12} className="text-faint" />) : <span className="w-3 flex-none" />}
 						{e.dir ? <FolderIcon size={13} className="text-faint" /> : <FileIcon size={13} className="text-faint" />}
 						<span className="min-w-0 flex-1 truncate">{e.name}</span>
-						{!e.dir ? <span className="text-xs text-faint">{size(e.size)}</span> : null}
+						{!e.dir ? <span className="text-faint">{size(e.size)}</span> : null}
 					</>
 				);
 				return (
@@ -486,10 +486,10 @@ function Output({ tab }: { tab: Tab }) {
 			<List label="Tool calls" onOpen={setOpen}>
 			{calls.data.map((c) => (
 				<ListRow key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
-					<span className={`w-3.5 flex-none text-center font-mono text-xs font-semibold ${c.entry.ok === false ? "text-destructive" : c.entry.ok ? "text-primary" : "text-warn"}`}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
+					<span className={`w-3.5 flex-none text-center font-mono font-semibold ${c.entry.ok === false ? "text-destructive" : c.entry.ok ? "text-primary" : "text-warn"}`}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
-					{c.entry.ms !== undefined ? <span className="text-xs text-faint">{took(c.entry.ms)}</span> : null}
+					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}
 				</ListRow>
 			))}
 				</List>

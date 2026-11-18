@@ -32,6 +32,7 @@ import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTi
 import { Kbd } from "@/components/ui/kbd";
 import { Spinner } from "@/components/ui/spinner";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
+import { Log } from "@/components/log";
 
 // Pieces of the frame drawn the same in several places.
 /** A row of the side bar: its hover, the one in front, and its focus from the keyboard. */
@@ -40,12 +41,6 @@ const ROW_ON = "bg-press text-foreground hover:bg-press";
 /** Something waits for the owner: an exclamation mark on the warning colour. */
 const NEEDS = "grid size-3.5 flex-none place-items-center rounded-full bg-warn text-xs leading-none font-bold text-background";
 const DOT = "dot size-2 flex-none rounded-full";
-/** What a command printed: monospace, kept as it was written, and scrolled when it is long. */
-const Log = ({ className, children }: { className?: string; children: React.ReactNode }) => (
-	<ScrollFadeArea className={cn("max-h-60 rounded-md bg-sunk text-muted-foreground", className)}>
-		<pre className="m-0 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere select-text">{children}</pre>
-	</ScrollFadeArea>
-);
 const Needs = () => <span className={NEEDS}>!</span>;
 const Unread = () => <span className={cn(DOT, "bg-info")} />;
 
@@ -558,7 +553,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 							</Field>
 						);
 					})}
-					{fields.length ? <div className="text-xs text-faint">{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</div> : null}
+					{fields.length ? <FieldDescription>{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</FieldDescription> : null}
 				</div>
 				</ScrollFadeArea>
 				<DialogFooter>

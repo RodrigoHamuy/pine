@@ -14,14 +14,14 @@ import { Hint } from "@/components/hint";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
+import { Log } from "@/components/log";
 
 const NONE = "px-3.5 py-0.5 text-faint wrap-anywhere";
-const LOG = "m-0 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text";
 
 function Section({ title, count, children, action }: { title: string; count?: number; children: React.ReactNode; action?: React.ReactNode }) {
 	return (
 		<section>
-			<h3 className="mt-1.5 mb-1 flex min-h-6 items-center gap-2 pr-2 pl-3.5 text-xs font-semibold text-faint">
+			<h3 className="mt-1.5 mb-1 flex min-h-6 items-center gap-2 pr-2 pl-3.5 font-semibold text-faint">
 				{title}
 				{count !== undefined ? <Badge variant="secondary">{count}</Badge> : null}
 				<span className="min-w-0 flex-1" />
@@ -78,7 +78,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
 				</Avatar>
 				<div className="min-w-0 flex-1">
-					<div className="agent-name flex items-center gap-2 text-base font-semibold">{tab.agent}{info.main ? <Badge>main</Badge> : null}</div>
+					<div className="agent-name flex items-center gap-2 text-base font-medium">{tab.agent}{info.main ? <Badge>main</Badge> : null}</div>
 					<div className="text-muted-foreground">{info.description || "no description"}</div>
 				</div>
 				<Button variant="outline" size="xs" onClick={() => s.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Settings</Button>
@@ -120,7 +120,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 			) : null}
 			{memory !== undefined ? (
 				<Section title="What it remembers">
-					{memory ? <ScrollFadeArea className="mx-3.5 max-h-56 rounded-md bg-sunk"><pre className={LOG}>{short(memory, 6000)}</pre></ScrollFadeArea> : <div className={NONE}>Its MEMORY.md is empty.</div>}
+					{memory ? <Log className="mx-3.5 max-h-56">{short(memory, 6000)}</Log> : <div className={NONE}>Its MEMORY.md is empty.</div>}
 				</Section>
 			) : null}
 			{detail.data ? <div className={cn(NONE, "pb-4")}>Its workspace is {detail.data.workspace}; the Files view shows {tab.folder ? "the folder this conversation works in" : "it"}.</div> : null}

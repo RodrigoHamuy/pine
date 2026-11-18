@@ -497,7 +497,7 @@ function Welcome({ tab }: { tab: Tab }) {
 			<Avatar size="lg">
 				<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
 			</Avatar>
-			<h1 className="mt-1.5 font-semibold text-2xl tracking-tight">{tab.agent}</h1>
+			<h1 className="mt-1.5 font-semibold text-xl tracking-tight">{tab.agent}</h1>
 			{/* A long path is broken where the line ends, not pushed out of it. */}
 			<p className="max-w-lg text-muted-foreground wrap-anywhere">{info?.description || "An agent of yours."}</p>
 			<div className="mt-0.5 flex flex-wrap gap-1.5">
