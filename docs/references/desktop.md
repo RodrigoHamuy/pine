@@ -428,7 +428,9 @@ sequence, a direction override, a zero-width character) is refused, with the cha
 Other languages get no ▶.
 
 For an agent: to hand the owner a command to run, put it in a block marked `bash`. In Pine it
-gets ▶; elsewhere it is a block to copy.
+gets ▶; elsewhere it is a block to copy. A message written in the app says so to the agent (the
+app sends `"via": "app"`, and the agent's note says it is read in the Pine app), so the agent
+writes such a block instead of a script to open or a command it runs itself.
 
 ## The browser
 
