@@ -272,7 +272,7 @@ function Sidebar() {
 				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")} aria-label="Hide the sidebar" />}><PanelLeftIcon /></TooltipTrigger><TooltipContent>Hide the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>
 			</SidebarHeader>
 			<SidebarContent>
-				<ScrollArea className="flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade flex-1">
+				<ScrollArea className="flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade flex-1 *:data-[slot=scroll-area-scrollbar]:opacity-0 *:data-[slot=scroll-area-scrollbar]:transition-opacity *:data-[slot=scroll-area-scrollbar]:hover:opacity-100 *:data-[slot=scroll-area-scrollbar]:data-scrolling:opacity-100">
 					<SidebarGroup className="pt-1 pb-0">
 						<SidebarMenu>
 							<SidebarMenuItem className="app-no-drag">

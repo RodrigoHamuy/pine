@@ -1406,6 +1406,36 @@ test("many tabs keep their width and scroll instead of stepping on each other", 
 	while ((await page.locator("[data-slot=tab]").count()) > had) await page.click("[data-slot=tab] >> nth=-1 >> button[aria-label='Close this tab']");
 });
 
+test("the panel's Agent view scrolls up and down only, however narrow the panel and however long a line it shows", async () => {
+	// A memory with a line no space breaks, and a description as long: the view wraps them, it is never pushed sideways.
+	write(path.join(home, "agents", "main", "workspace", "MEMORY.md"), `# Memory\n\n${"x".repeat(240)}\n${"https://example.com/".repeat(12)}\n`);
+	await page.click(".tab >> nth=0");
+	if (!(await page.$(".code"))) await page.click(".conv-head button[aria-label*='workspace']");
+	await page.locator(".code").getByRole("tab", { name: "Agent" }).click();
+	await sees(".agent-view >> text=What it remembers");
+	const width = () => page.$eval(".code", (el: Element) => el.getBoundingClientRect().width);
+	const was = await width();
+	const edge = await page.$eval(CODE_EDGE, (el: Element) => el.getBoundingClientRect());
+	await page.mouse.move(edge.x + edge.width / 2, 300);
+	await page.mouse.down();
+	await page.mouse.move(edge.x + edge.width / 2 + 600, 300, { steps: 6 });
+	await page.mouse.up();
+	assert.ok((await width()) < was, "the panel was not made narrower");
+	const fits = () => page.$eval(".agent-view > [data-slot=scroll-area-viewport]", (el: Element) => {
+		const wide = [...el.querySelectorAll("*")].filter((c) => c.getBoundingClientRect().right > el.getBoundingClientRect().right + 0.5).slice(0, 5).map((c) => `${c.tagName}.${c.className}`.slice(0, 120));
+		return { scroll: el.scrollWidth, client: el.clientWidth, wide };
+	});
+	const seen = await fits();
+	await shot("agent-view-narrow");
+	assert.ok(seen.scroll <= seen.client, `the Agent view is wider than the panel: ${JSON.stringify(seen)}`);
+	// Back to the width it had, for the tests after this one.
+	const back = await page.$eval(CODE_EDGE, (el: Element) => el.getBoundingClientRect());
+	await page.mouse.move(back.x + back.width / 2, 300);
+	await page.mouse.down();
+	await page.mouse.move(back.x + back.width / 2 - (was - (await width())), 300, { steps: 6 });
+	await page.mouse.up();
+});
+
 test("quitting stops the daemon it started", async () => {
 	const log = path.join(home, "data", "pine.log");
 	assert.ok(fs.existsSync(log));

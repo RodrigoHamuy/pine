@@ -192,7 +192,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 			{memory !== undefined ? (
 				<FieldSet className={SECTION}>
 					<FieldLegend className={TITLE}>What it remembers</FieldLegend>
-					{memory ? <Printed sm text={short(memory, 6000)} className="mx-3.5" /> : <div className={NONE}>Its MEMORY.md is empty.</div>}
+					{memory ? <Printed sm text={short(memory, 6000)} className="mx-3.5 w-auto" /> : <div className={NONE}>Its MEMORY.md is empty.</div>}
 				</FieldSet>
 			) : null}
 			{detail.data ? <div className={cn(NONE, "pb-4")}>Its workspace is {detail.data.workspace}; the Files view shows {tab.folder ? "the folder this conversation works in" : "it"}.</div> : null}
