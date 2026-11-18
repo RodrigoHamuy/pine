@@ -59,3 +59,34 @@ export const ConversationDark: Story = { args: { items: conversation }, globals:
 /** What the agent asks: an approval and a question, open, then as they were answered. */
 export const Ask: Story = { args: { items: asks } };
 export const AskDark: Story = { args: { items: asks }, globals: { theme: "dark" } };
+
+/** A turn at work: its last lines under the head, the call that runs and the thought that goes on. */
+const working: Made[] = [
+	{ t: "user", text: "Clean up the build folder." },
+	{
+		t: "work",
+		done: false,
+		open: false,
+		startedAt: now,
+		parts: [
+			{ p: "tool", key: "1", tool: "ls", subject: "build", status: "ok", ms: 12, depth: 0 },
+			{ p: "thought", text: "The folder holds old bundles. I remove them and keep the config.", done: false, startedAt: now },
+			{ p: "tool", key: "2", tool: "bash", subject: "rm -rf build/assets", status: "run", depth: 0 },
+			{ p: "child", task: 14, agent: "scout", kind: "delegate", label: "check the links", status: "run", depth: 1 },
+		],
+	},
+];
+export const Working: Story = { args: { items: working } };
+
+/** What pine says between turns: notes in each tone, an event, the goal, a divider. */
+const notes: Made[] = [
+	{ t: "divider", text: "yesterday" },
+	{ t: "note", tone: "muted", text: "The model changed to mock/m." },
+	{ t: "note", tone: "warn", text: "The answer was cut: the model ran out of room." },
+	{ t: "note", tone: "bad", text: "The model server did not answer.", action: { label: "Settings", run: () => {} } },
+	{ t: "note", tone: "accent", text: "↶ Taken back: your last message", lines: [{ text: "2 files restored" }, { text: "notes.md was changed since", tone: "warn" }] },
+	{ t: "event", label: "folder · changed", body: "~/notes/today.md was written" },
+	{ t: "goal", goal: { agent: "main", session: "main", objective: "Every link in the notes works", status: "met", note: "met after 2 rounds", round: 2, until: 5, reason: "All twelve links answer." } },
+];
+export const Notes: Story = { args: { items: notes } };
+export const NotesDark: Story = { args: { items: notes }, globals: { theme: "dark" } };

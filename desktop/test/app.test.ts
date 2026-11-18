@@ -321,9 +321,9 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	await sees('.md [data-streamdown="strong"]');
 	assert.match(await page.textContent(".md"), /first line/);
 	// The work of the turn (what it said on the way, and the tool call) is one line, which a click opens.
-	await page.waitForFunction(() => /1 tool call · read/.test(document.querySelector("[data-item=work] > [data-slot=collapsible-trigger]")?.textContent ?? ""));
+	await page.waitForFunction(() => /1 tool call · read/.test(document.querySelector("[data-item=work] > [data-slot=trace-collapsible-trigger]")?.textContent ?? ""));
 	assert.equal(await page.$("[data-item=work] [data-tool]"), null);
-	await page.click("[data-item=work] > [data-slot=collapsible-trigger]");
+	await page.click("[data-item=work] > [data-slot=trace-collapsible-trigger]");
 	await sees("[data-item=work] [data-tool]");
 	assert.equal(await page.textContent("[data-item=work] [data-tool]"), "read");
 	// A link says where it leads, and is not an address the page itself would follow.
@@ -503,7 +503,7 @@ test("what is asked is answered from the conversation too: an approval by its bu
 	await sees("[data-slot=dialog-content][data-tone=warn]");
 	await page.keyboard.press("Escape");
 	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
-	const asked = '[data-item="approval"][data-state="open"] [data-slot="alert"]';
+	const asked = '[data-item="approval"][data-state="open"] [data-slot="item"]';
 	await sees(`${asked} >> text=Approval needed`);
 	assert.match(await page.textContent(asked), /echo again/);
 	await shot("03-confirmation");
@@ -526,7 +526,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await sees("[data-slot=dialog-title] >> text=Which agent works in");
 	await page.keyboard.press("Enter");
 	await sees(".tab.on .name >> text=pine-desktop-folder");
-	await page.click(".conv-head [data-slot=button][title*='workspace']");
+	await page.click(".conv-head button[aria-label*='workspace']");
 	// The panel begins with the agent: who it is and what it runs on.
 	await sees(".agent-view .agent-name >> text=main");
 	assert.match(await page.textContent(".agent-view"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
@@ -545,7 +545,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	const wide = Math.round(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width));
 	await page.reload();
 	await sees(".tab.on .name >> text=pine-desktop-folder");
-	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	if (!(await page.$(".code"))) await page.click(".conv-head button[aria-label*='workspace']");
 	await sees(".code");
 	assert.equal(Math.round(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width)), wide);
 	// However narrow the panel is, the names of its views stay whole on one line.
@@ -593,7 +593,7 @@ const focused = () =>
 	});
 
 test("a file is opened from the panel's tree, its changes and its search with the keyboard alone", async () => {
-	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	if (!(await page.$(".code"))) await page.click(".conv-head button[aria-label*='workspace']");
 	// The test before left a file open in the editor.
 	if (await page.$(".editor")) await page.click(".code-sub button[aria-label='Back to the files']");
 	await page.click(".code [data-slot=tabs-trigger] >> text=Files");
@@ -938,7 +938,7 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.match((await page.locator(".side-agent", { has: page.locator(".who > :first-child", { hasText: /^test$/ }) }).textContent()) ?? "", /Made outside the app/);
 	// Beside a conversation, the panel's Agent view says what the agent has been given: here what was set up for all agents above.
 	await page.click(".tab >> nth=0");
-	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	if (!(await page.$(".code"))) await page.click(".conv-head button[aria-label*='workspace']");
 	await page.click(".code [data-slot=tabs-trigger] >> text=Agent");
 	await sees(".agent-view .agent-line .name >> text=invoices");
 	await sees(".agent-view .agent-line .name >> text=morning");
@@ -1152,7 +1152,7 @@ test("a sub-agent's work opens in a tab of its own", async () => {
 	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "subagent", args: { tasks: ["@@REF:child@@ say hi"] } }] }, { text: "the sub-agent answered" }], "ask a helper "));
 	await page.keyboard.press("Enter");
 	await sees(".md >> text=the sub-agent answered");
-	await page.click("[data-item=work] > [data-slot=collapsible-trigger] >> nth=-1");
+	await page.click("[data-item=work] > [data-slot=trace-collapsible-trigger] >> nth=-1");
 	await sees("[data-part=child] .open-link");
 	await page.click("[data-part=child] .open-link >> nth=0");
 	await sees(".tab.on .name >> text=#");

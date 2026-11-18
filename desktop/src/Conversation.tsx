@@ -1,21 +1,29 @@
 // One tab's conversation: what was said, the work of each turn folded into a line, and what
 // waits for the owner. Each kind of line is a small component; the list only draws what changed.
-import { ArrowUpIcon, BrainIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
-import { memo, type ReactNode, useEffect, useRef, useState } from "react";
-import { Confirmation, ConfirmationAction, ConfirmationActions, ConfirmationRequest, ConfirmationTitle } from "@/components/ai-elements/confirmation";
-import { Reasoning, ReasoningTrigger } from "@/components/ai-elements/reasoning";
-import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
-import { Task, TaskContent, TaskItem, TaskTrigger } from "@/components/ai-elements/task";
-import { Tool, ToolContent, ToolOutput } from "@/components/ai-elements/tool";
-import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+// The parts are shadcn's chat components, composed the way its AI Elements pages show: the thread
+// is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
+// (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
+import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
+import { Fragment, memo, type ReactNode, useEffect, useRef, useState } from "react";
+import { Hint } from "@/components/hint";
+import { ScrollFadeArea } from "@/components/scroll-fade-area";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Button } from "@/components/ui/button";
+import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
+import { Item as Card, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Kbd } from "@/components/ui/kbd";
+import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
-import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
+import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
@@ -30,77 +38,131 @@ const zoomable = {
 	onKeyDown: (e: React.KeyboardEvent<HTMLImageElement>) => e.key === "Enter" && window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
 };
 
-const NOTE_TONE: Record<string, string | undefined> = { warn: "text-warn", bad: "text-destructive", good: "text-primary" };
-const STATUS = "flex min-h-7.5 items-center gap-2 px-1 py-1.5 text-muted-foreground text-xs";
+/** A note's tone is information (a warning, a failure), so it colours the note's icon. */
+const NOTE_TONE: Record<string, string | undefined> = { warn: "text-warn", bad: "text-destructive", good: "text-primary", accent: "text-primary" };
 
 const TONE_ICON: Record<Tone, LucideIcon> = { muted: InfoIcon, warn: TriangleAlertIcon, bad: TriangleAlertIcon, good: CheckIcon, accent: Undo2Icon };
 
-function Status({ status }: { status: "run" | "ok" | "fail" | "done" | "failed" | "cancelled" }) {
-	if (status === "run") return <span className="inline-flex size-4 shrink-0 items-center justify-center"><Pulse size={11} /></span>;
-	const ok = status === "ok" || status === "done";
-	return <span className={cn("inline-flex size-4 shrink-0 items-center justify-center", ok ? "text-primary" : "text-destructive")}>{ok ? <CheckIcon className="size-3" /> : <XIcon className="size-3" />}</span>;
+type RunStatus = "run" | "ok" | "fail" | "done" | "failed" | "cancelled";
+
+/** What Trace calls the state of a line: running, failed, or nothing to say. */
+const traceStatus = (status: RunStatus) => (status === "run" ? "running" : status === "fail" || status === "failed" ? "error" : undefined);
+
+/** The icon of a line that runs: the breathing dot while it does (an agent at work), then how it ended. */
+function StatusIcon({ status }: { status: RunStatus }) {
+	if (status === "run") return <Pulse size={11} />;
+	return status === "ok" || status === "done" ? <CheckIcon /> : <XIcon />;
 }
 
-/** Thinking, folded into a line. Its text is shown as it is, never drawn as markdown: it is the model's own words. */
-function Thought({ text, head, peek }: { text: string; head: ReactNode; peek?: boolean }) {
-	const [open, setOpen] = useState(false);
+/**
+ * Thinking, as a line (Reasoning). It is open while the model thinks, showing the end of what it
+ * thinks, and folds when it is done; once the owner opened or closed it, that choice stays. Its
+ * text is shown as it is, never drawn as markdown: it is the model's own words.
+ */
+function Thought({ text, title, description, live = false }: { text: string; title: string; description?: string; live?: boolean }) {
+	const [open, setOpen] = useState<boolean>();
+	const line = (
+		<TraceLine status={live ? "running" : undefined}>
+			<TraceIcon>
+				<BrainIcon />
+			</TraceIcon>
+			<TraceTitle>{title}</TraceTitle>
+			{description ? <TraceDescription>{description}</TraceDescription> : null}
+		</TraceLine>
+	);
+	if (!text) return <div data-part="thought">{line}</div>;
+	const shown = live && text.length > 600 ? `…${text.slice(-600)}` : text;
 	return (
-		<Reasoning className="mb-0" open={open} onOpenChange={setOpen} data-part="thought">
-			<ReasoningTrigger className="py-0.5 text-xs italic">
-				<BrainIcon className="size-3.5" />
-				{head}
-				<ChevronDownIcon className={cn("size-3.5 transition-transform", open ? "rotate-180" : "rotate-0")} />
-			</ReasoningTrigger>
-			<CollapsibleContent className="mt-1 max-h-80 overflow-auto whitespace-pre-wrap border-l-2 pl-3 text-muted-foreground text-xs select-text">{text}</CollapsibleContent>
-			{!open && peek ? <div className="mt-1 line-clamp-3 border-l-2 pl-3 text-muted-foreground text-xs">{text.slice(-600)}</div> : null}
-		</Reasoning>
+		<TraceCollapsible open={open ?? live} onOpenChange={setOpen} data-part="thought">
+			<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
+			<TraceCollapsibleContent>
+				<ScrollFadeArea className="max-h-80">
+					<div className="whitespace-pre-wrap select-text">{shown}</div>
+				</ScrollFadeArea>
+			</TraceCollapsibleContent>
+		</TraceCollapsible>
 	);
 }
 
-/** One tool call: a line with what it did, which opens on what it returned or why it failed. */
+/** One tool call (Tool): a line with what it did, which opens on what it returned or why it failed. */
 function Call({ tool, subject, status, ms, depth = 0, output, error, images }: { tool: string; subject?: string; status: "run" | "ok" | "fail"; ms?: number; depth?: number; output?: string; error?: string; images?: string[] }) {
 	const more = Boolean(output || error || images?.length);
+	// A call made inside another one is drawn under it, by how deep it is.
+	const root = { "data-part": "tool", style: depth ? { paddingLeft: `calc(var(--spacing) * ${depth * 3.5})` } : undefined };
+	const line = (
+		<TraceLine status={traceStatus(status)} {...(more ? {} : root)}>
+			<TraceIcon>
+				<StatusIcon status={status} />
+			</TraceIcon>
+			{/* Font family only: a tool's name and its subject are code. */}
+			<TraceTitle className="font-mono" title={subject}>
+				<span data-tool>{tool}</span>
+				{subject ? ` ${subject}` : null}
+			</TraceTitle>
+			{ms !== undefined ? <TraceDescription>{took(ms)}</TraceDescription> : null}
+		</TraceLine>
+	);
+	// A line until there is something to open (Trace's rule).
+	if (!more) return line;
 	return (
-		<Tool className="mb-0 border-0" style={{ paddingLeft: `calc(var(--spacing) * ${depth * 3.5})` }} data-part="tool" data-status={status}>
-			<CollapsibleTrigger disabled={!more} className="flex w-full min-w-0 items-center gap-2 rounded-sm py-0.5 text-left text-xs enabled:cursor-pointer enabled:hover:bg-hover">
-				<Status status={status} />
-				<span className="shrink-0 font-mono text-foreground" data-tool>{tool}</span>
-				<span className="truncate font-mono text-muted-foreground" title={subject}>{subject}</span>
-				<span className="min-w-0 flex-1" />
-				{ms !== undefined ? <span className="shrink-0 text-faint">{took(ms)}</span> : null}
-			</CollapsibleTrigger>
-			{more ? (
-				<ToolContent className="p-2 pl-6">
-					<ToolOutput output={output ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-2 font-mono select-text">{output}</pre> : undefined} errorText={error} />
-					{(images ?? []).map((id) => (
-						<div className={`it-media ${MEDIA.box.image}`} key={id}><img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} /></div>
-					))}
-				</ToolContent>
-			) : null}
-		</Tool>
+		<TraceCollapsible {...root}>
+			<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
+			<TraceCollapsibleContent className="flex flex-col gap-2">
+				{output || error ? (
+					<CodeBlock size="sm" variant={error ? "destructive" : "default"}>
+						<CodeBlockContent wrap className="max-h-64 select-text">
+							{error ?? output}
+						</CodeBlockContent>
+					</CodeBlock>
+				) : null}
+				{(images ?? []).map((id) => (
+					<div className={`it-media ${MEDIA.box.image}`} key={id}>
+						<img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} />
+					</div>
+				))}
+			</TraceCollapsibleContent>
+		</TraceCollapsible>
+	);
+}
+
+/**
+ * A sub-task (Subagent): who does it and what, as a line that opens its own tab. Its own calls
+ * are not in this conversation's stream, so they are read in that tab and not drawn here.
+ */
+function Child({ part }: { part: Extract<Part, { p: "child" }> }) {
+	return (
+		<button type="button" data-part="child" style={part.depth > 1 ? { paddingLeft: `calc(var(--spacing) * ${(part.depth - 1) * 3.5})` } : undefined} onClick={() => void store.openTask(part.task)}>
+			{/* `open-link`: what the tests click to open the sub-task's tab. */}
+			<TraceLine status={traceStatus(part.status)} className="open-link">
+				<TraceIcon>
+					<StatusIcon status={part.status} />
+				</TraceIcon>
+				<TraceTitle>
+					↳ {part.agent} · {childKind(part.kind)} #{part.task}
+					{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}
+					<span className="sr-only"> (opens in a tab of its own)</span>
+				</TraceTitle>
+				<TraceIcon>
+					<ArrowUpRightIcon />
+				</TraceIcon>
+			</TraceLine>
+		</button>
 	);
 }
 
 function PartLine({ part, live }: { part: Part; live: boolean }) {
 	if (part.p === "thought") {
-		const secs = part.done ? undefined : Math.round((Date.now() - part.startedAt) / 1000);
-		return <Thought text={part.text} peek={live && !part.done} head={<>{part.done ? `thought for ${took(part.ms)}` : `thinking ${secs}s`}{part.speed ? <span className="text-faint not-italic">{part.speed}</span> : null}</>} />;
+		const running = live && !part.done;
+		const time = running ? `${Math.round((Date.now() - part.startedAt) / 1000)}s` : part.done ? took(part.ms) : "";
+		return <Thought text={part.text} live={running} title={running ? "Thinking" : "Thought"} description={[time, part.speed].filter(Boolean).join(" · ")} />;
 	}
-	if (part.p === "words") return <TaskItem className="whitespace-pre-wrap text-xs" data-part="words">{part.text}</TaskItem>;
-	if (part.p === "child")
-		return (
-			<TaskItem className="flex min-w-0 items-center gap-2 text-xs" style={{ paddingLeft: `calc(var(--spacing) * ${Math.max(0, part.depth - 1) * 3.5})` }} data-part="child">
-				<Status status={part.status} />
-				<span className="shrink-0 font-mono text-foreground">↳ {part.agent}</span>
-				<span className="truncate">{childKind(part.kind)} #{part.task}{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}</span>
-				<Button variant="link" size="xs" className="open-link" onClick={() => void store.openTask(part.task)}>open</Button>
-			</TaskItem>
-		);
+	if (part.p === "words") return <p className="whitespace-pre-wrap select-text" data-part="words">{part.text}</p>;
+	if (part.p === "child") return <Child part={part} />;
 	return <Call tool={part.tool} subject={part.subject} status={part.status} ms={part.ms} depth={part.depth} error={part.status === "fail" ? part.preview : undefined} />;
 }
 
-/** "12 tool calls · bash ×6 · read ×4 · edit · +1 more · 2 thoughts · 1 failed · 48s" */
-function workHead(parts: Part[], done: boolean, ms?: number): string {
+/** "12 tool calls · bash ×6 · read ×4 · edit · +1 more · 2 thoughts · 1 failed" */
+function workHead(parts: Part[], done: boolean): string {
 	const tools = parts.filter((p) => p.p === "tool") as Array<Extract<Part, { p: "tool" }>>;
 	const by = new Map<string, number>();
 	for (const t of tools) by.set(t.tool, (by.get(t.tool) ?? 0) + 1);
@@ -115,34 +177,47 @@ function workHead(parts: Part[], done: boolean, ms?: number): string {
 		subs ? plural(subs, "sub-task") : "",
 		thoughts ? plural(thoughts, "thought") : "",
 		failed ? `${failed} failed` : "",
-		done && ms !== undefined ? took(ms) : "",
 	]
 		.filter(Boolean)
 		.join(" · ");
 }
 
+/** The work of a turn (Task): a summary line that opens into its steps as they are taken. */
 function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 	const [open, setOpen] = useState(item.open);
 	const parts = item.parts;
 	// A turn with a single call or thought is that call or thought itself, with no line above it.
-	if (parts.length === 1 && item.done) return <div className="py-1" data-item="work"><PartLine part={parts[0]} live={false} /></div>;
+	if (parts.length === 1 && item.done)
+		return (
+			<Trace data-item="work">
+				<PartLine part={parts[0]} live={false} />
+			</Trace>
+		);
 	const shown = open ? parts : item.done ? [] : parts.slice(-6);
+	const head = workHead(parts, item.done) || "working";
+	const description = item.done ? (item.ms !== undefined ? took(item.ms) : "") : !open && parts.length > 6 ? "show all" : "";
 	// While the turn runs its last lines show under the head; a click shows all of them, another folds it.
 	return (
-		<Task open={shown.length > 0} onOpenChange={() => ((item.open = !open), setOpen(!open))} className="py-1" data-item="work" data-open={open || undefined}>
-			<TaskTrigger title={workHead(parts, item.done, item.ms) || "working"}>
-				<div className="flex w-full min-w-0 cursor-pointer items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground">
-					{item.done ? <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} /> : <Pulse size={12} />}
-					<span className="min-w-0 flex-1 truncate text-left">{workHead(parts, item.done, item.ms) || "working"}</span>
-					{!item.done && !open && parts.length > 6 ? <span className="text-faint">show all</span> : null}
-				</div>
-			</TaskTrigger>
-			<TaskContent className="[&>div]:mt-1 [&>div]:space-y-0.5">
-				{shown.map((p, i) => (
-					<PartLine key={open ? i : parts.length - shown.length + i} part={p} live={!item.done} />
-				))}
-			</TaskContent>
-		</Task>
+		<TraceCollapsible open={shown.length > 0} onOpenChange={() => ((item.open = !open), setOpen(!open))} data-item="work" data-open={open || undefined}>
+			<TraceCollapsibleTrigger>
+				<TraceLine status={item.done ? undefined : "running"}>
+					{item.done ? null : (
+						<TraceIcon>
+							<Pulse size={12} />
+						</TraceIcon>
+					)}
+					<TraceTitle title={head}>{head}</TraceTitle>
+					{description ? <TraceDescription>{description}</TraceDescription> : null}
+				</TraceLine>
+			</TraceCollapsibleTrigger>
+			<TraceCollapsibleContent>
+				<Trace>
+					{shown.map((p, i) => (
+						<PartLine key={open ? i : parts.length - shown.length + i} part={p} live={!item.done} />
+					))}
+				</Trace>
+			</TraceCollapsibleContent>
+		</TraceCollapsible>
 	);
 }
 
@@ -184,93 +259,122 @@ function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
 				</MessageContent>
 			</Message>
 		);
-	if (entry.kind === "thinking") return <Thought text={entry.text ?? ""} head="thought" />;
+	if (entry.kind === "thinking")
+		return (
+			<Trace>
+				<Thought text={entry.text ?? ""} title="Thought" />
+			</Trace>
+		);
 	const ok = entry.ok === undefined ? "run" : entry.ok ? "ok" : "fail";
 	const result = entry.result ? short(entry.result, 4000) : undefined;
-	return <Call tool={entry.tool ?? ""} subject={entry.subject ? oneLine(entry.subject) : ""} status={ok} ms={entry.ms} output={ok === "fail" ? undefined : result} error={ok === "fail" ? result : undefined} images={entry.images} />;
+	return (
+		<Trace>
+			<Call tool={entry.tool ?? ""} subject={entry.subject ? oneLine(entry.subject) : ""} status={ok} ms={entry.ms} output={ok === "fail" ? undefined : result} error={ok === "fail" ? result : undefined} images={entry.images} />
+		</Trace>
+	);
 }
 
 /**
- * A request of the agent's, in the conversation: what it wants and why, answered right here or
- * in the dialog. What needs typing (a secret, the owner's own words) opens the dialog.
+ * A request of the agent's, in the conversation (Confirmation): while it is open, an Item with
+ * what it wants and why and the answers; once answered, a line again. What needs typing (a secret,
+ * the owner's own words) opens the dialog.
  */
 function ApprovalCard({ item }: { item: Extract<Item, { t: "approval" }> }) {
 	const { req, state } = item;
 	const question = req.tool === "question";
 	const choices = req.choices ?? [];
 	const typed = Boolean(req.inputs?.length);
-	const head = state === "open" ? (question ? `${req.agent} asks` : "Approval needed") : state === "gone" ? "No longer open" : question ? (state === "allowed" ? "Answered" : "No answer") : state === "allowed" ? "Allowed" : "Denied";
-	const by = state !== "open" && item.by ? <span className="text-faint"> ({item.by}){item.always && req.remember ? ` · ${req.remember} will not ask again in this conversation` : ""}</span> : null;
+	if (state !== "open") {
+		const head = state === "gone" ? "No longer open" : question ? (state === "allowed" ? "Answered" : "No answer") : state === "allowed" ? "Allowed" : "Denied";
+		const about = state === "gone" ? "pine was restarted, or the question ran out of time" : [item.by ? `(${item.by})` : "", item.always && req.remember ? `${req.remember} will not ask again in this conversation` : ""].filter(Boolean).join(" · ");
+		const what = [head, question ? "" : req.tool, oneLine(req.summary)].filter(Boolean).join(" · ");
+		return (
+			<Trace data-item="approval" data-state={state}>
+				<TraceLine>
+					<TraceIcon>{state === "allowed" ? <CheckIcon /> : <XIcon />}</TraceIcon>
+					<TraceTitle className="select-text" title={req.summary}>
+						{what}
+					</TraceTitle>
+					{about ? <TraceDescription>{about}</TraceDescription> : null}
+				</TraceLine>
+			</Trace>
+		);
+	}
 	return (
-		<div className="py-1" data-item="approval" data-state={state}>
-			<Confirmation approval={state === "open" ? { id: req.id } : { id: req.id, approved: state === "allowed" }} state={state === "open" ? "approval-requested" : state === "gone" ? "output-denied" : "approval-responded"} className={cn(state !== "open" && "py-2 text-muted-foreground")}>
-				<ConfirmationTitle className="flex items-start gap-2">
-					{state === "open" ? question ? <MessageCircleQuestionIcon className="mt-0.5 size-4 shrink-0" /> : <TriangleAlertIcon className="mt-0.5 size-4 shrink-0 text-warn" /> : state === "allowed" ? <CheckIcon className="mt-0.5 size-4 shrink-0" /> : <XIcon className="mt-0.5 size-4 shrink-0" />}
-					<span className="min-w-0">
-						<b className="text-foreground">{head}</b>
-						{question ? null : <> · <span className="font-mono">{req.tool}</span></>}
-						{by}
-						{state === "gone" ? <span className="text-faint"> · pine was restarted, or the question ran out of time</span> : null}
-						<span className="block whitespace-pre-wrap break-words text-foreground select-text">{req.summary}</span>
-					</span>
-				</ConfirmationTitle>
-				<ConfirmationRequest>
-					{question ? null : <div className="pl-6 text-muted-foreground text-xs">{req.why}</div>}
-					{question && choices.length ? (
-						<Suggestions className="pl-6">
-							{choices.map((c, i) => <Suggestion key={i} suggestion={c} variant={i === 0 ? "default" : "outline"} title={i === 0 ? "recommended" : undefined} onClick={(text) => void store.decide(req.id, true, false, { answer: text })} />)}
-						</Suggestions>
-					) : null}
-				</ConfirmationRequest>
-				<ConfirmationActions>
+		<div data-item="approval" data-state={state}>
+			<Card variant="outline" size="sm">
+				<ItemMedia variant="icon">{question ? <MessageCircleQuestionIcon /> : <TriangleAlertIcon />}</ItemMedia>
+				<ItemContent>
+					<ItemTitle>
+						{question ? `${req.agent} asks` : "Approval needed"}
+						{question ? null : <span className="font-mono">{req.tool}</span>}
+					</ItemTitle>
+					{/* Not clamped: what is allowed here must be read whole. */}
+					<ItemDescription className="line-clamp-none whitespace-pre-wrap wrap-anywhere text-foreground select-text">{req.summary}</ItemDescription>
+					{question || !req.why ? null : <ItemDescription className="line-clamp-none select-text">{req.why}</ItemDescription>}
+				</ItemContent>
+				<ItemActions>
 					{question ? (
 						<>
-							<ConfirmationAction variant="ghost" onClick={() => void store.decide(req.id, false)}>No answer</ConfirmationAction>
-							<ConfirmationAction variant="outline" onClick={() => store.ask(req.id)}>{choices.length ? "In my own words…" : "Answer…"}</ConfirmationAction>
+							<Button size="sm" variant="ghost" onClick={() => void store.decide(req.id, false)}>No answer</Button>
+							<Button size="sm" variant="outline" onClick={() => store.ask(req.id)}>{choices.length ? "In my own words…" : "Answer…"}</Button>
 						</>
 					) : typed ? (
 						<>
-							<ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</ConfirmationAction>
-							<ConfirmationAction onClick={() => store.ask(req.id)}>Decide…</ConfirmationAction>
+							<Button size="sm" variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</Button>
+							<Button size="sm" onClick={() => store.ask(req.id)}>Decide…</Button>
 						</>
 					) : (
 						<>
-							<ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</ConfirmationAction>
-							{req.remember ? <ConfirmationAction variant="outline" onClick={() => void store.decide(req.id, true, true)}>Always here</ConfirmationAction> : null}
-							<ConfirmationAction onClick={() => void store.decide(req.id, true)}>{req.holds ? "Allow" : "Allow once"}</ConfirmationAction>
+							<Button size="sm" variant="outline" onClick={() => void store.decide(req.id, false)}>Deny</Button>
+							{req.remember ? <Button size="sm" variant="outline" onClick={() => void store.decide(req.id, true, true)}>Always here</Button> : null}
+							<Button size="sm" onClick={() => void store.decide(req.id, true)}>{req.holds ? "Allow" : "Allow once"}</Button>
 						</>
 					)}
-				</ConfirmationActions>
-			</Confirmation>
+				</ItemActions>
+				{question && choices.length ? (
+					// The answers it offers, the recommended one first (Suggestion: a Button that answers with its words).
+					<ItemFooter className="flex-wrap justify-start">
+						{choices.map((c, i) => {
+							const answer = <Button key={i} size="sm" variant={i === 0 ? "default" : "outline"} onClick={() => void store.decide(req.id, true, false, { answer: c })}>{c}</Button>;
+							return i === 0 ? <Hint key={i} label="recommended" describes>{answer}</Hint> : answer;
+						})}
+					</ItemFooter>
+				) : null}
+			</Card>
 		</div>
 	);
 }
 
-/** The agent's list of steps (its todo tool): how far it is, and each step. */
+/** The agent's list of steps (its todo tool, Plan): how far it is, and each step. */
 export function Steps({ items }: { items: Array<{ text: string; status: string }> }) {
 	const done = items.filter((t) => t.status === "done").length;
 	return (
-		<Task data-item="steps">
-			<TaskTrigger title={`steps · ${done} of ${items.length} done`}>
-				<div className="flex w-full cursor-pointer items-center gap-2 text-muted-foreground text-xs hover:text-foreground">
-					<ListChecksIcon className="size-3.5" />
-					<span>steps · {done} of {items.length} done</span>
-					<span className="h-1 w-16 overflow-hidden rounded-full bg-press"><i className="block h-full bg-primary" style={{ width: `${(100 * done) / Math.max(1, items.length)}%` }} /></span>
-					<ChevronDownIcon className="size-3.5 transition-transform group-data-[panel-open]:rotate-180" />
-				</div>
-			</TaskTrigger>
-			<TaskContent className="[&>div]:mt-2 [&>div]:space-y-1">
-				{items.map((t, i) => (
-					<TaskItem key={i} className={cn("flex items-start gap-2 text-xs", t.status === "done" && "line-through", t.status === "in_progress" && "text-foreground")} data-status={t.status}>
-						<span className={cn("mt-0.5 inline-flex size-3 shrink-0 items-center justify-center rounded-sm border", t.status === "done" && "border-primary bg-primary text-primary-foreground")}>{t.status === "done" ? <CheckIcon className="size-2.5" /> : null}</span>
-						<span className="select-text">{t.text}</span>
-					</TaskItem>
-				))}
-			</TaskContent>
-		</Task>
+		<Trace data-item="steps">
+			<TraceCollapsible defaultOpen>
+				<TraceCollapsibleTrigger>
+					<TraceLine status={items.some((t) => t.status === "in_progress") ? "running" : undefined}>
+						<TraceIcon>
+							<ListChecksIcon />
+						</TraceIcon>
+						<TraceTitle>Steps</TraceTitle>
+						<TraceDescription>{done} of {items.length} done</TraceDescription>
+					</TraceLine>
+				</TraceCollapsibleTrigger>
+				<TraceCollapsibleContent>
+					<Trace>
+						{items.map((t, i) => (
+							<TraceLine key={i} status={t.status === "in_progress" ? "running" : t.status === "done" ? undefined : "pending"}>
+								<TraceIcon>{t.status === "done" ? <CircleCheckIcon /> : t.status === "in_progress" ? <CircleDotIcon /> : <CircleIcon />}</TraceIcon>
+								<TraceTitle className="select-text" title={t.text}>{t.text}</TraceTitle>
+							</TraceLine>
+						))}
+					</Trace>
+				</TraceCollapsibleContent>
+			</TraceCollapsible>
+		</Trace>
 	);
 }
-
 
 /** One item of a conversation, drawn as what it is. */
 export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
@@ -291,30 +395,32 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 			const ToneIcon = TONE_ICON[item.tone];
 			return (
 				// The tone stays a class of its own too: the tests find a note by it.
-				<div className={cn("it-note flex cursor-auto gap-2 text-muted-foreground text-xs select-text", item.tone, NOTE_TONE[item.tone])}>
-					<ToneIcon size={14} className="mt-0.5" />
-					<div className="min-w-0 flex-1">
-						<span className={item.tone === "accent" ? "text-primary" : undefined}>{item.text}</span>
-						{item.action ? <Button variant="link" size="xs" className="open-link ml-2" onClick={item.action.run}>{item.action.label}</Button> : null}
-						{item.lines?.length ? <div className="mt-0.5 flex flex-col gap-px text-muted-foreground">{item.lines.filter((l) => l.text).map((l, i) => <span key={i} className={l.tone ? NOTE_TONE[l.tone] : undefined}>{l.text}</span>)}</div> : null}
-					</div>
-				</div>
+				<Marker className={cn("it-note select-text", item.tone)}>
+					<MarkerIcon className={NOTE_TONE[item.tone]}>
+						<ToneIcon />
+					</MarkerIcon>
+					<MarkerContent>
+						{item.text}
+						{item.action ? <Button variant="link" size="xs" className="open-link" onClick={item.action.run}>{item.action.label}</Button> : null}
+						{item.lines?.filter((l) => l.text).map((l, i) => (
+							<span key={i} className={cn("block", l.tone && NOTE_TONE[l.tone])}>{l.text}</span>
+						))}
+					</MarkerContent>
+				</Marker>
 			);
 		}
 		case "event":
 			return (
-				<div className="flex gap-2 rounded-lg bg-warn-soft px-3 py-2 text-xs select-text">
-					<ZapIcon size={14} className="mt-0.5 text-warn" />
-					<div className="min-w-0 flex-1">
-						<b>{item.label}</b>
-						<div className="text-muted-foreground wrap-anywhere">{short(oneLine(tilde(item.body)), 400)}</div>
-					</div>
-				</div>
+				<Alert className="select-text">
+					<ZapIcon />
+					<AlertTitle>{item.label}</AlertTitle>
+					<AlertDescription className="wrap-anywhere">{short(oneLine(tilde(item.body)), 400)}</AlertDescription>
+				</Alert>
 			);
 		case "approval":
 			return <ApprovalCard item={item} />;
 		case "steps":
-			return <div className="my-1 rounded-lg border p-3"><Steps items={item.items} /></div>;
+			return <Steps items={item.items} />;
 		case "media":
 			return (
 				<div className={`it-media ${MEDIA.box[item.kind]}`}>
@@ -326,28 +432,43 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 			const g = item.goal;
 			const wait = g.status !== "met" && g.status !== "active";
 			return (
-				<div className="flex gap-2 text-xs select-text">
-					<span className={cn("shrink-0", wait ? "text-warn" : "text-primary")}>{g.status === "met" ? "check" : wait ? <ClockIcon size={14} /> : <TargetIcon size={14} />}</span>
-					<div>
-						<b>goal</b> <span className="text-muted-foreground">{g.note}</span>
-						{g.reason ? <div className="text-muted-foreground">{short(oneLine(g.reason), 240)}</div> : null}
-						{item.full ? <div className="text-muted-foreground">the goal: {short(oneLine(g.objective), 320)}</div> : null}
-					</div>
-				</div>
+				<Marker className="select-text">
+					<MarkerIcon>{g.status === "met" ? <CheckIcon /> : wait ? <ClockIcon /> : <TargetIcon />}</MarkerIcon>
+					<MarkerContent>
+						goal · {g.note}
+						{g.reason ? <span className="block">{short(oneLine(g.reason), 240)}</span> : null}
+						{item.full ? <span className="block">the goal: {short(oneLine(g.objective), 320)}</span> : null}
+					</MarkerContent>
+				</Marker>
 			);
 		}
 		case "divider":
 			return (
-				<div className="flex items-center gap-3 text-faint text-xs">
-					<span className="h-px flex-1 bg-line-soft" />
-					{item.text}
-					<span className="h-px flex-1 bg-line-soft" />
-				</div>
+				<Marker variant="separator">
+					<MarkerContent>{item.text}</MarkerContent>
+				</Marker>
 			);
 		case "entry":
 			return <Entry entry={item.entry} agent={tab.agent} />;
 	}
 });
+
+/**
+ * The point the conversation goes back to (Checkpoint), drawn before the owner's last message:
+ * the daemon takes back that message, one at a time, so this is the one place it can return to.
+ */
+function Checkpoint({ tab }: { tab: Tab }) {
+	return (
+		<Marker variant="separator">
+			<MarkerContent className="inline-flex items-center gap-2">
+				before your last message
+				<Hint label="Its files are restored, the conversation forgets it, its text returns to the input" keys="⇧⌘Z" describes>
+					<Button size="xs" variant="outline" onClick={() => void store.undo(tab, false)}>Take back</Button>
+				</Hint>
+			</MarkerContent>
+		</Marker>
+	);
+}
 
 /** Where a conversation begins: who this agent is, what it runs on and reaches, and what it has. */
 function Welcome({ tab }: { tab: Tab }) {
@@ -372,15 +493,17 @@ function Welcome({ tab }: { tab: Tab }) {
 	const counts: Array<[string, number]> = h ? [["skill", h.skills.length], ["event source", h.sources.length], ["schedule", h.schedules.length], ["MCP server", h.servers.length], ["conversation", h.conversations.length]] : [];
 	return (
 		<div className="welcome flex flex-col items-start gap-2.5 py-10">
-			<span className="grid size-10 shrink-0 place-items-center rounded-xl bg-press font-semibold text-foreground text-xl">{tab.agent.slice(0, 1).toUpperCase()}</span>
+			<Avatar size="lg">
+				<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
+			</Avatar>
 			<h1 className="mt-1.5 font-semibold text-2xl tracking-tight">{tab.agent}</h1>
 			{/* A long path is broken where the line ends, not pushed out of it. */}
 			<p className="max-w-lg text-muted-foreground wrap-anywhere">{info?.description || "An agent of yours."}</p>
 			<div className="mt-0.5 flex flex-wrap gap-1.5">
-				<Badge variant="outline" title="The model it runs on"><CpuIcon size={12} /><b>{info?.model ?? "no model"}</b></Badge>
-				<Badge variant="outline" title={mode?.about}><ShieldIcon size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</Badge>
-				{info?.main ? <Badge variant="outline" title="It creates and changes the other agents and pine's settings when you ask it to">administers pine</Badge> : null}
-				{info?.delegates.length ? <Badge variant="outline" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></Badge> : null}
+				<Hint label="The model it runs on" describes><Badge variant="outline"><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></Badge></Hint>
+				<Hint label={mode?.about ?? "How much it asks and how far it reaches"} describes><Badge variant="outline"><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</Badge></Hint>
+				{info?.main ? <Hint label="It creates and changes the other agents and pine's settings when you ask it to" describes><Badge variant="outline">administers pine</Badge></Hint> : null}
+				{info?.delegates.length ? <Hint label="Agents it can hand work to" describes><Badge variant="outline">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></Badge></Hint> : null}
 				{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 			</div>
 			{info?.modelProblem ? (
@@ -396,10 +519,11 @@ function Welcome({ tab }: { tab: Tab }) {
 				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 			</p>
 			<div className="mt-2 flex flex-wrap gap-1.5">
-				<Suggestion size="xs" suggestion="What can you do for me, and what are you set up with?" onClick={say}>What can you do?</Suggestion>
+				{/* A suggestion: a Button that puts its words into the input. */}
+				<Button variant="outline" size="xs" onClick={() => say("What can you do for me, and what are you set up with?")}>What can you do?</Button>
 				<Button variant="outline" size="xs" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
 				<Button variant="outline" size="xs" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" />Give it a folder</Button>
-				<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <kbd className="rounded-sm border bg-card px-1 font-sans text-faint text-xs">⌘K</kbd></Button>
+				<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <Kbd>⌘K</Kbd></Button>
 			</div>
 		</div>
 	);
@@ -448,11 +572,15 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 	}, [at, count]);
 	const step = (by: number) => count && setAt((at + by + count) % count);
 	return (
-		<div className="find absolute top-11.5 right-5.5 z-5 flex items-center gap-1 rounded-lg border bg-card py-1 pr-1.5 pl-2.5 text-xs shadow-md">
-			<SearchIcon size={13} className="text-faint" />
-			<input
+		// Placed over the top right corner of the conversation, under its head.
+		<InputGroup className="find absolute top-11.5 right-5.5 z-5 w-auto bg-card shadow-md">
+			<InputGroupAddon>
+				<SearchIcon />
+			</InputGroupAddon>
+			<InputGroupInput
 				autoFocus
-				className="w-55 border-0 bg-transparent outline-none select-text"
+				className="w-55"
+				aria-label="Find in this conversation"
 				placeholder="Find in this conversation"
 				value={query}
 				onChange={(e) => setQuery(e.target.value)}
@@ -461,11 +589,13 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 					if (e.key === "Enter") step(e.shiftKey ? 1 : -1);
 				}}
 			/>
-			<span className="text-faint">{query ? (count ? `${at + 1} of ${count}` : "nothing") : ""}</span>
-			<Button variant="ghost" size="icon-xs" title="Earlier (↩)" onClick={() => step(-1)}><ArrowUpIcon /></Button>
-			<Button variant="ghost" size="icon-xs" title="Later (⇧↩)" onClick={() => step(1)}><ChevronDownIcon /></Button>
-			<Button variant="ghost" size="icon-xs" onClick={close}><XIcon /></Button>
-		</div>
+			<InputGroupAddon align="inline-end">
+				{query ? <InputGroupText>{count ? `${at + 1} of ${count}` : "nothing"}</InputGroupText> : null}
+				<Hint label="Earlier" keys="↩"><InputGroupButton size="icon-xs" onClick={() => step(-1)}><ArrowUpIcon /></InputGroupButton></Hint>
+				<Hint label="Later" keys="⇧↩"><InputGroupButton size="icon-xs" onClick={() => step(1)}><ChevronDownIcon /></InputGroupButton></Hint>
+				<Hint label="Close" keys="esc"><InputGroupButton size="icon-xs" onClick={close}><XIcon /></InputGroupButton></Hint>
+			</InputGroupAddon>
+		</InputGroup>
 	);
 }
 
@@ -480,12 +610,20 @@ function StatusLine({ tab }: { tab: Tab }) {
 	const waiting = [...tab.approvals.values()];
 	const elsewhere = store.tabs.find((t) => t !== tab && t.approvals.size > 0);
 	const goal = tab.goal?.status === "active" ? tab.goal : undefined;
+	// The line keeps its height when it says nothing, so that the input does not move.
+	const line = (icon: ReactNode, text: string, action?: ReactNode, warn?: boolean) => (
+		<Marker className="min-h-7.5 py-1.5">
+			{icon ? <MarkerIcon className={cn(warn && "text-warn")}>{icon}</MarkerIcon> : null}
+			<MarkerContent className="min-w-0 flex-1">{text}</MarkerContent>
+			{action}
+		</Marker>
+	);
 	if (!tab.busy) {
-		if (waiting.length) return <div className={cn(STATUS, "text-warn")}><TriangleAlertIcon size={14} /><span>{waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval."}</span><Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button></div>;
-		if (goal) return <div className={STATUS}><TargetIcon size={14} /><span>goal · round {goal.round} of {goal.until} · checking whether it is met</span><Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button></div>;
-		if (elsewhere) return <div className={cn(STATUS, "text-warn")}><TriangleAlertIcon size={14} /><span>{elsewhere.agent} · {elsewhere.session} waits for you.</span><Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button></div>;
-		if (tab.programs.length) return <div className={STATUS}><PlayIcon size={13} /><span>{plural(tab.programs.length, "program")} still running</span><Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button></div>;
-		return <div className={STATUS} />;
+		if (waiting.length) return line(<TriangleAlertIcon />, waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval.", <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button>, true);
+		if (goal) return line(<TargetIcon />, `goal · round ${goal.round} of ${goal.until} · checking whether it is met`, <Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button>);
+		if (elsewhere) return line(<TriangleAlertIcon />, `${elsewhere.agent} · ${elsewhere.session} waits for you.`, <Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button>, true);
+		if (tab.programs.length) return line(<PlayIcon />, `${plural(tab.programs.length, "program")} still running`, <Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button>);
+		return line(null, "");
 	}
 	const secs = Math.max(0, Math.round((Date.now() - tab.startedAt) / 1000));
 	const steps = tab.steps?.items ?? [];
@@ -493,6 +631,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 	const helpers = [...tab.children.values()].filter((c) => c.running).length;
 	const total = tab.tokens.input + tab.tokens.cached;
 	const parts = [
+		goal ? `goal · round ${goal.round} of ${goal.until}` : "",
 		waiting.length ? "waiting for you" : tab.thinking ? "thinking" : "working",
 		clock(secs),
 		at >= 0 ? `step ${at + 1} of ${steps.length}` : "",
@@ -501,14 +640,32 @@ function StatusLine({ tab }: { tab: Tab }) {
 		tab.tokens.output ? `${count(total)}↑${tab.tokens.cached ? ` (${Math.round((100 * tab.tokens.cached) / Math.max(1, total))}% cached)` : ""} ${count(tab.tokens.output)}↓` : "",
 		speedText(tab.speed),
 	].filter(Boolean);
+	return line(<Pulse size={13} />, parts.join(" · "), waiting.length ? <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null, waiting.length > 0);
+}
+
+/** How full the conversation's context window is (Context): the share in the head, the rest on hover. */
+function ContextUsage({ tab, percent }: { tab: Tab; percent: number }) {
+	const total = tab.tokens.input + tab.tokens.cached;
+	const speed = speedText(tab.speed);
 	return (
-		<div className={cn(STATUS, waiting.length && "text-warn")}>
-			<Pulse size={13} />
-			{goal ? <span>goal · round {goal.round} of {goal.until}</span> : null}
-			{parts.map((p, i) => <span key={i} className={i || goal ? "before:mr-2 before:text-faint before:content-['·']" : undefined}>{p}</span>)}
-			<span className="min-w-0 flex-1" />
-			{waiting.length ? <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null}
-		</div>
+		<HoverCard>
+			<HoverCardTrigger delay={10} closeDelay={100} render={<Button variant="ghost" size="xs" className="tabular-nums" />}>
+				{total ? `${count(total)} · ` : ""}
+				{Math.round(percent)}%
+			</HoverCardTrigger>
+			<HoverCardContent align="end" className="flex flex-col gap-3">
+				<div className="flex items-center justify-between gap-3">
+					<span className="font-medium">Context</span>
+					<span className="text-muted-foreground tabular-nums">{total ? `${count(total)} tokens · ` : ""}{Math.round(percent)}% full</span>
+				</div>
+				<Progress value={Math.min(100, percent)} aria-label="Context used" />
+				{tab.cacheShare !== undefined || speed ? (
+					<p className="text-muted-foreground">
+						{tab.cacheShare !== undefined ? `${tab.cacheShare}% of the last request came from the model server's cache.` : ""} {speed}
+					</p>
+				) : null}
+			</HoverCardContent>
+		</HoverCard>
 	);
 }
 
@@ -516,38 +673,30 @@ function StatusLine({ tab }: { tab: Tab }) {
 function ConvHead({ tab }: { tab: Tab }) {
 	useModel(store);
 	const chat = tab.kind === "chat";
-	const total = tab.tokens.input + tab.tokens.cached;
 	return (
 		<div className="conv-head flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-3 text-xs">
-			<span className="grid size-5 shrink-0 place-items-center rounded-sm bg-press font-semibold text-muted-foreground text-xs">{tab.agent.slice(0, 1).toUpperCase()}</span>
+			<Avatar size="sm">
+				<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
+			</Avatar>
 			<span className="text-muted-foreground">{tab.agent}</span>
 			<span className="text-faint">/</span>
 			<b className="min-w-0 shrink truncate font-semibold" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
-			{chat && tab.folder ? <Button variant="ghost" size="xs" className="min-w-0 shrink" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></Button> : null}
+			{chat && tab.folder ? <Hint label={`Works in ${tab.folder}`} describes><Button variant="ghost" size="xs" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></Button></Hint> : null}
 			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-faint" /> : null}
 			<span className="min-w-0 flex-1" />
-			{tab.context !== undefined ? (
-				<span className="mr-1 flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs tabular-nums" title={`Context ${tab.context}% full${tab.cacheShare !== undefined ? ` · ${tab.cacheShare}% of the last request came from the model server's cache` : ""}${speedText(tab.speed) ? ` · ${speedText(tab.speed)}` : ""}`}>
-					<Ring percent={tab.context} />
-					{total ? `${count(total)} · ` : ""}{Math.round(tab.context)}%
-				</span>
-			) : null}
-			{chat ? <Button variant={store.code ? "secondary" : "ghost"} size="icon-xs" aria-pressed={store.code} title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")}><PanelRightIcon /></Button> : null}
+			{tab.context !== undefined ? <ContextUsage tab={tab} percent={tab.context} /> : null}
+			{chat ? <Hint label="The agent and its workspace: what it has, files, changes, output" keys="⌥⌘B"><Button variant={store.code ? "secondary" : "ghost"} size="icon-xs" aria-pressed={store.code} onClick={() => void store.command("code")}><PanelRightIcon /></Button></Hint> : null}
 		</div>
 	);
 }
 
-/** A small ring that fills with the conversation's context window. */
-function Ring({ percent }: { percent: number }) {
-	const r = 6;
-	const c = 2 * Math.PI * r;
-	const colour = percent >= 85 ? "var(--bad)" : percent >= 65 ? "var(--warn)" : "var(--text-muted)";
-	return (
-		<svg className="shrink-0 -rotate-90" width="16" height="16" viewBox="0 0 16 16">
-			<circle cx="8" cy="8" r={r} fill="none" stroke="var(--press)" strokeWidth="2" />
-			<circle cx="8" cy="8" r={r} fill="none" stroke={colour} strokeWidth="2" strokeDasharray={`${(c * Math.min(100, percent)) / 100} ${c}`} strokeLinecap="round" />
-		</svg>
-	);
+/** The owner's last message, the one the daemon can take back: typed here, elsewhere, or found in the history. */
+function lastOwnerMessage(items: Item[]): number {
+	for (let i = items.length - 1; i >= 0; i--) {
+		const it = items[i];
+		if (it.t === "user" && (!it.from || it.from === "elsewhere")) return i;
+	}
+	return -1;
 }
 
 export function Conversation({ tab }: { tab: Tab }) {
@@ -570,6 +719,7 @@ export function Conversation({ tab }: { tab: Tab }) {
 	const loaded = tab.loaded;
 	const scroller = useRef<HTMLDivElement>(null);
 	const chat = tab.kind === "chat";
+	const checkpoint = chat && !tab.busy ? lastOwnerMessage(tab.items) : -1;
 	return (
 		<div className="relative flex min-w-85 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 			<ConvHead tab={tab} />
@@ -589,10 +739,17 @@ export function Conversation({ tab }: { tab: Tab }) {
 										<Welcome tab={tab} />
 									</MessageScrollerItem>
 								) : (
-									tab.items.map((item) => (
-										<MessageScrollerItem key={item.id} messageId={String(item.id)} scrollAnchor={item.t === "user"}>
-											<Row item={item} v={item.v} tab={tab} />
-										</MessageScrollerItem>
+									tab.items.map((item, i) => (
+										<Fragment key={item.id}>
+											{i === checkpoint ? (
+												<MessageScrollerItem>
+													<Checkpoint tab={tab} />
+												</MessageScrollerItem>
+											) : null}
+											<MessageScrollerItem messageId={String(item.id)} scrollAnchor={item.t === "user"}>
+												<Row item={item} v={item.v} tab={tab} />
+											</MessageScrollerItem>
+										</Fragment>
 									))
 								)}
 							</MessageScrollerContent>
