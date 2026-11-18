@@ -9,6 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { ALWAYS_BLOCKED, ASK_HINT, cleanOps, CORE_TOOLS, inlineFiles, relay, startGuardProxy, startViewDoor, toolAllowed, vet, webAddress } from "../mcp/browser.ts";
 import { browserSession } from "../src/agents.ts";
+import { keptAddress, VISITED } from "../src/browser-view.ts";
 import { localTarget } from "../src/net.ts";
 import { effectiveMcp, loadConfig, mcpTaints, toPiMcp } from "../src/config.ts";
 import { harness, mockMsg, notesOf, until } from "./support/harness.ts";
@@ -583,6 +584,13 @@ test("browser view: a picture only while a page is open, the owner's hand in ord
 	assert.equal((await b.view.state()).current, 1);
 	assert.deepEqual(await b.view.input([{ do: "tab", index: 0 }, { do: "closetab", index: 1 }]), { open: true, tabs: [{ title: "Page 0", url: "https://shop.example/cart" }], current: 0, window: false });
 	assert.deepEqual(b.log().slice(-3), ["browser_tabs new", "browser_tabs select0", "browser_tabs close1"]);
+	// The last tab is emptied, not closed: the browser stays up, and there is no page to show any more.
+	assert.deepEqual(await b.view.input([{ do: "closetab", index: 0 }]), { open: false, tabs: [], current: 0, window: false });
+	assert.equal(b.log().at(-1), "browser_navigate about:blank");
+	assert.ok(!b.log().includes("browser_tabs close0") && !b.log().includes("browser_close"));
+	assert.equal(await b.view.frame(), undefined);
+	// The owner opens a page again in the same browser.
+	assert.equal((await b.view.open("https://shop.example/cart")).open, true);
 
 	// A page's own words reach the owner's window as one line each.
 	await b.call("browser_navigate", { url: "https://sep.example/" });
@@ -673,7 +681,9 @@ test("browser view: the owner reaches a conversation's browser through the contr
 	assert.deepEqual((await api("GET", "/agents/main/browser?session=main")).body, closed);
 	assert.equal((await api("GET", "/agents/main/browser/frame?session=main")).status, 404);
 	assert.deepEqual((await api("POST", "/agents/main/browser/input", { session: "main", ops: [{ do: "back" }] })).body, closed);
-	assert.match((await api("POST", "/agents/main/browser/open", { session: "main", url: "example.com" })).body.error, /no browser running/);
+	// An address for a conversation there is none of: no browser, and no conversation is made by asking.
+	assert.match((await api("POST", "/agents/main/browser/open", { session: "nowhere", url: "example.com" })).body.error, /has no browser/);
+	assert.ok(!fs.existsSync(path.join(h.home, "agents", "main", "sessions", "nowhere")));
 	// Behind the token like everything else; an agent that is none is said.
 	for (const [method, at] of [["GET", "/agents/main/browser"], ["GET", "/agents/main/browser/frame"], ["POST", "/agents/main/browser/input"], ["POST", "/agents/main/browser/open"], ["POST", "/browser/embedded"]]) assert.equal((await api(method, at, method === "POST" ? {} : undefined, false)).status, 401, `${method} ${at}`);
 	assert.equal((await api("GET", "/agents/nobody/browser")).status, 404);
@@ -729,6 +739,69 @@ test("browser view: the owner reaches a conversation's browser through the contr
 	assert.deepEqual(fs.readdirSync(path.join(h.home, "data", "browser-view")), [`${encodeURIComponent("main:talk")}.json`]);
 });
 
+test("browser view: the addresses an agent opened are kept for its owner, and opening one starts the conversation's browser without a turn", { timeout: 60_000 }, async (t) => {
+	// What is kept is an address of the web, written out, and never a name and password.
+	assert.equal(keptAddress("https://user:secret@shop.example/cart?a=1#top"), "https://shop.example/cart?a=1#top");
+	assert.equal(keptAddress(" http://127.0.0.1:4173 "), "http://127.0.0.1:4173/");
+	for (const no of ["shop.example", "javascript:alert(1)", "file:///etc/passwd", "ftp://files.example/", "https://", "", 7, undefined, `https://long.example/${"x".repeat(2000)}`]) assert.equal(keptAddress(no), undefined, String(no).slice(0, 40));
+
+	// (The browser named here does not exist: nothing can be started by this test, whatever goes wrong.)
+	const h = await harness({ pine: { http: { port: 0 }, mcp: { browser: { pine: "browser", options: { executablePath: "/nonexistent/browser" } } } }, agents: { main: {}, helper: {} } });
+	t.after(() => h.close());
+	const api = async (method: string, at: string, body?: unknown) => {
+		const token = fs.readFileSync(path.join(h.home, "data", "http-token"), "utf8").trim();
+		const res = await fetch(`http://127.0.0.1:${h.pine.http!.port}${at}`, { method, headers: { authorization: `Bearer ${token}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) }, body: body !== undefined ? JSON.stringify(body) : undefined });
+		return (await res.json()) as any;
+	};
+	const door = (session: string) => path.join(h.home, "data", "browser-view", `${encodeURIComponent(`main:${session}`)}.json`);
+
+	// A page that did not come is not kept: here no page can.
+	await h.pine.agents.run({ agent: "main", session: "talk", prompt: mockMsg([{ tools: [{ name: "mcp__browser__browser_navigate", args: { url: "https://example.com/" } }] }, { text: "ok" }]), trust: "owner" });
+	assert.equal((await api("GET", "/agents/main/browser?session=talk")).visited, undefined);
+
+	// What a page that came leaves (the agent's call has ended well): newest first, each once, and not without end.
+	const visit = (url: unknown, perm = "main:talk") => (h.pine.agents as any).visit(perm, url);
+	for (const url of ["https://shop.example/", "http://127.0.0.1:4173/", "javascript:alert(1)", "https://user:secret@shop.example/"]) visit(url);
+	assert.deepEqual((await api("GET", "/agents/main/browser?session=talk")).visited, ["https://shop.example/", "http://127.0.0.1:4173/"]);
+	for (let i = 0; i < VISITED + 5; i++) visit(`https://site${i}.example/`, "main:many");
+	const many = (await api("GET", "/agents/main/browser?session=many")).visited;
+	assert.deepEqual([many.length, many[0]], [VISITED, `https://site${VISITED + 4}.example/`]);
+	// Another conversation and another agent have their own.
+	assert.equal((await api("GET", "/agents/main/browser?session=main")).visited, undefined);
+	assert.equal((await api("GET", "/agents/helper/browser?session=talk")).visited, undefined);
+
+	// After a restart the conversation is not up and has no browser. What it opened is still said, and asking starts nothing.
+	await h.restart();
+	assert.deepEqual(await api("GET", "/agents/main/browser?session=talk"), { open: false, tabs: [], current: 0, window: false, visited: ["https://shop.example/", "http://127.0.0.1:4173/"] });
+	assert.ok(!fs.existsSync(door("talk")));
+	assert.equal(h.pine.agents.status().sessions.length, 0);
+
+	// The owner opens one of them: the conversation's session comes up for it, with its browser, and no turn is taken.
+	const tasks = h.pine.tasks.list({ agent: "main" }).length;
+	const requests = h.mock.state.requests.length;
+	const opened = await api("POST", "/agents/main/browser/open", { session: "talk", url: "http://127.0.0.1:4173/" });
+	assert.ok(fs.existsSync(door("talk")), "its browser is up and said where its door is");
+	assert.doesNotMatch(String(opened.error), /has no browser/);
+	assert.deepEqual(opened.visited, ["https://shop.example/", "http://127.0.0.1:4173/"], "what the owner opens is not added: the list is what the agent opened");
+	assert.deepEqual(h.pine.agents.status().sessions.map((s: any) => s.key ?? s.session), ["talk"]);
+	assert.equal(h.pine.tasks.list({ agent: "main" }).length, tasks);
+	assert.equal(h.mock.state.requests.length, requests, "no model was asked anything");
+	// It is the owner's conversation that came up: the address on this computer is allowed for it, as when it is typed.
+	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(h.home, "data", "browser-local", `${encodeURIComponent("main:talk")}.json`), "utf8")), ["127.0.0.1:4173"]);
+	// A conversation there is none of gets no browser this way, and is not made by it.
+	assert.match((await api("POST", "/agents/main/browser/open", { session: "nowhere", url: "https://shop.example/" })).error, /has no browser/);
+	assert.ok(!fs.existsSync(path.join(h.home, "agents", "main", "sessions", "nowhere")));
+
+	// The list goes with the conversation's name, and ends with it.
+	await h.pine.agents.renameSession("main", "talk", "shop");
+	assert.equal((await api("GET", "/agents/main/browser?session=talk")).visited, undefined);
+	assert.deepEqual((await api("GET", "/agents/main/browser?session=shop")).visited, ["https://shop.example/", "http://127.0.0.1:4173/"]);
+	await h.pine.agents.resetSession("main", "shop");
+	assert.equal((await api("GET", "/agents/main/browser?session=shop")).visited, undefined);
+	await h.pine.agents.removeSession("main", "many");
+	assert.equal((await api("GET", "/agents/main/browser?session=many")).visited, undefined);
+});
+
 test("browser view: while a UI of the owner's shows the browser, the agent's browser_show opens no window, and without one it does", { timeout: 60_000 }, async (t) => {
 	// (The browser named here does not exist: nothing can be started by this test, whatever goes wrong.)
 	const h = await harness({ pine: { http: { port: 0 }, mcp: { browser: { pine: "browser", options: { executablePath: "/nonexistent/browser" } } } }, agents: { main: {} } });
@@ -778,6 +851,8 @@ test("live: an agent opens a page in the bundled browser", { skip: process.env.P
 	assert.match(code, /not found|not available/);
 	assert.ok(allowed.includes("DEV-SERVER-PAGE"), allowed);
 	assert.equal(asked.length, 2);
+	// What it opened is kept for the owner, newest first; the address that was not approved is not among them.
+	assert.deepEqual((await h.pine.agents.browserState("main", "main")).visited, [devUrl, "https://example.com/"]);
 	assert.ok(/mcp__browser__browser_navigate returned outside content/.test(h.pine.agents.status().sessions[0].tainted ?? ""));
 	await h.close();
 });

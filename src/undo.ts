@@ -545,6 +545,31 @@ export function rewind(file: string | undefined, leaf: string | null | undefined
 	return { file, leaf: from };
 }
 
+/**
+ * The entry a conversation stood at before a message, found by the message's text: for a
+ * message older than the turns pine keeps. Undefined when the file holds no such message.
+ */
+export function standingBefore(file: string | undefined, prompt: string): string | null | undefined {
+	if (!file || !fs.existsSync(file)) return undefined;
+	const needle = prompt.slice(0, 200);
+	const said = SessionManager.open(file).getBranch().filter((e: any) => e.type === "message" && e.message?.role === "user" && textOf(e.message.content).includes(needle)).at(-1);
+	return said ? (said.parentId ?? null) : undefined;
+}
+
+/**
+ * Write a new session file into `dir` that holds the conversation of `file` up to `leaf` and
+ * nothing after it, nor any branch that was taken back. The source is only read. Returns the
+ * new file, or undefined when there is nothing to copy.
+ */
+export function branchFile(file: string | undefined, leaf: string | null | undefined, dir: string): string | undefined {
+	if (!file || !fs.existsSync(file)) return undefined;
+	const sm = SessionManager.open(file, dir);
+	const at = leaf === undefined ? sm.getLeafId() : leaf;
+	if (!at || !sm.getEntry(at)) return undefined;
+	fs.mkdirSync(dir, { recursive: true });
+	return sm.createBranchedSession(at);
+}
+
 /** Put a conversation back to where it stood before `rewind`. */
 export function forward(file: string | undefined, leaf: string | null | undefined, task: number): boolean {
 	if (!file || !leaf || !fs.existsSync(file)) return false;

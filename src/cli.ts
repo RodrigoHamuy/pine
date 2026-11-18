@@ -15,6 +15,8 @@ Start here
   pine                            open the terminal UI (same as "pine tui")
   pine . | pine <folder>          the same, with a tab on that folder: a conversation of the main agent that
                                   works there (the one from last time, if there is one)
+  pine <folder> --worktree [name] a new conversation in a worktree of that folder's git repository: a
+                                  checkout of its own on a branch pine/<name>, apart from other conversations
   pine tui                        chat with your agents; starts a daemon inside if none is running
   pine login <provider>           sign in to a model provider (OpenCode, Claude, ChatGPT, ...)
   pine logout <provider>
@@ -516,7 +518,8 @@ async function main(): Promise<void> {
 
 	if (!cmd || cmd === "tui") {
 		const { runTui } = await import("./tui/run.ts");
-		return runTui(cfg, { folder });
+		if (flags.worktree !== undefined && flags.worktree !== false && !folder) throw new Error("--worktree goes with a folder: pine <folder> --worktree [name]");
+		return runTui(cfg, { folder, worktree: typeof flags.worktree === "string" ? flags.worktree : flags.worktree === true ? true : undefined });
 	}
 
 	if (cmd === "login" || cmd === "logout") {
@@ -639,6 +642,12 @@ async function main(): Promise<void> {
 		if (keys.length) out(`\nModel notes:\n${keys.map((k) => `  ! ${k}`).join("\n")}`);
 		const warnings = audit(cfg);
 		out(warnings.length ? `\nSecurity notes:\n${warnings.map((w) => `  ! ${w}`).join("\n")}` : "\nNo security notes.");
+		// Which conversations hold a worktree is the daemon's to say; without one running, check says nothing about them.
+		const trees: Array<{ agent?: string; session?: string; path: string; branch?: string; orphan?: boolean }> | undefined = cfg.http ? await client(cfg).get("/worktrees").catch(() => undefined) : undefined;
+		if (trees?.length) {
+			out("\nWorktrees:");
+			for (const t of trees) out(`  ${t.branch ?? "(no branch)"}  ${t.path}\n    ${t.orphan ? `no conversation works here any more; pine leaves it to you: git worktree remove --force ${t.path}` : `conversation ${t.session} of ${t.agent}`}`);
+		}
 		return;
 	}
 

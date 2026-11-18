@@ -152,7 +152,7 @@ function ChangeRow({ c, on, pick }: { c: Change; on: boolean; pick: () => void }
 
 /** What differs from the last commit, or from before the owner's last message. */
 function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (file: string) => void }) {
-	const list = useLoad(async () => (turn ? { ...(await api.turn(tab.agent, tab.session)), repo: true, branch: undefined as string | undefined } : { ...(await api.changes(tab.agent, tab.session)), note: undefined as string | undefined, prompt: undefined as string | undefined }), [tab.key, tab.codeTick, turn]);
+	const list = useLoad(async () => (turn ? { ...(await api.turn(tab.agent, tab.session)), repo: true, branch: undefined as string | undefined, worktree: undefined } : { ...(await api.changes(tab.agent, tab.session)), note: undefined as string | undefined, prompt: undefined as string | undefined }), [tab.key, tab.codeTick, turn]);
 	const [file, setFile] = useState<string>();
 	const diff = useLoad(async () => (file ? (turn ? api.turnDiff(tab.agent, tab.session, file) : api.diff(tab.agent, tab.session, file)) : undefined), [tab.key, file, tab.codeTick, turn]);
 	useEffect(() => setFile(undefined), [tab.key, turn]);
@@ -181,7 +181,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 	return (
 		<>
 			<div className="code-sub">
-				{turn ? <><Icon name="undo" size={13} /><span className="cut grow">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button small onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><Icon name="branch" size={13} /><span className="cut grow">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
+				{turn ? <><Icon name="undo" size={13} /><span className="cut grow">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button small onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><Icon name="branch" size={13} /><span className="cut grow">{data.branch || "no branch"}{data.worktree ? ` · ${data.worktree.ahead} ahead of ${data.worktree.base}${data.worktree.behind ? `, ${data.worktree.behind} behind` : ""}` : ""} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span>{data.worktree ? <Button small onClick={() => void store.worktreeMenu(tab)}>{data.worktree.ahead && !data.worktree.dirty ? "Merge…" : "Worktree…"}</Button> : null}</>}
 				<Button small variant="ghost" icon="refresh" onClick={list.reload} title="Read again" />
 			</div>
 			<div className="code-body">
@@ -398,7 +398,7 @@ function Running({ tab }: { tab: Tab }) {
 						<span>· {plural(p.processes, "process", "processes")}</span>
 						{p.background ? <span>· in the background</span> : null}
 						{p.ports.map((port) => (
-							<button key={port} type="button" className="open-link" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</button>
+							<button key={port} type="button" className="open-link" title="Opens in the browser beside this conversation" onClick={() => void store.showInBrowser(tab, `http://localhost:${port}`)}>localhost:{port}</button>
 						))}
 					</div>
 					{p.output ? <div className="entry-result" style={{ marginLeft: 0 }}>{p.output}</div> : null}

@@ -226,6 +226,26 @@ A conversation you only started (`+`) has no name of its own. The app calls it b
 began: the first thing you said in it, in the side bar, on its tab and in the search. Give it a
 name with Rename (a right click, or `/rename`) and that name is used.
 
+Beside each of your messages, while the pointer is on it, is a button that branches the
+conversation from there: a new conversation with what was said up to the end of that
+message's turn, opened in a tab, while the original stays as it was. A right click on the
+message, or Branch in the menu of a conversation in the side bar (all of it), does the same.
+A branch stands under the conversation it was made from in the side bar, with the branch
+sign, and is called after it ("… · branch") until you rename it. What a branch takes along
+and what it does not is in [agents.md](agents.md#branching-a-conversation).
+
+A conversation can work in a worktree of its folder's repository: a checkout of its own, so
+that conversations working on one project at once do not write over each other's files
+([coding.md](coding.md#a-worktree-for-a-conversation)). File › New Conversation in a
+Worktree… (⌥⌘T) starts one, from the folder of the conversation in front or one you pick;
+Conversation › Worktree… moves the conversation in front into one, and "Branch from here into a
+worktree" (a right click on a message of yours) or "Branch into a Worktree" (the menu of a
+conversation in the side bar) branches into one. Its header shows the branch (`pine/<name>`)
+instead of the folder, and the side bar the branch sign. A click on the branch, Conversation ›
+Worktree… or "Worktree…" in the side bar's menu opens what can be done with it: merge or squash
+it into what it was made from, update it from there, ask the agent to commit, discard it. The
+Changes view of the panel says how many commits it is ahead, with a button to merge.
+
 Everything in [tui.md](tui.md) about modes, goals, approvals, an agent's questions, its list
 of steps, sub-agents, `/undo` and what a conversation is holds here unchanged: it is the
 daemon's doing. What differs is how it is drawn and reached.
@@ -269,7 +289,7 @@ agent's workspace):
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
 | Browser | The browser the agent of this conversation works in, live, and yours to use too. See "The browser" below |
 | Output | The tool calls of the last messages, each with all it printed |
-| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop |
+| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the Browser view of the conversation, where the agent sees the same page; only where the conversation has no browser does it open in your own |
 
 While an agent keeps a list of steps, the open steps stand at the top of the panel.
 
@@ -293,11 +313,13 @@ one on your screen (`browser_show`); in the app it is in the panel, and no other
 | | |
 |---|---|
 | What you see | The page the agent is on, as it is right now, a few times a second. The page is laid out for the room the panel has, so it is shown at its real size; make the panel wider and the page gets wider. The browser's tabs are a row of tabs above the page, the agent's and yours alike |
-| What you can do | Click, type, turn the wheel, drag, paste (`⌘V` types what is in your clipboard), go back and forward, load again, open a tab (`+`), choose one, close one (the last one stays), and type an address into the line above the page. Enough to log in, solve a captcha or confirm something yourself |
+| What you can do | Click, type, turn the wheel, drag, paste (`⌘V` types what is in your clipboard), go back and forward, load again, open a tab (`+`), choose one, close one (closing the last one leaves the browser without a page, with its logins kept), and type an address into the line above the page. Enough to log in, solve a captcha or confirm something yourself |
 | An address of your own | Opened like any other, through pine's guard. One on this computer or your network (`localhost:3000`) is allowed for this conversation by your typing it, as a yes to the agent's question would. pine's own control port stays closed |
 | When the agent wants you to look | It calls `browser_show`: the panel opens on the Browser view. While the app runs, that call opens no window on your screen |
 | What the agent knows | What you do there, it sees when it next looks at the page. When you took the browser to another page, the agent is told so before it acts, and does not act on a page it has not seen ([mcp.md](mcp.md), "Seeing the browser, and logging in yourself") |
-| No page | Until the agent opens one, or you type an address, there is nothing to show. A conversation whose agent has not worked yet since pine started has no browser running: send it a message first |
+| No page | Until the agent opens one, or you open an address, there is nothing to show. The browser of a conversation closes when the conversation has been idle for a while (`idleMs`, 15 minutes) and when pine restarts. Opening an address starts it again, without a turn of the agent's; its logins are kept |
+| Running in this conversation | While no page is open, the view lists the ports of the programs this conversation left running (a dev server the agent started), as under Running. A click opens `localhost:<port>` in this browser |
+| Opened by the agent before | While no page is open, the view lists the last addresses the agent opened in this conversation, newest first, at most 12. A click opens one. Only a page that came is listed, and never an address the agent was refused. The list is the conversation's: it goes when the conversation is reset or removed |
 
 A page the agent made for you to use (a board, switches, a form) is shown here like any other,
 and what you press on it wakes the agent ([interfaces.md](interfaces.md)).

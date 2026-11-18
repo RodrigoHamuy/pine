@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
-import { ease, fit, shortDeclarations } from "../src/catalogue.ts";
+import { ease, fit, serverTool, shortDeclarations } from "../src/catalogue.ts";
 import { SOURCE_TYPES } from "../src/config.ts";
 import { harness, MCP_STUB, mockMsg, rawTextOf, textOf, until } from "./support/harness.ts";
 
@@ -529,6 +529,9 @@ test("arguments that are nearly right are taken as what was meant, and only thos
 	// A name as the owner says it.
 	assert.equal(ease("add_schedule", { name: "Check mail", task: "x" }).name, "check-mail");
 	assert.equal(ease("add_mcp_server", { name: "Home Link" }).name, "home_link");
+	assert.deepEqual(ease("remove_source", { source: "inbox" }), { name: "inbox" }, "the thing named by what it is");
+	assert.deepEqual(ease("remove_mcp_server", { server: "notes" }), { name: "notes" });
+	assert.deepEqual(ease("remove_schedule", { name: "a", schedule: "b" }), { name: "a", schedule: "b" }, "a name given stays");
 	// Another word for an option that has one reading.
 	assert.deepEqual(ease("add_source", { type: "folder", options: { path: "/x", glob: "*.pdf" } }).options, { dir: "/x", mask: "*.pdf" });
 	assert.deepEqual(ease("add_source", { type: "folder", options: '{"dir": "/x"}' }).options, { dir: "/x" });
@@ -688,4 +691,19 @@ test("families are for every conversation of the owner's, whatever an old config
 	const outside = named(h.mock.state.requests.at(-1));
 	assert.ok(outside.length > 0 && !outside.some((n: string) => n.startsWith("pine_") || n === "find_tools"), outside.join(", "));
 	await h.close();
+});
+
+// What pine tells an agent about a server names the tool the model is declared, also where a
+// server is named like one of pine's own tools and its tool is called differently.
+test("catalogue: a server's tool is declared under the name pine tells the agent", async (t) => {
+	const h = await harness({ agents: { main: { agent: { mcp: { notes: feed, manual: feed } } } } });
+	t.after(() => h.close());
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ text: "ok" }]), session: "s", ...owner });
+	const req = h.mock.state.requests.at(-1);
+	assert.equal(serverTool("mcp__notes"), "notes");
+	assert.equal(serverTool("mcp__manual"), "mcp_manual", "pine's own manual keeps its name");
+	for (const server of ["notes", "manual"]) {
+		assert.ok(named(req).includes(serverTool(`mcp__${server}`)), `${serverTool(`mcp__${server}`)} in ${named(req).join(", ")}`);
+		assert.match(req.wire.messages.map((m: any) => rawTextOf(m.content)).join("\n"), new RegExp(`${server} \\(one tool, "${serverTool(`mcp__${server}`)}", with an action for each of its tools\\)`));
+	}
 });

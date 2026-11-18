@@ -69,18 +69,26 @@ function Gate() {
 // under it its conversations. What starts something new stands on the agent's own line, so it
 // is never a question whom a new conversation or a folder is for.
 
-function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
+function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; depth?: number }) {
 	const s = store;
 	const tab = s.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === c.session);
 	const main = c.session === "main";
 	const menu = async () => {
 		const picked = await bridge.contextMenu([
 			{ id: "open", label: "Open" },
+			...(c.tasks ? [{ id: "branch", label: "Branch" }] : []),
+			...(c.tasks && c.folder ? [{ id: "branch-worktree", label: "Branch into a Worktree" }] : []),
+			...(c.worktree ? [{ id: "worktree", label: "Worktree…" }] : []),
 			...(main ? [] : [{ id: "pin", label: c.pinned ? "Unpin" : "Pin" }, { id: "rename", label: "Rename…" }]),
 			{ id: "sep", label: "", separator: true },
 			main ? { id: "reset", label: "Start over…" } : { id: "remove", label: "Remove…" },
 		]);
 		if (picked === "open") await s.openTab(agent, c.session);
+		if (picked === "branch" || picked === "branch-worktree") await s.branch(agent, c.session, undefined, picked === "branch-worktree");
+		if (picked === "worktree") {
+			await s.openTab(agent, c.session);
+			if (s.active?.kind === "chat") await s.worktreeMenu(s.active);
+		}
 		if (picked === "pin") {
 			await s.attempt(() => api.pinSession(agent, c.session, !c.pinned));
 			await s.refreshConversations(agent);
@@ -101,8 +109,8 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
-		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
-			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
+		<div className={`side-row side-conv${tab && tab === s.active ? " on" : ""}`} style={depth ? { paddingLeft: 31 + 14 * Math.min(depth, 4) } : undefined} onClick={() => void s.openTab(agent, c.session)} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`}>
+			<span className="lead">{tab?.approvals.size ? <span className="needs">!</span> : working ? <Pulse size={11} /> : tab?.unread ? <span className="dot unread" /> : main || c.pinned ? <Icon name="star" size={12} className="faint" /> : depth || c.worktree ? <Icon name="branch" size={12} className="faint" /> : c.folder ? <Icon name="folder" size={12} className="faint" /> : <Icon name="chat" size={12} className="faint" />}</span>
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
@@ -112,6 +120,25 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 			)}
 		</div>
 	);
+}
+
+/** The conversations in their order, with each branch right under the one it was made from, newest first. */
+function threaded(rows: Conv[]): Array<{ c: Conv; depth: number }> {
+	const names = new Set(rows.map((c) => c.session));
+	const kids = new Map<string, Conv[]>();
+	for (const c of rows) if (c.branch && names.has(c.branch.from) && c.branch.from !== c.session) kids.set(c.branch.from, [...(kids.get(c.branch.from) ?? []), c]);
+	const out: Array<{ c: Conv; depth: number }> = [];
+	const seen = new Set<string>();
+	const put = (c: Conv, depth: number) => {
+		if (seen.has(c.session)) return;
+		seen.add(c.session);
+		out.push({ c, depth });
+		for (const k of [...(kids.get(c.session) ?? [])].sort((x, y) => y.last - x.last)) put(k, depth + 1);
+	};
+	for (const c of rows) if (!(c.branch && names.has(c.branch.from))) put(c, 0);
+	// What is left was part of a circle of names (renames can make one): shown as it comes.
+	for (const c of rows) put(c, 0);
+	return out;
 }
 
 function AgentGroup({ a }: { a: AgentInfo }) {
@@ -163,7 +190,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 					<Button small variant="ghost" icon="plus" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)} />
 				</span>
 			</div>
-			{folded ? null : rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
+			{folded ? null : threaded(rows).map(({ c, depth }) => <ConversationRow key={c.session} agent={a.id} c={c} depth={depth} />)}
 		</div>
 	);
 }

@@ -77,6 +77,11 @@ export interface TaskMeta {
 	tainted?: string;
 	/** The folder the owner opened for the conversation this task was handed on from. A one-off delegated run works there too. */
 	folder?: string;
+	/**
+	 * A worktree of the repository made for this task alone (`worktree` of subagent and delegate):
+	 * the run works there, on a branch of its own, and what it did stays on that branch.
+	 */
+	worktree?: { repo: string; common: string; admin: string; path: string; branch: string; base: string; from: string; sub: string; made: number; kind: "conversation" | "task"; squashed?: string };
 	/** `input` is what the model server had to read anew; `cached` is what it took from its prompt cache. */
 	stats?: { input: number; output: number; cached?: number; turns: number; tools: string[]; ms: number; context?: ContextUse; timing?: CallTiming };
 }

@@ -81,6 +81,8 @@ src/
   computer.ts       app control: who gets the server (`computerSession`) and which app a call is about (`appTarget`); shared by the gate, classify() and the server
   workspace-view.ts what the code pane reads: git changes and diffs (git contained in a sandbox), folder listings, file text
   snapshots.ts      the state of a folder as a git tree in a git directory of pine's own: recorded, compared, restored
+  worktrees.ts      a conversation's worktree (.pine/worktrees/<name>, branch pine/<name>): made, merged, updated, removed by git
+                    in the helper sandbox with the repository's filters and merge drivers replaced; what a run in one may touch (`gitRights`)
   undo.ts           taking back the owner's last message: turns and their steps, what waits for a redo, pi's session file
   http.ts           control API and webhooks
   owner.ts          what the owner does through the control API that the main agent does by tool: pine's settings,
@@ -415,6 +417,13 @@ These are invariants. A change that breaks one needs a test that shows why it is
    and never give the door a road that does more than look and act in the page. An address on
    this computer that the owner types there is allowed for the conversation by it
    (`browserOpen`: the control API is the owner); pine's control port is refused there too.
+   Where that conversation's browser is not up, `browserOpen` brings its session up as a
+   message of the owner's would, without a turn (`wakeBrowser`): only for a conversation there
+   is, only as the owner's, and nothing else of the view starts anything. The addresses an
+   agent opened are kept for that view (`visit`, kv `visited:`): only a navigation that ended
+   well in an owner's conversation, so never one that was refused, as an address of the web
+   without a name and password (`keptAddress`), and handed on as lines of text that only the
+   owner's click opens.
    After the owner's hand was in the browser, the agent's next call is checked against what it
    last saw, as with a window (`shared`, `guarded`). While such a UI says it is there
    (`browserEmbedded`), the gate tells the browser's server before `browser_show`, which then
@@ -472,6 +481,14 @@ These are invariants. A change that breaks one needs a test that shows why it is
    code pane: every path is resolved and must stay inside the folder, and `git` runs behind
    `helperArgv()` without write access or network and with everything a repository's
    configuration could make it start turned off. Keep new git calls on that `git()` helper.
+   A worktree (`src/worktrees.ts`) is a folder of the same kind: only the owner makes, merges,
+   updates and discards one, through the control API (`makeWorktree` and the others in
+   `src/agents.ts`); a sub-agent's or a delegated task's (`worktree` of `subagent` and
+   `delegate`) is made from the folder the owner opened for its conversation. What a run in a
+   worktree may touch of the repository's shared git folder comes from pine's record of it
+   (`gitRights`, `Roots.fixed`), never from a file in the worktree, and goes into both sandboxes.
+   pine's git calls for it run behind `helperArgv()` and replace every filter and merge driver
+   the repository names (`neutral`): its configuration is one an agent may have written.
    Undo is the owner's in the same way (`AgentManager.undo` and `.redo`, `src/undo.ts`): the
    control API only, no tool, and only a message the owner typed is taken back
    (`ownerMessage`), never a run that outside content started. It is the one place where the

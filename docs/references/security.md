@@ -137,6 +137,32 @@ program and other agents' workspaces are refused, also as part of a larger folde
 folder's `AGENTS.md` and `CLAUDE.md` become instructions to the agent, so open folders whose
 authors you would let instruct it. See [coding.md](coding.md).
 
+#### Worktrees
+
+A conversation in a worktree of pine's ([coding.md](coding.md), "A worktree for a
+conversation") reads and writes all of its worktree. Of the repository's git folder, which all
+its worktrees share, it reads everything and writes only what its own git needs: the objects,
+its worktree's own part (`.git/worktrees/<name>`: its index, its HEAD), and the branches under
+`pine/`. The repository's configuration and hooks, your branches, the main checkout and the
+other worktrees are closed to it. So are the files that tell git where the worktree's repository
+is (the worktree's `.git` file, and `commondir` and `gitdir` in its part of the git folder): a
+pointer an agent rewrote would make your next git command there read a configuration of the
+agent's. These rights come from pine's record of the worktree, never from a file in it.
+
+A conversation whose folder is the repository itself cannot write into `.pine/worktrees`, at any
+depth: the worktrees are the other conversations'. A file tool says so; the sandbox refuses a
+command.
+
+What is still shared: an agent in a worktree can add to the repository's objects and could
+damage them (the sandbox does not tell adding from removing), and it can move or delete any
+branch under `pine/`, including another conversation's. Your branches it cannot touch.
+
+pine itself runs git for a worktree (making it, merging, updating, removing it, committing what a
+sub-agent left) in a sandbox that writes only what that step needs, with the repository's hooks
+and file system monitor off, and every filter and merge driver it names replaced by one that
+does nothing: an agent may have written the repository's configuration, and pine runs nothing
+it wrote.
+
 #### On Linux
 
 The sandbox is what `safe` and `manual` mode and every run started from outside work in; an
@@ -432,6 +458,10 @@ in the context. `/reset` in the terminal UI, or `pine reset`, clears it along wi
 conversation. `/undo` clears it only when the message that is taken back is the one that
 brought the outside content in: that text then leaves the context with the message, and
 what you allowed the conversation while the message was worked on is taken back too.
+A branch of a conversation ([agents.md](agents.md#branching-a-conversation)) starts with the
+mark the conversation had at the point it was branched from, never without it; when pine has
+no record of that point it takes the mark the conversation has now. What you allowed the
+conversation is not carried into a branch.
 `"run"` forgets it after each task, which is more convenient and weaker. `"off"` means no tool
 call marks a conversation at all: what a subscribed source reports then arrives with full tools
 and no questions. Runs that an outside event started stay restricted in every setting.
@@ -909,6 +939,10 @@ itself can be fooled by a page, but it has nothing to give away and cannot act.
   network path; use it on this machine, on your own network or through a VPN, and `https`
   elsewhere. pine asks you before it adds one and never sends a key anywhere but to the address
   you confirmed.
+- **Worktrees without a sandbox.** In `auto` and `bypass` mode a worktree keeps conversations
+  apart only by where their tools start; a command can write into the folder or another
+  worktree. In the sandbox, a worktree's run can still damage the repository's shared objects
+  and move other `pine/` branches (see "Worktrees" above).
 - **Bad answers.** An injected page can still make an agent tell you something false. Approval
   prompts show you the action, not whether the reasoning behind it was honest.
 - **Approval fatigue.** If you approve without reading, layer 4 is worth nothing. Requests show

@@ -11,6 +11,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
 import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
@@ -294,6 +295,19 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		await sees(".toast >> text=the browser was refused that address");
 		// The picture came through the app's own road for pictures, and the page asked the web for nothing.
 		assert.equal(await page.evaluate(() => performance.getEntriesByType("resource").filter((r) => /^https?:/.test(r.name)).length), 0);
+
+		// No page is open: what the agent opened here before is listed, as text, and a click opens it again.
+		Object.assign(where, { open: false, tabs: [] });
+		const db = new DatabaseSync(path.join(home, "data", "pine.db"));
+		db.exec("PRAGMA busy_timeout = 5000");
+		db.prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run("visited:main:main", JSON.stringify(["https://shop.example/<img src=x onerror=window.hacked=4>", "http://127.0.0.1:4173/"]));
+		db.close();
+		await sees(".browser-visited .open-link >> nth=1");
+		assert.deepEqual(await page.$$eval(".browser-visited .open-link", (els: Element[]) => els.map((e) => e.textContent)), ["shop.example/<img src=x onerror=window.hacked=4>", "127.0.0.1:4173"]);
+		assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
+		await shot("05-browser-empty");
+		await page.click(".browser-visited .open-link >> nth=1");
+		await waitFor("the address the agent had opened arrived", () => asked.some((a) => a.at === "/open" && a.body.url === "http://127.0.0.1:4173/"));
 
 		// Without a browser the view says so and draws nothing.
 		fs.rmSync(file);
@@ -730,6 +744,85 @@ test("the last message is taken back, and its text is in the input again", async
 	assert.equal(await page.$$eval(".it-user", (els: Element[]) => els.length), before - 1);
 	assert.match(await page.inputValue(".composer textarea"), /^ask a helper /);
 	await page.fill(".composer textarea", "");
+});
+
+test("a message is branched from: a new conversation with what was said up to it, under the original in the side bar", async () => {
+	await page.click(".tab >> nth=0");
+	await menu("new");
+	await sees(".tab.on .name >> text=new conversation");
+	for (const word of ["BRANCH-ONE", "BRANCH-TWO"]) {
+		await page.fill(".composer textarea", mockMsg([{ text: `answer to ${word}` }], `${word} `));
+		await page.keyboard.press("Enter");
+		await sees(`.md >> text=answer to ${word}`);
+	}
+	const from = await page.textContent(".tab.on .name");
+	// The button stands beside a message of the owner's while the pointer is on it.
+	await page.hover(".it-user:has-text('BRANCH-ONE')");
+	await page.click(".it-user:has-text('BRANCH-ONE') .branch-from button");
+	await sees(".toast >> text=from that message");
+	await sees(".tab.on .name >> text=· branch");
+	assert.ok((await page.textContent(".tab.on .name")).startsWith(`${from!.trim()} · branch`));
+	await sees(".md >> text=answer to BRANCH-ONE");
+	assert.doesNotMatch(await page.textContent(".column"), /BRANCH-TWO/);
+	// In the side bar it is under the conversation it was made from, one step in.
+	await page.waitForFunction(() => [...document.querySelectorAll(".side-conv")].some((r) => /a branch of/.test(r.getAttribute("title") ?? "")));
+	const rows = await page.$$eval(".side-conv", (els: Element[]) => els.map((e) => ({ title: e.getAttribute("title") ?? "", indent: (e as HTMLElement).style.paddingLeft })));
+	const at = rows.findIndex((r) => /a branch of/.test(r.title));
+	assert.equal(rows[at].indent, "45px");
+	assert.match(rows[at].title, new RegExp(`a branch of ${rows[at - 1].title.split(" · ")[1]}`), JSON.stringify(rows));
+	await shot("15-branch");
+	// What is said in the branch stays there.
+	await page.fill(".composer textarea", mockMsg([{ text: "only in the branch" }], "BRANCH-THREE "));
+	await page.keyboard.press("Enter");
+	await sees(".md >> text=only in the branch");
+	await page.click(".tab.on .close");
+	await page.click(".tab.on .close");
+	await page.click(".tab >> nth=0");
+	await sees(".composer textarea");
+});
+
+test("a conversation moves into a worktree of its folder: the chip names the branch, and its work is merged from the panel", async () => {
+	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
+	await sees(".pick-title >> text=Which agent works in");
+	await page.keyboard.press("Enter");
+	await sees(".tab.on .name >> text=pine-desktop-folder");
+	await menu("worktree");
+	await sees(".pick-title >> text=Work in a worktree?");
+	await page.keyboard.press("Enter");
+	await sees(".conv-head .chip.worktree >> text=pine/");
+	const branch = (await page.textContent(".conv-head .chip.worktree"))!.trim();
+	const tree = path.join(folder, ".pine", "worktrees", branch.slice(5));
+	assert.ok(fs.existsSync(path.join(tree, "README.md")), "a checkout of its own");
+	await sees(".column >> text=now works in the worktree");
+	// The side bar says where it works, once something was said in it.
+	await page.fill(".composer textarea", mockMsg([{ text: "working apart" }], "APART "));
+	await page.keyboard.press("Enter");
+	await sees(".md >> text=working apart");
+	await page.waitForFunction((b: string) => [...document.querySelectorAll(".side-conv")].some((r) => (r.getAttribute("title") ?? "").includes(`in the worktree ${b}`)), branch);
+
+	// Its work, committed there as an agent would, is merged from the panel into what the folder has checked out.
+	fs.writeFileSync(path.join(tree, "WORKTREE.md"), "made apart\n");
+	execFileSync("git", ["-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "add", "WORKTREE.md"], { stdio: "ignore" });
+	execFileSync("git", ["-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "apart"], { stdio: "ignore" });
+	await menu("code-changes");
+	await page.click(".code .segmented button >> text=Files");
+	await page.click(".code .segmented button >> text=Changes");
+	await sees(".code-sub >> text=1 ahead of");
+	await shot("16-worktree");
+	await page.click(".code-sub .btn >> text=Merge…");
+	await sees(".pick-title >> text=1 commit ahead of");
+	await page.keyboard.press("Enter");
+	await sees(".toast >> text=merged into");
+	assert.equal(fs.readFileSync(path.join(folder, "WORKTREE.md"), "utf8"), "made apart\n");
+	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n", "what was not committed in the folder stayed");
+
+	// Discarded once merged: the folder's chip is back.
+	await menu("worktree");
+	await sees(".pick-title >> text=ahead of");
+	await page.keyboard.press("Enter");
+	await sees(".conv-head .chip:not(.worktree) >> text=pine-desktop-folder");
+	assert.ok(!fs.existsSync(tree));
+	await page.click(".tab.on .close");
 });
 
 test("dictating puts what is heard into the input and sends nothing", async () => {
