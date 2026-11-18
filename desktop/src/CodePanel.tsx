@@ -175,10 +175,10 @@ export function Diff({ text }: { text: string }) {
 		<CodeBlock size="sm" className="diff m-2 w-auto select-text">
 			<CodeBlockContent>
 				{lines.map((l, i) => {
-					if (l.startsWith("@@")) return <CodeBlockLine key={i} variant="highlighted" className="bg-info/8 text-info">{l}</CodeBlockLine>;
+					if (l.startsWith("@@")) return <CodeBlockLine key={i} variant="highlighted">{l}</CodeBlockLine>;
 					if (META.some((m) => l.startsWith(m))) return <CodeBlockLine key={i} className="text-muted-foreground">{l}</CodeBlockLine>;
-					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added" className="add bg-add-bg text-add after:text-add">{l.slice(1)}</CodeBlockLine>;
-					if (l.startsWith("-")) return <CodeBlockLine key={i} variant="removed" className="bg-del-bg text-del after:text-del">{l.slice(1)}</CodeBlockLine>;
+					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added" className="add">{l.slice(1)}</CodeBlockLine>;
+					if (l.startsWith("-")) return <CodeBlockLine key={i} variant="removed">{l.slice(1)}</CodeBlockLine>;
 					return <CodeBlockLine key={i}>{l.startsWith(" ") ? l.slice(1) : l}</CodeBlockLine>;
 				})}
 			</CodeBlockContent>
