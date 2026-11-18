@@ -20,6 +20,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Confirm } from "./Confirm.tsx";
 import { Choice } from "@/components/choice";
 import { LabeledField } from "@/components/labeled-field";
+import { ScrollFadeArea } from "@/components/scroll-fade-area";
 import { AutoText, Empty, Pulse, useLoad } from "./ui.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
@@ -47,8 +48,14 @@ const CTL = "ctl flex max-w-1/2 flex-none items-center gap-1.5";
 /** A form inside a box: two fields side by side, a wide one on a row of its own. */
 const FORM = "form grid grid-cols-2 gap-3.5";
 const FOOT = "flex items-center justify-end gap-2 border-t border-line-soft bg-raised px-4 py-3";
-/** What a command printed: kept as it was written, selectable. */
-const LOG = "log max-h-60 overflow-auto rounded-md bg-sunk px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text";
+/** What a command printed: kept as it was written, selectable, and scrolled when it is long. */
+function Log({ children }: { children: ReactNode }) {
+	return (
+		<ScrollFadeArea className="max-h-60 rounded-md bg-sunk text-muted-foreground">
+			<pre className="log m-0 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere select-text">{children}</pre>
+		</ScrollFadeArea>
+	);
+}
 /** The heading above a box. */
 const H2 = "-mb-2 mt-1.5 flex items-center gap-2 text-xs font-semibold tracking-wide text-faint uppercase";
 
@@ -353,11 +360,12 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 	};
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
+			<DialogContent showCloseButton={false} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>A new agent</DialogTitle>
 				</DialogHeader>
-				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+					<div className="flex flex-col gap-3 px-4 select-text">
 					<LabeledField label="Name" hint="Lowercase letters, digits, - and _ (for example research, home, books)."><Input autoFocus className="mono font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} /></LabeledField>
 					<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to."><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField>
 					<LabeledField label="Instructions" hint="Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on."><AutoText value={f.instructions} onChange={(v) => setF({ ...f, instructions: v })} minRows={4} maxRows={12} placeholder="You are …" /></LabeledField>
@@ -365,6 +373,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 						<Choice value={f.model} onChange={(model) => setF({ ...f, model })} options={[{ value: "", label: "pine's default" }, ...(models.data ?? []).map((m) => ({ value: m, label: m }))]} />
 					</LabeledField>
 				</div>
+				</ScrollFadeArea>
 				<DialogFooter><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={!f.id.trim() || !f.description.trim()} onClick={() => void create()}>Create agent</Button></DialogFooter>
 			</DialogContent>
 		</Dialog>
@@ -447,13 +456,14 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 	const q = state?.question;
 	return (
 		<Dialog open onOpenChange={(open) => open || cancel()}>
-			<DialogContent showCloseButton={false} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
+			<DialogContent showCloseButton={false} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>Sign in to {provider}</DialogTitle>
 				</DialogHeader>
-				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+					<div className="flex flex-col gap-3 px-4 select-text">
 					{error || state?.error ? <Notice tone="bad">{error ?? state?.error}</Notice> : null}
-					{state?.lines.length ? <pre className={LOG}>{state.lines.join("\n")}</pre> : null}
+					{state?.lines.length ? <Log>{state.lines.join("\n")}</Log> : null}
 					{state?.url && !state.done ? <div className="flex items-center gap-2"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono cursor-auto font-mono select-text">{state.code}</b></span> : null}</div> : null}
 					{q && !state?.done ? (
 						q.options?.length ? (
@@ -476,6 +486,7 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 					{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
 					{state?.done && !state.error && state.models?.length ? <div className="flex items-center gap-2"><Button onClick={() => close(true, state.models)}>Choose the model your agents run on…</Button><span className="text-muted-foreground">Or later: Change, on the Models page.</span></div> : null}
 				</div>
+				</ScrollFadeArea>
 				<DialogFooter><Button variant={state?.done ? "default" : "outline"} onClick={cancel}>{state?.done ? "Done" : "Cancel"}</Button></DialogFooter>
 			</DialogContent>
 		</Dialog>
@@ -645,7 +656,7 @@ function Mcp() {
 					<Loading state={servers} />
 				)}
 			</div>
-			{out ? <pre className={LOG}>{out}</pre> : null}
+			{out ? <Log>{out}</Log> : null}
 			<h2 className={H2}>Add a server</h2>
 			<div className={GROUP}>
 				<div className={cn(FORM, "p-4")}>
@@ -773,11 +784,12 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 	};
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
+			<DialogContent showCloseButton={false} className="sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>A new event source</DialogTitle>
 				</DialogHeader>
-				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+					<div className="flex flex-col gap-3 px-4 select-text">
 					{plan ? (
 						<>
 							<div><b>{f.name}</b> ({f.type}) for {f.agent || "all agents"} will:</div>
@@ -805,6 +817,7 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 						</>
 					)}
 				</div>
+				</ScrollFadeArea>
 				<DialogFooter>{plan ? <><Button variant="outline" onClick={() => setPlan(undefined)}>Back</Button><Button disabled={busy || plan.needs.some((n) => !values[n.name]?.trim())} onClick={() => void add()}>Add source</Button></> : <><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={busy || !f.name.trim() || !f.type} onClick={() => void check()}>Continue</Button></>}</DialogFooter>
 			</DialogContent>
 		</Dialog>
@@ -1061,7 +1074,7 @@ function AppPage() {
 						<div className="min-w-0 flex-1">
 							<div className={NAME}>Browser for the web tools<Tag tone={s.browser ? "good" : "warn"}>{s.browser ? "on this Mac" : "not on this Mac"}</Tag></div>
 							<div className={ABOUT}>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</div>
-							{!s.browser && s.initLines.length ? <pre className={LOG}>{s.initLines.slice(-12).join("\n")}</pre> : null}
+							{!s.browser && s.initLines.length ? <Log>{s.initLines.slice(-12).join("\n")}</Log> : null}
 						</div>
 						{s.browser ? null : <div className={CTL}><Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={11} /> Fetching…</> : "Fetch it"}</Button></div>}
 					</div>
@@ -1083,14 +1096,16 @@ export function Settings() {
 	const s = useModel(store);
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background">
-			<nav className="set-nav flex w-50 flex-none flex-col gap-px overflow-y-auto border-r border-line-soft px-2.5 py-4.5">
+			<ScrollFadeArea className="w-50 flex-none border-r border-line-soft">
+				<nav className="set-nav flex flex-col gap-px px-2.5 py-4.5">
 				{SECTIONS.map((x) => (
 					<Button key={x.id} variant={s.section === x.id ? "secondary" : "ghost"} className="side-row justify-start" aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon data-icon="inline-start" />{x.label}</Button>
 				))}
-			</nav>
-			<div className="set-page min-w-0 flex-1 overflow-y-auto" key={s.section}>
+				</nav>
+			</ScrollFadeArea>
+			<ScrollFadeArea className="set-page min-w-0 flex-1" key={s.section}>
 				{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "app" ? <AppPage /> : <General />}
-			</div>
+			</ScrollFadeArea>
 		</div>
 	);
 }
