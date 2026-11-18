@@ -425,7 +425,7 @@ desktop/
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
-    components/ai-elements/  AI Elements' components for the conversation, added the same way
+    components/ai-elements/  the older AI SDK Elements copies still in use (terminal output, the prompt input)
     components/    pine's own compositions of stock components (a labelled field, a choice,
                    scroll-fade-area.tsx: every region that scrolls, a ScrollArea that fades where it is cut,
                    and hint.tsx: a Tooltip whose text is also an icon button's accessible name)
