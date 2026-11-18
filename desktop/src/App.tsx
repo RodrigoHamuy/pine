@@ -280,7 +280,11 @@ function useActiveLine(root: React.RefObject<HTMLDivElement | null>, redo: unkno
 		const frame = requestAnimationFrame(() => {
 			flushSync(() => setValue(""));
 			const line = root.current?.querySelector(target === undefined ? "[cmdk-item]" : `[cmdk-item][data-value="${CSS.escape(target)}"]`);
-			flushSync(() => line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true })));
+			line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+			// cmdk hands a choice made by the pointer to onValueChange, which React draws at the pointer's
+			// lower priority, some frames later when the page is busy (a notice coming or going). Until
+			// then no line is chosen, and an Enter typed in between chose nothing. Drawn now, it is there.
+			flushSync(() => setValue(line?.getAttribute("data-value") ?? ""));
 		});
 		return () => cancelAnimationFrame(frame);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
