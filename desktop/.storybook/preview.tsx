@@ -4,6 +4,10 @@ import "../src/index.css";
 import "../src/styles.css";
 import { followAppearance } from "../src/theme.ts";
 
+// No preload script here: the bridge is a stand-in whose every call does nothing (a listener it
+// is given is never called), so that a piece which listens to the app (the Composer) can be drawn.
+window.pine ??= new Proxy({}, { get: () => () => () => {} }) as typeof window.pine;
+
 // The page is dark when its root element has the `.dark` class. In the app that class follows the
 // system (theme.ts); here the toolbar sets it, or lets it follow the system as the app does.
 function applyTheme(theme: string): (() => void) | undefined {
