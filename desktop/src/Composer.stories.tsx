@@ -4,7 +4,7 @@ import { store, Tab } from "./model.ts";
 
 // The message box as a conversation shows it, without a daemon: what the agent runs on reads
 // "model" and "auto" here, as for an agent the app does not know yet.
-function Box({ draft = "", files = false, outside = false, paused = false }: { draft?: string; files?: boolean; outside?: boolean; paused?: boolean }) {
+function Box({ draft = "", files = false, outside = false, paused = false, narrow = false }: { draft?: string; files?: boolean; outside?: boolean; paused?: boolean; narrow?: boolean }) {
 	const tab = new Tab("chat", "main", "main");
 	tab.draft = draft;
 	if (paused) tab.goal = { agent: "main", session: "main", objective: "File every invoice of March", status: "paused", round: 3, until: 10, note: "paused by you after round 3" };
@@ -12,7 +12,7 @@ function Box({ draft = "", files = false, outside = false, paused = false }: { d
 	if (outside) store.taints.set("main:main", "a web page");
 	else store.taints.delete("main:main");
 	return (
-		<div className="relative w-160">
+		<div className={narrow ? "relative w-80" : "relative w-160"}>
 			<Composer tab={tab} />
 		</div>
 	);
@@ -31,3 +31,7 @@ export const WrittenDark: Story = { args: { draft: "Sum up the invoice and say w
 
 /** A goal that waits: its banner (an Alert) above the input, with Resume and Clear. */
 export const GoalPaused: Story = { args: { paused: true } };
+
+/** A narrow conversation (the side panel open in a small window): the buttons keep to one line inside the box, the send button
+ * last; the names of the model and the folder are cut, and what has no room for its words stands as its sign alone. */
+export const Narrow: Story = { args: { draft: "Sum up the invoice", files: true, outside: true, narrow: true } };

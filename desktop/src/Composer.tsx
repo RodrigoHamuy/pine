@@ -383,7 +383,7 @@ export function Composer({ tab }: { tab: Tab }) {
 						<Tooltip>
 							<TooltipTrigger render={<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickModel(tab)} aria-label={`Model: ${model}`} />}>
 								<CpuIcon />
-								<span className="truncate @max-sm/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
+								<span className="truncate @max-md/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
 							</TooltipTrigger>
 							<TooltipContent>Model: {model}</TooltipContent>
 						</Tooltip>
@@ -391,8 +391,8 @@ export function Composer({ tab }: { tab: Tab }) {
 							<Tooltip>
 								<TooltipTrigger render={<DropdownMenuTrigger render={<InputGroupButton size="sm" aria-label={`Reasoning: ${thinking}, how much the model thinks before it answers`} />} />}>
 									<SparkleIcon />
-									<span className="@max-xs/bar:hidden">{thinking}</span>
-									<ChevronDownIcon />
+									<span className="@max-md/bar:hidden">{thinking}</span>
+									<ChevronDownIcon className="@max-md/bar:hidden" />
 								</TooltipTrigger>
 								<TooltipContent>Reasoning: {thinking}, how much the model thinks before it answers</TooltipContent>
 							</Tooltip>
@@ -414,8 +414,8 @@ export function Composer({ tab }: { tab: Tab }) {
 							<Tooltip>
 								<TooltipTrigger render={<DropdownMenuTrigger render={<InputGroupButton size="sm" variant={mode === "bypass" && !paused ? "destructive" : "ghost"} aria-label={`Mode: ${mode}${paused ? " (paused)" : ""}, how much this agent does without asking`} />} />}>
 									<ShieldIcon />
-									<span>{mode}{paused ? " (paused)" : ""}</span>
-									<ChevronDownIcon />
+									<span className="@max-xl/bar:hidden">{mode}{paused ? " (paused)" : ""}</span>
+									<ChevronDownIcon className="@max-md/bar:hidden" />
 								</TooltipTrigger>
 								<TooltipContent>Mode: {mode}{paused ? " (paused)" : ""}, how much this agent does without asking</TooltipContent>
 							</Tooltip>
@@ -438,15 +438,15 @@ export function Composer({ tab }: { tab: Tab }) {
 						<Tooltip>
 							<TooltipTrigger render={<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)} aria-label={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} />}>
 								<FolderIcon />
-								<span className="truncate @max-2xs/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
+								<span className="truncate @max-sm/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
 							</TooltipTrigger>
 							<TooltipContent>{tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"}</TooltipContent>
 						</Tooltip>
 						{tainted ? (
 							<Tooltip>
-								<TooltipTrigger render={<Badge variant="outline" tabIndex={0} />}>
+								<TooltipTrigger render={<Badge variant="outline" className="min-w-0 shrink" tabIndex={0} />}>
 									<EyeIcon data-icon="inline-start" />
-									<span className="@max-lg/bar:hidden">outside content</span>
+									<span className="truncate @max-xl/bar:hidden">outside content</span>
 								</TooltipTrigger>
 								<TooltipContent>This conversation has read outside content ({tainted}): the agent asks before it sends something out.</TooltipContent>
 							</Tooltip>
