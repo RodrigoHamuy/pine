@@ -290,7 +290,11 @@ A right click on one of your messages offers "Branch from here": a new conversat
 was said up to the end of that message's turn, opened in a tab, while the original stays as it
 was. Branch in the menu of a conversation in the side bar does the same with all of it.
 A branch stands under the conversation it was made from in the side bar, with the branch
-sign, and is called after it ("… · branch") until you rename it. What a branch takes along
+sign, and is called after it ("… · branch") until you rename it. The line at the top of a
+conversation is a path: the conversations it was branched from, oldest first, then the
+conversation itself, then where it works (its worktree's branch or its folder); a click on one
+before it opens that conversation. A sub-agent's task shows the conversation it worked for and
+the task that started it the same way. What a branch takes along
 and what it does not is in [agents.md](agents.md#branching-a-conversation).
 
 A conversation can work in a worktree of its folder's repository: a checkout of its own, so

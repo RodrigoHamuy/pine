@@ -1478,6 +1478,15 @@ test("a message is branched from: a new conversation with what was said up to it
 	const at = rows.findIndex((r) => /a branch of/.test(r.title));
 	assert.ok(rows[at].indent > rows[at - 1].indent, JSON.stringify(rows));
 	assert.match(rows[at].title, new RegExp(`a branch of ${rows[at - 1].title.split(" · ")[1]}`), JSON.stringify(rows));
+	// Its top line is a path: the conversation it was made from, then itself; the one before opens with a click.
+	const original = from!.trim().split(" · ").slice(1).join(" · ");
+	await sees(`[data-slot=conversation-head] [data-slot=breadcrumb-link] >> text=${original}`);
+	assert.match(await page.textContent("[data-slot=conversation-head] [data-slot=breadcrumb-page]"), /branch/);
+	await page.click("[data-slot=conversation-head] [data-slot=breadcrumb-link]");
+	await page.waitForFunction((name) => document.querySelector("[data-slot=tab][data-active] [data-slot=tab-name]")?.textContent?.trim() === name, from!.trim());
+	assert.equal(await page.$("[data-slot=conversation-head] [data-slot=breadcrumb-link]"), null, "the original has nothing before it");
+	await page.click("[data-slot=tab]:has-text('· branch')");
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=· branch");
 	await shot("15-branch");
 	// What is said in the branch stays there.
 	await page.fill("[data-slot=composer] textarea", mockMsg([{ text: "only in the branch" }], "BRANCH-THREE "));

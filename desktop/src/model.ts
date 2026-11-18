@@ -103,6 +103,8 @@ export class Tab extends Model {
 	session: string;
 	/** For a tab on one task. */
 	task?: number;
+	/** For a tab on one task: the task that started it, if one did. */
+	parent?: number;
 	baseDepth = 0;
 	items: Item[] = [];
 	loaded = false;
@@ -815,6 +817,7 @@ export class Store extends Model {
 		const { task, entries } = data;
 		const tab = new Tab("task", task.agent, task.session);
 		tab.task = id;
+		tab.parent = task.parent;
 		tab.baseDepth = task.depth;
 		tab.roots.add(id);
 		this.tabs.push(tab);

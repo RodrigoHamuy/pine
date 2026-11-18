@@ -11,7 +11,7 @@ import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, Attach
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
-import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -733,35 +733,73 @@ function ContextUsage({ tab, percent }: { tab: Tab; percent: number }) {
 	);
 }
 
-/** What a conversation is, in one line at its top: whose, which, where it works; and how full its context is. */
+/**
+ * What lies above a conversation or a task, oldest first: the conversations a branch was made from, one after another; for
+ * a task, the conversation it was done for and the task that started it. Each opens with a click.
+ */
+function above(tab: Tab): Array<{ key: string; label: string; title: string; open: () => void }> {
+	const list = store.conversations.get(tab.agent) ?? [];
+	const conv = (session: string) => ({ key: `c:${session}`, label: store.titleOf(tab.agent, session), title: `Open the conversation ${session}`, open: () => void store.openTab(tab.agent, session) });
+	if (tab.kind === "task") {
+		const out = list.some((c) => c.session === tab.session) ? [conv(tab.session)] : [];
+		if (tab.parent !== undefined) {
+			const parent = tab.parent;
+			out.push({ key: `t:${parent}`, label: `task #${parent}`, title: `Open task #${parent}, which started this one`, open: () => void store.openTask(parent) });
+		}
+		return out;
+	}
+	if (tab.kind !== "chat") return [];
+	// Renames can make a circle of names: each conversation is named once.
+	const out: ReturnType<typeof above> = [];
+	const seen = new Set([tab.session]);
+	for (let from = list.find((c) => c.session === tab.session)?.branch?.from; from && !seen.has(from); from = list.find((c) => c.session === from)?.branch?.from) {
+		seen.add(from);
+		out.unshift(conv(from));
+	}
+	return out;
+}
+
+/**
+ * What a conversation is, in one line at its top, as a path: where it came from, which it is, and where it works (its
+ * worktree or folder); and how full its context is. Whose it is, its tab says.
+ */
 function ConvHead({ tab }: { tab: Tab }) {
 	useModel(store);
 	const chat = tab.kind === "chat";
+	const where = chat && tab.worktree ? (
+		<Tooltip>
+			<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-worktree={tab.worktree.branch} onClick={() => void store.worktreeMenu(tab)} />}><GitBranchIcon data-icon="inline-start" /><span className="truncate">{tab.worktree.branch}</span></TooltipTrigger>
+			<TooltipContent>Works in the worktree {tab.worktree.branch} of {tab.worktree.base}{tab.folder ? `, at ${tab.folder}` : ""}: merge it, update it or discard it</TooltipContent>
+		</Tooltip>
+	) : chat && tab.folder ? (
+		<Tooltip>
+			<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-folder={tab.folder} onClick={() => void store.pickFolder(tab)} />}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></TooltipTrigger>
+			<TooltipContent>Works in {tab.folder}</TooltipContent>
+		</Tooltip>
+	) : null;
 	return (
-		<div data-slot="conversation-head" className="flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-3 text-xs">
-			<Avatar size="sm">
-				<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
-			</Avatar>
+		<div data-slot="conversation-head" className="flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-4 text-xs">
 			<Breadcrumb className="min-w-0 shrink">
 				<BreadcrumbList className="flex-nowrap">
-					<BreadcrumbItem>{tab.agent}</BreadcrumbItem>
-					<BreadcrumbSeparator />
+					{above(tab).map((c) => (
+						<Fragment key={c.key}>
+							<BreadcrumbItem className="min-w-0">
+								<BreadcrumbLink render={<button type="button" />} className="truncate" title={c.title} onClick={c.open}>{c.label}</BreadcrumbLink>
+							</BreadcrumbItem>
+							<BreadcrumbSeparator />
+						</Fragment>
+					))}
 					<BreadcrumbItem className="min-w-0">
 						<BreadcrumbPage className="truncate" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</BreadcrumbPage>
 					</BreadcrumbItem>
+					{where ? (
+						<>
+							<BreadcrumbSeparator />
+							<BreadcrumbItem className="min-w-0">{where}</BreadcrumbItem>
+						</>
+					) : null}
 				</BreadcrumbList>
 			</Breadcrumb>
-			{chat && tab.worktree ? (
-				<Tooltip>
-					<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-worktree={tab.worktree.branch} onClick={() => void store.worktreeMenu(tab)} />}><GitBranchIcon data-icon="inline-start" /><span className="truncate">{tab.worktree.branch}</span></TooltipTrigger>
-					<TooltipContent>Works in the worktree {tab.worktree.branch} of {tab.worktree.base}{tab.folder ? `, at ${tab.folder}` : ""}: merge it, update it or discard it</TooltipContent>
-				</Tooltip>
-			) : chat && tab.folder ? (
-				<Tooltip>
-					<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-folder={tab.folder} onClick={() => void store.pickFolder(tab)} />}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></TooltipTrigger>
-					<TooltipContent>Works in {tab.folder}</TooltipContent>
-				</Tooltip>
-			) : null}
 			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-outline" /> : null}
 			<span className="min-w-0 flex-1" />
 			{tab.context !== undefined ? <ContextUsage tab={tab} percent={tab.context} /> : null}
