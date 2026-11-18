@@ -12,8 +12,10 @@ import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, Attach
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
 import { Item as Card, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from "@/components/ui/item";
@@ -21,7 +23,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
-import { Progress } from "@/components/ui/progress";
+import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { Toggle } from "@/components/ui/toggle";
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
@@ -493,40 +495,48 @@ function Welcome({ tab }: { tab: Tab }) {
 	const h = has?.holdings;
 	const counts: Array<[string, number]> = h ? [["skill", h.skills.length], ["event source", h.sources.length], ["schedule", h.schedules.length], ["MCP server", h.servers.length], ["conversation", h.conversations.length]] : [];
 	return (
-		<div className="welcome flex flex-col items-start gap-2.5 py-10">
-			<Avatar size="lg">
-				<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
-			</Avatar>
-			<h1 className="mt-1.5 font-semibold text-xl tracking-tight">{tab.agent}</h1>
-			{/* A long path is broken where the line ends, not pushed out of it. */}
-			<p className="max-w-lg text-muted-foreground wrap-anywhere">{info?.description || "An agent of yours."}</p>
-			<div className="mt-0.5 flex flex-wrap gap-1.5">
-				<Hint label="The model it runs on" describes><Badge variant="outline"><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></Badge></Hint>
-				<Hint label={mode?.about ?? "How much it asks and how far it reaches"} describes><Badge variant="outline"><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</Badge></Hint>
-				{info?.main ? <Hint label="It creates and changes the other agents and pine's settings when you ask it to" describes><Badge variant="outline">administers pine</Badge></Hint> : null}
-				{info?.delegates.length ? <Hint label="Agents it can hand work to" describes><Badge variant="outline">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></Badge></Hint> : null}
-				{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
-			</div>
-			{info?.modelProblem ? (
-				<Alert className="notice max-w-xl">
-					<TriangleAlertIcon />
-					<AlertDescription>{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</AlertDescription>
-					<AlertAction>
-						<Button variant="outline" size="xs" onClick={() => store.openSettings("models")}>Models…</Button>
-					</AlertAction>
-				</Alert>
-			) : null}
-			<p className="text-faint wrap-anywhere">
-				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
-			</p>
-			<div className="mt-2 flex flex-wrap gap-1.5">
-				{/* A suggestion: a Button that puts its words into the input. */}
-				<Button variant="outline" size="xs" onClick={() => say("What can you do for me, and what are you set up with?")}>What can you do?</Button>
-				<Button variant="outline" size="xs" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
-				<Button variant="outline" size="xs" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" />Give it a folder</Button>
-				<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <Kbd>⌘K</Kbd></Button>
-			</div>
-		</div>
+		<Empty className="welcome">
+			<EmptyHeader>
+				<EmptyMedia>
+					<Avatar size="lg">
+						<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
+					</Avatar>
+				</EmptyMedia>
+				<EmptyTitle>
+					<h1>{tab.agent}</h1>
+				</EmptyTitle>
+				{/* A long path is broken where the line ends, not pushed out of it. */}
+				<EmptyDescription className="wrap-anywhere">{info?.description || "An agent of yours."}</EmptyDescription>
+			</EmptyHeader>
+			<EmptyContent>
+				<div className="flex flex-wrap justify-center gap-1.5">
+					<Hint label="The model it runs on" describes><Badge variant="outline"><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></Badge></Hint>
+					<Hint label={mode?.about ?? "How much it asks and how far it reaches"} describes><Badge variant="outline"><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</Badge></Hint>
+					{info?.main ? <Hint label="It creates and changes the other agents and pine's settings when you ask it to" describes><Badge variant="outline">administers pine</Badge></Hint> : null}
+					{info?.delegates.length ? <Hint label="Agents it can hand work to" describes><Badge variant="outline">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></Badge></Hint> : null}
+					{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
+				</div>
+				{info?.modelProblem ? (
+					<Alert className="notice text-left">
+						<TriangleAlertIcon />
+						<AlertDescription>{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</AlertDescription>
+						<AlertAction>
+							<Button variant="outline" size="xs" onClick={() => store.openSettings("models")}>Models…</Button>
+						</AlertAction>
+					</Alert>
+				) : null}
+				<p className="text-faint wrap-anywhere">
+					{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
+				</p>
+				<div className="flex flex-wrap justify-center gap-1.5">
+					{/* A suggestion: a Button that puts its words into the input. */}
+					<Button variant="outline" size="xs" onClick={() => say("What can you do for me, and what are you set up with?")}>What can you do?</Button>
+					<Button variant="outline" size="xs" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
+					<Button variant="outline" size="xs" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" />Give it a folder</Button>
+					<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <Kbd>⌘K</Kbd></Button>
+				</div>
+			</EmptyContent>
+		</Empty>
 	);
 }
 
@@ -658,11 +668,10 @@ function ContextUsage({ tab, percent }: { tab: Tab; percent: number }) {
 				{Math.round(percent)}%
 			</HoverCardTrigger>
 			<HoverCardContent align="end" className="flex flex-col gap-3">
-				<div className="flex items-center justify-between gap-3">
-					<span className="font-medium">Context</span>
-					<span className="text-muted-foreground tabular-nums">{total ? `${count(total)} tokens · ` : ""}{Math.round(percent)}% full</span>
-				</div>
-				<Progress value={Math.min(100, percent)} aria-label="Context used" />
+				<Progress value={Math.min(100, percent)}>
+					<ProgressLabel>Context</ProgressLabel>
+					<ProgressValue>{() => `${total ? `${count(total)} tokens · ` : ""}${Math.round(percent)}% full`}</ProgressValue>
+				</Progress>
 				{tab.cacheShare !== undefined || speed ? (
 					<p className="text-muted-foreground">
 						{tab.cacheShare !== undefined ? `${tab.cacheShare}% of the last request came from the model server's cache.` : ""} {speed}
@@ -682,9 +691,15 @@ function ConvHead({ tab }: { tab: Tab }) {
 			<Avatar size="sm">
 				<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
 			</Avatar>
-			<span className="text-muted-foreground">{tab.agent}</span>
-			<span className="text-faint">/</span>
-			<b className="min-w-0 shrink truncate font-semibold" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
+			<Breadcrumb className="min-w-0 shrink">
+				<BreadcrumbList className="flex-nowrap">
+					<BreadcrumbItem>{tab.agent}</BreadcrumbItem>
+					<BreadcrumbSeparator />
+					<BreadcrumbItem className="min-w-0">
+						<BreadcrumbPage className="truncate" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</BreadcrumbPage>
+					</BreadcrumbItem>
+				</BreadcrumbList>
+			</Breadcrumb>
 			{chat && tab.folder ? <Hint label={`Works in ${tab.folder}`} describes><Button variant="ghost" size="xs" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></Button></Hint> : null}
 			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-faint" /> : null}
 			<span className="min-w-0 flex-1" />
