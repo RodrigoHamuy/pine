@@ -723,7 +723,15 @@ function Models() {
 			</ItemGroup>
 
 			<h2 className={H2}>Models you can use now</h2>
-			<p className="font-mono leading-relaxed wrap-anywhere text-muted-foreground">{models.data ? models.data.join("   ") || "none: sign in to a provider or add a server" : "…"}</p>
+			{models.data ? (
+				models.data.length ? (
+					<div className="flex flex-wrap gap-1.5">{models.data.map((m) => <Badge key={m} variant="outline" className="font-mono">{m}</Badge>)}</div>
+				) : (
+					<p className="text-muted-foreground">none: sign in to a provider or add a server</p>
+				)
+			) : (
+				<p className="text-muted-foreground">…</p>
+			)}
 			{signIn ? <SignIn provider={signIn.provider} type={signIn.type} close={(_done, choose) => (setSignIn(undefined), reload(), choose ? void store.chooseDefaultModel(choose).then(reload) : undefined)} /> : null}
 		</Page>
 	);

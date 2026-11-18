@@ -73,16 +73,20 @@ export function AgentView({ tab }: { tab: Tab }) {
 	return (
 		<ScrollFadeArea className="agent-view flex-1 cursor-auto text-xs select-text">
 		<div className="flex flex-col gap-3 pb-2">
-			<div className="flex items-start gap-3 px-3.5 pt-4 pb-0.5">
-				<Avatar size="lg">
-					<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
-				</Avatar>
-				<div className="min-w-0 flex-1">
-					<div className="agent-name flex items-center gap-2 text-base font-medium">{tab.agent}{info.main ? <Badge>main</Badge> : null}</div>
-					<div className="text-muted-foreground">{info.description || "no description"}</div>
-				</div>
-				<Button variant="outline" size="xs" onClick={() => s.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Settings</Button>
-			</div>
+			<Item className="px-3.5 pt-4 pb-0.5">
+				<ItemMedia>
+					<Avatar size="lg">
+						<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
+					</Avatar>
+				</ItemMedia>
+				<ItemContent>
+					<ItemTitle className="agent-name">{tab.agent}{info.main ? <Badge>main</Badge> : null}</ItemTitle>
+					<ItemDescription>{info.description || "no description"}</ItemDescription>
+				</ItemContent>
+				<ItemActions>
+					<Button variant="outline" size="xs" onClick={() => s.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Settings</Button>
+				</ItemActions>
+			</Item>
 			<div className="mt-0.5 flex flex-wrap gap-1.5 px-3.5">
 				<Hint label="The model it runs on" describes><Badge variant="outline" render={<button type="button" onClick={() => void s.pickModel(tab)} />}><CpuIcon data-icon="inline-start" />{info.model}</Badge></Hint>
 				<Hint label="How much its model thinks before it answers" describes><Badge variant="outline" render={<button type="button" onClick={() => void s.pickReasoning(tab)} />}><SparkleIcon data-icon="inline-start" />reasoning {info.thinking}</Badge></Hint>
