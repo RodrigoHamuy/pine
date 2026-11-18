@@ -1,7 +1,9 @@
 // The app's page in an ordinary browser (an editor's preview pane), reloading as you edit, on a
 // throwaway pine: a home in a temp folder with two agents and the scripted model server of pine's
-// tests, removed when the preview stops.
-//   npm run dev:preview            (the port from $PORT, 5173 by default)
+// tests, removed when the preview stops. With --home, on that pine home instead: the daemon that
+// runs there, or one started for the preview and stopped with it; the home is never removed.
+//   npm run dev:preview                     (the port from $PORT, 5173 by default)
+//   npm run dev:preview -- --home ~/.pine
 //
 // Vite's server stands where the app's main process stands: it holds the daemon's token and makes
 // every call for the page (electron/daemon.ts, the same module as the app), and the page holds no
@@ -13,6 +15,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { parseArgs } from "node:util";
 import { createServer, type Plugin } from "vite";
 import { startMock } from "../../baseline/tests/mock.mjs";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "../electron/daemon.ts";
@@ -129,8 +132,21 @@ function previewServer(service: Service, nonce: string): Plugin {
 
 // ---- start, and stop everything together -------------------------------------------------------
 
-const mock = await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g });
-const home = throwawayHome(mock.baseUrl);
+/**
+ * The home `--home` names, as the developer typed it: from the folder `npm run` was typed in
+ * (npm itself runs this in desktop/), with `~` for their home folder.
+ */
+function chosenHome(): string | undefined {
+	const { values } = parseArgs({ options: { home: { type: "string" } } });
+	if (!values.home) return undefined;
+	const typed = values.home.replace(/^~(?=$|\/)/, os.homedir());
+	return path.resolve(process.env.INIT_CWD ?? process.cwd(), typed);
+}
+
+const chosen = chosenHome();
+// Only the throwaway pine needs the scripted model server: a chosen home has its own models.
+const mock = chosen ? undefined : await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g });
+const home = chosen ?? throwawayHome(mock!.baseUrl);
 let service: Service | undefined;
 let server: Awaited<ReturnType<typeof createServer>> | undefined;
 let stopping = false;
@@ -139,9 +155,11 @@ async function stop(code = 0): Promise<never> {
 	if (!stopping) {
 		stopping = true;
 		await server?.close().catch(() => {});
+		// A daemon that ran before the preview goes on: `stop` ends only one that `pine service` started.
 		await service?.stop().catch(() => {});
-		await mock.close?.().catch(() => {});
-		fs.rmSync(home, { recursive: true, force: true });
+		await mock?.close?.().catch(() => {});
+		// A chosen home is the developer's: it is never removed.
+		if (!chosen) fs.rmSync(home, { recursive: true, force: true });
 	}
 	process.exit(code);
 }
@@ -163,7 +181,8 @@ try {
 	});
 	await server.listen();
 	console.log(`preview  ${server.resolvedUrls?.local[0]}`);
-	console.log(`pine     ${service.base} on a throwaway home in ${home} (removed when the preview stops)`);
+	if (!chosen) console.log(`pine     ${service.base} on a throwaway home in ${home} (removed when the preview stops)`);
+	else console.log(`pine     ${service.base} on ${home} (${service.started ? "started for the preview, stopped with it" : "the daemon that runs there, left running"})`);
 } catch (e) {
 	console.error(`The preview could not start: ${e instanceof Error ? e.message : e}`);
 	await stop(1);

@@ -112,6 +112,7 @@ it was built on. See "Packing and signing" for what it carries and how it is sig
 |---|---|
 | `npm start` | Builds the app and opens it |
 | `npm run dev` | Opens it with the page served by Vite, reloading on every change |
+| `npm run dev:preview` | The app's page in an ordinary browser, reloading on every change, on a throwaway pine. `-- --home <dir>` puts it on that pine home instead. See below |
 | `npm run check` | Type check |
 | `npm test` | The app from end to end: the real app on a pine home of its own with a scripted model. Needs a screen. With `PINE_LIVE=1` on a Mac it also dictates with the real voice helper, from a recording |
 | `npm run pack` | `release/mac-arm64/Pine.app`, with pine, Node and the helpers inside |
@@ -123,6 +124,24 @@ Electron. The pine of a packed app runs on the Node the app carries. From a chec
 looks for `node` the way your shell finds it (it asks your login shell for its environment,
 since an app started from the Finder has none of it); a packed app does the same for a pine
 that is not its own, and falls back to its own Node where the Mac has none.
+
+### The page in a browser
+
+`npm run dev:preview` serves the app's page at `http://localhost:5173` (the port from `$PORT`),
+for an editor's preview pane or any browser, without the app's window. It is a tool for
+working on the app, not a way to use pine. In Claude Code it is the `desktop-preview` entry
+of `.claude/launch.json`.
+
+| How it is started | What it runs on |
+|---|---|
+| `npm run dev:preview` | A throwaway pine: a home in a temp folder with two agents (`main` and `scout`) and the scripted model of pine's tests. The home and its daemon are removed when the preview stops |
+| `npm run dev:preview -- --home <dir>` | That pine home, with its own models and conversations. The daemon that runs there is used and left running; if none runs, one is started and stopped with the preview. The home is never removed |
+
+The preview's server stands where the app's main process stands: it holds the daemon's token
+and makes every call for the page, with the same checks, and it answers only the page on the
+same computer. What only the app can do does nothing in a browser: menus, system
+notifications, the dock badge, dictation, update checks, `pine` for a terminal, restarting
+pine, setting pine up. To open a folder for a conversation you type its path.
 
 ## The daemon: started or reused
 

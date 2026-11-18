@@ -1,47 +1,72 @@
 // The app's page in an ordinary browser (`npm run dev:preview`): the preview's server on a
-// throwaway pine, talked to over HTTP as a browser would. No window.
+// throwaway pine and on a home of one's choice (`--home`), talked to over HTTP as a browser
+// would. No window.
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { build } from "vite";
+import { startMock } from "../../baseline/tests/mock.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 
-let child: ChildProcess;
-/** Where the page is served, its origin, the daemon behind it and the throwaway home it runs on. */
-let page: string;
-let origin: string;
-let daemon: string;
-let home: string;
-let said = "";
+/** A preview that runs: its process, where the page is served and its origin, the daemon behind it and the home it runs on. */
+interface Preview {
+	child: ChildProcess;
+	page: string;
+	origin: string;
+	daemon: string;
+	home: string;
+}
 
-before(async () => {
-	child = spawn(process.execPath, [path.join(root, "scripts", "preview.ts")], { cwd: root, env: { ...process.env, PORT: "0" }, stdio: ["ignore", "pipe", "pipe"] });
+const previews: Preview[] = [];
+
+/** `npm run dev:preview` with these arguments, on a port the system picks, once it has said where it answers. */
+function startPreview(args: string[] = []): Promise<Preview> {
+	const child = spawn(process.execPath, [path.join(root, "scripts", "preview.ts"), ...args], { cwd: root, env: { ...process.env, PORT: "0" }, stdio: ["ignore", "pipe", "pipe"] });
+	let said = "";
 	child.stderr!.on("data", (d: Buffer) => (said += d.toString("utf8")));
-	await new Promise<void>((resolve, reject) => {
+	return new Promise((resolve, reject) => {
 		const timer = setTimeout(() => reject(new Error(`the preview did not come up. It said:\n${said}`)), 60_000);
 		child.stdout!.on("data", (d: Buffer) => {
 			said += d.toString("utf8");
 			const p = /preview\s+(http:\/\/\S+)/.exec(said)?.[1];
-			const pine = /pine\s+(http:\/\/\S+) on a throwaway home in (\S+)/.exec(said);
+			const pine = /pine\s+(http:\/\/\S+) on (?:a throwaway home in )?(\S+)/.exec(said);
 			if (p && pine) {
 				clearTimeout(timer);
-				page = p;
-				origin = new URL(p).origin;
-				daemon = pine[1];
-				home = pine[2];
-				resolve();
+				const preview = { child, page: p, origin: new URL(p).origin, daemon: pine[1], home: pine[2] };
+				previews.push(preview);
+				resolve(preview);
 			}
 		});
-		child.on("close", (code) => reject(new Error(`the preview ended (exit ${code}). It said:\n${said}`)));
+		child.on("close", (code) => (clearTimeout(timer), reject(new Error(`the preview ended (exit ${code}). It said:\n${said}`))));
 	});
+}
+
+/** Stop a preview as Ctrl-C does, and wait for it to end. */
+async function stopPreview(preview: Preview): Promise<void> {
+	if (preview.child.exitCode !== null) return;
+	const ended = new Promise((r) => preview.child.once("close", r));
+	preview.child.kill("SIGTERM");
+	await ended;
+}
+
+/** The preview on a throwaway pine that most tests here talk to. */
+let child: ChildProcess;
+let page: string;
+let origin: string;
+let daemon: string;
+let home: string;
+
+before(async () => {
+	({ child, page, origin, daemon, home } = await startPreview());
 });
 
 after(() => {
-	if (child.exitCode === null) child.kill("SIGKILL");
+	for (const p of previews) if (p.child.exitCode === null) p.child.kill("SIGKILL");
 });
 
 const call = (body: unknown, headers: Record<string, string> = { origin, "content-type": "application/json" }) => fetch(new URL("/__pine/call", page), { method: "POST", headers, body: JSON.stringify(body) });
@@ -106,4 +131,88 @@ test("stopping the preview removes the throwaway home and ends the daemon", asyn
 	await ended;
 	assert.equal(fs.existsSync(home), false);
 	await assert.rejects(fetch(`${daemon}/health`, { signal: AbortSignal.timeout(2000) }));
+});
+
+// ---- --home: a pine home of the developer's choice -----------------------------------------------
+
+const write = (file: string, content: string) => {
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	fs.writeFileSync(file, content);
+};
+
+/** A home of the test's own, as a developer's would be: one agent, on the scripted model server, on this port. */
+function ownHome(modelServer: string, port: number): string {
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-preview-own-")));
+	write(path.join(dir, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: modelServer, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
+	write(path.join(dir, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port }, main: "keeper", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false } }));
+	write(path.join(dir, "agents", "keeper", "agent.json"), JSON.stringify({ description: "The only agent of this home" }));
+	write(path.join(dir, "agents", "keeper", "workspace", "AGENTS.md"), "You are keeper.\n");
+	return dir;
+}
+
+/** A port nothing listens on now. */
+const freePort = () =>
+	new Promise<number>((resolve) => {
+		const s = net.createServer().listen(0, "127.0.0.1", () => {
+			const { port } = s.address() as net.AddressInfo;
+			s.close(() => resolve(port));
+		});
+	});
+
+const stateOf = async (p: Preview) => (await (await fetch(new URL("/__pine/state", p.page), { headers: { origin: p.origin } })).json()).state;
+
+const agentsOf = async (p: Preview) => {
+	const res = await fetch(new URL("/__pine/call", p.page), { method: "POST", headers: { origin: p.origin, "content-type": "application/json" }, body: JSON.stringify({ method: "GET", url: "/agents" }) });
+	return (await res.json()).data.map((a: { id: string }) => a.id);
+};
+
+const answers = async (url: string) => {
+	try {
+		return (await fetch(url, { signal: AbortSignal.timeout(2000) })).ok;
+	} catch {
+		return false;
+	}
+};
+
+test("--home starts a daemon on that home when none runs, stops it with the preview, and leaves the home", async (t) => {
+	const mock = await startMock();
+	t.after(() => mock.close?.());
+	const own = ownHome(mock.baseUrl, 0);
+	t.after(() => fs.rmSync(own, { recursive: true, force: true }));
+	const preview = await startPreview(["--home", own]);
+	assert.equal(preview.home, own);
+	assert.deepEqual(await agentsOf(preview), ["keeper"]);
+	assert.equal((await stateOf(preview)).started, true);
+	await stopPreview(preview);
+	assert.ok(fs.existsSync(path.join(own, "pine.json")));
+	assert.ok(fs.existsSync(path.join(own, "agents", "keeper", "agent.json")));
+	assert.equal(await answers(`${preview.daemon}/health`), false);
+});
+
+test("--home uses the daemon that runs on that home, and leaves it running", async (t) => {
+	const mock = await startMock();
+	t.after(() => mock.close?.());
+	const own = ownHome(mock.baseUrl, await freePort());
+	t.after(() => fs.rmSync(own, { recursive: true, force: true }));
+	// The developer's own pine of that home, running before the preview and after it.
+	const running = spawn(process.execPath, [path.join(root, "..", "bin", "pine.js"), "service", "--home", own], { stdio: ["pipe", "pipe", "ignore"] });
+	t.after(() => void (running.exitCode === null && running.kill("SIGKILL")));
+	const base = await new Promise<string>((resolve, reject) => {
+		let out = "";
+		running.stdout!.on("data", (d: Buffer) => {
+			out += d.toString("utf8");
+			if (out.includes("\n")) resolve(JSON.parse(out.slice(0, out.indexOf("\n"))).base);
+		});
+		running.once("close", (code) => reject(new Error(`pine service ended (exit ${code}): ${out}`)));
+	});
+	const preview = await startPreview(["--home", own]);
+	assert.equal(preview.daemon, base);
+	assert.equal((await stateOf(preview)).started, false);
+	assert.deepEqual(await agentsOf(preview), ["keeper"]);
+	await stopPreview(preview);
+	assert.equal(await answers(`${base}/health`), true);
+	assert.ok(fs.existsSync(path.join(own, "pine.json")));
+	const ended = new Promise((r) => running.once("close", r));
+	running.stdin!.end();
+	await ended;
 });
