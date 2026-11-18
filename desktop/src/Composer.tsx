@@ -194,7 +194,8 @@ export function Composer({ tab }: { tab: Tab }) {
 		}
 		// While suggestions show, the arrows, Enter and Escape are the combobox's: they move the
 		// highlight, pick it (`take`) and close the list. Everything else is the composer's.
-		const s = highlighted.current;
+		// The list highlights its first line by itself, a moment after it shows: a Tab in that moment takes that line too.
+		const s = highlighted.current ?? (e.key === "Tab" ? items[0] : undefined);
 		if (items.length && s && !e.altKey) {
 			if (e.key === "Tab" && !e.shiftKey) {
 				e.preventBaseUIHandler();

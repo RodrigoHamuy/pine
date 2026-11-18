@@ -22,7 +22,8 @@ import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { useEffect, useRef, useState } from "react";
-import { Terminal } from "@/components/ai-elements/terminal";
+import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton, CodeBlockLine } from "@/components/ui/code-block";
+import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
@@ -419,6 +420,26 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 	);
 }
 
+/**
+ * What a tool or a program printed: a stock Code Block, as shadcn's Terminal pattern shows a
+ * command's output, with the terminal's colours read by the stock highlighter ("ansi"). The panel
+ * is already the viewer, so there is no Trace line around it. `sm` caps it where several follow
+ * each other (the pattern's `max-h-64`).
+ */
+function Printed({ text, failed = false, sm = false, className }: { text: string; failed?: boolean; sm?: boolean; className?: string }) {
+	const lines = useHighlightedCode(text, "ansi");
+	return (
+		<CodeBlock variant={failed ? "destructive" : "default"} size={sm ? "sm" : "default"} className={className} data-status={failed ? "fail" : "ok"}>
+			<CodeBlockActions>
+				<CodeBlockCopyButton value={text} />
+			</CodeBlockActions>
+			<CodeBlockContent wrap className={sm ? "max-h-64" : undefined}>
+				{lines.map((line, i) => <CodeBlockLine key={i}>{line}</CodeBlockLine>)}
+			</CodeBlockContent>
+		</CodeBlock>
+	);
+}
+
 /** The tool calls of the last messages, each with what it printed. */
 function Output({ tab }: { tab: Tab }) {
 	const calls = useLoad(async () => {
@@ -443,7 +464,7 @@ function Output({ tab }: { tab: Tab }) {
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
 				<Body>
-					<Terminal output={shown.entry.result || "(it printed nothing)"} className="m-2" data-status={shown.entry.ok === false ? "fail" : "ok"} />
+					<Printed text={shown.entry.result || "(it printed nothing)"} failed={shown.entry.ok === false} className="m-2" />
 					{(shown.entry.images ?? []).map((id) => <div className="p-3" key={id}><img className={PICTURE} src={media.tool(id)} alt="" /></div>)}
 				</Body>
 			</>
@@ -489,7 +510,7 @@ function Running({ tab }: { tab: Tab }) {
 							<Confirm label="Stop" question={`Stop ${short(p.command, 80)}?`} onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
 						</ItemActions>
 					</Item>
-					{p.output ? <Terminal output={p.output} /> : null}
+					{p.output ? <Printed text={p.output} sm /> : null}
 				</div>
 			))}
 		</Body>
