@@ -1,16 +1,21 @@
 // Where the owner writes: the message, the files that go with it, and under it what the
 // conversation runs on (folder, model, reasoning, mode), each a click away.
 import { Combobox as ComboboxPrimitive } from "@base-ui/react";
-import { ArrowUpIcon, ClockIcon, CpuIcon, EyeIcon, FileIcon, FolderIcon, MicIcon, PlusIcon, ShieldIcon, SparkleIcon, XIcon } from "lucide-react";
-import { PromptInput, PromptInputBody, PromptInputButton, PromptInputFooter, PromptInputHeader, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from "@/components/ai-elements/prompt-input";
+import { ArrowUpIcon, ChevronDownIcon, ClockIcon, CpuIcon, EyeIcon, FileIcon, FolderIcon, MicIcon, PlusIcon, ShieldIcon, SparkleIcon, SquareIcon, XIcon } from "lucide-react";
+import { Hint } from "@/components/hint";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Attachment as Chip, AttachmentAction, AttachmentActions, AttachmentContent, AttachmentDescription, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Combobox, ComboboxContent, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { useEffect, useRef, useState } from "react";
 import { api } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
-import { type Attachment, store, type Tab, useModel, useSignal } from "./model.ts";
-import { baseName, size, tilde } from "./text.ts";
+import { type Attachment, REASONING_ABOUT, store, type Tab, useModel, useSignal } from "./model.ts";
+import { baseName, MODES, size, tilde } from "./text.ts";
 
 const MAX_FILE = 20 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -47,8 +52,6 @@ interface Suggestion {
 
 /** A key event that went through Base UI: `preventBaseUIHandler` keeps the combobox's own handling out of it. */
 type ListKeyEvent = React.KeyboardEvent<HTMLTextAreaElement> & { preventBaseUIHandler: () => void };
-
-const TONE: Record<string, string> = { good: "text-primary", warn: "text-warn", bad: "text-destructive", plan: "text-plan" };
 
 export function Composer({ tab }: { tab: Tab }) {
 	useModel(tab);
@@ -252,32 +255,41 @@ export function Composer({ tab }: { tab: Tab }) {
 	const mode = store.modeOf(tab);
 	const paused = store.bypassPaused(tab);
 	const tainted = store.taints.get(`${tab.agent}:${tab.session}`);
-	const modeTone = paused ? "warn" : mode === "bypass" ? "bad" : mode === "safe" ? "good" : mode === "plan" ? "plan" : "";
 	const goal = tab.goal && tab.goal.status !== "met" ? tab.goal : undefined;
 
+	const model = info?.model ?? "none";
+	const thinking = info?.thinking ?? "off";
+	// A menu's popup lies elsewhere on the page but inside the Input Group's addon for React, so a
+	// click in it would reach the addon's own handler (a click there puts focus into the input) and
+	// take focus from the button the menu gives it back to.
+	const inMenu = (e: React.MouseEvent) => e.stopPropagation();
+
+	// shadcn's Prompt Input pattern: an Input Group with the files above the text and the tools
+	// under it; the reasoning and the mode are the Model Selector pattern's menus.
 	return (
 		<>
 			{goal && goal.status !== "active" ? (
-				<div className={`banner mb-2 flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs bg-warn-soft`}>
-					<ClockIcon size={14} />
-					<span className="min-w-0 flex-1 truncate">Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}: {goal.note}</span>
-					<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
-					<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</Button>
-				</div>
+				<Alert className="banner mb-2">
+					<ClockIcon />
+					<AlertTitle>Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}</AlertTitle>
+					<AlertDescription className="truncate">{goal.note}</AlertDescription>
+					<AlertAction>
+						<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
+						<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</Button>
+					</AlertAction>
+				</Alert>
 			) : null}
 			{voice !== "off" ? (
-				<div className={`banner mb-2 flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs bg-brand-soft`}>
-					<span className="size-2 shrink-0 rounded-full bg-destructive" />
-					<span className="min-w-0 flex-1">{voice === "starting" ? "getting ready to listen…" : "listening · speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</span>
-				</div>
+				<Alert className="banner mb-2">
+					<MicIcon />
+					<AlertTitle>{voice === "starting" ? "getting ready to listen…" : "listening"}</AlertTitle>
+					<AlertDescription>{voice === "starting" ? "" : "speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</AlertDescription>
+				</Alert>
 			) : null}
-			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the
-			    daemon), so the Prompt Input keeps none of its own: maxFiles 0. */}
-			<PromptInput
-				className="composer [&[data-over]_[data-slot=input-group]]:border-dashed [&[data-over]_[data-slot=input-group]]:border-primary [&[data-over]_[data-slot=input-group]]:bg-brand-soft!"
-				data-over={over || undefined}
-				maxFiles={0}
-				onSubmit={() => void send("steer")}
+			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the daemon). */}
+			<form
+				className="composer"
+				onSubmit={(e) => (e.preventDefault(), void send("steer"))}
 				onDragOver={(e) => {
 					if (![...e.dataTransfer.types].includes("Files")) return;
 					e.preventDefault();
@@ -286,19 +298,35 @@ export function Composer({ tab }: { tab: Tab }) {
 				onDragLeave={() => setOver(false)}
 				onDrop={(e) => void onDrop(e)}
 			>
-				{tab.attachments.length ? (
-					<PromptInputHeader>
-						{tab.attachments.map((f, i) => (
-							<span className="flex items-center gap-1.5 rounded-md border border-line-soft bg-raised py-0.5 pr-1 pl-2 text-xs" key={`${f.name}:${i}`}>
-								{f.preview ? <img className="-ml-1 size-5.5 rounded-sm object-cover" src={f.preview} alt="" /> : <FileIcon size={13} />}
-								<span className="max-w-45 truncate">{f.name}</span>
-								<span className="text-faint">{size(f.size)}</span>
-								<Button variant="ghost" size="icon-xs" title="Remove" onClick={() => (tab.attachments.splice(i, 1), tab.touch())}><XIcon /></Button>
-							</span>
-						))}
-					</PromptInputHeader>
-				) : null}
-				<PromptInputBody>
+				<InputGroup>
+					{tab.attachments.length || over ? (
+						<InputGroupAddon align="block-start" className="flex-wrap">
+							{tab.attachments.map((f, i) => (
+								<Chip size="sm" key={`${f.name}:${i}`}>
+									<AttachmentMedia variant={f.preview ? "image" : "icon"}>{f.preview ? <img src={f.preview} alt="" /> : <FileIcon />}</AttachmentMedia>
+									<AttachmentContent>
+										<AttachmentTitle>{f.name}</AttachmentTitle>
+										<AttachmentDescription>{size(f.size)}</AttachmentDescription>
+									</AttachmentContent>
+									<AttachmentActions>
+										<Hint label={`Remove ${f.name}`}>
+											<AttachmentAction onClick={() => (tab.attachments.splice(i, 1), tab.touch())}><XIcon /></AttachmentAction>
+										</Hint>
+									</AttachmentActions>
+								</Chip>
+							))}
+							{/* While files are dragged over the input: where they go, as an attachment still to come. */}
+							{over ? (
+								<Chip size="sm" state="idle">
+									<AttachmentMedia><PlusIcon /></AttachmentMedia>
+									<AttachmentContent>
+										<AttachmentTitle>Drop to attach</AttachmentTitle>
+										<AttachmentDescription>a folder is opened for the conversation</AttachmentDescription>
+									</AttachmentContent>
+								</Chip>
+							) : null}
+						</InputGroupAddon>
+					) : null}
 					{/* The `/` commands and `@` files: pine finds them (`suggest`) and the combobox shows them. */}
 					<Combobox<Suggestion>
 						items={items}
@@ -314,8 +342,7 @@ export function Composer({ tab }: { tab: Tab }) {
 					>
 						<ComboboxPrimitive.Input
 							ref={area as unknown as React.Ref<HTMLInputElement>}
-							render={<PromptInputTextarea rows={1} />}
-							className="max-h-80 min-h-0 px-3.5 pt-3 text-sm"
+							render={<InputGroupTextarea rows={1} className="max-h-48 p-3" />}
 							placeholder={tab.busy ? `Say something to ${tab.agent} while it works…` : `Message ${tab.agent} · / for commands · @ for files`}
 							onChange={(e) => {
 								// A key that types ends the listening: what was heard stays, and nothing more is put into the input.
@@ -343,40 +370,96 @@ export function Composer({ tab }: { tab: Tab }) {
 							</ComboboxList>
 						</ComboboxContent>
 					</Combobox>
-				</PromptInputBody>
-				{/* A narrow input keeps every button on one line and whole: only the model's and the folder's
-				    names are cut, and what has no room for its words stands as its sign alone, with the words in its tooltip. */}
-				<PromptInputFooter className="@container/bar">
-					<PromptInputTools className="min-w-0 flex-1">
-						<PromptInputButton title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><PlusIcon /></PromptInputButton>
-						<PromptInputButton size="sm" className="min-w-0 shrink" title={`Model: ${info?.model ?? "none"}`} onClick={() => void store.pickModel(tab)}>
-							<CpuIcon />
-							<span className="truncate @max-sm/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
-						</PromptInputButton>
-						<PromptInputButton size="sm" title={`How much the model thinks before it answers: ${info?.thinking ?? "off"}`} onClick={() => void store.pickReasoning(tab)}>
-							<SparkleIcon />
-							<span className="@max-xs/bar:hidden">{info?.thinking ?? "off"}</span>
-						</PromptInputButton>
-						<PromptInputButton size="sm" className={TONE[modeTone]} title="How much this agent does without asking" onClick={() => void store.pickMode(tab)}>
-							<ShieldIcon />
-							<span>{mode}{paused ? " (paused)" : ""}</span>
-						</PromptInputButton>
-						<PromptInputButton size="sm" className="min-w-0 shrink" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
-							<FolderIcon />
-							<span className="truncate @max-2xs/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
-						</PromptInputButton>
-						{tainted ? <span className="flex shrink-0 items-center gap-1.5 px-2 text-xs text-warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><EyeIcon className="size-3.5" /><span className="@max-lg/bar:hidden">outside content</span></span> : null}
-					</PromptInputTools>
-					<PromptInputTools className="shrink-0">
-						{store.platform === "darwin" ? <PromptInputButton className={voice !== "off" ? TONE.bad : undefined} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><MicIcon /></PromptInputButton> : null}
+					{/* A narrow input keeps every button on one line and whole: only the model's and the folder's
+					    names are cut, and what has no room for its words stands as its sign alone, with the words in its tooltip. */}
+					<InputGroupAddon align="block-end" className="@container/bar">
+						<Hint label="Attach files (or drop them here)">
+							<InputGroupButton size="icon-sm" variant="outline" className="rounded-full" onClick={() => picker.current?.click()}><PlusIcon /></InputGroupButton>
+						</Hint>
+						<Hint label={`Model: ${model}`}>
+							<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickModel(tab)}>
+								<CpuIcon />
+								<span className="truncate @max-sm/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
+							</InputGroupButton>
+						</Hint>
+						<DropdownMenu>
+							<Hint label={`Reasoning: ${thinking}, how much the model thinks before it answers`}>
+								<DropdownMenuTrigger render={<InputGroupButton size="sm" />}>
+									<SparkleIcon />
+									<span className="@max-xs/bar:hidden">{thinking}</span>
+									<ChevronDownIcon />
+								</DropdownMenuTrigger>
+							</Hint>
+							<DropdownMenuContent side="top" className="w-56" onClick={inMenu}>
+								<DropdownMenuGroup>
+									<DropdownMenuLabel>Reasoning for {tab.agent}</DropdownMenuLabel>
+									<DropdownMenuRadioGroup value={thinking} onValueChange={(level: string) => void store.setReasoning(tab, level)}>
+										{Object.entries(REASONING_ABOUT).map(([level, about]) => (
+											<DropdownMenuRadioItem key={level} value={level} closeOnClick>
+												{level}
+												<span className="text-muted-foreground">{about}</span>
+											</DropdownMenuRadioItem>
+										))}
+									</DropdownMenuRadioGroup>
+								</DropdownMenuGroup>
+							</DropdownMenuContent>
+						</DropdownMenu>
+						<DropdownMenu>
+							<Hint label={`Mode: ${mode}${paused ? " (paused)" : ""}, how much this agent does without asking`}>
+								<DropdownMenuTrigger render={<InputGroupButton size="sm" variant={mode === "bypass" && !paused ? "destructive" : "ghost"} />}>
+									<ShieldIcon />
+									<span>{mode}{paused ? " (paused)" : ""}</span>
+									<ChevronDownIcon />
+								</DropdownMenuTrigger>
+							</Hint>
+							<DropdownMenuContent side="top" className="w-80" onClick={inMenu}>
+								<DropdownMenuGroup>
+									<DropdownMenuLabel>Mode for {tab.agent}</DropdownMenuLabel>
+									<DropdownMenuRadioGroup value={mode} onValueChange={(next: string) => void store.setMode(tab, next)}>
+										{MODES.map((m) => (
+											<DropdownMenuRadioItem key={m.value} value={m.value} closeOnClick>
+												<span className="flex flex-col">
+													{m.label}
+													<span className="text-muted-foreground">{m.about}</span>
+												</span>
+											</DropdownMenuRadioItem>
+										))}
+									</DropdownMenuRadioGroup>
+								</DropdownMenuGroup>
+							</DropdownMenuContent>
+						</DropdownMenu>
+						<Hint label={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"}>
+							<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)}>
+								<FolderIcon />
+								<span className="truncate @max-2xs/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
+							</InputGroupButton>
+						</Hint>
+						{tainted ? (
+							<Hint label={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`} describes>
+								<Badge variant="outline" tabIndex={0}>
+									<EyeIcon data-icon="inline-start" />
+									<span className="@max-lg/bar:hidden">outside content</span>
+								</Badge>
+							</Hint>
+						) : null}
+						<span className="ml-auto" />
+						{store.platform === "darwin" ? (
+							<Hint label={voice === "off" ? "Dictate the message" : "End the listening"} keys={voice === "off" ? "⌃R" : undefined}>
+								<InputGroupButton size="icon-sm" variant={voice !== "off" ? "destructive" : "ghost"} onClick={() => void dictate()}><MicIcon /></InputGroupButton>
+							</Hint>
+						) : null}
 						{tab.busy && !text.trim() ? (
-							<PromptInputSubmit status="streaming" onStop={() => void store.stop(tab)} title="Stop (esc)" />
+							<Hint label="Stop" keys="esc">
+								<InputGroupButton size="icon-sm" variant="default" className="rounded-full" onClick={() => void store.stop(tab)}><SquareIcon /></InputGroupButton>
+							</Hint>
 						) : (
-							<PromptInputSubmit title={tab.busy ? "Give it to the agent while it works (↩) · ⌥↩ waits its turn" : "Send (↩)"} disabled={!text.trim()}><ArrowUpIcon /></PromptInputSubmit>
+							<Hint label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} keys="↩">
+								<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full" disabled={!text.trim()}><ArrowUpIcon /></InputGroupButton>
+							</Hint>
 						)}
-					</PromptInputTools>
-				</PromptInputFooter>
-			</PromptInput>
+					</InputGroupAddon>
+				</InputGroup>
+			</form>
 			<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />
 			{tab.folder && !tab.items.length ? <div className="px-1 pt-1.5 text-faint text-xs">{tab.agent}'s tools start in {tilde(tab.folder)} and may read and change what is in it.</div> : null}
 		</>

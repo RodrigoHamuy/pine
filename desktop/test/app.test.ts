@@ -358,7 +358,7 @@ const announced = (selector: string) =>
 	page.$eval(selector, (d: Element) => (d.getAttribute("aria-labelledby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim());
 
 test("a model is chosen from its picker with the keyboard alone, and focus goes back to the chip", async () => {
-	const chip = ".composer button[title^='Model:']";
+	const chip = ".composer button[aria-label^='Model:']";
 	const focused = () => page.evaluate((s: string) => document.activeElement === document.querySelector(s), chip);
 	await page.focus(chip);
 	await page.keyboard.press("Enter");
@@ -388,7 +388,24 @@ test("a model is chosen from its picker with the keyboard alone, and focus goes 
 	await page.keyboard.press("Enter");
 	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	assert.equal(await focused(), true);
-	assert.match((await page.getAttribute(chip, "title")) ?? "", /mock\/m/);
+	assert.match((await page.getAttribute(chip, "aria-label")) ?? "", /mock\/m/);
+});
+
+test("the reasoning is chosen from the composer's menu with the keyboard, and the agent keeps it", async () => {
+	const trigger = ".composer button[aria-label^='Reasoning:']";
+	const before = (await page.getAttribute(trigger, "aria-label")) ?? "";
+	const wanted = before.startsWith("Reasoning: high,") ? "low" : "high";
+	await page.focus(trigger);
+	await page.keyboard.press("Enter");
+	await sees("[role=menu] [role=menuitemradio][aria-checked=true]");
+	// The first letter goes to the level, Enter chooses it.
+	await page.keyboard.press(wanted[0]);
+	await page.waitForFunction((v: string) => document.activeElement?.getAttribute("role") === "menuitemradio" && document.activeElement.textContent?.startsWith(v), wanted);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector("[role=menu]", { state: "detached" });
+	await page.waitForFunction((v: string) => document.querySelector(".composer button[aria-label^='Reasoning:']")?.getAttribute("aria-label")?.startsWith(`Reasoning: ${v},`), wanted);
+	await sees(`text=now reasons at "${wanted}"`);
+	assert.equal(await page.evaluate((s: string) => document.activeElement === document.querySelector(s), trigger), true);
 });
 
 test("what an answer points at on the web is not fetched by itself, and what it writes as HTML is cleaned", async () => {

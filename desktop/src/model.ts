@@ -11,6 +11,9 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 
+/** The reasoning levels, each with what it means for the answer. */
+export const REASONING_ABOUT: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
+
 export class Model {
 	v = 0;
 	private listeners = new Set<() => void>();
@@ -1017,9 +1020,13 @@ export class Store extends Model {
 	async pickReasoning(tab: Tab): Promise<void> {
 		const info = this.agent(tab.agent);
 		if (!info) return;
-		const about: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
-		const level = await this.pick({ title: `Reasoning for ${tab.agent}`, items: Object.entries(about).map(([value, a]) => ({ value, label: value, about: a })), current: info.thinking });
-		if (!level || level === info.thinking) return;
+		const level = await this.pick({ title: `Reasoning for ${tab.agent}`, items: Object.entries(REASONING_ABOUT).map(([value, a]) => ({ value, label: value, about: a })), current: info.thinking });
+		if (level) await this.setReasoning(tab, level);
+	}
+
+	async setReasoning(tab: Tab, level: string): Promise<void> {
+		const info = this.agent(tab.agent);
+		if (!info || level === info.thinking) return;
 		if (!(await this.attempt(() => api.setThinking(tab.agent, level)))) return;
 		info.thinking = level;
 		tab.note(`${tab.agent} now reasons at "${level}". A model that cannot reason ignores it.`);
