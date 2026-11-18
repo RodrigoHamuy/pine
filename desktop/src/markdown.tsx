@@ -118,7 +118,7 @@ function Player({ kind, src, alt }: { kind: "image" | "video" | "audio"; src: st
 					<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={src} alt={alt} draggable={false} />} />
 					<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
 						<DialogTitle className="sr-only">The picture, larger</DialogTitle>
-						<DialogClose nativeButton={false} render={<img src={src} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+						<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={src} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
 					</DialogContent>
 				</Dialog>
 			) : kind === "video" ? <video className={MEDIA.video} src={src} controls preload="metadata" /> : <audio className={MEDIA.audio} src={src} controls preload="metadata" />}

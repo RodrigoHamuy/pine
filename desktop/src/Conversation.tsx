@@ -115,10 +115,10 @@ function Call({ tool, subject, status, ms, depth = 0, output, error, images }: {
 				{(images ?? []).map((id) => (
 					<div className={`it-media ${MEDIA.box.image}`} key={id}>
 						<Dialog>
-							<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" />} />
+							<DialogTrigger nativeButton={false} aria-label="The picture, larger" render={<img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" />} />
 							<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
 								<DialogTitle className="sr-only">The picture, larger</DialogTitle>
-								<DialogClose nativeButton={false} render={<img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+								<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
 							</DialogContent>
 						</Dialog>
 					</div>
@@ -437,7 +437,7 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 							<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={item.url} alt={item.name} draggable={false} />} />
 							<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
 								<DialogTitle className="sr-only">The picture, larger</DialogTitle>
-								<DialogClose nativeButton={false} render={<img src={item.url} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+								<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={item.url} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
 							</DialogContent>
 						</Dialog>
 					) : item.kind === "video" ? <video className={MEDIA.video} src={item.url} controls preload="metadata" /> : <audio className={MEDIA.audio} src={item.url} controls preload="metadata" />}
