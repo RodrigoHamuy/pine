@@ -32,7 +32,8 @@ import { Composer } from "./Composer.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
-import { Loading, Pulse } from "./ui.tsx";
+import { Pulse } from "./ui.tsx";
+import { Spinner } from "@/components/ui/spinner";
 
 /** A picture that opens larger over the page, with a click or, focused, with Enter. */
 const zoomable = {
@@ -53,7 +54,7 @@ const traceStatus = (status: RunStatus) => (status === "run" ? "running" : statu
 
 /** The icon of a line that runs: the breathing dot while it does (an agent at work), then how it ended. */
 function StatusIcon({ status }: { status: RunStatus }) {
-	if (status === "run") return <Pulse size={11} />;
+	if (status === "run") return <Pulse className="size-3" />;
 	return status === "ok" || status === "done" ? <CheckIcon /> : <XIcon />;
 }
 
@@ -206,7 +207,7 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 				<TraceLine status={item.done ? undefined : "running"}>
 					{item.done ? null : (
 						<TraceIcon>
-							<Pulse size={12} />
+							<Pulse className="size-3" />
 						</TraceIcon>
 					)}
 					<TraceTitle title={head}>{head}</TraceTitle>
@@ -651,7 +652,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 		tab.tokens.output ? `${count(total)}↑${tab.tokens.cached ? ` (${Math.round((100 * tab.tokens.cached) / Math.max(1, total))}% cached)` : ""} ${count(tab.tokens.output)}↓` : "",
 		speedText(tab.speed),
 	].filter(Boolean);
-	return line(<Pulse size={13} />, parts.join(" · "), waiting.length ? <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null, waiting.length > 0);
+	return line(<Pulse />, parts.join(" · "), waiting.length ? <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null, waiting.length > 0);
 }
 
 /** How full the conversation's context window is (Context): the share in the head, the rest on hover. */
@@ -744,7 +745,7 @@ export function Conversation({ tab }: { tab: Tab }) {
 			<ConvHead tab={tab} />
 			{finding && loaded ? <FindBar key={looked ?? ""} initial={looked} root={() => scroller.current} close={() => (setFinding(false), setLooked(undefined))} /> : null}
 			{!loaded ? (
-				<Loading />
+				<Spinner className="m-auto" />
 			) : (
 				// Message Scroller follows what arrives while the reader is at the end, holds still when
 				// they went up, and brings them back with its button. A tab opens at its end.

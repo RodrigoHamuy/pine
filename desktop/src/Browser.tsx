@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
-import { Empty } from "./ui.tsx";
+import { EmptyView } from "./ui.tsx";
 import { Hint } from "@/components/hint";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -249,9 +249,9 @@ export function BrowserView({ tab }: { tab: Tab }) {
 					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Spinner /></div>}
 				</ScrollFadeArea>
 			) : (
-				<Empty icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
+				<EmptyView icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
 					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}
-				</Empty>
+				</EmptyView>
 			)}
 			{open ? <div className="flex flex-none items-center gap-1.5 border-t border-line-soft px-2.5 py-1 text-xs text-faint"><ShieldIcon size={11} /><span className="truncate">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
 		</div>

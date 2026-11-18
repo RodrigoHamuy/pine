@@ -89,7 +89,7 @@ function Gate() {
 			<Empty className="app-no-drag">
 				<EmptyHeader>
 					<EmptyMedia>
-						<Logo size={36} />
+						<Logo className="size-9" />
 					</EmptyMedia>
 					<EmptyTitle>{title}</EmptyTitle>
 					{about ? <EmptyDescription className="select-text">{about}</EmptyDescription> : null}
@@ -141,7 +141,7 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
 		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
 			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", c.tasks && "pr-16!", on && "on")} render={<ListRow value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
-				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Needs /> : working ? <Pulse size={11} /> : tab?.unread ? <Unread /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
+				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Needs /> : working ? <Pulse className="size-3" /> : tab?.unread ? <Unread /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
 				<span className="cut min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
 			{/* The badge is drawn over the button, so the button keeps the room for the time (stock pr-8 is for an action alone). */}
@@ -201,7 +201,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 							<span className="min-w-0 flex-initial truncate">{a.id}</span>
 							<span className="what @container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
 						</span>
-						{waits ? <Needs /> : working ? <Pulse size={11} /> : unread && folded ? <Unread /> : null}
+						{waits ? <Needs /> : working ? <Pulse className="size-3" /> : unread && folded ? <Unread /> : null}
 					</CollapsibleTrigger>
 					<Hint label={`Settings of ${a.id}`}><SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></SidebarMenuAction></Hint>
 					<Hint label={`Open a folder for a conversation with ${a.id}`}><SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()}><FolderIcon /></SidebarMenuAction></Hint>
@@ -291,7 +291,7 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 		>
 			<span className="grid min-w-3.5 flex-none place-items-center">
-				{tab.approvals.size ? <Needs /> : tab.busy ? <Pulse size={11} /> : tab.unread ? <Unread /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <Avatar size="sm"><AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>}
+				{tab.approvals.size ? <Needs /> : tab.busy ? <Pulse className="size-3" /> : tab.unread ? <Unread /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <Avatar size="sm"><AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>}
 			</span>
 			<span className="name truncate">
 				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b className="font-medium">{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b className="font-medium">{tab.agent}</b> : <><b className="font-medium">{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}

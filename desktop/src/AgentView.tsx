@@ -96,9 +96,9 @@ export function AgentView({ tab }: { tab: Tab }) {
 
 			{tab.busy || helpers.length || elsewhere.length ? (
 				<Section title="At work">
-					{tab.busy ? <Line media={<Pulse size={11} />} name="this conversation" about={`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`} /> : null}
-					{helpers.map(([id, c]) => <Line key={id} media={c.running ? <Pulse size={11} /> : <CheckIcon />} name={c.agent} about={`${childKind(c.kind)} #${id}: ${c.label}`} tag="open" run={() => void s.openTask(id)} />)}
-					{elsewhere.map((session) => <Line key={session} media={<Pulse size={11} />} name={session} about={`another conversation of ${tab.agent}`} tag="open" run={() => void s.openTab(tab.agent, session)} />)}
+					{tab.busy ? <Line media={<Pulse className="size-3" />} name="this conversation" about={`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`} /> : null}
+					{helpers.map(([id, c]) => <Line key={id} media={c.running ? <Pulse className="size-3" /> : <CheckIcon />} name={c.agent} about={`${childKind(c.kind)} #${id}: ${c.label}`} tag="open" run={() => void s.openTask(id)} />)}
+					{elsewhere.map((session) => <Line key={session} media={<Pulse className="size-3" />} name={session} about={`another conversation of ${tab.agent}`} tag="open" run={() => void s.openTab(tab.agent, session)} />)}
 				</Section>
 			) : null}
 

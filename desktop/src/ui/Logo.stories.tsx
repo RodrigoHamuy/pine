@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { Logo } from "../ui.tsx";
 
-const meta = { component: Logo, args: { size: 18 } } satisfies Meta<typeof Logo>;
+const meta = { component: Logo, args: {} } satisfies Meta<typeof Logo>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
 
-export const Large: Story = { args: { size: 48 } };
+export const Large: Story = { args: { className: "size-12" } };

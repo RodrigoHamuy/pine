@@ -523,7 +523,7 @@ export class Store extends Model {
 
 	// ---- small things ------------------------------------------------------------------------------
 
-	/** A passing notice; `Notices` shows it. One that says something went wrong stays longer and is
+	/** A passing notice; the stock `Toaster` shows it. One that says something went wrong stays longer and is
 	 * announced at once. An `ms` of Infinity keeps it until it is closed (Base UI's timeout 0). */
 	flash(text: string, tone: Tone = "muted", ms = 4500): void {
 		const type = { muted: undefined, accent: "info", good: "success", warn: "warning", bad: "error" }[tone];

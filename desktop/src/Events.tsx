@@ -10,7 +10,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { short } from "./text.ts";
-import { Empty } from "./ui.tsx";
+import { EmptyView } from "./ui.tsx";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 /** "agent/#" fits every topic under agent; "+" fits one level; a word without either is looked for anywhere. */
@@ -99,7 +99,7 @@ export function Events({ tab }: { tab: Tab }) {
 						</Collapsible>
 					))
 				) : (
-					<Empty icon={AudioLinesIcon} title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</Empty>
+					<EmptyView icon={AudioLinesIcon} title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</EmptyView>
 				)}
 				</div>
 			</ScrollFadeArea>

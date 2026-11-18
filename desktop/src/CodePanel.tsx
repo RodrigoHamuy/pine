@@ -22,9 +22,9 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { Fragment, type UIEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton, CodeBlockLine } from "@/components/ui/code-block";
-import { useHighlightedCode } from "@/hooks/use-highlighted-code";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { CodeBlock, CodeBlockContent, CodeBlockLine } from "@/components/ui/code-block";
+import { Printed } from "@/components/printed";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
@@ -35,7 +35,8 @@ import { clock, errText, oneLine, plural, short, size, tilde, took } from "./tex
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Confirm } from "./Confirm.tsx";
 import { List, ListRow, rowClass, Tree, TreeRow } from "./lists.tsx";
-import { Empty, Loading, Pulse, useLoad } from "./ui.tsx";
+import { EmptyView, Pulse, useLoad } from "./ui.tsx";
+import { Spinner } from "@/components/ui/spinner";
 import { Hint } from "@/components/hint";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -239,9 +240,9 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		const prefix = top && root && root !== top && root.startsWith(`${top}/`) ? `${root.slice(top.length + 1)}/` : "";
 		return prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
 	};
-	if (list.error) return <Empty icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</Empty>;
-	if (!data) return <Loading />;
-	if (!turn && !data.repo) return <Empty icon={GitBranchIcon} title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</Empty>;
+	if (list.error) return <EmptyView icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</EmptyView>;
+	if (!data) return <Spinner className="m-auto" />;
+	if (!turn && !data.repo) return <EmptyView icon={GitBranchIcon} title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</EmptyView>;
 	if (file)
 		return (
 			<>
@@ -250,7 +251,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 					<PathCrumbs path={file} />
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <LogText className="cursor-text text-muted-foreground">… the rest of this diff is too long to show.</LogText> : null}</> : diff.error ? <Empty icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</Empty> : <Loading />}</Body>
+				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <LogText className="cursor-text text-muted-foreground">… the rest of this diff is too long to show.</LogText> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <Spinner className="m-auto" />}</Body>
 			</>
 		);
 	return (
@@ -261,7 +262,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 			</div>
 			<Body>
 				{data.note ? <LogText className="cursor-text text-muted-foreground">{data.note}</LogText> : null}
-				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> : <Empty icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
+				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> : <EmptyView icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
 				{data.more ? <LogText className="cursor-text text-muted-foreground">… and more.</LogText> : null}
 			</Body>
 		</>
@@ -290,9 +291,9 @@ function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void;
 	const failed = state.failed.get("");
 	return (
 		<>
-			{failed ? <Empty icon={FolderIcon} title="This folder cannot be read">{failed}</Empty> : null}
-			{entries && !entries.length ? <Empty icon={FolderIcon} title="This folder is empty" /> : null}
-			{entries || failed ? null : <Loading />}
+			{failed ? <EmptyView icon={FolderIcon} title="This folder cannot be read">{failed}</EmptyView> : null}
+			{entries && !entries.length ? <EmptyView icon={FolderIcon} title="This folder is empty" /> : null}
+			{entries || failed ? null : <Spinner className="m-auto" />}
 			<Tree label="Files" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} onOpen={(full) => !isDir(full) && pick(full)}>
 				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
 			</Tree>
@@ -410,11 +411,11 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				{kind ? (
 					<div className="p-3.5">{kind === "image" ? <img className={PICTURE} src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video className="block max-h-90 max-w-full rounded-lg bg-black sm:max-w-lg" src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio className="block w-full max-w-md" src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
 				) : disk.error ? (
-					<Empty icon={FileIcon} title="This file cannot be shown">{disk.error}</Empty>
+					<EmptyView icon={FileIcon} title="This file cannot be shown">{disk.error}</EmptyView>
 				) : !disk.data ? (
-					<Loading />
+					<Spinner className="m-auto" />
 				) : (
-					<Empty icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
+					<EmptyView icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</EmptyView>
 				)}
 			</Body>
 			)}
@@ -442,44 +443,12 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 			</div>
 			<Body>
 				{query.trim() ? (
-					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className={rowClass()}><FileIcon size={13} className="text-faint" /><span className="truncate">{f}</span></ListRow>)}</List> : found.loading ? <Loading /> : <Empty icon={SearchIcon} title="No file fits" />
+					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className={rowClass()}><FileIcon size={13} className="text-faint" /><span className="truncate">{f}</span></ListRow>)}</List> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
 			</Body>
 		</>
-	);
-}
-
-/**
- * What a tool or a program printed: a stock Code Block, as shadcn's Terminal pattern shows a
- * command's output, with the terminal's colours read by the stock highlighter ("ansi"). The panel
- * is already the viewer, so there is no Trace line around it. `sm` caps it where several follow
- * each other (the pattern's `max-h-64`).
- */
-function Printed({ text, failed = false, sm = false, className }: { text: string; failed?: boolean; sm?: boolean; className?: string }) {
-	const lines = useHighlightedCode(text, "ansi");
-	// A program that is still running keeps printing: like a terminal, the block follows its end
-	// while it is scrolled to the end, and holds still once the owner scrolled up to read.
-	const pre = useRef<HTMLPreElement>(null);
-	const atEnd = useRef(true);
-	useLayoutEffect(() => {
-		const el = pre.current;
-		if (el && atEnd.current) el.scrollTop = el.scrollHeight;
-	}, [lines]);
-	const onScroll = (e: UIEvent<HTMLPreElement>) => {
-		const el = e.currentTarget;
-		atEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 8;
-	};
-	return (
-		<CodeBlock variant={failed ? "destructive" : "default"} size={sm ? "sm" : "default"} className={className} data-status={failed ? "fail" : "ok"}>
-			<CodeBlockActions>
-				<CodeBlockCopyButton value={text} />
-			</CodeBlockActions>
-			<CodeBlockContent ref={pre} onScroll={onScroll} wrap className={sm ? "max-h-64" : undefined}>
-				{lines.map((line, i) => <CodeBlockLine key={i}>{line}</CodeBlockLine>)}
-			</CodeBlockContent>
-		</CodeBlock>
 	);
 }
 
@@ -495,8 +464,8 @@ function Output({ tab }: { tab: Tab }) {
 		return out;
 	}, [tab.key, tab.codeTick]);
 	const [open, setOpen] = useState<string>();
-	if (!calls.data) return calls.error ? <Empty icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</Empty> : <Loading />;
-	if (!calls.data.length) return <Empty icon={SquareTerminalIcon} title="No tool calls yet">What the agent's commands and tools print appears here.</Empty>;
+	if (!calls.data) return calls.error ? <EmptyView icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</EmptyView> : <Spinner className="m-auto" />;
+	if (!calls.data.length) return <EmptyView icon={SquareTerminalIcon} title="No tool calls yet">What the agent's commands and tools print appears here.</EmptyView>;
 	const shown = calls.data.find((c) => `${c.task}:${c.n}` === open);
 	if (shown)
 		return (
@@ -517,7 +486,7 @@ function Output({ tab }: { tab: Tab }) {
 			<List label="Tool calls" onOpen={setOpen}>
 			{calls.data.map((c) => (
 				<ListRow key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
-					{c.entry.ok === false ? <XIcon size={13} className="flex-none text-destructive" /> : c.entry.ok ? <CheckIcon size={13} className="flex-none text-primary" /> : <Pulse size={13} />}
+					{c.entry.ok === false ? <XIcon size={13} className="flex-none text-destructive" /> : c.entry.ok ? <CheckIcon size={13} className="flex-none text-primary" /> : <Pulse />}
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}
@@ -530,7 +499,7 @@ function Output({ tab }: { tab: Tab }) {
 
 /** What the conversation's commands left running, and the way to stop each. */
 function Running({ tab }: { tab: Tab }) {
-	if (!tab.programs.length) return <Empty icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</Empty>;
+	if (!tab.programs.length) return <EmptyView icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</EmptyView>;
 	return (
 		<Body>
 			{tab.programs.map((p) => (

@@ -28,7 +28,8 @@ import { Hint } from "@/components/hint";
 import { LabeledField } from "@/components/labeled-field";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
 import { Log } from "@/components/log";
-import { AutoText, Empty, Loading, useLoad } from "./ui.tsx";
+import { EmptyView, useLoad } from "./ui.tsx";
+import { Textarea } from "@/components/ui/textarea";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -142,7 +143,7 @@ function Page({ title, lead, children, actions }: { title: string; lead?: ReactN
 
 /** What a page waits for: a spinner, or why it did not come. */
 function Pending({ state }: { state: { error?: string; loading: boolean } }) {
-	return state.error ? <Notice tone="bad">{state.error}</Notice> : <Loading />;
+	return state.error ? <Notice tone="bad">{state.error}</Notice> : <Spinner className="m-auto" />;
 }
 
 /** The way back from a page inside a page. */
@@ -485,7 +486,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 					<FieldGroup className="px-4 select-text">
 						<LabeledField label="Name" hint="Lowercase letters, digits, - and _ (for example research, home, books)."><Input autoFocus className="mono font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} /></LabeledField>
 						<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to."><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField>
-						<LabeledField label="Instructions" hint="Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on."><AutoText value={f.instructions} onChange={(v) => setF({ ...f, instructions: v })} minRows={4} maxRows={12} placeholder="You are …" /></LabeledField>
+						<LabeledField label="Instructions" hint="Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on."><Textarea className="min-h-24 max-h-64" value={f.instructions} onChange={(e) => setF({ ...f, instructions: e.target.value })} placeholder="You are …" /></LabeledField>
 						<LabeledField label="Model">
 							<Choice value={f.model} onChange={(model) => setF({ ...f, model })} options={[{ value: "", label: "pine's default" }, ...(models.data ?? []).map((m) => ({ value: m, label: m }))]} />
 						</LabeledField>
@@ -667,7 +668,7 @@ function Models() {
 						/>
 					))
 				) : servers.data ? (
-					<Empty icon={CpuIcon} title="No model server yet">Anything that speaks OpenAI's chat API works: llama.cpp, vLLM, LM Studio.</Empty>
+					<EmptyView icon={CpuIcon} title="No model server yet">Anything that speaks OpenAI's chat API works: llama.cpp, vLLM, LM Studio.</EmptyView>
 				) : (
 					<Pending state={servers} />
 				)}
@@ -705,7 +706,7 @@ function Models() {
 							/>
 						))
 					) : (
-						<Empty icon={CpuIcon} title="Signed in to no provider">Show all to pick one (OpenCode, Claude, ChatGPT, …), or add a model server of your own above.</Empty>
+						<EmptyView icon={CpuIcon} title="Signed in to no provider">Show all to pick one (OpenCode, Claude, ChatGPT, …), or add a model server of your own above.</EmptyView>
 					)
 				) : (
 					<Pending state={providers} />
@@ -795,7 +796,7 @@ function Mcp() {
 							);
 						})
 					) : (
-						<Empty icon={PlugIcon} title="No MCP servers yet" />
+						<EmptyView icon={PlugIcon} title="No MCP servers yet" />
 					)
 				) : (
 					<Pending state={servers} />
@@ -841,7 +842,7 @@ function Skills() {
 				<FieldGroup className="form grid grid-cols-2">
 					<LabeledField label="Name" hint="Lowercase letters, digits and single hyphens."><Input className="mono font-mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" /></LabeledField>
 					<LabeledField label="For">{edit.isNew ? <Whom value={edit.agent} onChange={(agent) => setEdit({ ...edit, agent })} /> : <Input disabled value={edit.agent || "all agents"} />}</LabeledField>
-					<LabeledField label="When to use it" wide hint="This line is always in front of the agent; it decides by it whether to read the rest."><AutoText value={edit.description} onChange={(description) => setEdit({ ...edit, description })} minRows={2} maxRows={5} readOnly={!edit.managed} /></LabeledField>
+					<LabeledField label="When to use it" wide hint="This line is always in front of the agent; it decides by it whether to read the rest."><Textarea className="min-h-14 max-h-30" value={edit.description} onChange={(e) => setEdit({ ...edit, description: e.target.value })} readOnly={!edit.managed} /></LabeledField>
 				</FieldGroup>
 				<div className="flex h-104 overflow-hidden rounded-lg border">
 					<Editor file="SKILL.md" text={edit.instructions} readOnly={!edit.managed} onChange={(instructions) => setEdit((was) => (was ? { ...was, instructions } : was))} onSave={() => void save()} />
@@ -870,7 +871,7 @@ function Skills() {
 							);
 						})
 					) : (
-						<Empty icon={BookIcon} title="No skills yet">An agent writes one when you ask it to, or add one here.</Empty>
+						<EmptyView icon={BookIcon} title="No skills yet">An agent writes one when you ask it to, or add one here.</EmptyView>
 					)
 				) : (
 					<Pending state={skills} />
@@ -1020,7 +1021,7 @@ function Sources() {
 							</Row>
 						))
 					) : (
-						<Empty icon={ZapIcon} title="No event sources yet">Add one, or ask an agent: “watch ~/Scans”, “tell me when the price drops”.</Empty>
+						<EmptyView icon={ZapIcon} title="No event sources yet">Add one, or ask an agent: “watch ~/Scans”, “tell me when the price drops”.</EmptyView>
 					)
 				) : (
 					<Pending state={sources} />
@@ -1064,7 +1065,7 @@ function Schedules() {
 							/>
 						))
 					) : (
-						<Empty icon={ClockIcon} title="Nothing is scheduled">An agent schedules something when you ask it to (“every morning at seven …”, “remind me at five”).</Empty>
+						<EmptyView icon={ClockIcon} title="Nothing is scheduled">An agent schedules something when you ask it to (“every morning at seven …”, “remind me at five”).</EmptyView>
 					)
 				) : (
 					<Pending state={list} />
@@ -1077,7 +1078,7 @@ function Schedules() {
 					<LabeledField label="For"><Whom value={f.agent} onChange={(agent) => setF({ ...f, agent })} /></LabeledField>
 					<LabeledField label="When"><OneOf label="When" value={f.kind} onChange={(kind) => setF({ ...f, kind: kind as keyof typeof WHEN, when: "" })} options={Object.entries(WHEN).map(([value, w]) => ({ value, label: w.label }))} /></LabeledField>
 					<LabeledField label={WHEN[f.kind].name} hint={WHEN[f.kind].hint}><Input className="mono font-mono" value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} /></LabeledField>
-					<LabeledField label="Task" wide hint="What the agent is to do when it is time, written so that it is enough on its own."><AutoText value={f.task} onChange={(task) => setF({ ...f, task })} minRows={2} maxRows={8} /></LabeledField>
+					<LabeledField label="Task" wide hint="What the agent is to do when it is time, written so that it is enough on its own."><Textarea className="min-h-14 max-h-44" value={f.task} onChange={(e) => setF({ ...f, task: e.target.value })} /></LabeledField>
 				</FieldGroup>
 				<Field orientation="horizontal" className="justify-end">
 					<Button disabled={!f.name.trim() || !f.when.trim() || !f.task.trim()} onClick={() => void add()}>Add schedule</Button>
