@@ -598,7 +598,8 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 	const field = useId();
 	useEffect(() => {
 		let live = true;
-		api.login(provider, type).then((r) => live && setId(r.id), (e) => live && setError(errText(e)));
+		// A dialog closed before the sign-in had started still ends it: nothing else knows its id.
+		api.login(provider, type).then((r) => (live ? setId(r.id) : void api.loginAnswer(r.id, { cancel: true }).catch(() => {})), (e) => live && setError(errText(e)));
 		return () => {
 			live = false;
 		};
