@@ -265,27 +265,27 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 	try {
 		await menu("code-browser");
 		// The page is a picture, drawn when it is whole; its address is text in the line above it.
-		await sees(".browser-page canvas:not(.blank)");
+		await sees("[data-slot=browser] canvas[data-drawn]");
 		// A row that scrolls sideways (the browser's tabs, the panel's, the conversations') is no taller than its room:
 		// stock's ScrollArea would show a vertical bar with nothing to scroll.
-		await sees(".browser-tabs [data-slot=scroll-area-viewport]");
-		const rows = await page.$$eval("[data-slot=scroll-area][class*='scroll-fade-x'] > [data-slot=scroll-area-viewport]", (els: Element[]) => els.map((el) => ({ row: el.closest(".browser-tabs, .code, .tabs")?.className.split(" ")[0], over: el.scrollHeight - el.clientHeight })));
+		await sees("[data-slot=browser] [data-slot=scroll-area-viewport]:has([data-slot=tabs-list])");
+		const rows = await page.$$eval("[data-slot=scroll-area][class*='scroll-fade-x'] > [data-slot=scroll-area-viewport]", (els: Element[]) => els.map((el) => ({ row: ((r) => r?.getAttribute("data-slot") ?? r?.className.split(" ")[0])(el.closest("[data-slot=browser], .code, .tabs")), over: el.scrollHeight - el.clientHeight })));
 		assert.ok(rows.length >= 3, JSON.stringify(rows));
 		assert.deepEqual(rows.filter((r) => r.over > 0), [], "a sideways row overflows vertically");
-		assert.equal(await page.inputValue(".browser-address"), "https://shop.example/");
-		assert.deepEqual(await page.$eval(".browser-page canvas", (c: HTMLCanvasElement) => [c.width, c.height]), [400, 300]);
+		assert.equal(await page.inputValue("[data-slot=browser] input[aria-label=Address]"), "https://shop.example/");
+		assert.deepEqual(await page.$eval("[data-slot=browser] canvas", (c: HTMLCanvasElement) => [c.width, c.height]), [400, 300]);
 		// The app said that it shows the browser itself, so the agent's browser opens no window.
 		await waitFor("the door was told that the app shows the browser", () => asked.some((a) => a.at === "/input" && a.body.ops.some((o: any) => o.do === "size")));
 		const size = ops().find((o) => o.do === "size");
-		const room = await page.$eval(".browser-page", (el: Element) => ({ w: Math.round(el.getBoundingClientRect().width), h: Math.round(el.getBoundingClientRect().height) }));
+		const room = await page.$eval("[data-slot=browser] [data-slot=scroll-area]:has(canvas)", (el: Element) => ({ w: Math.round(el.getBoundingClientRect().width), h: Math.round(el.getBoundingClientRect().height) }));
 		assert.deepEqual([size.w, size.h], [room.w, room.h], "the page is laid out for the room the panel has");
 		// A page's title is text wherever it stands: nothing of it becomes part of this window.
-		assert.match(await page.textContent(".browser-tab.on"), /<img src=x onerror=window\.hacked=3>Okapi shop/);
+		assert.match(await page.textContent("[data-slot=browser] [data-slot=tabs-trigger][aria-selected=true]"), /<img src=x onerror=window\.hacked=3>Okapi shop/);
 		assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
 		await shot("05-browser");
 
 		// A click in the picture is a click at that place in the page, whatever size the picture is drawn at.
-		const box = await page.$eval(".browser-page canvas", (c: HTMLCanvasElement) => ({ x: c.getBoundingClientRect().left, y: c.getBoundingClientRect().top, k: c.width / c.getBoundingClientRect().width }));
+		const box = await page.$eval("[data-slot=browser] canvas", (c: HTMLCanvasElement) => ({ x: c.getBoundingClientRect().left, y: c.getBoundingClientRect().top, k: c.width / c.getBoundingClientRect().width }));
 		await page.mouse.click(box.x + 100, box.y + 60);
 		await waitFor("the click arrived", () => ops().some((o) => o.do === "click"));
 		const click = ops().find((o) => o.do === "click");
@@ -301,19 +301,19 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		// The wheel adds up, a tab is chosen by a click, back is a button.
 		await page.mouse.wheel(0, 120);
 		await page.mouse.wheel(0, 120);
-		await page.click(".browser-tab >> nth=1");
+		await page.click("[data-slot=browser] [data-slot=tabs-trigger] >> nth=1");
 		// A tab of the owner's own, and one closed.
-		await page.click(".browser-tabs button[aria-label='A new tab']");
-		await page.click(".browser-tab >> nth=1 >> .browser-tab-close", { force: true });
+		await page.click("[data-slot=browser] button[aria-label='A new tab']");
+		await page.click("[data-slot=browser] [data-slot=tabs-list] button[aria-label^='Close'] >> nth=1", { force: true });
 		await waitFor("a new tab and a closed one arrived", () => ops().some((o) => o.do === "newtab") && ops().some((o) => o.do === "closetab" && o.index === 1));
-		await page.click(".browser-bar button[aria-label='Back']");
+		await page.click("[data-slot=browser] button[aria-label='Back']");
 		await waitFor("wheel, tab and back arrived", () => ["wheel", "tab", "back"].every((d) => ops().some((o) => o.do === d)));
 		// (How far a turn of the wheel goes is the system's to say; that it went down, and all of it, is what counts.)
 		assert.ok(ops().filter((o) => o.do === "wheel").reduce((sum, o) => sum + o.dy, 0) >= 240, JSON.stringify(ops().filter((o) => o.do === "wheel")));
 		assert.equal(ops().find((o) => o.do === "tab").index, 1);
 		// An address typed above the picture is opened by the daemon's hand, and a no is said.
-		await page.fill(".browser-address", "localhost:5173");
-		await page.press(".browser-address", "Enter");
+		await page.fill("[data-slot=browser] input[aria-label=Address]", "localhost:5173");
+		await page.press("[data-slot=browser] input[aria-label=Address]", "Enter");
 		await waitFor("the address arrived", () => asked.some((a) => a.at === "/open"));
 		assert.deepEqual(asked.find((a) => a.at === "/open")!.body, { url: "localhost:5173" });
 		await sees("[data-slot=toast] >> text=the browser was refused that address");
@@ -326,16 +326,16 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		db.exec("PRAGMA busy_timeout = 5000");
 		db.prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run("visited:main:main", JSON.stringify(["https://shop.example/<img src=x onerror=window.hacked=4>", "http://127.0.0.1:4173/"]));
 		db.close();
-		await sees(".browser [data-offer=visited] button >> nth=1");
-		assert.deepEqual(await page.$$eval(".browser [data-offer=visited] button", (els: Element[]) => els.map((e) => e.textContent)), ["shop.example/<img src=x onerror=window.hacked=4>", "127.0.0.1:4173"]);
+		await sees("[data-slot=browser] [data-offer=visited] button >> nth=1");
+		assert.deepEqual(await page.$$eval("[data-slot=browser] [data-offer=visited] button", (els: Element[]) => els.map((e) => e.textContent)), ["shop.example/<img src=x onerror=window.hacked=4>", "127.0.0.1:4173"]);
 		assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
 		await shot("05-browser-empty");
-		await page.click(".browser [data-offer=visited] button >> nth=1");
+		await page.click("[data-slot=browser] [data-offer=visited] button >> nth=1");
 		await waitFor("the address the agent had opened arrived", () => asked.some((a) => a.at === "/open" && a.body.url === "http://127.0.0.1:4173/"));
 
 		// Without a browser the view says so and draws nothing.
 		fs.rmSync(file);
-		await sees(".browser [data-slot=empty] >> text=No page is open");
+		await sees("[data-slot=browser] [data-slot=empty] >> text=No page is open");
 	} finally {
 		// (The panel as it was, for the tests that follow.)
 		await menu("code-agent");

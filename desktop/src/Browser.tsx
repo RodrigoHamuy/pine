@@ -167,9 +167,9 @@ export function BrowserView({ tab }: { tab: Tab }) {
 	};
 
 	return (
-		<div className="browser flex min-h-0 flex-1 flex-col overflow-hidden">
+		<div data-slot="browser" className="flex min-h-0 flex-1 flex-col overflow-hidden">
 			{open && state.tabs.length ? (
-				<div className="browser-tabs flex flex-none items-center gap-0.5 border-b border-line-soft px-2 pt-1">
+				<div className="flex flex-none items-center gap-0.5 border-b border-line-soft px-2 pt-1">
 					{/* The row scrolls sideways only. The padding is the room for the line under the tab in front, which stock draws
 					    below the list: without it the row is taller than its room, and a vertical bar shows with nothing to scroll. */}
 					<ScrollArea className="flex min-h-0 min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
@@ -177,12 +177,12 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						<Tabs value={state.current} onValueChange={(i) => i !== state.current && act({ do: "tab", index: i as number })}>
 							<TabsList variant="line">
 					{state.tabs.map((t, i) => (
-						<div key={i} className={cn("browser-tab group/tab flex h-full min-w-15 flex-initial basis-44 items-center", i === state.current && "on")} title={t.url}>
+						<div key={i} className="group/tab flex h-full min-w-15 flex-initial basis-44 items-center" title={t.url}>
 							<TabsTrigger value={i} className="min-w-0 justify-start">
 								<span className="min-w-0 flex-1 truncate text-left">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
 							</TabsTrigger>
 							{/* (Closing the last tab leaves the browser up without a page: the view is empty again.) */}
-							<Button variant="ghost" size="icon-xs" aria-label={state.tabs.length > 1 ? "Close this tab" : "Close the page"} className={cn("browser-tab-close", i !== state.current && "invisible group-hover/tab:visible")} onClick={() => act({ do: "closetab", index: i })}><XIcon /></Button>
+							<Button variant="ghost" size="icon-xs" aria-label={state.tabs.length > 1 ? "Close this tab" : "Close the page"} className={cn(i !== state.current && "invisible group-hover/tab:visible")} onClick={() => act({ do: "closetab", index: i })}><XIcon /></Button>
 						</div>
 					))}
 							</TabsList>
@@ -195,7 +195,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 					</Tooltip>
 				</div>
 			) : null}
-			<div className="browser-bar flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
+			<div className="flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
 				<ButtonGroup>
 					<Tooltip>
 						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Back" disabled={!open} onClick={() => act({ do: "back" })} />}><ChevronLeftIcon /></TooltipTrigger>
@@ -212,7 +212,8 @@ export function BrowserView({ tab }: { tab: Tab }) {
 				</ButtonGroup>
 				<InputGroup className="ml-1 min-w-0 flex-1">
 					<InputGroupInput
-						className="browser-address min-w-0"
+						aria-label="Address"
+						className="min-w-0"
 						spellCheck={false}
 						placeholder="An address: example.com, or localhost:3000"
 						ref={line}
@@ -229,12 +230,13 @@ export function BrowserView({ tab }: { tab: Tab }) {
 				</InputGroup>
 			</div>
 			{open ? (
-				<ScrollArea ref={room} className="browser-page flex min-h-0 flex-1 flex-col bg-press *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea ref={room} className="flex min-h-0 flex-1 flex-col bg-press *:data-[slot=scroll-area-viewport]:scroll-fade">
 					{/* The page keeps its shape: as wide as the panel, and scrolled down to when it is taller than the room. */}
 					<canvas
 						ref={canvas}
 						tabIndex={0}
-						className={`block h-auto w-full cursor-default bg-white outline-none ${drawn ? "" : "blank invisible"}`}
+						data-drawn={drawn || undefined}
+						className={cn("block h-auto w-full cursor-default bg-white outline-none", !drawn && "invisible")}
 						title={front?.title}
 						onMouseDown={(e) => {
 							e.currentTarget.focus();

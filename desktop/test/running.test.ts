@@ -109,8 +109,8 @@ test("a server the agent left running is one click away in the conversation's br
 
 	// The empty browser says what runs in this conversation, and a click opens it there.
 	await menu("code-browser");
-	await sees(".browser [data-slot=empty] >> text=No page is open");
-	const offered = page.locator(".browser [data-offer=running] button");
+	await sees("[data-slot=browser] [data-slot=empty] >> text=No page is open");
+	const offered = page.locator("[data-slot=browser] [data-offer=running] button");
 	await offered.waitFor({ timeout: 20_000 });
 	assert.equal(await offered.textContent(), `localhost:${port}`);
 	await offered.hover();
@@ -118,13 +118,13 @@ test("a server the agent left running is one click away in the conversation's br
 	await offered.click();
 	await waitFor("the address of the running server was opened in the conversation's browser", () => asked.length === 1);
 	assert.equal(asked[0], `http://localhost:${port}`);
-	await sees(`.browser-tab.on >> text=The server`);
+	await sees(`[data-slot=browser] [data-slot=tabs-trigger][aria-selected=true] >> text=The server`);
 
 	// The same address under Running goes to the same browser, and the panel shows it.
 	await menu("code-running");
 	await page.locator(".code").getByRole("button", { name: `localhost:${port}` }).click();
 	await waitFor("the link under Running was opened in the conversation's browser", () => asked.length === 2);
 	assert.equal(asked[1], `http://localhost:${port}`);
-	await sees(".browser .browser-bar");
+	await sees("[data-slot=browser] input[aria-label=Address]");
 	assert.deepEqual(await app.evaluate(() => (globalThis as any).opened), [], "nothing went to the owner's own browser");
 });

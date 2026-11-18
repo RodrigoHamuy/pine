@@ -44,7 +44,7 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 			return page.waitForSelector(`.md >> text=${done}`, { timeout: 60_000 });
 		};
 		const toolSaid = () => JSON.stringify(mock.state.requests.at(-1).body.messages.filter((m: any) => m.role === "tool").at(-1)?.content ?? "");
-		const address = (end: string) => page.waitForFunction((e: string) => (document.querySelector(".browser-address") as HTMLInputElement | null)?.value.endsWith(e), end, { timeout: 15_000 });
+		const address = (end: string) => page.waitForFunction((e: string) => (document.querySelector("[data-slot=browser] input[aria-label=Address]") as HTMLInputElement | null)?.value.endsWith(e), end, { timeout: 15_000 });
 		await page.waitForSelector(".welcome h1", { timeout: 60_000 });
 		const notNow = page.locator("[data-slot=dialog-footer]").getByRole("button", { name: "Not now" });
 		if (await notNow.count()) await notNow.click();
@@ -57,18 +57,18 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		await opened;
 		// No window was opened for that: the panel is where it is, and it came to the front by itself.
 		assert.match(toolSaid(), /Your owner sees the browser in the Pine app/);
-		await page.waitForSelector(".browser-page canvas:not(.blank)", { timeout: 20_000 });
+		await page.waitForSelector("[data-slot=browser] canvas[data-drawn]", { timeout: 20_000 });
 		await address("/one");
 		// The page is laid out for the room the panel has, and drawn point for point.
 		await page.waitForFunction(() => {
-			const c = document.querySelector(".browser-page canvas") as HTMLCanvasElement;
-			const room = document.querySelector(".browser-page")!.getBoundingClientRect();
+			const c = document.querySelector("[data-slot=browser] canvas") as HTMLCanvasElement;
+			const room = document.querySelector("[data-slot=browser] [data-slot=scroll-area]:has(canvas)")!.getBoundingClientRect();
 			return c.width === Math.round(room.width) && c.height === Math.round(room.height);
 		}, undefined, { timeout: 15_000 });
 		await shot("b1-page");
 
 		// The owner clicks into the page's field and types. The agent reads what was typed when it next looks.
-		const box = await page.$eval(".browser-page canvas", (c: HTMLCanvasElement) => ({ x: c.getBoundingClientRect().left, y: c.getBoundingClientRect().top }));
+		const box = await page.$eval("[data-slot=browser] canvas", (c: HTMLCanvasElement) => ({ x: c.getBoundingClientRect().left, y: c.getBoundingClientRect().top }));
 		await page.mouse.click(box.x + 100, box.y + 112);
 		await page.waitForTimeout(900);
 		await page.keyboard.type("Paula", { delay: 30 });
@@ -80,10 +80,10 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		// A link in the picture, an address typed above it, and back.
 		await page.mouse.click(box.x + 90, box.y + 215);
 		await address("/two");
-		await page.fill(".browser-address", `${at.replace("http://", "")}/three`);
-		await page.press(".browser-address", "Enter");
+		await page.fill("[data-slot=browser] input[aria-label=Address]", `${at.replace("http://", "")}/three`);
+		await page.press("[data-slot=browser] input[aria-label=Address]", "Enter");
 		await address("/three");
-		await page.locator(".browser-bar").getByRole("button", { name: "Back", exact: true }).click();
+		await page.locator("[data-slot=browser]").getByRole("button", { name: "Back", exact: true }).click();
 		await address("/two");
 		await shot("b3-second");
 
@@ -92,13 +92,13 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		assert.match(toolSaid(), /Not done: the browser is not where you left it[\s\S]*\/two/);
 
 		// The owner closes the last tab: the browser has no page any more, the view is empty, and what the agent opened is offered again.
-		await page.click(".browser-tab-close");
-		await page.waitForSelector(".browser [data-slot=empty] >> text=No page is open", { timeout: 15_000 });
-		const again = page.locator(".browser [data-offer=visited] button").first();
+		await page.click("[data-slot=browser] [data-slot=tabs-list] button[aria-label^='Close']");
+		await page.waitForSelector("[data-slot=browser] [data-slot=empty] >> text=No page is open", { timeout: 15_000 });
+		const again = page.locator("[data-slot=browser] [data-offer=visited] button").first();
 		await again.waitFor({ timeout: 15_000 });
 		await shot("b4-closed");
 		await again.click();
-		await page.waitForSelector(".browser-page canvas:not(.blank)", { timeout: 20_000 });
+		await page.waitForSelector("[data-slot=browser] canvas[data-drawn]", { timeout: 20_000 });
 		await address("/one");
 	} finally {
 		await app?.close().catch(() => {});
