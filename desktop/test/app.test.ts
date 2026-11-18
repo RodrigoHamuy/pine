@@ -896,6 +896,8 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 		await sees("[role=alertdialog] >> text=Remove the MCP server notes?");
 		// Asked in an alert dialog, announced by its question; Escape closes it onto the button, and nothing is removed.
 		assert.equal(await announced("[role=alertdialog]"), "Remove the MCP server notes?");
+		await page.locator("[role=alertdialog]").evaluate((el: Element) => Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)));
+		await shot("09-settings-confirm");
 		await page.keyboard.press("Escape");
 		await page.waitForSelector("[role=alertdialog]", { state: "detached" });
 		assert.equal(await server.locator("[data-slot=alert-dialog-trigger] >> text=Remove").evaluate((b: Element) => b === document.activeElement), true);
