@@ -570,8 +570,8 @@ desktop/
     index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
                    shadcn's tokens set from them, the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
-    theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
-                   which the Appearance setting decides
+    theme.ts       the `.dark` class on the root element, from the Appearance setting: Light or Dark
+                   by itself, System by the system's appearance
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
                    (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
@@ -631,8 +631,10 @@ holds only tokens and base rules.
 - Colours are tokens: pine's own names (`--brand`, `--text-muted`, `--warn`, the poimandres
   `--p-*` values) are set in `index.css`, shadcn's tokens point at them, and the ones shadcn has no
   name for are utilities too (`text-warn`, `bg-brand-soft`, `text-faint`...).
-- Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` keeps in
-  step with the system's appearance; Electron's appearance setting drives that.
+- Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` sets from
+  the Appearance setting: Light or Dark by itself, System by `prefers-color-scheme`. The page reads
+  the setting and not only the query because in the preview nothing drives the query; in the app the
+  same setting also sets Electron's native theme, for the window and the system's own controls.
 - Tests and the few rules that reach into a component select by shadcn's `data-slot` attributes
   and by roles, not by utility classes. Where nothing stock tells one of pine's own elements
   apart, it carries a `data-slot` of its own (`composer`, `code-panel`, `tab`...), never a bare class.
