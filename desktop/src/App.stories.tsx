@@ -3,8 +3,9 @@ import { useEffect } from "react";
 import * as App from "./App.tsx";
 
 // The dialogs of App.tsx, one group of stories each: a CSF file has one default export, so the
-// stories are named after the dialog they show.
-const meta = { title: "App", parameters: { layout: "fullscreen" } } satisfies Meta;
+// stories are named after the dialog they show. No docs page: it would open every dialog at once,
+// one over the other.
+const meta = { tags: ["!autodocs"], parameters: { layout: "fullscreen" } } satisfies Meta;
 export default meta;
 
 type ApprovalStory = StoryObj<typeof App.ApprovalDialog>;

@@ -4,7 +4,7 @@ import * as ui from "./ui.tsx";
 
 // pine's own parts of ui.tsx, one group of stories each: a CSF file has one default export, so
 // the stories are named after the part they show.
-const meta = { title: "ui" } satisfies Meta;
+const meta = {} satisfies Meta;
 export default meta;
 
 type EmptyStory = StoryObj<typeof ui.EmptyView>;

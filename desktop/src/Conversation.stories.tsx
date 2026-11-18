@@ -49,7 +49,7 @@ const asks: Made[] = [
 	{ t: "approval", req: { ...approval, id: "a4" }, state: "gone" },
 ];
 
-const meta = { title: "Conversation", component: Items, parameters: { layout: "padded" } } satisfies Meta<typeof Items>;
+const meta = { component: Items, parameters: { layout: "padded" } } satisfies Meta<typeof Items>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

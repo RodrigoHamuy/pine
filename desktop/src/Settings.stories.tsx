@@ -64,7 +64,7 @@ function Tab({ section }: { section: string }) {
 	);
 }
 
-const meta = { title: "Settings", component: Tab, parameters: { layout: "padded" } } satisfies Meta<typeof Tab>;
+const meta = { component: Tab, parameters: { layout: "padded" } } satisfies Meta<typeof Tab>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 

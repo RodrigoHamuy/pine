@@ -18,7 +18,7 @@ function Box({ draft = "", files = false, outside = false, paused = false }: { d
 	);
 }
 
-const meta = { title: "Composer", component: Box, parameters: { layout: "padded" } } satisfies Meta<typeof Box>;
+const meta = { component: Box, parameters: { layout: "padded" } } satisfies Meta<typeof Box>;
 export default meta;
 type Story = StoryObj<typeof meta>;
 
