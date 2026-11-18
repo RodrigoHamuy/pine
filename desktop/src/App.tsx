@@ -10,7 +10,6 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { type Layout, usePanelRef } from "react-resizable-panels";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
 import { cn } from "cn";
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "@/components/ui/command";
@@ -283,33 +282,46 @@ function TitleBar() {
 
 // ---- what lies over the window for a moment --------------------------------------------------------------
 
+/** A value no line has: the list starts with no line chosen, until useNamedLine chooses one. */
+const NO_LINE = "\u0000";
+
 /**
- * Which line of a cmdk list is active, announced to screen readers. cmdk names the active line in
- * aria-activedescendant only when the choice is made outside React's effects (a key, the pointer):
- * the line it picks by itself when the list is drawn or the text changes is shown but never named.
- * So once the list is drawn (`redo` changed) the line is chosen again as the pointer would choose it:
- * `start` the first time, then the first line. The value is let go of first, since cmdk ignores a
- * choice of the line it already has: both drawn at once, so that no key comes between.
+ * The line a cmdk list has chosen, named to screen readers. The list is cmdk's own (uncontrolled):
+ * it chooses the first line itself, the arrows and the pointer move it. But cmdk 1.1.1 names a line in
+ * aria-activedescendant only when it is chosen from outside its own scheduling (a key, the pointer):
+ * the line it chooses as the list is drawn or the text changes, and one handed to it with
+ * `defaultValue`, are drawn chosen and not named. So the line is chosen once more as the pointer
+ * would choose it, in cmdk's own store:
+ * - as the list is put on the page, `start` (the line in use) or the first. The list starts on a value
+ *   no line has (`defaultValue`), so that this choice is a change; it is made just after React puts
+ *   the list there and before it is painted (during, cmdk would look for the line before it is drawn
+ *   chosen and name none). A ref and not an effect: the dialog draws its content after itself.
+ * - after the text changed (`redo`), once cmdk has chosen the first line: if it is not named, another
+ *   line and then it, since cmdk ignores a choice of the line it has. A list of one line cannot be
+ *   moved off it, and stays unnamed until a key.
+ * Returns the Command's `ref` and `defaultValue`.
  */
-function useActiveLine(root: React.RefObject<HTMLDivElement | null>, redo: unknown, start?: string) {
-	const [value, setValue] = useState(start ?? "");
+function useNamedLine(redo: unknown, start?: string) {
+	const root = useRef<HTMLDivElement | null>(null);
+	const point = (line: Element | null | undefined) => line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
+	const ref = (el: HTMLDivElement | null) => {
+		if (!el || root.current) return;
+		root.current = el;
+		queueMicrotask(() => point(el.querySelector(start === undefined ? "[cmdk-item]" : `[cmdk-item][data-value="${CSS.escape(start)}"]`) ?? el.querySelector("[cmdk-item]")));
+	};
 	const first = useRef(true);
 	useEffect(() => {
-		const target = first.current ? start : undefined;
-		first.current = false;
+		if (first.current) return void (first.current = false);
 		const frame = requestAnimationFrame(() => {
-			flushSync(() => setValue(""));
-			const line = root.current?.querySelector(target === undefined ? "[cmdk-item]" : `[cmdk-item][data-value="${CSS.escape(target)}"]`);
-			line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
-			// cmdk hands a choice made by the pointer to onValueChange, which React draws at the pointer's
-			// lower priority, some frames later when the page is busy (a notice coming or going). Until
-			// then no line is chosen, and an Enter typed in between chose nothing. Drawn now, it is there.
-			flushSync(() => setValue(line?.getAttribute("data-value") ?? ""));
+			const el = root.current;
+			const chosen = el?.querySelector('[cmdk-item][aria-selected="true"]');
+			if (!el || !chosen || el.querySelector("[cmdk-input]")?.getAttribute("aria-activedescendant") === chosen.id) return;
+			const other = [...el.querySelectorAll("[cmdk-item]")].find((line) => line !== chosen);
+			if (other) (point(other), point(chosen));
 		});
 		return () => cancelAnimationFrame(frame);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [redo]);
-	return { value, onValueChange: setValue };
+	return { ref, defaultValue: NO_LINE };
 }
 
 /**
@@ -325,14 +337,12 @@ export function PickDialog({ p }: { p: Picker }) {
 	const [query, setQuery] = useState("");
 	const shown = useMemo(() => (query && !p.free ? p.items.map((i) => ({ i, rank: Math.min(...[fuzzy(query, i.label), fuzzy(query, i.about ?? "") + 10].filter((r) => r >= 0), 99) })).filter((x) => x.rank < 99).sort((a, b) => a.rank - b.rank).map((x) => x.i) : p.items), [query, p]);
 	// The list starts on the one in use.
-	const root = useRef<HTMLDivElement>(null);
-	const line = useActiveLine(root, query, p.current);
+	const line = useNamedLine(query, p.current);
 	const opener = useOpener();
 	// A short list is chosen from with the arrows; its field is there for the keyboard and for screen readers, unseen.
 	const typing = p.free || p.items.length > 7;
 	const list = (
 		<Command
-			ref={root}
 			{...line}
 			shouldFilter={false}
 			loop
@@ -386,8 +396,7 @@ export function PickDialog({ p }: { p: Picker }) {
 export function Palette() {
 	const s = store;
 	const [query, setQuery] = useState("");
-	const root = useRef<HTMLDivElement>(null);
-	const line = useActiveLine(root, query);
+	const line = useNamedLine(query);
 	const opener = useOpener();
 	useModel(s);
 	type Row = { id: string; group: string; label: string; about?: string; keys?: string; run: () => void; conv?: { agent: string; session: string } };
@@ -439,7 +448,7 @@ export function Palette() {
 		<Dialog open onOpenChange={(open) => open || close()}>
 			<DialogContent showCloseButton={false} finalFocus={opener} className="gap-0 p-0 sm:max-w-xl">
 				<DialogTitle className="sr-only">Search everything</DialogTitle>
-				<Command ref={root} {...line} shouldFilter={false} loop>
+				<Command {...line} shouldFilter={false} loop>
 					<CommandInput autoFocus placeholder="Search conversations (by name or by what was said), commands, agents" value={query} onValueChange={setQuery} />
 					<CommandList className="max-h-96">
 						{groups.map((g, n) => (
