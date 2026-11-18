@@ -5,7 +5,6 @@
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
 import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { useMediaQuery } from "usehooks-ts";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -33,7 +32,7 @@ import { type AgentDetail, api, media, type TranscriptEntry } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
-import { type Item, type Part, ROOM, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
+import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
 import { Spinner } from "@/components/ui/spinner";
 
@@ -737,8 +736,6 @@ function ContextUsage({ tab, percent }: { tab: Tab; percent: number }) {
 function ConvHead({ tab }: { tab: Tab }) {
 	useModel(store);
 	const chat = tab.kind === "chat";
-	// The same button shows the panel as a column in a wide window and over the conversation in a narrow one.
-	const roomForPanel = useMediaQuery(ROOM);
 	return (
 		<div data-slot="conversation-head" className="flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-3 text-xs">
 			<Avatar size="sm">
@@ -769,7 +766,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 			{tab.context !== undefined ? <ContextUsage tab={tab} percent={tab.context} /> : null}
 			{chat ? (
 				<Tooltip>
-					<TooltipTrigger render={<Toggle size="sm" pressed={roomForPanel ? store.code : store.codeOverlay} onPressedChange={() => void store.command("code")} aria-label="The agent and its workspace: what it has, files, changes, output" />}><PanelRightIcon /></TooltipTrigger>
+					<TooltipTrigger render={<Toggle size="sm" pressed={store.code} onPressedChange={() => void store.command("code")} aria-label="The agent and its workspace: what it has, files, changes, output" />}><PanelRightIcon /></TooltipTrigger>
 					<TooltipContent>The agent and its workspace: what it has, files, changes, output<Kbd>⌥⌘B</Kbd></TooltipContent>
 				</Tooltip>
 			) : null}

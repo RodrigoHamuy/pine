@@ -37,10 +37,6 @@ export function useModel<T extends Model>(model: T): T {
 let ids = 1;
 const uid = () => ids++;
 
-/** Tailwind's `lg`: below it a conversation and the side panel beside it do not both fit, with the side bar as a column too. */
-export const ROOM = "(min-width: 64rem)";
-const roomForPanel = () => window.matchMedia(ROOM).matches;
-
 export type Tone = "muted" | "warn" | "bad" | "good" | "accent";
 
 export type Part =
@@ -233,11 +229,7 @@ export class Store extends Model {
 	folded = new Set<string>(JSON.parse(localStorage.getItem("pine.folded") ?? "[]"));
 	/** Whether the side bar shows as a column in a wide window. Kept like its width, so that it is after a restart as it was left. */
 	sidebar = localStorage.getItem("pine.sidebar") !== "hidden";
-	/** Whether the side panel shows as a column beside the conversation in a wide window: the owner's choice, kept with the tabs. */
 	code = false;
-	/** Whether the side panel lies over the conversation in a narrow window, where it has no room for a column. For a moment
-	 *  only, like the side bar's sheet: never kept, and put away when the window gets narrow or another tab comes to the front. */
-	codeOverlay = false;
 	codeView: CodeView = "agent";
 	palette = false;
 	picker?: Picker;
@@ -306,7 +298,9 @@ export class Store extends Model {
 	 */
 	async showInBrowser(tab: Tab, url: string): Promise<void> {
 		const before = this.codeView;
-		this.showPanel("browser");
+		this.code = true;
+		this.codeView = "browser";
+		this.touch();
 		const state = await api.browserOpen(tab.agent, tab.session, url).catch(() => undefined);
 		if (state?.open) {
 			if (state.error) this.flash(state.error, "warn", 6000);
@@ -1375,23 +1369,6 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/** Shows the side panel on one of its views: as a column in a wide window, kept for the next start, and over the conversation for a moment in a narrow one. */
-	showPanel(view: CodeView): void {
-		this.codeView = view;
-		if (roomForPanel()) {
-			this.code = true;
-			this.saveTabs();
-		} else this.codeOverlay = true;
-		this.touch();
-	}
-
-	/** Lays the side panel over the conversation, or puts it away; the owner's choice of a column stays as it is. */
-	setCodeOverlay(open: boolean): void {
-		if (open === this.codeOverlay) return;
-		this.codeOverlay = open;
-		this.touch();
-	}
-
 	/** Ask the parts of the page for something only they can do. */
 	ask_(name: string): void {
 		this.lastSignal = name;
@@ -1404,7 +1381,12 @@ export class Store extends Model {
 		if (name.startsWith("folder:")) return this.openFolder(name.slice(7));
 		if (name.startsWith("focus:")) return this.activate(this.tabs.find((t) => t.key === name.slice(6)));
 		if (name.startsWith("tab-")) return this.activate(this.tabs[Number(name.slice(4)) - 1]);
-		if (name.startsWith("code-")) return this.showPanel(name.slice(5) as CodeView);
+		if (name.startsWith("code-")) {
+			this.code = true;
+			this.codeView = name.slice(5) as CodeView;
+			this.saveTabs();
+			return this.touch();
+		}
 		if (name.startsWith("settings:")) return this.openSettings(name.slice(9));
 		switch (name) {
 			case "settings":
@@ -1419,7 +1401,6 @@ export class Store extends Model {
 				// over the page for a moment and leaves the owner's choice as it is, in a wide one it calls `showSidebar`.
 				return this.ask_("sidebar");
 			case "code":
-				if (!roomForPanel()) return this.setCodeOverlay(!this.codeOverlay);
 				this.code = !this.code;
 				this.saveTabs();
 				return this.touch();
@@ -1834,7 +1815,9 @@ export class Store extends Model {
 				if (p.phase === "start") {
 					// The agent wants its owner to see the browser: it is in the panel beside the conversation.
 					if (/(^|_)browser_show$/.test(String(p.tool)) && tab === this.active && depth === 0) {
-						this.showPanel("browser");
+						this.code = true;
+						this.codeView = "browser";
+						this.saveTabs();
 					}
 					tab.toolCalls++;
 					if (depth === 0) this.foldWords(tab, p.task);

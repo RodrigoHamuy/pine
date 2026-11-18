@@ -1469,46 +1469,15 @@ test("the panel's Agent view scrolls up and down only, however narrow the panel 
 test("a phone-wide window lays the side bar and the panel over the conversation, and a wide one puts them back beside it", async () => {
 	// The page's size, as the start of this file sets it (the window's own size does not count while the driver sets one).
 	const size = (width: number, height: number) => page.setViewportSize({ width, height });
-	const sheet = "[data-slot=sheet-content] [data-slot=code-panel]";
-	const column = "#code-panel [data-slot=code-panel]";
-	const toggle = "[data-slot=conversation-head] button[aria-label^='The agent and its workspace']";
 	try {
 		await page.click("[data-slot=tab] >> nth=0");
 		await sees("#sidebar-panel [data-slot=sidebar]");
 		const wide = Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width));
-		// The panel open as a column: a window made narrower shows the conversation, and no sheet comes over it by itself.
-		if (!(await page.$(column))) await menu("code");
-		await sees(column);
-		await size(900, 760);
-		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
-		await new Promise((r) => setTimeout(r, 300));
-		assert.equal(await page.locator("[data-slot=sheet-content]").count(), 0);
-		await sees("[data-slot=conversation-head]");
-		// The panel's button lays it over the conversation, and Escape puts it away.
-		await page.click(toggle);
-		await sees(sheet);
-		assert.equal(await page.locator("[data-slot=resizable-handle]:has(+ #code-panel)").count(), 0);
-		await page.keyboard.press("Escape");
-		await page.waitForSelector("[data-slot=sheet-content]", { state: "detached" });
-		// So does the menu's toggle, both ways.
-		await menu("code");
-		await sees(sheet);
-		await menu("code");
-		await page.waitForSelector("[data-slot=sheet-content]", { state: "detached" });
-		// A view of the panel by name opens the sheet on it.
-		await menu("code-running");
-		await sees(sheet);
-		await sees("[data-slot=sheet-content] [role=tab][aria-selected=true] >> text=Running");
-		await page.keyboard.press("Escape");
-		await page.waitForSelector("[data-slot=sheet-content]", { state: "detached" });
-		// None of that changed the owner's choice of a column: wide again, it is there.
-		await size(1280, 820);
-		await sees(column);
+		if (await page.$("[data-slot=code-panel]")) await menu("code");
 		await size(380, 760);
 		// No column: the side bar is stock's sheet, closed until it is asked for, and the page does not scroll sideways.
 		await page.waitForSelector("#sidebar-panel", { state: "detached" });
 		assert.equal(await page.locator("[data-slot=sidebar][data-mobile=true]").count(), 0);
-		assert.equal(await page.locator("[data-slot=code-panel]").count(), 0);
 		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 380);
 		await page.click("header [data-sidebar=trigger]");
 		await sees("[data-slot=sidebar][data-mobile=true] [data-slot=agent-label]");
@@ -1520,30 +1489,30 @@ test("a phone-wide window lays the side bar and the panel over the conversation,
 		await sees("[data-slot=sidebar][data-mobile=true]");
 		await page.keyboard.press("Escape");
 		await page.waitForSelector("[data-slot=sidebar][data-mobile=true]", { state: "detached" });
-		// The panel's sheet is put away when another tab comes to the front.
+		// The panel beside a conversation is a sheet over it, and closing the sheet closes the panel.
 		await menu("code-agent");
-		await sees(sheet);
-		await menu("tab-2");
-		await page.waitForSelector("[data-slot=sheet-content]", { state: "detached" });
-		await menu("tab-1");
+		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
+		assert.equal(await page.locator("[data-slot=resizable-handle]:has(+ #code-panel)").count(), 0);
+		await page.keyboard.press("Escape");
+		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
 		// Between a phone and a laptop: the side bar has room for its column, the panel beside the conversation does not.
 		await size(900, 760);
 		await sees("#sidebar-panel [data-slot=sidebar]");
-		assert.equal(await page.locator("[data-slot=code-panel]").count(), 0);
-		// Wide again: the side bar is a column as wide as it was, and so is the panel the owner left open.
-		await size(1280, 820);
-		await sees("#sidebar-panel [data-slot=sidebar]");
-		await sees(column);
-		assert.equal(Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width)), wide);
+		await menu("code-agent");
+		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
 		await menu("code");
 		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+		// Wide again: the side bar is a column as wide as it was.
+		await size(1280, 820);
+		await sees("#sidebar-panel [data-slot=sidebar]");
+		assert.equal(Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width)), wide);
 	} finally {
 		// The tests after this one have the width the start of this file set, whatever failed here.
 		await size(1280, 820);
 	}
 });
 
-test("what was typed in a file and not saved stays when the panel goes from a column to a sheet and back, and Escape in the editor leaves the sheet open", async () => {
+test("what was typed in a file and not saved stays when the panel becomes a sheet and a column again, and Escape in the editor leaves the sheet open", async () => {
 	const size = (width: number, height: number) => page.setViewportSize({ width, height });
 	try {
 		// The folder's conversation from before is in a worktree by now: a new one in the folder itself.
@@ -1563,10 +1532,8 @@ test("what was typed in a file and not saved stays when the panel goes from a co
 		await page.keyboard.type("unsaved draft");
 		const save = page.locator("[data-slot=code-panel]").getByRole("button", { name: "Save" });
 		assert.ok(await save.isEnabled());
-		// Narrower than the room for a column: the conversation shows, and the sheet the owner opens has the draft in it.
+		// Narrower than the room for a column: the panel is drawn again inside a sheet, with the draft still in it.
 		await size(900, 760);
-		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
-		await menu("code");
 		await sees("[data-slot=sheet-content] [data-slot=code-panel] .cm-content");
 		assert.match(await page.textContent("[data-slot=code-panel] .cm-content"), /unsaved draft/);
 		assert.ok(await save.isEnabled());
@@ -1579,11 +1546,10 @@ test("what was typed in a file and not saved stays when the panel goes from a co
 		await page.keyboard.press("Escape");
 		await new Promise((r) => setTimeout(r, 300));
 		assert.equal(await page.locator("[data-slot=sheet-content] [data-slot=code-panel]").count(), 1);
-		// More typed in the sheet, then wide again: the panel is a column, with the whole draft still there to save or to leave.
-		await page.keyboard.type(" more");
+		// Wide again: the panel is a column, and the draft is still there to save or to leave.
 		await size(1280, 820);
 		await sees("#code-panel [data-slot=code-panel] .cm-content");
-		assert.match(await page.textContent("[data-slot=code-panel] .cm-content"), /unsaved draft more/);
+		assert.match(await page.textContent("[data-slot=code-panel] .cm-content"), /unsaved draft/);
 		assert.ok(await save.isEnabled());
 		await page.click("[data-slot=code-panel] button[aria-label='Back to the files']");
 		await page.locator("[role=alertdialog]").getByRole("button", { name: "Leave" }).click();

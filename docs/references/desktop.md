@@ -227,15 +227,14 @@ agent's:
 | Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
 
 The window can be made as narrow as a phone (360 pixels). Where there is no room for columns,
-the conversation is what shows: the side bar and the side panel lie over it for a moment when
-you ask for them, and are closed when the window becomes that narrow. Opening or closing them
-there does not change what you chose for a wide window (side bar shown or hidden, side panel open
-or closed); that and how wide you dragged them is kept, and a wide window puts them back as they were.
+the side bar and the side panel lie over the conversation instead of beside it. What you chose
+(side bar shown or hidden, side panel open or closed) and how wide you dragged them is kept, and a
+wide window puts them back as they were.
 
 | Window | Side bar | Side panel |
 |---|---|---|
 | 1024 pixels and wider | A column | A column |
-| 768 to 1023 | A column | Over the conversation, from the right, when its button in the conversation's header, `⌥⌘B` or `/code` asks for it. `esc`, a click beside it, its `×` or another tab in front puts it away; none of these closes the column of a wide window |
+| 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes the panel |
 | Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above: the whole width of a window narrower than 640 pixels, and at most 540 pixels wide from 640 to 767 |
 
 Settings follow the room they have, not the window: narrower than about 720 pixels, the list of
@@ -578,7 +577,7 @@ the side panel over a conversation in a narrow window (Sheet) and the agents' gr
 (Collapsible) are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. The page has three ways to follow the window's width, each in one place: stock `useIsMobile`
 (768 pixels) for the side bar in `App.tsx`, `useMediaQuery` of usehooks-ts (1024 pixels) for the side panel in
-`CodePanel.tsx` (the conversation's header and the panel's own toggle in `model.ts` read the same `ROOM`), and container queries on their own width (`@container/settings`) for the settings. A new
+`CodePanel.tsx`, and container queries on their own width (`@container/settings`) for the settings. A new
 breakpoint uses one of the three, not a fourth way. They have no stories of their own. What shadcn has no primitive for (a tree, a list
 of rows to open) is ui-sdk's (`@ui-sdk/react`), used directly, with the row's look from `src/lists.tsx`; ui-sdk is never used for a
 piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk list drawn as the

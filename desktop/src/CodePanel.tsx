@@ -33,7 +33,7 @@ import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
 import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
-import { type CodeView, mediaKind, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
+import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { LISTBOX, onPick, rowClass, TREE_ITEM } from "./lists.tsx";
@@ -550,6 +550,9 @@ function Running({ tab }: { tab: Tab }) {
 
 export const CODE_KEY = "pine.code.width";
 
+/** Tailwind's `lg`: below it a conversation and the panel beside it do not both fit, with the side bar as a column too. */
+const ROOM = "(min-width: 64rem)";
+
 /** What in the panel takes Escape for itself: the editor (its search), a field, the page in the browser. */
 const ESCAPE_KEEPERS = ".cm-editor, input, textarea, [contenteditable], [data-slot=browser] canvas";
 
@@ -563,9 +566,8 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const setView = (v: CodeView) => ((store.codeView = v), store.touch());
 	const setFile = (file?: string) => ((state.file = file), redraw((n) => n + 1));
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
-	// In a window narrower than that there is no room beside the conversation: the conversation is what shows, and
-	// the panel is a stock sheet over it from the right, for a moment, as the side bar is. The owner's choice of a
-	// column is the same either way, so it is back when the window is wide again.
+	// In a window narrower than that there is no room beside the conversation: the panel is a stock sheet over it,
+	// from the right, and putting it away is closing the panel. The owner's choice (open or not) is the same either way.
 	const narrow = !useMediaQuery(ROOM);
 	const panel = (
 				<div data-slot="code-panel" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
@@ -612,12 +614,12 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	);
 	if (narrow)
 		return (
-			<Sheet open={store.codeOverlay} onOpenChange={(open, details) => {
+			<Sheet open onOpenChange={(open, details) => {
 				if (open) return;
 				// Base UI closes on any Escape, even one the editor's search, an address field or the page in the browser
 				// took for itself: that Escape is theirs. Escape anywhere else in the sheet still closes it.
 				if (details.reason === "escape-key" && details.event.target instanceof Element && details.event.target.closest(ESCAPE_KEEPERS)) return details.cancel();
-				store.setCodeOverlay(false);
+				void store.command("code");
 			}}>
 				{/* The sheet lies over the title bar's drag region, which Electron honours whatever is drawn on top:
 				    without this a click on the panel's tabs would move the window on a Mac. */}
@@ -627,7 +629,6 @@ export function CodePanel({ tab }: { tab: Tab }) {
 				</SheetContent>
 			</Sheet>
 		);
-	if (!store.code) return null;
 	return (
 		<>
 			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
