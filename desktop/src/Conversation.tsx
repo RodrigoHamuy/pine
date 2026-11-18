@@ -22,6 +22,7 @@ import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
 import { Progress } from "@/components/ui/progress";
+import { Toggle } from "@/components/ui/toggle";
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
@@ -685,7 +686,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-faint" /> : null}
 			<span className="min-w-0 flex-1" />
 			{tab.context !== undefined ? <ContextUsage tab={tab} percent={tab.context} /> : null}
-			{chat ? <Hint label="The agent and its workspace: what it has, files, changes, output" keys="⌥⌘B"><Button variant={store.code ? "secondary" : "ghost"} size="icon-xs" aria-pressed={store.code} onClick={() => void store.command("code")}><PanelRightIcon /></Button></Hint> : null}
+			{chat ? <Hint label="The agent and its workspace: what it has, files, changes, output" keys="⌥⌘B"><Toggle size="sm" pressed={store.code} onPressedChange={() => void store.command("code")}><PanelRightIcon /></Toggle></Hint> : null}
 		</div>
 	);
 }
