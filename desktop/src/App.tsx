@@ -23,25 +23,21 @@ import { Events } from "./Events.tsx";
 import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
-import { List, ListRow } from "./lists.tsx";
+import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Confirm } from "./Confirm.tsx";
 import { Logo, Pulse } from "./ui.tsx";
-import { Hint } from "@/components/hint";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Kbd } from "@/components/ui/kbd";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
-import { ScrollFadeArea } from "@/components/scroll-fade-area";
-import { Log } from "@/components/log";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Printed } from "@/components/printed";
 
 // Pieces of the frame drawn the same in several places.
-/** Something waits for the owner: an exclamation mark on the warning colour. */
-const NEEDS = "grid size-3.5 flex-none place-items-center rounded-full bg-warn text-xs leading-none font-bold text-background";
 const DOT = "dot size-2 flex-none rounded-full";
-const Needs = () => <span className={NEEDS}>!</span>;
-const Unread = () => <span className={cn(DOT, "bg-info")} />;
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -66,7 +62,7 @@ function Gate() {
 						"Welcome to pine",
 						`pine keeps its agents, their workspaces and its settings in a home folder (${s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).`,
 						<>
-							{s.initLines.length ? <Log className="w-full text-start">{s.initLines.slice(-40).join("\n")}</Log> : null}
+							{s.initLines.length ? <Printed sm className="log w-full text-start" text={s.initLines.slice(-40).join("\n")} /> : null}
 							<div className="flex items-center gap-2">
 								<Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Spinner data-icon="inline-start" />Setting up…</> : "Set up pine"}</Button>
 								<Button variant="outline" disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
@@ -140,8 +136,8 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	return (
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
 		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
-			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", c.tasks && "pr-16!", on && "on")} render={<ListRow value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
-				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Needs /> : working ? <Pulse className="size-3" /> : tab?.unread ? <Unread /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
+			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", c.tasks && "pr-16!", on && "on")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Badge variant="destructive">!</Badge> : working ? <Pulse className="size-3" /> : tab?.unread ? <Badge /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
 				<span className="cut min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
 			{/* The badge is drawn over the button, so the button keeps the room for the time (stock pr-8 is for an action alone). */}
@@ -201,17 +197,17 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 							<span className="min-w-0 flex-initial truncate">{a.id}</span>
 							<span className="what @container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
 						</span>
-						{waits ? <Needs /> : working ? <Pulse className="size-3" /> : unread && folded ? <Unread /> : null}
+						{waits ? <Badge variant="destructive">!</Badge> : working ? <Pulse className="size-3" /> : unread && folded ? <Badge /> : null}
 					</CollapsibleTrigger>
-					<Hint label={`Settings of ${a.id}`}><SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></SidebarMenuAction></Hint>
-					<Hint label={`Open a folder for a conversation with ${a.id}`}><SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()}><FolderIcon /></SidebarMenuAction></Hint>
-					<Hint label={`New conversation with ${a.id}`}><SidebarMenuAction onClick={() => void s.newConversation(a.id)}><PlusIcon /></SidebarMenuAction></Hint>
+					<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)} aria-label={`Settings of ${a.id}`} />}><SettingsIcon /></TooltipTrigger><TooltipContent>{`Settings of ${a.id}`}</TooltipContent></Tooltip>
+					<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()} aria-label={`Open a folder for a conversation with ${a.id}`} />}><FolderIcon /></TooltipTrigger><TooltipContent>{`Open a folder for a conversation with ${a.id}`}</TooltipContent></Tooltip>
+					<Tooltip><TooltipTrigger render={<SidebarMenuAction onClick={() => void s.newConversation(a.id)} aria-label={`New conversation with ${a.id}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation with ${a.id}`}</TooltipContent></Tooltip>
 				</SidebarMenuItem>
 			</SidebarMenu>
 			<CollapsibleContent>
-				<List label={`Conversations with ${a.id}`} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onOpen={(session) => void s.openTab(a.id, session)} render={<SidebarMenu />}>
+				<Listbox aria-label={`Conversations with ${a.id}`} className="outline-none" activation="manual" value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onValueChange={(session) => typeof session === "string" && void s.openTab(a.id, session)} render={<SidebarMenu />}>
 					{rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
-				</List>
+				</Listbox>
 			</CollapsibleContent>
 		</Collapsible>
 	);
@@ -228,29 +224,29 @@ function Sidebar() {
 	return (
 		<SidebarRoot collapsible="none" className="sidebar w-full min-w-0 bg-transparent app-drag">
 			<SidebarHeader className={cn("h-11 flex-none flex-row items-center justify-end gap-0.5 py-0 pr-2 app-drag", s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2.5")}>
-				<Hint label="Hide the sidebar" keys="⌘B"><Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button></Hint>
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")} aria-label="Hide the sidebar" />}><PanelLeftIcon /></TooltipTrigger><TooltipContent>Hide the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>
 			</SidebarHeader>
 			<SidebarContent>
-				<ScrollFadeArea className="flex-1">
+				<ScrollArea className="flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade flex-1">
 					<SidebarGroup className="pt-1 pb-0">
 						<SidebarMenu>
 							<SidebarMenuItem className="app-no-drag">
-								<Hint label="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page" describes><SidebarMenuButton className="side-row" onClick={() => void s.command("palette")}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></SidebarMenuButton></Hint>
+								<Tooltip><TooltipTrigger render={<SidebarMenuButton className="side-row" onClick={() => void s.command("palette")} />}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></TooltipTrigger><TooltipContent>Find a conversation by its name or by what was said in it, or a command, an agent, a settings page</TooltipContent></Tooltip>
 							</SidebarMenuItem>
 						</SidebarMenu>
 					</SidebarGroup>
 					<SidebarGroup>
 						<SidebarGroupLabel>Agents</SidebarGroupLabel>
-						<Hint label="New agent"><SidebarGroupAction className="app-no-drag" onClick={() => s.openSettings("agents", "+")}><PlusIcon /></SidebarGroupAction></Hint>
+						<Tooltip><TooltipTrigger render={<SidebarGroupAction className="app-no-drag" onClick={() => s.openSettings("agents", "+")} aria-label="New agent" />}><PlusIcon /></TooltipTrigger><TooltipContent>New agent</TooltipContent></Tooltip>
 						<SidebarGroupContent className="flex flex-col gap-1">{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}</SidebarGroupContent>
 					</SidebarGroup>
-				</ScrollFadeArea>
+				</ScrollArea>
 			</SidebarContent>
 			<SidebarFooter className="side-foot gap-0">
 				<SidebarMenu>
 					{newer ? (
 						<SidebarMenuItem className="app-no-drag">
-							<Hint label={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`} describes><SidebarMenuButton className="side-row side-update text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)}><ArrowUpIcon /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></SidebarMenuButton></Hint>
+							<Tooltip><TooltipTrigger render={<SidebarMenuButton className="side-row side-update text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></Tooltip>
 						</SidebarMenuItem>
 					) : null}
 					<SidebarMenuItem className="app-no-drag">
@@ -291,7 +287,7 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 		>
 			<span className="grid min-w-3.5 flex-none place-items-center">
-				{tab.approvals.size ? <Needs /> : tab.busy ? <Pulse className="size-3" /> : tab.unread ? <Unread /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <Avatar size="sm"><AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>}
+				{tab.approvals.size ? <Badge variant="destructive">!</Badge> : tab.busy ? <Pulse className="size-3" /> : tab.unread ? <Badge /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <Avatar size="sm"><AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>}
 			</span>
 			<span className="name truncate">
 				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b className="font-medium">{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b className="font-medium">{tab.agent}</b> : <><b className="font-medium">{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
@@ -307,16 +303,16 @@ function TitleBar() {
 	const with_ = s.agentInFront();
 	return (
 		<header className={cn("flex h-11 flex-none items-center gap-1 pr-2 app-drag", s.sidebar ? "pl-0.5" : s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2")}>
-			{s.sidebar ? null : <Hint label="Show the sidebar" keys="⌘B"><Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button></Hint>}
+			{s.sidebar ? null : <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")} aria-label="Show the sidebar" />}><PanelLeftIcon /></TooltipTrigger><TooltipContent>Show the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>}
 			{/* A row that scrolls cuts off what a tab draws outside itself (the line around the tab in front, the mark where a dragged tab
 			    would land): the padding is the room for both, and the margin keeps the tabs where they were. It scrolls without a bar;
 			    the fade at a cut end says there is more. */}
-			<ScrollFadeArea axis="x" bar={false} className="tabs -mx-0.5 min-w-0">
+			<ScrollArea className="tabs -mx-0.5 flex min-h-0 min-w-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 				<div className="flex items-center gap-0.5 px-0.5 py-px">
 					{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
 				</div>
-			</ScrollFadeArea>
-			<Hint label={with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"} keys="⌘T"><Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.newConversation()}><PlusIcon /></Button></Hint>
+			</ScrollArea>
+			<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.newConversation()} aria-label={with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"} />}><PlusIcon /></TooltipTrigger><TooltipContent>{with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"}<Kbd>⌘T</Kbd></TooltipContent></Tooltip>
 			<span className="min-w-0 flex-1" />
 		</header>
 	);
@@ -553,14 +549,14 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><TriangleAlertIcon className="text-warn" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
+				<ScrollArea className="-mx-4 max-h-[50vh] flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="flex items-center gap-2 text-muted-foreground">
 						<span>{req.agent}</span>
 						{req.task ? <span className="text-faint">task #{req.task}</span> : null}
 						<Badge variant="secondary" className="font-mono">{req.tool}</Badge>
 					</div>
-					<Log className="max-h-56 text-foreground">{req.summary}</Log>
+					<Printed sm className="log" text={req.summary} />
 					<div className="text-xs text-muted-foreground">
 						Why you are asked: {req.why}
 						{req.holds ? <div>“Allow” holds for {req.holds}: you are not asked about it again there.</div> : null}
@@ -579,7 +575,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 					})}
 					{fields.length ? <FieldDescription>{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</FieldDescription> : null}
 				</div>
-				</ScrollFadeArea>
+				</ScrollArea>
 				<DialogFooter>
 					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <Kbd>esc</Kbd></Button>
 					<span className="min-w-0 flex-1" />
@@ -606,7 +602,7 @@ export function QuestionDialog({ req }: { req: Approval }) {
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><MessageSquareIcon className="text-primary" /> {req.agent} asks</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
+				<ScrollArea className="-mx-4 max-h-[50vh] flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="whitespace-pre-wrap">{req.summary}</div>
 					{choices.length ? (
@@ -634,7 +630,7 @@ export function QuestionDialog({ req }: { req: Approval }) {
 						}}
 					/>
 				</div>
-				</ScrollFadeArea>
+				</ScrollArea>
 				<DialogFooter>
 					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <Kbd>esc</Kbd></Button>
 					<span className="min-w-0 flex-1" />
@@ -674,7 +670,7 @@ function Help({ close }: { close: () => void }) {
 				<DialogHeader>
 					<DialogTitle>Keys and commands</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
+				<ScrollArea className="-mx-4 max-h-[50vh] flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-1.5 px-4 text-xs select-text">
 					{keys.map(([k, about]) => (
 						<Field key={k} orientation="horizontal" className="items-baseline">
@@ -689,7 +685,7 @@ function Help({ close }: { close: () => void }) {
 						</Field>
 					))}
 				</div>
-				</ScrollFadeArea>
+				</ScrollArea>
 				<DialogFooter>
 					<Button variant="outline" onClick={close}>Close</Button>
 				</DialogFooter>
@@ -758,7 +754,7 @@ function BrowserAsk() {
 				</DialogHeader>
 				<div className="flex flex-col gap-3 select-text">
 					<p className="text-muted-foreground">Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
-					{s.initLines.length ? <Log>{s.initLines.slice(-12).join("\n")}</Log> : null}
+					{s.initLines.length ? <Printed sm className="log" text={s.initLines.slice(-12).join("\n")} /> : null}
 				</div>
 				<DialogFooter>
 					<Button variant="outline" disabled={s.browserFetching} onClick={later}>Not now</Button>

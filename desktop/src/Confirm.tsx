@@ -5,7 +5,7 @@ import type { LucideIcon } from "lucide-react";
 import { type ReactElement, useState } from "react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
-import { Hint } from "@/components/hint";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 /**
  * A button that asks `question` before it does what `onConfirm` does. With an icon, `label` is its tooltip.
@@ -16,9 +16,10 @@ export function Confirm({ label, question, action = label, onConfirm, icon: Icon
 	return (
 		<AlertDialog open={open} onOpenChange={setOpen}>
 			{Icon ? (
-				<Hint label={label}>
-					<AlertDialogTrigger render={trigger ?? <Button variant="ghost" size="icon-xs" />}><Icon /></AlertDialogTrigger>
-				</Hint>
+				<Tooltip>
+					<TooltipTrigger render={<AlertDialogTrigger render={trigger ?? <Button variant="ghost" size="icon-xs" />} aria-label={label}><Icon /></AlertDialogTrigger>} />
+					<TooltipContent>{label}</TooltipContent>
+				</Tooltip>
 			) : (
 				<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>{label}</AlertDialogTrigger>
 			)}

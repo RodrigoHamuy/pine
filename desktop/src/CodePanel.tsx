@@ -34,15 +34,16 @@ import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Confirm } from "./Confirm.tsx";
-import { List, ListRow, rowClass, Tree, TreeRow } from "./lists.tsx";
+import { rowClass } from "./lists.tsx";
+import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
+import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
 import { EmptyView, Pulse, useLoad } from "./ui.tsx";
 import { Spinner } from "@/components/ui/spinner";
-import { Hint } from "@/components/hint";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
-import { ScrollFadeArea } from "@/components/scroll-fade-area";
-import { LogText } from "@/components/log";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -94,15 +95,10 @@ const EDITOR = [
 	"[&_.cm-searchMatch]:bg-warn-soft! [&_.cm-searchMatch]:outline-1! [&_.cm-searchMatch]:outline-warn/50! dark:[&_.cm-searchMatch]:bg-(--p-blue)/25! dark:[&_.cm-searchMatch]:outline-(--p-blue)/50!",
 ].join(" ");
 
-// The panel's parts: a bar of controls with a line under it, and what scrolls below.
-/** What scrolls under a bar; `wide` for what can be wider than the panel (a diff), which scrolls sideways too. */
-function Body({ wide, children }: { wide?: boolean; children: React.ReactNode }) {
-	return (
-		<ScrollFadeArea axis={wide ? "both" : "y"} className="flex-1">
-			<div className="flex min-h-full flex-col">{children}</div>
-		</ScrollFadeArea>
-	);
-}
+// The panel's parts: a bar of controls with a line under it, and what scrolls below: a stock
+// ScrollArea that fades where it is cut (scroll-fade sits on its viewport, the element that
+// scrolls), a flex column so that its viewport shrinks to it, and a sideways bar where a diff can
+// be wider than the panel. Inside, a flex column at least its height, for an Empty centred with `m-auto`.
 const SUB = "code-sub flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
 const PICTURE = "block max-h-80 max-w-full rounded-lg border sm:max-w-md";
 const STATUS: Record<string, string> = { M: "text-warn", A: "text-add", "?": "text-add", D: "text-del", R: "text-info" };
@@ -216,13 +212,13 @@ function PathCrumbs({ path, children }: { path: string; children?: React.ReactNo
 function ChangeRow({ c }: { c: Change }) {
 	const at = c.path.lastIndexOf("/");
 	return (
-		<ListRow value={c.path} label={c.path.slice(at + 1)} className={rowClass()} title={c.path}>
+		<ListboxItem value={c.path} label={c.path.slice(at + 1)} className={rowClass()} title={c.path}>
 			<span className={`w-3.5 flex-none text-center font-mono font-semibold ${STATUS[c.status] ?? ""}`}>{c.status === "?" ? "U" : c.status}</span>
 			<span className="truncate">{c.path.slice(at + 1)}</span>
 			<span className="min-w-0 flex-1 truncate text-faint">{at > 0 ? c.path.slice(0, at) : ""}</span>
 			{c.added ? <span className="font-mono text-add">+{c.added}</span> : null}
 			{c.removed ? <span className="font-mono text-del">−{c.removed}</span> : null}
-		</ListRow>
+		</ListboxItem>
 	);
 }
 
@@ -247,24 +243,24 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		return (
 			<>
 				<div className={SUB}>
-					<Hint label="Back to the list"><Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)}><ChevronLeftIcon /></Button></Hint>
+					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
 					<PathCrumbs path={file} />
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <LogText className="cursor-text text-muted-foreground">… the rest of this diff is too long to show.</LogText> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <Spinner className="m-auto" />}</Body>
+				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… the rest of this diff is too long to show.</p> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <Spinner className="m-auto" />}</div><ScrollBar orientation="horizontal" /></ScrollArea>
 			</>
 		);
 	return (
 		<>
 			<div className={SUB}>
-				{turn ? <><Undo2Icon size={13} /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon size={13} /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
-				<Hint label="Read again"><Button variant="ghost" size="icon-xs" onClick={list.reload}><RotateCwIcon /></Button></Hint>
+				{turn ? <><Undo2Icon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={list.reload} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
 			</div>
-			<Body>
-				{data.note ? <LogText className="cursor-text text-muted-foreground">{data.note}</LogText> : null}
-				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> : <EmptyView icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
-				{data.more ? <LogText className="cursor-text text-muted-foreground">… and more.</LogText> : null}
-			</Body>
+			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
+				{data.note ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">{data.note}</p> : null}
+				{data.files.length ? <Listbox aria-label={turn ? "Files the last message changed" : "Changed files"} className="outline-none" activation="manual" value={null} onValueChange={(next) => typeof next === "string" && setFile(next)}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</Listbox> : <EmptyView icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
+				{data.more ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… and more.</p> : null}
+			</div></ScrollArea>
 		</>
 	);
 }
@@ -294,7 +290,7 @@ function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void;
 			{failed ? <EmptyView icon={FolderIcon} title="This folder cannot be read">{failed}</EmptyView> : null}
 			{entries && !entries.length ? <EmptyView icon={FolderIcon} title="This folder is empty" /> : null}
 			{entries || failed ? null : <Spinner className="m-auto" />}
-			<Tree label="Files" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} onOpen={(full) => !isDir(full) && pick(full)}>
+			<Tree aria-label="Files" className="outline-none" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} expandOnPress onAction={(full) => !isDir(full) && pick(full)}>
 				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
 			</Tree>
 		</>
@@ -313,7 +309,7 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [read.loading, read.data, read.error]);
 	const failed = state.failed.get(dir);
-	if (failed && dir) return <LogText className="cursor-text text-faint" style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>{failed}</LogText>;
+	if (failed && dir) return <p className="py-2.5 pr-3 text-xs wrap-anywhere text-faint select-text" style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>{failed}</p>;
 	const entries = state.dirs.get(dir);
 	if (!entries) return null;
 	return (
@@ -321,18 +317,17 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 			{entries.map((e) => {
 				const full = dir ? `${dir}/${e.name}` : e.name;
 				const open = state.open.has(full);
-				const row = (
-					<>
-						{e.dir ? (open ? <ChevronDownIcon size={12} className="text-faint" /> : <ChevronRightIcon size={12} className="text-faint" />) : <span className="w-3 flex-none" />}
-						{e.dir ? <FolderIcon size={13} className="text-faint" /> : <FileIcon size={13} className="text-faint" />}
-						<span className="min-w-0 flex-1 truncate">{e.name}</span>
-						{!e.dir ? <span className="text-faint">{size(e.size)}</span> : null}
-					</>
-				);
+				// The focus is on the item around the row, so the row's class shows it (`rowClass`).
 				return (
-					<TreeRow key={full} value={full} label={e.name} row={row} on={state.file === full} depth={depth} branch={e.dir}>
-						{e.dir && open ? <Dir tab={tab} dir={full} depth={depth + 1} tick={tick} onLoad={onLoad} /> : null}
-					</TreeRow>
+					<TreeItem key={full} value={full} label={e.name} branch={e.dir} className="outline-none">
+						<TreeItemLabel className={rowClass(state.file === full)} style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>
+							{e.dir ? (open ? <ChevronDownIcon className="size-3 text-faint" /> : <ChevronRightIcon className="size-3 text-faint" />) : <span className="w-3 flex-none" />}
+							{e.dir ? <FolderIcon className="size-3.5 text-faint" /> : <FileIcon className="size-3.5 text-faint" />}
+							<span className="min-w-0 flex-1 truncate">{e.name}</span>
+							{!e.dir ? <span className="text-faint">{size(e.size)}</span> : null}
+						</TreeItemLabel>
+						{e.dir ? <TreeGroup>{open ? <Dir tab={tab} dir={full} depth={depth + 1} tick={tick} onLoad={onLoad} /> : null}</TreeGroup> : null}
+					</TreeItem>
 				);
 			})}
 		</>
@@ -376,7 +371,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	return (
 		<>
 			<div className={SUB}>
-				<Hint label="Back to the files"><Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())}><ChevronLeftIcon /></Button></Hint>
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></Tooltip>
 				<AlertDialog open={leaving} onOpenChange={setLeaving}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
@@ -390,7 +385,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				</AlertDialog>
 				<PathCrumbs path={file}>{dirty ? <span className="text-warn"> ●</span> : null}</PathCrumbs>
 				{disk.data?.truncated ? <Badge variant="outline">too large to edit</Badge> : null}
-				{root ? <Hint label="Show in the Finder"><Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button></Hint> : null}
+				{root ? <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)} aria-label="Show in the Finder"><ExternalLinkIcon /></Button>} /><TooltipContent>Show in the Finder</TooltipContent></Tooltip> : null}
 				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
 			</div>
 			{changedOnDisk ? (
@@ -407,7 +402,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 					<Editor file={file} text={dirty ? draft! : (base ?? text ?? "")} readOnly={disk.data.truncated} onChange={setDraft} onSave={() => void save()} />
 				</div>
 			) : (
-			<Body>
+			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{kind ? (
 					<div className="p-3.5">{kind === "image" ? <img className={PICTURE} src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video className="block max-h-90 max-w-full rounded-lg bg-black sm:max-w-lg" src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio className="block w-full max-w-md" src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
 				) : disk.error ? (
@@ -417,7 +412,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				) : (
 					<EmptyView icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</EmptyView>
 				)}
-			</Body>
+			</div></ScrollArea>
 			)}
 		</>
 	);
@@ -439,15 +434,15 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 					</InputGroupAddon>
 					<InputGroupInput aria-label="Find a file" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
 				</InputGroup>
-				<Hint label="Read again"><Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)}><RotateCwIcon /></Button></Hint>
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
 			</div>
-			<Body>
+			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{query.trim() ? (
-					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className={rowClass()}><FileIcon size={13} className="text-faint" /><span className="truncate">{f}</span></ListRow>)}</List> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
+					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" activation="manual" value={null} onValueChange={(next) => typeof next === "string" && setFile(next)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
-			</Body>
+			</div></ScrollArea>
 		</>
 	);
 }
@@ -471,29 +466,29 @@ function Output({ tab }: { tab: Tab }) {
 		return (
 			<>
 				<div className={SUB}>
-					<Hint label="Back to the list"><Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)}><ChevronLeftIcon /></Button></Hint>
+					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
 					<span className="font-mono">{shown.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
-				<Body>
+				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 					<Printed text={shown.entry.result || "(it printed nothing)"} failed={shown.entry.ok === false} className="m-2" />
 					{(shown.entry.images ?? []).map((id) => <div className="p-3" key={id}><img className={PICTURE} src={media.tool(id)} alt="" /></div>)}
-				</Body>
+				</div></ScrollArea>
 			</>
 		);
 	return (
-		<Body>
-			<List label="Tool calls" onOpen={setOpen}>
+		<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
+			<Listbox aria-label="Tool calls" className="outline-none" activation="manual" value={null} onValueChange={(next) => typeof next === "string" && setOpen(next)}>
 			{calls.data.map((c) => (
-				<ListRow key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
-					{c.entry.ok === false ? <XIcon size={13} className="flex-none text-destructive" /> : c.entry.ok ? <CheckIcon size={13} className="flex-none text-primary" /> : <Pulse />}
+				<ListboxItem key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
+					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Pulse />}
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}
-				</ListRow>
+				</ListboxItem>
 			))}
-				</List>
-			</Body>
+				</Listbox>
+			</div></ScrollArea>
 	);
 }
 
@@ -501,7 +496,7 @@ function Output({ tab }: { tab: Tab }) {
 function Running({ tab }: { tab: Tab }) {
 	if (!tab.programs.length) return <EmptyView icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</EmptyView>;
 	return (
-		<Body>
+		<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 			{tab.programs.map((p) => (
 				<div className="flex flex-col gap-1 border-b border-line-soft p-2" key={p.id}>
 					<Item size="sm">
@@ -525,7 +520,7 @@ function Running({ tab }: { tab: Tab }) {
 					{p.output ? <Printed text={p.output} sm /> : null}
 				</div>
 			))}
-		</Body>
+		</div></ScrollArea>
 	);
 }
 
@@ -549,7 +544,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 					<div className="flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2">
 						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
 						    for the line under the tab in front, which stock draws below the list. */}
-						<ScrollFadeArea axis="x" bar={false} className="min-w-0 flex-initial">
+						<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 						<div className="pb-1.5">
 						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
 							<TabsList variant="line" activateOnFocus>
@@ -566,11 +561,11 @@ export function CodePanel({ tab }: { tab: Tab }) {
 							</TabsList>
 						</Tabs>
 						</div>
-						</ScrollFadeArea>
+						</ScrollArea>
 						<span className="min-w-0 flex-1" />
-						<Hint label="Close the panel"><Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")}><XIcon /></Button></Hint>
+						<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></Tooltip>
 					</div>
-					{steps ? <ScrollFadeArea className="max-h-48 flex-none border-b border-line-soft"><div className="px-3 py-2.5"><Steps items={steps} /></div></ScrollFadeArea> : null}
+					{steps ? <ScrollArea className="flex max-h-48 min-h-0 flex-none flex-col border-b border-line-soft *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="px-3 py-2.5"><Steps items={steps} /></div></ScrollArea> : null}
 					{view === "agent" ? (
 						<AgentView tab={tab} />
 					) : view === "changes" || view === "turn" ? (

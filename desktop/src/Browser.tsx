@@ -13,10 +13,10 @@ import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
 import { EmptyView } from "./ui.tsx";
-import { Hint } from "@/components/hint";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
-import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 type Op = Record<string, unknown> & { do: string };
 
@@ -167,7 +167,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 		<div className="browser flex min-h-0 flex-1 flex-col overflow-hidden">
 			{open && state.tabs.length ? (
 				<div className="browser-tabs flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1">
-					<ScrollFadeArea axis="x" bar={false} className="min-w-0 flex-initial">
+					<ScrollArea className="flex min-h-0 min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 						<Tabs value={state.current} onValueChange={(i) => i !== state.current && act({ do: "tab", index: i as number })}>
 							<TabsList variant="line">
 					{state.tabs.map((t, i) => (
@@ -181,15 +181,27 @@ export function BrowserView({ tab }: { tab: Tab }) {
 					))}
 							</TabsList>
 						</Tabs>
-					</ScrollFadeArea>
-					<Hint label="A new tab"><Button variant="ghost" size="icon-xs" onClick={() => (act({ do: "newtab" }), line.current?.focus())}><PlusIcon /></Button></Hint>
+					</ScrollArea>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />}><PlusIcon /></TooltipTrigger>
+						<TooltipContent>A new tab</TooltipContent>
+					</Tooltip>
 				</div>
 			) : null}
 			<div className="browser-bar flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
 				<ButtonGroup>
-					<Hint label="Back"><Button variant="ghost" size="icon-xs" disabled={!open} onClick={() => act({ do: "back" })}><ChevronLeftIcon /></Button></Hint>
-					<Hint label="Forward"><Button variant="ghost" size="icon-xs" disabled={!open} onClick={() => act({ do: "forward" })}><ChevronRightIcon /></Button></Hint>
-					<Hint label="Load the page again"><Button variant="ghost" size="icon-xs" disabled={!open} onClick={() => act({ do: "reload" })}><RotateCwIcon /></Button></Hint>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Back" disabled={!open} onClick={() => act({ do: "back" })} />}><ChevronLeftIcon /></TooltipTrigger>
+						<TooltipContent>Back</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Forward" disabled={!open} onClick={() => act({ do: "forward" })} />}><ChevronRightIcon /></TooltipTrigger>
+						<TooltipContent>Forward</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })} />}><RotateCwIcon /></TooltipTrigger>
+						<TooltipContent>Load the page again</TooltipContent>
+					</Tooltip>
 				</ButtonGroup>
 				<InputGroup className="ml-1 min-w-0 flex-1">
 					<InputGroupInput
@@ -210,7 +222,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 				</InputGroup>
 			</div>
 			{open ? (
-				<ScrollFadeArea className="browser-page flex-1 bg-press" viewportRef={room}>
+				<ScrollArea ref={room} className="browser-page flex min-h-0 flex-1 flex-col bg-press *:data-[slot=scroll-area-viewport]:scroll-fade">
 					{/* The page keeps its shape: as wide as the panel, and scrolled down to when it is taller than the room. */}
 					<canvas
 						ref={canvas}
@@ -247,7 +259,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						}}
 					/>
 					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Spinner /></div>}
-				</ScrollFadeArea>
+				</ScrollArea>
 			) : (
 				<EmptyView icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
 					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}

@@ -5,8 +5,6 @@
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
 import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useRef, useState } from "react";
-import { Hint } from "@/components/hint";
-import { ScrollFadeArea } from "@/components/scroll-fade-area";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -24,7 +22,9 @@ import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
 import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toggle } from "@/components/ui/toggle";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
@@ -80,9 +80,9 @@ function Thought({ text, title, description, live = false }: { text: string; tit
 		<TraceCollapsible open={open ?? live} onOpenChange={setOpen} data-part="thought">
 			<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
 			<TraceCollapsibleContent>
-				<ScrollFadeArea className="max-h-80">
+				<ScrollArea className="flex max-h-80 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 					<div className="whitespace-pre-wrap select-text">{shown}</div>
-				</ScrollFadeArea>
+				</ScrollArea>
 			</TraceCollapsibleContent>
 		</TraceCollapsible>
 	);
@@ -341,7 +341,12 @@ function ApprovalCard({ item }: { item: Extract<Item, { t: "approval" }> }) {
 					<ItemFooter className="flex-wrap justify-start">
 						{choices.map((c, i) => {
 							const answer = <Button key={i} size="sm" variant={i === 0 ? "default" : "outline"} onClick={() => void store.decide(req.id, true, false, { answer: c })}>{c}</Button>;
-							return i === 0 ? <Hint key={i} label="recommended" describes>{answer}</Hint> : answer;
+							return i === 0 ? (
+								<Tooltip key={i}>
+									<TooltipTrigger render={answer} />
+									<TooltipContent>recommended</TooltipContent>
+								</Tooltip>
+							) : answer;
 						})}
 					</ItemFooter>
 				) : null}
@@ -466,9 +471,13 @@ function Checkpoint({ tab }: { tab: Tab }) {
 		<Marker variant="separator">
 			<MarkerContent className="inline-flex items-center gap-2">
 				before your last message
-				<Hint label="Its files are restored, the conversation forgets it, its text returns to the input" keys="⇧⌘Z" describes>
-					<Button size="xs" variant="outline" onClick={() => void store.undo(tab, false)}>Take back</Button>
-				</Hint>
+				<Tooltip>
+					<TooltipTrigger render={<Button size="xs" variant="outline" onClick={() => void store.undo(tab, false)} />}>Take back</TooltipTrigger>
+					<TooltipContent>
+						Its files are restored, the conversation forgets it, its text returns to the input
+						<Kbd>⇧⌘Z</Kbd>
+					</TooltipContent>
+				</Tooltip>
 			</MarkerContent>
 		</Marker>
 	);
@@ -511,10 +520,10 @@ function Welcome({ tab }: { tab: Tab }) {
 			</EmptyHeader>
 			<EmptyContent>
 				<div className="flex flex-wrap justify-center gap-1.5">
-					<Hint label="The model it runs on" describes><Badge variant="outline"><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></Badge></Hint>
-					<Hint label={mode?.about ?? "How much it asks and how far it reaches"} describes><Badge variant="outline"><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</Badge></Hint>
-					{info?.main ? <Hint label="It creates and changes the other agents and pine's settings when you ask it to" describes><Badge variant="outline">administers pine</Badge></Hint> : null}
-					{info?.delegates.length ? <Hint label="Agents it can hand work to" describes><Badge variant="outline">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></Badge></Hint> : null}
+					<Tooltip><TooltipTrigger render={<Badge variant="outline" />}><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></TooltipTrigger><TooltipContent>The model it runs on</TooltipContent></Tooltip>
+					<Tooltip><TooltipTrigger render={<Badge variant="outline" />}><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</TooltipTrigger><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></Tooltip>
+					{info?.main ? <Tooltip><TooltipTrigger render={<Badge variant="outline" />}>administers pine</TooltipTrigger><TooltipContent>It creates and changes the other agents and pine's settings when you ask it to</TooltipContent></Tooltip> : null}
+					{info?.delegates.length ? <Tooltip><TooltipTrigger render={<Badge variant="outline" />}>hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></TooltipTrigger><TooltipContent>Agents it can hand work to</TooltipContent></Tooltip> : null}
 					{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 				</div>
 				{info?.modelProblem ? (
@@ -603,9 +612,18 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 			/>
 			<InputGroupAddon align="inline-end">
 				{query ? <InputGroupText>{count ? `${at + 1} of ${count}` : "nothing"}</InputGroupText> : null}
-				<Hint label="Earlier" keys="↩"><InputGroupButton size="icon-xs" onClick={() => step(-1)}><ArrowUpIcon /></InputGroupButton></Hint>
-				<Hint label="Later" keys="⇧↩"><InputGroupButton size="icon-xs" onClick={() => step(1)}><ChevronDownIcon /></InputGroupButton></Hint>
-				<Hint label="Close" keys="esc"><InputGroupButton size="icon-xs" onClick={close}><XIcon /></InputGroupButton></Hint>
+				<Tooltip>
+					<TooltipTrigger render={<InputGroupButton size="icon-xs" onClick={() => step(-1)} aria-label="Earlier" />}><ArrowUpIcon /></TooltipTrigger>
+					<TooltipContent>Earlier<Kbd>↩</Kbd></TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger render={<InputGroupButton size="icon-xs" onClick={() => step(1)} aria-label="Later" />}><ChevronDownIcon /></TooltipTrigger>
+					<TooltipContent>Later<Kbd>⇧↩</Kbd></TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger render={<InputGroupButton size="icon-xs" onClick={close} aria-label="Close" />}><XIcon /></TooltipTrigger>
+					<TooltipContent>Close<Kbd>esc</Kbd></TooltipContent>
+				</Tooltip>
 			</InputGroupAddon>
 		</InputGroup>
 	);
@@ -701,11 +719,21 @@ function ConvHead({ tab }: { tab: Tab }) {
 					</BreadcrumbItem>
 				</BreadcrumbList>
 			</Breadcrumb>
-			{chat && tab.folder ? <Hint label={`Works in ${tab.folder}`} describes><Button variant="ghost" size="xs" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></Button></Hint> : null}
+			{chat && tab.folder ? (
+				<Tooltip>
+					<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)} />}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></TooltipTrigger>
+					<TooltipContent>Works in {tab.folder}</TooltipContent>
+				</Tooltip>
+			) : null}
 			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-faint" /> : null}
 			<span className="min-w-0 flex-1" />
 			{tab.context !== undefined ? <ContextUsage tab={tab} percent={tab.context} /> : null}
-			{chat ? <Hint label="The agent and its workspace: what it has, files, changes, output" keys="⌥⌘B"><Toggle size="sm" pressed={store.code} onPressedChange={() => void store.command("code")}><PanelRightIcon /></Toggle></Hint> : null}
+			{chat ? (
+				<Tooltip>
+					<TooltipTrigger render={<Toggle size="sm" pressed={store.code} onPressedChange={() => void store.command("code")} aria-label="The agent and its workspace: what it has, files, changes, output" />}><PanelRightIcon /></TooltipTrigger>
+					<TooltipContent>The agent and its workspace: what it has, files, changes, output<Kbd>⌥⌘B</Kbd></TooltipContent>
+				</Tooltip>
+			) : null}
 		</div>
 	);
 }

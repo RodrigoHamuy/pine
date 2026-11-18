@@ -4,14 +4,14 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
-import { Hint } from "@/components/hint";
-import { Log } from "@/components/log";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { MessageScroller, MessageScrollerContent, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Printed } from "@/components/printed";
+import { useEffect, useState } from "react";
 import { api, type PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { short } from "./text.ts";
 import { EmptyView } from "./ui.tsx";
-import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 /** "agent/#" fits every topic under agent; "+" fits one level; a word without either is looked for anywhere. */
 function fits(pattern: string, e: PineEvent): boolean {
@@ -33,22 +33,8 @@ export function Events({ tab }: { tab: Tab }) {
 	const [open, setOpen] = useState<number>();
 	const [paused, setPaused] = useState(false);
 	const [frozen, setFrozen] = useState<PineEvent[]>([]);
-	const scroller = useRef<HTMLDivElement>(null);
-	const stick = useRef(true);
 	const source = paused ? frozen : tab.log;
 	const shown = source.filter((e) => fits(filter, e)).slice(-600);
-	useLayoutEffect(() => {
-		const el = scroller.current;
-		if (el && stick.current && open === undefined) el.scrollTop = el.scrollHeight;
-	});
-	// The log follows its end while it is scrolled to there. (The viewport's scroll does not reach React's onScroll on the Root.)
-	useEffect(() => {
-		const el = scroller.current;
-		if (!el) return;
-		const follow = () => (stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60);
-		el.addEventListener("scroll", follow);
-		return () => el.removeEventListener("scroll", follow);
-	}, []);
 	useEffect(() => {
 		tab.logFilter = filter;
 	}, [filter, tab]);
@@ -80,10 +66,16 @@ export function Events({ tab }: { tab: Tab }) {
 				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
 				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>
-				<Hint label="Clear the view"><Button variant="ghost" size="icon-xs" onClick={() => ((tab.log = []), tab.touch())}><Trash2Icon /></Button></Hint>
+				<Tooltip>
+					<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Clear the view" onClick={() => ((tab.log = []), tab.touch())} />}><Trash2Icon /></TooltipTrigger>
+					<TooltipContent>Clear the view</TooltipContent>
+				</Tooltip>
 			</div>
-			<ScrollFadeArea axis="both" bar={false} className="events-list flex-1 cursor-auto font-mono text-xs select-text" viewportRef={scroller}>
-				<div className="flex min-h-full flex-col py-1.5">
+			{/* The log follows its end while it is scrolled to there, and holds still while a line is open. */}
+			<MessageScrollerProvider autoScroll={open === undefined} defaultScrollPosition="end">
+				<MessageScroller className="events-list flex-1 cursor-auto font-mono text-xs select-text">
+					<MessageScrollerViewport aria-label="Events">
+						<MessageScrollerContent className="gap-0 py-1.5">
 				{shown.length ? (
 					shown.map((e, i) => (
 						<Collapsible key={`${e.id}:${e.ts}:${i}`} open={open === i} onOpenChange={(now) => setOpen(now ? i : undefined)}>
@@ -94,15 +86,17 @@ export function Events({ tab }: { tab: Tab }) {
 								<span className="truncate text-muted-foreground">{short(JSON.stringify(e.payload ?? null), 220)}</span>
 							</CollapsibleTrigger>
 							<CollapsibleContent>
-								<Log className="mx-4 mb-1.5 ml-20">{`#${e.id} · from ${e.source}\n${JSON.stringify(e.payload ?? null, null, 2)}`}</Log>
+								<Printed sm text={`#${e.id} · from ${e.source}\n${JSON.stringify(e.payload ?? null, null, 2)}`} className="mr-4 mb-1.5 ml-20" />
 							</CollapsibleContent>
 						</Collapsible>
 					))
 				) : (
 					<EmptyView icon={AudioLinesIcon} title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</EmptyView>
 				)}
-				</div>
-			</ScrollFadeArea>
+						</MessageScrollerContent>
+					</MessageScrollerViewport>
+				</MessageScroller>
+			</MessageScrollerProvider>
 		</div>
 	);
 }
