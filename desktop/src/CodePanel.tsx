@@ -31,9 +31,8 @@ import { Printed } from "@/components/printed";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
-import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
-import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
+import { type CodeView, mediaKind, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { LISTBOX, onPick, rowClass, TREE_ITEM } from "./lists.tsx";
@@ -550,11 +549,8 @@ function Running({ tab }: { tab: Tab }) {
 
 export const CODE_KEY = "pine.code.width";
 
-/** Tailwind's `lg`: below it a conversation and the panel beside it do not both fit, with the side bar as a column too. */
-const ROOM = "(min-width: 64rem)";
-
-/** What in the panel takes Escape for itself: the editor (its search), a field, the page in the browser. */
-const ESCAPE_KEEPERS = ".cm-editor, input, textarea, [contenteditable], [data-slot=browser] canvas";
+/** What in a sheet takes Escape for itself: the editor (its search), a field, the page in the browser. */
+export const ESCAPE_KEEPERS = ".cm-editor, input, textarea, [contenteditable], [data-slot=browser] canvas";
 
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
@@ -573,7 +569,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 				<div data-slot="code-panel" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
 					{/* A sheet as wide as a phone-wide window reaches under the window's buttons at the top left on a Mac. */}
 					<div className={cn("flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2", narrow && "max-sm:pl-window-buttons")}>
-						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
+						{/* Six tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
 						    for the line under the tab in front, which stock draws below the list. */}
 						<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 						<div className="pb-1.5">
@@ -583,7 +579,6 @@ export function CodePanel({ tab }: { tab: Tab }) {
 								<TabsTrigger value="files">Files</TabsTrigger>
 								<TabsTrigger value="changes">Changes</TabsTrigger>
 								<TabsTrigger value="turn">Last turn</TabsTrigger>
-								<TabsTrigger value="browser">Browser</TabsTrigger>
 								<TabsTrigger value="output">Output</TabsTrigger>
 								<TabsTrigger value="running">
 									Running
@@ -603,8 +598,6 @@ export function CodePanel({ tab }: { tab: Tab }) {
 						<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
 					) : view === "files" ? (
 						<Files tab={tab} file={state.file} setFile={setFile} />
-					) : view === "browser" ? (
-						<BrowserView tab={tab} />
 					) : view === "output" ? (
 						<Output tab={tab} />
 					) : (

@@ -138,6 +138,10 @@ function contextAt(body: any): number | undefined {
 /** The edge between the side bar and the rest of the window, and the one before the panel beside a conversation. */
 const SIDE_EDGE = "#sidebar-panel + [data-slot=resizable-handle]";
 const CODE_EDGE = "[data-slot=resizable-handle]:has(+ #code-panel)";
+/** The edge before the browser's aside, and the toggles of the panel and of the browser at the top right of the title bar. */
+const BROWSER_EDGE = "[data-slot=resizable-handle]:has(+ #browser-panel)";
+const CODE_TOGGLE = "header [data-toggle=code]";
+const BROWSER_TOGGLE = "header [data-toggle=browser]";
 
 test("starts a daemon of its own and shows the main agent", async () => {
 	await sees("[data-slot=empty] h1");
@@ -237,7 +241,7 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	await sees("[data-slot=sidebar-footer] >> text=Pine 9.9.9 is available");
 });
 
-test("the agent's browser is shown in the panel as a picture, and what is done in it goes back through the daemon", async () => {
+test("the agent's browser is shown in an aside of its own as a picture, and what is done in it goes back through the daemon", async () => {
 	// A stand-in for the door of the browser of main's own conversation: it says where it is in pine's data,
 	// as the real one does, hands out one picture and notes what it is asked.
 	const picture = Buffer.from(await app.evaluate(({ nativeImage }: any) => nativeImage.createFromBitmap(Buffer.alloc(400 * 300 * 4, 180), { width: 400, height: 300 }).toJPEG(70).toString("base64")), "base64");
@@ -262,10 +266,21 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 	};
 	await page.click("[data-slot=tab] >> nth=0");
 	const had = Boolean(await page.$("[data-slot=code-panel]"));
+	// A window wide enough for the conversation, the side panel and the browser side by side, at the widths they start with.
+	await page.setViewportSize({ width: 1800, height: 900 });
 	try {
-		await menu("code-browser");
+		// The side panel and the browser are toggled from the top right of the title bar, and both show at once.
+		if (!had) await page.click(CODE_TOGGLE);
+		await sees("#code-panel [data-slot=code-panel]");
+		assert.equal(await page.$("[data-slot=conversation-head] [data-slot=toggle]"), null, "the conversation's top line has no panel toggle");
+		assert.ok(!(await page.locator("[data-slot=code-panel] [role=tab]").allTextContents()).some((t) => /Browser/.test(t)), "the side panel has no Browser tab");
+		await page.click(BROWSER_TOGGLE);
 		// The page is a picture, drawn when it is whole; its address is text in the line above it.
-		await sees("[data-slot=browser] canvas[data-drawn]");
+		await sees("#browser-panel [data-slot=browser-aside] [data-slot=browser] canvas[data-drawn]");
+		await sees(`${CODE_TOGGLE}[aria-pressed=true]`);
+		await sees(`${BROWSER_TOGGLE}[aria-pressed=true]`);
+		const right = (sel: string) => page.$eval(sel, (el: Element) => el.getBoundingClientRect());
+		assert.ok((await right("#browser-panel")).left >= (await right("#code-panel")).right, "the browser aside lies to the right of the side panel");
 		// A row that scrolls sideways (the browser's tabs, the panel's, the conversations') is no taller than its room:
 		// stock's ScrollArea would show a vertical bar with nothing to scroll.
 		await sees("[data-slot=browser] [data-slot=scroll-area-viewport]:has([data-slot=tabs-list])");
@@ -336,10 +351,58 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		// Without a browser the view says so and draws nothing.
 		fs.rmSync(file);
 		await sees("[data-slot=browser] [data-slot=empty] >> text=No page is open");
+
+		// The aside is as wide as it is dragged, by the edge before it, and after a restart it is open and as wide as it was.
+		const asideWidth = () => page.$eval("#browser-panel", (el: Element) => Math.round(el.getBoundingClientRect().width));
+		const was = await asideWidth();
+		const edge = await page.$eval(BROWSER_EDGE, (el: Element) => el.getBoundingClientRect());
+		await page.mouse.move(edge.x + edge.width / 2, 300);
+		await page.mouse.down();
+		await page.mouse.move(edge.x + edge.width / 2 - 40, 300, { steps: 4 });
+		await page.mouse.up();
+		assert.equal(await asideWidth(), was + 40);
+		await page.reload();
+		await sees("#browser-panel [data-slot=browser-aside]");
+		assert.equal(await asideWidth(), was + 40);
+		// Its own close button, the menu's item and /browser all toggle it.
+		await page.click("[data-slot=browser-aside] button[aria-label='Close the browser']");
+		await page.waitForSelector("[data-slot=browser-aside]", { state: "detached" });
+		await sees(`${BROWSER_TOGGLE}[aria-pressed=false]`);
+		await menu("browser");
+		await sees("[data-slot=browser-aside]");
+		await menu("browser");
+		await page.waitForSelector("[data-slot=browser-aside]", { state: "detached" });
+		await page.fill("[data-slot=composer] textarea", "/browser");
+		await page.press("[data-slot=composer] textarea", "Enter");
+		await sees("[data-slot=browser-aside]");
+		await page.click(BROWSER_TOGGLE);
+		await page.waitForSelector("[data-slot=browser-aside]", { state: "detached" });
+		// The side panel shows no browser of its own any more.
+		await page.fill("[data-slot=composer] textarea", "/code browser");
+		await page.press("[data-slot=composer] textarea", "Enter");
+		await sees("[data-slot=toast] >> text=The panel shows: agent, files, changes, turn, output, running.");
+		// The agent puts its browser in front of the owner: the aside opens. (In a conversation of its own, so that main's stays as the tests after this one expect it.)
+		const tabs = await page.locator("[data-slot=tab]").count();
+		await menu("new");
+		await page.waitForFunction((n) => document.querySelectorAll("[data-slot=tab]").length > n, tabs);
+		await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "browser_show", args: {} }], text: "Have a look." }, { text: "There it is." }], "Show me the page. "));
+		await page.keyboard.press("Enter");
+		await sees("[data-slot=browser-aside]");
+		await sees("[data-slot=markdown] >> text=There it is.");
+		await menu("close");
+		await page.waitForFunction((n) => document.querySelectorAll("[data-slot=tab]").length === n, tabs);
+		// On a tab that is not a conversation, both toggles are there and cannot be pressed.
+		await menu("settings");
+		await sees(`${CODE_TOGGLE}[disabled]`);
+		await sees(`${BROWSER_TOGGLE}[disabled]`);
+		await menu("settings");
+		await sees(`${BROWSER_TOGGLE}:not([disabled])`);
 	} finally {
-		// (The panel as it was, for the tests that follow.)
+		// (The panels as they were, for the tests that follow.)
 		await menu("code-agent");
 		if (!had) await menu("code");
+		if (await page.$("[data-slot=browser-aside]")) await menu("browser");
+		await page.setViewportSize({ width: 1280, height: 820 });
 		fs.rmSync(file, { force: true });
 		door.close();
 	}
@@ -687,7 +750,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await sees("[data-slot=dialog-title] >> text=Which agent works in");
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
-	await page.click("[data-slot=conversation-head] button[aria-label*='workspace']");
+	await page.click(CODE_TOGGLE);
 	// The panel begins with the agent: who it is and what it runs on.
 	await sees("[data-slot=code-panel] [data-slot=item-title] >> text=main");
 	assert.match(await page.textContent("[data-slot=code-panel]"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
@@ -706,7 +769,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	const wide = Math.round(await page.$eval("[data-slot=code-panel]", (el: Element) => el.getBoundingClientRect().width));
 	await page.reload();
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
-	if (!(await page.$("[data-slot=code-panel]"))) await page.click("[data-slot=conversation-head] button[aria-label*='workspace']");
+	if (!(await page.$("[data-slot=code-panel]"))) await page.click(CODE_TOGGLE);
 	await sees("[data-slot=code-panel]");
 	assert.equal(Math.round(await page.$eval("[data-slot=code-panel]", (el: Element) => el.getBoundingClientRect().width)), wide);
 	// However narrow the panel is, the names of its views stay whole on one line.
@@ -754,7 +817,7 @@ const focused = () =>
 	});
 
 test("a file is opened from the panel's tree, its changes and its search with the keyboard alone", async () => {
-	if (!(await page.$("[data-slot=code-panel]"))) await page.click("[data-slot=conversation-head] button[aria-label*='workspace']");
+	if (!(await page.$("[data-slot=code-panel]"))) await page.click(CODE_TOGGLE);
 	// The test before left a file open in the editor.
 	if (await page.$("[data-slot=code-panel] .cm-editor")) await page.click("[data-slot=code-panel] button[aria-label='Back to the files']");
 	await page.locator("[data-slot=code-panel]").getByRole("tab", { name: "Files" }).click();
@@ -1101,7 +1164,7 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.match((await page.locator("[data-slot=sidebar-menu-item]:has([data-slot=agent-label])", { has: page.locator("[data-slot=agent-label] > :first-child", { hasText: /^test$/ }) }).textContent()) ?? "", /Made outside the app/);
 	// Beside a conversation, the panel's Agent view says what the agent has been given: here what was set up for all agents above.
 	await page.click("[data-slot=tab] >> nth=0");
-	if (!(await page.$("[data-slot=code-panel]"))) await page.click("[data-slot=conversation-head] button[aria-label*='workspace']");
+	if (!(await page.$("[data-slot=code-panel]"))) await page.click(CODE_TOGGLE);
 	await page.locator("[data-slot=code-panel]").getByRole("tab", { name: "Agent" }).click();
 	await sees("[data-slot=code-panel] [data-slot=item-title] >> text=invoices");
 	await sees("[data-slot=code-panel] [data-slot=item-title] >> text=morning");
@@ -1501,7 +1564,7 @@ test("the panel's Agent view scrolls up and down only, however narrow the panel 
 	// A memory with a line no space breaks, and a description as long: the view wraps them, it is never pushed sideways.
 	write(path.join(home, "agents", "main", "workspace", "MEMORY.md"), `# Memory\n\n${"x".repeat(240)}\n${"https://example.com/".repeat(12)}\n${"- a line to remember\n".repeat(60)}`);
 	await page.click("[data-slot=tab] >> nth=0");
-	if (!(await page.$("[data-slot=code-panel]"))) await page.click("[data-slot=conversation-head] button[aria-label*='workspace']");
+	if (!(await page.$("[data-slot=code-panel]"))) await page.click(CODE_TOGGLE);
 	await page.locator("[data-slot=code-panel]").getByRole("tab", { name: "Agent" }).click();
 	await sees("[data-slot=code-panel] [data-slot=scroll-area] >> text=What it remembers");
 	const width = () => page.$eval("[data-slot=code-panel]", (el: Element) => el.getBoundingClientRect().width);
@@ -1576,6 +1639,24 @@ test("a phone-wide window lays the side bar and the panel over the conversation,
 		assert.equal(await page.locator("[data-slot=resizable-handle]:has(+ #code-panel)").count(), 0);
 		await page.keyboard.press("Escape");
 		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+		// The browser's aside is a sheet the same way, and of the two only the one opened last lies over the conversation;
+		// the other one's icon says it is open behind.
+		await menu("code-agent");
+		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
+		await menu("browser");
+		await sees("[data-slot=sheet-content] [data-slot=browser-aside]");
+		assert.equal(await page.locator("[data-slot=code-panel]").count(), 0);
+		assert.equal(await page.locator("[data-slot=resizable-handle]:has(+ #browser-panel)").count(), 0);
+		await sees(`${CODE_TOGGLE}[data-behind]`);
+		// Asking for the one behind brings it to the front; closing that one shows the other again.
+		await menu("code");
+		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
+		assert.equal(await page.locator("[data-slot=browser-aside]").count(), 0);
+		await sees(`${BROWSER_TOGGLE}[data-behind]`);
+		await menu("code");
+		await sees("[data-slot=sheet-content] [data-slot=browser-aside]");
+		await menu("browser");
+		await page.waitForSelector("[data-slot=browser-aside]", { state: "detached" });
 		// Between a phone and a laptop: the side bar has room for its column, the panel beside the conversation does not.
 		await size(900, 760);
 		await sees("#sidebar-panel [data-slot=sidebar]");

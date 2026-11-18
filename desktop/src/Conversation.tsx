@@ -3,7 +3,7 @@
 // The parts are shadcn's chat components, composed the way its AI Elements pages show: the thread
 // is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
-import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Sound } from "@/components/sound";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -765,12 +765,6 @@ function ConvHead({ tab }: { tab: Tab }) {
 			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-faint" /> : null}
 			<span className="min-w-0 flex-1" />
 			{tab.context !== undefined ? <ContextUsage tab={tab} percent={tab.context} /> : null}
-			{chat ? (
-				<Tooltip>
-					<TooltipTrigger render={<Toggle size="sm" pressed={store.code} onPressedChange={() => void store.command("code")} aria-label="The agent and its workspace: what it has, files, changes, output" />}><PanelRightIcon /></TooltipTrigger>
-					<TooltipContent>The agent and its workspace: what it has, files, changes, output<Kbd>⌥⌘B</Kbd></TooltipContent>
-				</Tooltip>
-			) : null}
 		</div>
 	);
 }

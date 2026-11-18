@@ -1,16 +1,21 @@
-// The browser of a conversation, in the panel beside it. It is the browser the agent works in:
+// The browser of a conversation, in an aside of its own at the right of the window. It is the browser the agent works in:
 // another process, behind pine's guard, without a window. What is shown here is a picture of its
 // page that the daemon hands over again and again, and what is done in the picture (a click, the
 // wheel, keys, an address) goes back to it through the daemon. Nothing of a web page is loaded
 // into this window: the picture is drawn, and its address and title are text.
-import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, PlusIcon, RotateCwIcon, ShieldIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, GlobeIcon, PlusIcon, RotateCwIcon, ShieldIcon, XIcon } from "lucide-react";
+import { useMediaQuery } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { ESCAPE_KEEPERS } from "./CodePanel.tsx";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
-import { store, type Tab, useModel } from "./model.ts";
+import { ROOM, store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -306,5 +311,51 @@ export function BrowserView({ tab }: { tab: Tab }) {
 			)}
 			{open ? <div className="flex flex-none items-center gap-1.5 border-t border-line-soft px-2.5 py-1 text-xs text-faint"><ShieldIcon size={11} /><span className="truncate">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
 		</div>
+	);
+}
+
+export const ASIDE_KEY = "pine.aside.width";
+
+/**
+ * The browser's aside, at the right of the window after the side panel: a bar with its name and
+ * its close button, and the browser under it. Where the window has no room for columns it is a
+ * sheet over the conversation, like the side panel, and putting the sheet away closes it.
+ */
+export function BrowserAside({ tab }: { tab: Tab }) {
+	const [width] = useState(() => Number(localStorage.getItem(ASIDE_KEY)) || 560);
+	const narrow = !useMediaQuery(ROOM);
+	const aside = (
+		<div data-slot="browser-aside" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
+			{/* A sheet as wide as a phone-wide window reaches under the window's buttons at the top left on a Mac. */}
+			<div className={cn("flex h-10 flex-none items-center gap-1.5 border-b border-line-soft pr-2 pl-3 text-sm font-medium", narrow && "max-sm:pl-window-buttons")}>
+				<GlobeIcon className="size-3.5 text-muted-foreground" />
+				<span className="min-w-0 flex-1 truncate">Browser</span>
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("browser")} aria-label="Close the browser"><XIcon /></Button>} /><TooltipContent>Close the browser<Kbd>⇧⌘B</Kbd></TooltipContent></Tooltip>
+			</div>
+			<BrowserView tab={tab} />
+		</div>
+	);
+	if (narrow)
+		return (
+			<Sheet open onOpenChange={(open, details) => {
+				if (open) return;
+				// An Escape the address line or the page took for itself is theirs (CodePanel.tsx says the same of its sheet).
+				if (details.reason === "escape-key" && details.event.target instanceof Element && details.event.target.closest(ESCAPE_KEEPERS)) return details.cancel();
+				void store.command("browser");
+			}}>
+				{/* Over the title bar's drag region, which Electron honours whatever is drawn on top. */}
+				<SheetContent side="right" showCloseButton={false} className="app-no-drag gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+					<SheetTitle className="sr-only">Browser</SheetTitle>
+					{aside}
+				</SheetContent>
+			</Sheet>
+		);
+	return (
+		<>
+			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the browser wider or narrower" />
+			<ResizablePanel id="browser-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
+				{aside}
+			</ResizablePanel>
+		</>
 	);
 }

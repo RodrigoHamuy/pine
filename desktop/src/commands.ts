@@ -65,11 +65,12 @@ export const COMMANDS: Command[] = [
 		run: (args) => {
 			const word = args.trim().toLowerCase();
 			if (!word) return store.command("code");
-			if (word === "off") return void ((store.code = false), store.touch());
-			if (!["agent", "changes", "turn", "files", "browser", "output", "running"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, browser, output, running.");
+			if (word === "off") return void (store.close("code"), store.touch());
+			if (!["agent", "changes", "turn", "files", "output", "running"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, output, running.");
 			return store.command(`code-${word}`);
 		},
 	},
+	{ name: "browser", title: "Browser", about: "The agent's browser, in an aside at the right of the window", keys: "⇧⌘B", run: menu("browser") },
 	{ name: "goal", title: "Goal", about: "Keep the agent working until something is reached", hint: "[objective|pause|resume|clear]", chat: true, run: (args, tab) => (chat(tab) ? (args.trim() ? store.setGoal(tab!, args) : store.askGoal(tab!)) : undefined) },
 	{ name: "stop", title: "Stop", about: "Stop what the agent is doing", keys: "⌘.", run: (_a, tab) => (tab?.busy ? store.stop(tab) : store.flash("Nothing is running.")) },
 	{

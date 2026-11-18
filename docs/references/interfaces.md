@@ -13,7 +13,7 @@ Nothing in pine is special for this. It is three things pine has anyway, put tog
 |---|---|---|
 | The page and its server | Files in the agent's workspace, and a small program that serves them and keeps running | "Commands in the background" in [coding.md](coding.md) |
 | The way back | The server offers what the page reports as an event stream. A `stream` event source listens to it and wakes the agent | `stream` in [source-types.md](source-types.md) |
-| The window | The agent's browser. In the Pine app it is in the panel beside the conversation; elsewhere `browser_show` puts it on the screen | [mcp.md](mcp.md), [desktop.md](desktop.md) |
+| The window | The agent's browser. In the Pine app it is beside the conversation, at the right of the window; elsewhere `browser_show` puts it on the screen | [mcp.md](mcp.md), [desktop.md](desktop.md) |
 
 ## The steps
 
