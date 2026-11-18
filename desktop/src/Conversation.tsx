@@ -52,6 +52,9 @@ function StatusIcon({ status }: { status: RunStatus }) {
 	return status === "ok" || status === "done" ? <CheckIcon /> : <XIcon />;
 }
 
+/** How much of a thought that streams is drawn: far more than its box holds, in the narrowest column. */
+const LIVE_TAIL = 4000;
+
 /**
  * Thinking, as a line (Reasoning). It is open while the model thinks, showing the end of what it
  * thinks, and folds when it is done; once the owner opened or closed it, that choice stays. Its
@@ -69,14 +72,23 @@ function Thought({ text, title, description, live = false }: { text: string; tit
 		</TraceLine>
 	);
 	if (!text) return <div data-part="thought">{line}</div>;
-	const shown = live && text.length > 600 ? `…${text.slice(-600)}` : text;
 	return (
 		<TraceCollapsible open={open ?? live} onOpenChange={setOpen} data-part="thought">
 			<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
 			<TraceCollapsibleContent>
-				<ScrollArea className="flex max-h-80 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-					<div className="whitespace-pre-wrap select-text">{shown}</div>
-				</ScrollArea>
+				{live ? (
+					// While it streams, the end of the thought sits at the bottom of a box that only grows,
+					// up to its height, and cuts what is above. Its height must never shrink: the thread
+					// follows its end, so a line less here moves the whole conversation. A tail of the
+					// text is enough to fill the box at any width.
+					<div className="flex max-h-80 flex-col justify-end overflow-hidden">
+						<div className="whitespace-pre-wrap select-text">{text.slice(-LIVE_TAIL)}</div>
+					</div>
+				) : (
+					<ScrollArea className="flex max-h-80 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+						<div className="whitespace-pre-wrap select-text">{text}</div>
+					</ScrollArea>
+				)}
 			</TraceCollapsibleContent>
 		</TraceCollapsible>
 	);
