@@ -121,9 +121,11 @@ desktop/            the desktop app (Electron; a package of its own, not part of
                     page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
                     patterns for the conversation and the input, Streamdown for answers, lucide icons;
                     ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
-                    The stock components are src/components/ui and nothing else: AI Elements' own registry
-                    serves code written on Radix and has none on Base UI, so its patterns are followed on
-                    core components, and that registry is never added. A stock component is never edited: add and
+                    The stock components are src/components/ui and nothing else, all from shadcn's own registry in the
+                    style components.json names, the chat components included (`npx shadcn add message`, not
+                    `@ai-elements/message`). AI Elements means shadcn's pages of patterns (ui.shadcn.com/docs/ai-elements),
+                    which are code to compose, not a package. Vercel's earlier `@ai-elements` registry, which shadcn's
+                    pages replace, serves one version written on Radix for every style: it is never added. A stock component is never edited: add and
                     update them with the shadcn CLI and components.json; a variant or composition lives elsewhere under
                     src/components/ and wraps the stock one, and only for what stock cannot do. No hand-written stylesheet:
                     utilities on Tailwind's default scale, tokens and one root font-size in src/index.css.
