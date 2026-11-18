@@ -17,12 +17,33 @@ export interface BrowserState {
 	/** The browser is a window on the owner's screen as well. */
 	window: boolean;
 	error?: string;
+	/** The addresses the agent opened in this conversation, newest first: what a browser with no page open offers again. The daemon's own note, not the door's. */
+	visited?: string[];
 }
 
 const CLOSED: BrowserState = { open: false, tabs: [], current: 0, window: false };
 
 /** A line of a page's own (a title, an address) as the daemon hands it on: text, one line, bounded. */
 const line = (v: unknown, max: number) => (typeof v === "string" ? v.replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").slice(0, max) : "");
+
+/** How many addresses a conversation keeps of those its agent opened. */
+export const VISITED = 12;
+
+/**
+ * An address the agent opened, as it is kept and offered to the owner again: one of the web,
+ * written out with its scheme, one bounded line, and without a name and password in it.
+ */
+export function keptAddress(given: unknown): string | undefined {
+	const text = typeof given === "string" ? given.trim() : "";
+	if (!text || text.length > 2000 || !/^https?:\/\//i.test(text)) return undefined;
+	try {
+		const url = new URL(text);
+		url.username = url.password = "";
+		return line(url.href, 2000) || undefined;
+	} catch {
+		return undefined;
+	}
+}
 
 /** What the door answered, taken for nothing but what it has to be. */
 function stateOf(raw: any): BrowserState {

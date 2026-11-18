@@ -2272,6 +2272,20 @@ select.input {
 	outline: none;
 	cursor: default;
 }
+/* What the agent opened before, under the words of the empty browser: one address a line, cut at the end. */
+.browser-visited {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 3px;
+	margin-top: 14px;
+	max-width: 100%;
+}
+.browser-visited .open-link {
+	max-width: 100%;
+	font-family: var(--mono);
+	font-size: 12px;
+}
 .browser-page canvas.blank {
 	visibility: hidden;
 }

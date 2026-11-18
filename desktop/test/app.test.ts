@@ -11,6 +11,7 @@ import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
 import path from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
 import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
@@ -294,6 +295,19 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		await sees(".toast >> text=the browser was refused that address");
 		// The picture came through the app's own road for pictures, and the page asked the web for nothing.
 		assert.equal(await page.evaluate(() => performance.getEntriesByType("resource").filter((r) => /^https?:/.test(r.name)).length), 0);
+
+		// No page is open: what the agent opened here before is listed, as text, and a click opens it again.
+		Object.assign(where, { open: false, tabs: [] });
+		const db = new DatabaseSync(path.join(home, "data", "pine.db"));
+		db.exec("PRAGMA busy_timeout = 5000");
+		db.prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run("visited:main:main", JSON.stringify(["https://shop.example/<img src=x onerror=window.hacked=4>", "http://127.0.0.1:4173/"]));
+		db.close();
+		await sees(".browser-visited .open-link >> nth=1");
+		assert.deepEqual(await page.$$eval(".browser-visited .open-link", (els: Element[]) => els.map((e) => e.textContent)), ["shop.example/<img src=x onerror=window.hacked=4>", "127.0.0.1:4173"]);
+		assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
+		await shot("05-browser-empty");
+		await page.click(".browser-visited .open-link >> nth=1");
+		await waitFor("the address the agent had opened arrived", () => asked.some((a) => a.at === "/open" && a.body.url === "http://127.0.0.1:4173/"));
 
 		// Without a browser the view says so and draws nothing.
 		fs.rmSync(file);

@@ -416,6 +416,13 @@ These are invariants. A change that breaks one needs a test that shows why it is
    and never give the door a road that does more than look and act in the page. An address on
    this computer that the owner types there is allowed for the conversation by it
    (`browserOpen`: the control API is the owner); pine's control port is refused there too.
+   Where that conversation's browser is not up, `browserOpen` brings its session up as a
+   message of the owner's would, without a turn (`wakeBrowser`): only for a conversation there
+   is, only as the owner's, and nothing else of the view starts anything. The addresses an
+   agent opened are kept for that view (`visit`, kv `visited:`): only a navigation that ended
+   well in an owner's conversation, so never one that was refused, as an address of the web
+   without a name and password (`keptAddress`), and handed on as lines of text that only the
+   owner's click opens.
    After the owner's hand was in the browser, the agent's next call is checked against what it
    last saw, as with a window (`shared`, `guarded`). While such a UI says it is there
    (`browserEmbedded`), the gate tells the browser's server before `browser_show`, which then

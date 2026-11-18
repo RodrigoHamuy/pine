@@ -463,6 +463,8 @@ export interface BrowserState {
 	window: boolean;
 	/** Why the last thing asked for was not done. */
 	error?: string;
+	/** The addresses the agent opened in this conversation, newest first. */
+	visited?: string[];
 }
 
 export const media = {

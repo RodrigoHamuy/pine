@@ -38,7 +38,7 @@ import { describeOptions } from "./sources.ts";
 import type { Scheduler } from "./timers.ts";
 import { pineTools } from "./tools.ts";
 import { type Program, Programs } from "./programs.ts";
-import { type BrowserState, BrowserViews } from "./browser-view.ts";
+import { type BrowserState, BrowserViews, keptAddress, VISITED } from "./browser-view.ts";
 import { Goals } from "./goals.ts";
 import { BACKGROUND_HELP, BACKGROUND_NOT_HERE, BACKGROUND_PARAM, backgroundRefused, endedNotice, startedText, tailOf, TIMEOUT_HINT } from "./background.ts";
 import { Snapshots } from "./snapshots.ts";
@@ -459,8 +459,56 @@ export class AgentManager {
 		this.embedUntil = Date.now() + 90_000;
 	}
 
-	browserState(agentId: string, session: string): Promise<BrowserState> {
-		return this.views.state(this.browserOf(agentId, session));
+	async browserState(agentId: string, session: string): Promise<BrowserState> {
+		const perm = this.browserOf(agentId, session);
+		return this.withVisited(perm, await this.views.state(perm));
+	}
+
+	/** The addresses the agent opened in a conversation, newest first (kv `visited:`). */
+	private visitedOf(perm: string): string[] {
+		const kept = this.kv.get<unknown>(`visited:${perm}`);
+		return Array.isArray(kept) ? kept.filter((u): u is string => typeof u === "string").slice(0, VISITED) : [];
+	}
+
+	/** The agent opened an address in its browser and the page came: kept, so that the owner can open it again. */
+	private visit(perm: string, given: unknown): void {
+		const url = keptAddress(given);
+		if (url) this.kv.set(`visited:${perm}`, [url, ...this.visitedOf(perm).filter((u) => u !== url)].slice(0, VISITED));
+	}
+
+	private withVisited(perm: string, state: BrowserState): BrowserState {
+		const visited = this.visitedOf(perm);
+		return visited.length ? { ...state, visited } : state;
+	}
+
+	/** The owner is using a conversation's browser: its session is not idle, and is not closed under their hand. */
+	private stir(perm: string): void {
+		const live = this.lives.get(perm);
+		if (live && !live.current) this.armIdle(live);
+	}
+
+	/**
+	 * The owner opens an address and the conversation's browser is not up: its session never began
+	 * in this run of pine, or was closed after its idle time. Bring the session up as a message of
+	 * the owner's would, without a turn, and wait for the browser's door. Only for a conversation
+	 * there is: this makes none. The control API alone comes here.
+	 */
+	private async wakeBrowser(agentId: string, session: string): Promise<boolean> {
+		const agent = this.cfg.agents[agentId];
+		const key = sessionKey(session);
+		const perm = `${agentId}:${key}`;
+		if (key !== "main" && !fs.existsSync(path.join(agent.dir, "sessions", key))) return false;
+		// An agent without the bundled browser has none to start, and its session is not started to find that out.
+		if (!Object.values(effectiveMcp(this.cfg, agent, key)).some((server) => server.pine === "browser")) return false;
+		try {
+			const live = await this.live(agent, { id: 0, agent: agentId, session: key, kind: "notify", meta: { trust: "owner" } } as Task);
+			if (!live.current) this.armIdle(live);
+		} catch (e) {
+			this.log.warn(`the browser of ${perm} could not be started for its owner`, errText(e));
+			return false;
+		}
+		for (let i = 0; i < 80 && !this.views.has(perm); i++) await sleep(100);
+		return this.views.has(perm);
 	}
 
 	/** The page as a picture (JPEG). Nothing while the conversation has no browser or no page open. */
@@ -469,8 +517,10 @@ export class AgentManager {
 	}
 
 	/** What the owner did in the picture: clicks, keys, the wheel. Checked by the browser's server, piece by piece. */
-	browserInput(agentId: string, session: string, ops: unknown): Promise<BrowserState> {
-		return this.views.input(this.browserOf(agentId, session), ops);
+	async browserInput(agentId: string, session: string, ops: unknown): Promise<BrowserState> {
+		const perm = this.browserOf(agentId, session);
+		this.stir(perm);
+		return this.withVisited(perm, await this.views.input(perm, ops));
 	}
 
 	/**
@@ -480,13 +530,12 @@ export class AgentManager {
 	 */
 	async browserOpen(agentId: string, session: string, url: string): Promise<BrowserState> {
 		const perm = this.browserOf(agentId, session);
-		if (!this.views.has(perm)) return { open: false, tabs: [], current: 0, window: false, error: "This conversation has no browser running. It starts when the agent first uses it." };
 		const local = localTarget(url);
-		if (local) {
-			if (this.cfg.http && local.port === this.cfg.http.port) return { ...(await this.views.state(perm)), error: `${local.key} is pine's own control port. It stays closed to the browser.` };
-			this.allowLocal(perm, local.key);
-		}
-		return this.views.open(perm, url);
+		if (local && this.cfg.http && local.port === this.cfg.http.port) return this.withVisited(perm, { ...(await this.views.state(perm)), error: `${local.key} is pine's own control port. It stays closed to the browser.` });
+		if (!this.views.has(perm) && !(await this.wakeBrowser(agentId, session))) return this.withVisited(perm, { open: false, tabs: [], current: 0, window: false, error: "This conversation has no browser. Its agent has to have the browser of the web tools, and the conversation a first message." });
+		if (local) this.allowLocal(perm, local.key);
+		this.stir(perm);
+		return this.withVisited(perm, await this.views.open(perm, url));
 	}
 
 	/** The programs a conversation's commands left running (a development server, a watcher). */
@@ -978,6 +1027,7 @@ export class AgentManager {
 			this.kv.set(`prefix:${agentId}:${key}`, null);
 			this.kv.set(`note:${agentId}:${key}`, null);
 			this.kv.set(`branch:${agentId}:${key}`, null);
+			this.kv.set(`visited:${agentId}:${key}`, null);
 			this.slots.forget(`${agentId}:${key}`);
 			this.goals.drop(agentId, key);
 			this.bypassAnyway.delete(`${agentId}:${key}`);
@@ -1490,6 +1540,7 @@ export class AgentManager {
 			this.kv.set(`prefix:${agentId}:${key}`, null);
 			this.kv.set(`note:${agentId}:${key}`, null);
 			this.kv.set(`branch:${agentId}:${key}`, null);
+			this.kv.set(`visited:${agentId}:${key}`, null);
 			this.slots.forget(`${agentId}:${key}`);
 			this.kv.set(`folder:${agentId}:${key}`, null);
 			this.goals.drop(agentId, key);
@@ -1613,7 +1664,7 @@ export class AgentManager {
 			const live = this.lives.get(`${agentId}:${a}${end}`);
 			if (live) await this.dispose(live);
 			if (fs.existsSync(path.join(root, `${a}${end}`))) fs.renameSync(path.join(root, `${a}${end}`), path.join(root, `${b}${end}`));
-			for (const mark of ["taint", "keep", "prefix", "note"]) {
+			for (const mark of ["taint", "keep", "prefix", "note", "visited"]) {
 				const had = this.kv.get(`${mark}:${agentId}:${a}${end}`);
 				this.kv.set(`${mark}:${agentId}:${a}${end}`, null);
 				if (had !== undefined && had !== null) this.kv.set(`${mark}:${agentId}:${b}${end}`, had);
@@ -1846,6 +1897,8 @@ export class AgentManager {
 			};
 			/** Calls of a routing tool that led to a call of the tool that was meant. */
 			const routed = new Set<string>();
+			/** The addresses of browser_navigate calls that have not ended, by call. */
+			const going = new Map<string, unknown>();
 			const unsubscribe = live.session.subscribe((e: any) => {
 				if (e.type === "turn_start") {
 					callAt = Date.now();
@@ -1901,12 +1954,17 @@ export class AgentManager {
 					flush();
 					if (String(e.toolCallId).includes("/")) routed.add(String(e.toolCallId).slice(0, String(e.toolCallId).lastIndexOf("/")));
 					stats.tools.push(e.toolName);
+					// Where the agent sends its browser, in the owner's conversation: kept once the page came (below).
+					if (live!.trust === "owner" && this.browserTool(agent, live!, String(e.toolName)) === "browser_navigate") going.set(String(e.toolCallId), e.args?.url);
 					this.bus.publish(`agent/${agent.id}/tool`, { ...ids, call: e.toolCallId, phase: "start", tool: e.toolName, subject: truncate(toolSubject(e.toolName, e.args), 300) }, live_);
 				} else if (e.type === "tool_execution_end") {
 					const out = (e.result?.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
 					// The agent put its browser on the owner's screen, or took it off: it is told so with the next message.
 					const shown = e.isError ? undefined : this.browserTool(agent, live!, String(e.toolName));
 					if (shown === "browser_show" || shown === "browser_hide") live!.window = shown === "browser_show";
+					// An address it opened is offered to the owner again where the browser has no page (GET /agents/<id>/browser).
+					if (shown === "browser_navigate" && going.has(String(e.toolCallId))) this.visit(live!.perm, going.get(String(e.toolCallId)));
+					going.delete(String(e.toolCallId));
 					const images = this.keepToolImages(task.id, String(e.toolCallId), e.result?.content);
 					this.bus.publish(`agent/${agent.id}/tool`, { ...ids, call: e.toolCallId, phase: "end", tool: e.toolName, ok: !e.isError, ms: e.durationMs, preview: truncate(out, 400), ...(images.length ? { images } : {}) }, live_);
 				}

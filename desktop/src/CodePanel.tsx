@@ -398,7 +398,7 @@ function Running({ tab }: { tab: Tab }) {
 						<span>· {plural(p.processes, "process", "processes")}</span>
 						{p.background ? <span>· in the background</span> : null}
 						{p.ports.map((port) => (
-							<button key={port} type="button" className="open-link" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</button>
+							<button key={port} type="button" className="open-link" title="Opens in the browser beside this conversation" onClick={() => void store.showInBrowser(tab, `http://localhost:${port}`)}>localhost:{port}</button>
 						))}
 					</div>
 					{p.output ? <div className="entry-result" style={{ marginLeft: 0 }}>{p.output}</div> : null}

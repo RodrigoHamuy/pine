@@ -298,6 +298,29 @@ export class Store extends Model {
 	}
 
 	/**
+	 * An address of the conversation's own (the port of a program it left running): opened in the
+	 * browser beside the conversation, which the daemon starts for it where it is not up. Where the
+	 * conversation has no browser at all, the address goes to the owner's own browser.
+	 */
+	async showInBrowser(tab: Tab, url: string): Promise<void> {
+		const before = this.codeView;
+		this.code = true;
+		this.codeView = "browser";
+		this.touch();
+		const state = await api.browserOpen(tab.agent, tab.session, url).catch(() => undefined);
+		if (state?.open) {
+			if (state.error) this.flash(state.error, "warn", 6000);
+			tab.codeTick++;
+			this.saveTabs();
+			return this.touch();
+		}
+		this.codeView = before;
+		this.flash("This conversation has no browser, so the address was opened in your own.", "muted", 6000);
+		this.touch();
+		void bridge.open(url);
+	}
+
+	/**
 	 * Remove an agent, after asking how: with everything it has, or with its folder kept. The
 	 * settings page and the side bar's menu both come here. Says whether it is gone.
 	 */

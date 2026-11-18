@@ -249,7 +249,7 @@ export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore },
 	unname(cfg, id);
 	// A worktree of one of its conversations stays in the owner's repository, which is not pine's to
 	// empty; `pine worktrees` (GET /worktrees) lists it as no conversation's.
-	for (const prefix of ["taint", "keep", "folder", "worktree", "todos", "turns", "undone", "prefix", "note", "branch"]) store.kv.forget(`${prefix}:${id}:`);
+	for (const prefix of ["taint", "keep", "folder", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited"]) store.kv.forget(`${prefix}:${id}:`);
 	// Which slot of a model server held one of its conversations (src/slots.ts).
 	const slots = store.kv.get<Record<string, Array<{ who?: string } | null | undefined>>>("slots");
 	if (slots) store.kv.set("slots", Object.fromEntries(Object.entries(slots).map(([server, held]) => [server, held.map((o) => (o && String(o.who).startsWith(`${id}:`) ? null : o))])));

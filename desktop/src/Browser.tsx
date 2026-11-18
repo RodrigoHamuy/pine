@@ -229,6 +229,15 @@ export function BrowserView({ tab }: { tab: Tab }) {
 			) : (
 				<Empty icon="eye" title={state ? "No page is open" : "Looking for the browser…"}>
 					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}
+					{state?.visited?.length ? (
+						<div className="browser-visited">
+							<div className="faint">Opened by the agent before</div>
+							{/* (An address is text an agent chose: drawn as text, whole in the tooltip, and opened only by this click.) */}
+							{state.visited.map((url) => (
+								<button key={url} type="button" className="open-link cut" title={url} disabled={busy} onClick={() => void go(url)}>{url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</button>
+							))}
+						</div>
+					) : null}
 				</Empty>
 			)}
 			{open ? <div className="browser-foot faint"><Icon name="shield" size={11} /><span className="cut">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}

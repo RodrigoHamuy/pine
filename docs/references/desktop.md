@@ -289,7 +289,7 @@ agent's workspace):
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
 | Browser | The browser the agent of this conversation works in, live, and yours to use too. See "The browser" below |
 | Output | The tool calls of the last messages, each with all it printed |
-| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop |
+| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the Browser view of the conversation, where the agent sees the same page; only where the conversation has no browser does it open in your own |
 
 While an agent keeps a list of steps, the open steps stand at the top of the panel.
 
@@ -317,7 +317,8 @@ one on your screen (`browser_show`); in the app it is in the panel, and no other
 | An address of your own | Opened like any other, through pine's guard. One on this computer or your network (`localhost:3000`) is allowed for this conversation by your typing it, as a yes to the agent's question would. pine's own control port stays closed |
 | When the agent wants you to look | It calls `browser_show`: the panel opens on the Browser view. While the app runs, that call opens no window on your screen |
 | What the agent knows | What you do there, it sees when it next looks at the page. When you took the browser to another page, the agent is told so before it acts, and does not act on a page it has not seen ([mcp.md](mcp.md), "Seeing the browser, and logging in yourself") |
-| No page | Until the agent opens one, or you type an address, there is nothing to show. A conversation whose agent has not worked yet since pine started has no browser running: send it a message first |
+| No page | Until the agent opens one, or you open an address, there is nothing to show. The browser of a conversation closes when the conversation has been idle for a while (`idleMs`, 15 minutes) and when pine restarts. Opening an address starts it again, without a turn of the agent's; its logins are kept |
+| Opened by the agent before | While no page is open, the view lists the last addresses the agent opened in this conversation, newest first, at most 12. A click opens one. Only a page that came is listed, and never an address the agent was refused. The list is the conversation's: it goes when the conversation is reset or removed |
 
 A page the agent made for you to use (a board, switches, a form) is shown here like any other,
 and what you press on it wakes the agent ([interfaces.md](interfaces.md)).
