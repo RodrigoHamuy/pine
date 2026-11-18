@@ -19,7 +19,7 @@ import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
 import { List, ListRow } from "./lists.tsx";
-import { Confirm, Dialog, Logo, Pulse } from "./ui.tsx";
+import { Confirm, Dialog, Logo, Notices, Pulse } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -671,7 +671,7 @@ export function App() {
 			<Asking />
 			{help ? <Help close={() => setHelp(false)} /> : null}
 			<Lightbox />
-			<div className="toasts">{s.toasts.map((t) => <div key={t.id} className={`toast ${t.tone}`}>{t.text}</div>)}</div>
+			<Notices />
 		</div>
 	);
 }

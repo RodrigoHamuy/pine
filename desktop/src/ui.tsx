@@ -1,11 +1,12 @@
 // The small parts of pine's own that everything else is built from, on shadcn's components: the
-// logo, the working dot, a labelled field, a choice, a dialog, a text that grows, an empty view.
+// logo, the working dot, a labelled field, a choice, a dialog, a text that grows, an empty view, where notices show.
 import type { LucideIcon } from "lucide-react";
 import { cloneElement, isValidElement, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Toaster } from "@/components/ui/sonner";
 
 /** pine's mark: the P of its wordmark (docs/images/logo-dark.svg), four blocks on a grid. */
 export function Logo({ size = 18 }: { size?: number }) {
@@ -35,6 +36,11 @@ export function Pulse({ size = 14 }: { size?: number }) {
 			<span ref={dot} style={{ width: d, height: d }} />
 		</span>
 	);
+}
+
+/** Where pine's passing notices (`store.flash`) show: at the bottom, up to four stacked, all in view. */
+export function Notices() {
+	return <Toaster position="bottom-center" visibleToasts={4} expand />;
 }
 
 /**

@@ -49,7 +49,7 @@ async function sees(selector: string, timeout = 20_000): Promise<void> {
 		await page.waitForSelector(selector, { timeout });
 	} catch {
 		await shot(`failed-${selector.replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}`);
-		const there = await page.evaluate(() => ({ text: (document.querySelector(".column, .set-in, .events-list, .gate") as HTMLElement | null)?.innerText?.slice(-1500), toasts: [...document.querySelectorAll(".toast")].map((t) => t.textContent), dialog: (document.querySelector(".dialog") as HTMLElement | null)?.innerText?.slice(0, 600) }));
+		const there = await page.evaluate(() => ({ text: (document.querySelector(".column, .set-in, .events-list, .gate") as HTMLElement | null)?.innerText?.slice(-1500), toasts: [...document.querySelectorAll("[data-sonner-toast]")].map((t) => t.textContent), dialog: (document.querySelector(".dialog") as HTMLElement | null)?.innerText?.slice(0, 600) }));
 		throw new Error(`"${selector}" did not appear. On screen: ${JSON.stringify(there, null, 1)}${pageErrors.length ? `\nErrors in the page:\n${pageErrors.join("\n")}` : ""}`);
 	}
 }
@@ -194,12 +194,12 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	// Nobody answers: that is said, and what was found before stays.
 	releases.status = 503;
 	await menu("updates");
-	await sees(".toast >> text=Could not ask GitHub for the latest version");
+	await sees("[data-sonner-toast] >> text=Could not ask GitHub for the latest version");
 	await sees(".side-update");
 	// This app is the last release: said once, and the side bar's line is gone.
 	Object.assign(releases, { status: 200, tag: `v${mine}` });
 	await menu("updates");
-	await sees(`.toast >> text=Pine ${mine} is the latest version.`);
+	await sees(`[data-sonner-toast] >> text=Pine ${mine} is the latest version.`);
 	await page.waitForSelector(".side-update", { state: "detached" });
 	// Settings > App has the same, and the switch for the question at the start.
 	await menu("settings");
@@ -298,7 +298,7 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		await page.press(".browser-address", "Enter");
 		await waitFor("the address arrived", () => asked.some((a) => a.at === "/open"));
 		assert.deepEqual(asked.find((a) => a.at === "/open")!.body, { url: "localhost:5173" });
-		await sees(".toast >> text=the browser was refused that address");
+		await sees("[data-sonner-toast] >> text=the browser was refused that address");
 		// The picture came through the app's own road for pictures, and the page asked the web for nothing.
 		assert.equal(await page.evaluate(() => performance.getEntriesByType("resource").filter((r) => /^https?:/.test(r.name)).length), 0);
 
@@ -569,12 +569,12 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	const limit = page.locator(".item", { has: page.locator(".mono", { hasText: /^limits\.maxDownloadMb$/ }) }).locator(".ctl input");
 	await limit.fill("123");
 	await limit.press("Enter");
-	await page.waitForFunction(() => [...document.querySelectorAll(".toast")].some((t) => /limits\.maxDownloadMb is now 123/.test(t.textContent ?? "")));
+	await page.waitForFunction(() => [...document.querySelectorAll("[data-sonner-toast]")].some((t) => /limits\.maxDownloadMb is now 123/.test(t.textContent ?? "")));
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).limits.maxDownloadMb, 123);
 	// One that cannot be is refused, and the file stays as it is.
 	await limit.fill("0");
 	await limit.press("Enter");
-	await page.waitForFunction(() => [...document.querySelectorAll(".toast.bad")].some((t) => /whole number from 1/.test(t.textContent ?? "")));
+	await page.waitForFunction(() => [...document.querySelectorAll("[data-sonner-toast][data-type=error]")].some((t) => /whole number from 1/.test(t.textContent ?? "")));
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).limits.maxDownloadMb, 123);
 	// A setting chosen from a list is chosen with the keyboard alone: Escape closes the list and gives
 	// focus back to it, Enter opens it, the arrows move, Enter chooses.
@@ -593,7 +593,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	const chosen = (await page.textContent(`${list} [role=option][data-highlighted]`))?.trim();
 	assert.notEqual(chosen, before?.trim());
 	await page.keyboard.press("Enter");
-	await page.waitForFunction((v) => [...document.querySelectorAll(".toast")].some((t) => t.textContent?.includes(`defaults.thinking is now ${v}`)), chosen);
+	await page.waitForFunction((v) => [...document.querySelectorAll("[data-sonner-toast]")].some((t) => t.textContent?.includes(`defaults.thinking is now ${v}`)), chosen);
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.thinking, chosen);
 	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
 	// Agents: make one.
@@ -635,7 +635,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	const offered = await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent ?? ""));
 	assert.ok(offered.length > 0 && offered.every((m) => m.startsWith("opencode/")), JSON.stringify(offered.slice(0, 5)));
 	await page.click(".pick-item >> nth=0");
-	await sees(`.toast >> text=Your agents now run on ${offered[0]}`);
+	await sees(`[data-sonner-toast] >> text=Your agents now run on ${offered[0]}`);
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, offered[0]);
 	await sees(`.item.fallback-model .name >> text=${offered[0]}`);
 	// Signed out again, that model cannot answer: the page says so for each agent it leaves without
@@ -653,7 +653,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.click(".item.fallback-model [data-slot=button] >> text=Change");
 	await sees(".pick-title >> text=Model for every agent that has none of its own");
 	await page.click(".pick-item >> text=mock/m");
-	await sees(".toast >> text=Your agents now run on mock/m");
+	await sees("[data-sonner-toast] >> text=Your agents now run on mock/m");
 	await page.waitForSelector(".item .notice", { state: "detached" });
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, "mock/m");
 	// MCP servers: a remote one is added, pine says whether it connects, and "Sign in" runs pi's own
@@ -927,7 +927,7 @@ test("a right click on an agent offers to remove it, and never the main agent", 
 	await sees(".pick-title >> text=Remove the agent spare?");
 	assert.ok(fs.existsSync(path.join(home, "agents", "spare", "agent.json")));
 	await page.click(".pick-item:has-text('Remove it with everything it has')");
-	await sees(".toast >> text=Removed the agent spare.");
+	await sees("[data-sonner-toast] >> text=Removed the agent spare.");
 	await page.waitForFunction(() => ![...document.querySelectorAll(".side-agent .who > :first-child")].some((e) => e.textContent?.trim() === "spare"));
 	assert.equal(fs.existsSync(path.join(home, "agents", "spare")), false);
 	// Asked for the main agent all the same (the palette, another road), the app says no and asks the daemon for nothing.
@@ -980,7 +980,7 @@ test("dictating puts what is heard into the input and sends nothing", async () =
 	await menu("voice");
 	await sees(".banner >> text=listening");
 	await page.waitForFunction(() => (document.querySelector(".composer textarea") as HTMLTextAreaElement).value === "Typed first: about the scans", undefined, { timeout: 8000 }).catch(async () => {
-		throw new Error(`what was heard is not in the input, which holds: ${JSON.stringify(await page.inputValue(".composer textarea"))}; ${await page.evaluate(() => [...document.querySelectorAll(".banner, .toast")].map((e) => e.textContent).join(" | "))}`);
+		throw new Error(`what was heard is not in the input, which holds: ${JSON.stringify(await page.inputValue(".composer textarea"))}; ${await page.evaluate(() => [...document.querySelectorAll(".banner, [data-sonner-toast]")].map((e) => e.textContent).join(" | "))}`);
 	});
 	// Enter says "that was all": the rest arrives, and the message is still only text in the input.
 	await page.focus(".composer textarea");
