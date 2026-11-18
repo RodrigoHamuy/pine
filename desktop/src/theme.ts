@@ -19,13 +19,14 @@ export function followAppearance(root: HTMLElement = document.documentElement): 
  * writes into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`. index.css points
  * shadcn's tokens and pine's own colour names at roles of that scheme.
  */
-export type Palette = Pick<MtbConfig, "source" | "neutral" | "colorMatch" | "scheme" | "contrast" | "customColors">;
+export type Palette = Required<Pick<MtbConfig, "source" | "neutral" | "colorMatch" | "scheme" | "contrast" | "customColors">>;
 
 /**
  * pine's palette: poimandres' mint as the source and its night blue as the neutral, with colour match
- * on so that the mint keeps its strength. Warnings, info and plan mode have no role in M3: they are
- * custom colours, kept as given (`blend: false`) so that they do not drift towards the mint. Their
- * names are fixed: index.css aliases `--md-sys-color-warn` and the others.
+ * on so that the mint keeps its strength. Warnings, info and keywords in code (`plan`) have no role in
+ * M3: they are custom colours that keep their hue (`blend: false`) so that they do not drift towards the
+ * mint, while their tone follows the look (darker in light, lighter in dark). Their names are fixed:
+ * index.css aliases `--md-sys-color-warn` and the others.
  */
 export const DEFAULT_PALETTE = {
 	source: "#5de4c7",
@@ -34,13 +35,13 @@ export const DEFAULT_PALETTE = {
 	scheme: "tonalSpot",
 	contrast: 0,
 	customColors: [
-		{ name: "warn", hex: "#c48814", blend: false },
-		{ name: "info", hex: "#2a6fc0", blend: false },
-		{ name: "plan", hex: "#7c4fd0", blend: false },
+		{ name: "warn" as const, hex: "#c48814", blend: false },
+		{ name: "info" as const, hex: "#2a6fc0", blend: false },
+		{ name: "plan" as const, hex: "#7c4fd0", blend: false },
 	],
 } satisfies Palette;
 
-type SchemeName = NonNullable<Palette["scheme"]>;
+type SchemeName = Palette["scheme"];
 
 /**
  * material-theme-builder's scheme variants, with the name Settings shows for each. A record, so that

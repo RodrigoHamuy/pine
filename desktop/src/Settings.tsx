@@ -1759,10 +1759,12 @@ function Instructions() {
 
 // ---- the app itself ----------------------------------------------------------------------------------------
 
-const CUSTOM_LABELS: Record<string, { title: string; about: string }> = {
-	warn: { title: "Warning colour", about: "Warnings." },
-	info: { title: "Info colour", about: "Notes that only inform." },
-	plan: { title: "Plan mode colour", about: "Plan mode." },
+/** The custom colours' names: every palette has exactly those of pine's (cleanPalette). */
+type CustomName = (typeof DEFAULT_PALETTE.customColors)[number]["name"];
+const CUSTOM_LABELS: Record<CustomName, { title: string; about: string }> = {
+	warn: { title: "Warning colour", about: "Warnings and approvals, modified or unsaved files, literals in code." },
+	info: { title: "Info colour", about: "Renamed files, and function and type names in code." },
+	plan: { title: "Keyword colour", about: "Keywords in code (if, const, class)." },
 };
 const schemeItems = Object.entries(SCHEMES).map(([value, label]) => ({ value, label }));
 
@@ -1787,7 +1789,6 @@ export function Colours() {
 		s.prefs = await bridge.prefs({ palette: change ? { ...palette, ...change } : undefined });
 		s.touch();
 	};
-	const hexOf = (name: string) => palette.customColors?.find((c) => c.name === name)?.hex ?? "#000000";
 	const field = useId();
 	return (
 		<FieldSet data-setting="colours">
@@ -1806,21 +1807,21 @@ export function Colours() {
 						<FieldLabel htmlFor={`${field}-neutral`}>Neutral colour</FieldLabel>
 						<FieldDescription>The tint of the surfaces and the lines.</FieldDescription>
 					</FieldContent>
-					<ColourInput id={`${field}-neutral`} name="neutral" value={palette.neutral ?? DEFAULT_PALETTE.neutral} onChange={(neutral) => void set({ neutral })} />
+					<ColourInput id={`${field}-neutral`} name="neutral" value={palette.neutral} onChange={(neutral) => void set({ neutral })} />
 				</Field>
 				<Field orientation="horizontal">
 					<FieldContent>
 						<FieldLabel htmlFor={`${field}-match`}>Colour match</FieldLabel>
 						<FieldDescription>Stay true to these colours. Off, the scheme below tones them as it does.</FieldDescription>
 					</FieldContent>
-					<Switch id={`${field}-match`} checked={palette.colorMatch ?? false} onCheckedChange={(colorMatch) => void set({ colorMatch })} />
+					<Switch id={`${field}-match`} checked={palette.colorMatch} onCheckedChange={(colorMatch) => void set({ colorMatch })} />
 				</Field>
 				<Field orientation="responsive" data-disabled={palette.colorMatch || undefined}>
 					<FieldContent>
 						<FieldLabel htmlFor={`${field}-scheme`}>Scheme</FieldLabel>
 						<FieldDescription>How the source colour is spread over the roles, while colour match is off.</FieldDescription>
 					</FieldContent>
-					<Select items={schemeItems} value={palette.scheme ?? DEFAULT_PALETTE.scheme} disabled={palette.colorMatch} onValueChange={(scheme) => scheme && void set({ scheme: scheme as Palette["scheme"] })}>
+					<Select items={schemeItems} value={palette.scheme} disabled={palette.colorMatch} onValueChange={(scheme) => scheme && void set({ scheme: scheme as Palette["scheme"] })}>
 						<SelectTrigger id={`${field}-scheme`} className="w-40">
 							<SelectValue />
 						</SelectTrigger>
@@ -1836,19 +1837,19 @@ export function Colours() {
 				<Field orientation="horizontal">
 					<FieldContent>
 						<FieldLabel htmlFor={`${field}-contrast`}>Contrast</FieldLabel>
-						<FieldDescription>Less to the left, more to the right, standard in the middle. Now {(palette.contrast ?? 0).toFixed(1)}.</FieldDescription>
+						<FieldDescription>Less to the left, more to the right, standard in the middle. Now {palette.contrast.toFixed(1)}.</FieldDescription>
 					</FieldContent>
 					<div className="flex w-40 shrink-0">
-						<Slider id={`${field}-contrast`} aria-label="Contrast" min={-1} max={1} step={0.1} value={[palette.contrast ?? 0]} onValueChange={(v) => void set({ contrast: Math.round((Array.isArray(v) ? v[0] : v) * 10) / 10 })} />
+						<Slider id={`${field}-contrast`} aria-label="Contrast" min={-1} max={1} step={0.1} value={[palette.contrast]} onValueChange={(v) => void set({ contrast: Math.round((Array.isArray(v) ? v[0] : v) * 10) / 10 })} />
 					</div>
 				</Field>
-				{DEFAULT_PALETTE.customColors.map(({ name }) => (
+				{palette.customColors.map(({ name, hex }) => (
 					<Field key={name} orientation="horizontal">
 						<FieldContent>
-							<FieldLabel htmlFor={`${field}-${name}`}>{CUSTOM_LABELS[name].title}</FieldLabel>
-							<FieldDescription>{CUSTOM_LABELS[name].about} M3 has no role for it: it is kept as it is.</FieldDescription>
+							<FieldLabel htmlFor={`${field}-${name}`}>{CUSTOM_LABELS[name as CustomName].title}</FieldLabel>
+							<FieldDescription>{CUSTOM_LABELS[name as CustomName].about} Not an M3 role: its hue is kept, darker in light and lighter in dark.</FieldDescription>
 						</FieldContent>
-						<ColourInput id={`${field}-${name}`} name={name} value={hexOf(name)} onChange={(hex) => void set({ customColors: palette.customColors?.map((c) => (c.name === name ? { ...c, hex } : c)) })} />
+						<ColourInput id={`${field}-${name}`} name={name} value={hex} onChange={(hex) => void set({ customColors: palette.customColors.map((c) => (c.name === name ? { ...c, hex } : c)) })} />
 					</Field>
 				))}
 				<Field orientation="horizontal">

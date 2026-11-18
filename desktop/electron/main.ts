@@ -91,6 +91,11 @@ function windowBackground(): string {
 	return builder(palette.source, palette).toJson().schemes[nativeTheme.shouldUseDarkColors ? "dark" : "light"].surface;
 }
 
+/** Repaints the window's background for the current palette and appearance; a no-op before the window exists. */
+function refreshBackground(): void {
+	if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
+}
+
 function savePrefs(): void {
 	try {
 		fs.mkdirSync(path.dirname(prefsFile()), { recursive: true });
@@ -411,6 +416,8 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 }
 
 function wire(): void {
+	// "updated" fires both when Settings sets themeSource and when the system's own appearance flips.
+	nativeTheme.on("updated", refreshBackground);
 	handle("pine:state", () => ({ state, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
 	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
 	handle("pine:retry", () => startService());
@@ -445,7 +452,8 @@ function wire(): void {
 		if ("home" in change) prefs.home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
 		// Reset sends none: nothing is stored, and the page draws pine's default.
 		if ("palette" in change) prefs.palette = cleanPalette(change.palette);
-		if (("palette" in change || "theme" in change) && win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
+		// A change of theme reaches the window through nativeTheme's "updated" (see wire()).
+		if ("palette" in change) refreshBackground();
 		savePrefs();
 		return { ...prefs, bounds: undefined };
 	});

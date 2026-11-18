@@ -176,7 +176,7 @@ pine packed into the app; the `pine` of your shell.
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
 | pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
-| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), colour match, the scheme (while colour match is off), the contrast, and the warning, info and plan mode colours. Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
+| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), colour match, the scheme (while colour match is off), the contrast, and the warning, info and keyword colours (their hue is kept, their shade follows light or dark). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
@@ -632,7 +632,8 @@ holds only tokens and base rules.
   `material-theme-builder/react`) wraps the page in `main.tsx` and every story in
   `.storybook/preview.tsx`; it writes the scheme of pine's palette (`DEFAULT_PALETTE` in `theme.ts`:
   source `#5de4c7`, neutral `#1b1e28`, colour match on, and the custom colours `warn`, `info` and
-  `plan`, kept as given) into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`.
+  `plan`, the warning, info and keyword colours, whose hue is kept while the shade follows light or
+  dark) into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`.
   shadcn's tokens come from the package's `shadcn.css`; pine's own names (`--brand`, `--text-muted`,
   `--warn`, `--hover`...) are aliases of M3 roles in `index.css`, and a role of the scheme, never a
   literal colour, is what a new one points at. Four places depart from `shadcn.css`, after it and with
