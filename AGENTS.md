@@ -118,9 +118,10 @@ baseline/           pi SDK behaviour checks and their results; the mock model se
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
-                    page (React, Tailwind v4, shadcn on Base UI, AI Elements for the conversation, Streamdown for answers, lucide icons;
+                    page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
+                    patterns for the conversation and the input, Streamdown for answers, lucide icons;
                     ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
-                    A stock shadcn or AI Elements component (src/components/ui, src/components/ai-elements) is never edited: add and
+                    A stock shadcn component (src/components/ui) is never edited: add and
                     update them with the shadcn CLI and components.json; a variant or composition lives elsewhere under
                     src/components/ and wraps the stock one, and only for what stock cannot do. No hand-written stylesheet:
                     utilities on Tailwind's default scale, tokens and one root font-size in src/index.css.

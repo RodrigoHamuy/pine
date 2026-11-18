@@ -203,7 +203,7 @@ agent's:
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens (it stays open while the turn runs, with its last lines). A `↳ … ↗` line opens a sub-agent's or delegated task's work in a tab of its own. A request of the agent's waits in the conversation with its buttons until it is answered, then becomes a line. Above your last message a line offers to take it back (**Take back**, `/undo`). Scrolled up, the conversation holds still while the answer goes on, and a button at its foot brings you back to the end |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |
-| The bar under the input | `+` attaches files; then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours): each opens a list on a click. `outside content` appears when the conversation has read something from outside |
+| The bar under the input | `+` attaches files (or drop them on the input; a dropped folder is opened for the conversation); then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours). The model and the folder open a list to search, the reasoning and the mode a menu right above the button. `outside content` appears when the conversation has read something from outside; each button says what it is in a tooltip |
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
 | Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
 
@@ -425,7 +425,6 @@ desktop/
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
-    components/ai-elements/  the older AI SDK Elements copies still in use (terminal output, the prompt input)
     components/    pine's own compositions of stock components (a labelled field, a choice,
                    scroll-fade-area.tsx: every region that scrolls, a ScrollArea that fades where it is cut,
                    and hint.tsx: a Tooltip whose text is also an icon button's accessible name)
@@ -465,15 +464,14 @@ holds only tokens and base rules.
 | Piece | What it is for |
 |---|---|
 | shadcn (`src/components/ui/`) | Every control and overlay: buttons, switches, fields, selects, tabs, dialogs, alert dialogs, the command palette, notices (Sonner), the combobox, resizable panels, collapsibles, badges, alerts. |
-| shadcn's chat components (`src/components/ui/`) | The conversation, composed in `Conversation.tsx` the way shadcn's AI Elements pages show: Message Scroller (the thread), Message, Bubble and Attachment (the turns), Trace (the work of a turn, tool calls, thoughts, sub-tasks, steps), Code Block (what a tool returned), Item (a request waiting for you), Marker (notes, dividers, the goal, the line above the input, the point to take back to), Hover Card and Progress (how full the context is). |
-| AI Elements (`src/components/ai-elements/`) | The older AI SDK Elements copies still in use: terminal output, the prompt input. |
+| shadcn's core chat components (`src/components/ui/`), composed per shadcn's AI Elements patterns | The conversation, composed in `Conversation.tsx`: Message Scroller (the thread), Message, Bubble and Attachment (the turns), Trace (the work of a turn, tool calls, thoughts, sub-tasks, steps), Code Block (what a tool returned), Item (a request waiting for you), Marker (notes, dividers, the goal, the line above the input, the point to take back to), Hover Card and Progress (how full the context is). The input, in `Composer.tsx`, is the Prompt Input pattern: an Input Group with the attached files as Attachments above the text, the goal and dictation as Alerts, and the reasoning and the mode as the Model Selector pattern's Dropdown Menus. The code pane's output (`CodePanel.tsx`) is a Code Block, with the terminal's colours. AI Elements patterns have no registry item: their pages say which core components to add, and pine composes them in its own files. |
 | Streamdown | Answers drawn from markdown, with code coloured by Shiki. `markdown.tsx` replaces three of its defaults (see below). |
 | lucide | Every icon. The pine logo is the one drawing of pine's own (`Logo` in `ui.tsx`). |
 | ui-sdk (`@ui-sdk/react`) | Only what shadcn has no component for: the tree of files and the lists of rows (`src/lists.tsx`). Never a piece shadcn has (no second dialog, button or select). |
 
-- A stock shadcn or AI Elements component is never edited. Add and update them with the shadcn
-  CLI (`npx shadcn@latest add <name>`, `@ai-elements/<name>` for AI Elements; `diff` shows what
-  changed upstream); the registries are declared in `components.json`.
+- A stock shadcn component is never edited. Add and update them with the shadcn CLI
+  (`npx shadcn@latest add <name>`; `--diff` shows what changed upstream); the project's style is
+  declared in `components.json`. Everything is on Base UI: no file of the page imports Radix.
 - Prefer the stock component as it is, with its own look. A variant or a composition lives
   elsewhere, under `src/components/` (or in the file that uses it), and wraps the stock one; add a
   composition or a style override only for what stock cannot do.
