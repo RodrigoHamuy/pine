@@ -106,3 +106,16 @@ export const ColoursDefault: Story = {
 		);
 	},
 };
+
+/** The Colours section with code in dark kept on poimandres: "Code follows the palette" off. */
+export const ColoursCodePoimandres: Story = {
+	args: { section: "app" },
+	render: () => {
+		store.prefs = { ...store.prefs, palette: undefined, codeFollowsPalette: false };
+		return (
+			<div className="w-full max-w-200">
+				<ColoursSection />
+			</div>
+		);
+	},
+};

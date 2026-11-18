@@ -52,9 +52,11 @@
 	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
-/* The code editor's colours (CodePanel.tsx: its CodeMirror theme and highlight style read only these).
-   Light points at M3 roles; dark is poimandres, token by token as the theme has them, which tells more
-   kinds of keyword apart than light does. `currentColor` is the colour of the text around. */
+/* The colours of code: the code editor's (CodePanel.tsx: its CodeMirror theme and highlight style read only these) and
+   the answers' (markdown.tsx: the highlighter's theme reads them too). Light points at M3 roles. Dark points at roles
+   too while code follows the palette (the default), with the plain text a step below the names and a few more kinds
+   apart than light, as poimandres does; with that preference off (`data-code="poimandres"` on the root element,
+   main.tsx), dark is poimandres, token by token as the theme has them. `currentColor` is the colour of the text around. */
 :root {
 	--code-text: var(--md-sys-color-on-surface);
 	--code-gutter: var(--md-sys-color-outline);
@@ -94,6 +96,42 @@
 }
 
 .dark {
+	--code-text: var(--md-sys-color-on-surface-variant);
+	--code-gutter: var(--md-sys-color-outline);
+	--code-gutter-active: var(--md-sys-color-on-surface-variant);
+	--code-active-line: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+	--code-cursor: var(--md-sys-color-primary);
+	--code-match: color-mix(in srgb, var(--md-sys-color-warn) 20%, transparent);
+	--code-match-line: color-mix(in oklab, var(--md-sys-color-warn) 50%, transparent);
+	--code-comment: var(--md-sys-color-outline);
+	--code-meta: var(--md-sys-color-outline);
+	--code-meta-style: italic;
+	--code-keyword: var(--md-sys-color-plan);
+	--code-definition: var(--md-sys-color-plan);
+	--code-control: var(--md-sys-color-plan);
+	--code-modifier: var(--md-sys-color-plan);
+	--code-string: var(--md-sys-color-primary);
+	--code-regexp: var(--md-sys-color-tertiary);
+	--code-literal: var(--md-sys-color-warn);
+	--code-null: var(--md-sys-color-error);
+	--code-name: var(--md-sys-color-on-surface);
+	--code-attribute: var(--md-sys-color-tertiary);
+	--code-attribute-style: italic;
+	--code-call: var(--md-sys-color-on-surface);
+	--code-function: var(--md-sys-color-info);
+	--code-type: var(--md-sys-color-info);
+	--code-namespace: var(--md-sys-color-tertiary);
+	--code-tag: var(--md-sys-color-info);
+	--code-heading: var(--md-sys-color-primary);
+	--code-emphasis: currentColor;
+	--code-link: var(--md-sys-color-info);
+	--code-inserted: var(--md-sys-color-primary);
+	--code-deleted: var(--md-sys-color-error);
+	--code-punctuation: var(--md-sys-color-on-surface-variant);
+	--code-operator: var(--md-sys-color-outline);
+}
+
+.dark[data-code="poimandres"] {
 	--code-text: var(--p-fg);
 	--code-gutter: color-mix(in oklab, var(--p-comment) 55%, transparent);
 	--code-gutter-active: var(--p-fg);

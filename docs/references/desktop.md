@@ -176,7 +176,7 @@ pine packed into the app; the `pine` of your shell.
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
 | pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
-| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, and the warning, info and keyword colours (their hue is kept, their shade follows light or dark). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
+| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, the warning, info and keyword colours (their hue is kept, their shade follows light or dark), and whether code follows the palette (on by default: code in dark draws with the scheme's roles; off, it keeps the poimandres theme's own colours). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
@@ -335,7 +335,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor keeps poimandres' own colours in dark |
+| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor follows the palette too, in light and dark; turn off "Code follows the palette" to keep poimandres' own colours for code in dark |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
@@ -569,8 +569,8 @@ desktop/
                    which are ui-sdk's, used directly (shadcn has neither); and the chosen line of
                    a palette's list, named to screen readers (`useNamedLine`)
     index.css      the only stylesheet: pine's mapping of shadcn's tokens to M3 roles on top of
-                   material-theme-builder's, the code colours (M3 roles in light, poimandres in
-                   `.dark`), the page's density and a few base rules
+                   material-theme-builder's, the code colours (`--code-*`: M3 roles, and poimandres in
+                   `.dark[data-code=poimandres]`), the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
                    which the Appearance setting decides; pine's palette (`DEFAULT_PALETTE`), which
@@ -658,7 +658,15 @@ holds only tokens and base rules.
   outline (grey, never the primary), the side bar is surface container low made translucent, hover
   and press (`--accent`, `--sidebar-accent`) are state layers of the text colour over the surface,
   and the side bar's text is muted. The only literal colours left are the shadows and the
-  poimandres `--p-*` values, which colour code in dark; in light the code colours are M3 roles.
+  poimandres `--p-*` values, which colour code in dark only while the owner keeps them for it.
+- The code colours (`--code-*` in `index.css`) are read by the editor's theme and highlight style
+  (`CodePanel.tsx`) and by the highlighter's theme for code in answers (`CODE_THEME` in
+  `markdown.tsx`, a Shiki theme whose colours are those variables, one theme for both looks), so
+  code looks the same everywhere. In light they are M3 roles; in dark too while "Code follows the
+  palette" is on (`codeFollowsPalette` in `prefs.json`, on unless it is `false`), with the plain text
+  on surface variant below the names on surface, and regular expressions, attributes and namespaces
+  on tertiary, as poimandres tells them apart. Off, the page puts `data-code="poimandres"` on the root
+  element (`Themed` in `main.tsx`) and dark code is poimandres, token by token.
 - The owner's palette (Settings > App > Colours) is an app preference, kept by the main process in
   `prefs.json` in the app's data folder (`palette`, beside `theme`) and set through the same `prefs`
   call. The main process checks each field when it is set and when it is read (`cleanPalette`: a

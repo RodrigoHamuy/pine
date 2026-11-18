@@ -1789,11 +1789,15 @@ export function Colours() {
 		s.prefs = await bridge.prefs({ palette: change ? { ...palette, ...change } : undefined });
 		s.touch();
 	};
+	const followCode = async (codeFollowsPalette: boolean) => {
+		s.prefs = await bridge.prefs({ codeFollowsPalette });
+		s.touch();
+	};
 	const field = useId();
 	return (
 		<FieldSet data-setting="colours">
 			<FieldLegend>Colours</FieldLegend>
-			<FieldDescription>Every colour of the window is a role of one Material 3 scheme, made from these. Code in dark keeps its own colours.</FieldDescription>
+			<FieldDescription>Every colour of the window is a role of one Material 3 scheme, made from these.</FieldDescription>
 			<FieldGroup>
 				<Field orientation="horizontal">
 					<FieldContent>
@@ -1859,6 +1863,13 @@ export function Colours() {
 						<ColourInput id={`${field}-${name}`} name={name} value={hex} onChange={(hex) => void set({ customColors: palette.customColors.map((c) => (c.name === name ? { ...c, hex } : c)) })} />
 					</Field>
 				))}
+				<Field orientation="horizontal" data-setting="code-follows-palette">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-code`}>Code follows the palette</FieldLabel>
+						<FieldDescription>Code in dark draws with the scheme's roles, like the rest of the window. Off, it keeps the poimandres theme's own colours. Code in light always follows the palette.</FieldDescription>
+					</FieldContent>
+					<Switch id={`${field}-code`} checked={s.prefs.codeFollowsPalette !== false} onCheckedChange={(on) => void followCode(on)} />
+				</Field>
 				<Field orientation="horizontal">
 					<FieldContent>
 						<FieldTitle>pine's colours</FieldTitle>

@@ -205,7 +205,7 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
 	connected = false;
-	prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true };
+	prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true, codeFollowsPalette: true };
 	platform = "darwin";
 	focused = true;
 	versions = { app: "", electron: "" };
