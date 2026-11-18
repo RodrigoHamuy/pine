@@ -23,6 +23,7 @@ import rehypeSanitize, { type Options as Schema } from "rehype-sanitize";
 import { Streamdown, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { api, media } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { mediaKind } from "./model.ts";
@@ -99,8 +100,6 @@ function Link({ href, children, node }: React.ComponentProps<"a"> & ExtraProps) 
 	);
 }
 
-const zoom = (src: string) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
-
 /** How a picture, a video or a sound is drawn, in an answer and in a conversation: never wider than its place. */
 export const MEDIA = {
 	box: { image: "block max-w-md", video: "block max-w-lg", audio: "block max-w-md" },
@@ -113,7 +112,16 @@ export const MEDIA = {
 function Player({ kind, src, alt }: { kind: "image" | "video" | "audio"; src: string; alt: string }) {
 	return (
 		<span className={`my-2.5 ${MEDIA.box[kind]}`}>
-			{kind === "image" ? <img className={MEDIA.image} src={src} alt={alt} draggable={false} onClick={() => zoom(src)} /> : kind === "video" ? <video className={MEDIA.video} src={src} controls preload="metadata" /> : <audio className={MEDIA.audio} src={src} controls preload="metadata" />}
+			{kind === "image" ? (
+				// Larger over the page with a click or, focused, with Enter; a click on it, beside it, or Escape closes it.
+				<Dialog>
+					<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={src} alt={alt} draggable={false} />} />
+					<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
+						<DialogTitle className="sr-only">The picture, larger</DialogTitle>
+						<DialogClose nativeButton={false} render={<img src={src} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+					</DialogContent>
+				</Dialog>
+			) : kind === "video" ? <video className={MEDIA.video} src={src} controls preload="metadata" /> : <audio className={MEDIA.audio} src={src} controls preload="metadata" />}
 			{alt ? <span className={MEDIA.cap}>{alt}</span> : null}
 		</span>
 	);

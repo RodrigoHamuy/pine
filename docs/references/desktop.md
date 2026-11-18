@@ -420,8 +420,9 @@ desktop/
     api.ts         the control API, typed
     App.tsx        the window: side bar, tabs, the dialogs for keys, updates and the browser
     ApprovalDialog.tsx, QuestionDialog.tsx     a request for the owner's approval, a question of an agent's
-    Palette.tsx, PickDialog.tsx, Lightbox.tsx  everything by name, a choice from a list, a picture larger
-    Conversation.tsx, Composer.tsx, markdown.tsx     a conversation, the input, an answer drawn
+    Palette.tsx, PickDialog.tsx  everything by name, a choice from a list
+    Conversation.tsx, Composer.tsx, markdown.tsx     a conversation, the input, an answer drawn (a picture
+                   in either opens larger in a stock Dialog of its own)
     CodePanel.tsx  changes, files and the editor, output, what is running
     Browser.tsx    the agent's browser in the panel: its page as a picture, and what is done in it handed back
     Settings.tsx   the settings pages

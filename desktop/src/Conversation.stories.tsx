@@ -90,3 +90,18 @@ const notes: Made[] = [
 ];
 export const Notes: Story = { args: { items: notes } };
 export const NotesDark: Story = { args: { items: notes }, globals: { theme: "dark" } };
+
+// A picture of 480 by 320, drawn here: the page loads nothing from the web.
+const PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320"><rect width="480" height="320" fill="#5de4c7"/><circle cx="240" cy="160" r="90" fill="#1b1e28"/></svg>')}`;
+
+/** A picture in the conversation: a click opens it larger over the page. */
+const picture: Made[] = [{ t: "media", kind: "image", name: "okapi.svg", url: PICTURE }];
+export const Picture: Story = { args: { items: picture } };
+
+/** The same picture, clicked: larger over the page. No docs page: it would open over the other stories. */
+export const PictureLarger: Story = {
+	args: { items: picture },
+	tags: ["!autodocs"],
+	play: async ({ canvas, userEvent }) => await userEvent.click(canvas.getByRole("button", { name: "okapi.svg" })),
+};
+export const PictureLargerDark: Story = { ...PictureLarger, globals: { theme: "dark" } };

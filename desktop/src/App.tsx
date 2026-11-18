@@ -21,7 +21,6 @@ import { Events } from "./Events.tsx";
 import { store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
-import { Lightbox } from "./Lightbox.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
 import { QuestionDialog } from "./QuestionDialog.tsx";
@@ -508,7 +507,6 @@ export function App() {
 			{s.palette ? <Palette /> : null}
 			<Asking />
 			{help ? <Help close={() => setHelp(false)} /> : null}
-			<Lightbox />
 		</div>
 	);
 }

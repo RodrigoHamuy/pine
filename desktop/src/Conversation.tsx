@@ -13,6 +13,7 @@ import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGroupText } from "@/components/ui/input-group";
@@ -33,13 +34,6 @@ import { Markdown, MEDIA } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
 import { Spinner } from "@/components/ui/spinner";
-
-/** A picture that opens larger over the page, with a click or, focused, with Enter. */
-const zoomable = {
-	tabIndex: 0,
-	onClick: (e: React.MouseEvent<HTMLImageElement>) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
-	onKeyDown: (e: React.KeyboardEvent<HTMLImageElement>) => e.key === "Enter" && window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
-};
 
 /** A note's tone is information (a warning, a failure), so it colours the note's icon. */
 const NOTE_TONE: Record<string, string | undefined> = { warn: "text-warn", bad: "text-destructive", good: "text-primary", accent: "text-primary" };
@@ -120,7 +114,13 @@ function Call({ tool, subject, status, ms, depth = 0, output, error, images }: {
 				) : null}
 				{(images ?? []).map((id) => (
 					<div className={`it-media ${MEDIA.box.image}`} key={id}>
-						<img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} />
+						<Dialog>
+							<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" />} />
+							<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
+								<DialogTitle className="sr-only">The picture, larger</DialogTitle>
+								<DialogClose nativeButton={false} render={<img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+							</DialogContent>
+						</Dialog>
 					</div>
 				))}
 			</TraceCollapsibleContent>
@@ -432,7 +432,15 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 		case "media":
 			return (
 				<div className={`it-media ${MEDIA.box[item.kind]}`}>
-					{item.kind === "image" ? <img className={MEDIA.image} src={item.url} alt={item.name} draggable={false} {...zoomable} /> : item.kind === "video" ? <video className={MEDIA.video} src={item.url} controls preload="metadata" /> : <audio className={MEDIA.audio} src={item.url} controls preload="metadata" />}
+					{item.kind === "image" ? (
+						<Dialog>
+							<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={item.url} alt={item.name} draggable={false} />} />
+							<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
+								<DialogTitle className="sr-only">The picture, larger</DialogTitle>
+								<DialogClose nativeButton={false} render={<img src={item.url} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+							</DialogContent>
+						</Dialog>
+					) : item.kind === "video" ? <video className={MEDIA.video} src={item.url} controls preload="metadata" /> : <audio className={MEDIA.audio} src={item.url} controls preload="metadata" />}
 					<div className={MEDIA.cap}>{item.name}</div>
 				</div>
 			);
