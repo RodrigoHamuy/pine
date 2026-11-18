@@ -176,6 +176,7 @@ pine packed into the app; the `pine` of your shell.
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
 | pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
+| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, and the warning, info and keyword colours (their hue is kept, their shade follows light or dark). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
@@ -334,7 +335,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| The poimandres theme | The dark look is poimandres: its colours for the window, and for code in an answer, in a diff and in the editor. The light look has colours of its own |
+| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor keeps poimandres' own colours in dark |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
@@ -452,7 +453,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
 | Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: add (at set times, every so often, once), remove. **Routes**: add, remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
-| App | The app's own settings (appearance, notifications, whether there is a newer app and whether that is asked at the start), and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
+| App | The app's own settings (appearance, colours, notifications, whether there is a newer app and whether that is asked at the start), and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
 key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is
@@ -567,11 +568,14 @@ desktop/
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
                    which are ui-sdk's, used directly (shadcn has neither); and the chosen line of
                    a palette's list, named to screen readers (`useNamedLine`)
-    index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
-                   shadcn's tokens set from them, the page's density and a few base rules
+    index.css      the only stylesheet: pine's mapping of shadcn's tokens to M3 roles on top of
+                   material-theme-builder's, the code colours (M3 roles in light, poimandres in
+                   `.dark`), the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
-                   which the Appearance setting decides
+                   which the Appearance setting decides; pine's palette (`DEFAULT_PALETTE`), which
+                   `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview; and
+                   `cleanPalette`, which makes a stored or sent palette safe field by field
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
                    (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
@@ -628,9 +632,43 @@ holds only tokens and base rules.
   start of a bar along the top (`pl-window-buttons`, a token in `index.css`): the window says where
   the buttons end (`titleBarOverlay` in `electron/main.ts`, read as `env(titlebar-area-x)`), so it is
   none in full screen, in an ordinary browser (the preview, Storybook) and on another system.
-- Colours are tokens: pine's own names (`--brand`, `--text-muted`, `--warn`, the poimandres
-  `--p-*` values) are set in `index.css`, shadcn's tokens point at them, and the ones shadcn has no
-  name for are utilities too (`text-warn`, `bg-brand-soft`, `text-faint`...).
+- Colours come from Material 3, through material-theme-builder. `<Mtb>` (from
+  `material-theme-builder/react`) wraps the page in `main.tsx` and every story in
+  `.storybook/preview.tsx`; it writes the scheme of pine's palette (`DEFAULT_PALETTE` in `theme.ts`:
+  source `#5de4c7`, poimandres' mint; neutral `#1b1e28`, its night blue; neutral variant `#767c9d`,
+  its blue grey; colour match off and the tonal spot scheme; and the custom colours `warn`, `info` and
+  `plan`, the warning, info and keyword colours, whose hue is kept while the shade follows light or
+  dark) into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`. Colour match is off
+  because with it the package uses M3's content variant, as Google's Material Theme Builder does, and
+  that variant divides a neutral's chroma by 8: the night blue would come out grey.
+  pine has no colour names of its own. A component uses shadcn's token where one means the same
+  (`text-foreground`, `text-muted-foreground`, `bg-muted`, `border-border`, `bg-primary`,
+  `text-destructive`, `bg-accent`...), and otherwise an M3 role through the package's Tailwind plugin
+  (`material-theme-builder/tailwind`: `text-outline` for faint text, `bg-surface-container-high`,
+  `border-surface-container-high` for a soft line, `text-warn`, `text-info`, `text-plan`); where a
+  name is both, shadcn's wins. A tint or a state layer is a role with Tailwind's opacity modifier:
+  `bg-primary/12` for a soft background, `bg-on-surface/8` for hover and `bg-on-surface/12` for press.
+  A role of the scheme, never a literal colour, is what a new colour points at.
+  shadcn's tokens come from the package's `shadcn.css`, and pine overrides them in `index.css`, after
+  it and with its doubled selectors. That mapping is pine's own reading of the bridge between shadcn
+  and M3, chosen token by token as the role closest to how the app looked before M3, not the
+  package's: popovers are surface container low, secondary surface container high with the text
+  colour on it, muted surface container, the border, the side bar's border and inputs surface
+  container highest, the charts the primary, info, plan, warn and error. The focus ring is the
+  outline (grey, never the primary), the side bar is surface container low made translucent, hover
+  and press (`--accent`, `--sidebar-accent`) are state layers of the text colour over the surface,
+  and the side bar's text is muted. The only literal colours left are the shadows and the
+  poimandres `--p-*` values, which colour code in dark; in light the code colours are M3 roles.
+- The owner's palette (Settings > App > Colours) is an app preference, kept by the main process in
+  `prefs.json` in the app's data folder (`palette`, beside `theme`) and set through the same `prefs`
+  call. The main process checks each field when it is set and when it is read (`cleanPalette`: a
+  colour is `#rrggbb`, colour match a boolean, the scheme one of material-theme-builder's variants,
+  the contrast in [-1, 1], the custom colours exactly `warn`, `info` and `plan`); a field that is
+  wrong is pine's default. Reset stores no palette. The page hands the stored palette, or
+  `DEFAULT_PALETTE`, to `<Mtb>`. The window's background before the page draws is the palette's
+  surface for the appearance, computed with material-theme-builder's `builder` (on a Mac the window
+  is transparent behind its vibrancy). The preview keeps the palette in its stand-in for the bridge,
+  in memory.
 - Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` keeps in
   step with the system's appearance; Electron's appearance setting drives that.
 - Tests and the few rules that reach into a component select by shadcn's `data-slot` attributes
@@ -657,8 +695,8 @@ of rows to open) is ui-sdk's (`@ui-sdk/react`), used directly, with the row's lo
 piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk list drawn as the
 stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the list's
 option, so the rows look like the side bar's and the arrow keys move between them.
-The side bar's colours are the `--sidebar*` tokens in `index.css`, set from pine's own: rows are
-muted, the one in front pressed, and its background is left to the window behind it (the system's
+The side bar's colours are the `--sidebar*` tokens in `index.css`, set from M3 roles: rows are
+muted (on surface variant), the one in front pressed (the text colour at 12%), and its background is left to the window behind it (the system's
 material on a Mac). A story sits beside the file of what it shows: `src/<File>.stories.tsx`
 for a file of `src/`, `src/components/<name>.stories.tsx` for a composition there (titled
 `Components/<Name>`: `Components/Logo`, `Components/EmptyView`). One story per part and state,

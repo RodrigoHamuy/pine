@@ -13,9 +13,11 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
+import { builder } from "material-theme-builder";
 import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { httpMcp } from "../../test/support/http-mcp.ts";
+import { DEFAULT_PALETTE } from "../src/theme.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const shots = process.env.PINE_DESKTOP_SHOTS;
@@ -1123,6 +1125,53 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await menu("settings");
 });
 
+/** The M3 scheme of pine's palette, as material-theme-builder generates it: what the window should draw. */
+const SCHEMES = builder(DEFAULT_PALETTE.source, DEFAULT_PALETTE).toJson().schemes;
+const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+/** The colour a CSS colour value resolves to in the page, read from an element of the test's own. */
+const resolved = (value: string) =>
+	page.evaluate((v: string) => {
+		const probe = document.body.appendChild(document.createElement("div"));
+		probe.style.backgroundColor = v;
+		const colour = getComputedStyle(probe).backgroundColor;
+		probe.remove();
+		return colour;
+	}, value);
+/** The alpha of a computed colour: rgba(..., a), color(srgb ... / a), or 1. */
+const alphaOf = (colour: string) => Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(colour)?.[1] ?? /\/\s*([\d.]+)\)/.exec(colour)?.[1] ?? 1);
+
+test("every colour is a role of the M3 scheme of pine's palette, in light and in dark", async () => {
+	try {
+		for (const look of ["light", "dark"] as const) {
+			await page.emulateMedia({ colorScheme: look });
+			await page.waitForFunction((d: boolean) => document.documentElement.classList.contains("dark") === d, look === "dark");
+			const scheme = SCHEMES[look];
+			// <Mtb> wrote the scheme into the page...
+			assert.equal(await resolved("var(--md-sys-color-surface)"), rgb(scheme.surface), `${look}: the M3 surface is in the page`);
+			// ...and shadcn's tokens point at its roles.
+			assert.equal(await resolved("var(--background)"), rgb(scheme.surface), `${look}: shadcn's background is the surface`);
+			assert.equal(await resolved("var(--primary)"), rgb(scheme.primary), `${look}: shadcn's primary is the primary`);
+			assert.equal(await resolved("var(--destructive)"), rgb(scheme.error), `${look}: shadcn's destructive is the error`);
+			// pine's own mapping on top of the package's: the line is the highest container, a popover sits just above the page.
+			assert.equal(await resolved("var(--border)"), rgb(scheme.surfaceContainerHighest), `${look}: the border is surface container highest`);
+			assert.equal(await resolved("var(--popover)"), rgb(scheme.surfaceContainerLow), `${look}: a popover is surface container low`);
+			// Hover and press are state layers over what is below, not an opaque colour.
+			for (const [token, alpha] of [["--accent", 0.08], ["--sidebar-accent", 0.12]] as const) {
+				const colour = await resolved(`var(${token})`);
+				assert.ok(Math.abs(alphaOf(colour) - alpha) < 0.01, `${look}: ${token} is the text colour at ${alpha * 100}%, not ${colour}`);
+			}
+			// What has the keyboard is grey, never the primary.
+			assert.equal(await resolved("var(--ring)"), rgb(scheme.outline), `${look}: the focus ring is the outline`);
+			assert.notEqual(await resolved("var(--ring)"), rgb(scheme.primary));
+			// The side bar lets the Mac's window material show through.
+			const side = await resolved("var(--sidebar)");
+			assert.ok(alphaOf(side) > 0 && alphaOf(side) < 1, `${look}: the side bar is translucent, not ${side}`);
+		}
+	} finally {
+		await page.emulateMedia({ colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light" });
+	}
+});
+
 test("the appearance setting puts the page in dark or light, and System follows the system", async () => {
 	// The driver forces light on every page; here the app's own setting has to decide, as it does
 	// for the owner (Electron's native theme drives the page's prefers-color-scheme).
@@ -1135,13 +1184,13 @@ test("the appearance setting puts the page in dark or light, and System follows 
 		await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
 		await appearance("Dark");
 		await waitDark(true);
-		// What the stylesheet draws follows the class: the tab in front is poimandres' background, then the light one.
+		// What the stylesheet draws follows the class: the tab in front is the dark M3 surface, then the light one.
 		const tab = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-slot=tab][data-active]")!).backgroundColor);
-		assert.equal(await tab(), "rgb(27, 30, 40)");
+		assert.equal(await tab(), rgb(SCHEMES.dark.surface));
 		await appearance("Light");
 		await waitDark(false);
 		assert.equal(await dark(), false);
-		assert.equal(await tab(), "rgb(253, 253, 252)");
+		assert.equal(await tab(), rgb(SCHEMES.light.surface));
 		// System: whatever the system says, the class says the same.
 		await appearance("System");
 		await page.emulateMedia({ colorScheme: "dark" });

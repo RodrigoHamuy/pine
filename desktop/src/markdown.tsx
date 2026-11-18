@@ -99,7 +99,7 @@ function Link({ href, children, node }: React.ComponentProps<"a"> & ExtraProps) 
 			{/* Beside the link, not inside it: it is the address in plain letters, not more of the link's words.
 			    It flows with the sentence: a line of its own would cut the link off from where it leads. */}
 			{plain ? null : (
-				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-faint wrap-anywhere" title={url} onClick={open(url)}>
+				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-outline wrap-anywhere" title={url} onClick={open(url)}>
 					<ArrowRightIcon className="mr-1 inline size-3" aria-hidden />
 					{short(url.replace(/^https?:\/\//, ""), 72)}
 				</span>
@@ -113,7 +113,7 @@ export const MEDIA = {
 	box: { image: "block max-w-md", video: "block max-w-lg", audio: "block max-w-md" },
 	image: "block max-h-80 max-w-full cursor-zoom-in rounded-md border",
 	video: "block max-h-90 max-w-full rounded-md bg-black",
-	cap: "mt-1 block text-xs text-faint",
+	cap: "mt-1 block text-xs text-outline",
 };
 
 function Player({ kind, src, alt, sound }: { kind: "image" | "video" | "audio"; src: string; alt: string; sound?: { id?: string; name: string; bytes: () => Promise<ArrayBuffer>; auto?: Heard } }) {
