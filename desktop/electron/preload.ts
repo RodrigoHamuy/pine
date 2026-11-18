@@ -38,7 +38,6 @@ const bridge = {
 	onConnection: on("pine:connection"),
 	onMenu: on("pine:menu"),
 	onFocus: on("pine:focus"),
-	onFullscreen: on("pine:fullscreen"),
 	onInitLine: on("pine:init-line"),
 	onVoice: on("pine:voice"),
 };

@@ -34,7 +34,7 @@ function standIn(): Bridge {
 	return {
 		state: async () => {
 			const s = await service();
-			return { state: s.state, home: s.state.home, prefs: { ...prefs }, platform: s.platform, fullscreen: false, focused: document.hasFocus(), updates: false, versions: { app: "preview", electron: "none" } };
+			return { state: s.state, home: s.state.home, prefs: { ...prefs }, platform: s.platform, focused: document.hasFocus(), updates: false, versions: { app: "preview", electron: "none" } };
 		},
 		ready: () => {
 			follow();
@@ -80,7 +80,6 @@ function standIn(): Bridge {
 		onConnection: on(listeners.connection),
 		onMenu: never,
 		onFocus: never,
-		onFullscreen: never,
 		onInitLine: never,
 		onVoice: never,
 	};

@@ -692,8 +692,8 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the side panel's sheet in a
   narrow window, in `src/CodePanel.tsx`, whose header lies under the Mac window buttons and over
   the title bar's drag area; the window's options in `electron/main.ts`: `titleBarStyle`,
-  `trafficLightPosition`, `vibrancy`), look at it once in light and dark, the side panel's sheet
-  in a window narrower than 1024 pixels.
+  `trafficLightPosition`, `vibrancy`), look at it once in light and dark, with the side panel
+  open in a window narrower than 1024 pixels too.
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).

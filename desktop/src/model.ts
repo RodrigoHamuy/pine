@@ -193,7 +193,6 @@ export class Store extends Model {
 	prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true };
 	platform = "darwin";
 	focused = true;
-	fullscreen = false;
 	versions = { app: "", electron: "" };
 	/** Whether this app asks for a newer one at all: an app from a checkout is no release and does not. */
 	updates = false;
@@ -274,7 +273,6 @@ export class Store extends Model {
 			if (f && this.active) this.seen(this.active);
 			if (f) void this.refreshAgents();
 		});
-		bridge.onFullscreen((f: boolean) => ((this.fullscreen = f), this.touch()));
 		bridge.onInitLine((line: string) => {
 			this.initLines.push(line);
 			if (this.initLines.length > 200) this.initLines.shift();
@@ -283,7 +281,6 @@ export class Store extends Model {
 		const first = await bridge.state();
 		this.prefs = first.prefs;
 		this.platform = first.platform;
-		this.fullscreen = first.fullscreen;
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;

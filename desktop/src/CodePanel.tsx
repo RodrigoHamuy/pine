@@ -572,7 +572,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const panel = (
 				<div data-slot="code-panel" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
 					{/* A sheet as wide as a phone-wide window reaches under the window's buttons at the top left on a Mac. */}
-					<div className={cn("flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2", narrow && store.platform === "darwin" && !store.fullscreen && "max-sm:pl-21")}>
+					<div className={cn("flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2", narrow && "max-sm:pl-window-buttons")}>
 						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
 						    for the line under the tab in front, which stock draws below the list. */}
 						<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">

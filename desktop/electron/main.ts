@@ -184,6 +184,8 @@ function createWindow(): void {
 		title: "Pine",
 		titleBarStyle: isMac ? "hiddenInset" : "default",
 		trafficLightPosition: { x: 16, y: 16 },
+		// Gives the page where the window buttons end (env(titlebar-area-x), 0 in full screen), so the bars make room for them by themselves.
+		titleBarOverlay: isMac,
 		vibrancy: isMac ? "sidebar" : undefined,
 		visualEffectState: "followWindow",
 		backgroundColor: isMac ? "#00000000" : nativeTheme.shouldUseDarkColors ? "#1b1e28" : "#fbfbf9",
@@ -216,8 +218,6 @@ function createWindow(): void {
 	win.on("close", savePrefs);
 	win.on("focus", () => send("pine:focus", true));
 	win.on("blur", () => send("pine:focus", false));
-	win.on("enter-full-screen", () => send("pine:fullscreen", true));
-	win.on("leave-full-screen", () => send("pine:fullscreen", false));
 	win.on("closed", () => (win = undefined));
 	void win.loadURL(DEV_URL ?? "app://pine/");
 	if (process.env.PINE_DESKTOP_DEVTOOLS) win.webContents.openDevTools({ mode: "detach" });
@@ -394,7 +394,7 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 }
 
 function wire(): void {
-	handle("pine:state", () => ({ state, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, fullscreen: Boolean(win?.isFullScreen()), focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
+	handle("pine:state", () => ({ state, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
 	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
 	handle("pine:retry", () => startService());
 	handle("pine:update", (again?: boolean) => update(again === true));
