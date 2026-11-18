@@ -24,7 +24,8 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { useMediaQuery } from "usehooks-ts";
 import { CodeBlock, CodeBlockContent, CodeBlockLine } from "@/components/ui/code-block";
 import { Printed } from "@/components/printed";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
@@ -543,12 +544,6 @@ export const CODE_KEY = "pine.code.width";
 
 /** Tailwind's `lg`: below it a conversation and the panel beside it do not both fit, with the side bar as a column too. */
 const ROOM = "(min-width: 64rem)";
-const roomy = () => window.matchMedia(ROOM).matches;
-const onRoom = (change: () => void) => {
-	const query = window.matchMedia(ROOM);
-	query.addEventListener("change", change);
-	return () => query.removeEventListener("change", change);
-};
 
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
@@ -562,7 +557,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
 	// In a window narrower than that there is no room beside the conversation: the panel is a stock sheet over it,
 	// from the right, and putting it away is closing the panel. The owner's choice (open or not) is the same either way.
-	const narrow = !useSyncExternalStore(onRoom, roomy);
+	const narrow = !useMediaQuery(ROOM);
 	const panel = (
 				<div data-slot="code-panel" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
 					{/* A sheet as wide as a phone-wide window reaches under the window's buttons at the top left on a Mac. */}
