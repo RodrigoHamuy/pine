@@ -184,6 +184,14 @@
 	--font-weight-semibold: 600;
 }
 
+/* Room for the Mac's window buttons at the start of a bar along the top (`pl-window-buttons`). The window says
+   where they end (main.ts sets titleBarOverlay, which gives the page Chromium's titlebar-area variables), so the
+   room follows the buttons themselves: none in full screen, none in an ordinary browser or on another system,
+   where the bar keeps the scale's 2 of its own. */
+@theme inline {
+	--spacing-window-buttons: max(env(titlebar-area-x, 0px), calc(var(--spacing) * 2));
+}
+
 /* shadcn's tokens, set from pine's own colours (light in :root, poimandres in .dark, above).
    They only point at pine's names, so one place holds each colour and the dark values follow the class
    by themselves. The font is the system's, as it always was. */

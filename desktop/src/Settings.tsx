@@ -52,7 +52,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 
 function Page({ title, lead, children, actions }: { title: string; lead?: ReactNode; children: ReactNode; actions?: ReactNode }) {
 	return (
-		<div data-slot="settings-page" className="mx-auto flex max-w-3xl flex-col gap-6 px-9 pt-8 pb-16 select-text">
+		<div data-slot="settings-page" className="mx-auto flex max-w-3xl flex-col gap-6 px-4 pt-6 pb-16 select-text @lg/settings:px-9 @lg/settings:pt-8">
 			<div className="flex items-start gap-2">
 				<div className="min-w-0 flex-1">
 					<h1 className="text-xl font-semibold tracking-tight">{title}</h1>
@@ -69,6 +69,10 @@ function Page({ title, lead, children, actions }: { title: string; lead?: ReactN
 const whom = (agents: Array<{ id: string }>) => [{ value: "", label: "all agents" }, ...agents.map((a) => ({ value: a.id, label: a.id }))];
 
 const scopeText = (scope: string, session?: string) => (scope === "global" ? "all agents" : session && session !== "main" ? `${scope} · ${session}` : scope);
+
+// The fields of a form: two to a row where the settings are wide enough, one to a row where they are not
+// (a phone, or a wide panel beside), measured on the settings themselves, not on the window.
+const FORM_GRID = "grid grid-cols-1 @lg/settings:grid-cols-2";
 
 // A single-choice toggle group hands back a list, empty when its pressed item is pressed again: that keeps the choice.
 const one = <T,>(set: (value: T) => void) => (values: T[]) => {
@@ -130,7 +134,7 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 		);
 	}
 	return (
-		<Field orientation="horizontal">
+		<Field orientation={k === "boolean" ? "horizontal" : "responsive"}>
 			<FieldContent>
 				<FieldLabel htmlFor={id}>
 					<span>{s.title ?? s.key}</span>
@@ -178,7 +182,7 @@ function General() {
 							{[...overview.data.warnings, ...overview.data.modelNotes].map((w, i) => (
 								<Alert key={i}>
 									<TriangleAlertIcon />
-									<AlertDescription>{w}</AlertDescription>
+									<AlertDescription className="wrap-anywhere">{w}</AlertDescription>
 								</Alert>
 							))}
 						</>
@@ -315,7 +319,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				<ChevronLeftIcon data-icon="inline-start" />
 				Agents
 			</Button>
-			<FieldGroup className="grid grid-cols-2">
+			<FieldGroup className={FORM_GRID}>
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-description`}>What it is for</FieldLabel>
 					<Input id={`${field}-description`} value={now("description")} onChange={(e) => put("description", e.target.value)} />
@@ -358,7 +362,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				</Field>
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-mode`}>Mode</FieldLabel>
-					<ToggleGroup id={`${field}-mode`} aria-label="Mode" variant="outline" value={[mode]} onValueChange={one((m) => put("mode", m))}>
+					<ToggleGroup id={`${field}-mode`} aria-label="Mode" variant="outline" className="flex-wrap" value={[mode]} onValueChange={one((m) => put("mode", m))}>
 						{MODES.map((o) => (
 							<ToggleGroupItem key={o.value} value={o.value}>
 								{o.label}
@@ -765,7 +769,7 @@ function Models() {
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a model server</FieldLegend>
-				<FieldGroup className="grid grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -927,7 +931,7 @@ function Mcp() {
 										<ItemTitle>
 											{x.name}
 											<Badge variant={tone === "good" ? "default" : tone === "warn" ? "outline" : "secondary"}>{state}</Badge>
-											<Badge variant="secondary">{x.scope === "global" ? `all: ${x.agents.join(", ") || "nobody"}` : x.session ? `only the conversation ${x.session} of ${x.scope}` : `only ${x.scope}`}</Badge>
+											<Badge variant="secondary" className="h-auto max-w-full whitespace-normal">{x.scope === "global" ? `all: ${x.agents.join(", ") || "nobody"}` : x.session ? `only the conversation ${x.session} of ${x.scope}` : `only ${x.scope}`}</Badge>
 											{x.taints ? <Badge variant="outline">outside content</Badge> : null}
 											{x.approve !== "never" ? <Badge variant="secondary">asks: {x.approve}</Badge> : null}
 										</ItemTitle>
@@ -967,7 +971,7 @@ function Mcp() {
 			) : null}
 			<FieldSet>
 				<FieldLegend>Add a server</FieldLegend>
-				<FieldGroup className="grid grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="home_link" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
@@ -992,7 +996,7 @@ function Mcp() {
 					</Field>
 					<Field className="col-span-full">
 						<FieldLabel htmlFor={`${field}-kind`}>Kind</FieldLabel>
-						<ToggleGroup id={`${field}-kind`} aria-label="Kind" variant="outline" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as "remote" | "local", target: "" }))}>
+						<ToggleGroup id={`${field}-kind`} aria-label="Kind" variant="outline" className="flex-wrap" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as "remote" | "local", target: "" }))}>
 							<ToggleGroupItem value="remote">Remote (https address)</ToggleGroupItem>
 							<ToggleGroupItem value="local">A program on this computer</ToggleGroupItem>
 						</ToggleGroup>
@@ -1052,7 +1056,7 @@ function Skills() {
 						<AlertDescription>This skill lies in a folder of yours that the configuration names. pine shows it and does not change it.</AlertDescription>
 					</Alert>
 				)}
-				<FieldGroup className="grid grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" />
@@ -1295,7 +1299,7 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 							</FieldGroup>
 						</>
 					) : (
-						<FieldGroup className="grid grid-cols-2">
+						<FieldGroup className={FORM_GRID}>
 							<Field>
 								<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 								<Input id={`${field}-name`} autoFocus className="font-mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -1514,7 +1518,7 @@ function Schedules() {
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a schedule</FieldLegend>
-				<FieldGroup className="grid grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -1538,7 +1542,7 @@ function Schedules() {
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-kind`}>When</FieldLabel>
-						<ToggleGroup id={`${field}-kind`} aria-label="When" variant="outline" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as keyof typeof WHEN, when: "" }))}>
+						<ToggleGroup id={`${field}-kind`} aria-label="When" variant="outline" className="flex-wrap" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as keyof typeof WHEN, when: "" }))}>
 							{Object.entries(WHEN).map(([value, w]) => (
 								<ToggleGroupItem key={value} value={value}>
 									{w.label}
@@ -1628,7 +1632,7 @@ function Routes() {
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a route</FieldLegend>
-				<FieldGroup className="grid grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -1772,7 +1776,7 @@ function AppPage() {
 			<FieldSet>
 				<FieldLegend>This app</FieldLegend>
 				<FieldGroup>
-					<Field orientation="horizontal">
+					<Field orientation="responsive">
 						<FieldContent>
 							<FieldTitle>Appearance</FieldTitle>
 							<FieldDescription>Light, dark, or what the system is set to.</FieldDescription>
@@ -1786,7 +1790,7 @@ function AppPage() {
 						</div>
 					</Field>
 					{s.updates ? (
-						<Field orientation="horizontal" data-setting="updates">
+						<Field orientation="responsive" data-setting="updates">
 							<FieldContent>
 								<FieldTitle>
 									Pine {s.versions.app}
@@ -1825,7 +1829,7 @@ function AppPage() {
 			<FieldSet>
 				<FieldLegend>pine</FieldLegend>
 				<FieldGroup>
-					<Field orientation="horizontal">
+					<Field orientation="responsive">
 						<FieldContent>
 							<FieldTitle>
 								{service ? `pine ${service.version ?? ""}` : "pine"}
@@ -1849,7 +1853,7 @@ function AppPage() {
 						</div>
 					</Field>
 					{command && (command.state !== "unavailable" || command.why) ? (
-						<Field orientation="horizontal">
+						<Field orientation="responsive">
 							<FieldContent>
 								<FieldTitle>
 									pine in a terminal
@@ -1865,7 +1869,7 @@ function AppPage() {
 						</Field>
 					) : null}
 					{s.browser !== undefined || s.browserFetching ? (
-						<Field orientation="horizontal" data-setting="browser">
+						<Field orientation="responsive" data-setting="browser">
 							<FieldContent>
 								<FieldTitle>
 									Browser for the web tools
@@ -1881,7 +1885,7 @@ function AppPage() {
 							{s.browser ? null : <Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner data-icon="inline-start" />Fetching…</> : "Fetch it"}</Button>}
 						</Field>
 					) : null}
-					<Field orientation="horizontal">
+					<Field orientation="responsive">
 						<FieldContent>
 							<FieldTitle>Home folder</FieldTitle>
 							<FieldDescription>
@@ -1903,32 +1907,37 @@ function AppPage() {
 
 export function Settings() {
 	const s = useModel(store);
+	// The sections are a column beside the page where there is room, and a row above it where there is not
+	// (a narrow window, or a wide panel beside): measured on the settings themselves, not on the window.
+	// An item's title wraps (its badges go under its name where the row is narrow): set once here for every row.
 	return (
-		<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background">
-			{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
-			    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
-			<SidebarProvider open className="min-h-0 w-auto flex-none">
-				<SidebarRoot collapsible="none" className="w-50 border-r border-line-soft bg-transparent">
-					<SidebarContent>
-						<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-							<SidebarGroup role="navigation" className="py-4">
-								<SidebarGroupContent>
-									<SidebarMenu>
-										{SECTIONS.map((x) => (
-											<SidebarMenuItem key={x.id}>
-												<SidebarMenuButton isActive={s.section === x.id} aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
-											</SidebarMenuItem>
-										))}
-									</SidebarMenu>
-								</SidebarGroupContent>
-							</SidebarGroup>
-						</ScrollArea>
-					</SidebarContent>
-				</SidebarRoot>
-			</SidebarProvider>
-			<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={s.section}>
-				{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "app" ? <AppPage /> : <General />}
-			</ScrollArea>
+		<div className="@container/settings flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background **:data-[slot=item-title]:flex-wrap">
+			<div className="flex min-h-0 min-w-0 flex-1 flex-col @3xl/settings:flex-row">
+				{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
+				    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
+				<SidebarProvider open className="min-h-0 w-full flex-none @3xl/settings:w-auto">
+					<SidebarRoot collapsible="none" className="w-full border-b border-line-soft bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
+						<SidebarContent>
+							<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x @3xl/settings:*:data-[slot=scroll-area-viewport]:scroll-fade">
+								<SidebarGroup role="navigation" className="py-2 @3xl/settings:py-4">
+									<SidebarGroupContent>
+										<SidebarMenu className="flex-row @3xl/settings:flex-col">
+											{SECTIONS.map((x) => (
+												<SidebarMenuItem key={x.id} className="flex-none @3xl/settings:flex-initial">
+													<SidebarMenuButton isActive={s.section === x.id} aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
+												</SidebarMenuItem>
+											))}
+										</SidebarMenu>
+									</SidebarGroupContent>
+								</SidebarGroup>
+							</ScrollArea>
+						</SidebarContent>
+					</SidebarRoot>
+				</SidebarProvider>
+				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={s.section}>
+					{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "app" ? <AppPage /> : <General />}
+				</ScrollArea>
+			</div>
 		</div>
 	);
 }

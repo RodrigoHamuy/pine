@@ -58,7 +58,7 @@ function Tab({ section }: { section: string }) {
 	store.settingsAgent = undefined;
 	store.agents = agents;
 	return (
-		<div className="flex h-180 w-250">
+		<div className="flex h-180 w-full max-w-250">
 			<Settings />
 		</div>
 	);

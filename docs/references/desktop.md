@@ -217,7 +217,7 @@ agent's:
 
 | Part | What it is |
 |---|---|
-| Side bar | Search at the top, then your agents (see above). Drag its right edge to make it wider or narrower, or focus the edge with Tab and use the arrow keys (a double click on the edge sets it back), `⌘B` hides it and shows it again, and it is after a restart as you left it; where nothing is to click, it moves the window. An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab, and so does Enter: Tab reaches an agent's line (Enter or Space folds it) and then its conversations, where the arrow keys move; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
+| Side bar | Search at the top, then your agents (see above). Drag its right edge to make it wider or narrower, or focus the edge with Tab and use the arrow keys (a double click on the edge sets it back), `⌘B` hides it and shows it again (in a window narrower than 768 pixels it opens it over the page instead: see the table below), and it is after a restart as you left it; where nothing is to click, it moves the window. An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab, and so does Enter: Tab reaches an agent's line (Enter or Space folds it) and then its conversations, where the arrow keys move; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
 | Tabs | One conversation each, with its agent's initial, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens (it stays open while the turn runs, with its last lines). A `↳ … ↗` line opens a sub-agent's or delegated task's work in a tab of its own. A request of the agent's waits in the conversation with its buttons until it is answered, then becomes a line. Above your last message a line offers to take it back (**Take back**, `/undo`). Scrolled up, the conversation holds still while the answer goes on, and a button at its foot brings you back to the end |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
@@ -225,6 +225,20 @@ agent's:
 | The bar under the input | `+` attaches files (or drop them on the input; a dropped folder is opened for the conversation); then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours). The model and the folder open a list to search, the reasoning and the mode a menu right above the button. `outside content` appears when the conversation has read something from outside; each button says what it is in a tooltip |
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
 | Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
+
+The window can be made as narrow as a phone (360 pixels). Where there is no room for columns,
+the side bar and the side panel lie over the conversation instead of beside it. What you chose
+(side bar shown or hidden, side panel open or closed) and how wide you dragged them is kept, and a
+wide window puts them back as they were.
+
+| Window | Side bar | Side panel |
+|---|---|---|
+| 1024 pixels and wider | A column | A column |
+| 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes the panel |
+| Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above: the whole width of a window narrower than 640 pixels, and at most 540 pixels wide from 640 to 767 |
+
+Settings follow the room they have, not the window: narrower than about 720 pixels, the list of
+pages is a row along the top that scrolls sideways, and a setting's control goes under its text.
 
 ### Finding a conversation
 
@@ -522,6 +536,7 @@ holds only tokens and base rules.
 | shadcn's core chat components (`src/components/ui/`), composed per shadcn's AI Elements patterns | The conversation, composed in `Conversation.tsx`: Message Scroller (the thread), Message, Bubble and Attachment (the turns), Trace (the work of a turn, tool calls, thoughts, sub-tasks, steps), Code Block (what a tool returned), Item (a request waiting for you), Marker (notes, dividers, the goal, the line above the input, the point to take back to), Hover Card and Progress (how full the context is). The input, in `Composer.tsx`, is the Prompt Input pattern: an Input Group with the attached files as Attachments above the text, the goal and dictation as Alerts, and the reasoning and the mode as the Model Selector pattern's Dropdown Menus. The code pane's output (`CodePanel.tsx`) is a Code Block, with the terminal's colours. AI Elements' own registry serves code written on Radix and has none on Base UI, so it is never added: its pages say which core components a pattern uses, and pine composes them in its own files. |
 | Streamdown | Answers drawn from markdown, with code coloured by Shiki. `markdown.tsx` replaces three of its defaults (see below). |
 | lucide | Every icon. The pine logo is the one drawing of pine's own (`Logo` in `components/logo.tsx`). |
+| usehooks-ts | `useMediaQuery`: the side panel's breakpoint (`CodePanel.tsx`). Nothing that stock shadcn already has a hook for. |
 | ui-sdk (`@ui-sdk/react`) | Only what shadcn has no component for: the tree of files and the lists of rows (`src/lists.tsx`). Never a piece shadcn has (no second dialog, button or select). |
 
 - A stock shadcn component is never edited. Add and update them with the shadcn CLI
@@ -535,7 +550,10 @@ holds only tokens and base rules.
 - Sizes and spacing are Tailwind's default scale and shadcn's defaults, never arbitrary values.
   The page's density is one `font-size` on `:root` in `index.css`: every rem size (text, spacing,
   components) follows it, so no component sets a font size of its own. Corners come from shadcn's
-  `--radius`.
+  `--radius`. The one size that is not on the scale is the room for a Mac's window buttons at the
+  start of a bar along the top (`pl-window-buttons`, a token in `index.css`): the window says where
+  the buttons end (`titleBarOverlay` in `electron/main.ts`, read as `env(titlebar-area-x)`), so it is
+  none in full screen, in an ordinary browser (the preview, Storybook) and on another system.
 - Colours are tokens: pine's own names (`--brand`, `--text-muted`, `--warn`, the poimandres
   `--p-*` values) are set in `index.css`, shadcn's tokens point at them, and the ones shadcn has no
   name for are utilities too (`text-warn`, `bg-brand-soft`, `text-faint`...).
@@ -553,9 +571,14 @@ holds only tokens and base rules.
 
 Buttons, switches, inputs, fields, toggle groups (the segmented controls), selects, the edges that resize
 the side bar and the code panel (Resizable), the side bar itself (Sidebar, fixed in place with
-`collapsible="none"`: its header, groups, menu buttons, badges and actions) and the agents' groups in it
+`collapsible="none"` in a wide window and stock's own sheet, `offcanvas` with its `openMobile` and the
+breakpoint of its `useIsMobile`, in a narrow one: its header, groups, menu buttons, badges and actions),
+the side panel over a conversation in a narrow window (Sheet) and the agents' groups in it
 (Collapsible) are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
-are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
+are lucide's. The page has three ways to follow the window's width, each in one place: stock `useIsMobile`
+(768 pixels) for the side bar in `App.tsx`, `useMediaQuery` of usehooks-ts (1024 pixels) for the side panel in
+`CodePanel.tsx`, and container queries on their own width (`@container/settings`) for the settings. A new
+breakpoint uses one of the three, not a fourth way. They have no stories of their own. What shadcn has no primitive for (a tree, a list
 of rows to open) is ui-sdk's (`@ui-sdk/react`), used directly, with the row's look from `src/lists.tsx`; ui-sdk is never used for a
 piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk list drawn as the
 stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the list's
@@ -578,5 +601,7 @@ stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does n
 Every pull request and every push to `next` publishes the stories to Chromatic
 (`.github/workflows/chromatic.yml`), which shows what changed in a picture for review. It
 needs the repository secret `CHROMATIC_PROJECT_TOKEN`; without it the job says so and passes.
-Chromatic takes each story in light and dark through its modes (`.storybook/modes.ts`, which
-set the `theme` global), so no dark twin of a story is written.
+Chromatic takes each story in light and dark, each at a phone's width (360, the window's
+smallest) and at the window's first width (1280), through its modes (`.storybook/modes.ts`,
+which set the `theme` global and a viewport), so no dark or phone twin of a story is written:
+four snapshots a story. The same two widths are the Viewport menu in Storybook's toolbar.

@@ -1466,6 +1466,101 @@ test("the panel's Agent view scrolls up and down only, however narrow the panel 
 	await page.mouse.up();
 });
 
+test("a phone-wide window lays the side bar and the panel over the conversation, and a wide one puts them back beside it", async () => {
+	// The page's size, as the start of this file sets it (the window's own size does not count while the driver sets one).
+	const size = (width: number, height: number) => page.setViewportSize({ width, height });
+	try {
+		await page.click("[data-slot=tab] >> nth=0");
+		await sees("#sidebar-panel [data-slot=sidebar]");
+		const wide = Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width));
+		if (await page.$("[data-slot=code-panel]")) await menu("code");
+		await size(380, 760);
+		// No column: the side bar is stock's sheet, closed until it is asked for, and the page does not scroll sideways.
+		await page.waitForSelector("#sidebar-panel", { state: "detached" });
+		assert.equal(await page.locator("[data-slot=sidebar][data-mobile=true]").count(), 0);
+		assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 380);
+		await page.click("header [data-sidebar=trigger]");
+		await sees("[data-slot=sidebar][data-mobile=true] [data-slot=agent-label]");
+		// Picking a conversation in it puts it away again.
+		await page.locator("[data-slot=sidebar][data-mobile=true] [role=option]").first().click();
+		await page.waitForSelector("[data-slot=sidebar][data-mobile=true]", { state: "detached" });
+		// The menu's Toggle Sidebar opens the sheet and leaves the owner's choice of a column as it was.
+		await menu("sidebar");
+		await sees("[data-slot=sidebar][data-mobile=true]");
+		await page.keyboard.press("Escape");
+		await page.waitForSelector("[data-slot=sidebar][data-mobile=true]", { state: "detached" });
+		// The panel beside a conversation is a sheet over it, and closing the sheet closes the panel.
+		await menu("code-agent");
+		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
+		assert.equal(await page.locator("[data-slot=resizable-handle]:has(+ #code-panel)").count(), 0);
+		await page.keyboard.press("Escape");
+		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+		// Between a phone and a laptop: the side bar has room for its column, the panel beside the conversation does not.
+		await size(900, 760);
+		await sees("#sidebar-panel [data-slot=sidebar]");
+		await menu("code-agent");
+		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
+		await menu("code");
+		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+		// Wide again: the side bar is a column as wide as it was.
+		await size(1280, 820);
+		await sees("#sidebar-panel [data-slot=sidebar]");
+		assert.equal(Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width)), wide);
+	} finally {
+		// The tests after this one have the width the start of this file set, whatever failed here.
+		await size(1280, 820);
+	}
+});
+
+test("what was typed in a file and not saved stays when the panel becomes a sheet and a column again, and Escape in the editor leaves the sheet open", async () => {
+	const size = (width: number, height: number) => page.setViewportSize({ width, height });
+	try {
+		// The folder's conversation from before is in a worktree by now: a new one in the folder itself.
+		await menu(`folder:${folder}`);
+		await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
+		await page.keyboard.press("Enter");
+		await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
+		await menu("code-files");
+		await sees("[data-slot=code-panel]");
+		if (!(await page.$("[data-slot=code-panel] .cm-content"))) {
+			await page.fill("[data-slot=code-panel] input[aria-label='Find a file']", "README");
+			await page.locator("[data-slot=code-panel] [role=listbox] [role=option]").first().click();
+		}
+		await sees("[data-slot=code-panel] .cm-content");
+		await page.click("[data-slot=code-panel] .cm-content");
+		await page.keyboard.press("Meta+End");
+		await page.keyboard.type("unsaved draft");
+		const save = page.locator("[data-slot=code-panel]").getByRole("button", { name: "Save" });
+		assert.ok(await save.isEnabled());
+		// Narrower than the room for a column: the panel is drawn again inside a sheet, with the draft still in it.
+		await size(900, 760);
+		await sees("[data-slot=sheet-content] [data-slot=code-panel] .cm-content");
+		assert.match(await page.textContent("[data-slot=code-panel] .cm-content"), /unsaved draft/);
+		assert.ok(await save.isEnabled());
+		// Escape that closes the editor's search is the editor's, and so is one in the editor itself: the sheet stays.
+		await page.click("[data-slot=code-panel] .cm-content");
+		await page.keyboard.press("Meta+F");
+		await sees("[data-slot=code-panel] .cm-search");
+		await page.keyboard.press("Escape");
+		await page.waitForSelector("[data-slot=code-panel] .cm-search", { state: "detached" });
+		await page.keyboard.press("Escape");
+		await new Promise((r) => setTimeout(r, 300));
+		assert.equal(await page.locator("[data-slot=sheet-content] [data-slot=code-panel]").count(), 1);
+		// Wide again: the panel is a column, and the draft is still there to save or to leave.
+		await size(1280, 820);
+		await sees("#code-panel [data-slot=code-panel] .cm-content");
+		assert.match(await page.textContent("[data-slot=code-panel] .cm-content"), /unsaved draft/);
+		assert.ok(await save.isEnabled());
+		await page.click("[data-slot=code-panel] button[aria-label='Back to the files']");
+		await page.locator("[role=alertdialog]").getByRole("button", { name: "Leave" }).click();
+		await page.waitForFunction(() => !document.querySelector("[data-slot=code-panel] .cm-editor"));
+		await menu("code");
+		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+	} finally {
+		await size(1280, 820);
+	}
+});
+
 test("quitting stops the daemon it started", async () => {
 	const log = path.join(home, "data", "pine.log");
 	assert.ok(fs.existsSync(log));

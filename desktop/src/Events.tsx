@@ -55,14 +55,14 @@ export function Events({ tab }: { tab: Tab }) {
 	};
 	return (
 		<div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
-			<div className="flex flex-none items-center gap-2 border-b border-line-soft px-4 py-2.5">
+			<div className="flex flex-none flex-wrap items-center gap-2 border-b border-line-soft px-4 py-2.5">
 				<InputGroup className="max-w-90">
 					<InputGroupAddon>
 						<SearchIcon />
 					</InputGroupAddon>
 					<InputGroupInput aria-label="Filter the events" placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
 				</InputGroup>
-				<span className="text-faint">{shown.length} shown · text deltas are left out</span>
+				<span className="whitespace-nowrap text-faint">{shown.length} shown · text deltas are left out</span>
 				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
 				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>

@@ -17,7 +17,7 @@ to change the code.
 | `node src/cli.ts <command>` | The CLI without installing it. |
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
 | `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
-| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark through its modes (`desktop/.storybook/modes.ts`), so no dark twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
+| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark at a phone's width (360) and the window's (1280) through its modes (`desktop/.storybook/modes.ts`), so no dark or phone twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
@@ -121,8 +121,8 @@ docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
                     page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
-                    patterns for the conversation and the input, Streamdown for answers, lucide icons;
-                    ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
+                    patterns for the conversation and the input, Streamdown for answers, lucide icons,
+                    usehooks-ts for the side panel's breakpoint; ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
                     The stock components are src/components/ui and nothing else, all from shadcn's own registry in the
                     style components.json names, the chat components included (`npx shadcn add message`, not
                     `@ai-elements/message`). AI Elements means shadcn's pages of patterns (ui.shadcn.com/docs/ai-elements),
@@ -689,9 +689,11 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   test in `desktop/test/voice-live.test.ts` (`PINE_LIVE=1`) puts the real helper behind it,
   listening to a recording. No test shows the app's real window with its title bar: after a
   change to the frame (`app-drag` and `app-no-drag` in `src/index.css`, the parts of
-  `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the window's options in
-  `electron/main.ts`: `titleBarStyle`, `trafficLightPosition`, `vibrancy`), look at it once in
-  light and dark.
+  `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the side panel's sheet in a
+  narrow window, in `src/CodePanel.tsx`, whose header lies under the Mac window buttons and over
+  the title bar's drag area; the window's options in `electron/main.ts`: `titleBarStyle`,
+  `trafficLightPosition`, `vibrancy`), look at it once in light and dark, with the side panel
+  open in a window narrower than 1024 pixels too.
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).

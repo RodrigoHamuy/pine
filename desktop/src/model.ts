@@ -193,7 +193,6 @@ export class Store extends Model {
 	prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true };
 	platform = "darwin";
 	focused = true;
-	fullscreen = false;
 	versions = { app: "", electron: "" };
 	/** Whether this app asks for a newer one at all: an app from a checkout is no release and does not. */
 	updates = false;
@@ -228,7 +227,7 @@ export class Store extends Model {
 	pendingFind?: { key: string; query: string };
 	/** Agents whose list of conversations is folded away in the side bar. */
 	folded = new Set<string>(JSON.parse(localStorage.getItem("pine.folded") ?? "[]"));
-	/** Whether the side bar shows. Kept like its width, so that it is after a restart as it was left. */
+	/** Whether the side bar shows as a column in a wide window. Kept like its width, so that it is after a restart as it was left. */
 	sidebar = localStorage.getItem("pine.sidebar") !== "hidden";
 	code = false;
 	codeView: CodeView = "agent";
@@ -274,7 +273,6 @@ export class Store extends Model {
 			if (f && this.active) this.seen(this.active);
 			if (f) void this.refreshAgents();
 		});
-		bridge.onFullscreen((f: boolean) => ((this.fullscreen = f), this.touch()));
 		bridge.onInitLine((line: string) => {
 			this.initLines.push(line);
 			if (this.initLines.length > 200) this.initLines.shift();
@@ -283,7 +281,6 @@ export class Store extends Model {
 		const first = await bridge.state();
 		this.prefs = first.prefs;
 		this.platform = first.platform;
-		this.fullscreen = first.fullscreen;
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;
@@ -1364,6 +1361,14 @@ export class Store extends Model {
 
 	// ---- commands: what a menu, a key or the palette asks for --------------------------------------
 
+	/** Shows or hides the side bar as a column: the owner's choice, kept for the next start. */
+	showSidebar(open: boolean): void {
+		if (open === this.sidebar) return;
+		this.sidebar = open;
+		localStorage.setItem("pine.sidebar", open ? "shown" : "hidden");
+		this.touch();
+	}
+
 	/** Ask the parts of the page for something only they can do. */
 	ask_(name: string): void {
 		this.lastSignal = name;
@@ -1392,9 +1397,9 @@ export class Store extends Model {
 				if (this.palette) void this.refreshSaid();
 				return this.touch();
 			case "sidebar":
-				this.sidebar = !this.sidebar;
-				localStorage.setItem("pine.sidebar", this.sidebar ? "shown" : "hidden");
-				return this.touch();
+				// The stock side bar carries it out (`TitleBar` in App.tsx): in a narrow window it slides the list
+				// over the page for a moment and leaves the owner's choice as it is, in a wide one it calls `showSidebar`.
+				return this.ask_("sidebar");
 			case "code":
 				this.code = !this.code;
 				this.saveTabs();
