@@ -46,12 +46,14 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		const toolSaid = () => JSON.stringify(mock.state.requests.at(-1).body.messages.filter((m: any) => m.role === "tool").at(-1)?.content ?? "");
 		const address = (end: string) => page.waitForFunction((e: string) => (document.querySelector(".browser-address") as HTMLInputElement | null)?.value.endsWith(e), end, { timeout: 15_000 });
 		await page.waitForSelector(".welcome h1", { timeout: 60_000 });
-		if (await page.$(".dialog-foot [data-slot=button] >> text=Not now")) await page.click(".dialog-foot [data-slot=button] >> text=Not now");
+		const notNow = page.locator("[data-slot=dialog-footer]").getByRole("button", { name: "Not now" });
+		if (await notNow.count()) await notNow.click();
 
 		// The agent opens a page (a local one: the owner says yes) and wants its owner to see the browser.
 		const opened = say("open the shop", [{ tools: [{ name: "mcp__browser__browser_navigate", args: { url: `${at}/one` } }] }, { tools: [{ name: "mcp__browser__browser_show", args: {} }] }, { text: "It is open." }], "It is open.");
-		await page.waitForSelector(".dialog-warn [data-slot=button] >> text=/^Allow/", { timeout: 30_000 });
-		await page.click(".dialog-warn [data-slot=button] >> text=/^Allow/");
+		const allow = page.locator("[data-slot=dialog-content][data-tone=warn]").getByRole("button", { name: /^Allow/ });
+		await allow.waitFor({ timeout: 30_000 });
+		await allow.click();
 		await opened;
 		// No window was opened for that: the panel is where it is, and it came to the front by itself.
 		assert.match(toolSaid(), /Your owner sees the browser in the Pine app/);
@@ -81,7 +83,7 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		await page.fill(".browser-address", `${at.replace("http://", "")}/three`);
 		await page.press(".browser-address", "Enter");
 		await address("/three");
-		await page.click(".browser-bar [data-slot=button][aria-label='Back']");
+		await page.locator(".browser-bar").getByRole("button", { name: "Back", exact: true }).click();
 		await address("/two");
 		await shot("b3-second");
 

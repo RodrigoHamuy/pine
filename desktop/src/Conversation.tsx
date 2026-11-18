@@ -20,7 +20,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGr
 import { Item as Card, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Kbd } from "@/components/ui/kbd";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
-import { Message, MessageContent, MessageFooter, MessageHeader } from "@/components/ui/message";
+import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -226,8 +226,8 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 }
 
 /** The owner's turn (or a task's prompt): a bubble on the owner's side, with the files it brought. */
-/** A message of the owner's. With `branch`, it can be branched from: a button under it while the pointer is on it, and its menu (`menu`). */
-export function OwnerTurn({ text, from, files, branch, menu }: { text: string; from?: string; files?: string[]; branch?: () => void; menu?: () => void }) {
+/** A message of the owner's. With `menu`, a right click on it offers to branch from it. */
+export function OwnerTurn({ text, from, files, menu }: { text: string; from?: string; files?: string[]; menu?: () => void }) {
 	return (
 		<Message align="end" data-item="user" onContextMenu={menu ? (e) => (e.preventDefault(), menu()) : undefined}>
 			<MessageContent>
@@ -248,14 +248,6 @@ export function OwnerTurn({ text, from, files, branch, menu }: { text: string; f
 							</Attachment>
 						))}
 					</AttachmentGroup>
-				) : null}
-				{branch ? (
-					<MessageFooter className="opacity-0 transition-opacity group-hover/message:opacity-100 has-focus-visible:opacity-100">
-						<Tooltip>
-							<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Branch from here" onClick={branch} />}><GitBranchIcon /></TooltipTrigger>
-							<TooltipContent>Branch from here: a new conversation that goes on from this message, with what was said up to it. This one stays as it is.</TooltipContent>
-						</Tooltip>
-					</MessageFooter>
 				) : null}
 			</MessageContent>
 		</Message>
@@ -405,7 +397,7 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 	switch (item.t) {
 		case "user": {
 			const task = tab.kind === "chat" ? item.task : undefined;
-			return <OwnerTurn text={item.text} from={item.from} files={item.files} branch={task === undefined ? undefined : () => void store.branch(tab.agent, tab.session, task)} menu={task === undefined ? undefined : () => void branchMenu(tab, task)} />;
+			return <OwnerTurn text={item.text} from={item.from} files={item.files} menu={task === undefined ? undefined : () => void branchMenu(tab, task)} />;
 		}
 		case "answer":
 			return (

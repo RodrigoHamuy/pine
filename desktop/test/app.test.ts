@@ -1258,9 +1258,16 @@ test("a message is branched from: a new conversation with what was said up to it
 		await sees(`.md >> text=answer to ${word}`);
 	}
 	const from = await page.textContent(".tab.on .name");
-	// The button stands beside a message of the owner's while the pointer is on it.
-	await page.hover("[data-item=user]:has-text('BRANCH-ONE')");
-	await page.click("[data-item=user]:has-text('BRANCH-ONE') button[aria-label='Branch from here']");
+	// A right click on a message of the owner's offers it. The menu is the system's: what it shows is noted, and the test picks.
+	await app.evaluate(({ ipcMain }: any) => {
+		const g = globalThis as any;
+		g.branchMenus = [];
+		ipcMain.removeHandler("pine:context-menu");
+		ipcMain.handle("pine:context-menu", (_e: unknown, items: Array<{ id: string; label: string }>) => (g.branchMenus.push(items.map((i) => i.label)), "branch"));
+	});
+	await page.click("[data-item=user]:has-text('BRANCH-ONE')", { button: "right" });
+	for (let i = 0; i < 100 && !(await app.evaluate(() => (globalThis as any).branchMenus.length)); i++) await new Promise((r) => setTimeout(r, 30));
+	assert.deepEqual(await app.evaluate(() => (globalThis as any).branchMenus[0]), ["Branch from here"]);
 	await sees("[data-slot=toast] >> text=from that message");
 	await sees(".tab.on .name >> text=· branch");
 	assert.ok((await page.textContent(".tab.on .name")).startsWith(`${from!.trim()} · branch`));
