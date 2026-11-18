@@ -759,7 +759,13 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 					if (op.do === "wheel") await tool("browser_mouse_wheel", { deltaX: op.dx, deltaY: op.dy });
 					else if (op.do === "move") await tool("browser_mouse_move_xy", { x: op.x, y: op.y });
 					else if (op.do === "newtab") await tool("browser_tabs", { action: "new" });
-					else await tool("browser_tabs", { action: op.do === "tab" ? "select" : "close", index: op.index });
+					else if (op.do === "closetab" && ((await tabsNow())?.tabs.length ?? 0) <= 1) {
+						// The last tab is emptied and not closed: a browser without a tab would open one again by
+						// itself. The browser stays up with its logins, and there is no page any more.
+						const before = error;
+						await tool("browser_navigate", { url: "about:blank" }, 20_000);
+						if (error === before) page = undefined;
+					} else await tool("browser_tabs", { action: op.do === "tab" ? "select" : "close", index: op.index });
 				}
 				await done();
 				return where(error);

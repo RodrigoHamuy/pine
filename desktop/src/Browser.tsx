@@ -32,6 +32,9 @@ export function BrowserView({ tab }: { tab: Tab }) {
 	/** What was done and is not sent yet: typing and the wheel come in bursts, and go as one. */
 	const pending = useRef<{ ops: Op[]; timer?: number; sending: boolean }>({ ops: [], sending: false });
 	const front = state?.tabs[state.current];
+	/** What the empty view offers: the ports of the conversation's running programs, and what the agent opened that is not one of those. */
+	const running = tab.programs.flatMap((p) => p.ports.map((port) => ({ port, command: p.command })));
+	const visited = (state?.visited ?? []).filter((url) => !running.some((r) => new RegExp(`^https?://(localhost|127\\.0\\.0\\.1):${r.port}/?$`).test(url)));
 
 	const took = (next: BrowserState | undefined) => {
 		if (!next) return;
@@ -161,8 +164,8 @@ export function BrowserView({ tab }: { tab: Tab }) {
 					{state.tabs.map((t, i) => (
 						<div key={i} className={`browser-tab${i === state.current ? " on" : ""}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
 							<span className="cut grow">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
-							{/* (The last tab stays: a browser without one would open one again.) */}
-							{state.tabs.length > 1 ? <button type="button" className="browser-tab-close" title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><Icon name="x" size={10} /></button> : null}
+							{/* (Closing the last tab leaves the browser up without a page: the view is empty again.) */}
+							<button type="button" className="browser-tab-close" title={state.tabs.length > 1 ? "Close this tab" : "Close the page"} onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><Icon name="x" size={10} /></button>
 						</div>
 					))}
 					<Button small variant="ghost" icon="plus" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />
@@ -229,11 +232,20 @@ export function BrowserView({ tab }: { tab: Tab }) {
 			) : (
 				<Empty icon="eye" title={state ? "No page is open" : "Looking for the browser…"}>
 					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}
-					{state?.visited?.length ? (
+					{/* What the conversation's own programs listen on (the code pane's Running): a server the agent started is one click away. */}
+					{state && running.length ? (
+						<div className="browser-visited">
+							<div className="faint">Running in this conversation</div>
+							{running.map((r) => (
+								<button key={r.port} type="button" className="open-link cut" title={r.command} disabled={busy} onClick={() => void go(`http://localhost:${r.port}`)}>localhost:{r.port}</button>
+							))}
+						</div>
+					) : null}
+					{visited.length ? (
 						<div className="browser-visited">
 							<div className="faint">Opened by the agent before</div>
 							{/* (An address is text an agent chose: drawn as text, whole in the tooltip, and opened only by this click.) */}
-							{state.visited.map((url) => (
+							{visited.map((url) => (
 								<button key={url} type="button" className="open-link cut" title={url} disabled={busy} onClick={() => void go(url)}>{url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</button>
 							))}
 						</div>

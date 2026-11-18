@@ -584,6 +584,13 @@ test("browser view: a picture only while a page is open, the owner's hand in ord
 	assert.equal((await b.view.state()).current, 1);
 	assert.deepEqual(await b.view.input([{ do: "tab", index: 0 }, { do: "closetab", index: 1 }]), { open: true, tabs: [{ title: "Page 0", url: "https://shop.example/cart" }], current: 0, window: false });
 	assert.deepEqual(b.log().slice(-3), ["browser_tabs new", "browser_tabs select0", "browser_tabs close1"]);
+	// The last tab is emptied, not closed: the browser stays up, and there is no page to show any more.
+	assert.deepEqual(await b.view.input([{ do: "closetab", index: 0 }]), { open: false, tabs: [], current: 0, window: false });
+	assert.equal(b.log().at(-1), "browser_navigate about:blank");
+	assert.ok(!b.log().includes("browser_tabs close0") && !b.log().includes("browser_close"));
+	assert.equal(await b.view.frame(), undefined);
+	// The owner opens a page again in the same browser.
+	assert.equal((await b.view.open("https://shop.example/cart")).open, true);
 
 	// A page's own words reach the owner's window as one line each.
 	await b.call("browser_navigate", { url: "https://sep.example/" });

@@ -88,6 +88,16 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		// The agent left the browser on /one. A call of its that would act is not carried out on a page it has not seen.
 		await say("go back", [{ tools: [{ name: "mcp__browser__browser_navigate_back", args: {} }] }, { text: "Told." }], "Told.");
 		assert.match(toolSaid(), /Not done: the browser is not where you left it[\s\S]*\/two/);
+
+		// The owner closes the last tab: the browser has no page any more, the view is empty, and what the agent opened is offered again.
+		await page.click(".browser-tab-close");
+		await page.waitForSelector(".browser .empty >> text=No page is open", { timeout: 15_000 });
+		const again = page.locator(".browser-visited", { hasText: "Opened by the agent before" }).locator(".open-link").first();
+		await again.waitFor({ timeout: 15_000 });
+		await shot("b4-closed");
+		await again.click();
+		await page.waitForSelector(".browser-page canvas:not(.blank)", { timeout: 20_000 });
+		await address("/one");
 	} finally {
 		await app?.close().catch(() => {});
 		await mock.close?.().catch(() => {});
