@@ -229,6 +229,14 @@ export class HttpServer {
 				req.on("close", () => !res.writableEnded && body.cancelOnDisconnect && this.manager.cancel(task.id));
 				return send(200, await this.manager.wait(task.id));
 			}
+			// The Pine app: a command of an answer that the owner ran in their terminal is still running, or has ended.
+			if (parts[0] === "agents" && parts[2] === "terminal" && parts.length === 3) {
+				const n = (v: unknown, most: number) => (typeof v === "number" && Number.isFinite(v) ? Math.max(0, Math.min(most, v)) : undefined);
+				if (typeof body.session !== "string" || !body.session || typeof body.command !== "string" || !body.command.trim() || (body.state !== "running" && body.state !== "ended")) throw new HttpError(400, "send session, command and state (running or ended), with code, seconds and output");
+				const code = typeof body.code === "number" && Number.isInteger(body.code) && body.code >= 0 && body.code < 256 ? body.code : undefined;
+				const task = this.manager.terminalReport(parts[1], body.session, { command: body.command.slice(0, 4000), state: body.state, code, seconds: n(body.seconds, 1e7) ?? 0, output: typeof body.output === "string" ? body.output.slice(-16_000) : "" });
+				return send(202, { task: task.id });
+			}
 			if (url.pathname === "/models/refresh") {
 				// The owner added or removed a model server with the pine command.
 				await this.manager.reloadModels();

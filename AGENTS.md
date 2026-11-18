@@ -496,6 +496,10 @@ These are invariants. A change that breaks one needs a test that shows why it is
    run by the main process; the page only types into it. What an answer holds reaches it only by
    the owner's press on a code block's Run button, and only a block whose every character shows
    as itself (`desktop/src/runnable.ts`): nothing types into it by itself, and the preview has none.
+   How such a block went goes back to the conversation (`POST /agents/<id>/terminal`,
+   `terminalNotice` in `src/background.ts`) as a `notify` task in pine's words with the output
+   quoted, like a background command's end: only for blocks run with the button, never what the
+   owner typed, and the agent never waits for it.
    The page in an ordinary browser (`npm run dev:preview` in `desktop/`, a development tool and
    no part of the app) is held to the same: Vite's server (`desktop/scripts/preview.ts`) stands
    where `main.ts` stands, holds the token and makes every call through the same module
@@ -714,8 +718,10 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   `desktop/test/browser-live.test.ts` (`PINE_LIVE=1`) puts the real browser behind the real
   app, on a page of its own on the loopback.
 - The terminal beside a conversation is tested without a window on a real pseudo-terminal with
-  `/bin/sh` (`desktop/test/terminal.test.ts`, with what a Run button refuses), and in the app with
-  `PINE_DESKTOP_SHELL=/bin/sh` (for tests only), so that no test loads the developer's shell profile.
+  `/bin/sh`, `/bin/bash` and `/bin/zsh` (`desktop/test/terminal.test.ts`: the shell hooks of
+  `desktop/electron/shell-hooks.ts`, what a run reports, what a Run button refuses), and in the app
+  with `PINE_DESKTOP_SHELL=/bin/bash` (for tests only, like `PINE_DESKTOP_STILL_RUNNING_MS`). A shell
+  named that way reads none of the developer's startup files.
 - `pine` for a terminal (`desktop/electron/command.ts`) is tested without a window
   (`desktop/test/command.test.ts`), on folders of the test's own as the PATH and the home:
   no test writes into a folder of the real PATH, and none runs what asks for a password.

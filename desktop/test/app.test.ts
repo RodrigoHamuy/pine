@@ -111,7 +111,7 @@ process.stdin.resume();
 		// (The driver shows every page in light unless it is told otherwise, whatever the app says.)
 		colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light",
 		args: [root],
-		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_SHELL: "/bin/sh", PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest` },
+		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_SHELL: "/bin/bash", PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest` },
 	});
 	page = await app.firstWindow();
 	page.on("pageerror", (e: Error) => pageErrors.push(String(e.stack ?? e.message).slice(0, 600)));
@@ -597,6 +597,13 @@ test("a shell block of an answer runs in the conversation's terminal with its bu
 	await sees("[data-slot=code-panel] [data-slot=terminal]");
 	await terminalShows("pine-ran-42");
 	assert.match(await page.textContent("[data-slot=terminal-cwd]"), /agents\/main\/workspace/);
+	// When it has ended, the conversation is told how, in pine's words with the output quoted, and the agent goes on.
+	const reported = () => mock.state.requests.find((r: any) => /\[pine: your owner ran a command from your answer in their terminal, and it has ended/.test(JSON.stringify(r.body.messages.at(-1))));
+	for (let i = 0; i < 100 && !reported(); i++) await new Promise((r) => setTimeout(r, 100));
+	const told = JSON.stringify(reported()?.body.messages.at(-1) ?? "");
+	assert.match(told, /Command: echo pine-ran-\$\(\(6\*7\)\)/);
+	assert.match(told, /finished without an error/);
+	assert.match(told, /\| pine-ran-42/);
 	// The terminal is the owner's: what is typed into it runs too.
 	await page.click("[data-slot=terminal]");
 	await page.keyboard.type("echo typed-$((1+1))");

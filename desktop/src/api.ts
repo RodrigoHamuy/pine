@@ -365,6 +365,8 @@ export const api = {
 	browserOpen: (agent: string, session: string, url: string) => post<BrowserState>(`${a(agent)}/browser/open`, { session, url }),
 	/** This app shows the browser itself: said again and again, so that the agent's browser opens no window of its own. */
 	browserEmbedded: () => post<{ ok: boolean }>("/browser/embedded"),
+	/** A command of an answer that the owner ran in the app's terminal is still running, or has ended: the conversation is told. */
+	terminalRun: (agent: string, session: string, report: { command: string; state: "running" | "ended"; code?: number; seconds: number; output: string }) => post<{ task: number }>(`${a(agent)}/terminal`, { session, ...report }),
 	stopProgram: (agent: string, session: string, id: number) => post<{ stopped: boolean }>(`${a(agent)}/programs/stop`, { session, id }),
 	goal: (agent: string, session: string) => get<{ goal?: GoalInfo }>(`${a(agent)}/goal${s(session)}`),
 	setGoal: (agent: string, session: string, what: { objective: string } | { action: "pause" | "resume" | "clear" }) => post<{ goal?: GoalInfo; cleared?: boolean }>(`${a(agent)}/goal`, { session, ...what }),

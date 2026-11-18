@@ -2,7 +2,8 @@
 // process runs the shell. It starts in the conversation's folder, or in its agent's workspace, and
 // goes on while the app runs: closing the panel or drawing it again only hands back what it printed.
 // A code block that the owner runs from an answer (its Run button, markdown.tsx) waits in `tab.runs`
-// and is typed here as a paste, and then Enter.
+// until the shell is there; the main process types it, follows it to its end and says how it went,
+// which the conversation is told (`onTermRun` in model.ts).
 import "@xterm/xterm/css/xterm.css";
 import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
@@ -13,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EmptyView } from "@/components/empty-view";
 import { bridge } from "./bridge.ts";
 import { SUB } from "./CodePanel.tsx";
-import { type Tab, useModel } from "./model.ts";
+import { store, type Tab, useModel } from "./model.ts";
 import { errText, tilde } from "./text.ts";
 
 /** A colour of the page's tokens, as xterm.js takes it: the browser says what any CSS colour is in sRGB. */
@@ -91,13 +92,10 @@ export function TerminalView({ tab }: { tab: Tab }) {
 				xterm.focus();
 			})
 			.catch((e) => !gone && setState({ error: errText(e) }));
-		// Code the owner ran from an answer, once the shell is there.
+		// Code the owner ran from an answer, once the shell is there. The main process types it and follows it to its end.
 		const drain = () => {
 			if (!open || gone) return;
-			for (const code of tab.runs.splice(0)) {
-				xterm.paste(code);
-				void bridge.termWrite(id, "\r");
-			}
+			for (const code of tab.runs.splice(0)) void bridge.termRun(id, code).catch((e) => store.flash(errText(e), "warn", 8000));
 		};
 		const runs = tab.subscribe(drain);
 		return () => {

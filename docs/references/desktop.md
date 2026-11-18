@@ -412,7 +412,8 @@ On a system without a sandbox the daemon does not write, and the app says so.
 
 The Terminal view is a shell of your own beside the conversation, as in Terminal.app: your login shell (`$SHELL`) with your
 environment, started in the conversation's folder (else the agent's workspace). It is not the
-agent's: no sandbox, no mode, no approvals, and the agent sees nothing of what runs there.
+agent's: no sandbox, no mode, no approvals. The agent sees nothing of what you type there; it
+hears only how a block you ran with ▶ went (below).
 
 | | |
 |---|---|
@@ -425,12 +426,30 @@ agent's: no sandbox, no mode, no approvals, and the agent sees nothing of what r
 paste, then Enter. Nothing runs without that press, and a block still streaming has none. A
 block holding a character that does not show as itself (a control character, an escape
 sequence, a direction override, a zero-width character) is refused, with the character named.
-Other languages get no ▶.
+Other languages get no ▶. While a command runs in the terminal, ▶ is refused (the block would
+go to that command): wait for it, or stop it with Ctrl-C.
+
+**The agent hears how it went.** When a block run with ▶ has ended, the conversation gets a
+message from pine with the command, how it ended (exit code, or Ctrl-C) and its last 30 lines of
+output, and the agent goes on from there: it reads an error and says what to do next, or takes
+the next step. A block that is still running after 10 seconds (a dev server, a watcher) is
+reported once as running, with its output so far, and again when it ends. The agent never waits
+for the terminal: its turn is over when it has written the block, and a report is a message that
+comes later, after whatever it is doing. A command that never ends never ends anything else.
+
+| | |
+|---|---|
+| What is reported | Only blocks run with ▶. What you type yourself is never reported |
+| How the end is known | The shell is started with hooks that mark when a command starts and ends (zsh and bash, after your own startup files). Another shell runs ▶ blocks but does not report them |
+| The report | A message of pine's own, not yours, with every line of output marked as output (`POST /agents/<id>/terminal`, [operations.md](operations.md)). In a conversation that has read outside content it keeps that mark |
 
 For an agent: to hand the owner a command to run, put it in a block marked `bash`. In Pine it
-gets ▶; elsewhere it is a block to copy. A message written in the app says so to the agent (the
-app sends `"via": "app"`, and the agent's note says it is read in the Pine app), so the agent
-writes such a block instead of a script to open or a command it runs itself.
+gets ▶, and you are told how it went; elsewhere it is a block to copy. A message written in the
+app says so to the agent (the app sends `"via": "app"`, and the agent's note says it is read in
+the Pine app), so the agent writes such a block instead of a script to open or a command it runs
+itself. For a series of commands that you have to run one after another, the agent is told to
+give one at a time and the next one when it has heard how the last went, so that the next
+command is always at the bottom of the conversation and not somewhere above.
 
 ## The browser
 
@@ -513,7 +532,7 @@ the agent to write. So:
 | What is drawn straight from the daemon | Only pictures, video and sound, by fixed addresses of the control API. The bars of a sound are measured from the same bytes, which the app asks the daemon for; the page reads no file |
 | Notifications and the window's title | pine's own words only |
 | What is heard | Text for the input: never sent by itself |
-| A code block's Run button | Only your click types a block into your terminal, and only a block whose every character shows as itself: an answer cannot run anything by itself, nor hide a part of what it runs |
+| A code block's Run button | Only your click types a block into your terminal, and only a block whose every character shows as itself: an answer cannot run anything by itself, nor hide a part of what it runs. What the agent hears back is that block's output, quoted, and nothing you typed |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | What the app itself asks the web | One thing: GitHub, for pine's last release (see "A newer version"). The question carries nothing about this Mac, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered |

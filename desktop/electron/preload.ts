@@ -36,10 +36,14 @@ const bridge = {
 	/** The owner's terminal of a conversation: started in `cwd` when it does not run yet; what it printed so far comes back. */
 	termOpen: (id: string, cwd: string | undefined, cols: number, rows: number) => ipcRenderer.invoke("pine:term-open", id, cwd, cols, rows) as Promise<{ kept: string; cwd: string; fresh: boolean }>,
 	termWrite: (id: string, data: string) => ipcRenderer.invoke("pine:term-write", id, data),
+	/** A code block of an answer, run with its button: typed into the terminal and followed until it ends. `reports`: whether the shell says how it went. */
+	termRun: (id: string, code: string) => ipcRenderer.invoke("pine:term-run", id, code) as Promise<{ reports: boolean }>,
 	termResize: (id: string, cols: number, rows: number) => ipcRenderer.invoke("pine:term-resize", id, cols, rows),
 	termClose: (id: string) => ipcRenderer.invoke("pine:term-close", id),
 	onTermData: on("pine:term-data"),
 	onTermExit: on("pine:term-exit"),
+	/** A block run with a Run button is still running, or has ended (`RunReport` of terminal.ts). */
+	onTermRun: on("pine:term-run"),
 	onService: on("pine:service"),
 	onEvents: on("pine:events"),
 	onConnection: on("pine:connection"),

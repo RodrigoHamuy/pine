@@ -126,7 +126,11 @@ const send = (channel: string, ...args: unknown[]) => {
 };
 
 /** The owner's terminal of each conversation (terminal.ts): their own shell, which ends with the app. */
-const terminals = new Terminals({ data: (id, data) => send("pine:term-data", id, data), exit: (id, code) => send("pine:term-exit", id, code) }, loginEnv, process.env.PINE_DESKTOP_SHELL ? [process.env.PINE_DESKTOP_SHELL] : undefined);
+// A block run with a Run button reports how it went to the page, which tells the conversation through the daemon.
+const terminals = new Terminals(
+	{ data: (id, data) => send("pine:term-data", id, data), exit: (id, code) => send("pine:term-exit", id, code), run: (id, report) => send("pine:term-run", id, report) },
+	{ env: loginEnv, hooks: path.join(app.getPath("userData"), "shell-hooks"), shell: process.env.PINE_DESKTOP_SHELL ? [process.env.PINE_DESKTOP_SHELL] : undefined, stillRunningMs: Number(process.env.PINE_DESKTOP_STILL_RUNNING_MS) || undefined },
+);
 
 function setState(next: ServiceState): void {
 	state = next;
@@ -527,6 +531,7 @@ function wire(): void {
 	// keyboard, or from a code block of an answer that the owner ran with its button.
 	handle("pine:term-open", (id: string, cwd?: string, cols?: number, rows?: number) => terminals.open(String(id), cwd, cols, rows));
 	handle("pine:term-write", (id: string, data: string) => terminals.write(String(id), data));
+	handle("pine:term-run", (id: string, code: string) => terminals.run(String(id), code));
 	handle("pine:term-resize", (id: string, cols: number, rows: number) => terminals.resize(String(id), cols, rows));
 	handle("pine:term-close", (id: string) => terminals.close(String(id)));
 	handle("pine:context-menu", (items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean }>) => {

@@ -85,10 +85,12 @@ function standIn(): Bridge {
 			throw new Error("The terminal is in the Pine app only.");
 		},
 		termWrite: async () => {},
+		termRun: async () => ({ reports: false }),
 		termResize: async () => {},
 		termClose: async () => {},
 		onTermData: never,
 		onTermExit: never,
+		onTermRun: never,
 		onService: on(listeners.service),
 		onEvents: on(listeners.events),
 		onConnection: on(listeners.connection),

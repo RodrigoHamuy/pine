@@ -312,6 +312,11 @@ export class Store extends Model {
 			this.touch();
 		});
 		bridge.onMenu((command: string) => void this.command(command));
+		// How a block run with a Run button went: the conversation it came from is told, and goes on.
+		bridge.onTermRun((id: string, report: { command: string; state: "running" | "ended"; code?: number; seconds: number; output: string }) => {
+			const at = id.indexOf(":");
+			if (at > 0) void this.attempt(() => api.terminalRun(id.slice(0, at), id.slice(at + 1), report));
+		});
 		bridge.onFocus((f: boolean) => {
 			this.focused = f;
 			if (f && this.active) this.seen(this.active);

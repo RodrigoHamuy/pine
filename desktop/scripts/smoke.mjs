@@ -95,7 +95,17 @@ try {
 			}),
 	);
 	if (printed !== "smoke-42") throw new Error(`the terminal printed ${printed}`);
-	console.log("ok: a terminal runs in the app's own node-pty");
+	// A block run as its Run button runs it, in the owner's own shell with their startup files and pine's hooks: it says how it went.
+	const report = await page.evaluate(
+		() =>
+			new Promise((resolve, reject) => {
+				const stop = window.pine.onTermRun((id, r) => id === "smoke:run" && r.state === "ended" && (stop(), void window.pine.termClose("smoke:run"), resolve(r)));
+				setTimeout(() => (stop(), reject(new Error("the run never said that it had ended"))), 20_000);
+				window.pine.termOpen("smoke:run", undefined, 80, 24).then(() => window.pine.termRun("smoke:run", "echo ran-$((6*7)); false")).then((r) => r.reports || reject(new Error("this shell does not report")), reject);
+			}),
+	);
+	if (report.code !== 1 || !/ran-42/.test(report.output)) throw new Error(`the run reported ${JSON.stringify(report)}`);
+	console.log("ok: a terminal runs in the app's own node-pty, and a block run in the owner's shell says how it ended");
 	// PINE_SMOKE_HOLD=<seconds>: stays open that long, for somebody to look at the window.
 	if (Number(process.env.PINE_SMOKE_HOLD) > 0) await new Promise((r) => setTimeout(r, Number(process.env.PINE_SMOKE_HOLD) * 1000));
 	if (from !== "the app") throw new Error(`the app used the pine of "${from}", not the one it carries`);

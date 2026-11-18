@@ -12,17 +12,51 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import type { IPty } from "node-pty";
+import { type Mark, MarkReader, withHooks } from "./shell-hooks.ts";
 
 /** How much of what a shell printed is kept for a page that opens it again. */
 const KEEP = 256 * 1024;
 /** A terminal's name: the conversation's key (agent:session), as the page knows it. */
 const ID = /^[A-Za-z0-9._~:-]{1,200}$/;
+/** A command that runs this long without ending is said to be running, once, with what it printed so far. */
+const STILL_RUNNING_MS = 10_000;
+/** After a command ends, this long without another starting: the block is over (a block of several lines without bracketed paste is a command per line). */
+const SETTLE_MS = 300;
+/** A block typed into a shell that does not start a command within this long is not followed any more. */
+const NEVER_STARTED_MS = 30_000;
+/** How long a block waits for a shell that has not shown its first prompt yet. */
+const FIRST_PROMPT_MS = 15_000;
+/** How much of what a block printed is kept for the report. */
+const RUN_KEEP = 64 * 1024;
+
 /** Variables of the app's own process that a shell of the owner's has no business with. */
 const NOT_THEIRS = /^(ELECTRON_|PINE_DESKTOP_|CHROME_|NODE_OPTIONS$|__CF|XPC_SERVICE_NAME$)/;
+
+/** What a block run with a Run button did, as the conversation is told. */
+export interface RunReport {
+	command: string;
+	state: "running" | "ended";
+	code?: number;
+	seconds: number;
+	output: string;
+}
 
 export interface TerminalEvents {
 	data: (id: string, data: string) => void;
 	exit: (id: string, code: number) => void;
+	/** A block run with a Run button is still running (once), or has ended. */
+	run?: (id: string, report: RunReport) => void;
+}
+
+/** A block that was run with a Run button, followed from when it was typed until it has ended. */
+interface Run {
+	command: string;
+	started?: number;
+	out: string;
+	code?: number;
+	saidRunning: boolean;
+	/** Until it starts; until it is said to be still running; from an end until it is over (`SETTLE_MS`). */
+	timers: { never?: NodeJS.Timeout; still?: NodeJS.Timeout; settle?: NodeJS.Timeout };
 }
 
 interface Shell {
@@ -30,6 +64,17 @@ interface Shell {
 	/** The end of what it printed. */
 	kept: string;
 	cwd: string;
+	/** Whether it reports when a command ends (shell-hooks.ts). */
+	marks: boolean;
+	reader: MarkReader;
+	/** It has shown a prompt: it reads what is typed as a command. */
+	prompted: boolean;
+	/** A command runs right now (started, not ended). */
+	busy: boolean;
+	/** Bracketed paste is on: a block of several lines arrives as one command. */
+	bracketed: boolean;
+	run?: Run;
+	waiting: Array<() => void>;
 }
 
 type Pty = typeof import("node-pty");
@@ -84,17 +129,24 @@ export function shellEnv(base: NodeJS.ProcessEnv): Record<string, string> {
 
 const size = (n: unknown, least: number, most: number) => Math.max(least, Math.min(most, Math.floor(Number(n)) || least));
 
+export interface TerminalOptions {
+	/** The environment shells start with (the owner's login environment). */
+	env: () => Promise<NodeJS.ProcessEnv>;
+	/** Where the files of the shell hooks are written (the app's own data). */
+	hooks: string;
+	/** The shell to run; the owner's own ($SHELL, as a login shell) when not given. A shell named here (tests) reads none of the owner's startup files. */
+	shell?: string[];
+	/** After how long a block that runs on is said to be running (tests make it short). */
+	stillRunningMs?: number;
+}
+
 export class Terminals {
 	private shells = new Map<string, Shell>();
 	private events: TerminalEvents;
-	/** The environment shells start with (the owner's login environment). */
-	private env: () => Promise<NodeJS.ProcessEnv>;
-	/** The shell to run; the owner's own ($SHELL, as a login shell) when not given. */
-	private shell?: string[];
-	constructor(events: TerminalEvents, env: () => Promise<NodeJS.ProcessEnv>, shell?: string[]) {
+	private opts: TerminalOptions;
+	constructor(events: TerminalEvents, opts: TerminalOptions) {
 		this.events = events;
-		this.env = env;
-		this.shell = shell;
+		this.opts = opts;
 	}
 
 	/**
@@ -109,26 +161,110 @@ export class Terminals {
 			return { kept: have.kept, cwd: have.cwd, fresh: false };
 		}
 		const pty = ptyModule();
-		const env = shellEnv(await this.env());
-		const [file, ...args] = this.shell ?? [env.SHELL && fs.existsSync(env.SHELL) ? env.SHELL : process.platform === "win32" ? "powershell.exe" : "/bin/zsh", ...(process.platform === "win32" ? [] : ["-l"])];
+		const env = shellEnv(await this.opts.env());
+		const [file, ...args] = this.opts.shell ?? [env.SHELL && fs.existsSync(env.SHELL) ? env.SHELL : process.platform === "win32" ? "powershell.exe" : "/bin/zsh", ...(process.platform === "win32" ? [] : ["-l"])];
+		const launch = withHooks(file, args, env, this.opts.hooks, Boolean(this.opts.shell));
 		const dir = startIn(cwd);
 		// Another call may have opened it while the environment was being asked for.
 		const raced = this.shells.get(id);
 		if (raced) return { kept: raced.kept, cwd: raced.cwd, fresh: false };
-		const proc = pty.spawn(file, args, { name: "xterm-256color", cols: size(cols, 2, 1000), rows: size(rows, 1, 500), cwd: dir, env });
-		const shell: Shell = { pty: proc, kept: "", cwd: dir };
+		const proc = pty.spawn(launch.file, launch.args, { name: "xterm-256color", cols: size(cols, 2, 1000), rows: size(rows, 1, 500), cwd: dir, env: launch.env });
+		const shell: Shell = { pty: proc, kept: "", cwd: dir, marks: launch.marks, reader: new MarkReader(), prompted: false, busy: false, bracketed: false, waiting: [] };
 		this.shells.set(id, shell);
 		proc.onData((data) => {
 			shell.kept = (shell.kept + data).slice(-KEEP);
 			this.events.data(id, data);
+			if (shell.marks) this.follow(id, shell, data);
 		});
 		// Said only of a shell that ended by itself: one that was closed has a successor, or nobody, to tell.
 		proc.onExit(({ exitCode }) => {
 			if (this.shells.get(id) !== shell) return;
 			this.shells.delete(id);
+			if (shell.run?.started) this.ended(id, shell, exitCode);
+			this.forget(shell);
 			this.events.exit(id, exitCode);
 		});
 		return { kept: "", cwd: dir, fresh: true };
+	}
+
+	/**
+	 * A code block of an answer, run with its button: typed into the shell as a paste and then
+	 * Enter, and followed until it has ended. `reports` says whether the conversation will hear how
+	 * it went (a shell without the hooks says nothing). A shell busy with another command gets
+	 * nothing: what was typed would go to that command.
+	 */
+	async run(id: string, code: unknown): Promise<{ reports: boolean }> {
+		const shell = this.shells.get(id);
+		if (!shell) throw new Error("This conversation's terminal is not open.");
+		if (typeof code !== "string" || !code.trim()) throw new Error("There is nothing to run.");
+		if (shell.marks && !shell.prompted) await new Promise<void>((resolve) => (shell.waiting.push(resolve), setTimeout(resolve, FIRST_PROMPT_MS)));
+		if (this.shells.get(id) !== shell) throw new Error("The terminal ended before the block could run.");
+		if (shell.marks && (shell.busy || shell.run)) throw new Error("The terminal is busy with another command. Wait for it, or stop it with Ctrl-C, and run the block again.");
+		const text = code.replace(/\r\n/g, "\n").replace(/\n+$/, "");
+		if (shell.marks) {
+			const run: Run = { command: text, out: "", saidRunning: false, timers: {} };
+			shell.run = run;
+			run.timers.never = setTimeout(() => !run.started && shell.run === run && this.forget(shell), NEVER_STARTED_MS);
+		}
+		shell.pty.write(shell.bracketed ? `\x1b[200~${text}\x1b[201~\r` : `${text.replace(/\n/g, "\r")}\r`);
+		return { reports: shell.marks };
+	}
+
+	private forget(shell: Shell): void {
+		for (const t of Object.values(shell.run?.timers ?? {})) clearTimeout(t);
+		shell.run = undefined;
+		for (const wake of shell.waiting.splice(0)) wake();
+	}
+
+	/** What the shell printed, read for its marks: prompts, commands that start and end, and the output of a block that runs. */
+	private follow(id: string, shell: Shell, data: string): void {
+		if (data.includes("\x1b[?2004h")) shell.bracketed = true;
+		if (data.includes("\x1b[?2004l")) shell.bracketed = false;
+		for (const piece of shell.reader.read(data)) {
+			if (typeof piece === "string") {
+				if (shell.run?.started) shell.run.out = (shell.run.out + piece).slice(-RUN_KEEP);
+				continue;
+			}
+			this.mark(id, shell, piece);
+		}
+	}
+
+	private mark(id: string, shell: Shell, mark: Mark): void {
+		const run = shell.run;
+		if (mark.kind === "A") {
+			shell.prompted = true;
+			for (const wake of shell.waiting.splice(0)) wake();
+			return;
+		}
+		if (mark.kind === "C") {
+			shell.busy = true;
+			if (!run) return;
+			// A further line of the same block (no bracketed paste): it goes on.
+			clearTimeout(run.timers.settle);
+			clearTimeout(run.timers.never);
+			if (!run.started) {
+				run.started = Date.now();
+				run.timers.still = setTimeout(() => {
+					if (shell.run !== run || run.saidRunning) return;
+					run.saidRunning = true;
+					this.events.run?.(id, { command: run.command, state: "running", seconds: (Date.now() - run.started!) / 1000, output: run.out });
+				}, this.opts.stillRunningMs ?? STILL_RUNNING_MS);
+			}
+			return;
+		}
+		// D: a command has ended.
+		shell.busy = false;
+		if (!run?.started) return;
+		run.code = mark.code;
+		clearTimeout(run.timers.settle);
+		run.timers.settle = setTimeout(() => shell.run === run && this.ended(id, shell, run.code), SETTLE_MS);
+	}
+
+	private ended(id: string, shell: Shell, code: number | undefined): void {
+		const run = shell.run;
+		if (!run?.started) return;
+		this.forget(shell);
+		this.events.run?.(id, { command: run.command, state: "ended", code, seconds: (Date.now() - run.started) / 1000, output: run.out });
 	}
 
 	/** What was typed, or pasted, into a terminal. */
@@ -155,6 +291,7 @@ export class Terminals {
 		const shell = this.shells.get(id);
 		if (!shell) return;
 		this.shells.delete(id);
+		this.forget(shell);
 		try {
 			shell.pty.kill();
 		} catch {
