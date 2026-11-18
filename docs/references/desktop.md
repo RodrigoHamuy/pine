@@ -500,9 +500,9 @@ the side bar and the code panel (Resizable), the side bar itself (Sidebar, fixed
 (Collapsible) are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
 of rows to open) is ui-sdk's (`@ui-sdk/react`), in `src/lists.tsx`; ui-sdk is never used for a
-piece shadcn has. The two meet in the side bar: an agent's conversations are a ui-sdk list drawn
-as the stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the
-list's option, so the rows look like the side bar's and the list stays one tab stop with the arrows.
+piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk list drawn as the
+stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the list's
+option, so the rows look like the side bar's and the arrow keys move between them.
 The side bar's colours are the `--sidebar*` tokens in `index.css`, set from pine's own: rows are
 muted, the one in front pressed, and its background is left to the window behind it (the system's
 material on a Mac). pine's own parts (`src/ui.tsx`: the logo, the working dot, an empty view,
