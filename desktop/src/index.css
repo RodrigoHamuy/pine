@@ -1,0 +1,363 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Streamdown draws answers with utilities of its own, which Tailwind finds only where it is told to look. */
+@source "../node_modules/streamdown/dist/*.js";
+@source "../node_modules/@streamdown/code/dist/*.js";
+
+/* Dark is a class on the root element, which theme.ts keeps in step with the system's appearance. */
+@custom-variant dark (&:is(.dark *));
+
+/* pine's colours. Light has its own; dark is the poimandres theme (github.com/drcmda/poimandres-theme):
+   its colours are the --p-* values, the app's names are set from them, and code is coloured the way the
+   theme colours it. Dark is a class on the root element, which theme.ts keeps in step with the system. */
+:root {
+	color-scheme: light;
+	/* The density of the whole page: every rem size (text, spacing, shadcn's components) follows this one. */
+	font-size: 15px;
+	--font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+	--bg: #fdfdfc;
+	--surface: #ffffff;
+	--raised: #f4f5f2;
+	--sunk: #eff0ed;
+	--composer: #ffffff;
+	--hover: rgba(20, 30, 24, 0.055);
+	--press: rgba(20, 30, 24, 0.09);
+	--line: #e1e3de;
+	--line-soft: #ecedea;
+	--text: #1a1d1b;
+	--text-muted: #666e68;
+	--faint: #99a19b;
+	--brand: #1f7a55;
+	--brand-soft: rgba(31, 122, 85, 0.1);
+	--on-accent: #ffffff;
+	--warn: #a86a08;
+	--warn-soft: rgba(196, 136, 20, 0.12);
+	--bad: #c2413a;
+	--bad-soft: rgba(194, 65, 58, 0.1);
+	--info: #2a6fc0;
+	--plan: #7c4fd0;
+	--add: #1c7c4a;
+	--add-bg: rgba(40, 160, 95, 0.12);
+	--del: #b3382f;
+	--del-bg: rgba(210, 70, 60, 0.11);
+	--shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 28px rgba(0, 0, 0, 0.1);
+	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.22);
+	--side: rgba(236, 237, 233, 0.86);
+	--scrim: rgba(20, 24, 22, 0.28);
+	--select: color-mix(in srgb, var(--brand) 28%, transparent);
+}
+
+.dark {
+	color-scheme: dark;
+	--p-bg: #1b1e28;
+	--p-fg: #a6accd;
+	--p-bright: #e4f0fb;
+	--p-comment: #767c9d;
+	--p-mint: #5de4c7;
+	--p-teal: #5fb3a1;
+	--p-blue: #add7ff;
+	--p-sky: #89ddff;
+	--p-steel: #91b4d5;
+	--p-slate: #7390aa;
+	--p-yellow: #fffac2;
+	--p-pink: #d0679d;
+	--p-focus: #303340;
+
+	--bg: var(--p-bg);
+	--surface: #1e212c;
+	--raised: #232633;
+	--sunk: #171922;
+	--composer: #1e212c;
+	--hover: rgba(166, 172, 205, 0.07);
+	--press: rgba(166, 172, 205, 0.12);
+	--line: #2b2e3c;
+	--line-soft: #242734;
+	--text: var(--p-bright);
+	--text-muted: var(--p-fg);
+	--faint: var(--p-comment);
+	--brand: var(--p-mint);
+	--brand-soft: rgba(93, 228, 199, 0.12);
+	--on-accent: #171922;
+	--warn: var(--p-yellow);
+	--warn-soft: rgba(255, 250, 194, 0.1);
+	--bad: var(--p-pink);
+	--bad-soft: rgba(208, 103, 157, 0.15);
+	--info: var(--p-blue);
+	--plan: var(--p-sky);
+	--add: var(--p-mint);
+	--add-bg: rgba(93, 228, 199, 0.1);
+	--del: var(--p-pink);
+	--del-bg: rgba(208, 103, 157, 0.14);
+	--select: rgba(113, 124, 180, 0.3);
+	--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);
+	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
+	--side: rgba(19, 21, 29, 0.88);
+	--scrim: rgba(10, 11, 17, 0.55);
+}
+
+/* The code editor's colours (CodePanel.tsx: its CodeMirror theme and highlight style read only these).
+   Light uses pine's names; dark is poimandres, token by token as the theme has them, which tells more
+   kinds of keyword apart than light does. `currentColor` is the colour of the text around. */
+:root {
+	--code-text: var(--text);
+	--code-gutter: var(--faint);
+	--code-gutter-active: var(--faint);
+	--code-active-line: var(--hover);
+	--code-cursor: var(--brand);
+	--code-match: var(--warn-soft);
+	--code-match-line: color-mix(in oklab, var(--warn) 50%, transparent);
+	--code-comment: var(--faint);
+	--code-meta: var(--faint);
+	--code-meta-style: italic;
+	--code-keyword: var(--plan);
+	--code-definition: var(--plan);
+	--code-control: var(--plan);
+	--code-modifier: var(--plan);
+	--code-string: var(--add);
+	--code-regexp: var(--add);
+	--code-literal: var(--warn);
+	--code-null: var(--warn);
+	--code-name: var(--text);
+	--code-attribute: var(--text);
+	--code-attribute-style: normal;
+	--code-call: var(--info);
+	--code-function: var(--info);
+	--code-type: var(--info);
+	--code-namespace: var(--info);
+	--code-tag: var(--info);
+	--code-heading: currentColor;
+	--code-emphasis: currentColor;
+	--code-link: currentColor;
+	--code-inserted: var(--add);
+	--code-deleted: var(--del);
+	--code-punctuation: var(--text-muted);
+	--code-operator: var(--text-muted);
+	/* How tall a dialog's body grows before it scrolls: shadcn's own value for a scrollable dialog. */
+	--dialog-scroll: 50vh;
+}
+
+.dark {
+	--code-text: var(--p-fg);
+	--code-gutter: color-mix(in oklab, var(--p-comment) 55%, transparent);
+	--code-gutter-active: var(--p-fg);
+	--code-active-line: color-mix(in oklab, var(--select) 25%, transparent);
+	--code-cursor: var(--p-fg);
+	--code-match: color-mix(in oklab, var(--p-blue) 25%, transparent);
+	--code-match-line: color-mix(in oklab, var(--p-blue) 50%, transparent);
+	--code-comment: color-mix(in oklab, var(--p-comment) 70%, transparent);
+	--code-meta: var(--p-fg);
+	--code-meta-style: normal;
+	--code-keyword: var(--p-fg);
+	--code-definition: var(--p-steel);
+	--code-control: color-mix(in oklab, var(--p-mint) 75%, transparent);
+	--code-modifier: var(--p-mint);
+	--code-string: var(--p-mint);
+	--code-regexp: var(--p-teal);
+	--code-literal: var(--p-mint);
+	--code-null: var(--p-pink);
+	--code-name: var(--p-bright);
+	--code-attribute: var(--p-steel);
+	--code-attribute-style: italic;
+	--code-call: color-mix(in oklab, var(--p-bright) 80%, transparent);
+	--code-function: var(--p-blue);
+	--code-type: color-mix(in oklab, var(--p-fg) 75%, transparent);
+	--code-namespace: var(--p-steel);
+	--code-tag: var(--p-mint);
+	--code-heading: var(--p-mint);
+	--code-emphasis: var(--p-slate);
+	--code-link: var(--p-blue);
+	--code-inserted: var(--p-blue);
+	--code-deleted: var(--p-pink);
+	--code-punctuation: var(--p-fg);
+	--code-operator: var(--p-steel);
+}
+
+/* The editor's theme (CodePanel.tsx) reads these from script, where Tailwind cannot see them, and Tailwind
+   emits a theme variable only when a utility uses it. Static keeps them emitted; the values are Tailwind's own. */
+@theme static {
+	--text-xs: 0.75rem;
+	--leading-relaxed: 1.625;
+	--font-weight-semibold: 600;
+}
+
+/* shadcn's tokens, set from pine's own colours (light in :root, poimandres in .dark, above).
+   They only point at pine's names, so one place holds each colour and the dark values follow the class
+   by themselves. The font is the system's, as it always was. */
+@theme inline {
+	--font-sans: var(--font);
+	--font-mono: var(--mono);
+	--font-heading: var(--font);
+	--color-sidebar-ring: var(--sidebar-ring);
+	--color-sidebar-border: var(--sidebar-border);
+	--color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+	--color-sidebar-accent: var(--sidebar-accent);
+	--color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+	--color-sidebar-primary: var(--sidebar-primary);
+	--color-sidebar-foreground: var(--sidebar-foreground);
+	--color-sidebar: var(--sidebar);
+	--color-chart-5: var(--chart-5);
+	--color-chart-4: var(--chart-4);
+	--color-chart-3: var(--chart-3);
+	--color-chart-2: var(--chart-2);
+	--color-chart-1: var(--chart-1);
+	--color-ring: var(--ring);
+	--color-input: var(--input);
+	--color-border: var(--border);
+	--color-destructive: var(--destructive);
+	--color-accent-foreground: var(--accent-foreground);
+	--color-accent: var(--accent);
+	--color-muted-foreground: var(--muted-foreground);
+	--color-muted: var(--muted);
+	--color-secondary-foreground: var(--secondary-foreground);
+	--color-secondary: var(--secondary);
+	--color-primary-foreground: var(--primary-foreground);
+	--color-primary: var(--primary);
+	--color-popover-foreground: var(--popover-foreground);
+	--color-popover: var(--popover);
+	--color-card-foreground: var(--card-foreground);
+	--color-card: var(--card);
+	--color-foreground: var(--foreground);
+	--color-background: var(--background);
+	/* pine's own colours that shadcn has no name for, as utilities (text-warn, bg-bad-soft...). */
+	--color-warn: var(--warn);
+	--color-warn-soft: var(--warn-soft);
+	--color-bad-soft: var(--bad-soft);
+	--color-info: var(--info);
+	--color-plan: var(--plan);
+	--color-faint: var(--faint);
+	--color-brand-soft: var(--brand-soft);
+	--color-line-soft: var(--line-soft);
+	--color-raised: var(--raised);
+	--color-sunk: var(--sunk);
+	--color-hover: var(--hover);
+	--color-press: var(--press);
+	--color-scrim: var(--scrim);
+	--color-composer: var(--composer);
+	--color-add: var(--add);
+	--color-add-bg: var(--add-bg);
+	--color-del: var(--del);
+	--color-del-bg: var(--del-bg);
+	--radius-sm: calc(var(--radius) * 0.6);
+	--radius-md: calc(var(--radius) * 0.8);
+	--radius-lg: var(--radius);
+	--radius-xl: calc(var(--radius) * 1.4);
+	--radius-2xl: calc(var(--radius) * 1.8);
+	--radius-3xl: calc(var(--radius) * 2.2);
+	--radius-4xl: calc(var(--radius) * 2.6);
+	--shadow-md: var(--shadow);
+	--shadow-lg: var(--shadow-l);
+	/* A line too long for its place slides to show its end, and back (needs a container around it). */
+	--animate-slide-end: slide-end 5s linear 0.5s infinite alternate;
+	@keyframes slide-end {
+		0%,
+		12% {
+			transform: translateX(0);
+		}
+		88%,
+		100% {
+			transform: translateX(min(0px, 100cqw - 100%));
+		}
+	}
+}
+
+/* What moves the window on a Mac: the bar along the top and the side bar, where nothing is to click. */
+@utility app-drag {
+	-webkit-app-region: drag;
+}
+@utility app-no-drag {
+	-webkit-app-region: no-drag;
+}
+
+:root {
+	--background: var(--bg);
+	--foreground: var(--text);
+	--card: var(--surface);
+	--card-foreground: var(--text);
+	--popover: var(--surface);
+	--popover-foreground: var(--text);
+	--primary: var(--brand);
+	--primary-foreground: var(--on-accent);
+	--secondary: var(--raised);
+	--secondary-foreground: var(--text);
+	--muted: var(--sunk);
+	--muted-foreground: var(--text-muted);
+	--accent: var(--hover);
+	--accent-foreground: var(--text);
+	--destructive: var(--bad);
+	--border: var(--line);
+	--input: var(--line);
+	/* What has the keyboard is said in gray, never in the green: the green is for what is on or at work. */
+	--ring: var(--faint);
+	--chart-1: var(--brand);
+	--chart-2: var(--info);
+	--chart-3: var(--plan);
+	--chart-4: var(--warn);
+	--chart-5: var(--bad);
+	--radius: 0.625rem;
+	/* The side bar's rows are muted until the pointer is on one; the one in front stays pressed. */
+	--sidebar: var(--side);
+	--sidebar-foreground: var(--text-muted);
+	--sidebar-primary: var(--brand);
+	--sidebar-primary-foreground: var(--on-accent);
+	--sidebar-accent: var(--press);
+	--sidebar-accent-foreground: var(--text);
+	--sidebar-border: var(--line);
+	--sidebar-ring: var(--faint);
+}
+
+@layer base {
+	* {
+		@apply border-border outline-ring/50;
+	}
+	html,
+	body,
+	#root {
+		@apply h-full;
+	}
+	html {
+		@apply font-sans;
+	}
+	/* On a Mac the window is the system's material, which shows through; elsewhere it is the page's colour. */
+	body {
+		@apply overflow-hidden bg-transparent text-sm text-foreground antialiased select-none cursor-default;
+	}
+	html:not([data-platform="darwin"]) body {
+		@apply bg-background;
+	}
+	::selection {
+		background: var(--select);
+	}
+	::-webkit-scrollbar {
+		@apply size-2.5;
+	}
+	::-webkit-scrollbar-thumb {
+		@apply rounded-full border-2 border-solid border-transparent bg-press bg-clip-content;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		@apply bg-faint;
+	}
+	svg.lucide {
+		@apply shrink-0;
+	}
+	/* What find in a conversation matches (the CSS Highlight API: no element to put a class on). */
+	::highlight(pine-find) {
+		background-color: color-mix(in srgb, var(--warn) 32%, transparent);
+	}
+	::highlight(pine-find-at) {
+		background-color: var(--warn);
+		color: var(--background);
+	}
+}
+
+/* A scroll area's bar shows only while it scrolls or under the pointer: the fade at its cut edge already says there is more.
+   Outside the base layer, so that the stock bar's transition-colors utility does not take the fade away. */
+[data-slot="scroll-area-scrollbar"] {
+	@apply opacity-0 transition-opacity duration-200;
+}
+[data-slot="scroll-area-scrollbar"]:is([data-hovering], [data-scrolling], :hover) {
+	@apply opacity-100;
+}

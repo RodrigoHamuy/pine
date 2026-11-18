@@ -2,6 +2,12 @@
 // with an editor, what changed in the folder (git), what the last message changed, what the
 // agent's tool calls printed, and what its commands left running. Everything is read through the control API; a file is written through it too, by
 // the daemon, inside a sandbox that reaches only this folder.
+import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
+import { Button } from "@/components/ui/button";
+import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
 import { html } from "@codemirror/lang-html";
@@ -16,7 +22,9 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
+import { CodeBlock, CodeBlockContent, CodeBlockLine } from "@/components/ui/code-block";
+import { Printed } from "@/components/printed";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
@@ -24,42 +32,74 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { Button, Confirm, Empty, Icon, Segmented, Pulse, useLoad } from "./ui.tsx";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { LISTBOX, onPick, rowClass, TREE_ITEM } from "./lists.tsx";
+import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
+import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
+import { EmptyView } from "@/components/empty-view";
+import { useLoad } from "./use-load.ts";
+import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
-// The editor says what a token is, and styles.css what it looks like: the colours differ between light and
-// dark (dark is poimandres, which tells more kinds of keyword apart than light does).
+// The editor says what a token is and what it looks like. The colours are tokens of index.css
+// (`--code-*`), so light and dark differ there and nowhere else.
 const colours = HighlightStyle.define([
-	{ tag: [t.comment], class: "t-comment" },
-	{ tag: [t.meta], class: "t-meta" },
-	{ tag: [t.keyword], class: "t-kw" },
-	{ tag: [t.definitionKeyword], class: "t-kw-def" },
-	{ tag: [t.controlKeyword], class: "t-kw-flow" },
-	{ tag: [t.moduleKeyword, t.modifier, t.operatorKeyword, t.self], class: "t-kw-mod" },
-	{ tag: [t.string, t.special(t.string)], class: "t-str" },
-	{ tag: [t.regexp, t.escape], class: "t-re" },
-	{ tag: [t.number, t.atom, t.url], class: "t-num" },
-	{ tag: [t.bool], class: "t-bool" },
-	{ tag: [t.null], class: "t-nil" },
-	{ tag: [t.variableName], class: "t-var" },
-	{ tag: [t.propertyName], class: "t-prop" },
-	{ tag: [t.attributeName], class: "t-attr" },
-	{ tag: [t.function(t.variableName), t.function(t.propertyName)], class: "t-call" },
-	{ tag: [t.function(t.definition(t.variableName)), t.definition(t.function(t.propertyName))], class: "t-fn" },
-	{ tag: [t.className, t.definition(t.className)], class: "t-cls" },
-	{ tag: [t.typeName], class: "t-type" },
-	{ tag: [t.namespace], class: "t-ns" },
-	{ tag: [t.tagName], class: "t-tag" },
-	{ tag: [t.heading], class: "t-head" },
-	{ tag: [t.emphasis], class: "t-em" },
-	{ tag: [t.strong], class: "t-strong" },
-	{ tag: [t.link], class: "t-link" },
-	{ tag: [t.inserted], class: "t-ins" },
-	{ tag: [t.deleted, t.invalid], class: "t-del" },
-	{ tag: [t.punctuation, t.bracket], class: "t-punct" },
-	{ tag: [t.operator], class: "t-op" },
+	{ tag: [t.comment], color: "var(--code-comment)", fontStyle: "italic" },
+	{ tag: [t.meta], color: "var(--code-meta)", fontStyle: "var(--code-meta-style)" },
+	{ tag: [t.keyword], color: "var(--code-keyword)" },
+	{ tag: [t.definitionKeyword], color: "var(--code-definition)" },
+	{ tag: [t.controlKeyword], color: "var(--code-control)" },
+	{ tag: [t.moduleKeyword, t.modifier, t.operatorKeyword, t.self], color: "var(--code-modifier)" },
+	{ tag: [t.string, t.special(t.string)], color: "var(--code-string)" },
+	{ tag: [t.regexp, t.escape], color: "var(--code-regexp)" },
+	{ tag: [t.number, t.atom, t.url, t.bool], color: "var(--code-literal)" },
+	{ tag: [t.null], color: "var(--code-null)" },
+	{ tag: [t.variableName, t.propertyName], color: "var(--code-name)" },
+	{ tag: [t.attributeName], color: "var(--code-attribute)", fontStyle: "var(--code-attribute-style)" },
+	{ tag: [t.function(t.variableName), t.function(t.propertyName)], color: "var(--code-call)" },
+	{ tag: [t.function(t.definition(t.variableName)), t.definition(t.function(t.propertyName)), t.className, t.definition(t.className)], color: "var(--code-function)" },
+	{ tag: [t.typeName], color: "var(--code-type)" },
+	{ tag: [t.namespace], color: "var(--code-namespace)" },
+	{ tag: [t.tagName], color: "var(--code-tag)" },
+	{ tag: [t.heading], color: "var(--code-heading)", fontWeight: "var(--font-weight-semibold)" },
+	{ tag: [t.emphasis], color: "var(--code-emphasis)", fontStyle: "italic" },
+	{ tag: [t.strong], color: "var(--code-emphasis)", fontWeight: "var(--font-weight-semibold)" },
+	{ tag: [t.link], color: "var(--code-link)", textDecoration: "underline" },
+	{ tag: [t.inserted], color: "var(--code-inserted)" },
+	{ tag: [t.deleted, t.invalid], color: "var(--code-deleted)" },
+	{ tag: [t.punctuation, t.bracket], color: "var(--code-punctuation)" },
+	{ tag: [t.operator], color: "var(--code-operator)" },
 ]);
+
+// CodeMirror's own look, in pine's tokens. A theme of CodeMirror's comes after its base theme, so it
+// wins without `!important`; the focused selection repeats the base theme's longer selector.
+const look = EditorView.theme({
+	"&": { height: "100%", minWidth: "0", flex: "1", backgroundColor: "var(--background)", color: "var(--code-text)" },
+	"&.cm-focused": { outline: "none" },
+	".cm-scroller": { fontFamily: "var(--mono)", fontSize: "var(--text-xs)", lineHeight: "var(--leading-relaxed)" },
+	".cm-gutters": { borderRight: "1px solid var(--line-soft)", backgroundColor: "var(--background)", color: "var(--code-gutter)" },
+	".cm-activeLine": { backgroundColor: "var(--code-active-line)" },
+	".cm-activeLineGutter": { backgroundColor: "var(--code-active-line)", color: "var(--code-gutter-active)" },
+	".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { background: "var(--select)" },
+	".cm-cursor": { borderLeftColor: "var(--code-cursor)" },
+	".cm-panels": { borderColor: "var(--border)", backgroundColor: "var(--raised)", color: "var(--foreground)" },
+	".cm-textfield, .cm-button": { borderRadius: "calc(var(--radius) * 0.8)", borderColor: "var(--border)", backgroundColor: "var(--card)", backgroundImage: "none", fontFamily: "var(--font)", fontSize: "var(--text-xs)", color: "var(--foreground)" },
+	".cm-searchMatch": { backgroundColor: "var(--code-match)", outline: "1px solid var(--code-match-line)" },
+});
+
+// The panel's parts: a bar of controls with a line under it, and what scrolls below: a stock
+// ScrollArea that fades where it is cut (scroll-fade sits on its viewport, the element that
+// scrolls), a flex column so that its viewport shrinks to it, and a sideways bar where a diff can
+// be wider than the panel. Inside, a flex column at least its height, for an Empty centred with `m-auto`.
+const SUB = "flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
+const PICTURE = "block max-h-80 max-w-full rounded-lg border sm:max-w-md";
+const STATUS: Record<string, string> = { M: "text-warn", A: "text-add", "?": "text-add", D: "text-del", R: "text-info" };
 
 function language(file: string): Extension {
 	const ext = file.slice(file.lastIndexOf(".") + 1).toLowerCase();
@@ -98,6 +138,7 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 					bracketMatching(),
 					highlightSelectionMatches(),
 					search({ top: true }),
+					look,
 					syntaxHighlighting(colours),
 					language(file),
 					EditorView.lineWrapping,
@@ -119,34 +160,65 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 	useEffect(() => {
 		view.current?.dispatch({ effects: lock.current.reconfigure([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]) });
 	}, [readOnly]);
-	return <div className="editor" ref={host} />;
+	return <div className="flex min-h-0 flex-1 overflow-hidden" ref={host} />;
 }
+
+// What a line of a unified diff is: a change is drawn by the stock line variants, which put the
+// sign in front themselves, so its own sign is taken off; a hunk header is highlighted; the
+// lines about the file itself are muted. The stock variants mark a line by its sign and a tint
+// (added is the neutral muted one), so pine's diff colours are laid over them.
+const META = ["+++", "---", "diff ", "index ", "new file", "deleted file", "similarity", "rename "];
 
 /** A unified diff, coloured line by line. */
 export function Diff({ text }: { text: string }) {
 	const lines = text.split("\n");
 	return (
-		<div className="diff">
-			{lines.map((l, i) => {
-				const cls = l.startsWith("@@") ? "hunk" : l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("index ") || l.startsWith("new file") || l.startsWith("deleted file") || l.startsWith("similarity") || l.startsWith("rename ") ? "meta" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : "";
-				return <div key={i} className={cls}>{l || " "}</div>;
-			})}
-		</div>
+		<CodeBlock size="sm" className="m-2 w-auto select-text">
+			<CodeBlockContent>
+				{lines.map((l, i) => {
+					if (l.startsWith("@@")) return <CodeBlockLine key={i} variant="highlighted">{l}</CodeBlockLine>;
+					if (META.some((m) => l.startsWith(m))) return <CodeBlockLine key={i} className="text-muted-foreground">{l}</CodeBlockLine>;
+					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added">{l.slice(1)}</CodeBlockLine>;
+					if (l.startsWith("-")) return <CodeBlockLine key={i} variant="removed">{l.slice(1)}</CodeBlockLine>;
+					return <CodeBlockLine key={i}>{l.startsWith(" ") ? l.slice(1) : l}</CodeBlockLine>;
+				})}
+			</CodeBlockContent>
+		</CodeBlock>
+	);
+}
+
+/** A path in the folder, a crumb per folder and the file last. */
+function PathCrumbs({ path, children }: { path: string; children?: React.ReactNode }) {
+	const parts = path.split("/");
+	const last = parts.length - 1;
+	return (
+		<Breadcrumb className="min-w-0 flex-1" title={path}>
+			<BreadcrumbList className="flex-nowrap font-mono">
+				{parts.map((part, i) => (
+					<Fragment key={i}>
+						{i ? <BreadcrumbSeparator /> : null}
+						<BreadcrumbItem className={i === last ? "min-w-0" : undefined}>
+							{i === last ? <BreadcrumbPage className="truncate">{part}{children}</BreadcrumbPage> : part}
+						</BreadcrumbItem>
+					</Fragment>
+				))}
+			</BreadcrumbList>
+		</Breadcrumb>
 	);
 }
 
 // ---- its views -------------------------------------------------------------------------------------
 
-function ChangeRow({ c, on, pick }: { c: Change; on: boolean; pick: () => void }) {
+function ChangeRow({ c }: { c: Change }) {
 	const at = c.path.lastIndexOf("/");
 	return (
-		<div className={`frow${on ? " on" : ""}`} onClick={pick} title={c.path}>
-			<span className={`st ${c.status === "?" ? "Q" : c.status}`}>{c.status === "?" ? "U" : c.status}</span>
-			<span className="cut">{c.path.slice(at + 1)}</span>
-			<span className="faint cut grow">{at > 0 ? c.path.slice(0, at) : ""}</span>
-			{c.added ? <span className="plus">+{c.added}</span> : null}
-			{c.removed ? <span className="minus">−{c.removed}</span> : null}
-		</div>
+		<ListboxItem value={c.path} label={c.path.slice(at + 1)} className={rowClass()} title={c.path}>
+			<span className={`w-3.5 flex-none text-center font-mono font-semibold ${STATUS[c.status] ?? ""}`}>{c.status === "?" ? "U" : c.status}</span>
+			<span className="truncate">{c.path.slice(at + 1)}</span>
+			<span className="min-w-0 flex-1 truncate text-faint">{at > 0 ? c.path.slice(0, at) : ""}</span>
+			{c.added ? <span className="font-mono text-add">+{c.added}</span> : null}
+			{c.removed ? <span className="font-mono text-del">−{c.removed}</span> : null}
+		</ListboxItem>
 	);
 }
 
@@ -164,31 +236,31 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		const prefix = top && root && root !== top && root.startsWith(`${top}/`) ? `${root.slice(top.length + 1)}/` : "";
 		return prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
 	};
-	if (list.error) return <Empty icon={turn ? "undo" : "branch"} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</Empty>;
-	if (!data) return <Empty title=""><Pulse /></Empty>;
-	if (!turn && !data.repo) return <Empty icon="branch" title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</Empty>;
+	if (list.error) return <EmptyView icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</EmptyView>;
+	if (!data) return <Spinner className="m-auto" />;
+	if (!turn && !data.repo) return <EmptyView icon={GitBranchIcon} title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</EmptyView>;
 	if (file)
 		return (
 			<>
-				<div className="code-sub">
-					<Button small variant="ghost" icon="back" onClick={() => setFile(undefined)} title="Back to the list" />
-					<span className="cut grow mono" title={file}>{file}</span>
-					<Button small variant="ghost" icon="edit" onClick={() => openFile(inFolder(file))}>Edit</Button>
+				<div className={SUB}>
+					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
+					<PathCrumbs path={file} />
+					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<div className="code-body">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className="out">… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</div>
+				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… the rest of this diff is too long to show.</p> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <Spinner className="m-auto" />}</div><ScrollBar orientation="horizontal" /></ScrollArea>
 			</>
 		);
 	return (
 		<>
-			<div className="code-sub">
-				{turn ? <><Icon name="undo" size={13} /><span className="cut grow">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button small onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><Icon name="branch" size={13} /><span className="cut grow">{data.branch || "no branch"}{data.worktree ? ` · ${data.worktree.ahead} ahead of ${data.worktree.base}${data.worktree.behind ? `, ${data.worktree.behind} behind` : ""}` : ""} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span>{data.worktree ? <Button small onClick={() => void store.worktreeMenu(tab)}>{data.worktree.ahead && !data.worktree.dirty ? "Merge…" : "Worktree…"}</Button> : null}</>}
-				<Button small variant="ghost" icon="refresh" onClick={list.reload} title="Read again" />
+			<div className={SUB}>
+				{turn ? <><Undo2Icon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"}{data.worktree ? ` · ${data.worktree.ahead} ahead of ${data.worktree.base}${data.worktree.behind ? `, ${data.worktree.behind} behind` : ""}` : ""} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span>{data.worktree ? <Button variant="outline" size="xs" onClick={() => void store.worktreeMenu(tab)}>{data.worktree.ahead && !data.worktree.dirty ? "Merge…" : "Worktree…"}</Button> : null}</>}
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={list.reload} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
 			</div>
-			<div className="code-body">
-				{data.note ? <div className="out">{data.note}</div> : null}
-				{data.files.length ? data.files.map((c) => <ChangeRow key={c.path} c={c} on={false} pick={() => setFile(c.path)} />) : <Empty icon="check" title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
-				{data.more ? <div className="out">… and more.</div> : null}
-			</div>
+			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
+				{data.note ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">{data.note}</p> : null}
+				{data.files.length ? <Listbox aria-label={turn ? "Files the last message changed" : "Changed files"} className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</Listbox> : <EmptyView icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
+				{data.more ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… and more.</p> : null}
+			</div></ScrollArea>
 		</>
 	);
 }
@@ -196,52 +268,65 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 interface TreeState {
 	open: Set<string>;
 	dirs: Map<string, Array<{ name: string; dir: boolean; size: number }>>;
+	/** Why a folder could not be read, by folder, so a failed read is not taken for an empty folder. */
+	failed: Map<string, string>;
 	file?: string;
 }
 const trees = new Map<string, TreeState>();
-const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map() }), trees.get(key)!);
+const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map(), failed: new Map() }), trees.get(key)!);
 
-function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: number; pick: (file: string) => void; tick: number }) {
+/** The folder's files as a tree: a folder opens and closes, a file opens in the editor. */
+function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void; tick: number }) {
 	const state = treeOf(tab.key);
 	const [, redraw] = useState(0);
+	const isDir = (full: string) => {
+		const at = full.lastIndexOf("/");
+		return Boolean(state.dirs.get(at > 0 ? full.slice(0, at) : "")?.find((e) => e.name === full.slice(at + 1))?.dir);
+	};
+	const entries = state.dirs.get("");
+	const failed = state.failed.get("");
+	return (
+		<>
+			{failed ? <EmptyView icon={FolderIcon} title="This folder cannot be read">{failed}</EmptyView> : null}
+			{entries && !entries.length ? <EmptyView icon={FolderIcon} title="This folder is empty" /> : null}
+			{entries || failed ? null : <Spinner className="m-auto" />}
+			<Tree aria-label="Files" className="outline-none" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} expandOnPress onAction={(full) => !isDir(full) && pick(full)}>
+				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
+			</Tree>
+		</>
+	);
+}
+
+/** A folder's rows in the tree, read when it opens; `onLoad` redraws the tree around once they are read. */
+function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: number; tick: number; onLoad: () => void }) {
+	const state = treeOf(tab.key);
+	const read = useLoad(() => api.tree(tab.agent, tab.session, dir), [tab.key, dir, tick]);
 	useEffect(() => {
-		let live = true;
-		api.tree(tab.agent, tab.session, dir).then(
-			(r) => live && (state.dirs.set(dir, r.entries), redraw((n) => n + 1)),
-			() => live && (state.dirs.set(dir, []), redraw((n) => n + 1)),
-		);
-		return () => {
-			live = false;
-		};
+		if (read.loading) return;
+		if (read.data) state.dirs.set(dir, read.data.entries), state.failed.delete(dir);
+		else state.failed.set(dir, read.error ?? ""), state.dirs.delete(dir);
+		onLoad();
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [tab.key, dir, tick]);
+	}, [read.loading, read.data, read.error]);
+	const failed = state.failed.get(dir);
+	if (failed && dir) return <p className="py-2.5 pr-3 text-xs wrap-anywhere text-faint select-text" style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>{failed}</p>;
 	const entries = state.dirs.get(dir);
-	if (!entries) return depth ? null : <Empty title=""><Pulse /></Empty>;
-	if (!entries.length && !depth) return <Empty icon="folder" title="This folder is empty" />;
+	if (!entries) return null;
 	return (
 		<>
 			{entries.map((e) => {
 				const full = dir ? `${dir}/${e.name}` : e.name;
 				const open = state.open.has(full);
 				return (
-					<div key={full}>
-						<div
-							className={`frow${state.file === full ? " on" : ""}`}
-							style={{ paddingLeft: 10 + depth * 14 }}
-							onClick={() => {
-								if (!e.dir) return pick(full);
-								if (open) state.open.delete(full);
-								else state.open.add(full);
-								redraw((n) => n + 1);
-							}}
-						>
-							{e.dir ? <Icon name={open ? "down" : "right"} size={11} className="faint" /> : <span style={{ width: 11 }} />}
-							<Icon name={e.dir ? "folder" : "file"} size={13} className="faint" />
-							<span className="cut grow">{e.name}</span>
-							{!e.dir ? <span className="faint" style={{ fontSize: 11 }}>{size(e.size)}</span> : null}
-						</div>
-						{e.dir && open ? <Tree tab={tab} dir={full} depth={depth + 1} pick={pick} tick={tick} /> : null}
-					</div>
+					<TreeItem key={full} value={full} label={e.name} branch={e.dir} className={TREE_ITEM}>
+						<TreeItemLabel className={rowClass(state.file === full)} style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>
+							{e.dir ? (open ? <ChevronDownIcon className="size-3 text-faint" /> : <ChevronRightIcon className="size-3 text-faint" />) : <span className="w-3 flex-none" />}
+							{e.dir ? <FolderIcon className="size-3.5 text-faint" /> : <FileIcon className="size-3.5 text-faint" />}
+							<span className="min-w-0 flex-1 truncate">{e.name}</span>
+							{!e.dir ? <span className="text-faint">{size(e.size)}</span> : null}
+						</TreeItemLabel>
+						{e.dir ? <TreeGroup>{open ? <Dir tab={tab} dir={full} depth={depth + 1} tick={tick} onLoad={onLoad} /> : null}</TreeGroup> : null}
+					</TreeItem>
 				);
 			})}
 		</>
@@ -278,36 +363,56 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 		setSaving(false);
 	};
 	useSignal("save", () => void save());
+	// Leaving with what was typed and not saved is asked first.
+	const [leaving, setLeaving] = useState(false);
 	const changedOnDisk = dirty && text !== undefined && text !== base;
 	const root = tab.folder ?? tab.workspace;
 	return (
 		<>
-			<div className="code-sub">
-				<Button small variant="ghost" icon="back" onClick={() => (dirty && !window.confirm(`Leave ${file} without saving what you typed?`) ? undefined : close())} title="Back to the files" />
-				<span className="cut grow mono" title={file}>{file}{dirty ? <span style={{ color: "var(--warn)" }}> ●</span> : null}</span>
-				{disk.data?.truncated ? <span className="tag warn">too large to edit</span> : null}
-				{root ? <Button small variant="ghost" icon="external" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)} /> : null}
-				{kind || disk.data?.binary ? null : <Button small variant={dirty ? "primary" : "ghost"} icon="save" disabled={!dirty || saving} onClick={() => void save()}>Save</Button>}
+			<div className={SUB}>
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></Tooltip>
+				<AlertDialog open={leaving} onOpenChange={setLeaving}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Leave {file} without saving what you typed?</AlertDialogTitle>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction variant="destructive" onClick={() => (setLeaving(false), close())}>Leave</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
+				<PathCrumbs path={file}>{dirty ? <span className="text-warn"> ●</span> : null}</PathCrumbs>
+				{disk.data?.truncated ? <Badge variant="outline">too large to edit</Badge> : null}
+				{root ? <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)} aria-label="Show in the Finder"><ExternalLinkIcon /></Button>} /><TooltipContent>Show in the Finder</TooltipContent></Tooltip> : null}
+				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
 			</div>
 			{changedOnDisk ? (
-				<div className="banner warn" style={{ margin: 8 }}>
-					<span className="grow">This file changed on disk while you were typing.</span>
-					<button type="button" className="open-link" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</button>
-				</div>
+				<Alert className="m-2 w-auto">
+					<AlertDescription>This file changed on disk while you were typing.</AlertDescription>
+					<AlertAction>
+						<Button variant="outline" size="xs" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</Button>
+					</AlertAction>
+				</Alert>
 			) : null}
-			<div className="code-body">
-				{kind ? (
-					<div className="it-media" style={{ padding: 14 }}>{kind === "image" ? <img src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
-				) : disk.error ? (
-					<Empty icon="file" title="This file cannot be shown">{disk.error}</Empty>
-				) : !disk.data ? (
-					<Empty title=""><Pulse /></Empty>
-				) : disk.data.binary ? (
-					<Empty icon="file" title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
-				) : (
+			{/* The editor scrolls itself (CodeMirror draws only the lines in view): around it nothing scrolls. */}
+			{!kind && !disk.error && disk.data && !disk.data.binary ? (
+				<div className="flex min-h-0 flex-1 flex-col">
 					<Editor file={file} text={dirty ? draft! : (base ?? text ?? "")} readOnly={disk.data.truncated} onChange={setDraft} onSave={() => void save()} />
+				</div>
+			) : (
+			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
+				{kind ? (
+					<div className="p-3.5">{kind === "image" ? <img className={PICTURE} src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video className="block max-h-90 max-w-full rounded-lg bg-black sm:max-w-lg" src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio className="block w-full max-w-md" src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
+				) : disk.error ? (
+					<EmptyView icon={FileIcon} title="This file cannot be shown">{disk.error}</EmptyView>
+				) : !disk.data ? (
+					<Spinner className="m-auto" />
+				) : (
+					<EmptyView icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</EmptyView>
 				)}
-			</div>
+			</div></ScrollArea>
+			)}
 		</>
 	);
 }
@@ -321,18 +426,22 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 	const root = tab.folder ?? tab.workspace;
 	return (
 		<>
-			<div className="code-sub">
-				<Icon name="search" size={13} />
-				<input className="grow" style={{ border: "none", outline: "none", background: "transparent", userSelect: "text" }} placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
-				<Button small variant="ghost" icon="refresh" onClick={() => setTick((n) => n + 1)} title="Read again" />
+			<div className={SUB}>
+				<InputGroup>
+					<InputGroupAddon>
+						<SearchIcon />
+					</InputGroupAddon>
+					<InputGroupInput aria-label="Find a file" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
+				</InputGroup>
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
 			</div>
-			<div className="code-body">
+			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{query.trim() ? (
-					found.data?.length ? found.data.map((f) => <div key={f} className="frow" onClick={() => setFile(f)}><Icon name="file" size={13} className="faint" /><span className="cut">{f}</span></div>) : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
+					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
 				) : (
-					<Tree tab={tab} dir="" depth={0} pick={setFile} tick={tick} />
+					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
-			</div>
+			</div></ScrollArea>
 		</>
 	);
 }
@@ -349,72 +458,91 @@ function Output({ tab }: { tab: Tab }) {
 		return out;
 	}, [tab.key, tab.codeTick]);
 	const [open, setOpen] = useState<string>();
-	if (!calls.data) return <Empty title="">{calls.error ?? <Pulse />}</Empty>;
-	if (!calls.data.length) return <Empty icon="terminal" title="No tool calls yet">What the agent's commands and tools print appears here.</Empty>;
+	if (!calls.data) return calls.error ? <EmptyView icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</EmptyView> : <Spinner className="m-auto" />;
+	if (!calls.data.length) return <EmptyView icon={SquareTerminalIcon} title="No tool calls yet">What the agent's commands and tools print appears here.</EmptyView>;
 	const shown = calls.data.find((c) => `${c.task}:${c.n}` === open);
 	if (shown)
 		return (
 			<>
-				<div className="code-sub">
-					<Button small variant="ghost" icon="back" onClick={() => setOpen(undefined)} />
-					<span className="mono">{shown.entry.tool}</span>
-					<span className="cut grow mono faint">{shown.entry.subject}</span>
-					<Button small variant="ghost" icon="copy" title="Copy the output" onClick={() => void navigator.clipboard.writeText(shown.entry.result ?? "")} />
+				<div className={SUB}>
+					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
+					<span className="font-mono">{shown.entry.tool}</span>
+					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
-				<div className="code-body">
-					<div className="out" style={shown.entry.ok === false ? { color: "var(--bad)" } : undefined}>{shown.entry.result || "(it printed nothing)"}</div>
-					{(shown.entry.images ?? []).map((id) => <div className="it-media" key={id} style={{ padding: 12 }}><img src={media.tool(id)} alt="" /></div>)}
-				</div>
+				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
+					<Printed text={shown.entry.result || "(it printed nothing)"} failed={shown.entry.ok === false} className="m-2" />
+					{(shown.entry.images ?? []).map((id) => <div className="p-3" key={id}><img className={PICTURE} src={media.tool(id)} alt="" /></div>)}
+				</div></ScrollArea>
 			</>
 		);
 	return (
-		<div className="code-body">
+		<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
+			<Listbox aria-label="Tool calls" className="outline-none" {...LISTBOX} onValueChange={onPick(setOpen)}>
 			{calls.data.map((c) => (
-				<div key={`${c.task}:${c.n}`} className="frow" onClick={() => setOpen(`${c.task}:${c.n}`)}>
-					<span className="st" style={{ color: c.entry.ok === false ? "var(--bad)" : c.entry.ok ? "var(--accent)" : "var(--warn)" }}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
-					<span className="mono">{c.entry.tool}</span>
-					<span className="cut grow mono faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
-					{c.entry.ms !== undefined ? <span className="faint" style={{ fontSize: 11 }}>{took(c.entry.ms)}</span> : null}
-				</div>
+				<ListboxItem key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
+					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Spinner aria-label="Working" className="size-3.5" />}
+					<span className="font-mono">{c.entry.tool}</span>
+					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
+					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}
+				</ListboxItem>
 			))}
-		</div>
+				</Listbox>
+			</div></ScrollArea>
 	);
 }
 
 /** What the conversation's commands left running, and the way to stop each. */
 function Running({ tab }: { tab: Tab }) {
-	if (!tab.programs.length) return <Empty icon="play" title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</Empty>;
+	if (!tab.programs.length) return <EmptyView icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</EmptyView>;
 	return (
-		<div className="code-body">
+		<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 			{tab.programs.map((p) => (
-				<div className="prog" key={p.id}>
-					<div className="row">
-						<span className="dot good" />
-						<span className="mono cut grow" title={p.command}>{p.command}</span>
-						<Confirm label="Stop" sure="Stop it?" onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
-					</div>
-					<div className="row faint" style={{ fontSize: 12 }}>
-						<span>running for {clock(p.seconds)}</span>
-						<span>· {plural(p.processes, "process", "processes")}</span>
-						{p.background ? <span>· in the background</span> : null}
-						{p.ports.map((port) => (
-							<button key={port} type="button" className="open-link" title="Opens in the browser beside this conversation" onClick={() => void store.showInBrowser(tab, `http://localhost:${port}`)}>localhost:{port}</button>
-						))}
-					</div>
-					{p.output ? <div className="entry-result" style={{ marginLeft: 0 }}>{p.output}</div> : null}
+				<div className="flex flex-col gap-1 border-b border-line-soft p-2" key={p.id}>
+					<Item size="sm">
+						<ItemMedia>
+							<span className="size-2 rounded-full bg-primary" />
+						</ItemMedia>
+						<ItemContent>
+							<ItemTitle className="font-mono">{p.command}</ItemTitle>
+							<ItemDescription>
+								running for {clock(p.seconds)} · {plural(p.processes, "process", "processes")}
+								{p.background ? " · in the background" : null}
+							</ItemDescription>
+						</ItemContent>
+						<ItemActions>
+							{p.ports.map((port) => (
+								<Tooltip key={port}>
+									<TooltipTrigger render={<Button variant="link" size="xs" onClick={() => void store.showInBrowser(tab, `http://localhost:${port}`)} />}>localhost:{port}</TooltipTrigger>
+									<TooltipContent>Opens in the browser beside this conversation</TooltipContent>
+								</Tooltip>
+							))}
+							<AlertDialog>
+								<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Stop</AlertDialogTrigger>
+								<AlertDialogContent>
+									<AlertDialogHeader>
+										<AlertDialogTitle>Stop {short(p.command, 80)}?</AlertDialogTitle>
+									</AlertDialogHeader>
+									<AlertDialogFooter>
+										<AlertDialogCancel>Cancel</AlertDialogCancel>
+										<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))}>Stop</AlertDialogCancel>
+									</AlertDialogFooter>
+								</AlertDialogContent>
+							</AlertDialog>
+						</ItemActions>
+					</Item>
+					{p.output ? <Printed text={p.output} sm /> : null}
 				</div>
 			))}
-		</div>
+		</div></ScrollArea>
 	);
 }
 
-const WIDTH_KEY = "pine.code.width";
+export const CODE_KEY = "pine.code.width";
 
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
-	const [width, setWidth] = useState(() => Number(localStorage.getItem(WIDTH_KEY)) || 520);
-	const [drag, setDrag] = useState(false);
+	const [width] = useState(() => Number(localStorage.getItem(CODE_KEY)) || 520);
 	const state = treeOf(tab.key);
 	const [, redraw] = useState(0);
 	const view = store.codeView;
@@ -423,58 +551,49 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
 	return (
 		<>
-			<div
-				className={`splitter${drag ? " drag" : ""}`}
-				onMouseDown={(e) => {
-					e.preventDefault();
-					setDrag(true);
-					const from = e.clientX;
-					const was = width;
-					let now = was;
-					const move = (m: MouseEvent) => setWidth((now = Math.max(320, Math.min(window.innerWidth - 420, was + from - m.clientX))));
-					const up = () => {
-						setDrag(false);
-						localStorage.setItem(WIDTH_KEY, String(now));
-						window.removeEventListener("mousemove", move);
-						window.removeEventListener("mouseup", up);
-					};
-					window.addEventListener("mousemove", move);
-					window.addEventListener("mouseup", up);
-				}}
-			/>
-			<div className="code" style={{ width }}>
-				<div className="code-head">
-					<Segmented
-						value={view}
-						onChange={setView}
-						options={[
-							{ value: "agent", label: "Agent" },
-							{ value: "files", label: "Files" },
-							{ value: "changes", label: "Changes" },
-							{ value: "turn", label: "Last turn" },
-							{ value: "browser", label: "Browser" },
-							{ value: "output", label: "Output" },
-							{ value: "running", label: "Running", badge: tab.programs.length || undefined },
-						]}
-					/>
-					<span className="grow" />
-					<Button small variant="ghost" icon="x" title="Close the panel" onClick={() => void store.command("code")} />
+			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
+			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
+				<div data-slot="code-panel" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
+					<div className="flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2">
+						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
+						    for the line under the tab in front, which stock draws below the list. */}
+						<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
+						<div className="pb-1.5">
+						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+							<TabsList variant="line" activateOnFocus>
+								<TabsTrigger value="agent">Agent</TabsTrigger>
+								<TabsTrigger value="files">Files</TabsTrigger>
+								<TabsTrigger value="changes">Changes</TabsTrigger>
+								<TabsTrigger value="turn">Last turn</TabsTrigger>
+								<TabsTrigger value="browser">Browser</TabsTrigger>
+								<TabsTrigger value="output">Output</TabsTrigger>
+								<TabsTrigger value="running">
+									Running
+									{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
+								</TabsTrigger>
+							</TabsList>
+						</Tabs>
+						</div>
+						</ScrollArea>
+						<span className="min-w-0 flex-1" />
+						<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></Tooltip>
+					</div>
+					{steps ? <ScrollArea className="flex max-h-48 min-h-0 flex-none flex-col border-b border-line-soft *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="px-3 py-2.5"><Steps items={steps} /></div></ScrollArea> : null}
+					{view === "agent" ? (
+						<AgentView tab={tab} />
+					) : view === "changes" || view === "turn" ? (
+						<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
+					) : view === "files" ? (
+						<Files tab={tab} file={state.file} setFile={setFile} />
+					) : view === "browser" ? (
+						<BrowserView tab={tab} />
+					) : view === "output" ? (
+						<Output tab={tab} />
+					) : (
+						<Running tab={tab} />
+					)}
 				</div>
-				{steps ? <div className="code-steps"><Steps items={steps} /></div> : null}
-				{view === "agent" ? (
-					<AgentView tab={tab} />
-				) : view === "changes" || view === "turn" ? (
-					<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
-				) : view === "files" ? (
-					<Files tab={tab} file={state.file} setFile={setFile} />
-				) : view === "browser" ? (
-					<BrowserView tab={tab} />
-				) : view === "output" ? (
-					<Output tab={tab} />
-				) : (
-					<Running tab={tab} />
-				)}
-			</div>
+			</ResizablePanel>
 		</>
 	);
 }

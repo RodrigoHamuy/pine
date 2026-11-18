@@ -418,7 +418,7 @@ other. The original is left exactly as it was.
 
 | Where | How |
 |---|---|
-| Pine app | "Branch from here" beside one of your messages (it shows when the pointer is on it, or a right click), or Branch in the menu of a conversation in the side bar, or the command Branch conversation, which takes all of it. "Branch from here into a worktree" and "Branch into a Worktree" do the same in a worktree |
+| Pine app | "Branch from here" in the menu of a right click on one of your messages, or Branch in the menu of a conversation in the side bar, or the command Branch conversation, which takes all of it. "Branch from here into a worktree" and "Branch into a Worktree" do the same in a worktree |
 | Terminal UI | `/branch`: pick one of your messages, or all of it, from a list; `/branch <name>`: all of it, under that name; `--worktree` with either: in a worktree |
 | Control API | `POST /agents/<id>/branch` `{ session, at?, to?, worktree? }` ([operations.md](operations.md)) |
 

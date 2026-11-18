@@ -1,0 +1,9 @@
+<style>
+	/* The app's window never scrolls as a whole (index.css: body is overflow-hidden, every pane scrolls
+	   itself), and Storybook draws a docs page into that same body. While a docs page is shown, its root
+	   has content: the body scrolls then, and a story's canvas keeps the app's rule. Unlayered, so it
+	   wins over Tailwind's base layer. */
+	body:has(> #storybook-docs > *) {
+		overflow: auto;
+	}
+</style>

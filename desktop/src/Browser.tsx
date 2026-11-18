@@ -3,11 +3,20 @@
 // page that the daemon hands over again and again, and what is done in the picture (a click, the
 // wheel, keys, an address) goes back to it through the daemon. Nothing of a web page is loaded
 // into this window: the picture is drawn, and its address and title are text.
+import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, PlusIcon, RotateCwIcon, ShieldIcon, XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
-import { Button, Empty, Icon, Pulse } from "./ui.tsx";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
 type Op = Record<string, unknown> & { do: string };
 
@@ -158,45 +167,76 @@ export function BrowserView({ tab }: { tab: Tab }) {
 	};
 
 	return (
-		<div className="code-body browser">
+		<div data-slot="browser" className="flex min-h-0 flex-1 flex-col overflow-hidden">
 			{open && state.tabs.length ? (
-				<div className="browser-tabs">
+				<div className="flex flex-none items-center gap-0.5 border-b border-line-soft px-2 pt-1">
+					{/* The row scrolls sideways only. The padding is the room for the line under the tab in front, which stock draws
+					    below the list: without it the row is taller than its room, and a vertical bar shows with nothing to scroll. */}
+					<ScrollArea className="flex min-h-0 min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
+						<div className="pb-1.5">
+						<Tabs value={state.current} onValueChange={(i) => i !== state.current && act({ do: "tab", index: i as number })}>
+							<TabsList variant="line">
 					{state.tabs.map((t, i) => (
-						<div key={i} className={`browser-tab${i === state.current ? " on" : ""}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
-							<span className="cut grow">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
+						<div key={i} className="group/tab flex h-full min-w-15 flex-initial basis-44 items-center" title={t.url}>
+							<TabsTrigger value={i} className="min-w-0 justify-start">
+								<span className="min-w-0 flex-1 truncate text-left">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
+							</TabsTrigger>
 							{/* (Closing the last tab leaves the browser up without a page: the view is empty again.) */}
-							<button type="button" className="browser-tab-close" title={state.tabs.length > 1 ? "Close this tab" : "Close the page"} onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><Icon name="x" size={10} /></button>
+							<Button variant="ghost" size="icon-xs" aria-label={state.tabs.length > 1 ? "Close this tab" : "Close the page"} className={cn(i !== state.current && "invisible group-hover/tab:visible")} onClick={() => act({ do: "closetab", index: i })}><XIcon /></Button>
 						</div>
 					))}
-					<Button small variant="ghost" icon="plus" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />
+							</TabsList>
+						</Tabs>
+						</div>
+					</ScrollArea>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />}><PlusIcon /></TooltipTrigger>
+						<TooltipContent>A new tab</TooltipContent>
+					</Tooltip>
 				</div>
 			) : null}
-			<div className="browser-bar">
-				<Button small variant="ghost" icon="back" title="Back" disabled={!open} onClick={() => act({ do: "back" })} />
-				<Button small variant="ghost" icon="right" title="Forward" disabled={!open} onClick={() => act({ do: "forward" })} />
-				<Button small variant="ghost" icon="refresh" title="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })} />
-				<input
-					className="input browser-address"
-					spellCheck={false}
-					placeholder="An address: example.com, or localhost:3000"
-					ref={line}
-					value={address ?? (front?.url === "about:blank" ? "" : (front?.url ?? ""))}
-					onChange={(e) => setAddress(e.target.value)}
-					onFocus={(e) => e.target.select()}
-					onBlur={() => setAddress(undefined)}
-					onKeyDown={(e) => {
-						if (e.key === "Enter") void go(e.currentTarget.value);
-						if (e.key === "Escape") (setAddress(undefined), e.currentTarget.blur());
-					}}
-				/>
-				{busy ? <Pulse size={12} /> : null}
+			<div className="flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
+				<ButtonGroup>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Back" disabled={!open} onClick={() => act({ do: "back" })} />}><ChevronLeftIcon /></TooltipTrigger>
+						<TooltipContent>Back</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Forward" disabled={!open} onClick={() => act({ do: "forward" })} />}><ChevronRightIcon /></TooltipTrigger>
+						<TooltipContent>Forward</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })} />}><RotateCwIcon /></TooltipTrigger>
+						<TooltipContent>Load the page again</TooltipContent>
+					</Tooltip>
+				</ButtonGroup>
+				<InputGroup className="ml-1 min-w-0 flex-1">
+					<InputGroupInput
+						aria-label="Address"
+						className="min-w-0"
+						spellCheck={false}
+						placeholder="An address: example.com, or localhost:3000"
+						ref={line}
+						value={address ?? (front?.url === "about:blank" ? "" : (front?.url ?? ""))}
+						onChange={(e) => setAddress(e.target.value)}
+						onFocus={(e) => e.target.select()}
+						onBlur={() => setAddress(undefined)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") void go(e.currentTarget.value);
+							if (e.key === "Escape") (setAddress(undefined), e.currentTarget.blur());
+						}}
+					/>
+					{busy ? <InputGroupAddon align="inline-end"><Spinner /></InputGroupAddon> : null}
+				</InputGroup>
 			</div>
 			{open ? (
-				<div className="browser-page" ref={room}>
+				<ScrollArea ref={room} className="flex min-h-0 flex-1 flex-col bg-press *:data-[slot=scroll-area-viewport]:scroll-fade">
+					{/* The page keeps its shape: as wide as the panel, and scrolled down to when it is taller than the room. */}
 					<canvas
 						ref={canvas}
 						tabIndex={0}
-						className={drawn ? "" : "blank"}
+						data-drawn={drawn || undefined}
+						className={cn("block h-auto w-full cursor-default bg-white outline-none", !drawn && "invisible")}
 						title={front?.title}
 						onMouseDown={(e) => {
 							e.currentTarget.focus();
@@ -227,32 +267,44 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) (e.preventDefault(), act({ do: "text", text: e.key }, 90));
 						}}
 					/>
-					{drawn ? null : <div className="browser-wait"><Pulse size={14} /></div>}
-				</div>
+					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Spinner /></div>}
+				</ScrollArea>
 			) : (
-				<Empty icon="eye" title={state ? "No page is open" : "Looking for the browser…"}>
-					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}
+				<Empty>
+					<EmptyHeader>
+						<EmptyMedia variant="icon">
+							<EyeIcon />
+						</EmptyMedia>
+						<EmptyTitle>{state ? "No page is open" : "Looking for the browser…"}</EmptyTitle>
+						{state ? <EmptyDescription>This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself.</EmptyDescription> : null}
+					</EmptyHeader>
 					{/* What the conversation's own programs listen on (the code pane's Running): a server the agent started is one click away. */}
 					{state && running.length ? (
-						<div className="browser-visited">
-							<div className="faint">Running in this conversation</div>
+						<EmptyContent data-offer="running">
+							<EmptyDescription>Running in this conversation</EmptyDescription>
 							{running.map((r) => (
-								<button key={r.port} type="button" className="open-link cut" title={r.command} disabled={busy} onClick={() => void go(`http://localhost:${r.port}`)}>localhost:{r.port}</button>
+								<Tooltip key={r.port}>
+									<TooltipTrigger render={<Button variant="link" size="xs" className="max-w-full font-mono" disabled={busy} onClick={() => void go(`http://localhost:${r.port}`)} />}><span className="truncate">localhost:{r.port}</span></TooltipTrigger>
+									<TooltipContent>{r.command}</TooltipContent>
+								</Tooltip>
 							))}
-						</div>
+						</EmptyContent>
 					) : null}
 					{visited.length ? (
-						<div className="browser-visited">
-							<div className="faint">Opened by the agent before</div>
+						<EmptyContent data-offer="visited">
+							<EmptyDescription>Opened by the agent before</EmptyDescription>
 							{/* (An address is text an agent chose: drawn as text, whole in the tooltip, and opened only by this click.) */}
 							{visited.map((url) => (
-								<button key={url} type="button" className="open-link cut" title={url} disabled={busy} onClick={() => void go(url)}>{url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</button>
+								<Tooltip key={url}>
+									<TooltipTrigger render={<Button variant="link" size="xs" className="max-w-full font-mono" disabled={busy} onClick={() => void go(url)} />}><span className="truncate">{url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span></TooltipTrigger>
+									<TooltipContent>{url}</TooltipContent>
+								</Tooltip>
 							))}
-						</div>
+						</EmptyContent>
 					) : null}
 				</Empty>
 			)}
-			{open ? <div className="browser-foot faint"><Icon name="shield" size={11} /><span className="cut">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
+			{open ? <div className="flex flex-none items-center gap-1.5 border-t border-line-soft px-2.5 py-1 text-xs text-faint"><ShieldIcon size={11} /><span className="truncate">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
 		</div>
 	);
 }

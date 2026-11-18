@@ -1,38 +1,21 @@
 import type { Decorator, Preview } from "@storybook/react-vite";
 import { useLayoutEffect } from "react";
-import "../src/styles.css";
+import "../src/index.css";
+import { followAppearance } from "../src/theme.ts";
+import { allModes } from "./modes.ts";
 
-// The app has no theme switch of its own: styles.css follows the system with
-// `@media (prefers-color-scheme: dark)`. To show either theme whatever the system says, the
-// toolbar rewrites those rules' media: "all" forces dark, "not all" forces light, and "system"
-// puts the original query back.
-const DARK = /prefers-color-scheme:\s*dark/;
-const original = new WeakMap<CSSMediaRule, string>();
+// No preload script here: the bridge is a stand-in whose every call does nothing (a listener it
+// is given is never called), so that a piece which listens to the app (the Composer) can be drawn.
+// A story that needs answers from the daemon puts a call of its own on it (`window.pine.call = ...`,
+// as Settings.stories.tsx does): what is set on it is used, everything else still does nothing.
+window.pine ??= new Proxy({} as Record<PropertyKey, unknown>, { get: (own, key) => own[key] ?? (() => () => {}) }) as unknown as typeof window.pine;
 
-function darkRules(): CSSMediaRule[] {
-	const found: CSSMediaRule[] = [];
-	for (const sheet of Array.from(document.styleSheets)) {
-		let rules: CSSRuleList;
-		try {
-			rules = sheet.cssRules;
-		} catch {
-			continue; // another origin's sheet
-		}
-		for (const rule of Array.from(rules)) {
-			if (!(rule instanceof CSSMediaRule)) continue;
-			const media = original.get(rule) ?? rule.media.mediaText;
-			if (DARK.test(media)) found.push(rule);
-		}
-	}
-	return found;
-}
-
-function applyTheme(theme: string) {
-	for (const rule of darkRules()) {
-		if (!original.has(rule)) original.set(rule, rule.media.mediaText);
-		rule.media.mediaText = theme === "dark" ? "all" : theme === "light" ? "not all" : original.get(rule)!;
-	}
-	document.documentElement.style.colorScheme = theme === "system" ? "" : theme;
+// The page is dark when its root element has the `.dark` class. In the app that class follows the
+// system (theme.ts); here the toolbar sets it, or lets it follow the system as the app does.
+function applyTheme(theme: string): (() => void) | undefined {
+	if (theme === "system") return followAppearance();
+	document.documentElement.classList.toggle("dark", theme === "dark");
+	return undefined;
 }
 
 const withTheme: Decorator = (Story, context) => {
@@ -59,7 +42,11 @@ const preview: Preview = {
 	},
 	initialGlobals: { theme: "light" },
 	decorators: [withTheme],
-	parameters: { layout: "centered" },
+	parameters: {
+		layout: "centered",
+		// Chromatic snapshots each story in both modes; the toolbar above still flips the theme by hand.
+		chromatic: { modes: { light: allModes.light, dark: allModes.dark } },
+	},
 	tags: ["autodocs"],
 };
 

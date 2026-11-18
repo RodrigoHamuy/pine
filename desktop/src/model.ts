@@ -6,9 +6,13 @@
 // (`touch`). A conversation gets a hundred events a second while a model writes; copying its
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
+import { toast } from "@/components/ui/toast";
 import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
+
+/** The reasoning levels, each with what it means for the answer. */
+export const REASONING_ABOUT: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
 
 export class Model {
 	v = 0;
@@ -180,12 +184,6 @@ const sessionName = () => `s${Date.now().toString(36)}`;
 const worktreeNote = (made: WorktreeMade) =>
 	`This conversation now works in the worktree ${made.branch} at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a checkout of its own, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} Merge it back from the folder's chip.`;
 
-export interface Toast {
-	id: number;
-	text: string;
-	tone: Tone;
-}
-
 export type Picker = { title: string; items: Array<{ value: string; label: string; about?: string; tone?: Tone }>; current?: string; done: (value: string | undefined) => void; placeholder?: string; free?: boolean };
 
 /** The app as a whole. */
@@ -239,7 +237,6 @@ export class Store extends Model {
 	/** The approval or question whose dialog is open. */
 	asking?: string;
 	asked = new Set<string>();
-	toasts: Toast[] = [];
 	initLines: string[] = [];
 	initRunning = false;
 	/** Whether the browser build this pine drives is on this computer; nothing while it is not known. */
@@ -557,15 +554,12 @@ export class Store extends Model {
 
 	// ---- small things ------------------------------------------------------------------------------
 
+	/** A passing notice; the stock `Toaster` shows it. One that says something went wrong stays longer and is
+	 * announced at once. An `ms` of Infinity keeps it until it is closed (Base UI's timeout 0). */
 	flash(text: string, tone: Tone = "muted", ms = 4500): void {
-		const toast = { id: uid(), text, tone };
-		this.toasts.push(toast);
-		if (this.toasts.length > 4) this.toasts.shift();
-		this.touch();
-		window.setTimeout(() => {
-			this.toasts = this.toasts.filter((t) => t !== toast);
-			this.touch();
-		}, tone === "bad" ? Math.max(ms, 7000) : ms);
+		const type = { muted: undefined, accent: "info", good: "success", warn: "warning", bad: "error" }[tone];
+		const timeout = tone === "bad" ? Math.max(ms, 7000) : ms;
+		toast.add({ description: text, type, timeout: Number.isFinite(timeout) ? timeout : 0, priority: tone === "bad" ? "high" : "low" });
 	}
 
 	/** Run something the owner asked for; what goes wrong is said, not thrown away. */
@@ -1138,9 +1132,13 @@ export class Store extends Model {
 	async pickReasoning(tab: Tab): Promise<void> {
 		const info = this.agent(tab.agent);
 		if (!info) return;
-		const about: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
-		const level = await this.pick({ title: `Reasoning for ${tab.agent}`, items: Object.entries(about).map(([value, a]) => ({ value, label: value, about: a })), current: info.thinking });
-		if (!level || level === info.thinking) return;
+		const level = await this.pick({ title: `Reasoning for ${tab.agent}`, items: Object.entries(REASONING_ABOUT).map(([value, a]) => ({ value, label: value, about: a })), current: info.thinking });
+		if (level) await this.setReasoning(tab, level);
+	}
+
+	async setReasoning(tab: Tab, level: string): Promise<void> {
+		const info = this.agent(tab.agent);
+		if (!info || level === info.thinking) return;
 		if (!(await this.attempt(() => api.setThinking(tab.agent, level)))) return;
 		info.thinking = level;
 		tab.note(`${tab.agent} now reasons at "${level}". A model that cannot reason ignores it.`);

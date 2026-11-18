@@ -17,7 +17,7 @@ to change the code.
 | `node src/cli.ts <command>` | The CLI without installing it. |
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
 | `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
-| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page (`desktop/src/*.stories.tsx`), at port 6006; `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`). Add or update a story when you change `desktop/src/ui.tsx`. |
+| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark through its modes (`desktop/.storybook/modes.ts`), so no dark twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
@@ -120,7 +120,21 @@ baseline/           pi SDK behaviour checks and their results; the mock model se
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
-                    page (React), test/ the app driven through its real window, scripts/ what packs it. docs/references/desktop.md describes it and its layout
+                    page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
+                    patterns for the conversation and the input, Streamdown for answers, lucide icons;
+                    ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
+                    The stock components are src/components/ui and nothing else, all from shadcn's own registry in the
+                    style components.json names, the chat components included (`npx shadcn add message`, not
+                    `@ai-elements/message`). AI Elements means shadcn's pages of patterns (ui.shadcn.com/docs/ai-elements),
+                    which are code to compose, not a package. Vercel's earlier `@ai-elements` registry, which shadcn's
+                    pages replace, serves one version written on Radix for every style: it is never added. A stock component is never edited: add and
+                    update them with the shadcn CLI and components.json. Stock is used directly where it is needed:
+                    no wrapper that only renames or bundles stock components. src/components/ holds only a
+                    composition stock cannot express in place, and wraps the stock one. No hand-written stylesheet:
+                    utilities on Tailwind's default scale, tokens and one root font-size in src/index.css.
+                    docs/references/desktop.md describes it and its layout.
+                    shadcn's agent skill lies in desktop/.agents/skills (desktop/.claude/skills links to it, skills-lock.json pins it):
+                    read it before you change the page; `npx skills update` in desktop/ brings it up to date
 ```
 
 ## What agents know about pine
@@ -471,7 +485,10 @@ These are invariants. A change that breaks one needs a test that shows why it is
    and sets the policy that lets the page load nothing from the web. Text from an agent or a
    tool is drawn by `desktop/src/markdown.tsx` (parsed, cleaned, links with their address
    beside them, a picture on the web as a line to click) or as plain text, nowhere as HTML.
-   `desktop/test/app.test.ts` has a test for it; keep it failing without the cleaning.
+   It renders with Streamdown, whose defaults are not safe here, and replaces three of them:
+   its cleaning rules (`CLEAN`), its link component and its image component. On every upgrade
+   of Streamdown read its defaults again and run `npm run desktop:test`.
+   `desktop/test/app.test.ts` has a test for it; keep it failing without each of the three.
 11. **Only the owner opens a folder for a conversation, and looking at one runs nothing.**
    `setFolder` in `src/agents.ts` is reached from the control API only; there is no tool for it.
    It refuses pine's home, pine's code and other agents' workspaces in either direction, and a
@@ -662,8 +679,10 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   is tested with a stand-in for the helper (`PINE_DESKTOP_VOICE`, for tests only); the `live:`
   test in `desktop/test/voice-live.test.ts` (`PINE_LIVE=1`) puts the real helper behind it,
   listening to a recording. No test shows the app's real window with its title bar: after a
-  change to the frame (`.side-top`, `.titlebar`, the window's options in `main.ts`), look at
-  it once in light and dark.
+  change to the frame (`app-drag` and `app-no-drag` in `src/index.css`, the parts of
+  `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the window's options in
+  `electron/main.ts`: `titleBarStyle`, `trafficLightPosition`, `vibrancy`), look at it once in
+  light and dark.
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).
@@ -681,7 +700,7 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
 
 ## Style
 
-- Plain TypeScript, tabs, no framework. Prefer one clear function over an abstraction used once.
+- Plain TypeScript, tabs, no framework (the desktop page aside: see its line in Layout). Prefer one clear function over an abstraction used once.
 - Comments explain why, not what. Error messages say what to do next.
 - Text an agent will read (tool descriptions, refusals, the `<pine>` block) is written for a
   small local model: short, concrete, no jargon.

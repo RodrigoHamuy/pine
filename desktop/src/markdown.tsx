@@ -1,243 +1,215 @@
 // An answer, drawn. What an agent writes can repeat what a web page told it to write, so the
-// text is treated as content from outside: it is parsed, cleaned of everything that could act
-// (scripts, styles, forms, frames), and then three things are settled by this file and not by
-// the text:
+// text is treated as content from outside. Streamdown parses it and draws it as it streams, and
+// three things of pine's own replace its defaults, which are not safe here (a picture at any
+// address loaded by itself, a button that downloads, links opened by the page):
 //
-//   - a link opens in the owner's browser, only for http(s), and its address stands next to it
-//     whenever its words are not the address itself: what is seen is what a click opens;
-//   - a picture, video or sound at a path is shown from the agent's workspace, through the daemon;
-//   - one at a web address is never fetched because an answer contains it. It is a line to
-//     click, and then the daemon fetches it (the page's own policy allows no address on the web).
-import DOMPurify from "dompurify";
-import hljs from "highlight.js/lib/common";
-import { marked } from "marked";
-import { memo, useEffect, useRef } from "react";
+//   - CLEAN, the rule set the text is cleaned with: no scripts, styles, forms, frames, svg, media
+//     tags, no style, class or id attributes, and links only to http(s) and mailto. Pictures in
+//     the text itself (`data:`) are kept, which GitHub's rules, Streamdown's default, drop;
+//   - Link: it opens in the owner's browser, only for http(s), it has no href that the page could
+//     follow, and its address stands next to it whenever its words are not the address itself;
+//   - Picture: one at a web address is never fetched because an answer contains it. It is a line
+//     to click, and then the daemon fetches it (the page's own policy allows no address on the
+//     web). One at a path is shown from the agent's workspace, through the daemon; a `data:` png,
+//     jpeg, gif or webp is shown as it is. Nothing else, and no download button.
+//
+// When Streamdown is upgraded, read its defaults again (`defaultRehypePlugins`, the components
+// it draws, its controls) and run the desktop suite: its markdown test fails without each of the three.
+import { createCodePlugin } from "@streamdown/code";
+import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
+import { Children, createContext, isValidElement, memo, useContext, useEffect, useState, type ReactNode } from "react";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize, { type Options as Schema } from "rehype-sanitize";
+import { Streamdown, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
+import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { api, media } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { mediaKind } from "./model.ts";
 import { errText, short } from "./text.ts";
 
-marked.setOptions({ gfm: true, breaks: false });
-
-const CLEAN = {
-	RETURN_DOM_FRAGMENT: true as const,
-	FORBID_TAGS: ["style", "form", "input", "button", "textarea", "select", "option", "iframe", "frame", "object", "embed", "svg", "math", "video", "audio", "source", "track", "link", "meta", "base", "template", "slot", "dialog", "marquee"],
-	FORBID_ATTR: ["style", "srcset", "class", "id", "name", "action", "formaction", "ping", "background", "poster", "loading", "usemap"],
-	ALLOW_DATA_ATTR: false,
-	ALLOW_ARIA_ATTR: false,
+/** The tags and attributes an answer keeps. Everything else is taken away, its words kept; what is in `strip` goes with its words. */
+export const CLEAN: Schema = {
+	tagNames: ["p", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "del", "s", "ins", "mark", "sub", "sup", "small", "kbd", "samp", "var", "code", "pre", "blockquote", "q", "cite", "abbr", "dfn", "time", "ul", "ol", "li", "dl", "dt", "dd", "a", "img", "table", "caption", "thead", "tbody", "tfoot", "tr", "th", "td", "details", "summary", "div", "span", "section", "figure", "figcaption", "ruby", "rt", "rp", "wbr"],
+	attributes: {
+		a: ["href", "title"],
+		img: ["src", "alt", "title"],
+		// The language of a code block, which the highlighter reads; no other class survives.
+		code: [["className", /^language-./]],
+		th: ["align", "colSpan", "rowSpan", "scope"],
+		td: ["align", "colSpan", "rowSpan"],
+		ol: ["start", "reversed"],
+		li: ["value"],
+		details: ["open"],
+		abbr: ["title"],
+		time: ["dateTime"],
+		"*": ["lang", "dir"],
+	},
+	protocols: { href: ["http", "https", "mailto"], src: ["http", "https", "data"] },
+	ancestors: { tbody: ["table"], td: ["table"], th: ["table"], thead: ["table"], tfoot: ["table"], tr: ["table"], caption: ["table"] },
+	strip: ["script", "style", "template", "textarea", "select", "noscript", "title", "iframe", "frame", "object", "embed", "svg", "math", "video", "audio"],
+	clobber: [],
+	clobberPrefix: "",
 };
 
+const REHYPE = [rehypeRaw, [rehypeSanitize, CLEAN]] as const;
+
 const isWeb = (url: string) => /^https?:\/\//i.test(url);
+const DATA_IMAGE = /^data:image\/(png|jpeg|gif|webp);base64,/i;
 
 export interface Where {
 	agent: string;
 	session?: string;
 }
 
+/** Whose workspace a path in the answer is in: a context, so that the components below stay the same for every answer. */
+const WhereContext = createContext<Where | undefined>(undefined);
+
+type Node = ExtraProps["node"];
+const textOf = (node: Node | { type: string; value?: string; children?: unknown[] }): string => {
+	if (!node) return "";
+	if (node.type === "text") return (node as { value?: string }).value ?? "";
+	return ((node as { children?: Node[] }).children ?? []).map(textOf).join("");
+};
+
+const open = (url: string) => (e: React.MouseEvent) => {
+	e.preventDefault();
+	void bridge.open(url);
+};
+
+function Link({ href, children, node }: React.ComponentProps<"a"> & ExtraProps) {
+	const url = typeof href === "string" ? href : "";
+	const shown = textOf(node).trim();
+	if (!isWeb(url)) return <span>{url && shown !== url ? <>{children} ({url})</> : children}</span>;
+	const plain = shown === url || shown === url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+	return (
+		<>
+			<a data-href={url} title={url} className="cursor-pointer text-primary underline decoration-primary/40 underline-offset-2" onClick={open(url)}>
+				{children}
+			</a>
+			{/* Beside the link, not inside it: it is the address in plain letters, not more of the link's words.
+			    It flows with the sentence: a line of its own would cut the link off from where it leads. */}
+			{plain ? null : (
+				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-faint wrap-anywhere" title={url} onClick={open(url)}>
+					<ArrowRightIcon className="mr-1 inline size-3" aria-hidden />
+					{short(url.replace(/^https?:\/\//, ""), 72)}
+				</span>
+			)}
+		</>
+	);
+}
+
+/** How a picture, a video or a sound is drawn, in an answer and in a conversation: never wider than its place. */
+export const MEDIA = {
+	box: { image: "block max-w-md", video: "block max-w-lg", audio: "block max-w-md" },
+	image: "block max-h-80 max-w-full cursor-zoom-in rounded-md border",
+	video: "block max-h-90 max-w-full rounded-md bg-black",
+	audio: "block w-full",
+	cap: "mt-1 block text-xs text-faint",
+};
+
+function Player({ kind, src, alt }: { kind: "image" | "video" | "audio"; src: string; alt: string }) {
+	return (
+		<span className={`my-2.5 ${MEDIA.box[kind]}`}>
+			{kind === "image" ? (
+				// Larger over the page with a click or, focused, with Enter; a click on it, beside it, or Escape closes it.
+				<Dialog>
+					<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={src} alt={alt} draggable={false} />} />
+					<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
+						<DialogTitle className="sr-only">The picture, larger</DialogTitle>
+						<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={src} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+					</DialogContent>
+				</Dialog>
+			) : kind === "video" ? <video className={MEDIA.video} src={src} controls preload="metadata" /> : <audio className={MEDIA.audio} src={src} controls preload="metadata" />}
+			{alt ? <span className={MEDIA.cap}>{alt}</span> : null}
+		</span>
+	);
+}
+
 /** A line to click instead of a picture: the address is shown, and nothing is fetched before the click. */
-function remote(url: string, alt: string): HTMLElement {
+function Remote({ url, alt }: { url: string; alt: string }) {
+	const [state, setState] = useState<{ loading?: boolean; error?: string; got?: { kind: "image" | "video" | "audio"; src: string } }>({});
+	useEffect(() => () => void (state.got && URL.revokeObjectURL(state.got.src)), [state.got]);
+	if (state.got) return <Player kind={state.got.kind} src={state.got.src} alt={alt} />;
 	const kind = mediaKind(url.split(/[?#]/)[0]) ?? "image";
-	const el = document.createElement("span");
-	el.className = "md-remote";
-	el.dataset.remote = url;
-	el.dataset.alt = alt;
-	el.title = url;
-	el.textContent = `Load ${kind === "image" ? "picture" : kind} · ${short(url, 90)}`;
-	return el;
-}
-
-function player(kind: "image" | "video" | "audio", src: string, alt: string): HTMLElement {
-	const fig = document.createElement("figure");
-	fig.className = `md-media md-${kind}`;
-	const el = document.createElement(kind === "image" ? "img" : kind);
-	el.setAttribute("src", src);
-	if (kind === "image") {
-		el.setAttribute("alt", alt);
-		el.setAttribute("draggable", "false");
-		el.dataset.zoom = "1";
-	} else {
-		el.setAttribute("controls", "");
-		el.setAttribute("preload", "metadata");
-	}
-	fig.append(el);
-	if (alt) {
-		const cap = document.createElement("figcaption");
-		cap.textContent = alt;
-		fig.append(cap);
-	}
-	return fig;
-}
-
-/** Code blocks keep the language the text named: the cleaning above takes class names away, so it is read before. */
-export function draw(text: string, where?: Where): DocumentFragment {
-	const langs: string[] = [];
-	const renderer = new marked.Renderer();
-	renderer.code = ({ text: body, lang }) => {
-		langs.push((lang ?? "").trim().split(/\s+/)[0] ?? "");
-		const escaped = body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-		return `<pre><code>${escaped}</code></pre>\n`;
-	};
-	const html = marked.parse(text, { async: false, renderer }) as string;
-	const frag = DOMPurify.sanitize(html, CLEAN) as unknown as DocumentFragment;
-	decorate(frag, where);
-	// Only the blocks this renderer wrote are numbered: a <pre> the text wrote as HTML has no language.
-	let n = 0;
-	for (const pre of frag.querySelectorAll("pre")) {
-		const code = pre.querySelector(":scope > code");
-		if (!code) continue;
-		const lang = langs[n++] ?? "";
-		const source = code.textContent ?? "";
-		if (lang && hljs.getLanguage(lang)) {
-			try {
-				// The highlighter escapes what it is given; its output is markup of its own making.
-				code.innerHTML = hljs.highlight(source, { language: lang, ignoreIllegals: true }).value;
-				refine(code);
-			} catch {
-				// shown without colours
-			}
-		}
-		const box = document.createElement("div");
-		box.className = "md-code";
-		const head = document.createElement("div");
-		head.className = "md-code-head";
-		const name = document.createElement("span");
-		name.textContent = lang || "text";
-		const copy = document.createElement("span");
-		copy.className = "md-copy";
-		copy.dataset.copy = "1";
-		copy.textContent = "Copy";
-		head.append(name, copy);
-		pre.replaceWith(box);
-		box.append(head, pre);
-	}
-	for (const table of frag.querySelectorAll("table")) {
-		const wrap = document.createElement("div");
-		wrap.className = "md-table";
-		table.replaceWith(wrap);
-		wrap.append(table);
-	}
-	return frag;
-}
-
-// The highlighter has one class for every keyword and one for every constant. The theme of the dark look
-// (poimandres) tells them apart, so the ones it colours differently get a second class. Light ignores it.
-const KW_MOD = new Set(["import", "export", "from", "default", "as", "async", "static", "new", "this", "super", "self", "public", "private", "protected", "readonly", "abstract", "override", "declare", "extends", "implements", "pub", "mut", "use", "package"]);
-const KW_FLOW = new Set(["return", "await", "yield", "break", "continue"]);
-const KW_PLAIN = new Set(["if", "else", "elif", "for", "while", "do", "switch", "case", "match", "in", "of", "loop", "then", "fi", "done", "esac", "end", "with", "and", "or", "not", "is"]);
-const KW_BAD = new Set(["try", "catch", "finally", "throw", "throws", "raise", "except", "delete", "del", "void", "panic", "unsafe"]);
-const NIL = new Set(["false", "null", "undefined", "nil", "none", "nan"]);
-
-function refine(code: Element): void {
-	for (const el of code.querySelectorAll(".hljs-keyword, .hljs-literal")) {
-		const word = (el.textContent ?? "").trim();
-		// Some languages (JSON) mark true, false and null as keywords.
-		if (NIL.has(word.toLowerCase())) el.classList.add("nil");
-		else if (el.classList.contains("hljs-literal") || word === "true") el.classList.add("lit");
-		else if (KW_MOD.has(word)) el.classList.add("kw-mod");
-		else if (KW_FLOW.has(word)) el.classList.add("kw-flow");
-		else if (KW_PLAIN.has(word)) el.classList.add("kw-plain");
-		else if (KW_BAD.has(word)) el.classList.add("kw-bad");
-	}
-	code.classList.add("hl");
-}
-
-function decorate(frag: DocumentFragment, where?: Where): void {
-	for (const a of frag.querySelectorAll("a")) {
-		const href = a.getAttribute("href") ?? "";
-		a.removeAttribute("href");
-		a.removeAttribute("target");
-		if (!isWeb(href)) {
-			const span = document.createElement("span");
-			span.textContent = href && a.textContent !== href ? `${a.textContent} (${href})` : (a.textContent ?? "");
-			a.replaceWith(span);
-			continue;
-		}
-		a.dataset.href = href;
-		a.title = href;
-		a.className = "md-link";
-		const shown = (a.textContent ?? "").trim();
-		if (shown !== href && shown !== href.replace(/^https?:\/\//, "").replace(/\/$/, "")) {
-			const target = document.createElement("span");
-			target.className = "md-target";
-			target.textContent = short(href.replace(/^https?:\/\//, ""), 72);
-			target.dataset.href = href;
-			// Beside the link, not inside it: it is the address in plain letters, not more of the link's words.
-			a.after(target);
-		}
-	}
-	for (const img of frag.querySelectorAll("img")) {
-		const src = img.getAttribute("src") ?? "";
-		const alt = img.getAttribute("alt") ?? "";
-		if (isWeb(src)) img.replaceWith(remote(src, alt));
-		else if (/^data:image\/(png|jpeg|gif|webp);base64,/i.test(src)) img.replaceWith(player("image", src, alt));
-		else if (where && src && !/^[a-z][a-z0-9+.-]*:/i.test(src)) {
-			const kind = mediaKind(src.split(/[?#]/)[0]);
-			let file = src;
-			try {
-				file = decodeURIComponent(src);
-			} catch {
-				// as written
-			}
-			if (kind) img.replaceWith(player(kind, media.workspace(where.agent, file, where.session), alt));
-			else img.replaceWith(document.createTextNode(alt || src));
-		} else img.replaceWith(document.createTextNode(alt || src));
-	}
-}
-
-/** What a click inside drawn text does: open a link, copy a block, fetch a picture, enlarge one. */
-async function onClick(e: MouseEvent): Promise<void> {
-	const el = e.target as HTMLElement;
-	const link = el.closest<HTMLElement>("[data-href]");
-	if (link) {
-		e.preventDefault();
-		return void bridge.open(link.dataset.href!);
-	}
-	const copy = el.closest<HTMLElement>("[data-copy]");
-	if (copy) {
-		await navigator.clipboard.writeText(copy.closest(".md-code")?.querySelector("pre")?.textContent ?? "");
-		copy.textContent = "Copied";
-		return void window.setTimeout(() => (copy.textContent = "Copy"), 1200);
-	}
-	const load = el.closest<HTMLElement>("[data-remote]");
-	if (load && !load.dataset.loading) {
-		load.dataset.loading = "1";
-		const url = load.dataset.remote!;
-		load.textContent = `Loading · ${short(url, 90)}`;
+	const load = async () => {
+		if (state.loading) return;
+		setState({ loading: true });
 		try {
 			const got = await api.fetchImage(url);
 			const kind = got.mime.startsWith("video/") ? "video" : got.mime.startsWith("audio/") ? "audio" : "image";
 			const blob = new Blob([Uint8Array.from(atob(got.base64), (c) => c.charCodeAt(0))], { type: got.mime });
-			load.replaceWith(player(kind, URL.createObjectURL(blob), load.dataset.alt ?? ""));
+			setState({ got: { kind, src: URL.createObjectURL(blob) } });
 		} catch (err) {
-			delete load.dataset.loading;
-			load.textContent = `Could not load ${short(url, 70)}: ${errText(err)}`;
+			setState({ error: errText(err) });
 		}
-		return;
-	}
-	const img = el.closest<HTMLImageElement>("img[data-zoom]");
-	if (img) window.dispatchEvent(new CustomEvent("pine:zoom", { detail: img.src }));
+	};
+	const label = state.loading ? `Loading · ${short(url, 90)}` : state.error ? `Could not load ${short(url, 70)}: ${state.error}` : `Load ${kind === "image" ? "picture" : kind} · ${short(url, 90)}`;
+	return (
+		<Button variant="outline" size="xs" data-remote={url} title={state.error ? `${url}: ${state.error}` : url} className="max-w-full" onClick={() => void load()}>
+			<span className="truncate">{label}</span>
+		</Button>
+	);
 }
 
-/** Markdown, drawn into the page. While `live`, the text grows and is drawn at most once a frame. */
-export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }) {
-	const ref = useRef<HTMLDivElement>(null);
-	const pending = useRef(0);
-	useEffect(() => {
-		const paint = () => {
-			pending.current = 0;
-			const el = ref.current;
-			if (!el) return;
-			// What the reader opened stays open while the text goes on growing.
-			const open = [...el.querySelectorAll("details")].map((d) => d.open);
-			el.replaceChildren(draw(text, where));
-			[...el.querySelectorAll("details")].forEach((d, i) => open[i] !== undefined && (d.open = open[i]));
-		};
-		if (!live) return paint();
-		if (!pending.current) pending.current = requestAnimationFrame(paint);
-		return () => {
-			if (pending.current) cancelAnimationFrame(pending.current);
-			pending.current = 0;
-		};
-	}, [text, where?.agent, where?.session, live]);
-	return <div ref={ref} className={`md${live ? " md-live" : ""}`} onClick={(e) => void onClick(e.nativeEvent)} />;
+function Picture({ src, alt }: React.ComponentProps<"img"> & ExtraProps) {
+	const where = useContext(WhereContext);
+	const url = typeof src === "string" ? src : "";
+	const words = alt ?? "";
+	if (isWeb(url)) return <Remote url={url} alt={words} />;
+	if (DATA_IMAGE.test(url)) return <Player kind="image" src={url} alt={words} />;
+	if (where && url && !/^[a-z][a-z0-9+.-]*:/i.test(url)) {
+		const kind = mediaKind(url.split(/[?#]/)[0]);
+		let file = url;
+		try {
+			file = decodeURIComponent(url);
+		} catch {
+			// as written
+		}
+		if (kind) return <Player kind={kind} src={media.workspace(where.agent, file, where.session)} alt={words} />;
+	}
+	return <>{words || url}</>;
+}
+
+/** A folded part written as raw HTML (`<details>`), drawn as shadcn's Collapsible. `open` in the text is
+ *  where it starts; from then on it is the reader's, and it stays as they left it while the text grows,
+ *  since the component is the same on every render (COMPONENTS is a constant) and keeps its own state. */
+function Details({ open, children }: React.ComponentProps<"details"> & ExtraProps) {
+	const parts = Children.toArray(children);
+	const isSummary = (part: ReactNode) => isValidElement<ExtraProps>(part) && part.props.node?.tagName === "summary";
+	return (
+		<Collapsible defaultOpen={open !== undefined && open !== false} data-details="" className="my-3 rounded-lg border px-3">
+			{parts.filter(isSummary)}
+			<CollapsibleContent className="pb-2.5">{parts.filter((part) => !isSummary(part))}</CollapsibleContent>
+		</Collapsible>
+	);
+}
+
+function Summary({ children }: React.ComponentProps<"summary"> & ExtraProps) {
+	return (
+		<CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-1 py-2 text-left font-medium text-muted-foreground select-none hover:text-foreground">
+			<ChevronRightIcon className="size-4 shrink-0 transition-transform group-data-panel-open:rotate-90" aria-hidden />
+			{children}
+		</CollapsibleTrigger>
+	);
+}
+
+const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary };
+const PLUGINS = { code: createCodePlugin({ themes: ["github-light", "poimandres"] }) };
+const CONTROLS: ControlsConfig = { code: { copy: true, download: false }, table: false, mermaid: false, image: false };
+
+// Streamdown draws every element with its own look, and a folded part written as raw HTML is
+// Details above. `data-slot="markdown"` and `data-live` are what the tests look for.
+const LOOK = "cursor-auto select-text wrap-anywhere";
+
+/** Markdown, drawn into the page. While `live`, the text grows; what the reader opened stays open. */
+export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }): ReactNode {
+	return (
+		<WhereContext.Provider value={where}>
+			<Streamdown data-slot="markdown" data-live={live || undefined} className={LOOK} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={["github-light", "poimandres"]} isAnimating={!!live} lineNumbers={false}>
+				{text}
+			</Streamdown>
+		</WhereContext.Provider>
+	);
 });

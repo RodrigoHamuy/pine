@@ -1,33 +1,26 @@
 // The agent, beside its conversation: who it is, what it runs on, what it is doing, and what it
 // has been given (what it listens to, its schedules, skills and servers, what it remembers).
 // A conversation in pine is a conversation with an agent; this is the agent.
+import { CheckIcon, CpuIcon, SettingsIcon, ShieldIcon, SparkleIcon, BookIcon, ClockIcon, PlugIcon, ZapIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
-import { Button, Icon, Pulse, useLoad } from "./ui.tsx";
+import { useLoad } from "./use-load.ts";
+import { Spinner } from "@/components/ui/spinner";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { FieldLegend, FieldSet } from "@/components/ui/field";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Printed } from "@/components/printed";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 
-function Section({ title, count, children, action }: { title: string; count?: number; children: React.ReactNode; action?: React.ReactNode }) {
-	return (
-		<section className="agent-sec">
-			<h3>
-				{title}
-				{count !== undefined ? <span className="badge">{count}</span> : null}
-				<span className="grow" />
-				{action}
-			</h3>
-			{children}
-		</section>
-	);
-}
-
-const Line = ({ icon, name, about, tag, run }: { icon: string; name: string; about?: string; tag?: string; run?: () => void }) => (
-	<div className={`agent-line${run ? " click" : ""}`} onClick={run} title={about}>
-		<Icon name={icon} size={13} className="faint" />
-		<span className="name">{name}</span>
-		<span className="about cut">{about}</span>
-		{tag ? <span className="tag">{tag}</span> : null}
-	</div>
-);
+const NONE = "px-3.5 py-0.5 text-faint wrap-anywhere";
+/** A section's title over its rows: stock FieldSet and FieldLegend, as the settings sections are. */
+const SECTION = "min-w-0 gap-0";
+const TITLE = "mt-1.5 mb-1 flex min-h-6 w-full items-center gap-2 pr-2 pl-3.5 text-xs font-semibold text-faint";
 
 export function AgentView({ tab }: { tab: Tab }) {
 	useModel(tab);
@@ -51,63 +44,159 @@ export function AgentView({ tab }: { tab: Tab }) {
 	const elsewhere = [...s.busy].filter(([key, tasks]) => tasks.size && key.startsWith(`${tab.agent}:`) && key !== tab.key).map(([key]) => key.slice(tab.agent.length + 1));
 	const memory = detail.data?.files.memory?.trim();
 	return (
-		<div className="code-body agent-view selectable">
-			<div className="agent-card">
-				<span className="avatar big">{tab.agent.slice(0, 1).toUpperCase()}</span>
-				<div className="grow" style={{ minWidth: 0 }}>
-					<div className="agent-name">{tab.agent}{info.main ? <span className="tag good">main</span> : null}</div>
-					<div className="muted">{info.description || "no description"}</div>
-				</div>
-				<Button small icon="gear" onClick={() => s.openSettings("agents", tab.agent)}>Settings</Button>
-			</div>
-			<div className="facts" style={{ padding: "0 14px" }}>
-				<button type="button" className="fact click" title="The model it runs on" onClick={() => void s.pickModel(tab)}><Icon name="cpu" size={12} /><b>{info.model}</b></button>
-				<button type="button" className="fact click" title="How much its model thinks before it answers" onClick={() => void s.pickReasoning(tab)}><Icon name="spark" size={12} />reasoning <b>{info.thinking}</b></button>
-				<button type="button" className="fact click" title={mode?.about} onClick={() => void s.pickMode(tab)}><Icon name="shield" size={12} /><b>{info.mode}</b>{info.mode === "auto" || info.mode === "bypass" ? "your account" : "in its sandbox"}</button>
-				{info.delegates.length ? <span className="fact" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></span> : null}
+		<ScrollArea className="flex min-h-0 flex-1 cursor-auto flex-col text-xs select-text *:data-[slot=scroll-area-viewport]:scroll-fade">
+		<div className="flex flex-col gap-3 pb-2">
+			<Item className="px-3.5 pt-4 pb-0.5">
+				<ItemMedia>
+					<Avatar size="lg">
+						<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
+					</Avatar>
+				</ItemMedia>
+				<ItemContent>
+					<ItemTitle>{tab.agent}{info.main ? <Badge>main</Badge> : null}</ItemTitle>
+					<ItemDescription>{info.description || "no description"}</ItemDescription>
+				</ItemContent>
+				<ItemActions>
+					<Button variant="outline" size="xs" onClick={() => s.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Settings</Button>
+				</ItemActions>
+			</Item>
+			<div className="mt-0.5 flex flex-wrap gap-1.5 px-3.5">
+				<Tooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickModel(tab)} />}><CpuIcon data-icon="inline-start" />{info.model}</Badge>} /><TooltipContent>The model it runs on</TooltipContent></Tooltip>
+				<Tooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickReasoning(tab)} />}><SparkleIcon data-icon="inline-start" />reasoning {info.thinking}</Badge>} /><TooltipContent>How much its model thinks before it answers</TooltipContent></Tooltip>
+				<Tooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickMode(tab)} />}><ShieldIcon data-icon="inline-start" />{info.mode} · {info.mode === "auto" || info.mode === "bypass" ? "your account" : "in its sandbox"}</Badge>} /><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></Tooltip>
+				{info.delegates.length ? <Badge variant="outline">hands work to {info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</Badge> : null}
 			</div>
 
 			{tab.busy || helpers.length || elsewhere.length ? (
-				<Section title="At work">
-					{tab.busy ? <div className="agent-line"><Pulse size={11} /><span className="name">this conversation</span><span className="about cut">{tab.thinking ? "thinking" : "working"}{tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}</span></div> : null}
+				<FieldSet className={SECTION}>
+					<FieldLegend className={TITLE}>At work</FieldLegend>
+					{tab.busy ? (
+						<Item size="xs">
+							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
+							<ItemContent>
+								<ItemTitle>this conversation</ItemTitle>
+								<ItemDescription>{`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`}</ItemDescription>
+							</ItemContent>
+						</Item>
+					) : null}
 					{helpers.map(([id, c]) => (
-						<div key={id} className="agent-line click" onClick={() => void s.openTask(id)}>
-							{c.running ? <Pulse size={11} /> : <Icon name="check" size={13} className="faint" />}
-							<span className="name">{c.agent}</span>
-							<span className="about cut">{childKind(c.kind)} #{id}: {c.label}</span>
-							<span className="tag">open</span>
-						</div>
+						<Item key={id} size="xs" render={<button type="button" onClick={() => void s.openTask(id)} />}>
+							<ItemMedia>{c.running ? <Spinner aria-label="Working" className="size-3" /> : <CheckIcon />}</ItemMedia>
+							<ItemContent>
+								<ItemTitle>{c.agent}</ItemTitle>
+								<ItemDescription>{`${childKind(c.kind)} #${id}: ${c.label}`}</ItemDescription>
+							</ItemContent>
+							<ItemActions><Badge variant="secondary">open</Badge></ItemActions>
+						</Item>
 					))}
-					{elsewhere.map((session) => <div key={session} className="agent-line click" onClick={() => void s.openTab(tab.agent, session)}><Pulse size={11} /><span className="name">{session}</span><span className="about cut">another conversation of {tab.agent}</span><span className="tag">open</span></div>)}
-				</Section>
+					{elsewhere.map((session) => (
+						<Item key={session} size="xs" render={<button type="button" onClick={() => void s.openTab(tab.agent, session)} />}>
+							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
+							<ItemContent>
+								<ItemTitle>{session}</ItemTitle>
+								<ItemDescription>another conversation of {tab.agent}</ItemDescription>
+							</ItemContent>
+							<ItemActions><Badge variant="secondary">open</Badge></ItemActions>
+						</Item>
+					))}
+				</FieldSet>
 			) : null}
 
 			{sources.data ? (
-				<Section title="Listens to" count={listens.length} action={<Button small variant="ghost" onClick={() => s.openSettings("events")}>Events</Button>}>
-					{listens.length ? listens.map((x) => <Line key={x.name} icon="bolt" name={x.name} about={(x.local ?? x.agent ?? x.global)?.note || x.description || x.type} tag={x.local ? "this conversation" : x.agent ? "as an agent" : "all agents"} />) : <div className="agent-none">Nothing wakes it by itself.{could > 0 ? ` ${could} event source${could === 1 ? "" : "s"} could: ask it to watch one, or subscribe it under Events.` : " Ask it to watch something (“tell me when a file lands in ~/Scans”)."}</div>}
-				</Section>
+				<FieldSet className={SECTION}>
+					<FieldLegend className={TITLE}>
+						Listens to
+						<Badge variant="secondary">{listens.length}</Badge>
+						<span className="min-w-0 flex-1" />
+						<Button variant="ghost" size="xs" onClick={() => s.openSettings("events")}>Events</Button>
+					</FieldLegend>
+					{listens.length ? listens.map((x) => (
+						<Item key={x.name} size="xs">
+							<ItemMedia><ZapIcon /></ItemMedia>
+							<ItemContent>
+								<ItemTitle>{x.name}</ItemTitle>
+								<ItemDescription>{(x.local ?? x.agent ?? x.global)?.note || x.description || x.type}</ItemDescription>
+							</ItemContent>
+							<ItemActions><Badge variant="secondary">{x.local ? "this conversation" : x.agent ? "as an agent" : "all agents"}</Badge></ItemActions>
+						</Item>
+					)) : <div className={NONE}>Nothing wakes it by itself.{could > 0 ? ` ${could} event source${could === 1 ? "" : "s"} could: ask it to watch one, or subscribe it under Events.` : " Ask it to watch something (“tell me when a file lands in ~/Scans”)."}</div>}
+				</FieldSet>
 			) : null}
 			{schedules.data ? (
-				<Section title="Schedules" count={timed.length}>
-					{timed.length ? timed.map((x) => <Line key={`${x.scope}:${x.name}`} icon="clock" name={x.name} about={`${x.when}${x.task ? ` · ${oneLine(x.task)}` : ""}`} tag={x.scope === "global" ? "all agents" : x.session && x.session !== "main" ? x.session : undefined} />) : <div className="agent-none">Nothing is scheduled. Ask it (“every morning at seven …”).</div>}
-				</Section>
+				<FieldSet className={SECTION}>
+					<FieldLegend className={TITLE}>
+						Schedules
+						<Badge variant="secondary">{timed.length}</Badge>
+					</FieldLegend>
+					{timed.length ? timed.map((x) => {
+						const tag = x.scope === "global" ? "all agents" : x.session && x.session !== "main" ? x.session : undefined;
+						return (
+							<Item key={`${x.scope}:${x.name}`} size="xs">
+								<ItemMedia><ClockIcon /></ItemMedia>
+								<ItemContent>
+									<ItemTitle>{x.name}</ItemTitle>
+									<ItemDescription>{`${x.when}${x.task ? ` · ${oneLine(x.task)}` : ""}`}</ItemDescription>
+								</ItemContent>
+								{tag ? <ItemActions><Badge variant="secondary">{tag}</Badge></ItemActions> : null}
+							</Item>
+						);
+					}) : <div className={NONE}>Nothing is scheduled. Ask it (“every morning at seven …”).</div>}
+				</FieldSet>
 			) : null}
 			{skills.data ? (
-				<Section title="Skills" count={knows.length} action={<Button small variant="ghost" onClick={() => s.openSettings("skills")}>Skills</Button>}>
-					{knows.length ? knows.map((x) => <Line key={x.dir} icon="book" name={x.name} about={x.description} tag={x.scope === "global" ? "all agents" : x.scope === "local" ? "this conversation" : undefined} />) : <div className="agent-none">No skills yet. Ask it to “make a skill for this”.</div>}
-				</Section>
+				<FieldSet className={SECTION}>
+					<FieldLegend className={TITLE}>
+						Skills
+						<Badge variant="secondary">{knows.length}</Badge>
+						<span className="min-w-0 flex-1" />
+						<Button variant="ghost" size="xs" onClick={() => s.openSettings("skills")}>Skills</Button>
+					</FieldLegend>
+					{knows.length ? knows.map((x) => {
+						const tag = x.scope === "global" ? "all agents" : x.scope === "local" ? "this conversation" : undefined;
+						return (
+							<Item key={x.dir} size="xs">
+								<ItemMedia><BookIcon /></ItemMedia>
+								<ItemContent>
+									<ItemTitle>{x.name}</ItemTitle>
+									{x.description ? <ItemDescription>{x.description}</ItemDescription> : null}
+								</ItemContent>
+								{tag ? <ItemActions><Badge variant="secondary">{tag}</Badge></ItemActions> : null}
+							</Item>
+						);
+					}) : <div className={NONE}>No skills yet. Ask it to “make a skill for this”.</div>}
+				</FieldSet>
 			) : null}
 			{servers.data ? (
-				<Section title="MCP servers" count={tools.length} action={<Button small variant="ghost" onClick={() => s.openSettings("mcp")}>Servers</Button>}>
-					{tools.length ? tools.map((x) => <Line key={`${x.scope}:${x.name}`} icon="plug" name={x.name} about={x.target} tag={x.scope === "global" ? "all agents" : x.session ? "this conversation" : undefined} />) : <div className="agent-none">No MCP servers.</div>}
-				</Section>
+				<FieldSet className={SECTION}>
+					<FieldLegend className={TITLE}>
+						MCP servers
+						<Badge variant="secondary">{tools.length}</Badge>
+						<span className="min-w-0 flex-1" />
+						<Button variant="ghost" size="xs" onClick={() => s.openSettings("mcp")}>Servers</Button>
+					</FieldLegend>
+					{tools.length ? tools.map((x) => {
+						const tag = x.scope === "global" ? "all agents" : x.session ? "this conversation" : undefined;
+						return (
+							<Item key={`${x.scope}:${x.name}`} size="xs">
+								<ItemMedia><PlugIcon /></ItemMedia>
+								<ItemContent>
+									<ItemTitle>{x.name}</ItemTitle>
+									{x.target ? <ItemDescription>{x.target}</ItemDescription> : null}
+								</ItemContent>
+								{tag ? <ItemActions><Badge variant="secondary">{tag}</Badge></ItemActions> : null}
+							</Item>
+						);
+					}) : <div className={NONE}>No MCP servers.</div>}
+				</FieldSet>
 			) : null}
 			{memory !== undefined ? (
-				<Section title="What it remembers">
-					{memory ? <pre className="log" style={{ margin: "0 14px", maxHeight: 220 }}>{short(memory, 6000)}</pre> : <div className="agent-none">Its MEMORY.md is empty.</div>}
-				</Section>
+				<FieldSet className={SECTION}>
+					<FieldLegend className={TITLE}>What it remembers</FieldLegend>
+					{memory ? <Printed sm text={short(memory, 6000)} className="mx-3.5 w-auto" /> : <div className={NONE}>Its MEMORY.md is empty.</div>}
+				</FieldSet>
 			) : null}
-			{detail.data ? <div className="agent-none" style={{ paddingBottom: 16 }}>Its workspace is {detail.data.workspace}; the Files view shows {tab.folder ? "the folder this conversation works in" : "it"}.</div> : null}
+			{detail.data ? <div className={cn(NONE, "pb-4")}>Its workspace is {detail.data.workspace}; the Files view shows {tab.folder ? "the folder this conversation works in" : "it"}.</div> : null}
 		</div>
+		</ScrollArea>
 	);
 }
