@@ -266,6 +266,12 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		await menu("code-browser");
 		// The page is a picture, drawn when it is whole; its address is text in the line above it.
 		await sees(".browser-page canvas:not(.blank)");
+		// A row that scrolls sideways (the browser's tabs, the panel's, the conversations') is no taller than its room:
+		// stock's ScrollArea would show a vertical bar with nothing to scroll.
+		await sees(".browser-tabs [data-slot=scroll-area-viewport]");
+		const rows = await page.$$eval("[data-slot=scroll-area][class*='scroll-fade-x'] > [data-slot=scroll-area-viewport]", (els: Element[]) => els.map((el) => ({ row: el.closest(".browser-tabs, .code, .tabs")?.className.split(" ")[0], over: el.scrollHeight - el.clientHeight })));
+		assert.ok(rows.length >= 3, JSON.stringify(rows));
+		assert.deepEqual(rows.filter((r) => r.over > 0), [], "a sideways row overflows vertically");
 		assert.equal(await page.inputValue(".browser-address"), "https://shop.example/");
 		assert.deepEqual(await page.$eval(".browser-page canvas", (c: HTMLCanvasElement) => [c.width, c.height]), [400, 300]);
 		// The app said that it shows the browser itself, so the agent's browser opens no window.

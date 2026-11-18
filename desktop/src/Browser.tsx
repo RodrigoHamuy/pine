@@ -169,8 +169,11 @@ export function BrowserView({ tab }: { tab: Tab }) {
 	return (
 		<div className="browser flex min-h-0 flex-1 flex-col overflow-hidden">
 			{open && state.tabs.length ? (
-				<div className="browser-tabs flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1">
+				<div className="browser-tabs flex flex-none items-center gap-0.5 border-b border-line-soft px-2 pt-1">
+					{/* The row scrolls sideways only. The padding is the room for the line under the tab in front, which stock draws
+					    below the list: without it the row is taller than its room, and a vertical bar shows with nothing to scroll. */}
 					<ScrollArea className="flex min-h-0 min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
+						<div className="pb-1.5">
 						<Tabs value={state.current} onValueChange={(i) => i !== state.current && act({ do: "tab", index: i as number })}>
 							<TabsList variant="line">
 					{state.tabs.map((t, i) => (
@@ -184,6 +187,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 					))}
 							</TabsList>
 						</Tabs>
+						</div>
 					</ScrollArea>
 					<Tooltip>
 						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />}><PlusIcon /></TooltipTrigger>
