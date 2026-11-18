@@ -14,5 +14,5 @@
     "verbatimModuleSyntax": true,
     "types": ["node", "vite/client"]
   },
-  "include": ["src", "electron", "test", "vite.config.ts"]
+  "include": ["src", "electron", "test", "vite.config.ts", ".storybook"]
 }

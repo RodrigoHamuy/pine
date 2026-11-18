@@ -2,3 +2,4 @@ dist-electron/
 release/
 release-*/
 .stage/
+storybook-static/

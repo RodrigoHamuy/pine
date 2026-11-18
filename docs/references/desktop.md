@@ -460,3 +460,19 @@ desktop/
   set as HTML anywhere else.
 - A new thing the owner can see or do gets a test in `desktop/test/`, which starts the real
   app on a home of its own.
+
+### Stories and Chromatic
+
+The parts the page is built from (`src/ui.tsx`: buttons, fields, switches, the segmented
+control, dialogs) have stories beside them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need neither Electron
+nor a daemon. Story only parts that take everything as props; a part that calls `api.ts` or
+the bridge has no story.
+
+| Command (in `desktop/`) | What it does |
+|---|---|
+| `npm run storybook` | Storybook at http://localhost:6006. The Theme menu in its toolbar shows light or dark whatever the system says. |
+| `npm run build-storybook` | The stories built into `storybook-static/`. |
+
+Every pull request and every push to `next` publishes the stories to Chromatic
+(`.github/workflows/chromatic.yml`), which shows what changed in a picture for review. It
+needs the repository secret `CHROMATIC_PROJECT_TOKEN`; without it the job says so and passes.
