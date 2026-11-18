@@ -41,7 +41,7 @@ test("live: the real voice helper's words arrive in the app's input", { skip: pr
 		await page.waitForSelector(".welcome h1", { timeout: 60_000 });
 		await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", "voice"));
 		await page.waitForFunction(() => /list the bills in my scans folder/i.test((document.querySelector(".composer textarea") as HTMLTextAreaElement).value), undefined, { timeout: 60_000 }).catch(async () => {
-			throw new Error(`nothing was heard. The input holds ${JSON.stringify(await page.inputValue(".composer textarea"))}; on screen: ${await page.evaluate(() => [...document.querySelectorAll(".banner, [data-sonner-toast]")].map((e) => e.textContent).join(" | "))}`);
+			throw new Error(`nothing was heard. The input holds ${JSON.stringify(await page.inputValue(".composer textarea"))}; on screen: ${await page.evaluate(() => [...document.querySelectorAll(".banner, [data-slot=toast]")].map((e) => e.textContent).join(" | "))}`);
 		});
 		// Heard is not sent.
 		assert.equal(await page.$$eval(".it-user", (els: Element[]) => els.length), 0);

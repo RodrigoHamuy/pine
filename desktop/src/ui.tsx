@@ -5,7 +5,7 @@ import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "re
 import { Empty as StockEmpty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
-import { Toaster } from "@/components/ui/sonner";
+import { Toaster } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
 
 /** pine's mark: the P of its wordmark (docs/images/logo-dark.svg), four blocks on a grid. */
@@ -39,9 +39,9 @@ export function Pulse({ size = 14 }: { size?: number }) {
 	);
 }
 
-/** Where pine's passing notices (`store.flash`) show: at the bottom, as Sonner's pile that opens on hover. */
+/** Where pine's passing notices (`store.flash`) show: stock Toast (Base UI), a pile at the bottom that opens on hover. */
 export function Notices() {
-	return <Toaster position="bottom-center" />;
+	return <Toaster />;
 }
 
 /** A text field that grows with what is typed into it. */

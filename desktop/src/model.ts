@@ -6,7 +6,7 @@
 // (`touch`). A conversation gets a hundred events a second while a model writes; copying its
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
@@ -523,10 +523,12 @@ export class Store extends Model {
 
 	// ---- small things ------------------------------------------------------------------------------
 
-	/** A passing notice; the `Toaster` in App shows it. One that says something went wrong stays longer. */
+	/** A passing notice; `Notices` shows it. One that says something went wrong stays longer and is
+	 * announced at once. An `ms` of Infinity keeps it until it is closed (Base UI's timeout 0). */
 	flash(text: string, tone: Tone = "muted", ms = 4500): void {
-		const say = { muted: toast, accent: toast.info, good: toast.success, warn: toast.warning, bad: toast.error }[tone];
-		say(text, { duration: tone === "bad" ? Math.max(ms, 7000) : ms });
+		const type = { muted: undefined, accent: "info", good: "success", warn: "warning", bad: "error" }[tone];
+		const timeout = tone === "bad" ? Math.max(ms, 7000) : ms;
+		toast.add({ description: text, type, timeout: Number.isFinite(timeout) ? timeout : 0, priority: tone === "bad" ? "high" : "low" });
 	}
 
 	/** Run something the owner asked for; what goes wrong is said, not thrown away. */

@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useEffect } from "react";
-import { toast } from "sonner";
+import { toast } from "@/components/ui/toast";
 import { store } from "../model.ts";
 import { Notices } from "../ui.tsx";
 
@@ -14,7 +14,7 @@ function Tones() {
 		store.flash("The browser build is not on this Mac.", "warn", Infinity);
 		store.flash("limits.maxDownloadMb has to be a whole number from 1.", "bad", Infinity);
 		return () => {
-			toast.dismiss();
+			toast.close();
 		};
 	}, []);
 	return <Notices />;
