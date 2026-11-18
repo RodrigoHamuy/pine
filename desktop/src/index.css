@@ -18,7 +18,9 @@
 
 /* pine's colours. Every one is a role of the Material 3 scheme that <Mtb> generates from the palette in theme.ts
    (`--md-sys-color-*`: light on :root, dark on .dark, both on the root element), so pine's names below only point at
-   roles and follow the class by themselves. Only the steps of the surfaces differ between light and dark. */
+   roles and follow the class by themselves. Only the steps of the surfaces, the line and muted text differ between
+   light and dark. The soft backgrounds (brand, added, warning, error, deleted) are their role at 12% over whatever is
+   below, like --select, rather than M3's opaque containers: a tint that stays light on any surface, in both looks. */
 :root {
 	color-scheme: light;
 	/* The density of the whole page: every rem size (text, spacing, shadcn's components) follows this one. */
@@ -35,24 +37,26 @@
 	/* Hover and press are M3's state layers: the colour of the text over whatever surface is below, at 8% and 12%. */
 	--hover: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
 	--press: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
-	--line: var(--md-sys-color-outline-variant);
+	/* The line is the highest container rather than outline-variant, which is too dark for a hairline. */
+	--line: var(--md-sys-color-surface-container-highest);
 	--line-soft: var(--md-sys-color-surface-container-high);
 	--text: var(--md-sys-color-on-surface);
-	--text-muted: var(--md-sys-color-on-surface-variant);
+	/* Muted text in light is the outline: on-surface-variant is nearly as dark as the text itself. */
+	--text-muted: var(--md-sys-color-outline);
 	--faint: var(--md-sys-color-outline);
 	--brand: var(--md-sys-color-primary);
-	--brand-soft: var(--md-sys-color-primary-container);
+	--brand-soft: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
 	--on-accent: var(--md-sys-color-on-primary);
 	--warn: var(--md-sys-color-warn);
-	--warn-soft: var(--md-sys-color-warn-container);
+	--warn-soft: color-mix(in srgb, var(--md-sys-color-warn) 12%, transparent);
 	--bad: var(--md-sys-color-error);
-	--bad-soft: var(--md-sys-color-error-container);
+	--bad-soft: color-mix(in srgb, var(--md-sys-color-error) 12%, transparent);
 	--info: var(--md-sys-color-info);
 	--plan: var(--md-sys-color-plan);
 	--add: var(--md-sys-color-primary);
-	--add-bg: var(--md-sys-color-primary-container);
+	--add-bg: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
 	--del: var(--md-sys-color-error);
-	--del-bg: var(--md-sys-color-error-container);
+	--del-bg: color-mix(in srgb, var(--md-sys-color-error) 12%, transparent);
 	--select: color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
 	/* The side bar lets the Mac's window material show through (main.ts sets the vibrancy). */
 	--side: color-mix(in srgb, var(--md-sys-color-surface-container-low) 86%, transparent);
@@ -62,7 +66,9 @@
 }
 
 /* In dark the surfaces step the other way: what is set apart (a card, the composer) is lighter than the page, and what
-   is sunk darker. The --p-* values are the poimandres theme (github.com/drcmda/poimandres-theme), for code only (below). */
+   is sunk darker. pine's surfaces sit one step above M3's: its dark surface is darker than poimandres' night blue,
+   surface-container-low (--bg) is the step nearest to it, and a sunk part (surface) can still go below.
+   Muted text keeps on-surface-variant, since the outline is too dim on a dark page. The --p-* values are the poimandres theme (github.com/drcmda/poimandres-theme), for code only (below). */
 .dark {
 	color-scheme: dark;
 	--p-bg: #1b1e28;
@@ -80,9 +86,13 @@
 	--p-focus: #303340;
 	--p-select: rgba(113, 124, 180, 0.3);
 
-	--surface: var(--md-sys-color-surface-container-low);
-	--composer: var(--md-sys-color-surface-container-low);
-	--sunk: var(--md-sys-color-surface-container-lowest);
+	--bg: var(--md-sys-color-surface-container-low);
+	--surface: var(--md-sys-color-surface-container);
+	--composer: var(--md-sys-color-surface-container);
+	--raised: var(--md-sys-color-surface-container-high);
+	--sunk: var(--md-sys-color-surface);
+	--line: var(--md-sys-color-surface-container-high);
+	--text-muted: var(--md-sys-color-on-surface-variant);
 	--side: color-mix(in srgb, var(--md-sys-color-surface-container-low) 88%, transparent);
 	--scrim: color-mix(in srgb, var(--md-sys-color-scrim) 55%, transparent);
 	--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);

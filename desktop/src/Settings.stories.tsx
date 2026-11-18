@@ -94,7 +94,7 @@ export const Colours: Story = {
 	},
 };
 
-/** The Colours section on pine's own palette: colour match on, the scheme disabled, nothing to reset. */
+/** The Colours section on pine's own palette: colour match off, the tonal spot scheme, nothing to reset. */
 export const ColoursDefault: Story = {
 	args: { section: "app" },
 	render: () => {

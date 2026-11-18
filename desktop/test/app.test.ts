@@ -1153,6 +1153,13 @@ test("every colour is a role of the M3 scheme of pine's palette, in light and in
 			assert.equal(await resolved("var(--primary)"), rgb(scheme.primary), `${look}: shadcn's primary is the primary`);
 			assert.equal(await resolved("var(--brand)"), rgb(scheme.primary), `${look}: pine's brand is the primary`);
 			assert.equal(await resolved("var(--bad)"), rgb(scheme.error), `${look}: pine's bad is the error`);
+			// pine's page is a step above M3's surface in dark.
+			assert.equal(await resolved("var(--bg)"), rgb(look === "dark" ? scheme.surfaceContainerLow : scheme.surface), `${look}: pine's bg`);
+			// The soft backgrounds are their role as a light tint over what is below, not an opaque container.
+			for (const soft of ["--brand-soft", "--add-bg", "--warn-soft", "--bad-soft", "--del-bg"]) {
+				const colour = await resolved(`var(${soft})`);
+				assert.ok(Math.abs(alphaOf(colour) - 0.12) < 0.01, `${look}: ${soft} is its role at 12%, not ${colour}`);
+			}
 			// What has the keyboard is grey, never the primary.
 			assert.equal(await resolved("var(--ring)"), rgb(scheme.outline), `${look}: the focus ring is the outline`);
 			assert.notEqual(await resolved("var(--ring)"), rgb(scheme.primary));

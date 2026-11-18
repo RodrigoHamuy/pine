@@ -1811,8 +1811,15 @@ export function Colours() {
 				</Field>
 				<Field orientation="horizontal">
 					<FieldContent>
+						<FieldLabel htmlFor={`${field}-neutral-variant`}>Neutral variant colour</FieldLabel>
+						<FieldDescription>The tint of muted text and outlines.</FieldDescription>
+					</FieldContent>
+					<ColourInput id={`${field}-neutral-variant`} name="neutralVariant" value={palette.neutralVariant} onChange={(neutralVariant) => void set({ neutralVariant })} />
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
 						<FieldLabel htmlFor={`${field}-match`}>Colour match</FieldLabel>
-						<FieldDescription>Stay true to these colours. Off, the scheme below tones them as it does.</FieldDescription>
+						<FieldDescription>Stay true to the source colour, at the cost of the neutrals' tint, which turns grey. Off, the scheme below tones the source as it does.</FieldDescription>
 					</FieldContent>
 					<Switch id={`${field}-match`} checked={palette.colorMatch} onCheckedChange={(colorMatch) => void set({ colorMatch })} />
 				</Field>
@@ -1855,7 +1862,7 @@ export function Colours() {
 				<Field orientation="horizontal">
 					<FieldContent>
 						<FieldTitle>pine's colours</FieldTitle>
-						<FieldDescription>Poimandres' mint on its night blue, with colour match on.</FieldDescription>
+						<FieldDescription>Poimandres' mint on its night blue, toned by M3's tonal spot scheme.</FieldDescription>
 					</FieldContent>
 					<Button variant="outline" size="xs" disabled={!s.prefs.palette} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
 				</Field>

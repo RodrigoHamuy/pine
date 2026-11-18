@@ -45,6 +45,15 @@ async function primaryIs(palette: Palette, look: "light" | "dark" = "light"): Pr
 	}
 	assert.equal(await resolved("var(--primary)"), want, `${look}: the primary of ${palette.source}`);
 }
+/** Waits until the page's outline (made from the neutral variant) is the one of that palette. */
+async function outlineIs(palette: Palette): Promise<void> {
+	const want = rgb(schemeOf(palette).light.outline);
+	for (let i = 0; i < 100; i++) {
+		if ((await resolved("var(--md-sys-color-outline)")) === want) return;
+		await new Promise((r) => setTimeout(r, 50));
+	}
+	assert.equal(await resolved("var(--md-sys-color-outline)"), want, `the outline of the neutral variant ${palette.neutralVariant}`);
+}
 
 async function start(): Promise<void> {
 	app = await electron.launch({ colorScheme: "light", args: [root], env: { ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
@@ -73,7 +82,7 @@ before(async () => {
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	// A palette written by hand, with one good field and the others wrong each in its own way.
-	write(prefsFile(), JSON.stringify({ updates: false, palette: { source: SOURCE, neutral: "blue", colorMatch: "yes", scheme: "rainbow", contrast: 3, customColors: [{ name: "warn", hex: "#zzzzzz" }, { name: "evil", hex: "#000000" }] } }));
+	write(prefsFile(), JSON.stringify({ updates: false, palette: { source: SOURCE, neutral: "blue", neutralVariant: "grey", colorMatch: "yes", scheme: "rainbow", contrast: 3, customColors: [{ name: "warn", hex: "#zzzzzz" }, { name: "evil", hex: "#000000" }] } }));
 	await start();
 });
 
@@ -87,6 +96,8 @@ test("a malformed stored palette opens the app with the default for each field t
 	// The good field is kept, every wrong one is pine's default: the scheme is the one of the default palette with that source.
 	await primaryIs({ ...DEFAULT_PALETTE, source: SOURCE });
 	assert.equal(await resolved("var(--surface)"), rgb(schemeOf({ ...DEFAULT_PALETTE, source: SOURCE }).light.surfaceContainerLowest));
+	// The outline is made from the neutral variant: the default one, since "grey" is not a colour.
+	await outlineIs({ ...DEFAULT_PALETTE, source: SOURCE });
 	// A custom colour of another name is not in the page; warn is there, and is the default one (checked against Reset below).
 	assert.equal(await resolved("var(--md-sys-color-evil)"), "rgba(0, 0, 0, 0)");
 	assert.notEqual(await resolved("var(--md-sys-color-warn)"), "rgba(0, 0, 0, 0)");
@@ -101,9 +112,12 @@ test("the source colour set in Settings redraws the window, is kept after a rest
 	assert.equal("palette" in JSON.parse(fs.readFileSync(prefsFile(), "utf8")), false, "Reset stores no palette");
 
 	// A new source colour: the whole window follows at once, in light and in dark.
-	const mine = { ...DEFAULT_PALETTE, source: "#3366cc" };
+	const mine = { ...DEFAULT_PALETTE, source: "#3366cc", neutralVariant: "#806040" };
 	await page.fill("input[type=color][name=source]", mine.source);
 	await primaryIs(mine);
+	// The neutral variant tints the outlines and muted text, and is kept like the rest.
+	await page.fill("input[type=color][name=neutralVariant]", mine.neutralVariant);
+	await outlineIs(mine);
 	await page.emulateMedia({ colorScheme: "dark" });
 	await primaryIs(mine, "dark");
 	await page.emulateMedia({ colorScheme: "light" });
@@ -112,6 +126,7 @@ test("the source colour set in Settings redraws the window, is kept after a rest
 	await app.close();
 	await start();
 	await primaryIs(mine);
+	await outlineIs(mine);
 
 	// Reset: pine's palette, and nothing kept.
 	await colours();

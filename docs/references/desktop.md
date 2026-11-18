@@ -176,7 +176,7 @@ pine packed into the app; the `pine` of your shell.
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
 | pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
-| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), colour match, the scheme (while colour match is off), the contrast, and the warning, info and keyword colours (their hue is kept, their shade follows light or dark). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
+| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, and the warning, info and keyword colours (their hue is kept, their shade follows light or dark). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
@@ -331,7 +331,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source) and night blue (the neutral), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor keeps poimandres' own colours in dark |
+| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor keeps poimandres' own colours in dark |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
@@ -631,12 +631,20 @@ holds only tokens and base rules.
 - Colours come from Material 3, through material-theme-builder. `<Mtb>` (from
   `material-theme-builder/react`) wraps the page in `main.tsx` and every story in
   `.storybook/preview.tsx`; it writes the scheme of pine's palette (`DEFAULT_PALETTE` in `theme.ts`:
-  source `#5de4c7`, neutral `#1b1e28`, colour match on, and the custom colours `warn`, `info` and
+  source `#5de4c7`, poimandres' mint; neutral `#1b1e28`, its night blue; neutral variant `#767c9d`,
+  its blue grey; colour match off and the tonal spot scheme; and the custom colours `warn`, `info` and
   `plan`, the warning, info and keyword colours, whose hue is kept while the shade follows light or
-  dark) into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`.
+  dark) into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`. Colour match is off
+  because with it the package uses M3's content variant, as Google's Material Theme Builder does, and
+  that variant divides a neutral's chroma by 8: the night blue would come out grey.
   shadcn's tokens come from the package's `shadcn.css`; pine's own names (`--brand`, `--text-muted`,
   `--warn`, `--hover`...) are aliases of M3 roles in `index.css`, and a role of the scheme, never a
-  literal colour, is what a new one points at. Four places depart from `shadcn.css`, after it and with
+  literal colour, is what a new one points at. The soft backgrounds (`--brand-soft`, `--add-bg`,
+  `--warn-soft`, `--bad-soft`, `--del-bg`) are their role at 12% over what is below, like the
+  selection. In dark pine's surfaces sit one step above M3's: `--bg` is surface container low, a card
+  and the composer surface container, what is raised and the lines surface container high, what is
+  sunk the surface. In light the lines are surface container highest and muted text is the outline.
+  Four places depart from `shadcn.css`, after it and with
   its doubled selectors: the focus ring is the outline (grey, never the primary), the side bar is
   translucent, hover and press (`--accent`) are state layers of the text colour over the surface,
   and the side bar's text is muted. The only literal colours left are the shadows and the
