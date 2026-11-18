@@ -70,12 +70,9 @@ type Story = StoryObj<typeof meta>;
 
 /** pine's own settings: the version and home, a note on the setup, and a control of each kind. */
 export const General: Story = { args: { section: "general" } };
-export const GeneralDark: Story = { args: { section: "general" }, globals: { theme: "dark" } };
 
 /** The list of agents, each a row to open: main, its mode, its model and workspace. */
 export const Agents: Story = { args: { section: "agents" } };
-export const AgentsDark: Story = { args: { section: "agents" }, globals: { theme: "dark" } };
 
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
 export const McpServers: Story = { args: { section: "mcp" } };
-export const McpServersDark: Story = { args: { section: "mcp" }, globals: { theme: "dark" } };

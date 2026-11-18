@@ -54,11 +54,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Conversation: Story = { args: { items: conversation } };
-export const ConversationDark: Story = { args: { items: conversation }, globals: { theme: "dark" } };
 
 /** What the agent asks: an approval and a question, open, then as they were answered. */
 export const Ask: Story = { args: { items: asks } };
-export const AskDark: Story = { args: { items: asks }, globals: { theme: "dark" } };
 
 /** A turn at work: its last lines under the head, the call that runs and the thought that goes on. */
 const working: Made[] = [
@@ -89,7 +87,6 @@ const notes: Made[] = [
 	{ t: "goal", goal: { agent: "main", session: "main", objective: "Every link in the notes works", status: "met", note: "met after 2 rounds", round: 2, until: 5, reason: "All twelve links answer." } },
 ];
 export const Notes: Story = { args: { items: notes } };
-export const NotesDark: Story = { args: { items: notes }, globals: { theme: "dark" } };
 
 // A picture of 480 by 320, drawn here: the page loads nothing from the web.
 const PICTURE = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="480" height="320"><rect width="480" height="320" fill="#5de4c7"/><circle cx="240" cy="160" r="90" fill="#1b1e28"/></svg>')}`;
@@ -104,4 +101,3 @@ export const PictureLarger: Story = {
 	tags: ["!autodocs"],
 	play: async ({ canvas, userEvent }) => await userEvent.click(canvas.getByRole("button", { name: "okapi.svg" })),
 };
-export const PictureLargerDark: Story = { ...PictureLarger, globals: { theme: "dark" } };

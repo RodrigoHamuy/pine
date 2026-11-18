@@ -23,11 +23,9 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Empty: Story = { args: {} };
-export const EmptyDark: Story = { args: {}, globals: { theme: "dark" } };
 
 /** A message being written, with files attached, in a conversation that has read outside content. */
 export const Written: Story = { args: { draft: "Sum up the invoice and say what is missing from @notes.md", files: true, outside: true } };
-export const WrittenDark: Story = { args: { draft: "Sum up the invoice and say what is missing from @notes.md", files: true, outside: true }, globals: { theme: "dark" } };
 
 /** A goal that waits: its banner (an Alert) above the input, with Resume and Clear. */
 export const GoalPaused: Story = { args: { paused: true } };

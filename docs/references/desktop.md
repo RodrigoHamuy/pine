@@ -529,3 +529,5 @@ stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does n
 Every pull request and every push to `next` publishes the stories to Chromatic
 (`.github/workflows/chromatic.yml`), which shows what changed in a picture for review. It
 needs the repository secret `CHROMATIC_PROJECT_TOKEN`; without it the job says so and passes.
+Chromatic takes each story in light and dark through its modes (`.storybook/modes.ts`, which
+set the `theme` global), so no dark twin of a story is written.

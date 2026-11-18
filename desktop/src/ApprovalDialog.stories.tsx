@@ -10,8 +10,6 @@ const approval: Story["args"] = { req: { id: "a1", agent: "main", task: 12, tool
 
 export const ApprovalDialog: Story = { args: approval };
 
-export const ApprovalDialogDark: Story = { args: approval, globals: { theme: "dark" } };
-
 /** Something only the owner has, typed here and sent to the daemon alone. */
 export const ApprovalDialogWithSecret: Story = {
 	args: { req: { id: "a2", agent: "main", task: 13, tool: "add_source", summary: "telegram source: chat with you", why: "it needs a token.", expires: 0, inputs: [{ name: "TELEGRAM_TOKEN", label: "TELEGRAM_TOKEN: the bot's token from @BotFather" }] } },

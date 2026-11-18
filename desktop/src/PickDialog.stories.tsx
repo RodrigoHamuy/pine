@@ -23,8 +23,6 @@ export const PickDialog: Story = {
 	},
 };
 
-export const PickDialogDark: Story = { ...PickDialog, globals: { theme: "dark" } };
-
 /** A long list gets a field that narrows it. */
 export const PickDialogTyped: Story = {
 	args: { p: { title: "New conversation with", done: () => {}, items: ["main", "scout", "books", "home", "mail", "notes", "news", "garden"].map((id) => ({ value: id, label: id, about: `the agent ${id}` })) } },
@@ -44,5 +42,3 @@ export const PickDialogRemoving: Story = {
 		},
 	},
 };
-
-export const PickDialogRemovingDark: Story = { ...PickDialogRemoving, globals: { theme: "dark" } };

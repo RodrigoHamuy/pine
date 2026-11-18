@@ -2,6 +2,7 @@ import type { Decorator, Preview } from "@storybook/react-vite";
 import { useLayoutEffect } from "react";
 import "../src/index.css";
 import { followAppearance } from "../src/theme.ts";
+import { allModes } from "./modes.ts";
 
 // No preload script here: the bridge is a stand-in whose every call does nothing (a listener it
 // is given is never called), so that a piece which listens to the app (the Composer) can be drawn.
@@ -41,7 +42,11 @@ const preview: Preview = {
 	},
 	initialGlobals: { theme: "light" },
 	decorators: [withTheme],
-	parameters: { layout: "centered" },
+	parameters: {
+		layout: "centered",
+		// Chromatic snapshots each story in both modes; the toolbar above still flips the theme by hand.
+		chromatic: { modes: { light: allModes.light, dark: allModes.dark } },
+	},
 	tags: ["autodocs"],
 };
 

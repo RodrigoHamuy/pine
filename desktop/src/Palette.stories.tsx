@@ -9,5 +9,3 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Palette: Story = {};
-
-export const PaletteDark: Story = { globals: { theme: "dark" } };
