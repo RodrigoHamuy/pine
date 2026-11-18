@@ -70,6 +70,10 @@ const whom = (agents: Array<{ id: string }>) => [{ value: "", label: "all agents
 
 const scopeText = (scope: string, session?: string) => (scope === "global" ? "all agents" : session && session !== "main" ? `${scope} · ${session}` : scope);
 
+// The fields of a form: two to a row where the settings are wide enough, one to a row where they are not
+// (a phone, or a wide panel beside), measured on the settings themselves, not on the window.
+const FORM_GRID = "grid grid-cols-1 @lg/settings:grid-cols-2";
+
 // A single-choice toggle group hands back a list, empty when its pressed item is pressed again: that keeps the choice.
 const one = <T,>(set: (value: T) => void) => (values: T[]) => {
 	if (values[0] !== undefined) set(values[0]);
@@ -315,7 +319,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				<ChevronLeftIcon data-icon="inline-start" />
 				Agents
 			</Button>
-			<FieldGroup className="grid grid-cols-1 @lg/settings:grid-cols-2">
+			<FieldGroup className={FORM_GRID}>
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-description`}>What it is for</FieldLabel>
 					<Input id={`${field}-description`} value={now("description")} onChange={(e) => put("description", e.target.value)} />
@@ -566,7 +570,7 @@ function Agents() {
 				{s.agents.map((a) => (
 					<Item key={a.id} variant="outline" render={<button type="button" />} onClick={() => setOpen(a.id)}>
 						<ItemContent className="min-w-0">
-							<ItemTitle className="flex-wrap">
+							<ItemTitle>
 								{a.id}
 								{a.main ? <Badge>main</Badge> : null}
 								<Badge variant={a.mode === "bypass" ? "destructive" : a.mode === "safe" ? "default" : "secondary"}>{a.mode}</Badge>
@@ -732,7 +736,7 @@ function Models() {
 					servers.data.map((s) => (
 						<Item key={s.name} variant="outline">
 							<ItemContent className="min-w-0">
-								<ItemTitle className="flex-wrap">
+								<ItemTitle>
 									{s.name}
 									<Badge variant="secondary" className="font-mono">{s.baseUrl}</Badge>
 									<Badge variant="secondary">key: {s.key}</Badge>
@@ -765,7 +769,7 @@ function Models() {
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a model server</FieldLegend>
-				<FieldGroup className="grid grid-cols-1 @lg/settings:grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -789,7 +793,7 @@ function Models() {
 						<FieldDescription>Only when the server does not say.</FieldDescription>
 					</Field>
 				</FieldGroup>
-				<Field orientation="responsive">
+				<Field orientation="horizontal">
 					<FieldDescription>An agent that is given one of its models sends its whole conversations there.</FieldDescription>
 					<Button disabled={!f.name.trim() || !f.url.trim() || busy} onClick={() => void add()}>{busy ? <><Spinner data-icon="inline-start" />Asking the server…</> : "Add server"}</Button>
 				</Field>
@@ -802,7 +806,7 @@ function Models() {
 						shown.map((p) => (
 							<Item key={p.id} variant="outline">
 								<ItemContent className="min-w-0">
-									<ItemTitle className="flex-wrap">
+									<ItemTitle>
 										{p.name ?? p.id}
 										{p.name && p.name !== p.id ? <Badge variant="secondary" className="font-mono">{p.id}</Badge> : null}
 										{p.signedIn ? <Badge>signed in</Badge> : null}
@@ -924,7 +928,7 @@ function Mcp() {
 							return (
 								<Item key={`${x.scope}:${x.name}`} variant="outline">
 									<ItemContent className="min-w-0">
-										<ItemTitle className="flex-wrap">
+										<ItemTitle>
 											{x.name}
 											<Badge variant={tone === "good" ? "default" : tone === "warn" ? "outline" : "secondary"}>{state}</Badge>
 											<Badge variant="secondary" className="h-auto max-w-full whitespace-normal">{x.scope === "global" ? `all: ${x.agents.join(", ") || "nobody"}` : x.session ? `only the conversation ${x.session} of ${x.scope}` : `only ${x.scope}`}</Badge>
@@ -967,7 +971,7 @@ function Mcp() {
 			) : null}
 			<FieldSet>
 				<FieldLegend>Add a server</FieldLegend>
-				<FieldGroup className="grid grid-cols-1 @lg/settings:grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="home_link" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
@@ -1052,7 +1056,7 @@ function Skills() {
 						<AlertDescription>This skill lies in a folder of yours that the configuration names. pine shows it and does not change it.</AlertDescription>
 					</Alert>
 				)}
-				<FieldGroup className="grid grid-cols-1 @lg/settings:grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" />
@@ -1100,7 +1104,7 @@ function Skills() {
 							return (
 								<Item key={x.dir} variant="outline">
 									<ItemContent className="min-w-0">
-										<ItemTitle className="flex-wrap">
+										<ItemTitle>
 											{x.name}
 											<Badge variant="secondary">{x.scope === "global" ? "all agents" : x.scope === "agent" ? x.agent : `${x.agent} · ${x.session}`}</Badge>
 											{x.managed ? null : <Badge variant="secondary">yours, from the configuration</Badge>}
@@ -1295,7 +1299,7 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 							</FieldGroup>
 						</>
 					) : (
-						<FieldGroup className="grid grid-cols-1 @lg/settings:grid-cols-2">
+						<FieldGroup className={FORM_GRID}>
 							<Field>
 								<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 								<Input id={`${field}-name`} autoFocus className="font-mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -1394,7 +1398,7 @@ function Sources() {
 							<Item key={`${x.scope}:${x.name}`} variant="outline">
 								<ItemMedia><span className={cn("size-2 rounded-full", x.error ? "bg-destructive" : x.running ? "bg-primary" : "bg-muted-foreground")} /></ItemMedia>
 								<ItemContent className="min-w-0">
-									<ItemTitle className="flex-wrap">
+									<ItemTitle>
 										{x.name}
 										<Badge variant="secondary">{x.type}</Badge>
 										<Badge variant="secondary">{scopeText(x.scope)}</Badge>
@@ -1476,7 +1480,7 @@ function Schedules() {
 							<Item key={`${x.scope}:${x.name}`} variant="outline">
 								<ItemMedia variant="icon"><ClockIcon /></ItemMedia>
 								<ItemContent className="min-w-0">
-									<ItemTitle className="flex-wrap">
+									<ItemTitle>
 										{x.name}
 										<Badge variant="secondary">{scopeText(x.scope, x.session)}</Badge>
 										<Badge variant="secondary">{x.when}</Badge>
@@ -1514,7 +1518,7 @@ function Schedules() {
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a schedule</FieldLegend>
-				<FieldGroup className="grid grid-cols-1 @lg/settings:grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -1590,7 +1594,7 @@ function Routes() {
 						list.data.map((r) => (
 							<Item key={r.name} variant="outline">
 								<ItemContent className="min-w-0">
-									<ItemTitle className="flex-wrap">
+									<ItemTitle>
 										{r.name}
 										<Badge variant="secondary" className="font-mono">on {r.on.join(", ")}</Badge>
 										{r.when ? <Badge variant="secondary" className="font-mono">when {short(JSON.stringify(r.when), 60)}</Badge> : null}
@@ -1628,7 +1632,7 @@ function Routes() {
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a route</FieldLegend>
-				<FieldGroup className="grid grid-cols-1 @lg/settings:grid-cols-2">
+				<FieldGroup className={FORM_GRID}>
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
@@ -1905,8 +1909,9 @@ export function Settings() {
 	const s = useModel(store);
 	// The sections are a column beside the page where there is room, and a row above it where there is not
 	// (a narrow window, or a wide panel beside): measured on the settings themselves, not on the window.
+	// An item's title wraps (its badges go under its name where the row is narrow): set once here for every row.
 	return (
-		<div className="@container/settings flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background">
+		<div className="@container/settings flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background **:data-[slot=item-title]:flex-wrap">
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col @3xl/settings:flex-row">
 				{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
 				    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}

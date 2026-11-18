@@ -11,7 +11,7 @@ function Items({ items }: { items: Made[] }) {
 	const tab = new Tab("chat", "main", "main");
 	for (const item of items) tab.add(item as never);
 	return (
-		<div className="flex w-160 flex-col gap-3.5">
+		<div className="flex w-full max-w-160 flex-col gap-3.5">
 			{tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
 		</div>
 	);

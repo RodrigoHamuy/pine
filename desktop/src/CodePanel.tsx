@@ -274,9 +274,12 @@ interface TreeState {
 	/** Why a folder could not be read, by folder, so a failed read is not taken for an empty folder. */
 	failed: Map<string, string>;
 	file?: string;
+	/** What was typed in a file and not saved, and what it was typed over, by file. Kept here and not in the editor's
+	 *  state because the panel's body is mounted again when the window crosses the width where it becomes a sheet. */
+	edits: Map<string, { draft?: string; base?: string }>;
 }
 const trees = new Map<string, TreeState>();
-const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map(), failed: new Map() }), trees.get(key)!);
+const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map(), failed: new Map(), edits: new Map() }), trees.get(key)!);
 
 /** The folder's files as a tree: a folder opens and closes, a file opens in the editor. */
 function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void; tick: number }) {
@@ -339,18 +342,23 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 /** One file, to read and to change. What the agent changes meanwhile is shown unless the owner has typed. */
 function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => void }) {
 	const disk = useLoad(() => api.file(tab.agent, tab.session, file), [tab.key, file, tab.codeTick]);
-	const [draft, setDraft] = useState<string>();
+	const edits = treeOf(tab.key).edits;
+	const [, redraw] = useState(0);
+	const edit = (patch: { draft?: string; base?: string }) => (edits.set(file, { ...edits.get(file), ...patch }), redraw((n) => n + 1));
+	const { draft, base } = edits.get(file) ?? {};
+	const setDraft = (draft?: string) => edit({ draft });
+	const setBase = (base?: string) => edit({ base });
 	const [saving, setSaving] = useState(false);
-	const [base, setBase] = useState<string>();
 	const kind = mediaKind(file);
 	const text = disk.data?.text;
 	const dirty = draft !== undefined && draft !== base;
 	// What is on disk becomes what the editor shows, as long as nothing was typed.
 	useEffect(() => {
-		if (text !== undefined && !dirty) (setBase(text), setDraft(undefined));
+		if (text !== undefined && !dirty) edit({ base: text, draft: undefined });
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [text]);
-	useEffect(() => (setDraft(undefined), setBase(undefined)), [file]);
+	// Leaving the file gives up what was typed in it.
+	const leave = () => (edits.delete(file), close());
 	const save = async () => {
 		if (!dirty || saving) return;
 		setSaving(true);
@@ -373,7 +381,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	return (
 		<>
 			<div className={SUB}>
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></Tooltip>
+				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : leave())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></Tooltip>
 				<AlertDialog open={leaving} onOpenChange={setLeaving}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
@@ -381,7 +389,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 						</AlertDialogHeader>
 						<AlertDialogFooter>
 							<AlertDialogCancel>Cancel</AlertDialogCancel>
-							<AlertDialogAction variant="destructive" onClick={() => (setLeaving(false), close())}>Leave</AlertDialogAction>
+							<AlertDialogAction variant="destructive" onClick={() => (setLeaving(false), leave())}>Leave</AlertDialogAction>
 						</AlertDialogFooter>
 					</AlertDialogContent>
 				</AlertDialog>
@@ -394,7 +402,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				<Alert className="m-2 w-auto">
 					<AlertDescription>This file changed on disk while you were typing.</AlertDescription>
 					<AlertAction>
-						<Button variant="outline" size="xs" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</Button>
+						<Button variant="outline" size="xs" onClick={() => edit({ base: text, draft: undefined })}>Take the new one</Button>
 					</AlertAction>
 				</Alert>
 			) : null}
@@ -545,6 +553,9 @@ export const CODE_KEY = "pine.code.width";
 /** Tailwind's `lg`: below it a conversation and the panel beside it do not both fit, with the side bar as a column too. */
 const ROOM = "(min-width: 64rem)";
 
+/** What in the panel takes Escape for itself: the editor (its search), a field, the page in the browser. */
+const ESCAPE_KEEPERS = ".cm-editor, input, textarea, [contenteditable], [data-slot=browser] canvas";
+
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
@@ -603,8 +614,16 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	);
 	if (narrow)
 		return (
-			<Sheet open onOpenChange={(open) => !open && void store.command("code")}>
-				<SheetContent side="right" showCloseButton={false} className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+			<Sheet open onOpenChange={(open, details) => {
+				if (open) return;
+				// Base UI closes on any Escape, even one the editor's search, an address field or the page in the browser
+				// took for itself: that Escape is theirs. Escape anywhere else in the sheet still closes it.
+				if (details.reason === "escape-key" && details.event.target instanceof Element && details.event.target.closest(ESCAPE_KEEPERS)) return details.cancel();
+				void store.command("code");
+			}}>
+				{/* The sheet lies over the title bar's drag region, which Electron honours whatever is drawn on top:
+				    without this a click on the panel's tabs would move the window on a Mac. */}
+				<SheetContent side="right" showCloseButton={false} className="app-no-drag gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
 					<SheetTitle className="sr-only">Side panel</SheetTitle>
 					{panel}
 				</SheetContent>

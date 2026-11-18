@@ -121,8 +121,8 @@ docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
                     page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
-                    patterns for the conversation and the input, Streamdown for answers, lucide icons;
-                    ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
+                    patterns for the conversation and the input, Streamdown for answers, lucide icons,
+                    usehooks-ts for the side panel's breakpoint; ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
                     The stock components are src/components/ui and nothing else, all from shadcn's own registry in the
                     style components.json names, the chat components included (`npx shadcn add message`, not
                     `@ai-elements/message`). AI Elements means shadcn's pages of patterns (ui.shadcn.com/docs/ai-elements),
@@ -689,9 +689,11 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   test in `desktop/test/voice-live.test.ts` (`PINE_LIVE=1`) puts the real helper behind it,
   listening to a recording. No test shows the app's real window with its title bar: after a
   change to the frame (`app-drag` and `app-no-drag` in `src/index.css`, the parts of
-  `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the window's options in
-  `electron/main.ts`: `titleBarStyle`, `trafficLightPosition`, `vibrancy`), look at it once in
-  light and dark.
+  `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the side panel's sheet in a
+  narrow window, in `src/CodePanel.tsx`, whose header lies under the Mac window buttons and over
+  the title bar's drag area; the window's options in `electron/main.ts`: `titleBarStyle`,
+  `trafficLightPosition`, `vibrancy`), look at it once in light and dark, the side panel's sheet
+  in a window narrower than 1024 pixels.
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).
