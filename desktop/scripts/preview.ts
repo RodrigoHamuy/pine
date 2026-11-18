@@ -4,6 +4,7 @@
 // runs there, or one started for the preview and stopped with it; the home is never removed.
 //   npm run dev:preview                     (the port from $PORT, 5173 by default)
 //   npm run dev:preview -- --home ~/.pine
+//   npm run dev:preview:home                (the same, at port 5174: beside the throwaway one)
 //
 // Vite's server stands where the app's main process stands: it holds the daemon's token and makes
 // every call for the page (electron/daemon.ts, the same module as the app), and the page holds no

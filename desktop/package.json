@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "dev:preview": "node scripts/preview.ts",
+    "dev:preview:home": "PORT=${PORT:-5174} node scripts/preview.ts --home '~/.pine'",
     "build": "node scripts/build.mjs",
     "start": "node scripts/build.mjs && electron .",
     "check": "tsc --noEmit",

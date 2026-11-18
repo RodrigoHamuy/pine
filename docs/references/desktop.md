@@ -113,6 +113,7 @@ it was built on. See "Packing and signing" for what it carries and how it is sig
 | `npm start` | Builds the app and opens it |
 | `npm run dev` | Opens it with the page served by Vite, reloading on every change |
 | `npm run dev:preview` | The app's page in an ordinary browser, reloading on every change, on a throwaway pine. `-- --home <dir>` puts it on that pine home instead. See below |
+| `npm run dev:preview:home` | The same on your own pine home, `~/.pine`, at port 5174, so that it runs beside the throwaway one. Its agents are your real ones. See below |
 | `npm run check` | Type check |
 | `npm test` | The app from end to end: the real app on a pine home of its own with a scripted model. Needs a screen. With `PINE_LIVE=1` on a Mac it also dictates with the real voice helper, from a recording |
 | `npm run pack` | `release/mac-arm64/Pine.app`, with pine, Node and the helpers inside |
@@ -129,13 +130,24 @@ that is not its own, and falls back to its own Node where the Mac has none.
 
 `npm run dev:preview` serves the app's page at `http://localhost:5173` (the port from `$PORT`),
 for an editor's preview pane or any browser, without the app's window. It is a tool for
-working on the app, not a way to use pine. In Claude Code it is the `desktop-preview` entry
-of `.claude/launch.json`.
+working on the app, not a way to use pine.
 
 | How it is started | What it runs on |
 |---|---|
 | `npm run dev:preview` | A throwaway pine: a home in a temp folder with two agents (`main` and `scout`) and the scripted model of pine's tests. The home and its daemon are removed when the preview stops |
-| `npm run dev:preview -- --home <dir>` | That pine home, with its own models and conversations. The daemon that runs there is used and left running; if none runs, one is started and stopped with the preview. The home is never removed |
+| `npm run dev:preview -- --home <dir>` | That pine home, with its own models and conversations. The daemon that runs there is used and left running; if none runs, one is started and stopped with the preview. The home is never removed. `~` in `<dir>` is your home folder |
+| `npm run dev:preview:home` | `--home ~/.pine` at `http://localhost:5174` (`$PORT` still wins). What you do in the page, your real agents do, with your real models, sources and files: a message is a real one |
+
+`.claude/launch.json` has one entry for each, so that the preview pane of Claude Code starts the
+one you name, and both can run side by side:
+
+| Entry | Command | Port |
+|---|---|---|
+| `desktop-preview` | `npm run dev:preview` (the throwaway pine) | 5173 |
+| `desktop-preview-home` | `npm run dev:preview:home` (your pine home) | 5174 |
+
+The throwaway pine has neither a web browser nor your models, so what needs them (the agent's
+browser in the side panel, an answer of a real model) is seen on `desktop-preview-home`.
 
 The preview's server stands where the app's main process stands: it holds the daemon's token
 and makes every call for the page, with the same checks, and it answers only the page on the
