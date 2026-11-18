@@ -1337,6 +1337,16 @@ test("a conversation moves into a worktree of its folder: the chip names the bra
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=conversation-head] [data-folder] >> text=pine-desktop-folder");
 	assert.ok(!fs.existsSync(tree));
+
+	// A worktree made for it by another hand (a terminal UI on the same daemon) shows here too, and so does its end:
+	// the call goes past the window's own model, which is told only that the conversation changed.
+	const session = ((await api("GET", "/agents/main/folders")).data as Array<{ session: string; folder: string }>).find((u) => u.folder === folder)!.session;
+	const made = await api("POST", "/agents/main/worktree", { session, name: "elsewhere" });
+	assert.ok(made.ok, JSON.stringify(made));
+	await sees("[data-slot=conversation-head] [data-worktree] >> text=pine/elsewhere");
+	const ended = await api("POST", "/agents/main/worktree/remove", { session });
+	assert.ok(ended.ok, JSON.stringify(ended));
+	await sees("[data-slot=conversation-head] [data-folder] >> text=pine-desktop-folder");
 	await page.click("[data-slot=tab][data-active] button[aria-label='Close this tab']");
 });
 

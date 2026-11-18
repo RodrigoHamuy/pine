@@ -1622,8 +1622,9 @@ export class Store extends Model {
 
 	/**
 	 * A conversation was changed by another hand than this window's: the main agent opened or
-	 * closed a tab, renamed a conversation, removed or pinned one. The tabs follow. A tab that is
-	 * opened this way never takes the place of the one the owner is in.
+	 * closed a tab, renamed a conversation, removed or pinned one, or it was given another folder
+	 * or a worktree in a terminal UI. The tabs follow. A tab that is opened this way never takes
+	 * the place of the one the owner is in.
 	 */
 	private async followed(p: any): Promise<void> {
 		const agent = String(p.agent ?? "");
@@ -1637,6 +1638,8 @@ export class Store extends Model {
 			for (const t of showing) ((t.session = p.to), t.touch());
 			if (showing.length) this.saveTabs();
 		} else if (p.change === "remove") this.dropTabs(agent, session);
+		// Its folder was changed, or a worktree made or discarded, elsewhere (a terminal UI): the chip and the side bar say where it works now.
+		else if (p.change === "folder") return void (await this.followWorktree(agent, session), this.touch());
 		void this.refreshConversations(agent);
 		this.touch();
 	}

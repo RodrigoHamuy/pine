@@ -470,7 +470,9 @@ These are invariants. A change that breaks one needs a test that shows why it is
    into the daemon, so that attached and embedded modes behave the same. What the main agent
    changes about a conversation reaches it as an event (`pine/conversation`, a topic only pine
    publishes on), and its tabs follow (`followed`): a tab opened that way never takes the place
-   of the one the owner is in.
+   of the one the owner is in. The same event says that the owner gave a conversation another
+   folder or a worktree in another UI (`folder`, from `setFolder` in `src/agents.ts`). It names
+   the conversation and nothing else; where it works now, each UI asks the control API.
    The desktop app (`desktop/`) is a client in the same way, and a stricter one: it does not
    load pine's code and reads none of pine's files, the token included. It asks `pine service`
    (`src/service.ts`) for a daemon and is told where it answers; from then on it uses the

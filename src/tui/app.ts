@@ -3174,8 +3174,9 @@ export class PineTui {
 	/** The daemon reports on a goal: it was set, a round was judged, it stopped or was cleared. */
 	/**
 	 * A conversation was changed by another hand than this UI's: the main agent opened or closed a
-	 * tab, gave a conversation another name, removed one or pinned it. The tabs follow. A tab that
-	 * is opened this way never takes the place of the one the owner is in.
+	 * tab, gave a conversation another name, removed one or pinned it, or the owner gave it another
+	 * folder or a worktree in another UI. The tabs follow. A tab that is opened this way never takes
+	 * the place of the one the owner is in.
 	 */
 	private async followed(p: any): Promise<void> {
 		const agent = String(p.agent ?? "");
@@ -3196,6 +3197,8 @@ export class PineTui {
 			else if (showing.includes(this.active)) this.activate(this.tabs[0]);
 			if (showing.length) this.saveTabs();
 		} else if (p.change === "pin") void this.refreshPins();
+		// Its folder was changed, or a worktree made or discarded, in another UI: the bar says where it works now.
+		else if (p.change === "folder" && showing.length) await this.followWorktree(showing[0]);
 		this.tui.requestRender();
 	}
 

@@ -89,6 +89,10 @@ message of yours. The conversation's header shows the branch instead of the fold
 the list. The Changes view of the panel shows how far the worktree is ahead of what it was made
 from, with a button to merge.
 
+A conversation that is open in the Pine app and in a terminal UI at once shows the same in both:
+a folder opened or a worktree made, merged away or discarded in one appears in the other's bar
+or header by itself.
+
 ### Merging, updating, discarding
 
 **Merge** brings the worktree's commits into the branch it was made from (`main`, say): as a

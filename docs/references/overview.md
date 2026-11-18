@@ -112,7 +112,7 @@ Topics pine itself uses:
 | `hook/<name>` | A hook under `http.hooks` in `pine.json` was called (a `webhook` source reports `source/<name>/received` instead) |
 | `approval/requested`, `approval/decided` | An approval is asked for or answered |
 | `pine/started`, `pine/route-failed` | Daemon lifecycle and route errors |
-| `pine/conversation` | The main agent changed a conversation (`open`, `close`, `rename`, `remove`, `pin`), so that a terminal UI's tabs follow. Not kept in the event log |
+| `pine/conversation` | A conversation was changed by another hand than the UI's that shows it, so that a terminal UI's or the Pine app's tabs follow: by the main agent (`open`, `close`, `rename`, `remove`, `pin`), or by you in another UI (`folder`: its folder was opened or closed, or a worktree made or discarded for it). It names the conversation and nothing else. Not kept in the event log |
 
 Agents cannot publish on `agent/`, `approval/`, `pine/`, `state/` or `timer/`.
 

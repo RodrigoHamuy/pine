@@ -1191,6 +1191,8 @@ export class AgentManager {
 		// The session is made anew with the next message: another place to start, another sandbox, other instruction files.
 		for (const live of [...this.lives.values()]) if (live.agent.id === agentId && live.perm === `${agentId}:${key}` && !live.current) await this.dispose(live);
 		this.log.info(folder ? `the conversation ${session} of ${agentId} works in ${folder}` : `the conversation ${session} of ${agentId} works in the agent's own workspace again`);
+		// Another UI that shows this conversation says where it works too (a worktree is a folder: making and discarding one end here).
+		this.conversationChanged("folder", agentId, key);
 		return { folder };
 	}
 
@@ -1474,10 +1476,12 @@ export class AgentManager {
 
 	/**
 	 * Tell a UI that is running that a conversation was changed by another hand than its own (the
-	 * main agent's tools), so that its tabs follow. Nothing is kept of it: what is kept is the list
-	 * of tabs, which a UI that starts later opens.
+	 * main agent's tools, or the owner in another UI: `folder`, which is also a worktree made or
+	 * discarded), so that its tabs follow. It names the conversation and nothing else: where it
+	 * works now, a UI asks. Nothing is kept of it: what is kept is the list of tabs, which a UI
+	 * that starts later opens.
 	 */
-	conversationChanged(change: "open" | "close" | "rename" | "remove" | "pin", agentId: string, session: string, to?: string): void {
+	conversationChanged(change: "open" | "close" | "rename" | "remove" | "pin" | "folder", agentId: string, session: string, to?: string): void {
 		this.bus.publish("pine/conversation", { change, agent: agentId, session, ...(to ? { to } : {}) }, { persist: false, source: "pine" });
 	}
 

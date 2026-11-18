@@ -377,3 +377,39 @@ test("tui: /worktree moves a conversation into one, the bar names its branch, an
 	await until(() => !/⎇/.test(app.screen().at(-1)!), 4000, "the bar to show the folder again");
 	assert.doesNotMatch(git("branch", "--list", "pine/*"), /pine\/try/);
 });
+
+test("tui: a folder opened and a worktree made for a conversation by another hand show in the bar of a tab that is open", boxed, async (t) => {
+	const { PineTui } = await import("../src/tui/app.ts");
+	const { Client } = await import("../src/tui/client.ts");
+	const { FakeTerminal } = await import("./support/terminal.ts");
+	const { until } = await import("./support/harness.ts");
+	const { dir } = repository(t);
+	const h = await harness({ pine: { main: "main", http: { port: 0 } }, agents: { main: {} } });
+	const told: any[] = [];
+	h.pine.bus.subscribe("pine/conversation", (e) => void told.push(e.payload));
+	const app = new PineTui({ client: new Client(`http://127.0.0.1:${h.pine.http!.port}`, h.pine.token), terminal: new FakeTerminal(130, 36), mode: "test", cwd: dir });
+	t.after(async () => {
+		await app.stop().catch(() => {});
+		await h.close();
+	});
+	await app.start();
+	const bar = () => app.screen().at(-1)!;
+	const shows = (what: string | RegExp, why: string) => until(() => (typeof what === "string" ? bar().includes(what) : what.test(bar())), 6000, `${why}\n--- bar ---\n${bar()}`);
+	await shows("no folder", "the bar of a conversation without a folder");
+
+	// Another UI on the same daemon (the Pine app, a second terminal): this one is told nothing but that the conversation changed.
+	const other = new Client(`http://127.0.0.1:${h.pine.http!.port}`, h.pine.token);
+	await other.setFolder("main", "main", dir);
+	await shows(path.basename(dir), "the bar to name the folder that was opened elsewhere");
+	await other.makeWorktree("main", "main", "elsewhere");
+	await shows(/⎇ pine\/elsewhere/, "the bar to name the worktree that was made elsewhere");
+	await other.discardWorktree("main", "main");
+	await until(() => !/⎇/.test(bar()) && bar().includes(path.basename(dir)), 6000, `the bar to show the folder again\n--- bar ---\n${bar()}`);
+	await other.setFolder("main", "main", null);
+	await shows("no folder", "the bar to say that the folder was closed elsewhere");
+
+	// What a UI is told names the conversation and nothing of where it works.
+	const folders = told.filter((p) => p.change === "folder");
+	assert.ok(folders.length >= 4, JSON.stringify(told));
+	for (const p of folders) assert.deepEqual(p, { change: "folder", agent: "main", session: "main" });
+});
