@@ -9,9 +9,11 @@ name: Release
 # marked as a pre-release on GitHub. "npm install -g @pmndre/pine" keeps getting the last release.
 #
 # A release from main also gets the Pine app (desktop/), for both kinds of Mac, attached to its
-# GitHub release as disk images: signed with a Developer ID, notarised by Apple, started once
-# and talked to before it is uploaded. That needs five secrets, in an environment named "release"
-# that is restricted to the branch main, so that no other branch can use them:
+# GitHub release as disk images: signed with a Developer ID, notarised by Apple and checked the
+# way another Mac checks it before it is uploaded. It is not started here: whether a packed app
+# runs is tried on a developer's Mac (node desktop/scripts/smoke.mjs), not on every release. That
+# needs five secrets, in an environment named "release" that is restricted to the branch main, so
+# that no other branch can use them:
 #   CSC_LINK            the "Developer ID Application" certificate with its key, a .p12 file, as base64
 #   CSC_KEY_PASSWORD    the password of that file
 #   APPLE_API_KEY       an App Store Connect API key: the text of its .p8 file
@@ -163,9 +165,6 @@ jobs:
           app="desktop/release/${{ matrix.arch == 'arm64' && 'mac-arm64' || 'mac' }}/Pine.app"
           spctl --assess --type execute --verbose=2 "$app"
           xcrun stapler validate "$app"
-      - if: steps.signing.outputs.ready == 'true'
-        name: Start it and talk to it
-        run: node desktop/scripts/smoke.mjs
       - if: steps.signing.outputs.ready == 'true'
         run: gh release upload "v$VERSION" "desktop/release/Pine-$VERSION-${{ matrix.arch }}.dmg" --clobber
         env:

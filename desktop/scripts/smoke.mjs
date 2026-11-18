@@ -58,7 +58,8 @@ try {
 		if (!page) await new Promise((r) => setTimeout(r, 200));
 	}
 	if (!page) throw new Error("the app has no window");
-	await page.waitForSelector(".welcome h1", { timeout: 60_000 }).catch(async () => {
+	// (The page is found by the names its parts carry, `data-slot`, as desktop/test/ finds it.)
+	await page.waitForSelector("[data-slot=empty] h1", { timeout: 60_000 }).catch(async () => {
 		throw new Error(`no conversation appeared. On screen: ${await page.evaluate(() => document.body.innerText.slice(0, 600))}`);
 	});
 	// On a Mac without the browser build this pine drives (a new one, a CI machine) the app asks at
@@ -66,14 +67,14 @@ try {
 	// it will be asked: then it is waited for and answered with "Not now".
 	const over = await page.evaluate(() => window.pine.call("GET", "/overview"));
 	if (over?.data?.browser === false) {
-		await page.waitForSelector(".dialog-title >> text=The browser for the web tools is not on this Mac", { timeout: 30_000 });
-		await page.click(".dialog-foot .btn >> text=Not now");
-		await page.waitForSelector(".dialog", { state: "detached", timeout: 15_000 });
+		await page.waitForSelector("[data-slot=dialog-title] >> text=The browser for the web tools is not on this Mac", { timeout: 30_000 });
+		await page.locator("[data-slot=dialog-footer]").getByRole("button", { name: "Not now" }).click();
+		await page.waitForSelector("[data-slot=dialog-content]", { state: "detached", timeout: 15_000 });
 	}
-	const status = await page.textContent(".side-status");
-	await page.fill(".composer textarea", "hello from the packed app");
+	const status = await page.textContent("[data-slot=service-status]");
+	await page.fill("[data-slot=composer] textarea", "hello from the packed app");
 	await page.keyboard.press("Enter");
-	await page.waitForSelector(".md >> text=ECHO[hello from the packed app]", { timeout: 30_000 });
+	await page.waitForSelector("[data-slot=markdown] >> text=ECHO[hello from the packed app]", { timeout: 30_000 });
 	const from = (await page.evaluate(() => window.pine.state())).state.from;
 	if (process.argv[3]) await page.screenshot({ path: process.argv[3] });
 	const shown = await page.evaluate(() => document.visibilityState);
@@ -109,9 +110,9 @@ try {
 		for (const f of found) execFileSync("/usr/bin/codesign", ["--verify", "--strict", f]);
 		console.log(`ok: the daemon runs on the app's Node; ${said} through a link; the three helpers are the app's`);
 		// Settings > App says what `pine` in a terminal is. (Only looked at: nothing is set up from here.)
-		await page.click(".side-row >> text=Settings");
-		await page.click(".set-nav .side-row >> text=App");
-		const row = (await page.textContent(".item.command", { timeout: 15_000 })) ?? "";
+		await page.locator("[data-slot=sidebar-footer]").getByRole("button", { name: "Settings" }).click();
+		await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+		const row = (await page.textContent("[data-slot=field]:has-text('pine in a terminal')", { timeout: 15_000 })) ?? "";
 		if (!/pine in a terminal/.test(row) || !/(Not set up|is the pine of this app|another pine|Move Pine)/.test(row)) throw new Error(`Settings > App says about the command: ${row.slice(0, 300)}`);
 		console.log(`ok: Settings > App: ${row.replace(/\s+/g, " ").trim()}`);
 		if (process.argv[3]) await page.screenshot({ path: process.argv[3].replace(/(\.\w+)?$/, "-app$1") });

@@ -18,7 +18,7 @@ to change the code.
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
 | `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
 | `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark at a phone's width (360) and the window's (1280) through its modes (`desktop/.storybook/modes.ts`), so no dark or phone twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
-| `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`. |
+| `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`, and the smoke test also after a change to the page's markup that it finds the page by (`data-slot` names): no workflow runs it. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
 helpers such as `mcp/computer.swift`, are built by pine on the Mac it runs on, on first use;
@@ -624,7 +624,11 @@ there would stand in for all the commits it brought.
 
 A release from `main` also gets the Pine app, attached to its GitHub release as a disk image
 for each kind of Mac (the job `app` in `release.yml`: `desktop/scripts/pack.mjs --dmg`, then
-Apple's own check and `smoke.mjs` on the signed app, then the upload). Signing and notarising
+Apple's own check of the signed app, then the upload). The job does not start the app:
+`smoke.mjs` drives its window, and a test that drives the window does not belong in a release,
+where a renamed part of the page holds back the disk images of an app that runs. Run it on a
+Mac of your own before a release that changed how the app is packed or its page is built
+(the commands above). Signing and notarising
 take five secrets in an environment `release`, which the top of `release.yml` lists; without
 them the job builds nothing and says so. An app that is not signed and notarised is never
 uploaded. npm does not wait for the app: a release has no disk images for the minutes Apple
