@@ -1,35 +1,37 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, ListIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, TriangleAlertIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, ListIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Input } from "@/components/ui/input";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { type Layout, usePanelRef } from "react-resizable-panels";
-import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Field } from "@/components/ui/field";
+import { useEffect, useState } from "react";
 import { cn } from "cn";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { type AgentInfo, api, type Approval, type Conversation as Conv } from "./api.ts";
+import { type AgentInfo, api, type Conversation as Conv } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { CODE_KEY, CodePanel } from "./CodePanel.tsx";
 import { COMMANDS } from "./commands.ts";
 import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
-import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
+import { store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
-import { ago, fuzzy, until } from "./text.ts";
+import { ApprovalDialog } from "./ApprovalDialog.tsx";
+import { Lightbox } from "./Lightbox.tsx";
+import { Palette } from "./Palette.tsx";
+import { PickDialog } from "./PickDialog.tsx";
+import { QuestionDialog } from "./QuestionDialog.tsx";
+import { ago, until } from "./text.ts";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { LISTBOX, onPick } from "./lists.tsx";
 import { Logo } from "./ui.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Kbd } from "@/components/ui/kbd";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
@@ -334,328 +336,6 @@ function TitleBar() {
 
 // ---- what lies over the window for a moment --------------------------------------------------------------
 
-/** A value no line has: the list starts with no line chosen, until useNamedLine chooses one. */
-const NO_LINE = "\u0000";
-
-/**
- * The line a cmdk list has chosen, named to screen readers. The list is cmdk's own (uncontrolled):
- * it chooses the first line itself, the arrows and the pointer move it. But cmdk 1.1.1 names a line in
- * aria-activedescendant only when it is chosen from outside its own scheduling (a key, the pointer):
- * the line it chooses as the list is drawn or the text changes, and one handed to it with
- * `defaultValue`, are drawn chosen and not named. So the line is chosen once more as the pointer
- * would choose it, in cmdk's own store:
- * - as the list is put on the page, `start` (the line in use) or the first. The list starts on a value
- *   no line has (`defaultValue`), so that this choice is a change; it is made just after React puts
- *   the list there and before it is painted (during, cmdk would look for the line before it is drawn
- *   chosen and name none). A ref and not an effect: the dialog draws its content after itself.
- * - after the text changed (`redo`), once cmdk has chosen the first line: if it is not named, another
- *   line and then it, since cmdk ignores a choice of the line it has. A list of one line cannot be
- *   moved off it, and stays unnamed until a key.
- * Returns the Command's `ref` and `defaultValue`.
- */
-function useNamedLine(redo: unknown, start?: string) {
-	const root = useRef<HTMLDivElement | null>(null);
-	const point = (line: Element | null | undefined) => line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true }));
-	const ref = (el: HTMLDivElement | null) => {
-		if (!el || root.current) return;
-		root.current = el;
-		queueMicrotask(() => point(el.querySelector(start === undefined ? "[cmdk-item]" : `[cmdk-item][data-value="${CSS.escape(start)}"]`) ?? el.querySelector("[cmdk-item]")));
-	};
-	const first = useRef(true);
-	useEffect(() => {
-		if (first.current) return void (first.current = false);
-		const frame = requestAnimationFrame(() => {
-			const el = root.current;
-			const chosen = el?.querySelector('[cmdk-item][aria-selected="true"]');
-			if (!el || !chosen || el.querySelector("[cmdk-input]")?.getAttribute("aria-activedescendant") === chosen.id) return;
-			const other = [...el.querySelectorAll("[cmdk-item]")].find((line) => line !== chosen);
-			if (other) (point(other), point(chosen));
-		});
-		return () => cancelAnimationFrame(frame);
-	}, [redo]);
-	return { ref, defaultValue: NO_LINE };
-}
-
-/**
- * What had focus when a dialog opened, to give it back when it closes. A dialog whose field takes focus
- * as it is drawn (autoFocus: the keys typed at once go there) would otherwise give it back to that field.
- */
-function useOpener(): () => HTMLElement | null {
-	const [opener] = useState(() => document.activeElement as HTMLElement | null);
-	return () => opener;
-}
-
-export function PickDialog({ p }: { p: Picker }) {
-	const [query, setQuery] = useState("");
-	const shown = useMemo(() => (query && !p.free ? p.items.map((i) => ({ i, rank: Math.min(...[fuzzy(query, i.label), fuzzy(query, i.about ?? "") + 10].filter((r) => r >= 0), 99) })).filter((x) => x.rank < 99).sort((a, b) => a.rank - b.rank).map((x) => x.i) : p.items), [query, p]);
-	// The list starts on the one in use.
-	const line = useNamedLine(query, p.current);
-	const opener = useOpener();
-	// A short list is chosen from with the arrows; its field is there for the keyboard and for screen readers, unseen.
-	const typing = p.free || p.items.length > 7;
-	const list = (
-		<Command
-			{...line}
-			shouldFilter={false}
-			loop
-			onKeyDown={(e) => {
-				// Words of the owner's own count before the list where both are possible.
-				if (e.key === "Enter" && p.free && query.trim()) (e.preventDefault(), p.done(query.trim()));
-			}}
-		>
-			<div className={typing ? undefined : "sr-only"}>
-				<CommandInput autoFocus placeholder={p.placeholder ?? "Type to narrow the list"} value={query} onValueChange={setQuery} />
-			</div>
-			<CommandList className="scroll-fade">
-				{shown.length ? (
-					<CommandGroup>
-						{shown.map((i) => (
-							<CommandItem key={i.value} value={i.value} data-checked={i.value === p.current} onSelect={() => p.done(i.value)}>
-								<span className={cn("label max-w-3/5 flex-none truncate", i.tone === "bad" && "text-destructive")}>{i.label}</span>
-								{i.about ? <span className="about min-w-0 truncate text-xs text-muted-foreground">{i.about}</span> : null}
-							</CommandItem>
-						))}
-					</CommandGroup>
-				) : null}
-				{p.free ? null : <CommandEmpty>Nothing fits.</CommandEmpty>}
-			</CommandList>
-		</Command>
-	);
-	const close = (open: boolean) => open || p.done(undefined);
-	if (p.items.some((i) => i.tone === "bad"))
-		return (
-			<AlertDialog open onOpenChange={close}>
-				<AlertDialogContent finalFocus={opener} className="data-[size=default]:sm:max-w-xl">
-					<AlertDialogHeader>
-						<AlertDialogTitle>{p.title}</AlertDialogTitle>
-					</AlertDialogHeader>
-					{list}
-				</AlertDialogContent>
-			</AlertDialog>
-		);
-	return (
-		<Dialog open onOpenChange={close}>
-			<DialogContent showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
-				<DialogHeader>
-					<DialogTitle>{p.title}</DialogTitle>
-				</DialogHeader>
-				{list}
-			</DialogContent>
-		</Dialog>
-	);
-}
-
-export function Palette() {
-	const s = store;
-	const [query, setQuery] = useState("");
-	const line = useNamedLine(query);
-	const opener = useOpener();
-	useModel(s);
-	type Row = { id: string; group: string; label: string; about?: string; keys?: string; run: () => void; conv?: { agent: string; session: string } };
-	const all = useMemo(() => {
-		const chat = s.active?.kind === "chat";
-		const rows: Row[] = [];
-		for (const t of s.tabs) rows.push({ id: `t:${t.id}`, group: "Open tabs", label: t.kind === "chat" ? `${t.agent} · ${s.titleOf(t.agent, t.session)}` : t.kind === "task" ? `${t.agent} task #${t.task}` : t.kind === "settings" ? "Settings" : "Events", run: () => s.activate(t), conv: t.kind === "chat" ? { agent: t.agent, session: t.session } : undefined });
-		for (const [agent, convs] of s.conversations) for (const c of convs) if (!s.tabs.some((t) => t.kind === "chat" && t.agent === agent && t.session === c.session)) rows.push({ id: `s:${agent}:${c.session}`, group: "Conversations", label: `${agent} · ${s.titleOf(agent, c.session)}`, about: `${ago(c.last)}${c.folder ? ` · ${c.folder}` : ""}`, run: () => void s.openTab(agent, c.session), conv: { agent, session: c.session } });
-		for (const c of COMMANDS) if (!c.chat || chat) rows.push({ id: `c:${c.name}`, group: "Commands", label: c.title, about: c.about, keys: c.keys, run: () => void c.run("", s.active) });
-		for (const a of s.agents) rows.push({ id: `a:${a.id}`, group: "Agents", label: `New conversation with ${a.id}`, about: a.description, run: () => void s.newConversation(a.id) });
-		for (const [id, label] of [["general", "General"], ["agents", "Agents"], ["models", "Models"], ["mcp", "MCP servers"], ["skills", "Skills"], ["events", "Events"], ["instructions", "Instructions"], ["app", "App"]]) rows.push({ id: `p:${id}`, group: "Settings", label: `Settings: ${label}`, run: () => void s.command(`settings:${id}`) });
-		return rows;
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [s.titles]);
-	// What fits by its name comes first; then the conversations in which the words were said; then
-	// what only fits by its description, and last what fits by letters in order.
-	const shown = useMemo(() => {
-		if (!query.trim()) return all;
-		const q = query.trim().toLowerCase();
-		const named: Row[] = [];
-		const described: Row[] = [];
-		const loose: Row[] = [];
-		for (const r of all) {
-			if (r.label.toLowerCase().includes(q)) named.push(r);
-			else if ((r.about ?? "").toLowerCase().includes(q)) described.push(r);
-			else if (fuzzy(q, r.label) >= 0) loose.push(r);
-		}
-		// A conversation is listed once. One that fits by its name and also holds the words opens at the words.
-		const found = s.searchSaid(q);
-		const holds = (r: Row) => (r.conv ? found.find((m) => m.agent === r.conv!.agent && m.session === r.conv!.session) : undefined);
-		const listed = new Set<string>();
-		const here = (r: Row): Row => {
-			const m = holds(r);
-			if (!m) return r;
-			listed.add(`${m.agent}:${m.session}`);
-			return { ...r, about: `${m.who}: ${m.snippet}`, keys: ago(m.ts), run: () => void s.openFound(m.agent, m.session, query.trim()) };
-		};
-		const byName = named.map(here);
-		const said: Row[] = found.filter((m) => !listed.has(`${m.agent}:${m.session}`)).map((m) => ({ id: `m:${m.agent}:${m.session}`, group: "Said in conversations", label: `${m.agent} · ${s.titleOf(m.agent, m.session)}`, about: `${m.who}: ${m.snippet}`, keys: ago(m.ts), run: () => void s.openFound(m.agent, m.session, query.trim()) }));
-		return [...byName, ...said, ...described.filter((r) => !holds(r) || !listed.has(`${r.conv!.agent}:${r.conv!.session}`)), ...loose.filter((r) => !r.conv || !listed.has(`${r.conv.agent}:${r.conv.session}`))].slice(0, 80);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [query, all, s.said]);
-	// Rows that follow each other under the same heading are one group.
-	const groups: Array<{ name: string; rows: Row[] }> = [];
-	for (const r of shown) groups.at(-1)?.name === r.group ? groups.at(-1)!.rows.push(r) : groups.push({ name: r.group, rows: [r] });
-	const close = () => ((s.palette = false), s.touch());
-	const run = (r: Row) => (close(), r.run());
-	return (
-		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} finalFocus={opener} className="gap-0 p-0 sm:max-w-xl">
-				<DialogTitle className="sr-only">Search everything</DialogTitle>
-				<Command {...line} shouldFilter={false} loop>
-					<CommandInput autoFocus placeholder="Search conversations (by name or by what was said), commands, agents" value={query} onValueChange={setQuery} />
-					<CommandList className="scroll-fade">
-						{groups.map((g, n) => (
-							<CommandGroup key={`${n}:${g.name}`} heading={g.name}>
-								{g.rows.map((r) => (
-									<CommandItem key={r.id} value={r.id} onSelect={() => run(r)}>
-										<span className="label max-w-3/5 flex-none truncate">{r.label}</span>
-										{r.about ? <span className="about min-w-0 truncate text-xs text-muted-foreground">{r.about}</span> : null}
-										{r.keys ? <CommandShortcut>{r.keys}</CommandShortcut> : null}
-									</CommandItem>
-								))}
-							</CommandGroup>
-						))}
-						<CommandEmpty>Nothing fits.</CommandEmpty>
-					</CommandList>
-				</Command>
-			</DialogContent>
-		</Dialog>
-	);
-}
-
-/** A label that reads "name: what it is" or "NAME (what it is)" is its name and, under it, the rest. */
-const labelParts = (label: string): [string, string] => {
-	const m = label.match(/^([\w.-]+): ([\s\S]+)$/) ?? label.match(/^([\w.-]+) \(([\s\S]+)\)$/);
-	return m ? [m[1], m[2]] : [label, ""];
-};
-
-/** A request for the owner's approval. Values only the owner has are typed here and go straight to the daemon. */
-export function ApprovalDialog({ req }: { req: Approval }) {
-	const s = store;
-	const fields = req.inputs ?? [];
-	const [values, setValues] = useState<Record<string, string>>({});
-	const opener = useOpener();
-	const allow = (always = false) => {
-		if (fields.length) {
-			const empty = fields.find((f) => !values[f.name]?.trim());
-			if (empty) return void document.getElementById(`ap-${empty.name}`)?.focus();
-			return void s.decide(req.id, true, false, Object.fromEntries(fields.map((f) => [f.name, values[f.name].trim()])));
-		}
-		void s.decide(req.id, true, always);
-	};
-	useEffect(() => {
-		if (fields.length) return;
-		// Letters answer while nothing is to be typed, as in the terminal UI.
-		const key = (e: KeyboardEvent) => {
-			if (e.metaKey || e.ctrlKey || e.altKey) return;
-			if (e.key === "a" || e.key === "y") allow();
-			else if (e.key === "s" && req.remember) allow(true);
-			else if (e.key === "d" || e.key === "n") void s.decide(req.id, false);
-			else return;
-			e.preventDefault();
-		};
-		window.addEventListener("keydown", key);
-		return () => window.removeEventListener("keydown", key);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [req.id]);
-	return (
-		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
-			<DialogContent data-tone="warn" showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
-				<DialogHeader>
-					<DialogTitle className="flex items-center gap-2"><TriangleAlertIcon className="text-warn" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="-mx-4 max-h-(--dialog-scroll) flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-				<div className="flex flex-col gap-3 px-4 select-text">
-					<div className="flex items-center gap-2 text-muted-foreground">
-						<span>{req.agent}</span>
-						{req.task ? <span className="text-faint">task #{req.task}</span> : null}
-						<Badge variant="secondary" className="font-mono">{req.tool}</Badge>
-					</div>
-					<Printed sm className="log" text={req.summary} />
-					<div className="text-xs text-muted-foreground">
-						Why you are asked: {req.why}
-						{req.holds ? <div>“Allow” holds for {req.holds}: you are not asked about it again there.</div> : null}
-						{req.remember ? <div>“Always here” stops asking about {req.remember} in this conversation.</div> : null}
-						{!req.remember && !req.holds && !fields.length ? <div>This one is asked every time: there is no “always” for it.</div> : null}
-					</div>
-					{fields.map((f, i) => {
-						const [name, about] = labelParts(f.label ?? f.name);
-						return (
-							<Field key={f.name}>
-								<FieldLabel htmlFor={`ap-${f.name}`}>{name}{fields.length > 1 ? <span className="text-faint"> · {i + 1} of {fields.length}</span> : null}</FieldLabel>
-								{about ? <FieldDescription>{about}</FieldDescription> : null}
-								<Input id={`ap-${f.name}`} autoFocus={i === 0} className="font-mono" type={f.secret !== false ? "password" : "text"} autoComplete="off" spellCheck={false} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && allow()} />
-							</Field>
-						);
-					})}
-					{fields.length ? <FieldDescription>{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</FieldDescription> : null}
-				</div>
-				</ScrollArea>
-				<DialogFooter>
-					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <Kbd>esc</Kbd></Button>
-					<span className="min-w-0 flex-1" />
-					<Button variant="destructive" onClick={() => void s.decide(req.id, false)}>Deny{fields.length ? "" : <Kbd>d</Kbd>}</Button>
-					{req.remember && !fields.length ? <Button variant="outline" onClick={() => allow(true)}>Always here <Kbd>s</Kbd></Button> : null}
-					<Button onClick={() => allow()}>{fields.length ? "Save and allow" : req.holds ? "Allow" : "Allow once"}{fields.length ? "" : <Kbd>a</Kbd>}</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	);
-}
-
-/** A question of the agent's: the answers it offers, and a line for the owner's own words. */
-export function QuestionDialog({ req }: { req: Approval }) {
-	const s = store;
-	const choices = req.choices ?? [];
-	const [own, setOwn] = useState("");
-	const [at, setAt] = useState(0);
-	const opener = useOpener();
-	const answer = (text: string) => void s.decide(req.id, true, false, { answer: text });
-	return (
-		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
-			<DialogContent data-tone="accent" showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
-				<DialogHeader>
-					<DialogTitle className="flex items-center gap-2"><MessageSquareIcon className="text-primary" /> {req.agent} asks</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="-mx-4 max-h-(--dialog-scroll) flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-				<div className="flex flex-col gap-3 px-4 select-text">
-					<div className="whitespace-pre-wrap">{req.summary}</div>
-					{choices.length ? (
-						<div className="flex flex-col">
-							{choices.map((c, i) => (
-								<Item key={i} size="sm" variant={i === at && !own ? "muted" : "default"} render={<button type="button" />} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
-									<ItemMedia><Kbd>{i + 1}</Kbd></ItemMedia>
-									<ItemContent>
-										<ItemTitle className="line-clamp-none text-left font-normal">{c}</ItemTitle>
-									</ItemContent>
-									{i === 0 ? <ItemActions><Badge>recommended</Badge></ItemActions> : null}
-								</Item>
-							))}
-						</div>
-					) : null}
-					<Input
-						autoFocus
-						placeholder={choices.length ? "Or answer in your own words" : "Your answer"}
-						value={own}
-						onChange={(e) => setOwn(e.target.value)}
-						onKeyDown={(e) => {
-							if (e.key === "Enter") return own.trim() ? answer(own.trim()) : choices.length ? answer(choices[at]) : undefined;
-							if (!own && /^[1-9]$/.test(e.key) && Number(e.key) <= choices.length) return (e.preventDefault(), answer(choices[Number(e.key) - 1]));
-							if (!own && (e.key === "ArrowDown" || e.key === "ArrowUp") && choices.length) (e.preventDefault(), setAt((at + (e.key === "ArrowDown" ? 1 : choices.length - 1)) % choices.length));
-						}}
-					/>
-				</div>
-				</ScrollArea>
-				<DialogFooter>
-					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <Kbd>esc</Kbd></Button>
-					<span className="min-w-0 flex-1" />
-					<Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button>
-					<Button disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	);
-}
-
 function Asking() {
 	const s = useModel(store);
 	if (!s.asking) return null;
@@ -703,25 +383,6 @@ function Help({ close }: { close: () => void }) {
 				<DialogFooter>
 					<Button variant="outline" onClick={close}>Close</Button>
 				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	);
-}
-
-/** A picture of the conversation, larger, over the page. A click on it, beside it, or Escape closes it. */
-export function Lightbox() {
-	const [src, setSrc] = useState<string>();
-	useEffect(() => {
-		const show = (e: Event) => setSrc((e as CustomEvent<string>).detail);
-		window.addEventListener("pine:zoom", show);
-		return () => window.removeEventListener("pine:zoom", show);
-	}, []);
-	if (!src) return null;
-	return (
-		<Dialog open onOpenChange={(open) => open || setSrc(undefined)}>
-			<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
-				<DialogTitle className="sr-only">The picture, larger</DialogTitle>
-				<img src={src} alt="" className="min-h-0 max-w-full rounded-md object-contain" onClick={() => setSrc(undefined)} />
 			</DialogContent>
 		</Dialog>
 	);

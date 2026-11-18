@@ -418,7 +418,9 @@ desktop/
   src/             the page (React)
     model.ts       what the page knows: tabs, what each conversation shows, the daemon's live events
     api.ts         the control API, typed
-    App.tsx        the window: side bar, tabs, palette, the dialogs for approvals and questions
+    App.tsx        the window: side bar, tabs, the dialogs for keys, updates and the browser
+    ApprovalDialog.tsx, QuestionDialog.tsx     a request for the owner's approval, a question of an agent's
+    Palette.tsx, PickDialog.tsx, Lightbox.tsx  everything by name, a choice from a list, a picture larger
     Conversation.tsx, Composer.tsx, markdown.tsx     a conversation, the input, an answer drawn
     CodePanel.tsx  changes, files and the editor, output, what is running
     Browser.tsx    the agent's browser in the panel: its page as a picture, and what is done in it handed back
@@ -430,7 +432,8 @@ desktop/
                    there only renames or bundles a stock one
     ui.tsx         pine's own small parts, made of shadcn's components: the logo, an empty view
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
-                   which are ui-sdk's, used directly (shadcn has neither)
+                   which are ui-sdk's, used directly (shadcn has neither); and the chosen line of
+                   a palette's list, named to screen readers (`useNamedLine`)
     index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
                    shadcn's tokens set from them, the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
@@ -511,9 +514,8 @@ muted, the one in front pressed, and its background is left to the window behind
 material on a Mac). A story sits beside the file of what it shows: `src/<File>.stories.tsx`
 for a file of `src/`, `src/components/<name>.stories.tsx` for a composition there (titled
 `Components/<Name>`). pine's own parts (`src/ui.tsx`: the logo, an empty view) are in
-`src/ui.stories.tsx`, the dialogs of `src/App.tsx` in `src/App.stories.tsx`, one story per part
-and state, named after it (`PickDialogRemoving`); a whole view is in its own
-(`src/Composer.stories.tsx`, `src/Conversation.stories.tsx`).
+`src/ui.stories.tsx`, one story per part and state, named after it (`PickDialogRemoving`); a dialog
+or a whole view is in its own (`src/PickDialog.stories.tsx`, `src/Composer.stories.tsx`).
 None needs Electron or a daemon. A view that calls `api.ts` or the bridge is drawn on
 stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does nothing.
 
