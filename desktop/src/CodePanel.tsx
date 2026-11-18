@@ -33,7 +33,7 @@ import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { rowClass } from "./lists.tsx";
+import { LISTBOX, onPick, rowClass, TREE_ITEM } from "./lists.tsx";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
 import { EmptyView, useLoad } from "./ui.tsx";
@@ -46,53 +46,51 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
-// The editor says what a token is and what it looks like: the colours differ between light and dark (dark is
-// poimandres, token by token as the theme has them, which tells more kinds of keyword apart than light does).
+// The editor says what a token is and what it looks like. The colours are tokens of index.css
+// (`--code-*`), so light and dark differ there and nowhere else.
 const colours = HighlightStyle.define([
-	{ tag: [t.comment], class: "text-faint italic dark:text-(--p-comment)/70" },
-	{ tag: [t.meta], class: "text-faint italic dark:text-(--p-fg) dark:not-italic" },
-	{ tag: [t.keyword], class: "text-plan dark:text-(--p-fg)" },
-	{ tag: [t.definitionKeyword], class: "text-plan dark:text-(--p-steel)" },
-	{ tag: [t.controlKeyword], class: "text-plan dark:text-(--p-mint)/75" },
-	{ tag: [t.moduleKeyword, t.modifier, t.operatorKeyword, t.self], class: "text-plan dark:text-(--p-mint)" },
-	{ tag: [t.string, t.special(t.string)], class: "text-add dark:text-(--p-mint)" },
-	{ tag: [t.regexp, t.escape], class: "text-add dark:text-(--p-teal)" },
-	{ tag: [t.number, t.atom, t.url], class: "text-warn dark:text-(--p-mint)" },
-	{ tag: [t.bool], class: "text-warn dark:text-(--p-mint)" },
-	{ tag: [t.null], class: "text-warn dark:text-(--p-pink)" },
-	{ tag: [t.variableName], class: "dark:text-(--p-bright)" },
-	{ tag: [t.propertyName], class: "text-foreground dark:text-(--p-bright)" },
-	{ tag: [t.attributeName], class: "text-foreground dark:text-(--p-steel) dark:italic" },
-	{ tag: [t.function(t.variableName), t.function(t.propertyName)], class: "text-info dark:text-(--p-bright)/80" },
-	{ tag: [t.function(t.definition(t.variableName)), t.definition(t.function(t.propertyName))], class: "text-info dark:text-(--p-blue)" },
-	{ tag: [t.className, t.definition(t.className)], class: "text-info dark:text-(--p-blue)" },
-	{ tag: [t.typeName], class: "text-info dark:text-(--p-fg)/75" },
-	{ tag: [t.namespace], class: "text-info dark:text-(--p-steel)" },
-	{ tag: [t.tagName], class: "text-info dark:text-(--p-mint)" },
-	{ tag: [t.heading], class: "font-semibold dark:text-(--p-mint)" },
-	{ tag: [t.emphasis], class: "italic dark:text-(--p-slate)" },
-	{ tag: [t.strong], class: "font-semibold dark:text-(--p-slate)" },
-	{ tag: [t.link], class: "underline dark:text-(--p-blue)" },
-	{ tag: [t.inserted], class: "text-add dark:text-(--p-blue)" },
-	{ tag: [t.deleted, t.invalid], class: "text-del dark:text-(--p-pink)" },
-	{ tag: [t.punctuation, t.bracket], class: "text-muted-foreground dark:text-(--p-fg)" },
-	{ tag: [t.operator], class: "text-muted-foreground dark:text-(--p-steel)" },
+	{ tag: [t.comment], color: "var(--code-comment)", fontStyle: "italic" },
+	{ tag: [t.meta], color: "var(--code-meta)", fontStyle: "var(--code-meta-style)" },
+	{ tag: [t.keyword], color: "var(--code-keyword)" },
+	{ tag: [t.definitionKeyword], color: "var(--code-definition)" },
+	{ tag: [t.controlKeyword], color: "var(--code-control)" },
+	{ tag: [t.moduleKeyword, t.modifier, t.operatorKeyword, t.self], color: "var(--code-modifier)" },
+	{ tag: [t.string, t.special(t.string)], color: "var(--code-string)" },
+	{ tag: [t.regexp, t.escape], color: "var(--code-regexp)" },
+	{ tag: [t.number, t.atom, t.url, t.bool], color: "var(--code-literal)" },
+	{ tag: [t.null], color: "var(--code-null)" },
+	{ tag: [t.variableName, t.propertyName], color: "var(--code-name)" },
+	{ tag: [t.attributeName], color: "var(--code-attribute)", fontStyle: "var(--code-attribute-style)" },
+	{ tag: [t.function(t.variableName), t.function(t.propertyName)], color: "var(--code-call)" },
+	{ tag: [t.function(t.definition(t.variableName)), t.definition(t.function(t.propertyName)), t.className, t.definition(t.className)], color: "var(--code-function)" },
+	{ tag: [t.typeName], color: "var(--code-type)" },
+	{ tag: [t.namespace], color: "var(--code-namespace)" },
+	{ tag: [t.tagName], color: "var(--code-tag)" },
+	{ tag: [t.heading], color: "var(--code-heading)", fontWeight: "var(--font-weight-semibold)" },
+	{ tag: [t.emphasis], color: "var(--code-emphasis)", fontStyle: "italic" },
+	{ tag: [t.strong], color: "var(--code-emphasis)", fontWeight: "var(--font-weight-semibold)" },
+	{ tag: [t.link], color: "var(--code-link)", textDecoration: "underline" },
+	{ tag: [t.inserted], color: "var(--code-inserted)" },
+	{ tag: [t.deleted, t.invalid], color: "var(--code-deleted)" },
+	{ tag: [t.punctuation, t.bracket], color: "var(--code-punctuation)" },
+	{ tag: [t.operator], color: "var(--code-operator)" },
 ]);
 
-// CodeMirror's own look, in pine's colours. Its base theme is a style sheet of its own, outside Tailwind's
-// layers, so what it also sets wins here only as important.
-const EDITOR = [
-	"editor flex min-h-0 flex-1 overflow-hidden",
-	"[&_.cm-editor]:h-full [&_.cm-editor]:min-w-0 [&_.cm-editor]:flex-1 [&_.cm-editor]:bg-background [&_.cm-editor]:text-foreground [&_.cm-editor]:outline-none! dark:[&_.cm-editor]:text-(--p-fg)",
-	"[&_.cm-scroller]:font-mono! [&_.cm-scroller]:text-xs [&_.cm-scroller]:leading-relaxed!",
-	"[&_.cm-gutters]:border-r! [&_.cm-gutters]:border-line-soft! [&_.cm-gutters]:bg-background! [&_.cm-gutters]:text-faint! dark:[&_.cm-gutters]:text-(--p-comment)/55!",
-	"[&_.cm-activeLine]:bg-hover! [&_.cm-activeLineGutter]:bg-hover! dark:[&_.cm-activeLine]:bg-(--select)/25! dark:[&_.cm-activeLineGutter]:bg-(--select)/25! dark:[&_.cm-activeLineGutter]:text-(--p-fg)!",
-	"[&_.cm-selectionBackground]:bg-(--select)! [&_.cm-cursor]:border-l-primary! dark:[&_.cm-cursor]:border-l-(--p-fg)!",
-	"[&_.cm-panels]:border-border! [&_.cm-panels]:bg-raised! [&_.cm-panels]:text-foreground!",
-	"[&_.cm-textfield]:rounded-md! [&_.cm-textfield]:border-border! [&_.cm-textfield]:bg-card! [&_.cm-textfield]:font-sans [&_.cm-textfield]:text-xs! [&_.cm-textfield]:text-foreground",
-	"[&_.cm-button]:rounded-md! [&_.cm-button]:border-border! [&_.cm-button]:bg-card! [&_.cm-button]:bg-none! [&_.cm-button]:font-sans [&_.cm-button]:text-xs! [&_.cm-button]:text-foreground",
-	"[&_.cm-searchMatch]:bg-warn-soft! [&_.cm-searchMatch]:outline-1! [&_.cm-searchMatch]:outline-warn/50! dark:[&_.cm-searchMatch]:bg-(--p-blue)/25! dark:[&_.cm-searchMatch]:outline-(--p-blue)/50!",
-].join(" ");
+// CodeMirror's own look, in pine's tokens. A theme of CodeMirror's comes after its base theme, so it
+// wins without `!important`; the focused selection repeats the base theme's longer selector.
+const look = EditorView.theme({
+	"&": { height: "100%", minWidth: "0", flex: "1", backgroundColor: "var(--background)", color: "var(--code-text)" },
+	"&.cm-focused": { outline: "none" },
+	".cm-scroller": { fontFamily: "var(--mono)", fontSize: "var(--text-xs)", lineHeight: "var(--leading-relaxed)" },
+	".cm-gutters": { borderRight: "1px solid var(--line-soft)", backgroundColor: "var(--background)", color: "var(--code-gutter)" },
+	".cm-activeLine": { backgroundColor: "var(--code-active-line)" },
+	".cm-activeLineGutter": { backgroundColor: "var(--code-active-line)", color: "var(--code-gutter-active)" },
+	".cm-selectionBackground, &.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground": { background: "var(--select)" },
+	".cm-cursor": { borderLeftColor: "var(--code-cursor)" },
+	".cm-panels": { borderColor: "var(--border)", backgroundColor: "var(--raised)", color: "var(--foreground)" },
+	".cm-textfield, .cm-button": { borderRadius: "calc(var(--radius) * 0.8)", borderColor: "var(--border)", backgroundColor: "var(--card)", backgroundImage: "none", fontFamily: "var(--font)", fontSize: "var(--text-xs)", color: "var(--foreground)" },
+	".cm-searchMatch": { backgroundColor: "var(--code-match)", outline: "1px solid var(--code-match-line)" },
+});
 
 // The panel's parts: a bar of controls with a line under it, and what scrolls below: a stock
 // ScrollArea that fades where it is cut (scroll-fade sits on its viewport, the element that
@@ -139,6 +137,7 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 					bracketMatching(),
 					highlightSelectionMatches(),
 					search({ top: true }),
+					look,
 					syntaxHighlighting(colours),
 					language(file),
 					EditorView.lineWrapping,
@@ -160,7 +159,7 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 	useEffect(() => {
 		view.current?.dispatch({ effects: lock.current.reconfigure([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]) });
 	}, [readOnly]);
-	return <div className={EDITOR} ref={host} />;
+	return <div className="editor flex min-h-0 flex-1 overflow-hidden" ref={host} />;
 }
 
 // What a line of a unified diff is: a change is drawn by the stock line variants, which put the
@@ -257,7 +256,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{data.note ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">{data.note}</p> : null}
-				{data.files.length ? <Listbox aria-label={turn ? "Files the last message changed" : "Changed files"} className="outline-none" activation="manual" value={null} onValueChange={(next) => typeof next === "string" && setFile(next)}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</Listbox> : <EmptyView icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
+				{data.files.length ? <Listbox aria-label={turn ? "Files the last message changed" : "Changed files"} className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</Listbox> : <EmptyView icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
 				{data.more ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… and more.</p> : null}
 			</div></ScrollArea>
 		</>
@@ -316,9 +315,8 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 			{entries.map((e) => {
 				const full = dir ? `${dir}/${e.name}` : e.name;
 				const open = state.open.has(full);
-				// The focus is on the item around the row, so the row's class shows it (`rowClass`).
 				return (
-					<TreeItem key={full} value={full} label={e.name} branch={e.dir} className="outline-none">
+					<TreeItem key={full} value={full} label={e.name} branch={e.dir} className={TREE_ITEM}>
 						<TreeItemLabel className={rowClass(state.file === full)} style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>
 							{e.dir ? (open ? <ChevronDownIcon className="size-3 text-faint" /> : <ChevronRightIcon className="size-3 text-faint" />) : <span className="w-3 flex-none" />}
 							{e.dir ? <FolderIcon className="size-3.5 text-faint" /> : <FileIcon className="size-3.5 text-faint" />}
@@ -437,7 +435,7 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{query.trim() ? (
-					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" activation="manual" value={null} onValueChange={(next) => typeof next === "string" && setFile(next)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
+					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
@@ -477,7 +475,7 @@ function Output({ tab }: { tab: Tab }) {
 		);
 	return (
 		<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
-			<Listbox aria-label="Tool calls" className="outline-none" activation="manual" value={null} onValueChange={(next) => typeof next === "string" && setOpen(next)}>
+			<Listbox aria-label="Tool calls" className="outline-none" {...LISTBOX} onValueChange={onPick(setOpen)}>
 			{calls.data.map((c) => (
 				<ListboxItem key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
 					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Spinner aria-label="Working" className="size-3.5" />}

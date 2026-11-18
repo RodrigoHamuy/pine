@@ -99,6 +99,83 @@
 	--scrim: rgba(10, 11, 17, 0.55);
 }
 
+/* The code editor's colours (CodePanel.tsx: its CodeMirror theme and highlight style read only these).
+   Light uses pine's names; dark is poimandres, token by token as the theme has them, which tells more
+   kinds of keyword apart than light does. `currentColor` is the colour of the text around. */
+:root {
+	--code-text: var(--text);
+	--code-gutter: var(--faint);
+	--code-gutter-active: var(--faint);
+	--code-active-line: var(--hover);
+	--code-cursor: var(--brand);
+	--code-match: var(--warn-soft);
+	--code-match-line: color-mix(in oklab, var(--warn) 50%, transparent);
+	--code-comment: var(--faint);
+	--code-meta: var(--faint);
+	--code-meta-style: italic;
+	--code-keyword: var(--plan);
+	--code-definition: var(--plan);
+	--code-control: var(--plan);
+	--code-modifier: var(--plan);
+	--code-string: var(--add);
+	--code-regexp: var(--add);
+	--code-literal: var(--warn);
+	--code-null: var(--warn);
+	--code-name: var(--text);
+	--code-attribute: var(--text);
+	--code-attribute-style: normal;
+	--code-call: var(--info);
+	--code-function: var(--info);
+	--code-type: var(--info);
+	--code-namespace: var(--info);
+	--code-tag: var(--info);
+	--code-heading: currentColor;
+	--code-emphasis: currentColor;
+	--code-link: currentColor;
+	--code-inserted: var(--add);
+	--code-deleted: var(--del);
+	--code-punctuation: var(--text-muted);
+	--code-operator: var(--text-muted);
+	/* How tall a dialog's body grows before it scrolls: shadcn's own value for a scrollable dialog. */
+	--dialog-scroll: 50vh;
+}
+
+.dark {
+	--code-text: var(--p-fg);
+	--code-gutter: color-mix(in oklab, var(--p-comment) 55%, transparent);
+	--code-gutter-active: var(--p-fg);
+	--code-active-line: color-mix(in oklab, var(--select) 25%, transparent);
+	--code-cursor: var(--p-fg);
+	--code-match: color-mix(in oklab, var(--p-blue) 25%, transparent);
+	--code-match-line: color-mix(in oklab, var(--p-blue) 50%, transparent);
+	--code-comment: color-mix(in oklab, var(--p-comment) 70%, transparent);
+	--code-meta: var(--p-fg);
+	--code-meta-style: normal;
+	--code-keyword: var(--p-fg);
+	--code-definition: var(--p-steel);
+	--code-control: color-mix(in oklab, var(--p-mint) 75%, transparent);
+	--code-modifier: var(--p-mint);
+	--code-string: var(--p-mint);
+	--code-regexp: var(--p-teal);
+	--code-literal: var(--p-mint);
+	--code-null: var(--p-pink);
+	--code-name: var(--p-bright);
+	--code-attribute: var(--p-steel);
+	--code-attribute-style: italic;
+	--code-call: color-mix(in oklab, var(--p-bright) 80%, transparent);
+	--code-function: var(--p-blue);
+	--code-type: color-mix(in oklab, var(--p-fg) 75%, transparent);
+	--code-namespace: var(--p-steel);
+	--code-tag: var(--p-mint);
+	--code-heading: var(--p-mint);
+	--code-emphasis: var(--p-slate);
+	--code-link: var(--p-blue);
+	--code-inserted: var(--p-blue);
+	--code-deleted: var(--p-pink);
+	--code-punctuation: var(--p-fg);
+	--code-operator: var(--p-steel);
+}
+
 /* shadcn's tokens, set from pine's own colours (light in :root, poimandres in .dark, above).
    They only point at pine's names, so one place holds each colour and the dark values follow the class
    by themselves. The font is the system's, as it always was. */

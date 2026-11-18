@@ -68,6 +68,11 @@ const whom = (agents: Array<{ id: string }>) => [{ value: "", label: "all agents
 
 const scopeText = (scope: string, session?: string) => (scope === "global" ? "all agents" : session && session !== "main" ? `${scope} · ${session}` : scope);
 
+// A single-choice toggle group hands back a list, empty when its pressed item is pressed again: that keeps the choice.
+const one = <T,>(set: (value: T) => void) => (values: T[]) => {
+	if (values[0] !== undefined) set(values[0]);
+};
+
 // ---- general ----------------------------------------------------------------------------------------
 
 function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reload: () => void }) {
@@ -351,7 +356,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				</Field>
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-mode`}>Mode</FieldLabel>
-					<ToggleGroup id={`${field}-mode`} aria-label="Mode" variant="outline" value={[mode]} onValueChange={(v) => v[0] && put("mode", v[0])}>
+					<ToggleGroup id={`${field}-mode`} aria-label="Mode" variant="outline" value={[mode]} onValueChange={one((m) => put("mode", m))}>
 						{MODES.map((o) => (
 							<ToggleGroupItem key={o.value} value={o.value}>
 								{o.label}
@@ -502,7 +507,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 				<DialogHeader>
 					<DialogTitle>A new agent</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 flex max-h-[50vh] min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 					<FieldGroup className="px-4 select-text">
 						<Field>
 							<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
@@ -629,7 +634,7 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 				<DialogHeader>
 					<DialogTitle>Sign in to {provider}</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 flex max-h-[50vh] min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 					<div className="flex flex-col gap-3 px-4 select-text">
 						{error || state?.error ? <Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{error ?? state?.error}</AlertDescription></Alert> : null}
 						{state?.lines.length ? (
@@ -979,7 +984,7 @@ function Mcp() {
 					</Field>
 					<Field className="col-span-full">
 						<FieldLabel htmlFor={`${field}-kind`}>Kind</FieldLabel>
-						<ToggleGroup id={`${field}-kind`} aria-label="Kind" variant="outline" value={[f.kind]} onValueChange={(v) => v[0] && setF({ ...f, kind: v[0] as "remote" | "local", target: "" })}>
+						<ToggleGroup id={`${field}-kind`} aria-label="Kind" variant="outline" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as "remote" | "local", target: "" }))}>
 							<ToggleGroupItem value="remote">Remote (https address)</ToggleGroupItem>
 							<ToggleGroupItem value="local">A program on this computer</ToggleGroupItem>
 						</ToggleGroup>
@@ -1251,7 +1256,7 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 				<DialogHeader>
 					<DialogTitle>A new event source</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 flex max-h-[50vh] min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 					<div className="flex flex-col gap-3 px-4 select-text">
 						{plan ? (
 							<>
@@ -1524,7 +1529,7 @@ function Schedules() {
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-kind`}>When</FieldLabel>
-						<ToggleGroup id={`${field}-kind`} aria-label="When" variant="outline" value={[f.kind]} onValueChange={(v) => v[0] && setF({ ...f, kind: v[0] as keyof typeof WHEN, when: "" })}>
+						<ToggleGroup id={`${field}-kind`} aria-label="When" variant="outline" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as keyof typeof WHEN, when: "" }))}>
 							{Object.entries(WHEN).map(([value, w]) => (
 								<ToggleGroupItem key={value} value={value}>
 									{w.label}
@@ -1765,7 +1770,7 @@ function AppPage() {
 							<FieldDescription>Light, dark, or what the system is set to.</FieldDescription>
 						</FieldContent>
 						<div className="ctl flex items-center gap-1.5">
-							<ToggleGroup aria-label="Appearance" variant="outline" value={[s.prefs.theme]} onValueChange={(v) => v[0] && void set({ theme: v[0] })}>
+							<ToggleGroup aria-label="Appearance" variant="outline" value={[s.prefs.theme]} onValueChange={one((theme) => void set({ theme }))}>
 								<ToggleGroupItem value="system">System</ToggleGroupItem>
 								<ToggleGroupItem value="light">Light</ToggleGroupItem>
 								<ToggleGroupItem value="dark">Dark</ToggleGroupItem>

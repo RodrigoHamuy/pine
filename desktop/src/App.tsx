@@ -24,6 +24,7 @@ import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
+import { LISTBOX, onPick } from "./lists.tsx";
 import { Logo } from "./ui.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -135,11 +136,11 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	return (
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
 		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
-			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", c.tasks && "pr-16!", on && "on")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16", on && "on")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
 				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : tab?.unread ? <Badge className="size-2 p-0" /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
 				<span className="cut min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
-			{/* The badge is drawn over the button, so the button keeps the room for the time (stock pr-8 is for an action alone). */}
+			{/* The badge is drawn over the button, so the button keeps the room for the time (stock pr-8 fits an action alone; the same selector as stock, so it takes the place of its pr-8). */}
 			{c.tasks ? <SidebarMenuBadge className={cn(!main && "group-hover/menu-item:hidden")}>{ago(c.last).replace(" ago", "")}</SidebarMenuBadge> : null}
 			{main ? null : (
 				// Shown under the pointer only, so that it is no tab stop of its own; its keys are not the list's.
@@ -218,7 +219,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 				</SidebarMenuItem>
 			</SidebarMenu>
 			<CollapsibleContent>
-				<Listbox aria-label={`Conversations with ${a.id}`} className="outline-none" activation="manual" value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onValueChange={(session) => typeof session === "string" && void s.openTab(a.id, session)} render={<SidebarMenu />}>
+				<Listbox aria-label={`Conversations with ${a.id}`} className="outline-none" {...LISTBOX} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onValueChange={onPick((session) => void s.openTab(a.id, session))} render={<SidebarMenu />}>
 					{rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
 				</Listbox>
 			</CollapsibleContent>
@@ -562,7 +563,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><TriangleAlertIcon className="text-warn" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 max-h-[50vh] flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 max-h-(--dialog-scroll) flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="flex items-center gap-2 text-muted-foreground">
 						<span>{req.agent}</span>
@@ -615,7 +616,7 @@ export function QuestionDialog({ req }: { req: Approval }) {
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><MessageSquareIcon className="text-primary" /> {req.agent} asks</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 max-h-[50vh] flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 max-h-(--dialog-scroll) flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="whitespace-pre-wrap">{req.summary}</div>
 					{choices.length ? (
@@ -683,7 +684,7 @@ function Help({ close }: { close: () => void }) {
 				<DialogHeader>
 					<DialogTitle>Keys and commands</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 max-h-[50vh] flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 max-h-(--dialog-scroll) flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-1.5 px-4 text-xs select-text">
 					{keys.map(([k, about]) => (
 						<Field key={k} orientation="horizontal" className="items-baseline">
