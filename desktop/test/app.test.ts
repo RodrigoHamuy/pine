@@ -343,7 +343,7 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	assert.match(await page.textContent(".md [data-href] + [data-target]"), /example\.com\/docs/);
 	assert.equal(await page.$$eval(".md a[href]", (els: Element[]) => els.length), 0);
 	// A folded part is there and closed.
-	assert.equal(await page.$eval(".md details", (d: HTMLDetailsElement) => d.open), false);
+	assert.equal(await page.getAttribute(".md [data-details] [data-slot=collapsible-trigger]", "aria-expanded"), "false");
 	// Code is coloured on the page, with its language and a copy button, and nothing to download.
 	await page.waitForFunction(() => document.querySelectorAll('.md [data-streamdown="code-block"] span[style]').length > 0);
 	assert.match(await page.textContent('.md [data-streamdown="code-block-header"]'), /ts/);
@@ -499,11 +499,11 @@ test("a folded part that was opened stays open while the answer goes on", async 
 	const text = "<details><summary>More</summary>\n\nhidden part\n\n</details>\n\n" + "and the answer goes on. ".repeat(40);
 	await page.fill(".composer textarea", mockMsg([{ text, chunkDelayMs: 40 }], "fold "));
 	await page.keyboard.press("Enter");
-	await sees(".md-live details summary");
-	await page.click(".md-live details summary");
-	await page.waitForSelector(".md details[open]");
+	await sees(".md-live [data-details] [data-slot=collapsible-trigger]");
+	await page.click(".md-live [data-details] [data-slot=collapsible-trigger]");
+	await page.waitForSelector('.md [data-details] [aria-expanded="true"]');
 	await page.waitForFunction(() => !document.querySelector(".md-live"), undefined, { timeout: 20_000 });
-	assert.equal(await page.locator(".md", { hasText: "hidden part" }).last().locator("details").evaluate((d: HTMLDetailsElement) => d.open), true);
+	assert.equal(await page.locator(".md", { hasText: "hidden part" }).last().locator("[data-details] [data-slot=collapsible-trigger]").getAttribute("aria-expanded"), "true");
 });
 
 test("a picture opens over the page, and Escape closes it back onto the picture", async () => {

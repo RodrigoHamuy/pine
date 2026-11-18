@@ -480,7 +480,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 				<DialogHeader>
 					<DialogTitle>A new agent</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
 					<FieldGroup className="px-4 select-text">
 						<LabeledField label="Name" hint="Lowercase letters, digits, - and _ (for example research, home, books)."><Input autoFocus className="mono font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} /></LabeledField>
 						<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to."><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField>
@@ -576,7 +576,7 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 				<DialogHeader>
 					<DialogTitle>Sign in to {provider}</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
 					<div className="flex flex-col gap-3 px-4 select-text">
 						{error || state?.error ? <Notice tone="bad">{error ?? state?.error}</Notice> : null}
 						{state?.lines.length ? <Log>{state.lines.join("\n")}</Log> : null}
@@ -931,7 +931,7 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 				<DialogHeader>
 					<DialogTitle>A new event source</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
 					<div className="flex flex-col gap-3 px-4 select-text">
 						{plan ? (
 							<>

@@ -16,11 +16,13 @@
 // When Streamdown is upgraded, read its defaults again (`defaultRehypePlugins`, the components
 // it draws, its controls) and run the desktop suite: its markdown test fails without each of the three.
 import { createCodePlugin } from "@streamdown/code";
-import { createContext, memo, useContext, useEffect, useState, type ReactNode } from "react";
+import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
+import { Children, createContext, isValidElement, memo, useContext, useEffect, useState, type ReactNode } from "react";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { type Options as Schema } from "rehype-sanitize";
 import { Streamdown, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { api, media } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { mediaKind } from "./model.ts";
@@ -88,7 +90,8 @@ function Link({ href, children, node }: React.ComponentProps<"a"> & ExtraProps) 
 			{/* Beside the link, not inside it: it is the address in plain letters, not more of the link's words.
 			    It flows with the sentence: a line of its own would cut the link off from where it leads. */}
 			{plain ? null : (
-				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-faint wrap-anywhere before:content-['→_']" title={url} onClick={open(url)}>
+				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-faint wrap-anywhere" title={url} onClick={open(url)}>
+					<ArrowRightIcon className="mr-1 inline size-3" aria-hidden />
 					{short(url.replace(/^https?:\/\//, ""), 72)}
 				</span>
 			)}
@@ -161,13 +164,36 @@ function Picture({ src, alt }: React.ComponentProps<"img"> & ExtraProps) {
 	return <>{words || url}</>;
 }
 
-const COMPONENTS: Components = { a: Link, img: Picture };
+/** A folded part written as raw HTML (`<details>`), drawn as shadcn's Collapsible. `open` in the text is
+ *  where it starts; from then on it is the reader's, and it stays as they left it while the text grows,
+ *  since the component is the same on every render (COMPONENTS is a constant) and keeps its own state. */
+function Details({ open, children }: React.ComponentProps<"details"> & ExtraProps) {
+	const parts = Children.toArray(children);
+	const isSummary = (part: ReactNode) => isValidElement<ExtraProps>(part) && part.props.node?.tagName === "summary";
+	return (
+		<Collapsible defaultOpen={open !== undefined && open !== false} data-details="" className="my-3 rounded-lg border px-3">
+			{parts.filter(isSummary)}
+			<CollapsibleContent className="pb-2.5">{parts.filter((part) => !isSummary(part))}</CollapsibleContent>
+		</Collapsible>
+	);
+}
+
+function Summary({ children }: React.ComponentProps<"summary"> & ExtraProps) {
+	return (
+		<CollapsibleTrigger className="group flex w-full cursor-pointer items-center gap-1 py-2 text-left font-medium text-muted-foreground select-none hover:text-foreground">
+			<ChevronRightIcon className="size-4 shrink-0 transition-transform group-data-panel-open:rotate-90" aria-hidden />
+			{children}
+		</CollapsibleTrigger>
+	);
+}
+
+const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary };
 const PLUGINS = { code: createCodePlugin({ themes: ["github-light", "poimandres"] }) };
 const CONTROLS: ControlsConfig = { code: { copy: true, download: false }, table: false, mermaid: false, image: false };
 
-// Streamdown draws every element with its own look. What it leaves unstyled is a folded part written as
-// raw HTML (`details`), drawn here as a box. `md` and `md-live` are what the tests look for.
-const LOOK = "md cursor-auto select-text wrap-anywhere [&_details]:my-3 [&_details]:rounded-lg [&_details]:border [&_details]:px-3 [&_details[open]]:pb-2.5 [&_summary]:cursor-pointer [&_summary]:py-2 [&_summary]:font-medium [&_summary]:text-muted-foreground [&_summary]:select-none [&_summary:hover]:text-foreground";
+// Streamdown draws every element with its own look, and a folded part written as raw HTML is
+// Details above. `md` and `md-live` are what the tests look for.
+const LOOK = "md cursor-auto select-text wrap-anywhere";
 
 /** Markdown, drawn into the page. While `live`, the text grows; what the reader opened stays open. */
 export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }): ReactNode {

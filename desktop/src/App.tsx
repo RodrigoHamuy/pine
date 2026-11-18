@@ -529,7 +529,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><TriangleAlertIcon className="text-warn" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="flex items-center gap-2 text-muted-foreground">
 						<span>{req.agent}</span>
@@ -582,7 +582,7 @@ export function QuestionDialog({ req }: { req: Approval }) {
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><MessageSquareIcon className="text-primary" /> {req.agent} asks</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="whitespace-pre-wrap">{req.summary}</div>
 					{choices.length ? (
@@ -648,10 +648,20 @@ function Help({ close }: { close: () => void }) {
 				<DialogHeader>
 					<DialogTitle>Keys and commands</DialogTitle>
 				</DialogHeader>
-				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
-				<div className="grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-1.5 px-4 text-xs select-text">
-					{keys.map(([k, about]) => [<span key={k}><Kbd>{k}</Kbd></span>, <span key={`${k}-a`} className="text-muted-foreground">{about}</span>])}
-					{COMMANDS.map((c) => [<span key={c.name} className="font-mono">/{c.name}</span>, <span key={`${c.name}-a`} className="text-muted-foreground">{c.about}{c.keys ? <> <Kbd>{c.keys}</Kbd></> : null}</span>])}
+				<ScrollFadeArea className="-mx-4 max-h-[50vh]">
+				<div className="flex flex-col gap-1.5 px-4 text-xs select-text">
+					{keys.map(([k, about]) => (
+						<Field key={k} orientation="horizontal" className="items-baseline">
+							<span className="w-24 flex-none"><Kbd>{k}</Kbd></span>
+							<span className="text-muted-foreground">{about}</span>
+						</Field>
+					))}
+					{COMMANDS.map((c) => (
+						<Field key={c.name} orientation="horizontal" className="items-baseline">
+							<span className="w-24 flex-none font-mono">/{c.name}</span>
+							<span className="text-muted-foreground">{c.about}{c.keys ? <> <Kbd>{c.keys}</Kbd></> : null}</span>
+						</Field>
+					))}
 				</div>
 				</ScrollFadeArea>
 				<DialogFooter>
@@ -673,9 +683,9 @@ export function Lightbox() {
 	if (!src) return null;
 	return (
 		<Dialog open onOpenChange={(open) => open || setSrc(undefined)}>
-			<DialogContent showCloseButton={false} className="w-auto max-w-11/12 sm:max-w-11/12">
+			<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
 				<DialogTitle className="sr-only">The picture, larger</DialogTitle>
-				<img src={src} alt="" className="max-h-[calc(100vh-96px)] max-w-full rounded-md" onClick={() => setSrc(undefined)} />
+				<img src={src} alt="" className="min-h-0 max-w-full rounded-md object-contain" onClick={() => setSrc(undefined)} />
 			</DialogContent>
 		</Dialog>
 	);
