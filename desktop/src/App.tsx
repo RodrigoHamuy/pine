@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { type Layout, usePanelRef } from "react-resizable-panels";
 import { Field } from "@/components/ui/field";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { cn } from "cn";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -289,9 +289,17 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 	const [drop, setDrop] = useState(false);
 	const on = s.active === tab;
 	const kept = tab.kind === "chat" && (tab.session === "main" || s.pins.has(tab.key));
+	// The tab brought to the front is scrolled into view when there are more tabs than the row shows.
+	const ref = useRef<HTMLDivElement>(null);
+	useEffect(() => {
+		if (on) ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
+	}, [on]);
+	// The least width is what the tab holds besides its name (the avatar, the gaps, the close button) and a few letters of the
+	// name: narrower, what does not shrink spills over the next tab. Past that, the row scrolls.
 	return (
 		<div
-			className={cn("tab group/tab relative flex h-8 max-w-55 min-w-16 flex-initial items-center gap-2 rounded-md pr-1.5 pl-2.5 app-no-drag", on ? "on bg-background text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-hover hover:text-foreground", drop && "before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-primary")}
+			ref={ref}
+			className={cn("tab group/tab relative flex h-8 max-w-55 min-w-28 flex-initial items-center gap-2 rounded-md pr-1.5 pl-2.5 app-no-drag", on ? "on bg-background text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-hover hover:text-foreground", drop && "before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-primary")}
 			draggable
 			onDragStart={(e) => (e.dataTransfer.setData("application/x-pine-tab", String(index)), (e.dataTransfer.effectAllowed = "move"))}
 			onDragOver={(e) => e.dataTransfer.types.includes("application/x-pine-tab") && (e.preventDefault(), setDrop(true))}

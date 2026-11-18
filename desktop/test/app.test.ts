@@ -1262,6 +1262,44 @@ test("find marks what is looked for", async () => {
 	await page.waitForSelector(".find", { state: "detached" });
 });
 
+test("many tabs keep their width and scroll instead of stepping on each other", async () => {
+	await page.click(".tab >> nth=0");
+	const had = await page.locator(".tab").count();
+	for (let i = 0; i < 20; i++) {
+		await menu("new");
+		await page.waitForFunction((n) => document.querySelectorAll(".tab").length === n, had + i + 1);
+	}
+	const measure = () =>
+		page.evaluate(() => {
+			const strip = document.querySelector(".tabs [data-slot=scroll-area-viewport]")!.getBoundingClientRect();
+			const tabs = [...document.querySelectorAll(".tab")].map((el) => {
+				const r = el.getBoundingClientRect();
+				// What a tab draws reaches as far as its widest child: a child that does not fit spills over the next tab.
+				const right = Math.max(r.right, ...[...el.children].map((c) => c.getBoundingClientRect().right));
+				return { left: r.left, right, width: r.width, on: el.classList.contains("on") };
+			});
+			const plus = document.querySelector("header button[aria-label^='New conversation']")!.getBoundingClientRect();
+			return { strip: { left: strip.left, right: strip.right }, tabs, plus: { left: plus.left, right: plus.right }, width: window.innerWidth };
+		});
+	const m = await measure();
+	const gaps = m.tabs.slice(1).map((t: any, i: number) => t.left - m.tabs[i].right);
+	assert.ok(Math.min(...gaps) >= 0, `tabs overlap: the smallest gap between two tabs is ${Math.min(...gaps)}px`);
+	assert.ok(Math.min(...m.tabs.map((t: any) => t.width)) >= 96, "every tab keeps room for its avatar, a few letters and its close button");
+	const on = m.tabs.find((t: any) => t.on);
+	assert.ok(on.left >= m.strip.left - 0.5 && on.right <= m.strip.right + 0.5, `the tab in front is in view: ${JSON.stringify({ on, strip: m.strip })}`);
+	assert.ok(m.plus.left >= m.strip.right && m.plus.right <= m.width, "the plus stays in view after the tabs");
+	// Going back to the first tab scrolls it into view.
+	await page.click(".tab >> nth=0");
+	await menu("prev-tab");
+	await page.waitForFunction(() => {
+		const strip = document.querySelector(".tabs [data-slot=scroll-area-viewport]")!.getBoundingClientRect();
+		const r = document.querySelector(".tab.on")!.getBoundingClientRect();
+		return r.left >= strip.left - 0.5 && r.right <= strip.right + 0.5;
+	});
+	await shot("many-tabs");
+	while ((await page.locator(".tab").count()) > had) await page.click(".tab >> nth=-1 >> .close");
+});
+
 test("quitting stops the daemon it started", async () => {
 	const log = path.join(home, "data", "pine.log");
 	assert.ok(fs.existsSync(log));
