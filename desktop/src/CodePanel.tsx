@@ -4,6 +4,7 @@
 // the daemon, inside a sandbox that reaches only this folder.
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -21,7 +22,7 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { type UIEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Fragment, type UIEvent, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CodeBlock, CodeBlockActions, CodeBlockContent, CodeBlockCopyButton, CodeBlockLine } from "@/components/ui/code-block";
 import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
@@ -34,7 +35,7 @@ import { clock, errText, oneLine, plural, short, size, tilde, took } from "./tex
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Confirm } from "./Confirm.tsx";
 import { List, ListRow, rowClass, Tree, TreeRow } from "./lists.tsx";
-import { Empty, Loading, useLoad } from "./ui.tsx";
+import { Empty, Loading, Pulse, useLoad } from "./ui.tsx";
 import { Hint } from "@/components/hint";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -166,16 +167,46 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 	return <div className={EDITOR} ref={host} />;
 }
 
+// What a line of a unified diff is: a change is drawn by the stock line variants, which put the
+// sign in front themselves, so its own sign is taken off; a hunk header is highlighted; the
+// lines about the file itself are muted.
+const META = ["+++", "---", "diff ", "index ", "new file", "deleted file", "similarity", "rename "];
+
 /** A unified diff, coloured line by line. */
 export function Diff({ text }: { text: string }) {
 	const lines = text.split("\n");
 	return (
-		<div className="diff min-w-max cursor-text py-1.5 font-mono text-xs leading-normal select-text dark:text-(--p-fg)">
-			{lines.map((l, i) => {
-				const cls = l.startsWith("@@") ? "mt-1.5 mb-0.5 bg-info/8 text-info" : l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("index ") || l.startsWith("new file") || l.startsWith("deleted file") || l.startsWith("similarity") || l.startsWith("rename ") ? "text-faint" : l.startsWith("+") ? "add bg-add-bg text-add" : l.startsWith("-") ? "bg-del-bg text-del" : "";
-				return <div key={i} className={`whitespace-pre px-3 ${cls}`}>{l || " "}</div>;
-			})}
-		</div>
+		<CodeBlock size="sm" className="diff m-2 w-auto select-text">
+			<CodeBlockContent>
+				{lines.map((l, i) => {
+					if (l.startsWith("@@")) return <CodeBlockLine key={i} variant="highlighted">{l}</CodeBlockLine>;
+					if (META.some((m) => l.startsWith(m))) return <CodeBlockLine key={i} className="text-muted-foreground">{l}</CodeBlockLine>;
+					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added" className="add">{l.slice(1)}</CodeBlockLine>;
+					if (l.startsWith("-")) return <CodeBlockLine key={i} variant="removed">{l.slice(1)}</CodeBlockLine>;
+					return <CodeBlockLine key={i}>{l.startsWith(" ") ? l.slice(1) : l}</CodeBlockLine>;
+				})}
+			</CodeBlockContent>
+		</CodeBlock>
+	);
+}
+
+/** A path in the folder, a crumb per folder and the file last. */
+function PathCrumbs({ path, children }: { path: string; children?: React.ReactNode }) {
+	const parts = path.split("/");
+	const last = parts.length - 1;
+	return (
+		<Breadcrumb className="min-w-0 flex-1" title={path}>
+			<BreadcrumbList className="flex-nowrap font-mono">
+				{parts.map((part, i) => (
+					<Fragment key={i}>
+						{i ? <BreadcrumbSeparator /> : null}
+						<BreadcrumbItem className={i === last ? "min-w-0" : undefined}>
+							{i === last ? <BreadcrumbPage className="truncate">{part}{children}</BreadcrumbPage> : part}
+						</BreadcrumbItem>
+					</Fragment>
+				))}
+			</BreadcrumbList>
+		</Breadcrumb>
 	);
 }
 
@@ -216,7 +247,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 			<>
 				<div className={SUB}>
 					<Hint label="Back to the list"><Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)}><ChevronLeftIcon /></Button></Hint>
-					<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}</span>
+					<PathCrumbs path={file} />
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
 				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <LogText className="cursor-text text-muted-foreground">… the rest of this diff is too long to show.</LogText> : null}</> : diff.error ? <Empty icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</Empty> : <Loading />}</Body>
@@ -356,7 +387,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 						</AlertDialogFooter>
 					</AlertDialogContent>
 				</AlertDialog>
-				<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}{dirty ? <span className="text-warn"> ●</span> : null}</span>
+				<PathCrumbs path={file}>{dirty ? <span className="text-warn"> ●</span> : null}</PathCrumbs>
 				{disk.data?.truncated ? <Badge variant="outline">too large to edit</Badge> : null}
 				{root ? <Hint label="Show in the Finder"><Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button></Hint> : null}
 				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
@@ -486,7 +517,7 @@ function Output({ tab }: { tab: Tab }) {
 			<List label="Tool calls" onOpen={setOpen}>
 			{calls.data.map((c) => (
 				<ListRow key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
-					<span className={`w-3.5 flex-none text-center font-mono font-semibold ${c.entry.ok === false ? "text-destructive" : c.entry.ok ? "text-primary" : "text-warn"}`}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
+					{c.entry.ok === false ? <XIcon size={13} className="flex-none text-destructive" /> : c.entry.ok ? <CheckIcon size={13} className="flex-none text-primary" /> : <Pulse size={13} />}
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}
