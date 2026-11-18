@@ -4,6 +4,7 @@
 // the daemon, inside a sandbox that reaches only this folder.
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
@@ -20,7 +21,6 @@ import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
 import { useEffect, useRef, useState } from "react";
-import { FileTree, FileTreeFile, FileTreeFolder, FileTreeIcon, FileTreeName } from "@/components/ai-elements/file-tree";
 import { Terminal } from "@/components/ai-elements/terminal";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
@@ -29,7 +29,10 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { Confirm, Empty, Pulse, useLoad } from "./ui.tsx";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Confirm } from "./Confirm.tsx";
+import { List, ListRow, Tree, TreeRow } from "./lists.tsx";
+import { Empty, Pulse, useLoad } from "./ui.tsx";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -142,16 +145,16 @@ export function Diff({ text }: { text: string }) {
 
 // ---- its views -------------------------------------------------------------------------------------
 
-function ChangeRow({ c, on, pick }: { c: Change; on: boolean; pick: () => void }) {
+function ChangeRow({ c }: { c: Change }) {
 	const at = c.path.lastIndexOf("/");
 	return (
-		<div className={`frow${on ? " on" : ""}`} onClick={pick} title={c.path}>
+		<ListRow value={c.path} label={c.path.slice(at + 1)} className="frow" title={c.path}>
 			<span className={`st ${c.status === "?" ? "Q" : c.status}`}>{c.status === "?" ? "U" : c.status}</span>
 			<span className="cut">{c.path.slice(at + 1)}</span>
 			<span className="faint cut grow">{at > 0 ? c.path.slice(0, at) : ""}</span>
 			{c.added ? <span className="plus">+{c.added}</span> : null}
 			{c.removed ? <span className="minus">−{c.removed}</span> : null}
-		</div>
+		</ListRow>
 	);
 }
 
@@ -191,7 +194,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 			</div>
 			<div className="code-body">
 				{data.note ? <div className="out">{data.note}</div> : null}
-				{data.files.length ? data.files.map((c) => <ChangeRow key={c.path} c={c} on={false} pick={() => setFile(c.path)} />) : <Empty icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
+				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> : <Empty icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
 				{data.more ? <div className="out">… and more.</div> : null}
 			</div>
 		</>
@@ -201,70 +204,71 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 interface TreeState {
 	open: Set<string>;
 	dirs: Map<string, Array<{ name: string; dir: boolean; size: number }>>;
+	/** Why a folder could not be read, by folder, so a failed read is not taken for an empty folder. */
+	failed: Map<string, string>;
 	file?: string;
 }
 const trees = new Map<string, TreeState>();
-const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map() }), trees.get(key)!);
+const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map(), failed: new Map() }), trees.get(key)!);
 
-function Tree({ tab, dir, depth, pick, tick }: { tab: Tab; dir: string; depth: number; pick: (file: string) => void; tick: number }) {
+/** The folder's files as a tree: a folder opens and closes, a file opens in the editor. */
+function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void; tick: number }) {
 	const state = treeOf(tab.key);
 	const [, redraw] = useState(0);
-	useEffect(() => {
-		let live = true;
-		api.tree(tab.agent, tab.session, dir).then(
-			(r) => live && (state.dirs.set(dir, r.entries), redraw((n) => n + 1)),
-			() => live && (state.dirs.set(dir, []), redraw((n) => n + 1)),
-		);
-		return () => {
-			live = false;
-		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [tab.key, dir, tick]);
-	const entries = state.dirs.get(dir);
-	if (!entries) return depth ? null : <Empty title=""><Pulse /></Empty>;
-	if (!entries.length && !depth) return <Empty icon={FolderIcon} title="This folder is empty" />;
-	const items = entries.map((e) => {
-		const full = dir ? `${dir}/${e.name}` : e.name;
-		// A folder's entries are asked for when it opens, and only then.
-		return e.dir ? (
-			<FileTreeFolder key={full} path={full} name={e.name}>
-				<Tree tab={tab} dir={full} depth={depth + 1} pick={pick} tick={tick} />
-			</FileTreeFolder>
-		) : (
-			<FileTreeFile key={full} path={full} name={e.name}>
-				<span className="size-4 shrink-0" />
-				<FileTreeIcon><FileIcon className="size-4 text-muted-foreground" /></FileTreeIcon>
-				<FileTreeName className="grow">{e.name}</FileTreeName>
-				<span className="shrink-0 text-faint text-xs">{size(e.size)}</span>
-			</FileTreeFile>
-		);
-	});
-	if (depth) return <>{items}</>;
-	const toggle = (path: string) => {
-		if (state.open.has(path)) state.open.delete(path);
-		else state.open.add(path);
-		redraw((n) => n + 1);
+	const isDir = (full: string) => {
+		const at = full.lastIndexOf("/");
+		return Boolean(state.dirs.get(at > 0 ? full.slice(0, at) : "")?.find((e) => e.name === full.slice(at + 1))?.dir);
 	};
+	const entries = state.dirs.get("");
+	const failed = state.failed.get("");
 	return (
-		<FileTree
-			className="rounded-none border-0 bg-transparent font-sans"
-			expanded={state.open}
-			onExpandedChange={(open) => ((state.open = open), redraw((n) => n + 1))}
-			selectedPath={state.file}
-			// A click on a folder's name opens or closes it, as one on its arrow does.
-			onSelect={(path) => (isDir(state, path) ? toggle(path) : pick(path))}
-		>
-			{items}
-		</FileTree>
+		<>
+			{failed ? <Empty icon={FolderIcon} title="This folder cannot be read">{failed}</Empty> : null}
+			{entries && !entries.length ? <Empty icon={FolderIcon} title="This folder is empty" /> : null}
+			{entries || failed ? null : <Empty title=""><Pulse /></Empty>}
+			<Tree label="Files" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} onOpen={(full) => !isDir(full) && pick(full)}>
+				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
+			</Tree>
+		</>
 	);
 }
 
-/** Whether a path of the tree is a folder, by what its parent folder listed. */
-function isDir(state: TreeState, path: string): boolean {
-	const cut = path.lastIndexOf("/");
-	const parent = cut < 0 ? "" : path.slice(0, cut);
-	const name = path.slice(cut + 1);
-	return Boolean(state.dirs.get(parent)?.some((e) => e.dir && e.name === name));
+/** A folder's rows in the tree, read when it opens; `onLoad` redraws the tree around once they are read. */
+function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: number; tick: number; onLoad: () => void }) {
+	const state = treeOf(tab.key);
+	const read = useLoad(() => api.tree(tab.agent, tab.session, dir), [tab.key, dir, tick]);
+	useEffect(() => {
+		if (read.loading) return;
+		if (read.data) state.dirs.set(dir, read.data.entries), state.failed.delete(dir);
+		else state.failed.set(dir, read.error ?? ""), state.dirs.delete(dir);
+		onLoad();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [read.loading, read.data, read.error]);
+	const failed = state.failed.get(dir);
+	if (failed && dir) return <div className="out faint" style={{ paddingLeft: 10 + depth * 14 }}>{failed}</div>;
+	const entries = state.dirs.get(dir);
+	if (!entries) return null;
+	return (
+		<>
+			{entries.map((e) => {
+				const full = dir ? `${dir}/${e.name}` : e.name;
+				const open = state.open.has(full);
+				const row = (
+					<>
+						{e.dir ? (open ? <ChevronDownIcon size={11} className="faint" /> : <ChevronRightIcon size={11} className="faint" />) : <span style={{ width: 11 }} />}
+						{e.dir ? <FolderIcon size={13} className="faint" /> : <FileIcon size={13} className="faint" />}
+						<span className="cut grow">{e.name}</span>
+						{!e.dir ? <span className="faint" style={{ fontSize: 11 }}>{size(e.size)}</span> : null}
+					</>
+				);
+				return (
+					<TreeRow key={full} value={full} label={e.name} row={row} on={state.file === full} depth={depth} branch={e.dir}>
+						{e.dir && open ? <Dir tab={tab} dir={full} depth={depth + 1} tick={tick} onLoad={onLoad} /> : null}
+					</TreeRow>
+				);
+			})}
+		</>
+	);
 }
 
 /** One file, to read and to change. What the agent changes meanwhile is shown unless the owner has typed. */
@@ -297,12 +301,25 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 		setSaving(false);
 	};
 	useSignal("save", () => void save());
+	// Leaving with what was typed and not saved is asked first.
+	const [leaving, setLeaving] = useState(false);
 	const changedOnDisk = dirty && text !== undefined && text !== base;
 	const root = tab.folder ?? tab.workspace;
 	return (
 		<>
 			<div className="code-sub">
-				<Button variant="ghost" size="icon-xs" onClick={() => (dirty && !window.confirm(`Leave ${file} without saving what you typed?`) ? undefined : close())} title="Back to the files"><ChevronLeftIcon /></Button>
+				<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())} title="Back to the files"><ChevronLeftIcon /></Button>
+				<AlertDialog open={leaving} onOpenChange={setLeaving}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Leave {file} without saving what you typed?</AlertDialogTitle>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction variant="destructive" onClick={() => (setLeaving(false), close())}>Leave</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 				<span className="cut grow mono" title={file}>{file}{dirty ? <span style={{ color: "var(--warn)" }}> ●</span> : null}</span>
 				{disk.data?.truncated ? <span className="tag warn">too large to edit</span> : null}
 				{root ? <Button variant="ghost" size="icon-xs" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button> : null}
@@ -347,9 +364,9 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 			</div>
 			<div className="code-body">
 				{query.trim() ? (
-					found.data?.length ? found.data.map((f) => <div key={f} className="frow" onClick={() => setFile(f)}><FileIcon size={13} className="faint" /><span className="cut">{f}</span></div>) : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
+					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className="frow"><FileIcon size={13} className="faint" /><span className="cut">{f}</span></ListRow>)}</List> : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
 				) : (
-					<Tree tab={tab} dir="" depth={0} pick={setFile} tick={tick} />
+					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
 			</div>
 		</>
@@ -409,7 +426,7 @@ function Running({ tab }: { tab: Tab }) {
 					<div className="row">
 						<span className="dot good" />
 						<span className="mono cut grow" title={p.command}>{p.command}</span>
-						<Confirm label="Stop" sure="Stop it?" onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
+						<Confirm label="Stop" question={`Stop ${short(p.command, 80)}?`} onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
 					</div>
 					<div className="row faint" style={{ fontSize: 12 }}>
 						<span>running for {clock(p.seconds)}</span>
@@ -426,13 +443,12 @@ function Running({ tab }: { tab: Tab }) {
 	);
 }
 
-const WIDTH_KEY = "pine.code.width";
+export const CODE_KEY = "pine.code.width";
 
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
-	const [width, setWidth] = useState(() => Number(localStorage.getItem(WIDTH_KEY)) || 520);
-	const [drag, setDrag] = useState(false);
+	const [width] = useState(() => Number(localStorage.getItem(CODE_KEY)) || 520);
 	const state = treeOf(tab.key);
 	const [, redraw] = useState(0);
 	const view = store.codeView;
@@ -441,59 +457,43 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
 	return (
 		<>
-			<div
-				className={`splitter${drag ? " drag" : ""}`}
-				onMouseDown={(e) => {
-					e.preventDefault();
-					setDrag(true);
-					const from = e.clientX;
-					const was = width;
-					let now = was;
-					const move = (m: MouseEvent) => setWidth((now = Math.max(320, Math.min(window.innerWidth - 420, was + from - m.clientX))));
-					const up = () => {
-						setDrag(false);
-						localStorage.setItem(WIDTH_KEY, String(now));
-						window.removeEventListener("mousemove", move);
-						window.removeEventListener("mouseup", up);
-					};
-					window.addEventListener("mousemove", move);
-					window.addEventListener("mouseup", up);
-				}}
-			/>
-			<div className="code" style={{ width }}>
-				<div className="code-head">
-					<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
-						<TabsList variant="line" activateOnFocus className="max-w-full overflow-x-auto">
-							<TabsTrigger value="agent">Agent</TabsTrigger>
-							<TabsTrigger value="files">Files</TabsTrigger>
-							<TabsTrigger value="changes">Changes</TabsTrigger>
-							<TabsTrigger value="turn">Last turn</TabsTrigger>
-							<TabsTrigger value="browser">Browser</TabsTrigger>
-							<TabsTrigger value="output">Output</TabsTrigger>
-							<TabsTrigger value="running">
-								Running
-								{tab.programs.length ? <span className="badge">{tab.programs.length}</span> : null}
-							</TabsTrigger>
-						</TabsList>
-					</Tabs>
-					<span className="grow" />
-					<Button variant="ghost" size="icon-xs" title="Close the panel" onClick={() => void store.command("code")}><XIcon /></Button>
+			<ResizableHandle className="w-(--gap) bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
+			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
+				<div className="code">
+					<div className="code-head">
+						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+							<TabsList variant="line" activateOnFocus className="max-w-full overflow-x-auto">
+								<TabsTrigger value="agent">Agent</TabsTrigger>
+								<TabsTrigger value="files">Files</TabsTrigger>
+								<TabsTrigger value="changes">Changes</TabsTrigger>
+								<TabsTrigger value="turn">Last turn</TabsTrigger>
+								<TabsTrigger value="browser">Browser</TabsTrigger>
+								<TabsTrigger value="output">Output</TabsTrigger>
+								<TabsTrigger value="running">
+									Running
+									{tab.programs.length ? <span className="badge">{tab.programs.length}</span> : null}
+								</TabsTrigger>
+							</TabsList>
+						</Tabs>
+						<span className="grow" />
+						<Button variant="ghost" size="icon-xs" title="Close the panel" onClick={() => void store.command("code")}><XIcon /></Button>
+					</div>
+					{steps ? <div className="code-steps"><Steps items={steps} /></div> : null}
+					{view === "agent" ? (
+						<AgentView tab={tab} />
+					) : view === "changes" || view === "turn" ? (
+						<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
+					) : view === "files" ? (
+						<Files tab={tab} file={state.file} setFile={setFile} />
+					) : view === "browser" ? (
+						<BrowserView tab={tab} />
+					) : view === "output" ? (
+						<Output tab={tab} />
+					) : (
+						<Running tab={tab} />
+					)}
 				</div>
-				{steps ? <div className="code-steps"><Steps items={steps} /></div> : null}
-				{view === "agent" ? (
-					<AgentView tab={tab} />
-				) : view === "changes" || view === "turn" ? (
-					<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
-				) : view === "files" ? (
-					<Files tab={tab} file={state.file} setFile={setFile} />
-				) : view === "browser" ? (
-					<BrowserView tab={tab} />
-				) : view === "output" ? (
-					<Output tab={tab} />
-				) : (
-					<Running tab={tab} />
-				)}
-			</div>
+			</ResizablePanel>
 		</>
 	);
 }

@@ -19,6 +19,13 @@ import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal }
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
 import { Pulse } from "./ui.tsx";
 
+/** A picture that opens larger over the page, with a click or, focused, with Enter. */
+const zoomable = {
+	tabIndex: 0,
+	onClick: (e: React.MouseEvent<HTMLImageElement>) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
+	onKeyDown: (e: React.KeyboardEvent<HTMLImageElement>) => e.key === "Enter" && window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
+};
+
 const TONE_ICON: Record<Tone, LucideIcon> = { muted: InfoIcon, warn: TriangleAlertIcon, bad: TriangleAlertIcon, good: CheckIcon, accent: Undo2Icon };
 
 function Status({ status }: { status: "run" | "ok" | "fail" | "done" | "failed" | "cancelled" }) {
@@ -59,7 +66,7 @@ function Call({ tool, subject, status, ms, depth = 0, output, error, images }: {
 				<ToolContent className="p-2 pl-6">
 					<ToolOutput output={output ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-2 font-mono select-text">{output}</pre> : undefined} errorText={error} />
 					{(images ?? []).map((id) => (
-						<div className="it-media" key={id}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" onClick={(e) => zoom((e.target as HTMLImageElement).src)} /></div>
+						<div className="it-media" key={id}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} /></div>
 					))}
 				</ToolContent>
 			) : null}
@@ -232,7 +239,6 @@ export function Steps({ items }: { items: Array<{ text: string; status: string }
 	);
 }
 
-const zoom = (src: string) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
 
 /** One item of a conversation, drawn as what it is. */
 export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
@@ -287,7 +293,7 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 		case "media":
 			return (
 				<div className="it-media">
-					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} onClick={() => zoom(item.url)} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
+					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} {...zoomable} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
 					<div className="cap">{item.name}</div>
 				</div>
 			);

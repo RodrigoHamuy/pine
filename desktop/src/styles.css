@@ -11,7 +11,6 @@
 	--r: 10px;
 	--r-s: 7px;
 	--r-l: 14px;
-	--sidebar-w: 248px;
 	--bar-h: 44px;
 	--gap: 6px;
 	--col: 780px;
@@ -190,8 +189,8 @@ html:not([data-platform="darwin"]) .app {
 	background: var(--sunk);
 }
 .sidebar {
-	width: var(--sidebar-w);
-	flex: none;
+	flex: 1;
+	min-width: 0;
 	display: flex;
 	flex-direction: column;
 	min-height: 0;
@@ -201,13 +200,8 @@ html:not([data-platform="darwin"]) .app {
 .sidebar .side-row,
 .sidebar .side-agent,
 .sidebar .side-label [data-slot=button],
-.sidebar .side-status,
-.splitter {
+.sidebar .side-status {
 	-webkit-app-region: no-drag;
-}
-.splitter.side {
-	margin: 0 -3px;
-	z-index: 6;
 }
 .side-top {
 	height: var(--bar-h);
@@ -242,6 +236,22 @@ html:not([data-platform="darwin"]) .side-top {
 }
 .side-group {
 	margin-bottom: 4px;
+}
+/* What folds the group is the agent's line but its buttons: a button that looks like none. */
+.fold-trigger {
+	display: flex;
+	align-items: center;
+	gap: inherit;
+	flex: 1;
+	min-width: 0;
+	align-self: stretch;
+	padding: 0;
+	border: none;
+	border-radius: var(--r-s);
+	background: none;
+	color: inherit;
+	font: inherit;
+	text-align: start;
 }
 .side-agent {
 	display: flex;
@@ -681,86 +691,13 @@ kbd {
 	font-size: 12.5px;
 }
 
-/* ---- dialogs, lists to pick from, toasts ----------------------------------------------------------- */
+/* ---- lists to pick from, toasts ----------------------------------------------------------------- */
 
-.scrim {
-	position: fixed;
-	inset: 0;
-	z-index: 50;
-	background: var(--scrim);
-	display: flex;
-	align-items: flex-start;
-	justify-content: center;
-	padding-top: 12vh;
-	animation: fade 0.12s ease-out;
-}
-@keyframes fade {
-	from {
-		opacity: 0;
-	}
-}
-.dialog {
-	max-width: calc(100vw - 48px);
-	max-height: 76vh;
-	display: flex;
-	flex-direction: column;
-	background: var(--surface);
-	border: 1px solid var(--line);
-	border-radius: var(--r-l);
-	box-shadow: var(--shadow-l);
-	overflow: hidden;
-	animation: rise 0.14s ease-out;
-}
 @keyframes rise {
 	from {
 		transform: translateY(6px) scale(0.985);
 		opacity: 0;
 	}
-}
-.dialog-warn {
-	border-color: color-mix(in srgb, var(--warn) 45%, var(--line));
-}
-.dialog-accent {
-	border-color: color-mix(in srgb, var(--brand) 45%, var(--line));
-}
-.dialog-title {
-	padding: 16px 20px 0;
-	font-weight: 600;
-	font-size: 14.5px;
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-.dialog-body {
-	padding: 14px 20px 18px;
-	overflow-y: auto;
-	display: flex;
-	flex-direction: column;
-	gap: 12px;
-	user-select: text;
-}
-.dialog-foot {
-	padding: 12px 20px;
-	border-top: 1px solid var(--line-soft);
-	display: flex;
-	justify-content: flex-end;
-	gap: 8px;
-	background: var(--raised);
-}
-.pick-input {
-	width: 100%;
-	border: none;
-	outline: none;
-	background: transparent;
-	padding: 14px 18px;
-	font-size: 14.5px;
-	border-bottom: 1px solid var(--line-soft);
-}
-.pick-title {
-	padding: 12px 18px 0;
-	font-size: 12px;
-	font-weight: 600;
-	color: var(--text-muted);
 }
 .pick-list {
 	overflow-y: auto;
@@ -800,14 +737,6 @@ kbd {
 .pick-item.bad .label {
 	color: var(--bad);
 }
-.pick-group {
-	padding: 8px 12px 3px;
-	font-size: 11px;
-	font-weight: 600;
-	letter-spacing: 0.04em;
-	text-transform: uppercase;
-	color: var(--faint);
-}
 .toasts {
 	position: fixed;
 	bottom: 18px;
@@ -838,22 +767,6 @@ kbd {
 	background: var(--brand);
 	color: var(--on-accent);
 }
-.lightbox {
-	position: fixed;
-	inset: 0;
-	z-index: 90;
-	background: rgba(0, 0, 0, 0.82);
-	display: grid;
-	place-items: center;
-	padding: 32px;
-}
-.lightbox img {
-	max-width: 100%;
-	max-height: 100%;
-	border-radius: 6px;
-	box-shadow: var(--shadow-l);
-}
-
 /* ---- the conversation ------------------------------------------------------------------------------- */
 
 .conv {
@@ -1360,9 +1273,6 @@ kbd {
 .status.warn {
 	color: var(--warn);
 }
-.pick-input::placeholder {
-	color: var(--faint);
-}
 .attachment {
 	display: flex;
 	align-items: center;
@@ -1400,33 +1310,11 @@ kbd {
 
 /* ---- the panel beside a conversation ----------------------------------------------------------------- */
 
-.splitter {
-	width: var(--gap);
-	flex: none;
-	cursor: col-resize;
-	position: relative;
-}
-.splitter::after {
-	content: "";
-	position: absolute;
-	left: 2px;
-	top: 14px;
-	bottom: 14px;
-	width: 2px;
-	border-radius: 2px;
-	background: transparent;
-	transition: background 0.12s;
-}
-.splitter:hover::after,
-.splitter.drag::after {
-	background: var(--brand);
-}
-/* The panel gives way before the conversation does: in a narrow window it is the panel that gets narrower. */
 .code {
-	flex: 0 1 auto;
+	flex: 1;
 	display: flex;
 	flex-direction: column;
-	min-width: 240px;
+	min-width: 0;
 }
 .code-head {
 	height: 40px;
@@ -1576,6 +1464,19 @@ kbd {
 }
 .frow.on {
 	background: var(--press);
+}
+/* The lists and the tree are one tab stop each; the row that has focus shows it, from the keyboard. */
+[data-slot="listbox"],
+[data-slot="tree"],
+[data-slot="tree-item"] {
+	outline: none;
+}
+.frow:focus-visible,
+.side-row:focus-visible,
+[data-slot="tree-item"]:focus-visible > .frow,
+.fold-trigger:focus-visible {
+	outline: 2px solid color-mix(in srgb, var(--brand) 60%, transparent);
+	outline-offset: -2px;
 }
 .frow .st {
 	width: 14px;

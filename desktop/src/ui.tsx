@@ -1,8 +1,7 @@
 // The small parts of pine's own that everything else is built from, on shadcn's components: the
-// logo, the working dot, a labelled field, a choice, a dialog, a text that grows, an empty view.
+// logo, the working dot, a labelled field, a choice, a text that grows, an empty view.
 import type { LucideIcon } from "lucide-react";
 import { cloneElement, isValidElement, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -75,29 +74,6 @@ export function Choice({ value, options, onChange, id, disabled }: { value: stri
 	);
 }
 
-/** A window over the page that asks for one thing. Escape and a click beside it close it. */
-export function Dialog({ title, children, onClose, width = 520, tone, footer }: { title?: ReactNode; children: ReactNode; onClose?: () => void; width?: number; tone?: "warn" | "accent"; footer?: ReactNode }) {
-	useEffect(() => {
-		const key = (e: KeyboardEvent) => {
-			if (e.key === "Escape" && onClose) {
-				e.stopPropagation();
-				onClose();
-			}
-		};
-		window.addEventListener("keydown", key, true);
-		return () => window.removeEventListener("keydown", key, true);
-	}, [onClose]);
-	return (
-		<div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}>
-			<div className={`dialog${tone ? ` dialog-${tone}` : ""}`} style={{ width }} role="dialog" aria-modal="true">
-				{title ? <div className="dialog-title">{title}</div> : null}
-				<div className="dialog-body">{children}</div>
-				{footer ? <div className="dialog-foot">{footer}</div> : null}
-			</div>
-		</div>
-	);
-}
-
 /** A text field that grows with what is typed into it. */
 export function AutoText({ value, onChange, minRows = 3, maxRows = 24, mono, className, ...rest }: { value: string; onChange: (v: string) => void; minRows?: number; maxRows?: number; mono?: boolean } & Omit<React.TextareaHTMLAttributes<HTMLTextAreaElement>, "onChange" | "value">) {
 	const ref = useRef<HTMLTextAreaElement>(null);
@@ -118,31 +94,6 @@ export function Empty({ icon: Icon, title, children }: { icon?: LucideIcon; titl
 			<div className="empty-title">{title}</div>
 			{children ? <div className="empty-text">{children}</div> : null}
 		</div>
-	);
-}
-
-/** Ask twice before something that cannot be taken back: the first click arms the button, the second does it. */
-export function Confirm({ label, sure = "Sure?", onConfirm, icon: Icon, small = true }: { label?: string; sure?: string; onConfirm: () => void; icon?: LucideIcon; small?: boolean }) {
-	const [armed, setArmed] = useState(false);
-	useEffect(() => {
-		if (!armed) return;
-		const t = window.setTimeout(() => setArmed(false), 3000);
-		return () => window.clearTimeout(t);
-	}, [armed]);
-	const iconOnly = !armed && Icon;
-	return (
-		<Button
-			variant={armed ? "destructive" : "ghost"}
-			size={iconOnly ? (small ? "icon-xs" : "icon") : small ? "xs" : "default"}
-			title={label}
-			onClick={(e) => {
-				e.stopPropagation();
-				if (armed) onConfirm();
-				setArmed(!armed);
-			}}
-		>
-			{armed ? sure : Icon ? <Icon /> : label}
-		</Button>
 	);
 }
 

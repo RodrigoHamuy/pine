@@ -49,7 +49,7 @@ async function sees(selector: string, timeout = 20_000): Promise<void> {
 		await page.waitForSelector(selector, { timeout });
 	} catch {
 		await shot(`failed-${selector.replace(/[^a-z0-9]+/gi, "-").slice(0, 40)}`);
-		const there = await page.evaluate(() => ({ text: (document.querySelector(".column, .set-in, .events-list, .gate") as HTMLElement | null)?.innerText?.slice(-1500), toasts: [...document.querySelectorAll(".toast")].map((t) => t.textContent), dialog: (document.querySelector(".dialog") as HTMLElement | null)?.innerText?.slice(0, 600) }));
+		const there = await page.evaluate(() => ({ text: (document.querySelector(".column, .set-in, .events-list, .gate") as HTMLElement | null)?.innerText?.slice(-1500), toasts: [...document.querySelectorAll(".toast")].map((t) => t.textContent), dialog: (document.querySelector("[data-slot=dialog-content]") as HTMLElement | null)?.innerText?.slice(0, 600) }));
 		throw new Error(`"${selector}" did not appear. On screen: ${JSON.stringify(there, null, 1)}${pageErrors.length ? `\nErrors in the page:\n${pageErrors.join("\n")}` : ""}`);
 	}
 }
@@ -123,15 +123,19 @@ after(async () => {
 	for (const dir of [home, folder]) if (dir) fs.rmSync(dir, { recursive: true, force: true });
 });
 
+/** The edge between the side bar and the rest of the window, and the one before the panel beside a conversation. */
+const SIDE_EDGE = "[data-slot=resizable-panel]:has(.sidebar) + [data-slot=resizable-handle]";
+const CODE_EDGE = "[data-slot=resizable-handle]:has(+ [data-slot=resizable-panel] > * > .code)";
+
 test("starts a daemon of its own and shows the main agent", async () => {
 	await sees(".welcome h1");
 	assert.equal(await page.textContent(".welcome h1"), "main");
 	// This home has no browser for the web tools in the build its pine drives (the folder for it
 	// is empty): that is asked once, at the start, and "Not now" is remembered.
-	await sees(".dialog-title >> text=The browser for the web tools is not on this Mac");
+	await sees("[data-slot=dialog-title] >> text=The browser for the web tools is not on this Mac");
 	await shot("00-browser");
-	await page.click(".dialog-foot [data-slot=button] >> text=Not now");
-	await page.waitForSelector(".dialog", { state: "detached" });
+	await page.click("[data-slot=dialog-footer] [data-slot=button] >> text=Not now");
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	assert.match(await page.textContent(".side-status"), /started here/);
 	const agents = await page.$$eval(".side-agent .who > :first-child", (els: Element[]) => els.map((e) => e.textContent?.trim()));
 	assert.deepEqual(agents, ["main", "scout"]);
@@ -178,13 +182,13 @@ test("a newer app is said at the start and when asked, with a link to its page o
 		return found.length;
 	});
 	assert.equal(inMenu, 1);
-	await sees(".dialog-title >> text=Pine 9.9.9 is available");
+	await sees("[data-slot=dialog-title] >> text=Pine 9.9.9 is available");
 	assert.equal(releases.asked, 2);
-	const body = await page.textContent(".dialog-body");
+	const body = await page.textContent("[data-slot=dialog-content]");
 	assert.ok(body.includes(`This is Pine ${mine}.`) && body.includes(link), body);
 	await shot("01-update-asked");
-	await page.click(".dialog-foot [data-slot=button] >> text=Open the release page");
-	await page.waitForSelector(".dialog", { state: "detached" });
+	await page.click("[data-slot=dialog-footer] [data-slot=button] >> text=Open the release page");
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	// The link is GitHub's page of that release, not the address the answer named.
 	assert.deepEqual(await opened(), [link, link]);
 	// Nobody answers: that is said, and what was found before stays.
@@ -204,7 +208,7 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	releases.tag = "v9.9.9";
 	await page.click(".item.updates [data-slot=button] >> text=Check now");
 	await sees(".item.updates .tag.warn >> text=9.9.9 is available");
-	await page.click(".dialog-foot [data-slot=button] >> text=Not now");
+	await page.click("[data-slot=dialog-footer] [data-slot=button] >> text=Not now");
 	await page.click(".item.updates [data-slot=button] >> text=Release page");
 	assert.deepEqual(await opened(), [link, link, link]);
 	const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
@@ -337,6 +341,56 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	await shot("02-answer");
 });
 
+/** Where focus is: the field's role, and the option it marks active, as a screen reader hears them. */
+const activeOption = () =>
+	page.evaluate(() => {
+		const field = document.activeElement as HTMLElement;
+		const id = field.getAttribute("aria-activedescendant");
+		const option = id ? document.getElementById(id) : null;
+		return { inDialog: Boolean(field.closest("[role=dialog]")), role: field.getAttribute("role"), option: option?.getAttribute("role"), selected: option?.getAttribute("aria-selected"), text: option?.textContent ?? "", list: Boolean(option?.closest("[role=listbox]")) };
+	});
+
+/** Tab stays inside the dialog: past its last stop, the dialog's focus guard hands focus back to its first (in the next frame). */
+const stillInside = () => page.waitForFunction(() => Boolean(document.activeElement?.closest("[role=dialog]")) && !document.activeElement?.hasAttribute("data-base-ui-focus-guard"), undefined, { timeout: 2000 });
+
+/** The text a dialog is announced by: what its aria-labelledby points at. */
+const announced = (selector: string) =>
+	page.$eval(selector, (d: Element) => (d.getAttribute("aria-labelledby") ?? "").split(" ").map((id) => document.getElementById(id)?.textContent ?? "").join(" ").trim());
+
+test("a model is chosen from its picker with the keyboard alone, and focus goes back to the chip", async () => {
+	const chip = ".composer button[title^='Model:']";
+	const focused = () => page.evaluate((s: string) => document.activeElement === document.querySelector(s), chip);
+	await page.focus(chip);
+	await page.keyboard.press("Enter");
+	await sees("[data-slot=dialog-content] [role=listbox] [role=option]");
+	await sees("[data-slot=dialog-content] [role=combobox][aria-activedescendant]");
+	// It is announced by its title.
+	assert.match(await announced("[data-slot=dialog-content]"), /^Model for main/);
+	// Its models are options in a list, the one in use marked active, and Tab stays inside.
+	let at = await activeOption();
+	assert.deepEqual([at.inDialog, at.role, at.option, at.selected, at.list], [true, "combobox", "option", "true", true], JSON.stringify(at));
+	assert.match(at.text, /mock\/m/);
+	await page.keyboard.press("Tab");
+	await stillInside();
+	// Escape closes it, and focus is back on the chip.
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
+	assert.equal(await focused(), true);
+	// Arrows move, Enter chooses.
+	await page.keyboard.press("Enter");
+	await sees("[data-slot=dialog-content] [role=listbox] [role=option]");
+	const count = await page.$$eval("[data-slot=dialog-content] [role=option]", (els: Element[]) => els.length);
+	await page.keyboard.press("ArrowDown");
+	if (count > 1) assert.doesNotMatch((await activeOption()).text, /^mock\/m/);
+	await page.keyboard.press("ArrowUp");
+	at = await activeOption();
+	assert.match(at.text, /mock\/m/);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
+	assert.equal(await focused(), true);
+	assert.match((await page.getAttribute(chip, "title")) ?? "", /mock\/m/);
+});
+
 test("what an answer points at on the web is not fetched by itself, and what it writes as HTML is cleaned", async () => {
 	// A picture the page tried to load from an address the policy refuses would be said here.
 	await page.evaluate(() => {
@@ -391,12 +445,38 @@ test("a folded part that was opened stays open while the answer goes on", async 
 	assert.equal(await page.locator(".md", { hasText: "hidden part" }).last().locator("details").evaluate((d: HTMLDetailsElement) => d.open), true);
 });
 
+test("a picture opens over the page, and Escape closes it back onto the picture", async () => {
+	const picture = await app.evaluate(({ nativeImage }: any) => nativeImage.createFromBitmap(Buffer.alloc(40 * 30 * 4, 180), { width: 40, height: 30 }).toPNG().toString("base64"));
+	fs.writeFileSync(path.join(home, "agents", "main", "workspace", "okapi.png"), Buffer.from(picture, "base64"));
+	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "read", args: { path: "okapi.png" } }] }, { text: "an okapi" }], "picture "));
+	await page.keyboard.press("Enter");
+	const img = ".it-media img";
+	await sees(img);
+	await page.click(img);
+	await sees("[data-slot=dialog-content][role=dialog] img");
+	await page.keyboard.press("Escape");
+	await page.waitForFunction(() => !document.querySelector("[data-slot=dialog-content]"));
+	assert.equal(await page.evaluate((s: string) => document.activeElement === document.querySelector(s), img), true);
+	// A press beside the picture closes it too.
+	await page.click(img);
+	await sees("[data-slot=dialog-content][role=dialog] img");
+	await page.mouse.click(5, 5);
+	await page.waitForFunction(() => !document.querySelector("[data-slot=dialog-content]"));
+	// From the keyboard: Enter on the focused picture opens it, and Escape gives focus back to it.
+	await page.focus(img);
+	await page.keyboard.press("Enter");
+	await sees("[data-slot=dialog-content][role=dialog] img");
+	await page.keyboard.press("Escape");
+	await page.waitForFunction(() => !document.querySelector("[data-slot=dialog-content]"));
+	assert.equal(await page.evaluate((s: string) => document.activeElement === document.querySelector(s), img), true);
+});
+
 test("an approval is asked in a dialog and answered from it, and so is a question", async () => {
 	// The owner listed bash under "approve": it asks in every mode.
 	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo hello" } }] }, { tools: [{ name: "question", args: { question: "Which database?", choices: ["the old one", "the new one"] } }] }, { text: "done" }], "run it "));
 	await page.keyboard.press("Enter");
-	await sees(".dialog-warn");
-	assert.match(await page.textContent(".dialog-warn"), /Approval needed[\s\S]*echo hello/);
+	await sees("[data-slot=dialog-content][data-tone=warn]");
+	assert.match(await page.textContent("[data-slot=dialog-content][data-tone=warn]"), /Approval needed[\s\S]*echo hello/);
 	await shot("03-approval");
 	// What is at work is a dot that breathes, and all of them breathe in step, whenever each appeared:
 	// here the line of the turn's work and the line under the conversation, which came one after the other.
@@ -404,15 +484,15 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	assert.ok(breaths.length >= 2, `${breaths.length} dots at work`);
 	assert.deepEqual([...new Set(breaths.map((b: any) => `${b.start}/${b.every}`))], ["0/2000"], JSON.stringify(breaths));
 	assert.equal(await page.$$eval(".spinner", (els: Element[]) => els.length), 0);
-	await page.click(".dialog-warn [data-slot=button] >> text=/^Allow/");
+	await page.click("[data-slot=dialog-content][data-tone=warn] [data-slot=button] >> text=/^Allow/");
 	await sees('[data-item="approval"][data-state="allowed"]');
 	// Then the agent asks something: the answers it offers, the recommended one first.
-	await sees(".dialog-accent");
-	assert.match(await page.textContent(".dialog-accent"), /Which database\?[\s\S]*the old one[\s\S]*the new one/);
+	await sees("[data-slot=dialog-content][data-tone=accent]");
+	assert.match(await page.textContent("[data-slot=dialog-content][data-tone=accent]"), /Which database\?[\s\S]*the old one[\s\S]*the new one/);
 	await shot("03-question");
 	await page.keyboard.press("2");
 	await sees('[data-item="approval"][data-state="allowed"] >> text=Answered');
-	await page.waitForSelector(".dialog", { state: "detached" });
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	await sees(".md >> text=done");
 });
 
@@ -420,9 +500,9 @@ test("what is asked is answered from the conversation too: an approval by its bu
 	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo again" } }] }, { tools: [{ name: "question", args: { question: "Which colour?", choices: ["green", "blue"] } }] }, { text: "answered from the line" }], "ask in line "));
 	await page.keyboard.press("Enter");
 	// The dialog is put off ("Later"); the request stays in the conversation, with what it is and why.
-	await sees(".dialog-warn");
+	await sees("[data-slot=dialog-content][data-tone=warn]");
 	await page.keyboard.press("Escape");
-	await page.waitForSelector(".dialog", { state: "detached" });
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	const asked = '[data-item="approval"][data-state="open"] [data-slot="alert"]';
 	await sees(`${asked} >> text=Approval needed`);
 	assert.match(await page.textContent(asked), /echo again/);
@@ -430,9 +510,9 @@ test("what is asked is answered from the conversation too: an approval by its bu
 	await page.click(`${asked} button:has-text("Allow once")`);
 	await sees('[data-item="approval"][data-state="allowed"] >> text=Allowed');
 	// The question offers its answers as suggestions; one click answers.
-	await sees(".dialog-accent");
+	await sees("[data-slot=dialog-content][data-tone=accent]");
 	await page.keyboard.press("Escape");
-	await page.waitForSelector(".dialog", { state: "detached" });
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	await sees(`${asked} >> text=Which colour?`);
 	await page.click(`${asked} button:has-text("blue")`);
 	await sees('[data-item="approval"][data-state="allowed"] >> text=Answered');
@@ -443,13 +523,31 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	// As the system does it when a folder is dropped on the app's icon.
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
 	// With several agents the app asks whose folder it is; the one in front is offered first.
-	await sees(".pick-title >> text=Which agent works in");
+	await sees("[data-slot=dialog-title] >> text=Which agent works in");
 	await page.keyboard.press("Enter");
 	await sees(".tab.on .name >> text=pine-desktop-folder");
 	await page.click(".conv-head [data-slot=button][title*='workspace']");
 	// The panel begins with the agent: who it is and what it runs on.
 	await sees(".agent-view .agent-name >> text=main");
 	assert.match(await page.textContent(".agent-view"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
+	// The panel is as wide as it is dragged, by the edge before it, and the keyboard moves that edge too.
+	const was = await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width);
+	const edge = await page.$eval(CODE_EDGE, (el: Element) => el.getBoundingClientRect());
+	await page.mouse.move(edge.x + edge.width / 2, 300);
+	await page.mouse.down();
+	await page.mouse.move(edge.x + edge.width / 2 - 60, 300, { steps: 4 });
+	await page.mouse.up();
+	assert.equal(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width), was + 60);
+	await page.focus(`${CODE_EDGE}[role='separator']`);
+	await page.keyboard.press("ArrowLeft");
+	await page.waitForFunction((w) => document.querySelector(".code")!.getBoundingClientRect().width > w, was + 60);
+	// Loaded again, it is as wide as it was left (to the pixel).
+	const wide = Math.round(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width));
+	await page.reload();
+	await sees(".tab.on .name >> text=pine-desktop-folder");
+	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	await sees(".code");
+	assert.equal(Math.round(await page.$eval(".code", (el: Element) => el.getBoundingClientRect().width)), wide);
 	// However narrow the panel is, the names of its views stay whole on one line.
 	// (On one line: no taller than the control's own height, 32 pixels.)
 	assert.ok((await page.$eval(".code [data-slot=tabs-trigger] >> text=Last turn", (b: Element) => b.getBoundingClientRect().height)) <= 32);
@@ -475,6 +573,72 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	for (let i = 0; i < 50 && !fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8").includes("43"); i++) await new Promise((r) => setTimeout(r, 100));
 	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n");
 	await shot("05-editor");
+	// Leaving what was typed and not saved is asked in the app: staying keeps it, leaving drops it.
+	await page.keyboard.type("// draft");
+	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await sees("[role=alertdialog] >> text=without saving");
+	await page.click("[role=alertdialog] [data-slot=alert-dialog-cancel] >> text=Cancel");
+	await page.waitForFunction(() => !document.querySelector("[role=alertdialog]"));
+	assert.ok(await page.$(".editor .cm-content"));
+	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.click("[role=alertdialog] [data-slot=alert-dialog-action] >> text=Leave");
+	await page.waitForFunction(() => !document.querySelector(".editor"));
+	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n");
+});
+
+const focused = () =>
+	page.evaluate(() => {
+		const el = document.activeElement as HTMLElement;
+		return { role: el.getAttribute("role"), expanded: el.getAttribute("aria-expanded"), text: (el.querySelector("[data-slot=tree-label]") ?? el).textContent ?? "" };
+	});
+
+test("a file is opened from the panel's tree, its changes and its search with the keyboard alone", async () => {
+	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
+	// The test before left a file open in the editor.
+	if (await page.$(".editor")) await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.click(".code [data-slot=tabs-trigger] >> text=Files");
+	await sees(".code [role=tree] [role=treeitem]");
+	// From the find field, Tab reaches the tree after the refresh button: one stop.
+	await page.focus(".code-sub input");
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Tab");
+	assert.equal((await focused()).role, "treeitem");
+	// Typing finds the folder, the right arrow opens it and goes in, Enter opens the file.
+	await page.keyboard.type("src");
+	assert.deepEqual([(await focused()).text.trim(), (await focused()).expanded], ["src", "false"]);
+	await page.keyboard.press("ArrowRight");
+	await page.waitForFunction(() => document.activeElement?.getAttribute("aria-expanded") === "true");
+	await sees(".code [role=treeitem] >> text=index.ts");
+	await page.keyboard.press("ArrowRight");
+	assert.match((await focused()).text, /index\.ts/);
+	await page.keyboard.press("ArrowLeft");
+	assert.deepEqual([(await focused()).text.trim(), (await focused()).expanded], ["src", "true"]);
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("Enter");
+	await sees(".editor .cm-content");
+	assert.match(await page.textContent(".editor .cm-content"), /answer = 43/);
+	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	// The file search's results are a list: Tab reaches it, Enter opens one.
+	await page.fill(".code-sub input", "index");
+	await sees(".code [role=listbox] [role=option] >> text=src/index.ts");
+	await page.focus(".code-sub input");
+	await page.keyboard.press("Tab");
+	await page.keyboard.press("Tab");
+	assert.equal((await focused()).role, "option");
+	await page.keyboard.press("Enter");
+	await sees(".editor .cm-content");
+	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.fill(".code-sub input", "");
+	// So are the changes: Tab from the refresh button, Enter opens the diff.
+	await page.click(".code [data-slot=tabs-trigger] >> text=Changes");
+	await sees(".code [role=listbox] [role=option]");
+	await page.focus(".code-sub [data-slot=button][title='Read again']");
+	await page.keyboard.press("Tab");
+	assert.equal((await focused()).role, "option");
+	await page.keyboard.press("Enter");
+	await sees(".diff");
+	await page.click(".code-sub [data-slot=button][title='Back to the list']");
+	await page.click(".code [data-slot=tabs-trigger] >> text=Files");
 });
 
 /** The composer's field, and the suggestion it marks active, as a screen reader hears them. */
@@ -594,9 +758,9 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// Agents: make one.
 	await page.click(".set-nav .side-row >> text=Agents");
 	await page.click("[data-slot=button] >> text=New agent");
-	await page.fill(".dialog input.mono", "books");
-	await page.fill(".dialog [data-slot=field]:nth-of-type(2) input", "Keeps the books");
-	await page.click(".dialog [data-slot=button] >> text=Create agent");
+	await page.fill("[data-slot=dialog-content] input.mono", "books");
+	await page.fill("[data-slot=dialog-content] [data-slot=field]:nth-of-type(2) input", "Keeps the books");
+	await page.click("[data-slot=dialog-content] [data-slot=button] >> text=Create agent");
 	await sees(".set-in h1 >> text=books");
 	assert.ok(fs.existsSync(path.join(home, "agents", "books", "agent.json")));
 	// It is in the side bar at once, with the others.
@@ -617,27 +781,28 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.click(".set-in h2 [data-slot=button] >> text=/Show all/");
 	const row = page.locator(".item", { has: page.locator(".tag.mono", { hasText: /^opencode$/ }) }).first();
 	await row.locator("[data-slot=button] >> text=API key").click();
-	await sees(".dialog input[type=password]");
-	await page.fill(".dialog input[type=password]", "sk-test-not-a-real-key-0123456789");
-	await page.click(".dialog [data-slot=button] >> text=Continue");
-	await sees(".dialog .notice.plain");
-	assert.doesNotMatch(await page.textContent(".dialog"), /sk-test-not-a-real-key/);
+	await sees("[data-slot=dialog-content] input[type=password]");
+	await page.fill("[data-slot=dialog-content] input[type=password]", "sk-test-not-a-real-key-0123456789");
+	await page.click("[data-slot=dialog-content] [data-slot=button] >> text=Continue");
+	await sees("[data-slot=dialog-content] .notice.plain");
+	assert.doesNotMatch(await page.textContent("[data-slot=dialog-content]"), /sk-test-not-a-real-key/);
 	await shot("09-settings-sign-in");
 	assert.match(fs.readFileSync(path.join(home, "auth.json"), "utf8"), /opencode/);
 	// A sign-in changes no agent's model, so the dialog offers the new ones for all agents.
-	await page.click(".dialog [data-slot=button] >> text=Choose the model your agents run on");
-	await sees(".pick-title >> text=Model for every agent that has none of its own");
-	const offered = await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent ?? ""));
+	await page.click("[data-slot=dialog-content] [data-slot=button] >> text=Choose the model your agents run on");
+	await sees("[data-slot=dialog-title] >> text=Model for every agent that has none of its own");
+	const offered = await page.$$eval("[data-slot=command-item] .label", (els: Element[]) => els.map((e) => e.textContent ?? ""));
 	assert.ok(offered.length > 0 && offered.every((m) => m.startsWith("opencode/")), JSON.stringify(offered.slice(0, 5)));
-	await page.click(".pick-item >> nth=0");
+	await page.click("[data-slot=command-item] >> nth=0");
 	await sees(`.toast >> text=Your agents now run on ${offered[0]}`);
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, offered[0]);
 	await sees(`.item.fallback-model .name >> text=${offered[0]}`);
 	// Signed out again, that model cannot answer: the page says so for each agent it leaves without
 	// one, and so does the welcome of such an agent's conversation, with the way to this page.
 	const signedIn = page.locator(".item", { has: page.locator(".tag.mono", { hasText: /^opencode$/ }) }).first();
-	await signedIn.locator("[data-slot=button] >> text=Sign out").click();
-	await signedIn.locator("[data-slot=button] >> text=Sign out?").click();
+	await signedIn.locator("[data-slot=alert-dialog-trigger] >> text=Sign out").click();
+	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=/^Sign out of /");
+	await page.click("[data-slot=alert-dialog-action] >> text=Sign out");
 	await sees(".item .notice >> text=/main cannot answer: .* needs a sign-in to opencode/");
 	await page.click(".tab:has-text('pine-desktop-folder')");
 	await sees(".welcome .notice >> text=/needs a sign-in to opencode/");
@@ -646,8 +811,8 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees(".set-in h1 >> text=Models");
 	// "Change" offers every model that can be used now.
 	await page.click(".item.fallback-model [data-slot=button] >> text=Change");
-	await sees(".pick-title >> text=Model for every agent that has none of its own");
-	await page.click(".pick-item >> text=mock/m");
+	await sees("[data-slot=dialog-title] >> text=Model for every agent that has none of its own");
+	await page.click("[data-slot=command-item] >> text=mock/m");
 	await sees(".toast >> text=Your agents now run on mock/m");
 	await page.waitForSelector(".item .notice", { state: "detached" });
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, "mock/m");
@@ -667,8 +832,17 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 		await shot("09-settings-mcp-sign-in");
 		assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"notes"/);
 		// And taken out again: the file is as it was.
-		await server.locator("[data-slot=button] >> text=Remove").click();
-		await server.locator("[data-slot=button] >> text=Remove it?").click();
+		await server.locator("[data-slot=alert-dialog-trigger] >> text=Remove").click();
+		await sees("[role=alertdialog] >> text=Remove the MCP server notes?");
+		// Asked in an alert dialog, announced by its question; Escape closes it onto the button, and nothing is removed.
+		assert.equal(await announced("[role=alertdialog]"), "Remove the MCP server notes?");
+		await page.keyboard.press("Escape");
+		await page.waitForSelector("[role=alertdialog]", { state: "detached" });
+		assert.equal(await server.locator("[data-slot=alert-dialog-trigger] >> text=Remove").evaluate((b: Element) => b === document.activeElement), true);
+		assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"notes"/);
+		await server.locator("[data-slot=alert-dialog-trigger] >> text=Remove").click();
+		await sees("[role=alertdialog] >> text=Remove the MCP server notes?");
+		await page.click("[data-slot=alert-dialog-action] >> text=Remove");
 		await server.waitFor({ state: "detached", timeout: 15_000 });
 		assert.doesNotMatch(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"notes"/);
 	} finally {
@@ -687,18 +861,18 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// Events: a folder to watch, set up from the type's own options.
 	await page.click(".set-nav .side-row >> text=Events");
 	await page.click("[data-slot=button] >> text=New source");
-	await page.fill(".dialog input[placeholder='scans']", "scans");
-	await page.locator(".dialog [data-slot=field]", { has: page.locator("[data-slot=field-label]", { hasText: /^Type$/ }) }).locator("[role=combobox]").click();
+	await page.fill("[data-slot=dialog-content] input[placeholder='scans']", "scans");
+	await page.locator("[data-slot=dialog-content] [data-slot=field]", { has: page.locator("[data-slot=field-label]", { hasText: /^Type$/ }) }).locator("[role=combobox]").click();
 	await page.click("[role=option] >> text=/^folder:/");
 	// Chosen with a click, the list closes and stays closed.
 	await page.waitForSelector("[data-slot=select-content][data-open]", { state: "detached" });
 	const watched = path.join(folder, "scans");
 	fs.mkdirSync(watched, { recursive: true });
-	await page.locator(".dialog [data-slot=field]", { has: page.locator("[data-slot=field-label]", { hasText: /^dir/ }) }).locator("input").fill(watched);
+	await page.locator("[data-slot=dialog-content] [data-slot=field]", { has: page.locator("[data-slot=field-label]", { hasText: /^dir/ }) }).locator("input").fill(watched);
 	await shot("09-settings-new-source");
-	await page.click(".dialog [data-slot=button] >> text=Continue");
-	await sees(".dialog >> text=will:");
-	await page.click(".dialog [data-slot=button] >> text=Add source");
+	await page.click("[data-slot=dialog-content] [data-slot=button] >> text=Continue");
+	await sees("[data-slot=dialog-content] >> text=will:");
+	await page.click("[data-slot=dialog-content] [data-slot=button] >> text=Add source");
 	await sees(".item .name >> text=scans");
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"scans"/);
 	await shot("09-settings-sources");
@@ -793,14 +967,20 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(one.row, 30, "an agent's line is as high as a conversation's");
 	// The side bar is as wide as it is dragged.
 	const before = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
-	const edge = await page.$eval(".splitter.side", (el: Element) => el.getBoundingClientRect());
+	const edge = await page.$eval(SIDE_EDGE, (el: Element) => el.getBoundingClientRect());
 	await page.mouse.move(edge.x + edge.width / 2, 300);
 	await page.mouse.down();
 	await page.mouse.move(edge.x + edge.width / 2 + 80, 300, { steps: 4 });
 	await page.mouse.up();
 	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), before + 80);
-	// Hidden, the side bar is still hidden when the page is loaded again, and shown it is as wide as it was.
-	const wide = await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width);
+	// The edge is a separator the keyboard moves too: focused, an arrow key makes the side bar wider.
+	await page.focus(`${SIDE_EDGE}[role='separator']`);
+	assert.ok(await page.getAttribute(SIDE_EDGE, "aria-valuenow"), "the edge says how far it is");
+	await page.keyboard.press("ArrowRight");
+	await page.waitForFunction((was) => document.querySelector(".sidebar")!.getBoundingClientRect().width > was, before + 80);
+	// Hidden, the side bar is still hidden when the page is loaded again, and shown it is as wide as it was
+	// (to the pixel: the edges place panels by fractions of the window, a few hundredths of a pixel apart).
+	const wide = Math.round(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width));
 	await menu("sidebar");
 	await page.waitForSelector(".sidebar", { state: "detached" });
 	await page.reload();
@@ -808,7 +988,7 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(await page.locator(".sidebar").count(), 0);
 	await menu("sidebar");
 	await sees(".sidebar");
-	assert.equal(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width), wide);
+	assert.equal(Math.round(await page.$eval(".sidebar", (el: Element) => el.getBoundingClientRect().width)), wide);
 	await page.reload();
 	await sees(".sidebar .side-agent");
 	// A group folds away on a click on its agent, and comes back.
@@ -834,16 +1014,16 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await page.click(".tab.on .close");
 	// Search finds a conversation by what was said in it, and opens it with the words marked.
 	await menu("palette");
-	await sees(".pick-input");
+	await sees("[data-slot=command-input]");
 	// By words that are only in an answer of the agent's, never in a name:
 	await page.keyboard.type("echo[where");
-	await sees(".pick-group >> text=Said in conversations");
-	assert.match(await page.textContent(".pick-list"), /scout · where is the okapi invoice[\s\S]*ECHO\[where is the okapi invoice\]/);
+	await sees("[cmdk-group-heading] >> text=Said in conversations");
+	assert.match(await page.textContent("[data-slot=command-list]"), /scout · where is the okapi invoice[\s\S]*ECHO\[where is the okapi invoice\]/);
 	await shot("15-search");
 	// By words that are also its name, it is listed once, and still opens at the words.
-	await page.fill(".pick-input", "okapi invoice");
-	await page.waitForFunction(() => document.querySelectorAll(".pick-item").length > 0 && [...document.querySelectorAll(".pick-item .label")].filter((e) => /where is the okapi invoice/.test(e.textContent ?? "")).length === 1);
-	await page.click(".pick-item:has-text('scout · where is the okapi invoice')");
+	await page.fill("[data-slot=command-input]", "okapi invoice");
+	await page.waitForFunction(() => document.querySelectorAll("[data-slot=command-item]").length > 0 && [...document.querySelectorAll("[data-slot=command-item] .label")].filter((e) => /where is the okapi invoice/.test(e.textContent ?? "")).length === 1);
+	await page.click("[data-slot=command-item]:has-text('scout · where is the okapi invoice')");
 	await sees(".tab.on .name >> text=where is the okapi invoice");
 	await sees(".find >> text=/\\d+ of \\d+/");
 	assert.equal(await page.inputValue(".find input"), "okapi invoice");
@@ -853,9 +1033,33 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await menu("events");
 	await sees(".tab.on .name >> text=Events");
 	await menu("new");
-	await sees(".pick-title >> text=New conversation with");
-	assert.deepEqual(await page.$$eval(".pick-item .label", (els: Element[]) => els.map((e) => e.textContent)), ["main", "scout", "books", "test"]);
+	await sees("[data-slot=dialog-title] >> text=New conversation with");
+	assert.deepEqual(await page.$$eval("[data-slot=command-item] .label", (els: Element[]) => els.map((e) => e.textContent)), ["main", "scout", "books", "test"]);
 	await page.keyboard.press("Escape");
+	await page.click(".tab.on .close");
+});
+
+test("a conversation is opened from the side bar with the keyboard alone, and a group folds from it", async () => {
+	const group = page.locator(".side-group", { has: page.locator(".who > :first-child", { hasText: /^scout$/ }) });
+	const fold = group.locator("[data-slot=collapsible-trigger]");
+	await fold.focus();
+	assert.equal(await fold.getAttribute("aria-expanded"), "true");
+	await page.keyboard.press("Enter");
+	await page.waitForFunction(() => document.activeElement?.getAttribute("aria-expanded") === "false");
+	assert.equal(await group.locator(".side-conv").count(), 0);
+	await page.keyboard.press("Space");
+	await page.waitForFunction(() => document.activeElement?.getAttribute("aria-expanded") === "true");
+	assert.ok((await group.locator(".side-conv").count()) > 0);
+	// Its conversations are one stop after the agent's plus: Tab goes in, the arrows move, Enter opens.
+	await page.keyboard.press("Tab");
+	assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("title")), "New conversation with scout");
+	await page.keyboard.press("Tab");
+	const at = () => page.evaluate(() => ({ role: document.activeElement?.getAttribute("role"), text: document.activeElement?.textContent ?? "" }));
+	assert.equal((await at()).role, "option");
+	for (let i = 0; i < 6 && !/where is the okapi invoice/.test((await at()).text); i++) await page.keyboard.press("ArrowDown");
+	assert.match((await at()).text, /where is the okapi invoice/);
+	await page.keyboard.press("Enter");
+	await sees(".tab.on .name >> text=where is the okapi invoice");
 	await page.click(".tab.on .close");
 });
 
@@ -889,9 +1093,12 @@ test("a right click on an agent offers to remove it, and never the main agent", 
 	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "Agent settings…"]);
 	assert.deepEqual(await shown("spare", "remove"), ["New conversation with spare", "Open a folder with spare…", "Agent settings…", "Remove spare…"]);
 	// It asks first, and how: nothing is removed by the menu alone.
-	await sees(".pick-title >> text=Remove the agent spare?");
+	// It is an alert dialog: it does not go away with a stray click beside it.
+	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the agent spare?");
+	await page.mouse.click(5, 5);
+	await sees("[role=alertdialog]");
 	assert.ok(fs.existsSync(path.join(home, "agents", "spare", "agent.json")));
-	await page.click(".pick-item:has-text('Remove it with everything it has')");
+	await page.click("[data-slot=command-item]:has-text('Remove it with everything it has')");
 	await sees(".toast >> text=Removed the agent spare.");
 	await page.waitForFunction(() => ![...document.querySelectorAll(".side-agent .who > :first-child")].some((e) => e.textContent?.trim() === "spare"));
 	assert.equal(fs.existsSync(path.join(home, "agents", "spare")), false);
@@ -900,11 +1107,37 @@ test("a right click on an agent offers to remove it, and never the main agent", 
 	assert.ok(fs.existsSync(path.join(home, "agents", "main", "agent.json")));
 });
 
+test("a conversation is opened from the palette with the keyboard alone", async () => {
+	await menu("palette");
+	await sees("[data-slot=dialog-content] [role=listbox]");
+	assert.equal((await activeOption()).role, "combobox");
+	assert.equal(await announced("[data-slot=dialog-content]"), "Search everything");
+	await page.keyboard.press("Tab");
+	await stillInside();
+	await page.keyboard.press("Shift+Tab");
+	await stillInside();
+	assert.equal((await activeOption()).role, "combobox");
+	await page.keyboard.type("where is the okapi");
+	// Its results keep their group headers.
+	await sees("[cmdk-group-heading] >> text=Conversations");
+	await sees("[role=option] >> text=scout · where is the okapi invoice");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowUp");
+	const at = await activeOption();
+	assert.deepEqual([at.option, at.selected, at.list], ["option", "true", true], JSON.stringify(at));
+	assert.match(at.text, /scout · where is the okapi invoice/);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
+	await sees(".tab.on .name >> text=where is the okapi invoice");
+	await page.keyboard.press("Escape");
+	await page.click(".tab.on .close");
+});
+
 test("the palette finds things by name, and the event log follows", async () => {
 	// The pointer rests where the list will open: the first line is still the one that enter takes.
 	await page.mouse.move(640, 320);
 	await menu("palette");
-	await sees(".pick-input");
+	await sees("[data-slot=command-input]");
 	await page.keyboard.type("event log");
 	await shot("10-palette");
 	await page.keyboard.press("Enter");
