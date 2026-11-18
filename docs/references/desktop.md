@@ -494,7 +494,7 @@ holds only tokens and base rules.
 
 ### Stories and Chromatic
 
-Buttons, switches, inputs, fields, tabs (the segmented controls), selects, the edges that resize
+Buttons, switches, inputs, fields, toggle groups (the segmented controls), selects, the edges that resize
 the side bar and the code panel (Resizable) and the agents' groups in the side bar (Collapsible)
 are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
