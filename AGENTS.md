@@ -124,7 +124,9 @@ desktop/            the desktop app (Electron; a package of its own, not part of
                     update them with the shadcn CLI and components.json; a variant or composition lives elsewhere under
                     src/components/ and wraps the stock one, and only for what stock cannot do. No hand-written stylesheet:
                     utilities on Tailwind's default scale, tokens and one root font-size in src/index.css.
-                    docs/references/desktop.md describes it and its layout
+                    docs/references/desktop.md describes it and its layout.
+                    shadcn's agent skill lies in desktop/.agents/skills (desktop/.claude/skills links to it, skills-lock.json pins it):
+                    read it before you change the page; `npx skills update` in desktop/ brings it up to date
 ```
 
 ## What agents know about pine

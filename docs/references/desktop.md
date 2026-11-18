@@ -432,6 +432,8 @@ desktop/
     index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
                    shadcn's tokens set from them, the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons, registries)
+  .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
+                   skills-lock.json; .claude/skills links to it for Claude Code)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
                    which the Appearance setting decides
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
