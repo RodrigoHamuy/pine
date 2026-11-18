@@ -1,7 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import "./index.css";
-import "./styles.css";
 import { followAppearance } from "./theme.ts";
 import { Notices } from "./ui.tsx";
 

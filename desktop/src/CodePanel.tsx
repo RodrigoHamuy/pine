@@ -3,6 +3,7 @@
 // agent's tool calls printed, and what its commands left running. Everything is read through the control API; a file is written through it too, by
 // the daemon, inside a sandbox that reaches only this folder.
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -31,43 +32,65 @@ import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Confirm } from "./Confirm.tsx";
-import { List, ListRow, Tree, TreeRow } from "./lists.tsx";
+import { List, ListRow, rowClass, Tree, TreeRow } from "./lists.tsx";
 import { Empty, Pulse, useLoad } from "./ui.tsx";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
-// The editor says what a token is, and styles.css what it looks like: the colours differ between light and
-// dark (dark is poimandres, which tells more kinds of keyword apart than light does).
+// The editor says what a token is and what it looks like: the colours differ between light and dark (dark is
+// poimandres, token by token as the theme has them, which tells more kinds of keyword apart than light does).
 const colours = HighlightStyle.define([
-	{ tag: [t.comment], class: "t-comment" },
-	{ tag: [t.meta], class: "t-meta" },
-	{ tag: [t.keyword], class: "t-kw" },
-	{ tag: [t.definitionKeyword], class: "t-kw-def" },
-	{ tag: [t.controlKeyword], class: "t-kw-flow" },
-	{ tag: [t.moduleKeyword, t.modifier, t.operatorKeyword, t.self], class: "t-kw-mod" },
-	{ tag: [t.string, t.special(t.string)], class: "t-str" },
-	{ tag: [t.regexp, t.escape], class: "t-re" },
-	{ tag: [t.number, t.atom, t.url], class: "t-num" },
-	{ tag: [t.bool], class: "t-bool" },
-	{ tag: [t.null], class: "t-nil" },
-	{ tag: [t.variableName], class: "t-var" },
-	{ tag: [t.propertyName], class: "t-prop" },
-	{ tag: [t.attributeName], class: "t-attr" },
-	{ tag: [t.function(t.variableName), t.function(t.propertyName)], class: "t-call" },
-	{ tag: [t.function(t.definition(t.variableName)), t.definition(t.function(t.propertyName))], class: "t-fn" },
-	{ tag: [t.className, t.definition(t.className)], class: "t-cls" },
-	{ tag: [t.typeName], class: "t-type" },
-	{ tag: [t.namespace], class: "t-ns" },
-	{ tag: [t.tagName], class: "t-tag" },
-	{ tag: [t.heading], class: "t-head" },
-	{ tag: [t.emphasis], class: "t-em" },
-	{ tag: [t.strong], class: "t-strong" },
-	{ tag: [t.link], class: "t-link" },
-	{ tag: [t.inserted], class: "t-ins" },
-	{ tag: [t.deleted, t.invalid], class: "t-del" },
-	{ tag: [t.punctuation, t.bracket], class: "t-punct" },
-	{ tag: [t.operator], class: "t-op" },
+	{ tag: [t.comment], class: "text-faint italic dark:text-(--p-comment)/70" },
+	{ tag: [t.meta], class: "text-faint italic dark:text-(--p-fg) dark:not-italic" },
+	{ tag: [t.keyword], class: "text-plan dark:text-(--p-fg)" },
+	{ tag: [t.definitionKeyword], class: "text-plan dark:text-(--p-steel)" },
+	{ tag: [t.controlKeyword], class: "text-plan dark:text-(--p-mint)/75" },
+	{ tag: [t.moduleKeyword, t.modifier, t.operatorKeyword, t.self], class: "text-plan dark:text-(--p-mint)" },
+	{ tag: [t.string, t.special(t.string)], class: "text-add dark:text-(--p-mint)" },
+	{ tag: [t.regexp, t.escape], class: "text-add dark:text-(--p-teal)" },
+	{ tag: [t.number, t.atom, t.url], class: "text-warn dark:text-(--p-mint)" },
+	{ tag: [t.bool], class: "text-warn dark:text-(--p-mint)" },
+	{ tag: [t.null], class: "text-warn dark:text-(--p-pink)" },
+	{ tag: [t.variableName], class: "dark:text-(--p-bright)" },
+	{ tag: [t.propertyName], class: "text-foreground dark:text-(--p-bright)" },
+	{ tag: [t.attributeName], class: "text-foreground dark:text-(--p-steel) dark:italic" },
+	{ tag: [t.function(t.variableName), t.function(t.propertyName)], class: "text-info dark:text-(--p-bright)/80" },
+	{ tag: [t.function(t.definition(t.variableName)), t.definition(t.function(t.propertyName))], class: "text-info dark:text-(--p-blue)" },
+	{ tag: [t.className, t.definition(t.className)], class: "text-info dark:text-(--p-blue)" },
+	{ tag: [t.typeName], class: "text-info dark:text-(--p-fg)/75" },
+	{ tag: [t.namespace], class: "text-info dark:text-(--p-steel)" },
+	{ tag: [t.tagName], class: "text-info dark:text-(--p-mint)" },
+	{ tag: [t.heading], class: "font-semibold dark:text-(--p-mint)" },
+	{ tag: [t.emphasis], class: "italic dark:text-(--p-slate)" },
+	{ tag: [t.strong], class: "font-semibold dark:text-(--p-slate)" },
+	{ tag: [t.link], class: "underline dark:text-(--p-blue)" },
+	{ tag: [t.inserted], class: "text-add dark:text-(--p-blue)" },
+	{ tag: [t.deleted, t.invalid], class: "text-del dark:text-(--p-pink)" },
+	{ tag: [t.punctuation, t.bracket], class: "text-muted-foreground dark:text-(--p-fg)" },
+	{ tag: [t.operator], class: "text-muted-foreground dark:text-(--p-steel)" },
 ]);
+
+// CodeMirror's own look, in pine's colours. Its base theme is a style sheet of its own, outside Tailwind's
+// layers, so what it also sets wins here only as important.
+const EDITOR = [
+	"editor flex min-h-0 flex-1 overflow-hidden",
+	"[&_.cm-editor]:h-full [&_.cm-editor]:min-w-0 [&_.cm-editor]:flex-1 [&_.cm-editor]:bg-background [&_.cm-editor]:text-foreground [&_.cm-editor]:outline-none! dark:[&_.cm-editor]:text-(--p-fg)",
+	"[&_.cm-scroller]:font-mono! [&_.cm-scroller]:text-xs [&_.cm-scroller]:leading-relaxed!",
+	"[&_.cm-gutters]:border-r! [&_.cm-gutters]:border-line-soft! [&_.cm-gutters]:bg-background! [&_.cm-gutters]:text-faint! dark:[&_.cm-gutters]:text-(--p-comment)/55!",
+	"[&_.cm-activeLine]:bg-hover! [&_.cm-activeLineGutter]:bg-hover! dark:[&_.cm-activeLine]:bg-(--select)/25! dark:[&_.cm-activeLineGutter]:bg-(--select)/25! dark:[&_.cm-activeLineGutter]:text-(--p-fg)!",
+	"[&_.cm-selectionBackground]:bg-(--select)! [&_.cm-cursor]:border-l-primary! dark:[&_.cm-cursor]:border-l-(--p-fg)!",
+	"[&_.cm-panels]:border-border! [&_.cm-panels]:bg-raised! [&_.cm-panels]:text-foreground!",
+	"[&_.cm-textfield]:rounded-md! [&_.cm-textfield]:border-border! [&_.cm-textfield]:bg-card! [&_.cm-textfield]:font-sans [&_.cm-textfield]:text-xs! [&_.cm-textfield]:text-foreground",
+	"[&_.cm-button]:rounded-md! [&_.cm-button]:border-border! [&_.cm-button]:bg-card! [&_.cm-button]:bg-none! [&_.cm-button]:font-sans [&_.cm-button]:text-xs! [&_.cm-button]:text-foreground",
+	"[&_.cm-searchMatch]:bg-warn-soft! [&_.cm-searchMatch]:outline-1! [&_.cm-searchMatch]:outline-warn/50! dark:[&_.cm-searchMatch]:bg-(--p-blue)/25! dark:[&_.cm-searchMatch]:outline-(--p-blue)/50!",
+].join(" ");
+
+// The panel's parts: a bar of controls with a line under it, and what scrolls below.
+const SUB = "code-sub flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
+const BODY = "flex min-h-0 flex-1 flex-col overflow-auto";
+const PICTURE = "block max-h-80 max-w-full rounded-lg border sm:max-w-md";
+const OUT = "whitespace-pre-wrap wrap-anywhere px-3 py-2.5 font-mono text-xs text-muted-foreground select-text cursor-text";
+const STATUS: Record<string, string> = { M: "text-warn", A: "text-add", "?": "text-add", D: "text-del", R: "text-info" };
 
 function language(file: string): Extension {
 	const ext = file.slice(file.lastIndexOf(".") + 1).toLowerCase();
@@ -127,17 +150,17 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 	useEffect(() => {
 		view.current?.dispatch({ effects: lock.current.reconfigure([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]) });
 	}, [readOnly]);
-	return <div className="editor" ref={host} />;
+	return <div className={EDITOR} ref={host} />;
 }
 
 /** A unified diff, coloured line by line. */
 export function Diff({ text }: { text: string }) {
 	const lines = text.split("\n");
 	return (
-		<div className="diff">
+		<div className="diff min-w-max cursor-text py-1.5 font-mono text-xs leading-normal select-text dark:text-(--p-fg)">
 			{lines.map((l, i) => {
-				const cls = l.startsWith("@@") ? "hunk" : l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("index ") || l.startsWith("new file") || l.startsWith("deleted file") || l.startsWith("similarity") || l.startsWith("rename ") ? "meta" : l.startsWith("+") ? "add" : l.startsWith("-") ? "del" : "";
-				return <div key={i} className={cls}>{l || " "}</div>;
+				const cls = l.startsWith("@@") ? "mt-1.5 mb-0.5 bg-info/8 text-info" : l.startsWith("+++") || l.startsWith("---") || l.startsWith("diff ") || l.startsWith("index ") || l.startsWith("new file") || l.startsWith("deleted file") || l.startsWith("similarity") || l.startsWith("rename ") ? "text-faint" : l.startsWith("+") ? "add bg-add-bg text-add" : l.startsWith("-") ? "bg-del-bg text-del" : "";
+				return <div key={i} className={`whitespace-pre px-3 ${cls}`}>{l || " "}</div>;
 			})}
 		</div>
 	);
@@ -148,12 +171,12 @@ export function Diff({ text }: { text: string }) {
 function ChangeRow({ c }: { c: Change }) {
 	const at = c.path.lastIndexOf("/");
 	return (
-		<ListRow value={c.path} label={c.path.slice(at + 1)} className="frow" title={c.path}>
-			<span className={`st ${c.status === "?" ? "Q" : c.status}`}>{c.status === "?" ? "U" : c.status}</span>
-			<span className="cut">{c.path.slice(at + 1)}</span>
-			<span className="faint cut grow">{at > 0 ? c.path.slice(0, at) : ""}</span>
-			{c.added ? <span className="plus">+{c.added}</span> : null}
-			{c.removed ? <span className="minus">−{c.removed}</span> : null}
+		<ListRow value={c.path} label={c.path.slice(at + 1)} className={rowClass()} title={c.path}>
+			<span className={`w-3.5 flex-none text-center font-mono text-xs font-semibold ${STATUS[c.status] ?? ""}`}>{c.status === "?" ? "U" : c.status}</span>
+			<span className="truncate">{c.path.slice(at + 1)}</span>
+			<span className="min-w-0 flex-1 truncate text-faint">{at > 0 ? c.path.slice(0, at) : ""}</span>
+			{c.added ? <span className="font-mono text-xs text-add">+{c.added}</span> : null}
+			{c.removed ? <span className="font-mono text-xs text-del">−{c.removed}</span> : null}
 		</ListRow>
 	);
 }
@@ -178,24 +201,24 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 	if (file)
 		return (
 			<>
-				<div className="code-sub">
+				<div className={SUB}>
 					<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} title="Back to the list"><ChevronLeftIcon /></Button>
-					<span className="cut grow mono" title={file}>{file}</span>
+					<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}</span>
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<div className="code-body">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className="out">… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</div>
+				<div className={BODY}>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className={OUT}>… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</div>
 			</>
 		);
 	return (
 		<>
-			<div className="code-sub">
-				{turn ? <><Undo2Icon size={13} /><span className="cut grow">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon size={13} /><span className="cut grow">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
+			<div className={SUB}>
+				{turn ? <><Undo2Icon size={13} /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon size={13} /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
 				<Button variant="ghost" size="icon-xs" onClick={list.reload} title="Read again"><RotateCwIcon /></Button>
 			</div>
-			<div className="code-body">
-				{data.note ? <div className="out">{data.note}</div> : null}
+			<div className={BODY}>
+				{data.note ? <div className={OUT}>{data.note}</div> : null}
 				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> : <Empty icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
-				{data.more ? <div className="out">… and more.</div> : null}
+				{data.more ? <div className={OUT}>… and more.</div> : null}
 			</div>
 		</>
 	);
@@ -245,7 +268,7 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [read.loading, read.data, read.error]);
 	const failed = state.failed.get(dir);
-	if (failed && dir) return <div className="out faint" style={{ paddingLeft: 10 + depth * 14 }}>{failed}</div>;
+	if (failed && dir) return <div className={`${OUT} text-faint`} style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>{failed}</div>;
 	const entries = state.dirs.get(dir);
 	if (!entries) return null;
 	return (
@@ -255,10 +278,10 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 				const open = state.open.has(full);
 				const row = (
 					<>
-						{e.dir ? (open ? <ChevronDownIcon size={11} className="faint" /> : <ChevronRightIcon size={11} className="faint" />) : <span style={{ width: 11 }} />}
-						{e.dir ? <FolderIcon size={13} className="faint" /> : <FileIcon size={13} className="faint" />}
-						<span className="cut grow">{e.name}</span>
-						{!e.dir ? <span className="faint" style={{ fontSize: 11 }}>{size(e.size)}</span> : null}
+						{e.dir ? (open ? <ChevronDownIcon size={12} className="text-faint" /> : <ChevronRightIcon size={12} className="text-faint" />) : <span className="w-3 flex-none" />}
+						{e.dir ? <FolderIcon size={13} className="text-faint" /> : <FileIcon size={13} className="text-faint" />}
+						<span className="min-w-0 flex-1 truncate">{e.name}</span>
+						{!e.dir ? <span className="text-xs text-faint">{size(e.size)}</span> : null}
 					</>
 				);
 				return (
@@ -307,7 +330,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	const root = tab.folder ?? tab.workspace;
 	return (
 		<>
-			<div className="code-sub">
+			<div className={SUB}>
 				<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())} title="Back to the files"><ChevronLeftIcon /></Button>
 				<AlertDialog open={leaving} onOpenChange={setLeaving}>
 					<AlertDialogContent>
@@ -320,20 +343,20 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 						</AlertDialogFooter>
 					</AlertDialogContent>
 				</AlertDialog>
-				<span className="cut grow mono" title={file}>{file}{dirty ? <span style={{ color: "var(--warn)" }}> ●</span> : null}</span>
-				{disk.data?.truncated ? <span className="tag warn">too large to edit</span> : null}
+				<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}{dirty ? <span className="text-warn"> ●</span> : null}</span>
+				{disk.data?.truncated ? <Badge variant="secondary" className="bg-warn-soft text-warn">too large to edit</Badge> : null}
 				{root ? <Button variant="ghost" size="icon-xs" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button> : null}
 				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
 			</div>
 			{changedOnDisk ? (
-				<div className="banner warn" style={{ margin: 8 }}>
-					<span className="grow">This file changed on disk while you were typing.</span>
-					<button type="button" className="open-link" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</button>
+				<div className="m-2 flex items-center gap-2.5 rounded-lg bg-warn-soft px-3 py-2 text-xs">
+					<span className="min-w-0 flex-1">This file changed on disk while you were typing.</span>
+					<Button variant="link" size="xs" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</Button>
 				</div>
 			) : null}
-			<div className="code-body">
+			<div className={BODY}>
 				{kind ? (
-					<div className="it-media" style={{ padding: 14 }}>{kind === "image" ? <img src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
+					<div className="p-3.5">{kind === "image" ? <img className={PICTURE} src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video className="block max-h-90 max-w-full rounded-lg bg-black sm:max-w-lg" src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio className="block w-full max-w-md" src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
 				) : disk.error ? (
 					<Empty icon={FileIcon} title="This file cannot be shown">{disk.error}</Empty>
 				) : !disk.data ? (
@@ -357,14 +380,14 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 	const root = tab.folder ?? tab.workspace;
 	return (
 		<>
-			<div className="code-sub">
+			<div className={SUB}>
 				<SearchIcon size={13} />
-				<input className="grow" style={{ border: "none", outline: "none", background: "transparent", userSelect: "text" }} placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
+				<input className="min-w-0 flex-1 bg-transparent outline-none select-text" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
 				<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} title="Read again"><RotateCwIcon /></Button>
 			</div>
-			<div className="code-body">
+			<div className={BODY}>
 				{query.trim() ? (
-					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className="frow"><FileIcon size={13} className="faint" /><span className="cut">{f}</span></ListRow>)}</List> : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
+					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className={rowClass()}><FileIcon size={13} className="text-faint" /><span className="truncate">{f}</span></ListRow>)}</List> : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
@@ -391,25 +414,25 @@ function Output({ tab }: { tab: Tab }) {
 	if (shown)
 		return (
 			<>
-				<div className="code-sub">
+				<div className={SUB}>
 					<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)}><ChevronLeftIcon /></Button>
-					<span className="mono">{shown.entry.tool}</span>
-					<span className="cut grow mono faint">{shown.entry.subject}</span>
+					<span className="font-mono">{shown.entry.tool}</span>
+					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
-				<div className="code-body">
+				<div className={BODY}>
 					<Terminal output={shown.entry.result || "(it printed nothing)"} className="m-2" data-status={shown.entry.ok === false ? "fail" : "ok"} />
-					{(shown.entry.images ?? []).map((id) => <div className="it-media" key={id} style={{ padding: 12 }}><img src={media.tool(id)} alt="" /></div>)}
+					{(shown.entry.images ?? []).map((id) => <div className="p-3" key={id}><img className={PICTURE} src={media.tool(id)} alt="" /></div>)}
 				</div>
 			</>
 		);
 	return (
-		<div className="code-body">
+		<div className={BODY}>
 			{calls.data.map((c) => (
-				<div key={`${c.task}:${c.n}`} className="frow" onClick={() => setOpen(`${c.task}:${c.n}`)}>
-					<span className="st" style={{ color: c.entry.ok === false ? "var(--bad)" : c.entry.ok ? "var(--brand)" : "var(--warn)" }}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
-					<span className="mono">{c.entry.tool}</span>
-					<span className="cut grow mono faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
-					{c.entry.ms !== undefined ? <span className="faint" style={{ fontSize: 11 }}>{took(c.entry.ms)}</span> : null}
+				<div key={`${c.task}:${c.n}`} className={rowClass()} onClick={() => setOpen(`${c.task}:${c.n}`)}>
+					<span className={`w-3.5 flex-none text-center font-mono text-xs font-semibold ${c.entry.ok === false ? "text-destructive" : c.entry.ok ? "text-primary" : "text-warn"}`}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
+					<span className="font-mono">{c.entry.tool}</span>
+					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
+					{c.entry.ms !== undefined ? <span className="text-xs text-faint">{took(c.entry.ms)}</span> : null}
 				</div>
 			))}
 		</div>
@@ -420,20 +443,20 @@ function Output({ tab }: { tab: Tab }) {
 function Running({ tab }: { tab: Tab }) {
 	if (!tab.programs.length) return <Empty icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</Empty>;
 	return (
-		<div className="code-body">
+		<div className={BODY}>
 			{tab.programs.map((p) => (
-				<div className="prog" key={p.id}>
-					<div className="row">
-						<span className="dot good" />
-						<span className="mono cut grow" title={p.command}>{p.command}</span>
+				<div className="flex flex-col gap-1 border-b border-line-soft px-3 py-2.5 text-xs" key={p.id}>
+					<div className="flex items-center gap-2">
+						<span className="size-2 flex-none rounded-full bg-primary" />
+						<span className="min-w-0 flex-1 truncate font-mono" title={p.command}>{p.command}</span>
 						<Confirm label="Stop" question={`Stop ${short(p.command, 80)}?`} onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
 					</div>
-					<div className="row faint" style={{ fontSize: 12 }}>
+					<div className="flex items-center gap-2 text-xs text-faint">
 						<span>running for {clock(p.seconds)}</span>
 						<span>· {plural(p.processes, "process", "processes")}</span>
 						{p.background ? <span>· in the background</span> : null}
 						{p.ports.map((port) => (
-							<button key={port} type="button" className="open-link" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</button>
+							<Button key={port} variant="link" size="xs" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</Button>
 						))}
 					</div>
 					{p.output ? <Terminal output={p.output} className="mt-1" /> : null}
@@ -457,10 +480,10 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
 	return (
 		<>
-			<ResizableHandle className="w-(--gap) bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
+			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
 			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
-				<div className="code">
-					<div className="code-head">
+				<div className="code flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
+					<div className="flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2">
 						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
 							<TabsList variant="line" activateOnFocus className="max-w-full overflow-x-auto">
 								<TabsTrigger value="agent">Agent</TabsTrigger>
@@ -471,14 +494,14 @@ export function CodePanel({ tab }: { tab: Tab }) {
 								<TabsTrigger value="output">Output</TabsTrigger>
 								<TabsTrigger value="running">
 									Running
-									{tab.programs.length ? <span className="badge">{tab.programs.length}</span> : null}
+									{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
 								</TabsTrigger>
 							</TabsList>
 						</Tabs>
-						<span className="grow" />
+						<span className="min-w-0 flex-1" />
 						<Button variant="ghost" size="icon-xs" title="Close the panel" onClick={() => void store.command("code")}><XIcon /></Button>
 					</div>
-					{steps ? <div className="code-steps"><Steps items={steps} /></div> : null}
+					{steps ? <div className="max-h-48 flex-none overflow-y-auto border-b border-line-soft px-3 py-2.5"><Steps items={steps} /></div> : null}
 					{view === "agent" ? (
 						<AgentView tab={tab} />
 					) : view === "changes" || view === "turn" ? (

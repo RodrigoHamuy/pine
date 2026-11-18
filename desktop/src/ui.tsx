@@ -1,16 +1,15 @@
 // The small parts of pine's own that everything else is built from, on shadcn's components: the
-// logo, the working dot, a labelled field, a choice, a text that grows, an empty view, where notices show.
+// logo, the working dot, a text that grows, an empty view, where notices show.
 import type { LucideIcon } from "lucide-react";
-import { cloneElement, isValidElement, type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from "react";
-import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Textarea } from "@/components/ui/textarea";
 import { Toaster } from "@/components/ui/sonner";
+import { cn } from "@/lib/utils";
 
 /** pine's mark: the P of its wordmark (docs/images/logo-dark.svg), four blocks on a grid. */
 export function Logo({ size = 18 }: { size?: number }) {
 	return (
-		<svg width={size} height={size} viewBox="0 0 800 800" fill="currentColor" aria-hidden="true" className="logo">
+		<svg width={size} height={size} viewBox="0 0 800 800" fill="currentColor" aria-hidden="true" className="shrink-0 text-foreground">
 			<rect x="280" y="560" width="240" height="240" />
 			<rect x="280" y="280" width="240" height="240" />
 			<rect x="0" y="280" width="240" height="240" />
@@ -31,8 +30,9 @@ export function Pulse({ size = 14 }: { size?: number }) {
 	}, []);
 	const d = Math.min(9, Math.max(6, Math.round(size * 0.6)));
 	return (
-		<span className="pulse" style={{ width: size, height: size }} aria-label="working">
-			<span ref={dot} style={{ width: d, height: d }} />
+		<span className="inline-grid flex-none place-items-center" style={{ width: size, height: size }} aria-label="working">
+			{/* Tailwind's own pulse: slow, and every dot in step (above). */}
+			<span ref={dot} className="animate-pulse rounded-full bg-primary motion-reduce:animate-none" style={{ width: d, height: d }} />
 		</span>
 	);
 }
@@ -40,44 +40,6 @@ export function Pulse({ size = 14 }: { size?: number }) {
 /** Where pine's passing notices (`store.flash`) show: at the bottom, as Sonner's pile that opens on hover. */
 export function Notices() {
 	return <Toaster position="bottom-center" />;
-}
-
-/**
- * A labelled field: shadcn's Field with its label and hint. The label names the control it holds
- * (it points at the control's id, given to it here unless it has one), so a click on the label
- * reaches the control and a screen reader says the label with it.
- */
-export function LabeledField({ label, hint, children, wide }: { label: string; hint?: ReactNode; children: ReactNode; wide?: boolean }) {
-	const made = useId();
-	const one = isValidElement<{ id?: string }>(children) ? children : undefined;
-	const id = one?.props.id ?? made;
-	return (
-		<Field className={wide ? "field-wide" : undefined}>
-			<FieldLabel htmlFor={id}>{label}</FieldLabel>
-			{one && !one.props.id ? cloneElement(one, { id }) : children}
-			{hint ? <FieldDescription>{hint}</FieldDescription> : null}
-		</Field>
-	);
-}
-
-/** One value out of a list, on shadcn's Select (what was a native select). "" is a value like any other. */
-export function Choice({ value, options, onChange, id, disabled }: { value: string; options: Array<{ value: string; label: string }>; onChange: (v: string) => void; id?: string; disabled?: boolean }) {
-	return (
-		<Select items={options} value={value} onValueChange={(v) => onChange(v ?? "")} disabled={disabled}>
-			<SelectTrigger id={id} className="w-full">
-				<SelectValue />
-			</SelectTrigger>
-			<SelectContent>
-				<SelectGroup>
-					{options.map((o) => (
-						<SelectItem key={o.value} value={o.value}>
-							{o.label}
-						</SelectItem>
-					))}
-				</SelectGroup>
-			</SelectContent>
-		</Select>
-	);
 }
 
 /** A text field that grows with what is typed into it. */
@@ -90,15 +52,15 @@ export function AutoText({ value, onChange, minRows = 3, maxRows = 24, mono, cla
 		const line = Number.parseFloat(getComputedStyle(el).lineHeight) || 20;
 		el.style.height = `${Math.min(Math.max(el.scrollHeight + 2, minRows * line + 18), maxRows * line + 18)}px`;
 	}, [value, minRows, maxRows]);
-	return <Textarea ref={ref} className={[mono ? "mono" : "", className ?? ""].join(" ").trim() || undefined} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={!mono} {...rest} />;
+	return <Textarea ref={ref} className={cn(mono && "font-mono", className)} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={!mono} {...rest} />;
 }
 
 export function Empty({ icon: Icon, title, children }: { icon?: LucideIcon; title: string; children?: ReactNode }) {
 	return (
-		<div className="empty">
+		<div className="empty m-auto flex max-w-md flex-col items-center gap-1.5 px-6 py-10 text-center text-faint">
 			{Icon ? <Icon size={22} /> : null}
-			<div className="empty-title">{title}</div>
-			{children ? <div className="empty-text">{children}</div> : null}
+			<div className="font-medium text-muted-foreground">{title}</div>
+			{children ? <div className="text-xs">{children}</div> : null}
 		</div>
 	);
 }

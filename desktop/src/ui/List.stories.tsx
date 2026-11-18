@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { FileIcon } from "lucide-react";
 import { useState } from "react";
-import { List, ListRow } from "../lists.tsx";
+import { List, ListRow, rowClass } from "../lists.tsx";
 
 const FILES = ["README.md", "src/index.ts", "src/ui.tsx", "package.json"];
 
@@ -10,7 +10,7 @@ const meta = {
 	args: { label: "Files that fit", value: null, onOpen: () => {}, children: null },
 	decorators: [
 		(Story) => (
-			<div className="code-body" style={{ width: 320 }}>
+			<div className="flex w-80 flex-col">
 				<Story />
 			</div>
 		),
@@ -21,9 +21,9 @@ const meta = {
 		return (
 			<List {...args} value={value} onOpen={setValue}>
 				{FILES.map((f) => (
-					<ListRow key={f} value={f} label={f} className={`frow${value === f ? " on" : ""}`}>
-						<FileIcon size={13} className="faint" />
-						<span className="cut">{f}</span>
+					<ListRow key={f} value={f} label={f} className={rowClass(value === f)}>
+						<FileIcon size={13} className="text-faint" />
+						<span className="truncate">{f}</span>
 					</ListRow>
 				))}
 			</List>

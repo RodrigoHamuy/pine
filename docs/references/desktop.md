@@ -425,11 +425,13 @@ desktop/
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
+    components/ai-elements/  AI Elements' components for the conversation, added the same way
+    components/    pine's own compositions of stock components (a labelled field, a choice)
     ui.tsx         pine's own small parts, made of shadcn's components
     lists.tsx      the tree of files and the lists to open a row from, on ui-sdk (shadcn has neither)
-    index.css      Tailwind and shadcn's tokens, set from the colours of styles.css (components.json
-                   is shadcn's configuration: Base UI, lucide icons)
-    styles.css     the colours, light in `:root` and poimandres in `:root.dark`, and the rest of the look
+    index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
+                   shadcn's tokens set from them, the page's density and a few base rules
+                   (components.json is shadcn's configuration: Base UI, lucide icons, registries)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
                    which the Appearance setting decides
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
@@ -450,6 +452,43 @@ desktop/
 - A new thing the owner can see or do gets a test in `desktop/test/`, which starts the real
   app on a home of its own.
 
+### How the page is drawn
+
+The page is React with Tailwind v4 (through its Vite plugin) and shadcn's components on Base UI.
+There is no hand-written stylesheet: everything is utilities in the components, and `index.css`
+holds only tokens and base rules.
+
+| Piece | What it is for |
+|---|---|
+| shadcn (`src/components/ui/`) | Every control and overlay: buttons, switches, fields, selects, tabs, dialogs, alert dialogs, the command palette, notices (Sonner), the combobox, resizable panels, collapsibles, badges, alerts. |
+| AI Elements (`src/components/ai-elements/`) | The conversation: messages, tool calls, reasoning, tasks and steps, confirmations (an approval or a question in the conversation), suggestions, code blocks, terminal output, the prompt input. |
+| Streamdown | Answers drawn from markdown, with code coloured by Shiki. `markdown.tsx` replaces three of its defaults (see below). |
+| lucide | Every icon. The pine logo is the one drawing of pine's own (`Logo` in `ui.tsx`). |
+| ui-sdk (`@ui-sdk/react`) | Only what shadcn has no component for: the tree of files and the lists of rows (`src/lists.tsx`). Never a piece shadcn has (no second dialog, button or select). |
+
+- A stock shadcn or AI Elements component is never edited. Add and update them with the shadcn
+  CLI (`npx shadcn@latest add <name>`, `@ai-elements/<name>` for AI Elements; `diff` shows what
+  changed upstream); the registries are declared in `components.json`.
+- Prefer the stock component as it is, with its own look. A variant or a composition lives
+  elsewhere, under `src/components/` (or in the file that uses it), and wraps the stock one; add a
+  composition or a style override only for what stock cannot do.
+- Sizes and spacing are Tailwind's default scale and shadcn's defaults, never arbitrary values.
+  The page's density is one `font-size` on `:root` in `index.css`: every rem size (text, spacing,
+  components) follows it, so no component sets a font size of its own. Corners come from shadcn's
+  `--radius`.
+- Colours are tokens: pine's own names (`--brand`, `--text-muted`, `--warn`, the poimandres
+  `--p-*` values) are set in `index.css`, shadcn's tokens point at them, and the ones shadcn has no
+  name for are utilities too (`text-warn`, `bg-brand-soft`, `text-faint`...).
+- Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` keeps in
+  step with the system's appearance; Electron's appearance setting drives that.
+- Tests and the few rules that reach into a component select by shadcn's `data-slot` attributes
+  and by roles, not by utility classes. The class names left on pine's own elements (`sidebar`,
+  `side-row`, `composer`...) are hooks for the tests and carry no style.
+- Streamdown's defaults are not safe here (pictures from the web, a download button, links opened
+  by the page, cleaning rules that drop `data:` pictures). `markdown.tsx` replaces three of them:
+  the cleaning rules (`CLEAN`), the link and the picture. On every upgrade of Streamdown, read its
+  defaults again and run the desktop suite: its markdown test fails without each of the three.
+
 ### Stories and Chromatic
 
 Buttons, switches, inputs, fields, tabs (the segmented controls), selects, the edges that resize
@@ -457,8 +496,8 @@ the side bar and the code panel (Resizable) and the agents' groups in the side b
 are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
 of rows to open) is ui-sdk's (`@ui-sdk/react`), in `src/lists.tsx`; ui-sdk is never used for a
-piece shadcn has. pine's own parts (`src/ui.tsx`: the logo, a
-labelled field and a choice made of shadcn's pieces, dialogs, an empty view; `src/lists.tsx`: the tree and the list) have stories beside
+piece shadcn has. pine's own parts (`src/ui.tsx`: the logo, the working dot, an empty view,
+the notices; dialogs; `src/lists.tsx`: the tree and the list) have stories beside
 them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need
 neither Electron nor a daemon. Story only parts that take everything as props; a part that calls
 `api.ts` or the bridge has no story.

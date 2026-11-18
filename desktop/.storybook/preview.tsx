@@ -1,7 +1,6 @@
 import type { Decorator, Preview } from "@storybook/react-vite";
 import { useLayoutEffect } from "react";
 import "../src/index.css";
-import "../src/styles.css";
 import { followAppearance } from "../src/theme.ts";
 
 // No preload script here: the bridge is a stand-in whose every call does nothing (a listener it

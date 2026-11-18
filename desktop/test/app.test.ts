@@ -826,7 +826,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 		await page.click("[data-slot=button] >> text=Add server");
 		const server = page.locator(".item", { has: page.locator(".name", { hasText: /^notes/ }) });
 		await server.waitFor({ timeout: 15_000 });
-		await page.waitForFunction(() => /connected, 1 tool/.test(document.querySelector(".set-in .group")?.textContent ?? ""), undefined, { timeout: 30_000 });
+		await page.waitForFunction(() => /connected, 1 tool/.test(document.querySelector(".set-in .set-group")?.textContent ?? ""), undefined, { timeout: 30_000 });
 		await server.locator("[data-slot=button] >> text=Sign in").click();
 		await sees("pre.log >> text=/signed in to MCP server .notes./i", 40_000);
 		await shot("09-settings-mcp-sign-in");

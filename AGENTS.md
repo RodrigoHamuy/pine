@@ -118,7 +118,13 @@ baseline/           pi SDK behaviour checks and their results; the mock model se
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
-                    page (React), test/ the app driven through its real window, scripts/ what packs it. docs/references/desktop.md describes it and its layout
+                    page (React, Tailwind v4, shadcn on Base UI, AI Elements for the conversation, Streamdown for answers, lucide icons;
+                    ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
+                    A stock shadcn or AI Elements component (src/components/ui, src/components/ai-elements) is never edited: add and
+                    update them with the shadcn CLI and components.json; a variant or composition lives elsewhere under
+                    src/components/ and wraps the stock one, and only for what stock cannot do. No hand-written stylesheet:
+                    utilities on Tailwind's default scale, tokens and one root font-size in src/index.css.
+                    docs/references/desktop.md describes it and its layout
 ```
 
 ## What agents know about pine
@@ -462,7 +468,10 @@ These are invariants. A change that breaks one needs a test that shows why it is
    and sets the policy that lets the page load nothing from the web. Text from an agent or a
    tool is drawn by `desktop/src/markdown.tsx` (parsed, cleaned, links with their address
    beside them, a picture on the web as a line to click) or as plain text, nowhere as HTML.
-   `desktop/test/app.test.ts` has a test for it; keep it failing without the cleaning.
+   It renders with Streamdown, whose defaults are not safe here, and replaces three of them:
+   its cleaning rules (`CLEAN`), its link component and its image component. On every upgrade
+   of Streamdown read its defaults again and run `npm run desktop:test`.
+   `desktop/test/app.test.ts` has a test for it; keep it failing without each of the three.
 11. **Only the owner opens a folder for a conversation, and looking at one runs nothing.**
    `setFolder` in `src/agents.ts` is reached from the control API only; there is no tool for it.
    It refuses pine's home, pine's code and other agents' workspaces in either direction, and a
@@ -664,7 +673,7 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
 
 ## Style
 
-- Plain TypeScript, tabs, no framework. Prefer one clear function over an abstraction used once.
+- Plain TypeScript, tabs, no framework (the desktop page aside: see its line in Layout). Prefer one clear function over an abstraction used once.
 - Comments explain why, not what. Error messages say what to do next.
 - Text an agent will read (tool descriptions, refusals, the `<pine>` block) is written for a
   small local model: short, concrete, no jargon.

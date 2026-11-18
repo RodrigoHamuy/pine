@@ -3,10 +3,13 @@
 // checks every change as it checks the main agent's, and nothing here writes a file itself.
 import { AudioLinesIcon, BookIcon, CheckIcon, ChevronLeftIcon, ChevronRightIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { cn } from "cn";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { type AgentDetail, api, type LoginState, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
@@ -15,7 +18,9 @@ import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Confirm } from "./Confirm.tsx";
-import { AutoText, Choice, Empty, LabeledField, Pulse, useLoad } from "./ui.tsx";
+import { Choice } from "@/components/choice";
+import { LabeledField } from "@/components/labeled-field";
+import { AutoText, Empty, Pulse, useLoad } from "./ui.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -28,13 +33,51 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "app", label: "App", icon: SettingsIcon },
 ];
 
+// The parts every page is made of. The first word of some (set-group, item, name, ctl, form, log, tag,
+// notice) is a name the desktop tests look for: it carries no style.
+/** A box of settings: lines (ITEM) one below the other, inside a border. */
+const GROUP = "set-group overflow-hidden rounded-lg border bg-card";
+/** One line of a box: what it is (NAME and ABOUT) on the left, its control (CTL) on the right. */
+const ITEM = "item flex min-w-0 items-center gap-3.5 border-b border-line-soft px-4 py-3 last:border-b-0";
+/** A line that opens something when clicked. */
+const CLICK = "hover:bg-hover";
+const NAME = "name flex flex-wrap items-center gap-2 font-medium";
+const ABOUT = "mt-px text-xs wrap-anywhere text-muted-foreground select-text";
+const CTL = "ctl flex max-w-1/2 flex-none items-center gap-1.5";
+/** A form inside a box: two fields side by side, a wide one on a row of its own. */
+const FORM = "form grid grid-cols-2 gap-3.5";
+const FOOT = "flex items-center justify-end gap-2 border-t border-line-soft bg-raised px-4 py-3";
+/** What a command printed: kept as it was written, selectable. */
+const LOG = "log max-h-60 overflow-auto rounded-md bg-sunk px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text";
+/** The heading above a box. */
+const H2 = "-mb-2 mt-1.5 flex items-center gap-2 text-xs font-semibold tracking-wide text-faint uppercase";
+
+/** A short word beside a name, on stock Badge. */
+function Tag({ tone, mono, children }: { tone?: "good" | "warn" | "bad"; mono?: boolean; children: ReactNode }) {
+	return (
+		<Badge variant={tone === "bad" ? "destructive" : "secondary"} className={cn("tag", tone, mono && "mono font-mono", tone === "good" && "bg-brand-soft text-primary", tone === "warn" && "bg-warn-soft text-warn")}>
+			{children}
+		</Badge>
+	);
+}
+
+/** Something to know, on stock Alert: a warning by default, an error (bad), or plain information. */
+function Notice({ tone, icon: Icon = TriangleAlertIcon, className, children }: { tone?: "bad" | "plain"; icon?: LucideIcon; className?: string; children: ReactNode }) {
+	return (
+		<Alert variant={tone === "bad" ? "destructive" : "default"} className={cn("notice", tone === "plain" ? "plain" : tone === undefined && "text-warn", className)}>
+			<Icon />
+			<AlertDescription>{children}</AlertDescription>
+		</Alert>
+	);
+}
+
 function Page({ title, lead, children, actions }: { title: string; lead?: ReactNode; children: ReactNode; actions?: ReactNode }) {
 	return (
-		<div className="set-in">
-			<div className="row" style={{ alignItems: "flex-start" }}>
-				<div className="grow">
-					<h1>{title}</h1>
-					{lead ? <p className="lead">{lead}</p> : null}
+		<div className="set-in mx-auto flex max-w-3xl flex-col gap-5.5 px-9 pt-8 pb-16">
+			<div className="flex items-start gap-2">
+				<div className="min-w-0 flex-1">
+					<h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+					{lead ? <p className="mt-1 max-w-2xl text-muted-foreground">{lead}</p> : null}
 				</div>
 				{actions}
 			</div>
@@ -44,7 +87,7 @@ function Page({ title, lead, children, actions }: { title: string; lead?: ReactN
 }
 
 function Loading({ state }: { state: { error?: string; loading: boolean } }) {
-	return state.error ? <div className="notice bad"><TriangleAlertIcon />{state.error}</div> : <div className="empty"><Pulse /></div>;
+	return state.error ? <Notice tone="bad">{state.error}</Notice> : <div className="m-auto flex justify-center p-10"><Pulse /></div>;
 }
 
 /** Who something is for: all agents, or one. */
@@ -78,31 +121,31 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 	if (k === "boolean") control = <Switch checked={s.now === "true"} onCheckedChange={(on) => void set(on)} />;
 	else if (k === "model")
 		control = (
-			<Choice value={unset ? "" : s.now} onChange={(v) => void set(v || "default")} options={[{ value: "", label: unset ? s.now : "pine's default" }, ...(!unset && !models.includes(s.now) ? [s.now] : []).concat(models).map((m) => ({ value: m, label: m }))]} />
+			<Choice className="w-48" value={unset ? "" : s.now} onChange={(v) => void set(v || "default")} options={[{ value: "", label: unset ? s.now : "pine's default" }, ...(!unset && !models.includes(s.now) ? [s.now] : []).concat(models).map((m) => ({ value: m, label: m }))]} />
 		);
 	else if (typeof k === "object" && "one" in k)
 		control = (
-			<Choice value={k.one.includes(s.now) ? s.now : ""} onChange={(v) => void set(v || "default")} options={[...(k.one.includes(s.now) ? [] : [{ value: "", label: s.now }]), ...k.one.map((v) => ({ value: v, label: v }))]} />
+			<Choice className="w-48" value={k.one.includes(s.now) ? s.now : ""} onChange={(v) => void set(v || "default")} options={[...(k.one.includes(s.now) ? [] : [{ value: "", label: s.now }]), ...k.one.map((v) => ({ value: v, label: v }))]} />
 		);
 	else
 		control = (
 			<>
-				<Input className="mono" style={{ width: 110 }} value={draft ?? s.now} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && draft !== undefined && void set(draft)} title={typeof k === "object" ? `a whole number from ${k.from} to ${k.to}` : "a time such as 90s or 5m"} />
+				<Input className="mono w-28 font-mono" value={draft ?? s.now} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && draft !== undefined && void set(draft)} title={typeof k === "object" ? `a whole number from ${k.from} to ${k.to}` : "a time such as 90s or 5m"} />
 				{draft !== undefined && draft !== s.now ? <Button size="xs" onClick={() => void set(draft)}>Save</Button> : null}
 			</>
 		);
 	return (
-		<div className="item">
-			<div className="info">
-				<div className="name">
+		<div className={ITEM}>
+			<div className="min-w-0 flex-1">
+				<div className={NAME}>
 					<span>{s.title ?? s.key}</span>
-					{s.title ? <span className="mono faint setting-key" title="Its name in pine.json, and for the main agent">{s.key}</span> : null}
-					{s.live ? null : <span className="tag">from the next start</span>}
-					{saved ? <span className="tag warn">saved: {saved}</span> : null}
+					{s.title ? <span className="mono font-mono text-xs font-normal text-faint" title="Its name in pine.json, and for the main agent">{s.key}</span> : null}
+					{s.live ? null : <Tag>from the next start</Tag>}
+					{saved ? <Tag tone="warn">saved: {saved}</Tag> : null}
 				</div>
-				<div className="about lines">{s.about}</div>
+				<div className={cn(ABOUT, "whitespace-pre-line")}>{s.about}</div>
 			</div>
-			<div className="ctl">{control}</div>
+			<div className={CTL}>{control}</div>
 		</div>
 	);
 }
@@ -116,16 +159,16 @@ function General() {
 		<Page title="General" lead="pine's own settings. A change is checked by pine before it is written; one that would not load is not kept.">
 			{overview.data ? (
 				<>
-					<div className="group">
-						<div className="item">
-							<div className="info"><div className="name">pine {overview.data.version}</div><div className="about">Home: {tilde(overview.data.home)} · main agent: {overview.data.main} · {overview.data.sandbox ? "sandbox available" : "no sandbox on this system"}</div></div>
-							<div className="ctl"><Button variant="outline" size="xs" onClick={() => void bridge.reveal(overview.data!.log)}><ExternalLinkIcon data-icon="inline-start" />Show log</Button></div>
+					<div className={GROUP}>
+						<div className={ITEM}>
+							<div className="min-w-0 flex-1"><div className={NAME}>pine {overview.data.version}</div><div className={ABOUT}>Home: {tilde(overview.data.home)} · main agent: {overview.data.main} · {overview.data.sandbox ? "sandbox available" : "no sandbox on this system"}</div></div>
+							<div className={CTL}><Button variant="outline" size="xs" onClick={() => void bridge.reveal(overview.data!.log)}><ExternalLinkIcon data-icon="inline-start" />Show log</Button></div>
 						</div>
 					</div>
 					{overview.data.warnings.length || overview.data.modelNotes.length ? (
 						<>
-							<h2>Notes on this setup</h2>
-							{[...overview.data.warnings, ...overview.data.modelNotes].map((w, i) => <div key={i} className="notice"><TriangleAlertIcon /><span>{w}</span></div>)}
+							<h2 className={H2}>Notes on this setup</h2>
+							{[...overview.data.warnings, ...overview.data.modelNotes].map((w, i) => <Notice key={i}>{w}</Notice>)}
 						</>
 					) : null}
 				</>
@@ -134,9 +177,9 @@ function General() {
 			)}
 			{settings.data ? (
 				groups.map(([prefix, title]) => (
-					<div key={prefix} style={{ display: "contents" }}>
-						<h2>{title}</h2>
-						<div className="group">{settings.data!.filter((s) => s.key.startsWith(prefix)).map((s) => <SettingRow key={s.key} s={s} models={models.data ?? []} reload={settings.reload} />)}</div>
+					<div key={prefix} className="contents">
+						<h2 className={H2}>{title}</h2>
+						<div className={GROUP}>{settings.data!.filter((s) => s.key.startsWith(prefix)).map((s) => <SettingRow key={s.key} s={s} models={models.data ?? []} reload={settings.reload} />)}</div>
 					</div>
 				))
 			) : (
@@ -150,10 +193,10 @@ function General() {
 
 function Checks({ all, value, onChange }: { all: string[]; value: string[]; onChange: (v: string[]) => void }) {
 	return (
-		<div className="checks">
+		<div className="flex flex-wrap gap-1.5">
 			{all.map((x) => {
 				const on = value.includes(x);
-				return <button type="button" key={x} className={`check${on ? " on" : ""}`} onClick={() => onChange(on ? value.filter((v) => v !== x) : [...value, x])}>{on ? <CheckIcon size={11} /> : null}{x}</button>;
+				return <Button key={x} variant={on ? "secondary" : "outline"} size="xs" aria-pressed={on} onClick={() => onChange(on ? value.filter((v) => v !== x) : [...value, x])}>{on ? <CheckIcon data-icon="inline-start" /> : null}{x}</Button>;
 			})}
 		</div>
 	);
@@ -176,7 +219,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 	const [busy, setBusy] = useState(false);
 	const d = detail.data;
 	useEffect(() => (setChange({}), setTexts({})), [id, d]);
-	if (!d) return <Page title={id}><Button variant="ghost" size="xs" className="back" onClick={back}><ChevronLeftIcon data-icon="inline-start" />Agents</Button><Loading state={detail} /></Page>;
+	if (!d) return <Page title={id}><Button variant="ghost" size="xs" className="-mb-2.5 self-start" onClick={back}><ChevronLeftIcon data-icon="inline-start" />Agents</Button><Loading state={detail} /></Page>;
 	const now = <K extends keyof AgentDetail>(key: K): AgentDetail[K] => (key in change ? (change[key as string] as AgentDetail[K]) : d[key]);
 	const put = (key: string, value: unknown) => setChange({ ...change, [key]: value });
 	const dirtyFiles = FILES.filter((f) => f.edit && texts[f.key] !== undefined && texts[f.key] !== (d.files[f.key] ?? ""));
@@ -209,9 +252,9 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 			lead={d.main ? "The main agent: it administers pine, and may hand work to every other agent." : `An agent with its own workspace at ${tilde(d.workspace)}.`}
 			actions={<><Button variant="outline" onClick={() => void store.openTab(id, "main")}><MessageSquareIcon data-icon="inline-start" />Open</Button><Button disabled={!dirty || busy} onClick={() => void save()}>{busy ? "Saving…" : "Save changes"}</Button></>}
 		>
-			<Button variant="ghost" size="xs" className="back" onClick={back}><ChevronLeftIcon data-icon="inline-start" />Agents</Button>
-			<div className="group">
-				<div className="form">
+			<Button variant="ghost" size="xs" className="-mb-2.5 self-start" onClick={back}><ChevronLeftIcon data-icon="inline-start" />Agents</Button>
+			<div className={GROUP}>
+				<div className={cn(FORM, "p-4")}>
 					<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to." wide>
 						<Input value={now("description")} onChange={(e) => put("description", e.target.value)} />
 					</LabeledField>
@@ -228,51 +271,51 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 						<Checks all={d.allTools} value={now("tools")} onChange={(v) => put("tools", v)} />
 					</LabeledField>
 					<LabeledField label="May hand work to" hint={d.main ? "The main agent may delegate to everyone." : "Agents it can give a task to with its delegate tool."} wide>
-						{others.length ? <Checks all={["*", ...others]} value={now("delegates")} onChange={(v) => put("delegates", v)} /> : <span className="faint">There is no other agent yet.</span>}
+						{others.length ? <Checks all={["*", ...others]} value={now("delegates")} onChange={(v) => put("delegates", v)} /> : <span className="text-faint">There is no other agent yet.</span>}
 					</LabeledField>
 					<LabeledField label="Network from its shell" hint="In its sandbox (safe and manual mode) its commands have no network unless this is on. With it, a command can send what the agent reads anywhere.">
 						<Switch checked={now("network")} onCheckedChange={(on) => put("network", on)} />
 					</LabeledField>
 					<LabeledField label="Folders outside its workspace" wide hint="What it may reach in its sandbox besides its own folders.">
-						<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+						<div className="flex flex-col gap-1">
 							{[...d.read.map((p) => ({ p, kind: "read" })), ...d.write.map((p) => ({ p, kind: "read and change" }))].map(({ p, kind }) => {
 								const dropped = ((change.forget as string[]) ?? []).includes(p);
 								return (
-									<div className="row" key={`${kind}:${p}`}>
-										<FolderIcon size={13} className="faint" />
-										<span className="mono cut grow" style={dropped ? { textDecoration: "line-through", opacity: 0.5 } : undefined}>{tilde(p)}</span>
-										<span className="tag">{kind}</span>
+									<div className="flex items-center gap-2" key={`${kind}:${p}`}>
+										<FolderIcon className="size-3.5 text-faint" />
+										<span className={cn("mono min-w-0 flex-1 truncate font-mono", dropped && "line-through opacity-50")}>{tilde(p)}</span>
+										<Tag>{kind}</Tag>
 										<Button variant="ghost" size="icon-xs" title={dropped ? "Keep it" : "Take it away"} onClick={() => put("forget", dropped ? ((change.forget as string[]) ?? []).filter((x) => x !== p) : [...((change.forget as string[]) ?? []), p])}>{dropped ? <Undo2Icon /> : <XIcon />}</Button>
 									</div>
 								);
 							})}
 							{(["read", "write"] as const).flatMap((kind) => ((change[kind] as string[]) ?? []).map((p) => (
-								<div className="row" key={`new:${kind}:${p}`}>
-									<PlusIcon size={13} className="faint" />
-									<span className="mono cut grow">{tilde(p)}</span>
-									<span className="tag good">{kind === "write" ? "read and change" : "read"} · new</span>
+								<div className="flex items-center gap-2" key={`new:${kind}:${p}`}>
+									<PlusIcon className="size-3.5 text-faint" />
+									<span className="mono min-w-0 flex-1 truncate font-mono">{tilde(p)}</span>
+									<Tag tone="good">{kind === "write" ? "read and change" : "read"} · new</Tag>
 									<Button variant="ghost" size="icon-xs" onClick={() => put(kind, ((change[kind] as string[]) ?? []).filter((x) => x !== p))}><XIcon /></Button>
 								</div>
 							)))}
-							<div className="row"><Button variant="outline" size="xs" onClick={() => void addFolder("read")}><PlusIcon data-icon="inline-start" />May read…</Button><Button variant="outline" size="xs" onClick={() => void addFolder("write")}><PlusIcon data-icon="inline-start" />May read and change…</Button></div>
+							<div className="flex items-center gap-2"><Button variant="outline" size="xs" onClick={() => void addFolder("read")}><PlusIcon data-icon="inline-start" />May read…</Button><Button variant="outline" size="xs" onClick={() => void addFolder("write")}><PlusIcon data-icon="inline-start" />May read and change…</Button></div>
 						</div>
 					</LabeledField>
 				</div>
 			</div>
 
-			<h2>What it is told</h2>
-			<div className="group">
-				<div className="item" style={{ alignItems: "flex-start", flexDirection: "column", gap: 8 }}>
+			<h2 className={H2}>What it is told</h2>
+			<div className={GROUP}>
+				<div className={cn(ITEM, "flex-col items-start gap-2")}>
 					<Tabs value={file} onValueChange={setFile}><TabsList activateOnFocus>{FILES.filter((f) => f.edit || d.files[f.key] !== undefined).map((f) => <TabsTrigger key={f.key} value={f.key}>{f.label}</TabsTrigger>)}</TabsList></Tabs>
-					<div className="about" style={{ color: "var(--text-muted)", fontSize: 12.5 }}>{meta.about}</div>
+					<div className={ABOUT}>{meta.about}</div>
 				</div>
-				<div style={{ height: 380, display: "flex" }}>
+				<div className="flex h-96">
 					<Editor key={`${id}:${file}`} file={`${file}.md`} text={text} readOnly={!meta.edit} onChange={(v) => setTexts((was) => ({ ...was, [file]: v }))} onSave={() => void save()} />
 				</div>
 			</div>
 
-			<h2>What it has</h2>
-			<div className="group">
+			<h2 className={H2}>What it has</h2>
+			<div className={GROUP}>
 				{(
 					[
 						["Conversations", d.holdings.conversations],
@@ -283,13 +326,13 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 						["Routes that wake it", d.holdings.routes],
 					] as Array<[string, string[]]>
 				).map(([label, list]) => (
-					<div className="item" key={label}><div className="info"><div className="name">{label}</div></div><div className="ctl muted" style={{ maxWidth: "70%" }}><span className="cut">{list?.length ? list.join(", ") : "none"}</span></div></div>
+					<div className={ITEM} key={label}><div className="min-w-0 flex-1"><div className={NAME}>{label}</div></div><div className={cn(CTL, "max-w-2/3 text-muted-foreground")}><span className="truncate">{list?.length ? list.join(", ") : "none"}</span></div></div>
 				))}
-				<div className="item"><div className="info"><div className="name">Workspace</div><div className="about mono">{tilde(d.workspace)} · {plural(d.holdings.files, "file")}</div></div><div className="ctl"><Button variant="outline" size="xs" onClick={() => void bridge.reveal(d.workspace)}><ExternalLinkIcon data-icon="inline-start" />Show</Button></div></div>
+				<div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>Workspace</div><div className={cn(ABOUT, "mono font-mono")}>{tilde(d.workspace)} · {plural(d.holdings.files, "file")}</div></div><div className={CTL}><Button variant="outline" size="xs" onClick={() => void bridge.reveal(d.workspace)}><ExternalLinkIcon data-icon="inline-start" />Show</Button></div></div>
 			</div>
 			{d.main ? null : (
-				<div className="group">
-					<div className="item"><div className="info"><div className="name">Remove this agent</div><div className="about">With its conversations, sources, schedules, servers, skills, the routes that wake it, its folder and its private home.{d.holdings.outside ? " Its workspace lies outside pine's home and is left as it is." : ""}</div></div><div className="ctl"><Button variant="destructive" onClick={() => void remove()}><Trash2Icon data-icon="inline-start" />Remove…</Button></div></div>
+				<div className={GROUP}>
+					<div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>Remove this agent</div><div className={ABOUT}>With its conversations, sources, schedules, servers, skills, the routes that wake it, its folder and its private home.{d.holdings.outside ? " Its workspace lies outside pine's home and is left as it is." : ""}</div></div><div className={CTL}><Button variant="destructive" onClick={() => void remove()}><Trash2Icon data-icon="inline-start" />Remove…</Button></div></div>
 				</div>
 			)}
 		</Page>
@@ -310,12 +353,12 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 	};
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[600px]">
+			<DialogContent showCloseButton={false} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>A new agent</DialogTitle>
 				</DialogHeader>
 				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
-					<LabeledField label="Name" hint="Lowercase letters, digits, - and _ (for example research, home, books)."><Input autoFocus className="mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} /></LabeledField>
+					<LabeledField label="Name" hint="Lowercase letters, digits, - and _ (for example research, home, books)."><Input autoFocus className="mono font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} /></LabeledField>
 					<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to."><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField>
 					<LabeledField label="Instructions" hint="Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on."><AutoText value={f.instructions} onChange={(v) => setF({ ...f, instructions: v })} minRows={4} maxRows={12} placeholder="You are …" /></LabeledField>
 					<LabeledField label="Model">
@@ -338,15 +381,15 @@ function Agents() {
 	if (open && s.agents.some((a) => a.id === open)) return <AgentPage id={open} back={() => setOpen(undefined)} />;
 	return (
 		<Page title="Agents" lead="An agent is a folder with a workspace, instructions and a model. Each has its own conversations and reach." actions={<Button onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New agent</Button>}>
-			<div className="group">
+			<div className={GROUP}>
 				{s.agents.map((a) => (
-					<div className="item click" key={a.id} onClick={() => setOpen(a.id)}>
-						<div className="info">
-							<div className="name">{a.id}{a.main ? <span className="tag good">main</span> : null}<span className={`tag${a.mode === "bypass" ? " bad" : a.mode === "safe" ? " good" : ""}`}>{a.mode}</span></div>
-							<div className="about">{a.description || "no description"}</div>
-							<div className="about faint mono" style={{ fontSize: 11.5 }}>{a.model} · reasoning {a.thinking} · {tilde(a.workspace)}</div>
+					<div className={cn(ITEM, CLICK)} key={a.id} onClick={() => setOpen(a.id)}>
+						<div className="min-w-0 flex-1">
+							<div className={NAME}>{a.id}{a.main ? <Tag tone="good">main</Tag> : null}<Tag tone={a.mode === "bypass" ? "bad" : a.mode === "safe" ? "good" : undefined}>{a.mode}</Tag></div>
+							<div className={ABOUT}>{a.description || "no description"}</div>
+							<div className={cn(ABOUT, "mono font-mono text-faint")}>{a.model} · reasoning {a.thinking} · {tilde(a.workspace)}</div>
 						</div>
-						<ChevronRightIcon size={14} className="faint" />
+						<ChevronRightIcon className="size-3.5 text-faint" />
 					</div>
 				))}
 			</div>
@@ -404,34 +447,34 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 	const q = state?.question;
 	return (
 		<Dialog open onOpenChange={(open) => open || cancel()}>
-			<DialogContent showCloseButton={false} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[560px]">
+			<DialogContent showCloseButton={false} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>Sign in to {provider}</DialogTitle>
 				</DialogHeader>
 				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
-					{error || state?.error ? <div className="notice bad"><TriangleAlertIcon />{error ?? state?.error}</div> : null}
-					{state?.lines.length ? <pre className="log">{state.lines.join("\n")}</pre> : null}
-					{state?.url && !state.done ? <div className="row"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono selectable">{state.code}</b></span> : null}</div> : null}
+					{error || state?.error ? <Notice tone="bad">{error ?? state?.error}</Notice> : null}
+					{state?.lines.length ? <pre className={LOG}>{state.lines.join("\n")}</pre> : null}
+					{state?.url && !state.done ? <div className="flex items-center gap-2"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono cursor-auto font-mono select-text">{state.code}</b></span> : null}</div> : null}
 					{q && !state?.done ? (
 						q.options?.length ? (
-							<div className="pick-list" style={{ padding: 0 }}>
-								<div className="muted" style={{ marginBottom: 4 }}>{q.message}</div>
-								{q.options.map((o) => <div key={o.id} className="pick-item" onClick={() => void send(o.id)}><span className="label">{o.label}</span><span className="about">{o.description}</span></div>)}
+							<div className="flex flex-col">
+								<div className="mb-1 text-muted-foreground">{q.message}</div>
+								{q.options.map((o) => <div key={o.id} className="flex items-baseline gap-2.5 rounded-md px-3 py-2 hover:bg-hover" onClick={() => void send(o.id)}><span className="max-w-3/5 flex-none truncate">{o.label}</span><span className="min-w-0 truncate text-xs text-faint">{o.description}</span></div>)}
 							</div>
 						) : (
 							<LabeledField label={q.message} hint={q.secret ? "It is not shown, and is stored in auth.json in pine's home, where agents cannot read it." : undefined}>
-								<div className="row">
-									<Input autoFocus className="mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
+								<div className="flex items-center gap-2">
+									<Input autoFocus className="mono font-mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
 									<Button disabled={!answer.trim()} onClick={() => void send(answer.trim())}>Continue</Button>
 								</div>
 							</LabeledField>
 						)
 					) : !state?.done && !error ? (
-						<div className="row muted"><Pulse /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
+						<div className="flex items-center gap-2 text-muted-foreground"><Pulse /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
 					) : null}
-					{state?.done && !state.error ? <div className="notice plain"><CheckIcon />{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</div> : null}
+					{state?.done && !state.error ? <Notice tone="plain" icon={CheckIcon}>{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</Notice> : null}
 					{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
-					{state?.done && !state.error && state.models?.length ? <div className="row"><Button onClick={() => close(true, state.models)}>Choose the model your agents run on…</Button><span className="muted">Or later: Change, on the Models page.</span></div> : null}
+					{state?.done && !state.error && state.models?.length ? <div className="flex items-center gap-2"><Button onClick={() => close(true, state.models)}>Choose the model your agents run on…</Button><span className="text-muted-foreground">Or later: Change, on the Models page.</span></div> : null}
 				</div>
 				<DialogFooter><Button variant={state?.done ? "default" : "outline"} onClick={cancel}>{state?.done ? "Done" : "Cancel"}</Button></DialogFooter>
 			</DialogContent>
@@ -474,43 +517,43 @@ function Models() {
 	const shown = all ? hosted : hosted.filter((p) => p.signedIn);
 	return (
 		<Page title="Models" lead="Which models your agents can run on: providers you sign in to, and model servers of your own. An agent's model is chosen on its page, or in the bar under a conversation.">
-			<h2>Model servers of your own</h2>
-			<div className="group">
+			<h2 className={H2}>Model servers of your own</h2>
+			<div className={GROUP}>
 				{servers.data?.length ? (
 					servers.data.map((s) => (
-						<div className="item" key={s.name}>
-							<div className="info">
-								<div className="name">{s.name}<span className="tag mono">{s.baseUrl}</span><span className="tag">key: {s.key}</span></div>
-								<div className="about mono">{s.models.map((m) => `${s.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</div>
+						<div className={ITEM} key={s.name}>
+							<div className="min-w-0 flex-1">
+								<div className={NAME}>{s.name}<Tag mono>{s.baseUrl}</Tag><Tag>key: {s.key}</Tag></div>
+								<div className={cn(ABOUT, "mono font-mono")}>{s.models.map((m) => `${s.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</div>
 							</div>
-							<div className="ctl"><Confirm label="Remove" question={`Remove the model server ${s.name}?`} onConfirm={() => void store.attempt(() => api.removeModelServer(s.name)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} /></div>
+							<div className={CTL}><Confirm label="Remove" question={`Remove the model server ${s.name}?`} onConfirm={() => void store.attempt(() => api.removeModelServer(s.name)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} /></div>
 						</div>
 					))
 				) : servers.data ? (
-					<div className="item"><div className="info"><div className="about">None yet. Anything that speaks OpenAI's chat API works: llama.cpp, vLLM, LM Studio.</div></div></div>
+					<div className={ITEM}><div className="min-w-0 flex-1"><div className={ABOUT}>None yet. Anything that speaks OpenAI's chat API works: llama.cpp, vLLM, LM Studio.</div></div></div>
 				) : (
 					<Loading state={servers} />
 				)}
-				<div className="form">
-					<LabeledField label="Name" hint="Its models are then called name/model."><Input className="mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
-					<LabeledField label="Address" hint="pine asks the server which models it has."><Input className="mono" placeholder="http://127.0.0.1:8080" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} /></LabeledField>
-					{locked || f.key ? <LabeledField label="API key" hint="The server wants a key. It goes into pine's .env file."><Input className="mono" type="password" autoComplete="off" value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} /></LabeledField> : null}
-					<LabeledField label="Context (tokens)" hint="Only when the server does not say."><Input className="mono" placeholder="from the server" value={f.context} onChange={(e) => setF({ ...f, context: e.target.value.replace(/\D/g, "") })} /></LabeledField>
+				<div className={cn(FORM, "p-4")}>
+					<LabeledField label="Name" hint="Its models are then called name/model."><Input className="mono font-mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
+					<LabeledField label="Address" hint="pine asks the server which models it has."><Input className="mono font-mono" placeholder="http://127.0.0.1:8080" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} /></LabeledField>
+					{locked || f.key ? <LabeledField label="API key" hint="The server wants a key. It goes into pine's .env file."><Input className="mono font-mono" type="password" autoComplete="off" value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} /></LabeledField> : null}
+					<LabeledField label="Context (tokens)" hint="Only when the server does not say."><Input className="mono font-mono" placeholder="from the server" value={f.context} onChange={(e) => setF({ ...f, context: e.target.value.replace(/\D/g, "") })} /></LabeledField>
 				</div>
-				<div className="form-foot">
-					<span className="muted grow" style={{ fontSize: 12 }}>An agent that is given one of its models sends its whole conversations there.</span>
+				<div className={FOOT}>
+					<span className="min-w-0 flex-1 text-xs text-muted-foreground">An agent that is given one of its models sends its whole conversations there.</span>
 					<Button disabled={!f.name.trim() || !f.url.trim() || busy} onClick={() => void add()}>{busy ? "Asking the server…" : "Add server"}</Button>
 				</div>
 			</div>
 
-			<h2>Providers <Button variant="ghost" size="xs" onClick={() => setAll(!all)}>{all ? "Only those signed in" : `Show all ${hosted.length}`}</Button></h2>
-			<div className="group">
+			<h2 className={H2}>Providers <Button variant="ghost" size="xs" onClick={() => setAll(!all)}>{all ? "Only those signed in" : `Show all ${hosted.length}`}</Button></h2>
+			<div className={GROUP}>
 				{providers.data ? (
 					shown.length ? (
 						shown.map((p) => (
-							<div className="item" key={p.id}>
-								<div className="info"><div className="name">{p.name ?? p.id}{p.name && p.name !== p.id ? <span className="tag mono">{p.id}</span> : null}{p.signedIn ? <span className="tag good">signed in</span> : null}</div><div className="about">{plural(p.models, "model")}</div></div>
-								<div className="ctl">
+							<div className={ITEM} key={p.id}>
+								<div className="min-w-0 flex-1"><div className={NAME}>{p.name ?? p.id}{p.name && p.name !== p.id ? <Tag mono>{p.id}</Tag> : null}{p.signedIn ? <Tag tone="good">signed in</Tag> : null}</div><div className={ABOUT}>{plural(p.models, "model")}</div></div>
+								<div className={CTL}>
 									{p.signedIn ? <Confirm label="Sign out" question={`Sign out of ${p.name ?? p.id}?`} onConfirm={() => void store.attempt(() => api.logout(p.id)).then((r) => r && reload())} /> : null}
 									{p.oauth ? <Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "oauth" })}>Sign in</Button> : null}
 									<Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "api_key" })}>{p.signedIn ? "New key" : "API key"}</Button>
@@ -518,24 +561,24 @@ function Models() {
 							</div>
 						))
 					) : (
-						<div className="item"><div className="info"><div className="about">You are signed in to no provider. Show all to pick one (OpenCode, Claude, ChatGPT, …), or add a model server of your own above.</div></div></div>
+						<div className={ITEM}><div className="min-w-0 flex-1"><div className={ABOUT}>You are signed in to no provider. Show all to pick one (OpenCode, Claude, ChatGPT, …), or add a model server of your own above.</div></div></div>
 					)
 				) : (
 					<Loading state={providers} />
 				)}
 			</div>
 
-			<h2>The model your agents run on</h2>
-			<div className="group">
-				<div className="item fallback-model">
-					<div className="info"><div className="name mono">{fallback.data ?? "…"}</div><div className="about">Every agent that has no model of its own runs on it{own.length ? `. With a model of their own: ${own.join(", ")}` : ""}.</div></div>
+			<h2 className={H2}>The model your agents run on</h2>
+			<div className={GROUP}>
+				<div className={cn(ITEM, "fallback-model")}>
+					<div className="min-w-0 flex-1"><div className={cn(NAME, "mono font-mono")}>{fallback.data ?? "…"}</div><div className={ABOUT}>Every agent that has no model of its own runs on it{own.length ? `. With a model of their own: ${own.join(", ")}` : ""}.</div></div>
 					<Button variant="outline" size="xs" onClick={() => void store.chooseDefaultModel().then(reload)}>Change…</Button>
 				</div>
-				{stuck.map((a) => <div className="item" key={a.id}><div className="notice grow"><TriangleAlertIcon /><div><b>{a.id}</b> cannot answer: {a.modelProblem}</div></div></div>)}
+				{stuck.map((a) => <div className={ITEM} key={a.id}><Notice className="min-w-0 flex-1"><b>{a.id}</b> cannot answer: {a.modelProblem}</Notice></div>)}
 			</div>
 
-			<h2>Models you can use now</h2>
-			<div className="group"><div className="item"><div className="about mono selectable" style={{ color: "var(--text-muted)", fontSize: 12, lineHeight: 1.7 }}>{models.data ? models.data.join("   ") || "none: sign in to a provider or add a server" : "…"}</div></div></div>
+			<h2 className={H2}>Models you can use now</h2>
+			<div className={GROUP}><div className={ITEM}><div className={cn(ABOUT, "mono font-mono leading-relaxed")}>{models.data ? models.data.join("   ") || "none: sign in to a provider or add a server" : "…"}</div></div></div>
 			{signIn ? <SignIn provider={signIn.provider} type={signIn.type} close={(_done, choose) => (setSignIn(undefined), reload(), choose ? void store.chooseDefaultModel(choose).then(reload) : undefined)} /> : null}
 		</Page>
 	);
@@ -576,19 +619,19 @@ function Mcp() {
 	};
 	return (
 		<Page title="MCP servers" lead="Servers that offer tools to your agents: a remote one by its address, or a program on this computer, which runs where the commands of the agent that uses it run.">
-			<div className="group">
+			<div className={GROUP}>
 				{servers.data ? (
 					servers.data.length ? (
 						servers.data.map((s) => {
 							const state = !s.enabled ? "disabled" : (states.data?.[s.name] ?? (states.loading ? "…" : s.remote ? "unknown" : "local"));
 							const agent = s.scope === "global" ? undefined : s.scope;
 							return (
-								<div className="item" key={`${s.scope}:${s.name}`}>
-									<div className="info">
-										<div className="name">{s.name}<span className={`tag${/connected|ok|local|authenticated/i.test(state) ? " good" : /needs|error|fail|unauth/i.test(state) ? " warn" : ""}`}>{state}</span><span className="tag">{s.scope === "global" ? `all: ${s.agents.join(", ") || "nobody"}` : s.session ? `only the conversation ${s.session} of ${s.scope}` : `only ${s.scope}`}</span>{s.taints ? <span className="tag warn">outside content</span> : null}{s.approve !== "never" ? <span className="tag">asks: {s.approve}</span> : null}</div>
-										<div className="about mono">{s.target}</div>
+								<div className={ITEM} key={`${s.scope}:${s.name}`}>
+									<div className="min-w-0 flex-1">
+										<div className={NAME}>{s.name}<Tag tone={/connected|ok|local|authenticated/i.test(state) ? "good" : /needs|error|fail|unauth/i.test(state) ? "warn" : undefined}>{state}</Tag><Tag>{s.scope === "global" ? `all: ${s.agents.join(", ") || "nobody"}` : s.session ? `only the conversation ${s.session} of ${s.scope}` : `only ${s.scope}`}</Tag>{s.taints ? <Tag tone="warn">outside content</Tag> : null}{s.approve !== "never" ? <Tag>asks: {s.approve}</Tag> : null}</div>
+										<div className={cn(ABOUT, "mono font-mono")}>{s.target}</div>
 									</div>
-									<div className="ctl">
+									<div className={CTL}>
 										{s.remote ? <Button variant="outline" size="xs" disabled={busy === s.name} onClick={() => void login(s.name, agent)}>{busy === s.name ? <><Pulse size={11} /> In your browser…</> : "Sign in"}</Button> : null}
 										{s.target.startsWith("bundled:") ? null : <Confirm label="Remove" question={`Remove the MCP server ${s.name}?`} onConfirm={() => void store.attempt(() => api.removeMcp(s.name, agent)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} />}
 									</div>
@@ -596,24 +639,24 @@ function Mcp() {
 							);
 						})
 					) : (
-						<div className="item"><div className="about muted">No MCP servers yet.</div></div>
+						<div className={ITEM}><div className={ABOUT}>No MCP servers yet.</div></div>
 					)
 				) : (
 					<Loading state={servers} />
 				)}
 			</div>
-			{out ? <pre className="log">{out}</pre> : null}
-			<h2>Add a server</h2>
-			<div className="group">
-				<div className="form">
-					<LabeledField label="Name" hint="Lowercase letters, digits and _. Its tools appear as mcp__name__tool."><Input className="mono" placeholder="home_link" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></LabeledField>
+			{out ? <pre className={LOG}>{out}</pre> : null}
+			<h2 className={H2}>Add a server</h2>
+			<div className={GROUP}>
+				<div className={cn(FORM, "p-4")}>
+					<LabeledField label="Name" hint="Lowercase letters, digits and _. Its tools appear as mcp__name__tool."><Input className="mono font-mono" placeholder="home_link" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} /></LabeledField>
 					<LabeledField label="For"><Whom value={f.agent} onChange={(agent) => setF({ ...f, agent })} /></LabeledField>
 					<LabeledField label="Kind" wide><Tabs value={f.kind} onValueChange={(kind) => setF({ ...f, kind, target: "" })}><TabsList activateOnFocus><TabsTrigger value="remote">Remote (https address)</TabsTrigger><TabsTrigger value="local">A program on this computer</TabsTrigger></TabsList></Tabs></LabeledField>
-					<LabeledField label={f.kind === "remote" ? "Address" : "Command"} wide hint={f.kind === "remote" ? "Its https URL." : "The program and its arguments, as its documentation gives them. One program, no shell operators."}><Input className="mono" placeholder={f.kind === "remote" ? "https://mcp.example.com/mcp" : "npx -y @example/mcp@latest"} value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} /></LabeledField>
+					<LabeledField label={f.kind === "remote" ? "Address" : "Command"} wide hint={f.kind === "remote" ? "Its https URL." : "The program and its arguments, as its documentation gives them. One program, no shell operators."}><Input className="mono font-mono" placeholder={f.kind === "remote" ? "https://mcp.example.com/mcp" : "npx -y @example/mcp@latest"} value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} /></LabeledField>
 					<LabeledField label="What it offers" hint="One sentence, for the agents."><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField>
 					<LabeledField label="Returns outside content" hint="Its results mark a conversation as having read outside content (a server that reads the web, mail or other people's words)."><Switch checked={f.taints} onCheckedChange={(taints) => setF({ ...f, taints })} /></LabeledField>
 				</div>
-				<div className="form-foot"><Button disabled={!f.name.trim() || !f.target.trim()} onClick={() => void add()}>Add server</Button></div>
+				<div className={FOOT}><Button disabled={!f.name.trim() || !f.target.trim()} onClick={() => void add()}>Add server</Button></div>
 			</div>
 		</Page>
 	);
@@ -635,15 +678,15 @@ function Skills() {
 	if (edit)
 		return (
 			<Page title={edit.isNew ? "A new skill" : edit.name} lead="A skill is how something is done, written down so that an agent can do it again: a name, one or two sentences on when to use it, and the steps." actions={edit.managed ? <Button disabled={!edit.name.trim() || !edit.description.trim() || !edit.instructions.trim()} onClick={() => void save()}>Save skill</Button> : undefined}>
-				<Button variant="ghost" size="xs" className="back" onClick={() => setEdit(undefined)}><ChevronLeftIcon data-icon="inline-start" />Skills</Button>
-				{edit.managed ? null : <div className="notice plain"><InfoIcon />This skill lies in a folder of yours that the configuration names. pine shows it and does not change it.</div>}
-				<div className="group">
-					<div className="form">
-						<LabeledField label="Name" hint="Lowercase letters, digits and single hyphens."><Input className="mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" /></LabeledField>
+				<Button variant="ghost" size="xs" className="-mb-2.5 self-start" onClick={() => setEdit(undefined)}><ChevronLeftIcon data-icon="inline-start" />Skills</Button>
+				{edit.managed ? null : <Notice tone="plain" icon={InfoIcon}>This skill lies in a folder of yours that the configuration names. pine shows it and does not change it.</Notice>}
+				<div className={GROUP}>
+					<div className={cn(FORM, "p-4")}>
+						<LabeledField label="Name" hint="Lowercase letters, digits and single hyphens."><Input className="mono font-mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" /></LabeledField>
 						<LabeledField label="For">{edit.isNew ? <Whom value={edit.agent} onChange={(agent) => setEdit({ ...edit, agent })} /> : <Input disabled value={edit.agent || "all agents"} />}</LabeledField>
 						<LabeledField label="When to use it" wide hint="This line is always in front of the agent; it decides by it whether to read the rest."><AutoText value={edit.description} onChange={(description) => setEdit({ ...edit, description })} minRows={2} maxRows={5} readOnly={!edit.managed} /></LabeledField>
 					</div>
-					<div style={{ height: 420, display: "flex", borderTop: "1px solid var(--line-soft)" }}>
+					<div className="flex h-104 border-t border-line-soft">
 						<Editor file="SKILL.md" text={edit.instructions} readOnly={!edit.managed} onChange={(instructions) => setEdit((was) => (was ? { ...was, instructions } : was))} onSave={() => void save()} />
 					</div>
 				</div>
@@ -651,16 +694,16 @@ function Skills() {
 		);
 	return (
 		<Page title="Skills" lead="What your agents know how to do. An agent writes one when you ask it to (“make a skill for this”); here you can read them, change them and add your own." actions={<Button onClick={() => setEdit({ name: "", description: "", instructions: "", agent: "", isNew: true, managed: true })}><PlusIcon data-icon="inline-start" />New skill</Button>}>
-			<div className="group">
+			<div className={GROUP}>
 				{skills.data ? (
 					skills.data.length ? (
 						skills.data.map((s) => (
-							<div className="item click" key={s.dir} onClick={() => setEdit({ name: s.name, description: s.description, instructions: s.instructions ?? "", agent: s.agent ?? "", isNew: false, managed: s.managed && s.scope !== "local" })}>
-								<div className="info">
-									<div className="name">{s.name}<span className="tag">{s.scope === "global" ? "all agents" : s.scope === "agent" ? s.agent : `${s.agent} · ${s.session}`}</span>{s.managed ? null : <span className="tag">yours, from the configuration</span>}</div>
-									<div className="about">{short(s.description, 220)}</div>
+							<div className={cn(ITEM, CLICK)} key={s.dir} onClick={() => setEdit({ name: s.name, description: s.description, instructions: s.instructions ?? "", agent: s.agent ?? "", isNew: false, managed: s.managed && s.scope !== "local" })}>
+								<div className="min-w-0 flex-1">
+									<div className={NAME}>{s.name}<Tag>{s.scope === "global" ? "all agents" : s.scope === "agent" ? s.agent : `${s.agent} · ${s.session}`}</Tag>{s.managed ? null : <Tag>yours, from the configuration</Tag>}</div>
+									<div className={ABOUT}>{short(s.description, 220)}</div>
 								</div>
-								<div className="ctl" onClick={(e) => e.stopPropagation()}>{s.managed ? <Confirm icon={Trash2Icon} label="Remove this skill" question={`Remove the skill ${s.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSkill(s.name, s.agent, s.session)).then((r) => r && (store.flash(`Removed the skill ${s.name}.`), skills.reload()))} /> : null}</div>
+								<div className={CTL} onClick={(e) => e.stopPropagation()}>{s.managed ? <Confirm icon={Trash2Icon} label="Remove this skill" question={`Remove the skill ${s.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSkill(s.name, s.agent, s.session)).then((r) => r && (store.flash(`Removed the skill ${s.name}.`), skills.reload()))} /> : null}</div>
 							</div>
 						))
 					) : (
@@ -683,10 +726,10 @@ function OptionField({ name, schema, required, value, onChange }: { name: string
 	const hint = schema?.description;
 	if (type === "boolean") return <LabeledField label={label} hint={hint}><Switch checked={value === true} onCheckedChange={onChange} /></LabeledField>;
 	if (Array.isArray(schema?.enum)) return <LabeledField label={label} hint={hint}><Choice value={String(value ?? "")} onChange={(v) => onChange(v || undefined)} options={[{ value: "", label: "not set" }, ...schema.enum.map((v: string) => ({ value: v, label: v }))]} /></LabeledField>;
-	if (type === "number" || type === "integer") return <LabeledField label={label} hint={hint}><Input className="mono" value={value === undefined ? "" : String(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} inputMode="decimal" /></LabeledField>;
-	if (type === "array") return <LabeledField label={label} hint={<>{hint} <span className="faint">Several: separate them with commas.</span></>} wide><Input className="mono" value={Array.isArray(value) ? value.join(", ") : ""} onChange={(e) => onChange(e.target.value.trim() ? e.target.value.split(",").map((x) => x.trim()).filter(Boolean) : undefined)} /></LabeledField>;
-	if (type === "object" || type === "any") return <LabeledField label={label} hint={<>{hint} <span className="faint">As JSON.</span></>} wide><Input className="mono" value={typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} /></LabeledField>;
-	return <LabeledField label={label} hint={hint} wide={String(hint ?? "").length > 90}><Input className="mono" value={String(value ?? "")} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} /></LabeledField>;
+	if (type === "number" || type === "integer") return <LabeledField label={label} hint={hint}><Input className="mono font-mono" value={value === undefined ? "" : String(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} inputMode="decimal" /></LabeledField>;
+	if (type === "array") return <LabeledField label={label} hint={<>{hint} <span className="text-faint">Several: separate them with commas.</span></>} wide><Input className="mono font-mono" value={Array.isArray(value) ? value.join(", ") : ""} onChange={(e) => onChange(e.target.value.trim() ? e.target.value.split(",").map((x) => x.trim()).filter(Boolean) : undefined)} /></LabeledField>;
+	if (type === "object" || type === "any") return <LabeledField label={label} hint={<>{hint} <span className="text-faint">As JSON.</span></>} wide><Input className="mono font-mono" value={typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} /></LabeledField>;
+	return <LabeledField label={label} hint={hint} wide={String(hint ?? "").length > 90}><Input className="mono font-mono" value={String(value ?? "")} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} /></LabeledField>;
 }
 
 function NewSource({ types, close, made }: { types: SourceType[]; close: () => void; made: () => void }) {
@@ -730,7 +773,7 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 	};
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[680px]">
+			<DialogContent showCloseButton={false} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>A new event source</DialogTitle>
 				</DialogHeader>
@@ -738,18 +781,18 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 					{plan ? (
 						<>
 							<div><b>{f.name}</b> ({f.type}) for {f.agent || "all agents"} will:</div>
-							<ul style={{ margin: 0, paddingLeft: 20 }}>{plan.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
-							{plan.owner ? <div className="notice"><TriangleAlertIcon />What it reports is treated as your own words: the agent it wakes gets its full tools.</div> : null}
+							<ul className="list-disc pl-5">{plan.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
+							{plan.owner ? <Notice>What it reports is treated as your own words: the agent it wakes gets its full tools.</Notice> : null}
 							{plan.needs.map((n) => {
 								const at = n.label.indexOf(": ");
-								return <LabeledField key={n.name} label={at > 0 ? n.label.slice(0, at) : n.name} hint={<>{at > 0 ? n.label.slice(at + 2) : ""} It is not shown, goes into pine's .env file, and never reaches an agent.</>}><Input className="mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} /></LabeledField>;
+								return <LabeledField key={n.name} label={at > 0 ? n.label.slice(0, at) : n.name} hint={<>{at > 0 ? n.label.slice(at + 2) : ""} It is not shown, goes into pine's .env file, and never reaches an agent.</>}><Input className="mono font-mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} /></LabeledField>;
 							})}
 							<LabeledField label="Subscribe right away" hint={`What is to be done when it reports something. With a note, ${f.agent || "every agent"} is woken by its events; without one, nobody is subscribed yet.`}><Input placeholder="for example: file the scan and tell me what it is" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></LabeledField>
 						</>
 					) : (
 						<>
-							<div className="form" style={{ padding: 0 }}>
-								<LabeledField label="Name" hint="Lowercase letters, digits, - and _."><Input autoFocus className="mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
+							<div className={FORM}>
+								<LabeledField label="Name" hint="Lowercase letters, digits, - and _."><Input autoFocus className="mono font-mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
 								<LabeledField label="For"><Whom value={f.agent} onChange={(agent) => setF({ ...f, agent })} /></LabeledField>
 								<LabeledField label="Type" wide hint={type?.summary}>
 									<Choice value={f.type} onChange={(type) => (setF({ ...f, type }), setOptions({}))} options={[{ value: "", label: "Choose what it watches…" }, ...types.map((t) => ({ value: t.name, label: `${t.name}: ${short(t.summary, 80)}` }))]} />
@@ -758,7 +801,7 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 								{props.map(([name, schema]) => <OptionField key={name} name={name} schema={schema} required={required.has(name)} value={options[name]} onChange={(v) => setOptions({ ...options, [name]: v })} />)}
 								{type ? <LabeledField label="It is my own" hint="Only for a device or folder nobody else can put content into: what it reports is then trusted like your own messages."><Switch checked={f.own} onCheckedChange={(own) => setF({ ...f, own })} /></LabeledField> : null}
 							</div>
-							{type ? <div className="faint" style={{ fontSize: 12 }}>A password or token it needs is asked for in the next step.</div> : null}
+							{type ? <div className="text-xs text-faint">A password or token it needs is asked for in the next step.</div> : null}
 						</>
 					)}
 				</div>
@@ -789,23 +832,23 @@ function Sources() {
 	};
 	return (
 		<>
-			<div className="row"><span className="muted grow">What can wake an agent: a folder, a web address, a chat, a device. A source costs nothing until somebody is subscribed to it.</span><Button disabled={!types.data} onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New source</Button></div>
-			<div className="group">
+			<div className="flex items-center gap-2"><span className="muted grow">What can wake an agent: a folder, a web address, a chat, a device. A source costs nothing until somebody is subscribed to it.</span><Button disabled={!types.data} onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New source</Button></div>
+			<div className={GROUP}>
 				{sources.data ? (
 					sources.data.length ? (
 						sources.data.map((x) => (
-							<div className="item" key={`${x.scope}:${x.name}`} style={{ alignItems: "flex-start" }}>
-								<span className={`dot ${x.error ? "bad" : x.running ? "good" : ""}`} style={{ marginTop: 7 }} />
-								<div className="info">
-									<div className="name">{x.name}<span className="tag">{x.type}</span><span className="tag">{scopeText(x.scope)}</span>{x.trust === "owner" ? <span className="tag good">yours</span> : null}</div>
-									{x.description ? <div className="about">{x.description}</div> : null}
-									<div className="about faint">{x.error ? `not running: ${x.error}` : x.running ? (x.status ?? "running") : "idle, nobody is subscribed"} · {x.last ? `last event ${ago(x.last.ts)}, ${x.events} since start` : "no events since start"}</div>
-									<div className="row" style={{ flexWrap: "wrap", marginTop: 5, gap: 5 }}>
-										{x.subscribers.map((who) => <span className="tag" key={who}>{who}<span style={{ cursor: "pointer" }} title="End this subscription" onClick={() => void unsubscribe(x.name, who)}><XIcon size={10} /></span></span>)}
+							<div className={cn(ITEM, "items-start")} key={`${x.scope}:${x.name}`}>
+								<span className={cn("mt-2 size-2 shrink-0 rounded-full", x.error ? "bg-destructive" : x.running ? "bg-primary" : "bg-faint")} />
+								<div className="min-w-0 flex-1">
+									<div className={NAME}>{x.name}<Tag>{x.type}</Tag><Tag>{scopeText(x.scope)}</Tag>{x.trust === "owner" ? <Tag tone="good">yours</Tag> : null}</div>
+									{x.description ? <div className={ABOUT}>{x.description}</div> : null}
+									<div className={cn(ABOUT, "text-faint")}>{x.error ? `not running: ${x.error}` : x.running ? (x.status ?? "running") : "idle, nobody is subscribed"} · {x.last ? `last event ${ago(x.last.ts)}, ${x.events} since start` : "no events since start"}</div>
+									<div className="mt-1 flex flex-wrap items-center gap-1">
+										{x.subscribers.map((who) => <Tag key={who}>{who}<span className="cursor-pointer" title="End this subscription" onClick={() => void unsubscribe(x.name, who)}><XIcon className="size-2.5" /></span></Tag>)}
 										<Button variant="ghost" size="xs" onClick={() => void subscribe(x.name)}><PlusIcon data-icon="inline-start" />Subscribe</Button>
 									</div>
 								</div>
-								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this source" question={`Remove the event source ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSource(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && (store.flash(`Removed the event source ${x.name}.`), sources.reload()))} /></div>
+								<div className={CTL}><Confirm icon={Trash2Icon} label="Remove this source" question={`Remove the event source ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSource(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && (store.flash(`Removed the event source ${x.name}.`), sources.reload()))} /></div>
 							</div>
 						))
 					) : (
@@ -833,34 +876,34 @@ function Schedules() {
 	};
 	return (
 		<>
-			<div className="muted">What happens because of the time. A schedule wakes an agent with a task, in your name.</div>
-			<div className="group">
+			<div className="text-muted-foreground">What happens because of the time. A schedule wakes an agent with a task, in your name.</div>
+			<div className={GROUP}>
 				{list.data ? (
 					list.data.length ? (
 						list.data.map((x) => (
-							<div className="item" key={`${x.scope}:${x.name}`}>
-								<ClockIcon className="faint" />
-								<div className="info">
-									<div className="name">{x.name}<span className="tag">{scopeText(x.scope, x.session)}</span><span className="tag">{x.when}</span>{x.next ? <span className="tag good">next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</span> : null}</div>
-									<div className="about">{x.task ?? `publishes ${x.topic}`}</div>
+							<div className={ITEM} key={`${x.scope}:${x.name}`}>
+								<ClockIcon className="text-faint" />
+								<div className="min-w-0 flex-1">
+									<div className={NAME}>{x.name}<Tag>{scopeText(x.scope, x.session)}</Tag><Tag>{x.when}</Tag>{x.next ? <Tag tone="good">next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</Tag> : null}</div>
+									<div className={ABOUT}>{x.task ?? `publishes ${x.topic}`}</div>
 								</div>
-								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this schedule" question={`Remove the schedule ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())} /></div>
+								<div className={CTL}><Confirm icon={Trash2Icon} label="Remove this schedule" question={`Remove the schedule ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())} /></div>
 							</div>
 						))
 					) : (
-						<div className="item"><div className="about muted">Nothing is scheduled. An agent schedules something when you ask it to (“every morning at seven …”, “remind me at five”).</div></div>
+						<div className={ITEM}><div className={ABOUT}>Nothing is scheduled. An agent schedules something when you ask it to (“every morning at seven …”, “remind me at five”).</div></div>
 					)
 				) : (
 					<Loading state={list} />
 				)}
-				<div className="form">
-					<LabeledField label="Name"><Input className="mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
+				<div className={cn(FORM, "p-4")}>
+					<LabeledField label="Name"><Input className="mono font-mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
 					<LabeledField label="For"><Whom value={f.agent} onChange={(agent) => setF({ ...f, agent })} /></LabeledField>
 					<LabeledField label="When"><Tabs value={f.kind} onValueChange={(kind) => setF({ ...f, kind, when: "" })}><TabsList activateOnFocus><TabsTrigger value="cron">At set times</TabsTrigger><TabsTrigger value="every">Every</TabsTrigger><TabsTrigger value="at">Once, at</TabsTrigger><TabsTrigger value="in">Once, in</TabsTrigger></TabsList></Tabs></LabeledField>
-					<LabeledField label=" " hint={hint}><Input className="mono" value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} /></LabeledField>
+					<LabeledField label=" " hint={hint}><Input className="mono font-mono" value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} /></LabeledField>
 					<LabeledField label="Task" wide hint="What the agent is to do when it is time, written so that it is enough on its own."><AutoText value={f.task} onChange={(task) => setF({ ...f, task })} minRows={2} maxRows={8} /></LabeledField>
 				</div>
-				<div className="form-foot"><Button disabled={!f.name.trim() || !f.when.trim() || !f.task.trim()} onClick={() => void add()}>Add schedule</Button></div>
+				<div className={FOOT}><Button disabled={!f.name.trim() || !f.when.trim() || !f.task.trim()} onClick={() => void add()}>Add schedule</Button></div>
 			</div>
 		</>
 	);
@@ -882,39 +925,39 @@ function Routes() {
 	const does = (r: NonNullable<typeof list.data>[number]) => [r.set ? `sets ${JSON.stringify(r.set)}` : "", r.call ? `asks a model: ${short(r.call.prompt, 80)}` : "", r.publish ? `publishes ${r.publish.topic}` : "", r.agent ? `wakes ${r.agent}${r.session ? ` (${r.session})` : ""}${r.prompt ? ` with: ${short(r.prompt, 100)}` : ""}` : ""].filter(Boolean).join("; ");
 	return (
 		<>
-			<div className="muted">Rules that turn an event into something: wake an agent, write shared state, publish another event. A subscription is the simple case and needs no route.</div>
-			<div className="group">
+			<div className="text-muted-foreground">Rules that turn an event into something: wake an agent, write shared state, publish another event. A subscription is the simple case and needs no route.</div>
+			<div className={GROUP}>
 				{list.data ? (
 					list.data.length ? (
 						list.data.map((r) => (
-							<div className="item" key={r.name}>
-								<div className="info">
-									<div className="name">{r.name}<span className="tag mono">on {r.on.join(", ")}</span>{r.when ? <span className="tag mono">when {short(JSON.stringify(r.when), 60)}</span> : null}{r.trust === "owner" ? <span className="tag warn">counts as your words</span> : null}</div>
-									<div className="about">{does(r)}</div>
+							<div className={ITEM} key={r.name}>
+								<div className="min-w-0 flex-1">
+									<div className={NAME}>{r.name}<Tag mono>on {r.on.join(", ")}</Tag>{r.when ? <Tag mono>when {short(JSON.stringify(r.when), 60)}</Tag> : null}{r.trust === "owner" ? <Tag tone="warn">counts as your words</Tag> : null}</div>
+									<div className={ABOUT}>{does(r)}</div>
 								</div>
-								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this route" question={`Remove the route ${r.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())} /></div>
+								<div className={CTL}><Confirm icon={Trash2Icon} label="Remove this route" question={`Remove the route ${r.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())} /></div>
 							</div>
 						))
 					) : (
-						<div className="item"><div className="about muted">No routes.</div></div>
+						<div className={ITEM}><div className={ABOUT}>No routes.</div></div>
 					)
 				) : (
 					<Loading state={list} />
 				)}
-				<div className="form">
-					<LabeledField label="Name"><Input className="mono" placeholder="door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
-					<LabeledField label="On" hint="Topic patterns, separated by commas."><Input className="mono" placeholder="source/house/message" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} /></LabeledField>
-					<LabeledField label="Only when" hint="Optional, as JSON."><Input className="mono" placeholder={'{"payload.open": true}'} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} /></LabeledField>
-					<LabeledField label="At most one per" hint="Optional, a time such as 5m."><Input className="mono" value={f.throttle} onChange={(e) => setF({ ...f, throttle: e.target.value })} /></LabeledField>
+				<div className={cn(FORM, "p-4")}>
+					<LabeledField label="Name"><Input className="mono font-mono" placeholder="door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
+					<LabeledField label="On" hint="Topic patterns, separated by commas."><Input className="mono font-mono" placeholder="source/house/message" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} /></LabeledField>
+					<LabeledField label="Only when" hint="Optional, as JSON."><Input className="mono font-mono" placeholder={'{"payload.open": true}'} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} /></LabeledField>
+					<LabeledField label="At most one per" hint="Optional, a time such as 5m."><Input className="mono font-mono" value={f.throttle} onChange={(e) => setF({ ...f, throttle: e.target.value })} /></LabeledField>
 					<LabeledField label="Wake the agent">
 						<Choice value={f.agent} onChange={(agent) => setF({ ...f, agent })} options={[{ value: "", label: "nobody" }, ...s.agents.map((a) => ({ value: a.id, label: a.id }))]} />
 					</LabeledField>
-					<LabeledField label="In the conversation" hint="Empty: its main one. “new”: a fresh one for every event."><Input className="mono" disabled={!f.agent} value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} /></LabeledField>
+					<LabeledField label="In the conversation" hint="Empty: its main one. “new”: a fresh one for every event."><Input className="mono font-mono" disabled={!f.agent} value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} /></LabeledField>
 					<LabeledField label="With" wide hint="What it is told. {{payload.field}} stands for a value of the event."><Input disabled={!f.agent} value={f.prompt} onChange={(e) => setF({ ...f, prompt: e.target.value })} /></LabeledField>
-					<LabeledField label="Set shared state" hint="Optional, as JSON."><Input className="mono" placeholder={'{"house/mode": "{{payload.value}}"}'} value={f.set} onChange={(e) => setF({ ...f, set: e.target.value })} /></LabeledField>
-					<LabeledField label="Publish the event" hint="Optional: a topic of your own."><Input className="mono" value={f.publish_topic} onChange={(e) => setF({ ...f, publish_topic: e.target.value })} /></LabeledField>
+					<LabeledField label="Set shared state" hint="Optional, as JSON."><Input className="mono font-mono" placeholder={'{"house/mode": "{{payload.value}}"}'} value={f.set} onChange={(e) => setF({ ...f, set: e.target.value })} /></LabeledField>
+					<LabeledField label="Publish the event" hint="Optional: a topic of your own."><Input className="mono font-mono" value={f.publish_topic} onChange={(e) => setF({ ...f, publish_topic: e.target.value })} /></LabeledField>
 				</div>
-				<div className="form-foot"><Button disabled={!f.name.trim() || !f.on.trim()} onClick={() => void add()}>Add route</Button></div>
+				<div className={FOOT}><Button disabled={!f.name.trim() || !f.on.trim()} onClick={() => void add()}>Add route</Button></div>
 			</div>
 		</>
 	);
@@ -956,17 +999,17 @@ function Instructions() {
 	return (
 		<Page title="Instructions" lead="What holds for all agents: three files in pine's home that are put into every agent's prompt. The main agent keeps them when you tell it something that is for everybody; here you can read and change them yourself." actions={<Button disabled={!dirty} onClick={() => void save()}>Save {name}</Button>}>
 			{files.data ? (
-				<div className="group">
-					<div className="item" style={{ flexDirection: "column", alignItems: "flex-start", gap: 8 }}>
+				<div className={GROUP}>
+					<div className={cn(ITEM, "flex-col items-start gap-2")}>
 						<Tabs value={name} onValueChange={setName}><TabsList activateOnFocus>{files.data.map((f) => <TabsTrigger key={f.name} value={f.name}>{f.name}</TabsTrigger>)}</TabsList></Tabs>
-						<div style={{ color: "var(--text-muted)", fontSize: 12.5 }}>{file?.about}</div>
+						<div className={ABOUT}>{file?.about}</div>
 					</div>
-					<div style={{ height: 460, display: "flex" }}><Editor key={name} file={name} text={text} onChange={(v) => setTexts((was) => ({ ...was, [name]: v }))} onSave={() => void save()} /></div>
+					<div className="flex h-116"><Editor key={name} file={name} text={text} onChange={(v) => setTexts((was) => ({ ...was, [name]: v }))} onSave={() => void save()} /></div>
 				</div>
 			) : (
 				<Loading state={files} />
 			)}
-			<div className="notice plain"><InfoIcon />What only one agent should know or do goes into that agent's own files, on its page under Agents.</div>
+			<Notice tone="plain" icon={InfoIcon}>What only one agent should know or do goes into that agent's own files, on its page under Agents.</Notice>
 		</Page>
 	);
 }
@@ -988,50 +1031,50 @@ function AppPage() {
 	useEffect(() => void store.checkBrowser(), []);
 	return (
 		<Page title="App" lead="How this window behaves, and the pine it talks to.">
-			<h2>This app</h2>
-			<div className="group">
-				<div className="item"><div className="info"><div className="name">Appearance</div><div className="about">Light, dark, or what the system is set to.</div></div><div className="ctl"><Tabs value={s.prefs.theme} onValueChange={(theme) => void set({ theme })}><TabsList activateOnFocus><TabsTrigger value="system">System</TabsTrigger><TabsTrigger value="light">Light</TabsTrigger><TabsTrigger value="dark">Dark</TabsTrigger></TabsList></Tabs></div></div>
+			<h2 className={H2}>This app</h2>
+			<div className={GROUP}>
+				<div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>Appearance</div><div className={ABOUT}>Light, dark, or what the system is set to.</div></div><div className={CTL}><Tabs value={s.prefs.theme} onValueChange={(theme) => void set({ theme })}><TabsList activateOnFocus><TabsTrigger value="system">System</TabsTrigger><TabsTrigger value="light">Light</TabsTrigger><TabsTrigger value="dark">Dark</TabsTrigger></TabsList></Tabs></div></div>
 				{s.updates ? (
-					<div className="item updates">
-						<div className="info">
-							<div className="name">Pine {s.versions.app}{newer ? <span className="tag warn">{newer.version} is available</span> : s.update?.status === "latest" ? <span className="tag good">the latest version</span> : null}</div>
-							<div className="about">{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</div>
+					<div className={cn(ITEM, "updates")}>
+						<div className="min-w-0 flex-1">
+							<div className={NAME}>Pine {s.versions.app}{newer ? <Tag tone="warn">{newer.version} is available</Tag> : s.update?.status === "latest" ? <Tag tone="good">the latest version</Tag> : null}</div>
+							<div className={ABOUT}>{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</div>
 						</div>
-						<div className="ctl">
+						<div className={CTL}>
 							{newer ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
 							<Button variant="outline" size="xs" disabled={s.updateLooking} onClick={() => void s.lookForUpdate(true)}><RotateCwIcon data-icon="inline-start" />Check now</Button>
 						</div>
 					</div>
 				) : null}
-				{s.updates ? <div className="item"><div className="info"><div className="name">Look for a newer version at the start</div><div className="about">One question to GitHub each time the app starts. It says nothing about this Mac or your pine.</div></div><div className="ctl"><Switch checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} /></div></div> : null}
-				<div className="item"><div className="info"><div className="name">Notifications</div><div className="about">When an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The text is pine's own, never the agent's.</div></div><div className="ctl"><Switch checked={s.prefs.notify} onCheckedChange={(notify) => void set({ notify })} /></div></div>
+				{s.updates ? <div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>Look for a newer version at the start</div><div className={ABOUT}>One question to GitHub each time the app starts. It says nothing about this Mac or your pine.</div></div><div className={CTL}><Switch checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} /></div></div> : null}
+				<div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>Notifications</div><div className={ABOUT}>When an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The text is pine's own, never the agent's.</div></div><div className={CTL}><Switch checked={s.prefs.notify} onCheckedChange={(notify) => void set({ notify })} /></div></div>
 			</div>
-			<h2>pine</h2>
-			<div className="group">
-				<div className="item"><div className="info"><div className="name">{service ? `pine ${service.version ?? ""}` : "pine"}<span className={`tag ${s.connected ? "good" : "warn"}`}>{s.connected ? "connected" : "not connected"}</span></div><div className="about">{service ? (service.started ? `Started by this app (${service.mode}), from ${service.from}. It stops when the app quits unless the switch below is on.` : "Attached to a pine that was already running. It goes on when this app quits.") : "Not running."}</div></div><div className="ctl">{service?.started ? <Button variant="outline" size="xs" onClick={() => void s.attempt(() => bridge.restart())}><RotateCwIcon data-icon="inline-start" />Restart</Button> : null}</div></div>
-				<div className="item"><div className="info"><div className="name">Keep pine running after the app quits</div><div className="about">A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</div></div><div className="ctl"><Switch checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} /></div></div>
+			<h2 className={H2}>pine</h2>
+			<div className={GROUP}>
+				<div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>{service ? `pine ${service.version ?? ""}` : "pine"}<Tag tone={s.connected ? "good" : "warn"}>{s.connected ? "connected" : "not connected"}</Tag></div><div className={ABOUT}>{service ? (service.started ? `Started by this app (${service.mode}), from ${service.from}. It stops when the app quits unless the switch below is on.` : "Attached to a pine that was already running. It goes on when this app quits.") : "Not running."}</div></div><div className={CTL}>{service?.started ? <Button variant="outline" size="xs" onClick={() => void s.attempt(() => bridge.restart())}><RotateCwIcon data-icon="inline-start" />Restart</Button> : null}</div></div>
+				<div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>Keep pine running after the app quits</div><div className={ABOUT}>A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</div></div><div className={CTL}><Switch checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} /></div></div>
 				{command && (command.state !== "unavailable" || command.why) ? (
-					<div className="item command"><div className="info"><div className="name">pine in a terminal{command.state === "here" ? <span className="tag good">set up</span> : null}</div><div className="about">{command.text}</div></div><div className="ctl">{command.state === "none" ? <Button variant="outline" size="xs" onClick={() => void bridge.command("install").then(setCommand)}>Set up</Button> : command.state === "here" ? <Button variant="outline" size="xs" onClick={() => void bridge.command("remove").then(setCommand)}>Remove</Button> : null}</div></div>
+					<div className={ITEM}><div className="min-w-0 flex-1"><div className={NAME}>pine in a terminal{command.state === "here" ? <Tag tone="good">set up</Tag> : null}</div><div className={ABOUT}>{command.text}</div></div><div className={CTL}>{command.state === "none" ? <Button variant="outline" size="xs" onClick={() => void bridge.command("install").then(setCommand)}>Set up</Button> : command.state === "here" ? <Button variant="outline" size="xs" onClick={() => void bridge.command("remove").then(setCommand)}>Remove</Button> : null}</div></div>
 				) : null}
 				{s.browser !== undefined || s.browserFetching ? (
-					<div className="item browser">
-						<div className="info">
-							<div className="name">Browser for the web tools<span className={`tag ${s.browser ? "good" : "warn"}`}>{s.browser ? "on this Mac" : "not on this Mac"}</span></div>
-							<div className="about">{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</div>
-							{!s.browser && s.initLines.length ? <pre className="log">{s.initLines.slice(-12).join("\n")}</pre> : null}
+					<div className={cn(ITEM, "browser")}>
+						<div className="min-w-0 flex-1">
+							<div className={NAME}>Browser for the web tools<Tag tone={s.browser ? "good" : "warn"}>{s.browser ? "on this Mac" : "not on this Mac"}</Tag></div>
+							<div className={ABOUT}>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</div>
+							{!s.browser && s.initLines.length ? <pre className={LOG}>{s.initLines.slice(-12).join("\n")}</pre> : null}
 						</div>
-						{s.browser ? null : <div className="ctl"><Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={11} /> Fetching…</> : "Fetch it"}</Button></div>}
+						{s.browser ? null : <div className={CTL}><Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={11} /> Fetching…</> : "Fetch it"}</Button></div>}
 					</div>
 				) : null}
-				<div className="item">
-					<div className="info"><div className="name">Home folder</div><div className="about mono">{tilde(service?.home ?? s.prefs.home ?? "~/.pine")}</div><div className="about">Where pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.</div></div>
-					<div className="ctl">
+				<div className={ITEM}>
+					<div className="min-w-0 flex-1"><div className={NAME}>Home folder</div><div className={cn(ABOUT, "mono font-mono")}>{tilde(service?.home ?? s.prefs.home ?? "~/.pine")}</div><div className={ABOUT}>Where pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.</div></div>
+					<div className={CTL}>
 						{s.prefs.home ? <Button variant="outline" size="xs" onClick={() => void set({ home: "" }).then(() => bridge.retry())}>Use ~/.pine</Button> : null}
 						<Button variant="outline" size="xs" onClick={() => void bridge.pickFolder("A pine home folder").then((dir: string | undefined) => dir && set({ home: dir }).then(() => (service?.started ? bridge.restart() : bridge.retry())))}><FolderIcon data-icon="inline-start" />Choose…</Button>
 					</div>
 				</div>
 			</div>
-			<div className="faint" style={{ fontSize: 12 }}>Pine {s.versions.app} · Electron {s.versions.electron}</div>
+			<div className="text-xs text-faint">Pine {s.versions.app} · Electron {s.versions.electron}</div>
 		</Page>
 	);
 }
@@ -1039,13 +1082,13 @@ function AppPage() {
 export function Settings() {
 	const s = useModel(store);
 	return (
-		<div className="settings">
-			<nav className="set-nav">
+		<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background">
+			<nav className="set-nav flex w-50 flex-none flex-col gap-px overflow-y-auto border-r border-line-soft px-2.5 py-4.5">
 				{SECTIONS.map((x) => (
-					<div key={x.id} className={`side-row${s.section === x.id ? " on" : ""}`} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon size={14} /><span>{x.label}</span></div>
+					<Button key={x.id} variant={s.section === x.id ? "secondary" : "ghost"} className="side-row justify-start" aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon data-icon="inline-start" />{x.label}</Button>
 				))}
 			</nav>
-			<div className="set-page" key={s.section}>
+			<div className="set-page min-w-0 flex-1 overflow-y-auto" key={s.section}>
 				{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "app" ? <AppPage /> : <General />}
 			</div>
 		</div>

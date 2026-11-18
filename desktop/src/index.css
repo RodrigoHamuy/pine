@@ -9,7 +9,97 @@
 /* Dark is a class on the root element, which theme.ts keeps in step with the system's appearance. */
 @custom-variant dark (&:is(.dark *));
 
-/* shadcn's tokens, set from pine's own colours (styles.css: light in :root, poimandres in :root.dark).
+/* pine's colours. Light has its own; dark is the poimandres theme (github.com/drcmda/poimandres-theme):
+   its colours are the --p-* values, the app's names are set from them, and code is coloured the way the
+   theme colours it. Dark is a class on the root element, which theme.ts keeps in step with the system. */
+:root {
+	color-scheme: light;
+	/* The density of the whole page: every rem size (text, spacing, shadcn's components) follows this one. */
+	font-size: 15px;
+	--font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+	--bg: #fdfdfc;
+	--surface: #ffffff;
+	--raised: #f4f5f2;
+	--sunk: #eff0ed;
+	--composer: #ffffff;
+	--hover: rgba(20, 30, 24, 0.055);
+	--press: rgba(20, 30, 24, 0.09);
+	--line: #e1e3de;
+	--line-soft: #ecedea;
+	--text: #1a1d1b;
+	--text-muted: #666e68;
+	--faint: #99a19b;
+	--brand: #1f7a55;
+	--brand-soft: rgba(31, 122, 85, 0.1);
+	--on-accent: #ffffff;
+	--warn: #a86a08;
+	--warn-soft: rgba(196, 136, 20, 0.12);
+	--bad: #c2413a;
+	--bad-soft: rgba(194, 65, 58, 0.1);
+	--info: #2a6fc0;
+	--plan: #7c4fd0;
+	--add: #1c7c4a;
+	--add-bg: rgba(40, 160, 95, 0.12);
+	--del: #b3382f;
+	--del-bg: rgba(210, 70, 60, 0.11);
+	--shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 28px rgba(0, 0, 0, 0.1);
+	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.22);
+	--side: rgba(236, 237, 233, 0.86);
+	--scrim: rgba(20, 24, 22, 0.28);
+	--select: color-mix(in srgb, var(--brand) 28%, transparent);
+}
+
+.dark {
+	color-scheme: dark;
+	--p-bg: #1b1e28;
+	--p-fg: #a6accd;
+	--p-bright: #e4f0fb;
+	--p-comment: #767c9d;
+	--p-mint: #5de4c7;
+	--p-teal: #5fb3a1;
+	--p-blue: #add7ff;
+	--p-sky: #89ddff;
+	--p-steel: #91b4d5;
+	--p-slate: #7390aa;
+	--p-yellow: #fffac2;
+	--p-pink: #d0679d;
+	--p-focus: #303340;
+
+	--bg: var(--p-bg);
+	--surface: #1e212c;
+	--raised: #232633;
+	--sunk: #171922;
+	--composer: #1e212c;
+	--hover: rgba(166, 172, 205, 0.07);
+	--press: rgba(166, 172, 205, 0.12);
+	--line: #2b2e3c;
+	--line-soft: #242734;
+	--text: var(--p-bright);
+	--text-muted: var(--p-fg);
+	--faint: var(--p-comment);
+	--brand: var(--p-mint);
+	--brand-soft: rgba(93, 228, 199, 0.12);
+	--on-accent: #171922;
+	--warn: var(--p-yellow);
+	--warn-soft: rgba(255, 250, 194, 0.1);
+	--bad: var(--p-pink);
+	--bad-soft: rgba(208, 103, 157, 0.15);
+	--info: var(--p-blue);
+	--plan: var(--p-sky);
+	--add: var(--p-mint);
+	--add-bg: rgba(93, 228, 199, 0.1);
+	--del: var(--p-pink);
+	--del-bg: rgba(208, 103, 157, 0.14);
+	--select: rgba(113, 124, 180, 0.3);
+	--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);
+	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
+	--side: rgba(19, 21, 29, 0.88);
+	--scrim: rgba(10, 11, 17, 0.55);
+}
+
+/* shadcn's tokens, set from pine's own colours (light in :root, poimandres in .dark, above).
    They only point at pine's names, so one place holds each colour and the dark values follow the class
    by themselves. The font is the system's, as it always was. */
 @theme inline {
@@ -61,15 +151,40 @@
 	--color-hover: var(--hover);
 	--color-press: var(--press);
 	--color-scrim: var(--scrim);
-	--radius-sm: var(--r-s);
+	--color-composer: var(--composer);
+	--color-add: var(--add);
+	--color-add-bg: var(--add-bg);
+	--color-del: var(--del);
+	--color-del-bg: var(--del-bg);
+	--radius-sm: calc(var(--radius) * 0.6);
 	--radius-md: calc(var(--radius) * 0.8);
 	--radius-lg: var(--radius);
-	--radius-xl: var(--r-l);
+	--radius-xl: calc(var(--radius) * 1.4);
 	--radius-2xl: calc(var(--radius) * 1.8);
 	--radius-3xl: calc(var(--radius) * 2.2);
 	--radius-4xl: calc(var(--radius) * 2.6);
 	--shadow-md: var(--shadow);
 	--shadow-lg: var(--shadow-l);
+	/* A line too long for its place slides to show its end, and back (needs a container around it). */
+	--animate-slide-end: slide-end 5s linear 0.5s infinite alternate;
+	@keyframes slide-end {
+		0%,
+		12% {
+			transform: translateX(0);
+		}
+		88%,
+		100% {
+			transform: translateX(min(0px, 100cqw - 100%));
+		}
+	}
+}
+
+/* What moves the window on a Mac: the bar along the top and the side bar, where nothing is to click. */
+@utility app-drag {
+	-webkit-app-region: drag;
+}
+@utility app-no-drag {
+	-webkit-app-region: no-drag;
 }
 
 :root {
@@ -96,7 +211,7 @@
 	--chart-3: var(--plan);
 	--chart-4: var(--warn);
 	--chart-5: var(--bad);
-	--radius: var(--r);
+	--radius: 0.625rem;
 	--sidebar: var(--side);
 	--sidebar-foreground: var(--text);
 	--sidebar-primary: var(--brand);
@@ -111,10 +226,42 @@
 	* {
 		@apply border-border outline-ring/50;
 	}
-	body {
-		@apply bg-background text-foreground;
+	html,
+	body,
+	#root {
+		@apply h-full;
 	}
 	html {
 		@apply font-sans;
+	}
+	/* On a Mac the window is the system's material, which shows through; elsewhere it is the page's colour. */
+	body {
+		@apply overflow-hidden bg-transparent text-sm text-foreground antialiased select-none cursor-default;
+	}
+	html:not([data-platform="darwin"]) body {
+		@apply bg-background;
+	}
+	::selection {
+		background: var(--select);
+	}
+	::-webkit-scrollbar {
+		@apply size-2.5;
+	}
+	::-webkit-scrollbar-thumb {
+		@apply rounded-full border-2 border-solid border-transparent bg-press bg-clip-content;
+	}
+	::-webkit-scrollbar-thumb:hover {
+		@apply bg-faint;
+	}
+	svg.lucide {
+		@apply shrink-0;
+	}
+	/* What find in a conversation matches (the CSS Highlight API: no element to put a class on). */
+	::highlight(pine-find) {
+		background-color: color-mix(in srgb, var(--warn) 32%, transparent);
+	}
+	::highlight(pine-find-at) {
+		background-color: var(--warn);
+		color: var(--background);
 	}
 }

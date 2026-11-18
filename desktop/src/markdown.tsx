@@ -81,12 +81,13 @@ function Link({ href, children, node }: React.ComponentProps<"a"> & ExtraProps) 
 	const plain = shown === url || shown === url.replace(/^https?:\/\//, "").replace(/\/$/, "");
 	return (
 		<>
-			<a data-href={url} title={url} className="md-link" onClick={open(url)}>
+			<a data-href={url} title={url} className="cursor-pointer text-primary underline decoration-primary/40 underline-offset-2" onClick={open(url)}>
 				{children}
 			</a>
-			{/* Beside the link, not inside it: it is the address in plain letters, not more of the link's words. */}
+			{/* Beside the link, not inside it: it is the address in plain letters, not more of the link's words.
+			    It flows with the sentence: a line of its own would cut the link off from where it leads. */}
 			{plain ? null : (
-				<span data-target="" className="md-target" title={url} onClick={open(url)}>
+				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-faint wrap-anywhere before:content-['→_']" title={url} onClick={open(url)}>
 					{short(url.replace(/^https?:\/\//, ""), 72)}
 				</span>
 			)}
@@ -96,11 +97,20 @@ function Link({ href, children, node }: React.ComponentProps<"a"> & ExtraProps) 
 
 const zoom = (src: string) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: src }));
 
+/** How a picture, a video or a sound is drawn, in an answer and in a conversation: never wider than its place. */
+export const MEDIA = {
+	box: { image: "block max-w-md", video: "block max-w-lg", audio: "block max-w-md" },
+	image: "block max-h-80 max-w-full cursor-zoom-in rounded-md border",
+	video: "block max-h-90 max-w-full rounded-md bg-black",
+	audio: "block w-full",
+	cap: "mt-1 block text-xs text-faint",
+};
+
 function Player({ kind, src, alt }: { kind: "image" | "video" | "audio"; src: string; alt: string }) {
 	return (
-		<span className={`md-media md-${kind}`}>
-			{kind === "image" ? <img src={src} alt={alt} draggable={false} onClick={() => zoom(src)} /> : kind === "video" ? <video src={src} controls preload="metadata" /> : <audio src={src} controls preload="metadata" />}
-			{alt ? <span className="cap">{alt}</span> : null}
+		<span className={`my-2.5 ${MEDIA.box[kind]}`}>
+			{kind === "image" ? <img className={MEDIA.image} src={src} alt={alt} draggable={false} onClick={() => zoom(src)} /> : kind === "video" ? <video className={MEDIA.video} src={src} controls preload="metadata" /> : <audio className={MEDIA.audio} src={src} controls preload="metadata" />}
+			{alt ? <span className={MEDIA.cap}>{alt}</span> : null}
 		</span>
 	);
 }
@@ -125,7 +135,7 @@ function Remote({ url, alt }: { url: string; alt: string }) {
 	};
 	const label = state.loading ? `Loading · ${short(url, 90)}` : state.error ? `Could not load ${short(url, 70)}: ${state.error}` : `Load ${kind === "image" ? "picture" : kind} · ${short(url, 90)}`;
 	return (
-		<button type="button" data-remote={url} title={url} className="md-remote" onClick={() => void load()}>
+		<button type="button" data-remote={url} title={url} className="inline-flex cursor-pointer rounded-md border border-dashed px-2.5 py-1 text-muted-foreground text-xs select-none hover:border-primary hover:text-foreground" onClick={() => void load()}>
 			{label}
 		</button>
 	);
@@ -154,11 +164,15 @@ const COMPONENTS: Components = { a: Link, img: Picture };
 const PLUGINS = { code: createCodePlugin({ themes: ["github-light", "poimandres"] }) };
 const CONTROLS: ControlsConfig = { code: { copy: true, download: false }, table: false, mermaid: false, image: false };
 
+// Streamdown draws every element with its own look. What it leaves unstyled is a folded part written as
+// raw HTML (`details`), drawn here as a box. `md` and `md-live` are what the tests look for.
+const LOOK = "md cursor-auto select-text wrap-anywhere [&_details]:my-3 [&_details]:rounded-lg [&_details]:border [&_details]:px-3 [&_details[open]]:pb-2.5 [&_summary]:cursor-pointer [&_summary]:py-2 [&_summary]:font-medium [&_summary]:text-muted-foreground [&_summary]:select-none [&_summary:hover]:text-foreground";
+
 /** Markdown, drawn into the page. While `live`, the text grows; what the reader opened stays open. */
 export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }): ReactNode {
 	return (
 		<WhereContext.Provider value={where}>
-			<Streamdown className={`md${live ? " md-live" : ""}`} rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={["github-light", "poimandres"]} isAnimating={!!live} lineNumbers={false}>
+			<Streamdown className={`${LOOK}${live ? " md-live" : ""}`} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={["github-light", "poimandres"]} isAnimating={!!live} lineNumbers={false}>
 				{text}
 			</Streamdown>
 		</WhereContext.Provider>

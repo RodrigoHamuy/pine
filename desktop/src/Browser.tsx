@@ -158,25 +158,25 @@ export function BrowserView({ tab }: { tab: Tab }) {
 	};
 
 	return (
-		<div className="code-body browser">
+		<div className="browser flex min-h-0 flex-1 flex-col overflow-auto">
 			{open && state.tabs.length ? (
-				<div className="browser-tabs">
+				<div className="browser-tabs flex flex-none items-center gap-0.5 overflow-x-auto border-b border-line-soft px-2 py-1">
 					{state.tabs.map((t, i) => (
-						<div key={i} className={`browser-tab${i === state.current ? " on" : ""}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
-							<span className="cut grow">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
+						<div key={i} className={`browser-tab group/tab flex h-6 min-w-15 flex-initial basis-44 items-center gap-1 rounded-md pr-1 pl-2 text-xs ${i === state.current ? "on bg-press text-foreground" : "text-muted-foreground hover:bg-hover"}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
+							<span className="min-w-0 flex-1 truncate">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
 							{/* (The last tab stays: a browser without one would open one again.) */}
-							{state.tabs.length > 1 ? <button type="button" className="browser-tab-close" title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><XIcon size={10} /></button> : null}
+							{state.tabs.length > 1 ? <button type="button" className={`browser-tab-close grid size-4 flex-none place-items-center rounded-sm text-faint hover:bg-press hover:text-foreground ${i === state.current ? "" : "invisible group-hover/tab:visible"}`} title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><XIcon size={10} /></button> : null}
 						</div>
 					))}
 					<Button variant="ghost" size="icon-xs" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())}><PlusIcon /></Button>
 				</div>
 			) : null}
-			<div className="browser-bar">
+			<div className="browser-bar flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
 				<Button variant="ghost" size="icon-xs" title="Back" disabled={!open} onClick={() => act({ do: "back" })}><ChevronLeftIcon /></Button>
 				<Button variant="ghost" size="icon-xs" title="Forward" disabled={!open} onClick={() => act({ do: "forward" })}><ChevronRightIcon /></Button>
 				<Button variant="ghost" size="icon-xs" title="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })}><RotateCwIcon /></Button>
 				<Input
-					className="browser-address"
+					className="browser-address ml-1 min-w-0 flex-1"
 					spellCheck={false}
 					placeholder="An address: example.com, or localhost:3000"
 					ref={line}
@@ -192,11 +192,12 @@ export function BrowserView({ tab }: { tab: Tab }) {
 				{busy ? <Pulse size={12} /> : null}
 			</div>
 			{open ? (
-				<div className="browser-page" ref={room}>
+				<div className="browser-page relative min-h-0 flex-1 overflow-auto bg-press" ref={room}>
+					{/* The page keeps its shape: as wide as the panel, and scrolled down to when it is taller than the room. */}
 					<canvas
 						ref={canvas}
 						tabIndex={0}
-						className={drawn ? "" : "blank"}
+						className={`block h-auto w-full cursor-default bg-white outline-none ${drawn ? "" : "blank invisible"}`}
 						title={front?.title}
 						onMouseDown={(e) => {
 							e.currentTarget.focus();
@@ -227,14 +228,14 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) (e.preventDefault(), act({ do: "text", text: e.key }, 90));
 						}}
 					/>
-					{drawn ? null : <div className="browser-wait"><Pulse size={14} /></div>}
+					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Pulse size={14} /></div>}
 				</div>
 			) : (
 				<Empty icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
 					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}
 				</Empty>
 			)}
-			{open ? <div className="browser-foot faint"><ShieldIcon size={11} /><span className="cut">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
+			{open ? <div className="flex flex-none items-center gap-1.5 border-t border-line-soft px-2.5 py-1 text-xs text-faint"><ShieldIcon size={11} /><span className="truncate">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
 		</div>
 	);
 }

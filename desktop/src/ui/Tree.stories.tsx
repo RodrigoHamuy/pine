@@ -19,9 +19,9 @@ function Rows({ nodes, dir, depth, expanded, file }: { nodes: Node[]; dir: strin
 				const open = expanded.includes(full);
 				const row = (
 					<>
-						{n.children ? (open ? <ChevronDownIcon size={11} className="faint" /> : <ChevronRightIcon size={11} className="faint" />) : <span style={{ width: 11 }} />}
-						{n.children ? <FolderIcon size={13} className="faint" /> : <FileIcon size={13} className="faint" />}
-						<span className="cut grow">{n.name}</span>
+						{n.children ? (open ? <ChevronDownIcon size={12} className="text-faint" /> : <ChevronRightIcon size={12} className="text-faint" />) : <span className="w-3 flex-none" />}
+						{n.children ? <FolderIcon size={13} className="text-faint" /> : <FileIcon size={13} className="text-faint" />}
+						<span className="min-w-0 flex-1 truncate">{n.name}</span>
 					</>
 				);
 				return (
@@ -39,7 +39,7 @@ const meta = {
 	args: { label: "Files", expanded: [], onExpandedChange: () => {}, onOpen: () => {}, children: null },
 	decorators: [
 		(Story) => (
-			<div className="code-body" style={{ width: 320 }}>
+			<div className="flex w-80 flex-col">
 				<Story />
 			</div>
 		),

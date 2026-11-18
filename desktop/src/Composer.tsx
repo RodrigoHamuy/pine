@@ -258,23 +258,23 @@ export function Composer({ tab }: { tab: Tab }) {
 	return (
 		<>
 			{goal && goal.status !== "active" ? (
-				<div className="banner warn">
+				<div className={`banner mb-2 flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs bg-warn-soft`}>
 					<ClockIcon size={14} />
-					<span className="grow cut">Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}: {goal.note}</span>
-					<button type="button" className="open-link" onClick={() => void store.setGoal(tab, "resume")}>Resume</button>
-					<button type="button" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</button>
+					<span className="min-w-0 flex-1 truncate">Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}: {goal.note}</span>
+					<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
+					<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</Button>
 				</div>
 			) : null}
 			{voice !== "off" ? (
-				<div className="banner">
-					<span className="dot bad" />
-					<span className="grow">{voice === "starting" ? "getting ready to listen…" : "listening · speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</span>
+				<div className={`banner mb-2 flex items-center gap-2.5 rounded-lg px-3 py-2 text-xs bg-brand-soft`}>
+					<span className="size-2 shrink-0 rounded-full bg-destructive" />
+					<span className="min-w-0 flex-1">{voice === "starting" ? "getting ready to listen…" : "listening · speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</span>
 				</div>
 			) : null}
 			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the
 			    daemon), so the Prompt Input keeps none of its own: maxFiles 0. */}
 			<PromptInput
-				className="composer [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:bg-(--composer)! [&[data-over]_[data-slot=input-group]]:border-dashed [&[data-over]_[data-slot=input-group]]:border-primary [&[data-over]_[data-slot=input-group]]:bg-brand-soft!"
+				className="composer [&[data-over]_[data-slot=input-group]]:border-dashed [&[data-over]_[data-slot=input-group]]:border-primary [&[data-over]_[data-slot=input-group]]:bg-brand-soft!"
 				data-over={over || undefined}
 				maxFiles={0}
 				onSubmit={() => void send("steer")}
@@ -289,10 +289,10 @@ export function Composer({ tab }: { tab: Tab }) {
 				{tab.attachments.length ? (
 					<PromptInputHeader>
 						{tab.attachments.map((f, i) => (
-							<span className="attachment" key={`${f.name}:${i}`}>
-								{f.preview ? <img src={f.preview} alt="" /> : <FileIcon size={13} />}
-								<span className="cut" style={{ maxWidth: 180 }}>{f.name}</span>
-								<span className="faint">{size(f.size)}</span>
+							<span className="flex items-center gap-1.5 rounded-md border border-line-soft bg-raised py-0.5 pr-1 pl-2 text-xs" key={`${f.name}:${i}`}>
+								{f.preview ? <img className="-ml-1 size-5.5 rounded-sm object-cover" src={f.preview} alt="" /> : <FileIcon size={13} />}
+								<span className="max-w-45 truncate">{f.name}</span>
+								<span className="text-faint">{size(f.size)}</span>
 								<Button variant="ghost" size="icon-xs" title="Remove" onClick={() => (tab.attachments.splice(i, 1), tab.touch())}><XIcon /></Button>
 							</span>
 						))}
@@ -315,7 +315,7 @@ export function Composer({ tab }: { tab: Tab }) {
 						<ComboboxPrimitive.Input
 							ref={area as unknown as React.Ref<HTMLInputElement>}
 							render={<PromptInputTextarea rows={1} />}
-							className="max-h-[40vh] min-h-0 px-3.5 pt-3 text-sm"
+							className="max-h-80 min-h-0 px-3.5 pt-3 text-sm"
 							placeholder={tab.busy ? `Say something to ${tab.agent} while it works…` : `Message ${tab.agent} · / for commands · @ for files`}
 							onChange={(e) => {
 								// A key that types ends the listening: what was heard stays, and nothing more is put into the input.
@@ -347,15 +347,15 @@ export function Composer({ tab }: { tab: Tab }) {
 				{/* A narrow input keeps every button on one line and whole: only the model's and the folder's
 				    names are cut, and what has no room for its words stands as its sign alone, with the words in its tooltip. */}
 				<PromptInputFooter className="@container/bar">
-					<PromptInputTools className="grow">
+					<PromptInputTools className="min-w-0 flex-1">
 						<PromptInputButton title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><PlusIcon /></PromptInputButton>
 						<PromptInputButton size="sm" className="min-w-0 shrink" title={`Model: ${info?.model ?? "none"}`} onClick={() => void store.pickModel(tab)}>
 							<CpuIcon />
-							<span className="truncate @max-[400px]/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
+							<span className="truncate @max-sm/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
 						</PromptInputButton>
 						<PromptInputButton size="sm" title={`How much the model thinks before it answers: ${info?.thinking ?? "off"}`} onClick={() => void store.pickReasoning(tab)}>
 							<SparkleIcon />
-							<span className="@max-[320px]/bar:hidden">{info?.thinking ?? "off"}</span>
+							<span className="@max-xs/bar:hidden">{info?.thinking ?? "off"}</span>
 						</PromptInputButton>
 						<PromptInputButton size="sm" className={TONE[modeTone]} title="How much this agent does without asking" onClick={() => void store.pickMode(tab)}>
 							<ShieldIcon />
@@ -363,9 +363,9 @@ export function Composer({ tab }: { tab: Tab }) {
 						</PromptInputButton>
 						<PromptInputButton size="sm" className="min-w-0 shrink" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
 							<FolderIcon />
-							<span className="truncate @max-[290px]/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
+							<span className="truncate @max-2xs/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
 						</PromptInputButton>
-						{tainted ? <span className="flex shrink-0 items-center gap-1.5 px-2 text-xs text-warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><EyeIcon className="size-3.5" /><span className="@max-[490px]/bar:hidden">outside content</span></span> : null}
+						{tainted ? <span className="flex shrink-0 items-center gap-1.5 px-2 text-xs text-warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><EyeIcon className="size-3.5" /><span className="@max-lg/bar:hidden">outside content</span></span> : null}
 					</PromptInputTools>
 					<PromptInputTools className="shrink-0">
 						{store.platform === "darwin" ? <PromptInputButton className={voice !== "off" ? TONE.bad : undefined} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><MicIcon /></PromptInputButton> : null}
@@ -378,7 +378,7 @@ export function Composer({ tab }: { tab: Tab }) {
 				</PromptInputFooter>
 			</PromptInput>
 			<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />
-			{tab.folder && !tab.items.length ? <div className="faint" style={{ fontSize: 11.5, padding: "6px 4px 0" }}>{tab.agent}'s tools start in {tilde(tab.folder)} and may read and change what is in it.</div> : null}
+			{tab.folder && !tab.items.length ? <div className="px-1 pt-1.5 text-faint text-xs">{tab.agent}'s tools start in {tilde(tab.folder)} and may read and change what is in it.</div> : null}
 		</>
 	);
 }

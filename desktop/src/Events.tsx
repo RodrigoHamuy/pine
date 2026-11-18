@@ -2,6 +2,7 @@
 import { AudioLinesIcon, PlayIcon, SearchIcon, SquareIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { cn } from "cn";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
@@ -55,18 +56,18 @@ export function Events({ tab }: { tab: Tab }) {
 		if (done) store.flash(`Published event #${done.id}.`);
 	};
 	return (
-		<div className="events">
-			<div className="events-bar">
-				<SearchIcon size={14} className="faint" />
-				<Input style={{ maxWidth: 360 }} placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
-				<span className="faint">{shown.length} shown · text deltas are left out</span>
-				<span className="grow" />
+		<div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
+			<div className="flex flex-none items-center gap-2 border-b border-line-soft px-4 py-2.5">
+				<SearchIcon className="size-3.5 text-faint" />
+				<Input className="max-w-90" placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
+				<span className="text-faint">{shown.length} shown · text deltas are left out</span>
+				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
 				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>
 				<Button variant="ghost" size="icon-xs" title="Clear the view" onClick={() => ((tab.log = []), tab.touch())}><Trash2Icon /></Button>
 			</div>
 			<div
-				className="events-list selectable"
+				className="events-list flex-1 cursor-auto overflow-auto py-1.5 font-mono text-xs select-text"
 				ref={scroller}
 				onScroll={(e) => {
 					const el = e.currentTarget;
@@ -76,13 +77,13 @@ export function Events({ tab }: { tab: Tab }) {
 				{shown.length ? (
 					shown.map((e, i) => (
 						<div key={`${e.id}:${e.ts}:${i}`}>
-							<div className={`ev${open === i ? " open" : ""}`} onClick={() => setOpen(open === i ? undefined : i)}>
-								<span className="t">{new Date(e.ts).toLocaleTimeString("sv-SE")}</span>
-								<span className={`who ${e.trust === "owner" ? "owner" : ""}`}>{e.trust === "owner" ? "owner" : "other"}</span>
-								<span className="topic">{e.topic}</span>
-								<span className="pl">{short(JSON.stringify(e.payload ?? null), 220)}</span>
+							<div className={cn("ev flex gap-3 px-4 py-0.5 whitespace-nowrap hover:bg-hover", open === i && "bg-hover")} onClick={() => setOpen(open === i ? undefined : i)}>
+								<span className="flex-none text-faint">{new Date(e.ts).toLocaleTimeString("sv-SE")}</span>
+								<span className={cn("w-11 flex-none", e.trust === "owner" ? "text-primary" : "text-faint")}>{e.trust === "owner" ? "owner" : "other"}</span>
+								<span className="flex-none font-semibold">{e.topic}</span>
+								<span className="truncate text-muted-foreground">{short(JSON.stringify(e.payload ?? null), 220)}</span>
 							</div>
-							{open === i ? <div className="ev-detail">{`#${e.id} · from ${e.source}\n${JSON.stringify(e.payload ?? null, null, 2)}`}</div> : null}
+							{open === i ? <div className="mx-4 mb-1.5 ml-20 rounded-md bg-sunk px-2.5 py-2 whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text">{`#${e.id} · from ${e.source}\n${JSON.stringify(e.payload ?? null, null, 2)}`}</div> : null}
 						</div>
 					))
 				) : (

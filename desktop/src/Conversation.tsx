@@ -8,13 +8,14 @@ import { Reasoning, ReasoningTrigger } from "@/components/ai-elements/reasoning"
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { Task, TaskContent, TaskItem, TaskTrigger } from "@/components/ai-elements/task";
 import { Tool, ToolContent, ToolOutput } from "@/components/ai-elements/tool";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
 import { Composer } from "./Composer.tsx";
-import { Markdown } from "./markdown.tsx";
+import { Markdown, MEDIA } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
 import { Pulse } from "./ui.tsx";
@@ -25,6 +26,9 @@ const zoomable = {
 	onClick: (e: React.MouseEvent<HTMLImageElement>) => window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
 	onKeyDown: (e: React.KeyboardEvent<HTMLImageElement>) => e.key === "Enter" && window.dispatchEvent(new CustomEvent("pine:zoom", { detail: e.currentTarget.src })),
 };
+
+const NOTE_TONE: Record<string, string | undefined> = { warn: "text-warn", bad: "text-destructive", good: "text-primary" };
+const STATUS = "flex min-h-7.5 items-center gap-2 px-1 py-1.5 text-muted-foreground text-xs";
 
 const TONE_ICON: Record<Tone, LucideIcon> = { muted: InfoIcon, warn: TriangleAlertIcon, bad: TriangleAlertIcon, good: CheckIcon, accent: Undo2Icon };
 
@@ -54,19 +58,19 @@ function Thought({ text, head, peek }: { text: string; head: ReactNode; peek?: b
 function Call({ tool, subject, status, ms, depth = 0, output, error, images }: { tool: string; subject?: string; status: "run" | "ok" | "fail"; ms?: number; depth?: number; output?: string; error?: string; images?: string[] }) {
 	const more = Boolean(output || error || images?.length);
 	return (
-		<Tool className="mb-0 border-0" style={{ paddingLeft: depth * 14 }} data-part="tool" data-status={status}>
+		<Tool className="mb-0 border-0" style={{ paddingLeft: `calc(var(--spacing) * ${depth * 3.5})` }} data-part="tool" data-status={status}>
 			<CollapsibleTrigger disabled={!more} className="flex w-full min-w-0 items-center gap-2 rounded-sm py-0.5 text-left text-xs enabled:cursor-pointer enabled:hover:bg-hover">
 				<Status status={status} />
 				<span className="shrink-0 font-mono text-foreground" data-tool>{tool}</span>
 				<span className="truncate font-mono text-muted-foreground" title={subject}>{subject}</span>
-				<span className="grow" />
+				<span className="min-w-0 flex-1" />
 				{ms !== undefined ? <span className="shrink-0 text-faint">{took(ms)}</span> : null}
 			</CollapsibleTrigger>
 			{more ? (
 				<ToolContent className="p-2 pl-6">
 					<ToolOutput output={output ? <pre className="max-h-80 overflow-auto whitespace-pre-wrap p-2 font-mono select-text">{output}</pre> : undefined} errorText={error} />
 					{(images ?? []).map((id) => (
-						<div className="it-media" key={id}><img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} /></div>
+						<div className={`it-media ${MEDIA.box.image}`} key={id}><img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" {...zoomable} /></div>
 					))}
 				</ToolContent>
 			) : null}
@@ -82,11 +86,11 @@ function PartLine({ part, live }: { part: Part; live: boolean }) {
 	if (part.p === "words") return <TaskItem className="whitespace-pre-wrap text-xs" data-part="words">{part.text}</TaskItem>;
 	if (part.p === "child")
 		return (
-			<TaskItem className="flex min-w-0 items-center gap-2 text-xs" style={{ paddingLeft: Math.max(0, part.depth - 1) * 14 }} data-part="child">
+			<TaskItem className="flex min-w-0 items-center gap-2 text-xs" style={{ paddingLeft: `calc(var(--spacing) * ${Math.max(0, part.depth - 1) * 3.5})` }} data-part="child">
 				<Status status={part.status} />
 				<span className="shrink-0 font-mono text-foreground">↳ {part.agent}</span>
 				<span className="truncate">{childKind(part.kind)} #{part.task}{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}</span>
-				<button type="button" className="open-link" onClick={() => void store.openTask(part.task)}>open</button>
+				<Button variant="link" size="xs" className="open-link" onClick={() => void store.openTask(part.task)}>open</Button>
 			</TaskItem>
 		);
 	return <Call tool={part.tool} subject={part.subject} status={part.status} ms={part.ms} depth={part.depth} error={part.status === "fail" ? part.preview : undefined} />;
@@ -126,7 +130,7 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 			<TaskTrigger title={workHead(parts, item.done, item.ms) || "working"}>
 				<div className="flex w-full min-w-0 cursor-pointer items-center gap-2 text-muted-foreground text-xs transition-colors hover:text-foreground">
 					{item.done ? <ChevronRightIcon className={cn("size-3.5 transition-transform", open && "rotate-90")} /> : <Pulse size={12} />}
-					<span className="grow truncate text-left">{workHead(parts, item.done, item.ms) || "working"}</span>
+					<span className="min-w-0 flex-1 truncate text-left">{workHead(parts, item.done, item.ms) || "working"}</span>
 					{!item.done && !open && parts.length > 6 ? <span className="text-faint">show all</span> : null}
 				</div>
 			</TaskTrigger>
@@ -266,23 +270,24 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 		case "note": {
 			const ToneIcon = TONE_ICON[item.tone];
 			return (
-				<div className={`it-note ${item.tone}`}>
-					<ToneIcon size={14} />
-					<div className="grow">
-						<span className="head">{item.text}</span>
-						{item.action ? <button type="button" className="open-link" style={{ marginLeft: 8 }} onClick={item.action.run}>{item.action.label}</button> : null}
-						{item.lines?.length ? <div className="lines">{item.lines.filter((l) => l.text).map((l, i) => <span key={i} className={l.tone ?? ""}>{l.text}</span>)}</div> : null}
+				// The tone stays a class of its own too: the tests find a note by it.
+				<div className={cn("it-note flex cursor-auto gap-2 text-muted-foreground text-xs select-text", item.tone, NOTE_TONE[item.tone])}>
+					<ToneIcon size={14} className="mt-0.5" />
+					<div className="min-w-0 flex-1">
+						<span className={item.tone === "accent" ? "text-primary" : undefined}>{item.text}</span>
+						{item.action ? <Button variant="link" size="xs" className="open-link ml-2" onClick={item.action.run}>{item.action.label}</Button> : null}
+						{item.lines?.length ? <div className="mt-0.5 flex flex-col gap-px text-muted-foreground">{item.lines.filter((l) => l.text).map((l, i) => <span key={i} className={l.tone ? NOTE_TONE[l.tone] : undefined}>{l.text}</span>)}</div> : null}
 					</div>
 				</div>
 			);
 		}
 		case "event":
 			return (
-				<div className="it-event">
-					<ZapIcon size={14} />
-					<div className="grow">
+				<div className="flex gap-2 rounded-lg bg-warn-soft px-3 py-2 text-xs select-text">
+					<ZapIcon size={14} className="mt-0.5 text-warn" />
+					<div className="min-w-0 flex-1">
 						<b>{item.label}</b>
-						<div className="body">{short(oneLine(tilde(item.body)), 400)}</div>
+						<div className="text-muted-foreground wrap-anywhere">{short(oneLine(tilde(item.body)), 400)}</div>
 					</div>
 				</div>
 			);
@@ -292,27 +297,33 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 			return <div className="my-1 rounded-lg border p-3"><Steps items={item.items} /></div>;
 		case "media":
 			return (
-				<div className="it-media">
-					{item.kind === "image" ? <img src={item.url} alt={item.name} draggable={false} {...zoomable} /> : item.kind === "video" ? <video src={item.url} controls preload="metadata" /> : <audio src={item.url} controls preload="metadata" />}
-					<div className="cap">{item.name}</div>
+				<div className={`it-media ${MEDIA.box[item.kind]}`}>
+					{item.kind === "image" ? <img className={MEDIA.image} src={item.url} alt={item.name} draggable={false} {...zoomable} /> : item.kind === "video" ? <video className={MEDIA.video} src={item.url} controls preload="metadata" /> : <audio className={MEDIA.audio} src={item.url} controls preload="metadata" />}
+					<div className={MEDIA.cap}>{item.name}</div>
 				</div>
 			);
 		case "goal": {
 			const g = item.goal;
 			const wait = g.status !== "met" && g.status !== "active";
 			return (
-				<div className={`it-goal${wait ? " wait" : ""}`}>
-					<span className="mark">{g.status === "met" ? "check" : wait ? <ClockIcon size={14} /> : <TargetIcon size={14} />}</span>
+				<div className="flex gap-2 text-xs select-text">
+					<span className={cn("shrink-0", wait ? "text-warn" : "text-primary")}>{g.status === "met" ? "check" : wait ? <ClockIcon size={14} /> : <TargetIcon size={14} />}</span>
 					<div>
-						<b>goal</b> <span className="muted">{g.note}</span>
-						{g.reason ? <div className="reason">{short(oneLine(g.reason), 240)}</div> : null}
-						{item.full ? <div className="reason">the goal: {short(oneLine(g.objective), 320)}</div> : null}
+						<b>goal</b> <span className="text-muted-foreground">{g.note}</span>
+						{g.reason ? <div className="text-muted-foreground">{short(oneLine(g.reason), 240)}</div> : null}
+						{item.full ? <div className="text-muted-foreground">the goal: {short(oneLine(g.objective), 320)}</div> : null}
 					</div>
 				</div>
 			);
 		}
 		case "divider":
-			return <div className="it-divider">{item.text}</div>;
+			return (
+				<div className="flex items-center gap-3 text-faint text-xs">
+					<span className="h-px flex-1 bg-line-soft" />
+					{item.text}
+					<span className="h-px flex-1 bg-line-soft" />
+				</div>
+			);
 		case "entry":
 			return <Entry entry={item.entry} agent={tab.agent} />;
 	}
@@ -340,32 +351,35 @@ function Welcome({ tab }: { tab: Tab }) {
 	const h = has?.holdings;
 	const counts: Array<[string, number]> = h ? [["skill", h.skills.length], ["event source", h.sources.length], ["schedule", h.schedules.length], ["MCP server", h.servers.length], ["conversation", h.conversations.length]] : [];
 	return (
-		<div className="welcome">
-			<span className="avatar big">{tab.agent.slice(0, 1).toUpperCase()}</span>
-			<h1>{tab.agent}</h1>
-			<p>{info?.description || "An agent of yours."}</p>
-			<div className="facts">
-				<span className="fact" title="The model it runs on"><CpuIcon size={12} /><b>{info?.model ?? "no model"}</b></span>
-				<span className="fact" title={mode?.about}><ShieldIcon size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</span>
-				{info?.main ? <span className="fact" title="It creates and changes the other agents and pine's settings when you ask it to">administers pine</span> : null}
-				{info?.delegates.length ? <span className="fact" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></span> : null}
-				{counts.filter(([, n]) => n > 0).map(([what, n]) => <span className="fact" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</span>)}
+		<div className="welcome my-auto flex flex-col items-start gap-2.5 py-10">
+			<span className="grid size-10 shrink-0 place-items-center rounded-xl bg-press font-semibold text-foreground text-xl">{tab.agent.slice(0, 1).toUpperCase()}</span>
+			<h1 className="mt-1.5 font-semibold text-2xl tracking-tight">{tab.agent}</h1>
+			{/* A long path is broken where the line ends, not pushed out of it. */}
+			<p className="max-w-lg text-muted-foreground wrap-anywhere">{info?.description || "An agent of yours."}</p>
+			<div className="mt-0.5 flex flex-wrap gap-1.5">
+				<Badge variant="outline" title="The model it runs on"><CpuIcon size={12} /><b>{info?.model ?? "no model"}</b></Badge>
+				<Badge variant="outline" title={mode?.about}><ShieldIcon size={12} /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</Badge>
+				{info?.main ? <Badge variant="outline" title="It creates and changes the other agents and pine's settings when you ask it to">administers pine</Badge> : null}
+				{info?.delegates.length ? <Badge variant="outline" title="Agents it can hand work to">hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></Badge> : null}
+				{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 			</div>
 			{info?.modelProblem ? (
-				<div className="notice no-model">
+				<Alert className="notice max-w-xl">
 					<TriangleAlertIcon />
-					<div className="grow">{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</div>
-					<Button variant="outline" size="xs" onClick={() => store.openSettings("models")}>Models…</Button>
-				</div>
+					<AlertDescription>{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</AlertDescription>
+					<AlertAction>
+						<Button variant="outline" size="xs" onClick={() => store.openSettings("models")}>Models…</Button>
+					</AlertAction>
+				</Alert>
 			) : null}
-			<p className="faint">
+			<p className="text-faint wrap-anywhere">
 				{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 			</p>
-			<div className="hints">
+			<div className="mt-2 flex flex-wrap gap-1.5">
 				<Suggestion size="xs" suggestion="What can you do for me, and what are you set up with?" onClick={say}>What can you do?</Suggestion>
 				<Button variant="outline" size="xs" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
 				<Button variant="outline" size="xs" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" />Give it a folder</Button>
-				<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <kbd>⌘K</kbd></Button>
+				<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <kbd className="rounded-sm border bg-card px-1 font-sans text-faint text-xs">⌘K</kbd></Button>
 			</div>
 		</div>
 	);
@@ -414,10 +428,11 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 	}, [at, count]);
 	const step = (by: number) => count && setAt((at + by + count) % count);
 	return (
-		<div className="find">
-			<SearchIcon size={13} className="faint" />
+		<div className="find absolute top-11.5 right-5.5 z-5 flex items-center gap-1 rounded-lg border bg-card py-1 pr-1.5 pl-2.5 text-xs shadow-md">
+			<SearchIcon size={13} className="text-faint" />
 			<input
 				autoFocus
+				className="w-55 border-0 bg-transparent outline-none select-text"
 				placeholder="Find in this conversation"
 				value={query}
 				onChange={(e) => setQuery(e.target.value)}
@@ -426,7 +441,7 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 					if (e.key === "Enter") step(e.shiftKey ? 1 : -1);
 				}}
 			/>
-			<span className="faint">{query ? (count ? `${at + 1} of ${count}` : "nothing") : ""}</span>
+			<span className="text-faint">{query ? (count ? `${at + 1} of ${count}` : "nothing") : ""}</span>
 			<Button variant="ghost" size="icon-xs" title="Earlier (↩)" onClick={() => step(-1)}><ArrowUpIcon /></Button>
 			<Button variant="ghost" size="icon-xs" title="Later (⇧↩)" onClick={() => step(1)}><ChevronDownIcon /></Button>
 			<Button variant="ghost" size="icon-xs" onClick={close}><XIcon /></Button>
@@ -446,11 +461,11 @@ function StatusLine({ tab }: { tab: Tab }) {
 	const elsewhere = store.tabs.find((t) => t !== tab && t.approvals.size > 0);
 	const goal = tab.goal?.status === "active" ? tab.goal : undefined;
 	if (!tab.busy) {
-		if (waiting.length) return <div className="status warn"><TriangleAlertIcon size={14} /><span>{waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval."}</span><Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button></div>;
-		if (goal) return <div className="status"><TargetIcon size={14} /><span>goal · round {goal.round} of {goal.until} · checking whether it is met</span><Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button></div>;
-		if (elsewhere) return <div className="status warn"><TriangleAlertIcon size={14} /><span>{elsewhere.agent} · {elsewhere.session} waits for you.</span><Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button></div>;
-		if (tab.programs.length) return <div className="status"><PlayIcon size={13} /><span>{plural(tab.programs.length, "program")} still running</span><Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button></div>;
-		return <div className="status" />;
+		if (waiting.length) return <div className={cn(STATUS, "text-warn")}><TriangleAlertIcon size={14} /><span>{waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval."}</span><Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button></div>;
+		if (goal) return <div className={STATUS}><TargetIcon size={14} /><span>goal · round {goal.round} of {goal.until} · checking whether it is met</span><Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button></div>;
+		if (elsewhere) return <div className={cn(STATUS, "text-warn")}><TriangleAlertIcon size={14} /><span>{elsewhere.agent} · {elsewhere.session} waits for you.</span><Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button></div>;
+		if (tab.programs.length) return <div className={STATUS}><PlayIcon size={13} /><span>{plural(tab.programs.length, "program")} still running</span><Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button></div>;
+		return <div className={STATUS} />;
 	}
 	const secs = Math.max(0, Math.round((Date.now() - tab.startedAt) / 1000));
 	const steps = tab.steps?.items ?? [];
@@ -467,11 +482,11 @@ function StatusLine({ tab }: { tab: Tab }) {
 		speedText(tab.speed),
 	].filter(Boolean);
 	return (
-		<div className={`status${waiting.length ? " warn" : ""}`}>
+		<div className={cn(STATUS, waiting.length && "text-warn")}>
 			<Pulse size={13} />
 			{goal ? <span>goal · round {goal.round} of {goal.until}</span> : null}
-			{parts.map((p, i) => <span key={i} className={i || goal ? "sep" : ""}>{p}</span>)}
-			<span className="grow" />
+			{parts.map((p, i) => <span key={i} className={i || goal ? "before:mr-2 before:text-faint before:content-['·']" : undefined}>{p}</span>)}
+			<span className="min-w-0 flex-1" />
 			{waiting.length ? <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button> : null}
 		</div>
 	);
@@ -483,21 +498,21 @@ function ConvHead({ tab }: { tab: Tab }) {
 	const chat = tab.kind === "chat";
 	const total = tab.tokens.input + tab.tokens.cached;
 	return (
-		<div className="conv-head">
-			<span className="avatar">{tab.agent.slice(0, 1).toUpperCase()}</span>
-			<span className="muted">{tab.agent}</span>
-			<span className="faint">/</span>
-			<b className="cut" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
-			{chat && tab.folder ? <button type="button" className="chip" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><FolderIcon size={12} /><span className="cut">{tilde(tab.folder)}</span></button> : null}
-			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="faint" /> : null}
-			<span className="grow" />
+		<div className="conv-head flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-3 text-xs">
+			<span className="grid size-5 shrink-0 place-items-center rounded-sm bg-press font-semibold text-muted-foreground text-xs">{tab.agent.slice(0, 1).toUpperCase()}</span>
+			<span className="text-muted-foreground">{tab.agent}</span>
+			<span className="text-faint">/</span>
+			<b className="min-w-0 shrink truncate font-semibold" title={chat ? `conversation ${tab.session}` : undefined}>{chat ? store.titleOf(tab.agent, tab.session) : `task #${tab.task}`}</b>
+			{chat && tab.folder ? <Button variant="ghost" size="xs" className="min-w-0 shrink" title={`Works in ${tab.folder}`} onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></Button> : null}
+			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-faint" /> : null}
+			<span className="min-w-0 flex-1" />
 			{tab.context !== undefined ? (
-				<span className="conv-meta" title={`Context ${tab.context}% full${tab.cacheShare !== undefined ? ` · ${tab.cacheShare}% of the last request came from the model server's cache` : ""}${speedText(tab.speed) ? ` · ${speedText(tab.speed)}` : ""}`}>
+				<span className="mr-1 flex shrink-0 items-center gap-1.5 text-muted-foreground text-xs tabular-nums" title={`Context ${tab.context}% full${tab.cacheShare !== undefined ? ` · ${tab.cacheShare}% of the last request came from the model server's cache` : ""}${speedText(tab.speed) ? ` · ${speedText(tab.speed)}` : ""}`}>
 					<Ring percent={tab.context} />
 					{total ? `${count(total)} · ` : ""}{Math.round(tab.context)}%
 				</span>
 			) : null}
-			{chat ? <Button variant="ghost" size="icon-xs" aria-pressed={store.code} title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")}><PanelRightIcon /></Button> : null}
+			{chat ? <Button variant={store.code ? "secondary" : "ghost"} size="icon-xs" aria-pressed={store.code} title="The agent and its workspace: what it has, files, changes, output (⌥⌘B)" onClick={() => void store.command("code")}><PanelRightIcon /></Button> : null}
 		</div>
 	);
 }
@@ -508,7 +523,7 @@ function Ring({ percent }: { percent: number }) {
 	const c = 2 * Math.PI * r;
 	const colour = percent >= 85 ? "var(--bad)" : percent >= 65 ? "var(--warn)" : "var(--text-muted)";
 	return (
-		<svg className="ring" width="16" height="16" viewBox="0 0 16 16">
+		<svg className="shrink-0 -rotate-90" width="16" height="16" viewBox="0 0 16 16">
 			<circle cx="8" cy="8" r={r} fill="none" stroke="var(--press)" strokeWidth="2" />
 			<circle cx="8" cy="8" r={r} fill="none" stroke={colour} strokeWidth="2" strokeDasharray={`${(c * Math.min(100, percent)) / 100} ${c}`} strokeLinecap="round" />
 		</svg>
@@ -558,11 +573,12 @@ export function Conversation({ tab }: { tab: Tab }) {
 	}, [tab.id]);
 	const chat = tab.kind === "chat";
 	return (
-		<div className="conv">
+		<div className="relative flex min-w-85 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 			<ConvHead tab={tab} />
 			{finding && loaded ? <FindBar key={looked ?? ""} initial={looked} root={() => scroller.current} close={() => (setFinding(false), setLooked(undefined))} /> : null}
 			<div
-				className="transcript"
+				// No scroll anchoring: the code above keeps the end in view, and the browser's own would fight it.
+				className="flex-1 overflow-x-hidden overflow-y-auto [overflow-anchor:none]"
 				ref={scroller}
 				onScroll={(e) => {
 					const el = e.currentTarget;
@@ -571,18 +587,18 @@ export function Conversation({ tab }: { tab: Tab }) {
 					if (away === near) setAway(!near);
 				}}
 			>
-				<div className="column">
-					{!tab.loaded ? <div className="empty"><Pulse /></div> : !tab.items.length && chat ? <Welcome tab={tab} /> : tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
+				<div className="column mx-auto flex min-h-full max-w-3xl flex-col gap-3.5 px-7 pt-7 pb-2">
+					{!tab.loaded ? <div className="m-auto py-10"><Pulse /></div> : !tab.items.length && chat ? <Welcome tab={tab} /> : tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
 				</div>
 			</div>
-			{away ? <Button variant="outline" size="xs" className="jump" onClick={() => ((stick.current = true), toEnd(), setAway(false))}><ChevronDownIcon data-icon="inline-start" />Latest</Button> : null}
-			<div className="dock">
-				<div className="dock-in">
+			{away ? <Button variant="outline" size="xs" className="absolute bottom-3 left-1/2 z-3 -translate-x-1/2 shadow-md" onClick={() => ((stick.current = true), toEnd(), setAway(false))}><ChevronDownIcon data-icon="inline-start" />Latest</Button> : null}
+			<div className="shrink-0 px-7 pb-4">
+				<div className="relative mx-auto max-w-3xl">
 					<StatusLine tab={tab} />
 					{chat ? (
 						<Composer tab={tab} />
 					) : tab.busy ? (
-						<div className="row"><span className="muted grow">This tab shows one task's work and takes no messages.</span><Button variant="outline" size="xs" onClick={() => void store.stop(tab)}><SquareIcon data-icon="inline-start" />Stop this task</Button></div>
+						<div className="flex items-center gap-2"><span className="min-w-0 flex-1 text-muted-foreground">This tab shows one task's work and takes no messages.</span><Button variant="outline" size="xs" onClick={() => void store.stop(tab)}><SquareIcon data-icon="inline-start" />Stop this task</Button></div>
 					) : null}
 				</div>
 			</div>

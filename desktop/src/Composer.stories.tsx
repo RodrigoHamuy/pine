@@ -11,7 +11,7 @@ function Box({ draft = "", files = false, outside = false }: { draft?: string; f
 	if (outside) store.taints.set("main:main", "a web page");
 	else store.taints.delete("main:main");
 	return (
-		<div className="dock-in" style={{ width: 640 }}>
+		<div className="relative w-160">
 			<Composer tab={tab} />
 		</div>
 	);
