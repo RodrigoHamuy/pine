@@ -176,6 +176,14 @@
 	--code-operator: var(--p-steel);
 }
 
+/* The editor's theme (CodePanel.tsx) reads these from script, where Tailwind cannot see them, and Tailwind
+   emits a theme variable only when a utility uses it. Static keeps them emitted; the values are Tailwind's own. */
+@theme static {
+	--text-xs: 0.75rem;
+	--leading-relaxed: 1.625;
+	--font-weight-semibold: 600;
+}
+
 /* shadcn's tokens, set from pine's own colours (light in :root, poimandres in .dark, above).
    They only point at pine's names, so one place holds each colour and the dark values follow the class
    by themselves. The font is the system's, as it always was. */

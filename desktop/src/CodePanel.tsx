@@ -164,7 +164,8 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 
 // What a line of a unified diff is: a change is drawn by the stock line variants, which put the
 // sign in front themselves, so its own sign is taken off; a hunk header is highlighted; the
-// lines about the file itself are muted.
+// lines about the file itself are muted. The stock variants mark a line by its sign and a tint
+// (added is the neutral muted one), so pine's diff colours are laid over them.
 const META = ["+++", "---", "diff ", "index ", "new file", "deleted file", "similarity", "rename "];
 
 /** A unified diff, coloured line by line. */
@@ -174,10 +175,10 @@ export function Diff({ text }: { text: string }) {
 		<CodeBlock size="sm" className="diff m-2 w-auto select-text">
 			<CodeBlockContent>
 				{lines.map((l, i) => {
-					if (l.startsWith("@@")) return <CodeBlockLine key={i} variant="highlighted">{l}</CodeBlockLine>;
+					if (l.startsWith("@@")) return <CodeBlockLine key={i} variant="highlighted" className="bg-info/8 text-info">{l}</CodeBlockLine>;
 					if (META.some((m) => l.startsWith(m))) return <CodeBlockLine key={i} className="text-muted-foreground">{l}</CodeBlockLine>;
-					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added" className="add">{l.slice(1)}</CodeBlockLine>;
-					if (l.startsWith("-")) return <CodeBlockLine key={i} variant="removed">{l.slice(1)}</CodeBlockLine>;
+					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added" className="add bg-add-bg text-add after:text-add">{l.slice(1)}</CodeBlockLine>;
+					if (l.startsWith("-")) return <CodeBlockLine key={i} variant="removed" className="bg-del-bg text-del after:text-del">{l.slice(1)}</CodeBlockLine>;
 					return <CodeBlockLine key={i}>{l.startsWith(" ") ? l.slice(1) : l}</CodeBlockLine>;
 				})}
 			</CodeBlockContent>
