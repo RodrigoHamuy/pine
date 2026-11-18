@@ -1466,6 +1466,40 @@ test("the panel's Agent view scrolls up and down only, however narrow the panel 
 	await page.mouse.up();
 });
 
+test("a phone-wide window lays the side bar and the panel over the conversation, and a wide one puts them back beside it", async () => {
+	// The page's size, as the start of this file sets it (the window's own size does not count while the driver sets one).
+	const size = (width: number, height: number) => page.setViewportSize({ width, height });
+	await page.click("[data-slot=tab] >> nth=0");
+	await sees("#sidebar-panel [data-slot=sidebar]");
+	const wide = Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width));
+	if (await page.$("[data-slot=code-panel]")) await menu("code");
+	await size(380, 760);
+	// No column: the side bar is stock's sheet, closed until it is asked for, and the page does not scroll sideways.
+	await page.waitForSelector("#sidebar-panel", { state: "detached" });
+	assert.equal(await page.locator("[data-slot=sidebar][data-mobile=true]").count(), 0);
+	assert.equal(await page.evaluate(() => document.documentElement.scrollWidth), 380);
+	await page.click("header [data-sidebar=trigger]");
+	await sees("[data-slot=sidebar][data-mobile=true] [data-slot=agent-label]");
+	// Picking a conversation in it puts it away again.
+	await page.locator("[data-slot=sidebar][data-mobile=true] [role=option]").first().click();
+	await page.waitForSelector("[data-slot=sidebar][data-mobile=true]", { state: "detached" });
+	// The menu's Toggle Sidebar opens the sheet and leaves the owner's choice of a column as it was.
+	await menu("sidebar");
+	await sees("[data-slot=sidebar][data-mobile=true]");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[data-slot=sidebar][data-mobile=true]", { state: "detached" });
+	// The panel beside a conversation is a sheet over it, and closing the sheet closes the panel.
+	await menu("code-agent");
+	await sees("[data-slot=sheet-content] [data-slot=code-panel]");
+	assert.equal(await page.locator("[data-slot=resizable-handle]:has(+ #code-panel)").count(), 0);
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+	// Wide again: the side bar is a column as wide as it was.
+	await size(1280, 820);
+	await sees("#sidebar-panel [data-slot=sidebar]");
+	assert.equal(Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width)), wide);
+});
+
 test("quitting stops the daemon it started", async () => {
 	const log = path.join(home, "data", "pine.log");
 	assert.ok(fs.existsSync(log));

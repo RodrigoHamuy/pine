@@ -226,6 +226,20 @@ agent's:
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
 | Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
 
+The window can be made as narrow as a phone (360 pixels). Where there is no room for columns,
+the side bar and the side panel lie over the conversation instead of beside it. What you chose
+(side bar shown or hidden, side panel open or closed) and how wide you dragged them is kept, and a
+wide window puts them back as they were.
+
+| Window | Side bar | Side panel |
+|---|---|---|
+| 1024 pixels and wider | A column | A column |
+| 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes the panel |
+| Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above, the whole width of the window |
+
+Settings follow the room they have, not the window: narrower than about 720 pixels, the list of
+pages is a row along the top that scrolls sideways, and a setting's control goes under its text.
+
 ### Finding a conversation
 
 `⌘K` (or Search at the top of the side bar) is one box for everything. Type a few words:
@@ -553,7 +567,9 @@ holds only tokens and base rules.
 
 Buttons, switches, inputs, fields, toggle groups (the segmented controls), selects, the edges that resize
 the side bar and the code panel (Resizable), the side bar itself (Sidebar, fixed in place with
-`collapsible="none"`: its header, groups, menu buttons, badges and actions) and the agents' groups in it
+`collapsible="none"` in a wide window and stock's own sheet, `offcanvas` with its `openMobile` and the
+breakpoint of its `useIsMobile`, in a narrow one: its header, groups, menu buttons, badges and actions),
+the side panel over a conversation in a narrow window (Sheet) and the agents' groups in it
 (Collapsible) are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
 of rows to open) is ui-sdk's (`@ui-sdk/react`), used directly, with the row's look from `src/lists.tsx`; ui-sdk is never used for a
@@ -578,5 +594,7 @@ stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does n
 Every pull request and every push to `next` publishes the stories to Chromatic
 (`.github/workflows/chromatic.yml`), which shows what changed in a picture for review. It
 needs the repository secret `CHROMATIC_PROJECT_TOKEN`; without it the job says so and passes.
-Chromatic takes each story in light and dark through its modes (`.storybook/modes.ts`, which
-set the `theme` global), so no dark twin of a story is written.
+Chromatic takes each story in light and dark, each at a phone's width (360, the window's
+smallest) and at the window's first width (1280), through its modes (`.storybook/modes.ts`,
+which set the `theme` global and a viewport), so no dark or phone twin of a story is written:
+four snapshots a story. The same two widths are the Viewport menu in Storybook's toolbar.

@@ -1,3 +1,4 @@
+import { cn } from "cn";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { AgentInfo, McpServer, Overview, Setting } from "./api.ts";
 import { store } from "./model.ts";
@@ -53,12 +54,12 @@ const answers: Record<string, unknown> = {
 
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
 
-function Tab({ section }: { section: string }) {
+function Tab({ section, narrow }: { section: string; narrow?: boolean }) {
 	store.section = section;
 	store.settingsAgent = undefined;
 	store.agents = agents;
 	return (
-		<div className="flex h-180 w-250">
+		<div className={cn("flex h-180", narrow ? "w-90" : "w-250")}>
 			<Settings />
 		</div>
 	);
@@ -76,3 +77,9 @@ export const Agents: Story = { args: { section: "agents" } };
 
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
 export const McpServers: Story = { args: { section: "mcp" } };
+
+/** As wide as a phone: the pages are a row along the top, and a control goes under its text. */
+export const GeneralNarrow: Story = { args: { section: "general", narrow: true } };
+
+/** MCP servers as wide as a phone: one field to a line, the choices wrapping. */
+export const McpServersNarrow: Story = { args: { section: "mcp", narrow: true } };

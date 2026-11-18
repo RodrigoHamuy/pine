@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
+import { cn } from "cn";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
@@ -22,7 +24,7 @@ import { highlightSelectionMatches, search, searchKeymap } from "@codemirror/sea
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
 import { drawSelection, EditorView, highlightActiveLine, highlightActiveLineGutter, keymap, lineNumbers } from "@codemirror/view";
 import { tags as t } from "@lezer/highlight";
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { CodeBlock, CodeBlockContent, CodeBlockLine } from "@/components/ui/code-block";
 import { Printed } from "@/components/printed";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
@@ -539,6 +541,15 @@ function Running({ tab }: { tab: Tab }) {
 
 export const CODE_KEY = "pine.code.width";
 
+/** Tailwind's `lg`: below it a conversation and the panel beside it do not both fit, with the side bar as a column too. */
+const ROOM = "(min-width: 64rem)";
+const roomy = () => window.matchMedia(ROOM).matches;
+const onRoom = (change: () => void) => {
+	const query = window.matchMedia(ROOM);
+	query.addEventListener("change", change);
+	return () => query.removeEventListener("change", change);
+};
+
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
@@ -549,12 +560,13 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const setView = (v: CodeView) => ((store.codeView = v), store.touch());
 	const setFile = (file?: string) => ((state.file = file), redraw((n) => n + 1));
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
-	return (
-		<>
-			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
-			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
-				<div data-slot="code-panel" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
-					<div className="flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2">
+	// In a window narrower than that there is no room beside the conversation: the panel is a stock sheet over it,
+	// from the right, and putting it away is closing the panel. The owner's choice (open or not) is the same either way.
+	const narrow = !useSyncExternalStore(onRoom, roomy);
+	const panel = (
+				<div data-slot="code-panel" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
+					{/* A sheet as wide as a phone-wide window reaches under the window's buttons at the top left on a Mac. */}
+					<div className={cn("flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2", narrow && store.platform === "darwin" && !store.fullscreen && "max-sm:pl-21")}>
 						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
 						    for the line under the tab in front, which stock draws below the list. */}
 						<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
@@ -593,6 +605,21 @@ export function CodePanel({ tab }: { tab: Tab }) {
 						<Running tab={tab} />
 					)}
 				</div>
+	);
+	if (narrow)
+		return (
+			<Sheet open onOpenChange={(open) => !open && void store.command("code")}>
+				<SheetContent side="right" showCloseButton={false} className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+					<SheetTitle className="sr-only">Side panel</SheetTitle>
+					{panel}
+				</SheetContent>
+			</Sheet>
+		);
+	return (
+		<>
+			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
+			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
+				{panel}
 			</ResizablePanel>
 		</>
 	);

@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, ListIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, ListIcon, MessageSquareIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -32,7 +32,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
-import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
+import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Spinner } from "@/components/ui/spinner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printed } from "@/components/printed";
@@ -109,6 +110,7 @@ function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; dept
 	const s = store;
 	const tab = s.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === c.session);
 	const main = c.session === "main";
+	const { setOpenMobile } = useSidebar();
 	const menu = async () => {
 		const picked = await bridge.contextMenu([
 			{ id: "open", label: "Open" },
@@ -148,7 +150,7 @@ function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; dept
 	return (
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
 		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
-			<SidebarMenuButton isActive={on} className={cn(INDENT[Math.min(depth, INDENT.length - 1)], c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+			<SidebarMenuButton isActive={on} onClick={() => setOpenMobile(false)} className={cn(INDENT[Math.min(depth, INDENT.length - 1)], c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`} />}>
 				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : tab?.unread ? <Badge className="size-2 p-0" /> : main || c.pinned ? <StarIcon className="text-faint" /> : depth || c.worktree ? <GitBranchIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
 				<span className="min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
@@ -263,13 +265,15 @@ function Sidebar() {
 	const ready = s.service.status === "ready";
 	const front = s.active;
 	const newer = s.update?.status === "newer" ? s.update : undefined;
-	// shadcn's stock Sidebar, fixed in its place (the panel around it sets its width). Its background
-	// is left to the window behind it, which is the system's material on a Mac.
-	// Where nothing is to click, the side bar moves the window, like the bar along the top.
+	const { isMobile } = useSidebar();
+	// shadcn's stock Sidebar. In a wide window it is fixed in its place (the panel around it sets its width),
+	// its background left to the window behind it, which is the system's material on a Mac, and where nothing
+	// is to click it moves the window, like the bar along the top. In a narrow one it is stock's own sheet over
+	// the page (`offcanvas` on a phone-wide window), opened by the same button and key.
 	return (
-		<SidebarRoot collapsible="none" className="w-full min-w-0 bg-transparent app-drag">
+		<SidebarRoot collapsible={isMobile ? "offcanvas" : "none"} className="w-full min-w-0 bg-transparent app-drag">
 			<SidebarHeader className={cn("h-11 flex-none flex-row items-center justify-end gap-0.5 py-0 pr-2 app-drag", s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2.5")}>
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")} aria-label="Hide the sidebar" />}><PanelLeftIcon /></TooltipTrigger><TooltipContent>Hide the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>
+				<Tooltip><TooltipTrigger render={<SidebarTrigger size="icon" className="app-no-drag" aria-label="Hide the sidebar" />} /><TooltipContent>Hide the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>
 			</SidebarHeader>
 			<SidebarContent>
 				<ScrollArea className="flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade flex-1">
@@ -356,9 +360,16 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 function TitleBar() {
 	const s = useModel(store);
 	const with_ = s.agentInFront();
+	const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
+	const column = s.sidebar && !isMobile;
+	// The menu's Toggle Sidebar goes to the stock toggle, which knows whether the side bar is a column or a sheet.
+	useSignal("sidebar", toggleSidebar);
+	// The sheet of a narrow window is put away once another tab comes to the front (from the sheet, the palette,
+	// a menu), and when the window gets wide. A click on the conversation already in front puts it away too (ConversationRow).
+	useEffect(() => setOpenMobile(false), [s.active?.id, isMobile, setOpenMobile]);
 	return (
-		<header className={cn("flex h-11 flex-none items-center gap-1 pr-2 app-drag", s.sidebar ? "pl-0.5" : s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2")}>
-			{s.sidebar ? null : <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")} aria-label="Show the sidebar" />}><PanelLeftIcon /></TooltipTrigger><TooltipContent>Show the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>}
+		<header className={cn("flex h-11 flex-none items-center gap-1 pr-2 app-drag", column ? "pl-0.5" : s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2")}>
+			{column ? null : <Tooltip><TooltipTrigger render={<SidebarTrigger size="icon" className="app-no-drag" aria-label="Show the sidebar" />} /><TooltipContent>Show the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>}
 			{/* A row that scrolls cuts off what a tab draws outside itself (the line around the tab in front, the mark where a dragged tab
 			    would land): the padding is the room for both, and the margin keeps the tabs where they were. It scrolls without a bar;
 			    the fade at a cut end says there is more. */}
@@ -508,16 +519,22 @@ export function App() {
 	const ready = s.service.status === "ready" && s.agents.length > 0 && s.active;
 	const tab = s.active;
 	const side = usePanelRef();
+	// Narrower than stock's breakpoint (Tailwind's `md`), the side bar lies over the page instead of beside it, as stock's
+	// own sheet. (The panel beside a conversation does the same below `lg`: CodePanel.tsx.)
+	const narrow = useIsMobile();
+	const column = s.sidebar && !narrow;
 	// The window itself: what shows between and around the panels. On a Mac the system's material lies behind it.
 	return (
 		<div className={cn("flex h-full", s.platform === "darwin" ? "bg-sidebar" : "bg-sunk")}>
 			{!ready ? (
 				<Gate />
 			) : (
-				// The stock provider follows the model: its own ⌘B, where the page gets the key before the menu, toggles the same setting.
-				<SidebarProvider open={s.sidebar} onOpenChange={(open) => open !== s.sidebar && void s.command("sidebar")}>
+				// The stock provider follows the model: its own ⌘B, where the page gets the key before the menu, toggles the same
+				// setting in a wide window, and its sheet in a narrow one.
+				<SidebarProvider open={s.sidebar} onOpenChange={(open) => s.showSidebar(open)}>
+					{narrow ? <Sidebar /> : null}
 					<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "sidebar-panel", SIDE_KEY)}>
-						{s.sidebar ? (
+						{column ? (
 							<>
 								<ResizablePanel id="sidebar-panel" className="flex" panelRef={side} defaultSize={Number(localStorage.getItem(SIDE_KEY)) || SIDE_WIDTH} minSize={190} maxSize={460} groupResizeBehavior="preserve-pixel-size">
 									<Sidebar />
@@ -528,9 +545,9 @@ export function App() {
 						<ResizablePanel id="main" className="flex">
 							<div className="flex min-w-0 flex-1 flex-col">
 								<TitleBar />
-								<div className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !s.sidebar && "pl-1.5")}>
+								<div className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !column && "pl-1.5")}>
 									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "code-panel", CODE_KEY)}>
-										<ResizablePanel id="view" className="flex" minSize={420}>
+										<ResizablePanel id="view" className="flex" minSize={320}>
 											{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
 										</ResizablePanel>
 										{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
