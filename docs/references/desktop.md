@@ -514,8 +514,8 @@ holds only tokens and base rules.
 - Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` keeps in
   step with the system's appearance; Electron's appearance setting drives that.
 - Tests and the few rules that reach into a component select by shadcn's `data-slot` attributes
-  and by roles, not by utility classes. The class names left on pine's own elements (`sidebar`,
-  `side-row`, `composer`...) are hooks for the tests and carry no style.
+  and by roles, not by utility classes. Where nothing stock tells one of pine's own elements
+  apart, it carries a `data-slot` of its own (`composer`, `code-panel`, `tab`...), never a bare class.
 - Streamdown's defaults are not safe here (pictures from the web, a download button, links opened
   by the page, cleaning rules that drop `data:` pictures). `markdown.tsx` replaces three of them:
   the cleaning rules (`CLEAN`), the link and the picture. On every upgrade of Streamdown, read its

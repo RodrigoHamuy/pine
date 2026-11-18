@@ -98,11 +98,11 @@ after(async () => {
 });
 
 test("a server the agent left running is one click away in the conversation's browser, from the empty browser and from Running", async () => {
-	await sees(".welcome h1", 30_000);
+	await sees("[data-slot=empty] h1", 30_000);
 	const dialog = await page.waitForSelector("[data-slot=dialog-footer] button >> text=Not now", { timeout: 5000 }).catch(() => undefined);
 	if (dialog) await dialog.click();
-	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "node serve.mjs", background: true } }] }, { text: "The server runs." }], "Start the server. "));
-	await page.press(".composer textarea", "Enter");
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "node serve.mjs", background: true } }] }, { text: "The server runs." }], "Start the server. "));
+	await page.press("[data-slot=composer] textarea", "Enter");
 	await sees("text=The server runs.", 30_000);
 	// The conversation's browser, as its door: up, and without a page.
 	write(path.join(home, "data", "browser-view", `${encodeURIComponent("main:main")}.json`), JSON.stringify({ port: (door.address() as net.AddressInfo).port, token: "ef".repeat(32), pid: 1 }));
@@ -122,7 +122,7 @@ test("a server the agent left running is one click away in the conversation's br
 
 	// The same address under Running goes to the same browser, and the panel shows it.
 	await menu("code-running");
-	await page.locator(".code").getByRole("button", { name: `localhost:${port}` }).click();
+	await page.locator("[data-slot=code-panel]").getByRole("button", { name: `localhost:${port}` }).click();
 	await waitFor("the link under Running was opened in the conversation's browser", () => asked.length === 2);
 	assert.equal(asked[1], `http://localhost:${port}`);
 	await sees("[data-slot=browser] input[aria-label=Address]");

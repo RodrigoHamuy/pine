@@ -60,7 +60,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 						{req.task ? <span className="text-faint">task #{req.task}</span> : null}
 						<Badge variant="secondary" className="font-mono">{req.tool}</Badge>
 					</div>
-					<Printed sm className="log" text={req.summary} />
+					<Printed sm text={req.summary} />
 					<div className="text-xs text-muted-foreground">
 						Why you are asked: {req.why}
 						{req.holds ? <div>“Allow” holds for {req.holds}: you are not asked about it again there.</div> : null}

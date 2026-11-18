@@ -44,7 +44,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 	const elsewhere = [...s.busy].filter(([key, tasks]) => tasks.size && key.startsWith(`${tab.agent}:`) && key !== tab.key).map(([key]) => key.slice(tab.agent.length + 1));
 	const memory = detail.data?.files.memory?.trim();
 	return (
-		<ScrollArea className="agent-view flex min-h-0 flex-1 cursor-auto flex-col text-xs select-text *:data-[slot=scroll-area-viewport]:scroll-fade">
+		<ScrollArea className="flex min-h-0 flex-1 cursor-auto flex-col text-xs select-text *:data-[slot=scroll-area-viewport]:scroll-fade">
 		<div className="flex flex-col gap-3 pb-2">
 			<Item className="px-3.5 pt-4 pb-0.5">
 				<ItemMedia>
@@ -53,7 +53,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					</Avatar>
 				</ItemMedia>
 				<ItemContent>
-					<ItemTitle className="agent-name">{tab.agent}{info.main ? <Badge>main</Badge> : null}</ItemTitle>
+					<ItemTitle>{tab.agent}{info.main ? <Badge>main</Badge> : null}</ItemTitle>
 					<ItemDescription>{info.description || "no description"}</ItemDescription>
 				</ItemContent>
 				<ItemActions>
@@ -71,30 +71,30 @@ export function AgentView({ tab }: { tab: Tab }) {
 				<FieldSet className={SECTION}>
 					<FieldLegend className={TITLE}>At work</FieldLegend>
 					{tab.busy ? (
-						<Item size="xs" className="agent-line">
+						<Item size="xs">
 							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
 							<ItemContent>
-								<ItemTitle className="name">this conversation</ItemTitle>
-								<ItemDescription className="about">{`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`}</ItemDescription>
+								<ItemTitle>this conversation</ItemTitle>
+								<ItemDescription>{`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`}</ItemDescription>
 							</ItemContent>
 						</Item>
 					) : null}
 					{helpers.map(([id, c]) => (
-						<Item key={id} size="xs" className="agent-line" render={<button type="button" onClick={() => void s.openTask(id)} />}>
+						<Item key={id} size="xs" render={<button type="button" onClick={() => void s.openTask(id)} />}>
 							<ItemMedia>{c.running ? <Spinner aria-label="Working" className="size-3" /> : <CheckIcon />}</ItemMedia>
 							<ItemContent>
-								<ItemTitle className="name">{c.agent}</ItemTitle>
-								<ItemDescription className="about">{`${childKind(c.kind)} #${id}: ${c.label}`}</ItemDescription>
+								<ItemTitle>{c.agent}</ItemTitle>
+								<ItemDescription>{`${childKind(c.kind)} #${id}: ${c.label}`}</ItemDescription>
 							</ItemContent>
 							<ItemActions><Badge variant="secondary">open</Badge></ItemActions>
 						</Item>
 					))}
 					{elsewhere.map((session) => (
-						<Item key={session} size="xs" className="agent-line" render={<button type="button" onClick={() => void s.openTab(tab.agent, session)} />}>
+						<Item key={session} size="xs" render={<button type="button" onClick={() => void s.openTab(tab.agent, session)} />}>
 							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
 							<ItemContent>
-								<ItemTitle className="name">{session}</ItemTitle>
-								<ItemDescription className="about">another conversation of {tab.agent}</ItemDescription>
+								<ItemTitle>{session}</ItemTitle>
+								<ItemDescription>another conversation of {tab.agent}</ItemDescription>
 							</ItemContent>
 							<ItemActions><Badge variant="secondary">open</Badge></ItemActions>
 						</Item>
@@ -111,11 +111,11 @@ export function AgentView({ tab }: { tab: Tab }) {
 						<Button variant="ghost" size="xs" onClick={() => s.openSettings("events")}>Events</Button>
 					</FieldLegend>
 					{listens.length ? listens.map((x) => (
-						<Item key={x.name} size="xs" className="agent-line">
+						<Item key={x.name} size="xs">
 							<ItemMedia><ZapIcon /></ItemMedia>
 							<ItemContent>
-								<ItemTitle className="name">{x.name}</ItemTitle>
-								<ItemDescription className="about">{(x.local ?? x.agent ?? x.global)?.note || x.description || x.type}</ItemDescription>
+								<ItemTitle>{x.name}</ItemTitle>
+								<ItemDescription>{(x.local ?? x.agent ?? x.global)?.note || x.description || x.type}</ItemDescription>
 							</ItemContent>
 							<ItemActions><Badge variant="secondary">{x.local ? "this conversation" : x.agent ? "as an agent" : "all agents"}</Badge></ItemActions>
 						</Item>
@@ -131,11 +131,11 @@ export function AgentView({ tab }: { tab: Tab }) {
 					{timed.length ? timed.map((x) => {
 						const tag = x.scope === "global" ? "all agents" : x.session && x.session !== "main" ? x.session : undefined;
 						return (
-							<Item key={`${x.scope}:${x.name}`} size="xs" className="agent-line">
+							<Item key={`${x.scope}:${x.name}`} size="xs">
 								<ItemMedia><ClockIcon /></ItemMedia>
 								<ItemContent>
-									<ItemTitle className="name">{x.name}</ItemTitle>
-									<ItemDescription className="about">{`${x.when}${x.task ? ` · ${oneLine(x.task)}` : ""}`}</ItemDescription>
+									<ItemTitle>{x.name}</ItemTitle>
+									<ItemDescription>{`${x.when}${x.task ? ` · ${oneLine(x.task)}` : ""}`}</ItemDescription>
 								</ItemContent>
 								{tag ? <ItemActions><Badge variant="secondary">{tag}</Badge></ItemActions> : null}
 							</Item>
@@ -154,11 +154,11 @@ export function AgentView({ tab }: { tab: Tab }) {
 					{knows.length ? knows.map((x) => {
 						const tag = x.scope === "global" ? "all agents" : x.scope === "local" ? "this conversation" : undefined;
 						return (
-							<Item key={x.dir} size="xs" className="agent-line">
+							<Item key={x.dir} size="xs">
 								<ItemMedia><BookIcon /></ItemMedia>
 								<ItemContent>
-									<ItemTitle className="name">{x.name}</ItemTitle>
-									{x.description ? <ItemDescription className="about">{x.description}</ItemDescription> : null}
+									<ItemTitle>{x.name}</ItemTitle>
+									{x.description ? <ItemDescription>{x.description}</ItemDescription> : null}
 								</ItemContent>
 								{tag ? <ItemActions><Badge variant="secondary">{tag}</Badge></ItemActions> : null}
 							</Item>
@@ -177,11 +177,11 @@ export function AgentView({ tab }: { tab: Tab }) {
 					{tools.length ? tools.map((x) => {
 						const tag = x.scope === "global" ? "all agents" : x.session ? "this conversation" : undefined;
 						return (
-							<Item key={`${x.scope}:${x.name}`} size="xs" className="agent-line">
+							<Item key={`${x.scope}:${x.name}`} size="xs">
 								<ItemMedia><PlugIcon /></ItemMedia>
 								<ItemContent>
-									<ItemTitle className="name">{x.name}</ItemTitle>
-									{x.target ? <ItemDescription className="about">{x.target}</ItemDescription> : null}
+									<ItemTitle>{x.name}</ItemTitle>
+									{x.target ? <ItemDescription>{x.target}</ItemDescription> : null}
 								</ItemContent>
 								{tag ? <ItemActions><Badge variant="secondary">{tag}</Badge></ItemActions> : null}
 							</Item>

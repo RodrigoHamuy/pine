@@ -114,7 +114,7 @@ function Call({ tool, subject, status, ms, depth = 0, output, error, images }: {
 					</CodeBlock>
 				) : null}
 				{(images ?? []).map((id) => (
-					<div className={`it-media ${MEDIA.box.image}`} key={id}>
+					<div className={MEDIA.box.image} key={id}>
 						<Dialog>
 							<DialogTrigger nativeButton={false} aria-label="The picture, larger" render={<img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" />} />
 							<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
@@ -136,8 +136,7 @@ function Call({ tool, subject, status, ms, depth = 0, output, error, images }: {
 function Child({ part }: { part: Extract<Part, { p: "child" }> }) {
 	return (
 		<button type="button" data-part="child" style={part.depth > 1 ? { paddingLeft: `calc(var(--spacing) * ${(part.depth - 1) * 3.5})` } : undefined} onClick={() => void store.openTask(part.task)}>
-			{/* `open-link`: what the tests click to open the sub-task's tab. */}
-			<TraceLine status={traceStatus(part.status)} className="open-link">
+			<TraceLine status={traceStatus(part.status)}>
 				<TraceIcon>
 					<StatusIcon status={part.status} />
 				</TraceIcon>
@@ -412,14 +411,14 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 		case "note": {
 			const ToneIcon = TONE_ICON[item.tone];
 			return (
-				// The tone stays a class of its own too: the tests find a note by it.
-				<Marker className={cn("it-note select-text", item.tone)}>
+				// The tone is said as data too: the tests find a note by it.
+				<Marker data-tone={item.tone} className="select-text">
 					<MarkerIcon className={NOTE_TONE[item.tone]}>
 						<ToneIcon />
 					</MarkerIcon>
 					<MarkerContent>
 						{item.text}
-						{item.action ? <Button variant="link" size="xs" className="open-link" onClick={item.action.run}>{item.action.label}</Button> : null}
+						{item.action ? <Button variant="link" size="xs" onClick={item.action.run}>{item.action.label}</Button> : null}
 						{item.lines?.filter((l) => l.text).map((l, i) => (
 							<span key={i} className={cn("block", l.tone && NOTE_TONE[l.tone])}>{l.text}</span>
 						))}
@@ -441,7 +440,7 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 			return <Steps items={item.items} />;
 		case "media":
 			return (
-				<div className={`it-media ${MEDIA.box[item.kind]}`}>
+				<div className={MEDIA.box[item.kind]}>
 					{item.kind === "image" ? (
 						<Dialog>
 							<DialogTrigger nativeButton={false} render={<img className={MEDIA.image} src={item.url} alt={item.name} draggable={false} />} />
@@ -522,7 +521,7 @@ function Welcome({ tab }: { tab: Tab }) {
 	const h = has?.holdings;
 	const counts: Array<[string, number]> = h ? [["skill", h.skills.length], ["event source", h.sources.length], ["schedule", h.schedules.length], ["MCP server", h.servers.length], ["conversation", h.conversations.length]] : [];
 	return (
-		<Empty className="welcome">
+		<Empty>
 			<EmptyHeader>
 				<EmptyMedia>
 					<Avatar size="lg">
@@ -544,7 +543,7 @@ function Welcome({ tab }: { tab: Tab }) {
 					{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 				</div>
 				{info?.modelProblem ? (
-					<Alert className="notice text-left">
+					<Alert className="text-left">
 						<TriangleAlertIcon />
 						<AlertDescription>{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</AlertDescription>
 						<AlertAction>
@@ -611,7 +610,7 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 	const step = (by: number) => count && setAt((at + by + count) % count);
 	return (
 		// Placed over the top right corner of the conversation, under its head.
-		<InputGroup className="find absolute top-11.5 right-5.5 z-5 w-auto bg-card shadow-md">
+		<InputGroup className="absolute top-11.5 right-5.5 z-5 w-auto bg-card shadow-md">
 			<InputGroupAddon>
 				<SearchIcon />
 			</InputGroupAddon>
@@ -723,7 +722,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 	useModel(store);
 	const chat = tab.kind === "chat";
 	return (
-		<div className="conv-head flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-3 text-xs">
+		<div data-slot="conversation-head" className="flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-3 text-xs">
 			<Avatar size="sm">
 				<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
 			</Avatar>
@@ -803,7 +802,7 @@ export function Conversation({ tab }: { tab: Tab }) {
 					<MessageScroller className="flex-1">
 						<MessageScrollerViewport ref={scroller}>
 							{/* The column of the conversation, under the head and above the input. */}
-							<MessageScrollerContent className="column mx-auto max-w-3xl px-7 pt-7 pb-2" aria-busy={tab.busy}>
+							<MessageScrollerContent className="mx-auto max-w-3xl px-7 pt-7 pb-2" aria-busy={tab.busy}>
 								{!tab.items.length && chat ? (
 									<MessageScrollerItem className="my-auto">
 										<Welcome tab={tab} />

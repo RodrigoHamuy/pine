@@ -97,7 +97,7 @@ const look = EditorView.theme({
 // ScrollArea that fades where it is cut (scroll-fade sits on its viewport, the element that
 // scrolls), a flex column so that its viewport shrinks to it, and a sideways bar where a diff can
 // be wider than the panel. Inside, a flex column at least its height, for an Empty centred with `m-auto`.
-const SUB = "code-sub flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
+const SUB = "flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
 const PICTURE = "block max-h-80 max-w-full rounded-lg border sm:max-w-md";
 const STATUS: Record<string, string> = { M: "text-warn", A: "text-add", "?": "text-add", D: "text-del", R: "text-info" };
 
@@ -160,7 +160,7 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 	useEffect(() => {
 		view.current?.dispatch({ effects: lock.current.reconfigure([EditorState.readOnly.of(Boolean(readOnly)), EditorView.editable.of(!readOnly)]) });
 	}, [readOnly]);
-	return <div className="editor flex min-h-0 flex-1 overflow-hidden" ref={host} />;
+	return <div className="flex min-h-0 flex-1 overflow-hidden" ref={host} />;
 }
 
 // What a line of a unified diff is: a change is drawn by the stock line variants, which put the
@@ -173,12 +173,12 @@ const META = ["+++", "---", "diff ", "index ", "new file", "deleted file", "simi
 export function Diff({ text }: { text: string }) {
 	const lines = text.split("\n");
 	return (
-		<CodeBlock size="sm" className="diff m-2 w-auto select-text">
+		<CodeBlock size="sm" className="m-2 w-auto select-text">
 			<CodeBlockContent>
 				{lines.map((l, i) => {
 					if (l.startsWith("@@")) return <CodeBlockLine key={i} variant="highlighted">{l}</CodeBlockLine>;
 					if (META.some((m) => l.startsWith(m))) return <CodeBlockLine key={i} className="text-muted-foreground">{l}</CodeBlockLine>;
-					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added" className="add">{l.slice(1)}</CodeBlockLine>;
+					if (l.startsWith("+")) return <CodeBlockLine key={i} variant="added">{l.slice(1)}</CodeBlockLine>;
 					if (l.startsWith("-")) return <CodeBlockLine key={i} variant="removed">{l.slice(1)}</CodeBlockLine>;
 					return <CodeBlockLine key={i}>{l.startsWith(" ") ? l.slice(1) : l}</CodeBlockLine>;
 				})}
@@ -553,7 +553,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 		<>
 			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
 			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
-				<div className="code flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
+				<div data-slot="code-panel" className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 					<div className="flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2">
 						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
 						    for the line under the tab in front, which stock draws below the list. */}

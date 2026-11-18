@@ -52,7 +52,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 
 function Page({ title, lead, children, actions }: { title: string; lead?: ReactNode; children: ReactNode; actions?: ReactNode }) {
 	return (
-		<div className="set-in mx-auto flex max-w-3xl flex-col gap-6 px-9 pt-8 pb-16 select-text">
+		<div data-slot="settings-page" className="mx-auto flex max-w-3xl flex-col gap-6 px-9 pt-8 pb-16 select-text">
 			<div className="flex items-start gap-2">
 				<div className="min-w-0 flex-1">
 					<h1 className="text-xl font-semibold tracking-tight">{title}</h1>
@@ -122,7 +122,7 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 		control = (
 			<>
 				<Tooltip>
-					<TooltipTrigger render={<Input id={id} className="mono w-28 font-mono" value={draft ?? s.now} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && draft !== undefined && void set(draft)} />} />
+					<TooltipTrigger render={<Input id={id} className="w-28 font-mono" value={draft ?? s.now} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && draft !== undefined && void set(draft)} />} />
 					<TooltipContent>{hint}</TooltipContent>
 				</Tooltip>
 				{draft !== undefined && draft !== s.now ? <Button size="xs" onClick={() => void set(draft)}>Save</Button> : null}
@@ -130,24 +130,24 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 		);
 	}
 	return (
-		<Field orientation="horizontal" className="item">
+		<Field orientation="horizontal">
 			<FieldContent>
-				<FieldLabel htmlFor={id} className="name">
+				<FieldLabel htmlFor={id}>
 					<span>{s.title ?? s.key}</span>
 					{s.title ? (
 						<Tooltip>
-							<TooltipTrigger render={<span className="mono font-mono font-normal text-muted-foreground">{s.key}</span>} />
+							<TooltipTrigger render={<span className="font-mono font-normal text-muted-foreground">{s.key}</span>} />
 							<TooltipContent>Its name in pine.json, and for the main agent</TooltipContent>
 						</Tooltip>
 					) : null}
-					{s.live ? null : <Badge variant="secondary" className="tag">from the next start</Badge>}
-					{saved ? <Badge variant="outline" className="tag warn">saved: {saved}</Badge> : null}
+					{s.live ? null : <Badge variant="secondary">from the next start</Badge>}
+					{saved ? <Badge variant="outline">saved: {saved}</Badge> : null}
 				</FieldLabel>
 				<FieldDescription>
 					<span className="whitespace-pre-line">{s.about}</span>
 				</FieldDescription>
 			</FieldContent>
-			<div className="ctl flex items-center gap-1.5">{control}</div>
+			<div className="flex items-center gap-1.5">{control}</div>
 		</Field>
 	);
 }
@@ -161,13 +161,13 @@ function General() {
 		<Page title="General" lead="pine's own settings. A change is checked by pine before it is written; one that would not load is not kept.">
 			{overview.data ? (
 				<>
-					<ItemGroup className="set-group">
-						<Item variant="outline" className="item">
+					<ItemGroup>
+						<Item variant="outline">
 							<ItemContent className="min-w-0">
-								<ItemTitle className="name">pine {overview.data.version}</ItemTitle>
+								<ItemTitle>pine {overview.data.version}</ItemTitle>
 								<ItemDescription className="line-clamp-none wrap-anywhere">{`Home: ${tilde(overview.data.home)} · main agent: ${overview.data.main} · ${overview.data.sandbox ? "sandbox available" : "no sandbox on this system"}`}</ItemDescription>
 							</ItemContent>
-							<ItemActions className="ctl">
+							<ItemActions>
 								<Button variant="outline" size="xs" onClick={() => void bridge.reveal(overview.data!.log)}><ExternalLinkIcon data-icon="inline-start" />Show log</Button>
 							</ItemActions>
 						</Item>
@@ -176,7 +176,7 @@ function General() {
 						<>
 							<h2 className="flex items-center gap-2 text-base font-medium">Notes on this setup</h2>
 							{[...overview.data.warnings, ...overview.data.modelNotes].map((w, i) => (
-								<Alert key={i} className="notice">
+								<Alert key={i}>
 									<TriangleAlertIcon />
 									<AlertDescription>{w}</AlertDescription>
 								</Alert>
@@ -185,7 +185,7 @@ function General() {
 					) : null}
 				</>
 			) : overview.error ? (
-				<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{overview.error}</AlertDescription></Alert>
+				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{overview.error}</AlertDescription></Alert>
 			) : (
 				<Spinner className="m-auto" />
 			)}
@@ -193,13 +193,13 @@ function General() {
 				groups.map(([prefix, title]) => (
 					<FieldSet key={prefix}>
 						<FieldLegend>{title}</FieldLegend>
-						<FieldGroup className="set-group">
+						<FieldGroup>
 							{settings.data!.filter((s) => s.key.startsWith(prefix)).map((s) => <SettingRow key={s.key} s={s} models={models.data ?? []} reload={settings.reload} />)}
 						</FieldGroup>
 					</FieldSet>
 				))
 			) : settings.error ? (
-				<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{settings.error}</AlertDescription></Alert>
+				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{settings.error}</AlertDescription></Alert>
 			) : (
 				<Spinner className="m-auto" />
 			)}
@@ -269,7 +269,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 					<ChevronLeftIcon data-icon="inline-start" />
 					Agents
 				</Button>
-				{detail.error ? <Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{detail.error}</AlertDescription></Alert> : <Spinner className="m-auto" />}
+				{detail.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{detail.error}</AlertDescription></Alert> : <Spinner className="m-auto" />}
 			</Page>
 		);
 	const now = <K extends keyof AgentDetail>(key: K): AgentDetail[K] => (key in change ? (change[key as string] as AgentDetail[K]) : d[key]);
@@ -315,7 +315,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				<ChevronLeftIcon data-icon="inline-start" />
 				Agents
 			</Button>
-			<FieldGroup className="form grid grid-cols-2">
+			<FieldGroup className="grid grid-cols-2">
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-description`}>What it is for</FieldLabel>
 					<Input id={`${field}-description`} value={now("description")} onChange={(e) => put("description", e.target.value)} />
@@ -394,10 +394,10 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 								<Item key={`${kind}:${p}`} variant="outline" size="xs">
 									<ItemMedia variant="icon"><FolderIcon /></ItemMedia>
 									<ItemContent className="min-w-0">
-										<ItemTitle className={cn("mono font-mono", dropped && "line-through")}>{tilde(p)}</ItemTitle>
+										<ItemTitle className={cn("font-mono", dropped && "line-through")}>{tilde(p)}</ItemTitle>
 									</ItemContent>
 									<ItemActions>
-										<Badge variant="secondary" className="tag">{kind}</Badge>
+										<Badge variant="secondary">{kind}</Badge>
 										<Tooltip>
 											<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={dropped ? "Keep it" : "Take it away"} onClick={() => put("forget", dropped ? forget.filter((x) => x !== p) : [...forget, p])}>{dropped ? <Undo2Icon /> : <XIcon />}</Button>} />
 											<TooltipContent>{dropped ? "Keep it" : "Take it away"}</TooltipContent>
@@ -411,10 +411,10 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 								<Item key={`new:${kind}:${p}`} variant="outline" size="xs">
 									<ItemMedia variant="icon"><PlusIcon /></ItemMedia>
 									<ItemContent className="min-w-0">
-										<ItemTitle className="mono font-mono">{tilde(p)}</ItemTitle>
+										<ItemTitle className="font-mono">{tilde(p)}</ItemTitle>
 									</ItemContent>
 									<ItemActions>
-										<Badge className="tag good">{kind === "write" ? "read and change" : "read"} · new</Badge>
+										<Badge>{kind === "write" ? "read and change" : "read"} · new</Badge>
 										<Tooltip>
 											<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Leave it out" onClick={() => put(kind, ((change[kind] as string[]) ?? []).filter((x) => x !== p))}><XIcon /></Button>} />
 											<TooltipContent>Leave it out</TooltipContent>
@@ -444,7 +444,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 			</FileTabs>
 
 			<h2 className="flex items-center gap-2 text-base font-medium">What it has</h2>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{(
 					[
 						["Conversations", d.holdings.conversations],
@@ -455,31 +455,31 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 						["Routes that wake it", d.holdings.routes],
 					] as Array<[string, string[]]>
 				).map(([label, list]) => (
-					<Item key={label} variant="outline" className="item">
+					<Item key={label} variant="outline">
 						<ItemContent className="min-w-0">
-							<ItemTitle className="name">{label}</ItemTitle>
+							<ItemTitle>{label}</ItemTitle>
 							<ItemDescription className="line-clamp-none wrap-anywhere">{list?.length ? list.join(", ") : "none"}</ItemDescription>
 						</ItemContent>
 					</Item>
 				))}
-				<Item variant="outline" className="item">
+				<Item variant="outline">
 					<ItemContent className="min-w-0">
-						<ItemTitle className="name">Workspace</ItemTitle>
+						<ItemTitle>Workspace</ItemTitle>
 						<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{`${tilde(d.workspace)} · ${plural(d.holdings.files, "file")}`}</ItemDescription>
 					</ItemContent>
-					<ItemActions className="ctl">
+					<ItemActions>
 						<Button variant="outline" size="xs" onClick={() => void bridge.reveal(d.workspace)}><ExternalLinkIcon data-icon="inline-start" />Show</Button>
 					</ItemActions>
 				</Item>
 			</ItemGroup>
 			{d.main ? null : (
-				<ItemGroup className="set-group">
-					<Item variant="outline" className="item">
+				<ItemGroup>
+					<Item variant="outline">
 						<ItemContent className="min-w-0">
-							<ItemTitle className="name">Remove this agent</ItemTitle>
+							<ItemTitle>Remove this agent</ItemTitle>
 							<ItemDescription className="line-clamp-none wrap-anywhere">{`With its conversations, sources, schedules, servers, skills, the routes that wake it, its folder and its private home.${d.holdings.outside ? " Its workspace lies outside pine's home and is left as it is." : ""}`}</ItemDescription>
 						</ItemContent>
-						<ItemActions className="ctl">
+						<ItemActions>
 							<Button variant="destructive" onClick={() => void remove()}><Trash2Icon data-icon="inline-start" />Remove…</Button>
 						</ItemActions>
 					</Item>
@@ -514,7 +514,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 					<FieldGroup className="px-4 select-text">
 						<Field>
 							<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-							<Input id={`${field}-name`} ref={name} className="mono font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} />
+							<Input id={`${field}-name`} ref={name} className="font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} />
 							<FieldDescription>Lowercase letters, digits, - and _ (for example research, home, books).</FieldDescription>
 						</Field>
 						<Field>
@@ -562,14 +562,14 @@ function Agents() {
 	if (open && s.agents.some((a) => a.id === open)) return <AgentPage id={open} back={() => setOpen(undefined)} />;
 	return (
 		<Page title="Agents" lead="An agent is a folder with a workspace, instructions and a model. Each has its own conversations and reach." actions={<Button onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New agent</Button>}>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{s.agents.map((a) => (
-					<Item key={a.id} variant="outline" className="item" render={<button type="button" />} onClick={() => setOpen(a.id)}>
+					<Item key={a.id} variant="outline" render={<button type="button" />} onClick={() => setOpen(a.id)}>
 						<ItemContent className="min-w-0">
-							<ItemTitle className="name">
+							<ItemTitle>
 								{a.id}
-								{a.main ? <Badge className="tag good">main</Badge> : null}
-								<Badge variant={a.mode === "bypass" ? "destructive" : a.mode === "safe" ? "default" : "secondary"} className={cn("tag", a.mode === "bypass" && "bad", a.mode === "safe" && "good")}>{a.mode}</Badge>
+								{a.main ? <Badge>main</Badge> : null}
+								<Badge variant={a.mode === "bypass" ? "destructive" : a.mode === "safe" ? "default" : "secondary"}>{a.mode}</Badge>
 							</ItemTitle>
 							<ItemDescription>{a.description || "no description"}</ItemDescription>
 							<ItemDescription className="font-mono">{a.model} · reasoning {a.thinking} · {tilde(a.workspace)}</ItemDescription>
@@ -641,13 +641,13 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 			</DialogHeader>
 			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-3 px-4 select-text">
-					{error || state?.error ? <Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{error ?? state?.error}</AlertDescription></Alert> : null}
+					{error || state?.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{error ?? state?.error}</AlertDescription></Alert> : null}
 					{state?.lines.length ? (
 						<CodeBlock size="sm">
-							<CodeBlockContent wrap className="log max-h-60 select-text">{state.lines.join("\n")}</CodeBlockContent>
+							<CodeBlockContent wrap className="max-h-60 select-text">{state.lines.join("\n")}</CodeBlockContent>
 						</CodeBlock>
 					) : null}
-					{state?.url && !state.done ? <div className="flex items-center gap-2"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono cursor-auto font-mono">{state.code}</b></span> : null}</div> : null}
+					{state?.url && !state.done ? <div className="flex items-center gap-2"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="cursor-auto font-mono">{state.code}</b></span> : null}</div> : null}
 					{q && !state?.done ? (
 						q.options?.length ? (
 							<FieldSet>
@@ -667,7 +667,7 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 							<Field>
 								<FieldLabel htmlFor={`${field}-answer`}>{q.message}</FieldLabel>
 								<div className="flex items-center gap-2">
-									<Input id={`${field}-answer`} autoFocus className="mono font-mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
+									<Input id={`${field}-answer`} autoFocus className="font-mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
 									<Button disabled={!answer.trim()} onClick={() => void send(answer.trim())}>Continue</Button>
 								</div>
 								{q.secret ? <FieldDescription>It is not shown, and is stored in auth.json in pine's home, where agents cannot read it.</FieldDescription> : null}
@@ -677,7 +677,7 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 						<div className="flex items-center gap-2 text-muted-foreground"><Spinner /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
 					) : null}
 					{state?.done && !state.error ? (
-						<Alert className="notice plain">
+						<Alert data-tone="good">
 							<CheckIcon />
 							<AlertDescription>{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</AlertDescription>
 						</Alert>
@@ -727,19 +727,19 @@ function Models() {
 	return (
 		<Page title="Models" lead="Which models your agents can run on: providers you sign in to, and model servers of your own. An agent's model is chosen on its page, or in the bar under a conversation.">
 			<h2 className="flex items-center gap-2 text-base font-medium">Model servers of your own</h2>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{servers.data?.length ? (
 					servers.data.map((s) => (
-						<Item key={s.name} variant="outline" className="item">
+						<Item key={s.name} variant="outline">
 							<ItemContent className="min-w-0">
-								<ItemTitle className="name">
+								<ItemTitle>
 									{s.name}
-									<Badge variant="secondary" className="tag mono font-mono">{s.baseUrl}</Badge>
-									<Badge variant="secondary" className="tag">key: {s.key}</Badge>
+									<Badge variant="secondary" className="font-mono">{s.baseUrl}</Badge>
+									<Badge variant="secondary">key: {s.key}</Badge>
 								</ItemTitle>
 								<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{s.models.map((m) => `${s.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</ItemDescription>
 							</ItemContent>
-							<ItemActions className="ctl">
+							<ItemActions>
 								<AlertDialog>
 									<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
 									<AlertDialogContent>
@@ -758,34 +758,34 @@ function Models() {
 				) : servers.data ? (
 					<EmptyView icon={CpuIcon} title="No model server yet">Anything that speaks OpenAI's chat API works: llama.cpp, vLLM, LM Studio.</EmptyView>
 				) : servers.error ? (
-					<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
 				) : (
 					<Spinner className="m-auto" />
 				)}
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a model server</FieldLegend>
-				<FieldGroup className="form grid grid-cols-2">
+				<FieldGroup className="grid grid-cols-2">
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="mono font-mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+						<Input id={`${field}-name`} className="font-mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
 						<FieldDescription>Its models are then called name/model.</FieldDescription>
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-url`}>Address</FieldLabel>
-						<Input id={`${field}-url`} className="mono font-mono" placeholder="http://127.0.0.1:8080" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
+						<Input id={`${field}-url`} className="font-mono" placeholder="http://127.0.0.1:8080" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
 						<FieldDescription>pine asks the server which models it has.</FieldDescription>
 					</Field>
 					{locked || f.key ? (
 						<Field>
 							<FieldLabel htmlFor={`${field}-key`}>API key</FieldLabel>
-							<Input id={`${field}-key`} className="mono font-mono" type="password" autoComplete="off" value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} />
+							<Input id={`${field}-key`} className="font-mono" type="password" autoComplete="off" value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} />
 							<FieldDescription>The server wants a key. It goes into pine's .env file.</FieldDescription>
 						</Field>
 					) : null}
 					<Field>
 						<FieldLabel htmlFor={`${field}-context`}>Context (tokens)</FieldLabel>
-						<Input id={`${field}-context`} className="mono font-mono" placeholder="from the server" value={f.context} onChange={(e) => setF({ ...f, context: e.target.value.replace(/\D/g, "") })} />
+						<Input id={`${field}-context`} className="font-mono" placeholder="from the server" value={f.context} onChange={(e) => setF({ ...f, context: e.target.value.replace(/\D/g, "") })} />
 						<FieldDescription>Only when the server does not say.</FieldDescription>
 					</Field>
 				</FieldGroup>
@@ -796,20 +796,20 @@ function Models() {
 			</FieldSet>
 
 			<h2 className="flex items-center gap-2 text-base font-medium">Providers <Button variant="ghost" size="xs" onClick={() => setAll(!all)}>{all ? "Only those signed in" : `Show all ${hosted.length}`}</Button></h2>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{providers.data ? (
 					shown.length ? (
 						shown.map((p) => (
-							<Item key={p.id} variant="outline" className="item">
+							<Item key={p.id} variant="outline">
 								<ItemContent className="min-w-0">
-									<ItemTitle className="name">
+									<ItemTitle>
 										{p.name ?? p.id}
-										{p.name && p.name !== p.id ? <Badge variant="secondary" className="tag mono font-mono">{p.id}</Badge> : null}
-										{p.signedIn ? <Badge className="tag good">signed in</Badge> : null}
+										{p.name && p.name !== p.id ? <Badge variant="secondary" className="font-mono">{p.id}</Badge> : null}
+										{p.signedIn ? <Badge>signed in</Badge> : null}
 									</ItemTitle>
 									<ItemDescription className="line-clamp-none wrap-anywhere">{plural(p.models, "model")}</ItemDescription>
 								</ItemContent>
-								<ItemActions className="ctl">
+								<ItemActions>
 									{p.signedIn ? <AlertDialog>
 										<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Sign out</AlertDialogTrigger>
 										<AlertDialogContent>
@@ -837,25 +837,25 @@ function Models() {
 						<EmptyView icon={CpuIcon} title="Signed in to no provider">Show all to pick one (OpenCode, Claude, ChatGPT, …), or add a model server of your own above.</EmptyView>
 					)
 				) : providers.error ? (
-					<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{providers.error}</AlertDescription></Alert>
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{providers.error}</AlertDescription></Alert>
 				) : (
 					<Spinner className="m-auto" />
 				)}
 			</ItemGroup>
 
 			<h2 className="flex items-center gap-2 text-base font-medium">The model your agents run on</h2>
-			<ItemGroup className="set-group">
-				<Item variant="outline" className="item fallback-model">
+			<ItemGroup>
+				<Item variant="outline" data-setting="fallback-model">
 					<ItemContent className="min-w-0">
-						<ItemTitle className="name"><span className="font-mono">{fallback.data ?? "…"}</span></ItemTitle>
+						<ItemTitle><span className="font-mono">{fallback.data ?? "…"}</span></ItemTitle>
 						<ItemDescription className="line-clamp-none wrap-anywhere">{`Every agent that has no model of its own runs on it${own.length ? `. With a model of their own: ${own.join(", ")}` : ""}.`}</ItemDescription>
 					</ItemContent>
-					<ItemActions className="ctl">
+					<ItemActions>
 						<Button variant="outline" size="xs" onClick={() => void store.chooseDefaultModel().then(reload)}>Change…</Button>
 					</ItemActions>
 				</Item>
 				{stuck.map((a) => (
-					<Alert key={a.id} className="notice">
+					<Alert key={a.id}>
 						<TriangleAlertIcon />
 						<AlertDescription><b>{a.id}</b> cannot answer: {a.modelProblem}</AlertDescription>
 					</Alert>
@@ -914,7 +914,7 @@ function Mcp() {
 	};
 	return (
 		<Page title="MCP servers" lead="Servers that offer tools to your agents: a remote one by its address, or a program on this computer, which runs where the commands of the agent that uses it run.">
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{servers.data ? (
 					servers.data.length ? (
 						servers.data.map((x) => {
@@ -922,18 +922,18 @@ function Mcp() {
 							const agent = x.scope === "global" ? undefined : x.scope;
 							const tone = /connected|ok|local|authenticated/i.test(state) ? "good" : /needs|error|fail|unauth/i.test(state) ? "warn" : undefined;
 							return (
-								<Item key={`${x.scope}:${x.name}`} variant="outline" className="item">
+								<Item key={`${x.scope}:${x.name}`} variant="outline">
 									<ItemContent className="min-w-0">
-										<ItemTitle className="name">
+										<ItemTitle>
 											{x.name}
-											<Badge variant={tone === "good" ? "default" : tone === "warn" ? "outline" : "secondary"} className={cn("tag", tone)}>{state}</Badge>
-											<Badge variant="secondary" className="tag">{x.scope === "global" ? `all: ${x.agents.join(", ") || "nobody"}` : x.session ? `only the conversation ${x.session} of ${x.scope}` : `only ${x.scope}`}</Badge>
-											{x.taints ? <Badge variant="outline" className="tag warn">outside content</Badge> : null}
-											{x.approve !== "never" ? <Badge variant="secondary" className="tag">asks: {x.approve}</Badge> : null}
+											<Badge variant={tone === "good" ? "default" : tone === "warn" ? "outline" : "secondary"}>{state}</Badge>
+											<Badge variant="secondary">{x.scope === "global" ? `all: ${x.agents.join(", ") || "nobody"}` : x.session ? `only the conversation ${x.session} of ${x.scope}` : `only ${x.scope}`}</Badge>
+											{x.taints ? <Badge variant="outline">outside content</Badge> : null}
+											{x.approve !== "never" ? <Badge variant="secondary">asks: {x.approve}</Badge> : null}
 										</ItemTitle>
 										<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{x.target}</ItemDescription>
 									</ItemContent>
-									<ItemActions className="ctl">
+									<ItemActions>
 										{x.remote ? <Button variant="outline" size="xs" disabled={busy === x.name} onClick={() => void login(x.name, agent)}>{busy === x.name ? <><Spinner data-icon="inline-start" />In your browser…</> : "Sign in"}</Button> : null}
 										{x.target.startsWith("bundled:") ? null : <AlertDialog>
 											<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
@@ -955,22 +955,22 @@ function Mcp() {
 						<EmptyView icon={PlugIcon} title="No MCP servers yet" />
 					)
 				) : servers.error ? (
-					<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
 				) : (
 					<Spinner className="m-auto" />
 				)}
 			</ItemGroup>
 			{out ? (
 				<CodeBlock size="sm">
-					<CodeBlockContent wrap className="log max-h-60 select-text">{out}</CodeBlockContent>
+					<CodeBlockContent wrap className="max-h-60 select-text">{out}</CodeBlockContent>
 				</CodeBlock>
 			) : null}
 			<FieldSet>
 				<FieldLegend>Add a server</FieldLegend>
-				<FieldGroup className="form grid grid-cols-2">
+				<FieldGroup className="grid grid-cols-2">
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="mono font-mono" placeholder="home_link" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+						<Input id={`${field}-name`} className="font-mono" placeholder="home_link" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
 						<FieldDescription>Lowercase letters, digits and _. Its tools appear as mcp__name__tool.</FieldDescription>
 					</Field>
 					<Field>
@@ -999,7 +999,7 @@ function Mcp() {
 					</Field>
 					<Field className="col-span-full">
 						<FieldLabel htmlFor={`${field}-target`}>{f.kind === "remote" ? "Address" : "Command"}</FieldLabel>
-						<Input id={`${field}-target`} className="mono font-mono" placeholder={f.kind === "remote" ? "https://mcp.example.com/mcp" : "npx -y @example/mcp@latest"} value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} />
+						<Input id={`${field}-target`} className="font-mono" placeholder={f.kind === "remote" ? "https://mcp.example.com/mcp" : "npx -y @example/mcp@latest"} value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} />
 						<FieldDescription>{f.kind === "remote" ? "Its https URL." : "The program and its arguments, as its documentation gives them. One program, no shell operators."}</FieldDescription>
 					</Field>
 					<Field className="col-span-full">
@@ -1047,15 +1047,15 @@ function Skills() {
 					Skills
 				</Button>
 				{edit.managed ? null : (
-					<Alert className="notice plain">
+					<Alert>
 						<InfoIcon />
 						<AlertDescription>This skill lies in a folder of yours that the configuration names. pine shows it and does not change it.</AlertDescription>
 					</Alert>
 				)}
-				<FieldGroup className="form grid grid-cols-2">
+				<FieldGroup className="grid grid-cols-2">
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="mono font-mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" />
+						<Input id={`${field}-name`} className="font-mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" />
 						<FieldDescription>Lowercase letters, digits and single hyphens.</FieldDescription>
 					</Field>
 					<Field>
@@ -1092,22 +1092,22 @@ function Skills() {
 		);
 	return (
 		<Page title="Skills" lead="What your agents know how to do. An agent writes one when you ask it to (“make a skill for this”); here you can read them, change them and add your own." actions={<Button onClick={() => setEdit({ name: "", description: "", instructions: "", agent: "", isNew: true, managed: true })}><PlusIcon data-icon="inline-start" />New skill</Button>}>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{skills.data ? (
 					skills.data.length ? (
 						skills.data.map((x) => {
 							const managed = x.managed && x.scope !== "local";
 							return (
-								<Item key={x.dir} variant="outline" className="item">
+								<Item key={x.dir} variant="outline">
 									<ItemContent className="min-w-0">
-										<ItemTitle className="name">
+										<ItemTitle>
 											{x.name}
-											<Badge variant="secondary" className="tag">{x.scope === "global" ? "all agents" : x.scope === "agent" ? x.agent : `${x.agent} · ${x.session}`}</Badge>
-											{x.managed ? null : <Badge variant="secondary" className="tag">yours, from the configuration</Badge>}
+											<Badge variant="secondary">{x.scope === "global" ? "all agents" : x.scope === "agent" ? x.agent : `${x.agent} · ${x.session}`}</Badge>
+											{x.managed ? null : <Badge variant="secondary">yours, from the configuration</Badge>}
 										</ItemTitle>
 										<ItemDescription className="line-clamp-none wrap-anywhere">{short(x.description, 220)}</ItemDescription>
 									</ItemContent>
-									<ItemActions className="ctl">
+									<ItemActions>
 										<Button variant="outline" size="xs" onClick={() => setEdit({ name: x.name, description: x.description, instructions: x.instructions ?? "", agent: x.agent ?? "", isNew: false, managed })}>{managed ? "Edit" : "Read"}</Button>
 										{x.managed ? <AlertDialog>
 											<Tooltip>
@@ -1132,7 +1132,7 @@ function Skills() {
 						<EmptyView icon={BookIcon} title="No skills yet">An agent writes one when you ask it to, or add one here.</EmptyView>
 					)
 				) : skills.error ? (
-					<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{skills.error}</AlertDescription></Alert>
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{skills.error}</AlertDescription></Alert>
 				) : (
 					<Spinner className="m-auto" />
 				)}
@@ -1186,7 +1186,7 @@ function OptionField({ name, schema, required, value, onChange }: { name: string
 		return (
 			<Field>
 				<FieldLabel htmlFor={id}>{label}</FieldLabel>
-				<Input id={id} className="mono font-mono" value={value === undefined ? "" : String(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} inputMode="decimal" />
+				<Input id={id} className="font-mono" value={value === undefined ? "" : String(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : Number(e.target.value))} inputMode="decimal" />
 				{hint ? <FieldDescription>{hint}</FieldDescription> : null}
 			</Field>
 		);
@@ -1194,7 +1194,7 @@ function OptionField({ name, schema, required, value, onChange }: { name: string
 		return (
 			<Field className="col-span-full">
 				<FieldLabel htmlFor={id}>{label}</FieldLabel>
-				<Input id={id} className="mono font-mono" value={Array.isArray(value) ? value.join(", ") : ""} onChange={(e) => onChange(e.target.value.trim() ? e.target.value.split(",").map((x) => x.trim()).filter(Boolean) : undefined)} />
+				<Input id={id} className="font-mono" value={Array.isArray(value) ? value.join(", ") : ""} onChange={(e) => onChange(e.target.value.trim() ? e.target.value.split(",").map((x) => x.trim()).filter(Boolean) : undefined)} />
 				<FieldDescription>{`${hint ?? ""} Several: separate them with commas.`.trim()}</FieldDescription>
 			</Field>
 		);
@@ -1202,14 +1202,14 @@ function OptionField({ name, schema, required, value, onChange }: { name: string
 		return (
 			<Field className="col-span-full">
 				<FieldLabel htmlFor={id}>{label}</FieldLabel>
-				<Input id={id} className="mono font-mono" value={typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} />
+				<Input id={id} className="font-mono" value={typeof value === "string" ? value : value === undefined ? "" : JSON.stringify(value)} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} />
 				<FieldDescription>{`${hint ?? ""} As JSON.`.trim()}</FieldDescription>
 			</Field>
 		);
 	return (
 		<Field className={String(hint ?? "").length > 90 ? "col-span-full" : undefined}>
 			<FieldLabel htmlFor={id}>{label}</FieldLabel>
-			<Input id={id} className="mono font-mono" value={String(value ?? "")} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} />
+			<Input id={id} className="font-mono" value={String(value ?? "")} onChange={(e) => onChange(e.target.value === "" ? undefined : e.target.value)} />
 			{hint ? <FieldDescription>{hint}</FieldDescription> : null}
 		</Field>
 	);
@@ -1271,7 +1271,7 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 							<div><b>{f.name}</b> ({f.type}) for {f.agent || "all agents"} will:</div>
 							<ul className="list-disc pl-5">{plan.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
 							{plan.owner ? (
-								<Alert className="notice">
+								<Alert>
 									<TriangleAlertIcon />
 									<AlertDescription>What it reports is treated as your own words: the agent it wakes gets its full tools.</AlertDescription>
 								</Alert>
@@ -1282,7 +1282,7 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 									return (
 										<Field key={n.name}>
 											<FieldLabel htmlFor={`${field}-need-${n.name}`}>{at > 0 ? n.label.slice(0, at) : n.name}</FieldLabel>
-											<Input id={`${field}-need-${n.name}`} className="mono font-mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} />
+											<Input id={`${field}-need-${n.name}`} className="font-mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} />
 											<FieldDescription>{`${at > 0 ? n.label.slice(at + 2) : ""} It is not shown, goes into pine's .env file, and never reaches an agent.`.trim()}</FieldDescription>
 										</Field>
 									);
@@ -1295,10 +1295,10 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 							</FieldGroup>
 						</>
 					) : (
-						<FieldGroup className="form grid grid-cols-2">
+						<FieldGroup className="grid grid-cols-2">
 							<Field>
 								<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-								<Input id={`${field}-name`} autoFocus className="mono font-mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+								<Input id={`${field}-name`} autoFocus className="font-mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
 								<FieldDescription>Lowercase letters, digits, - and _.</FieldDescription>
 							</Field>
 							<Field>
@@ -1387,18 +1387,18 @@ function Sources() {
 				<DialogTrigger render={<Button disabled={!types.data} />}><PlusIcon data-icon="inline-start" />New source</DialogTrigger>
 				<DialogContent showCloseButton={false} className="sm:max-w-2xl">{types.data ? <NewSource types={types.data} made={() => (adding.current?.close(), sources.reload())} /> : null}</DialogContent>
 			</Dialog></div>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{sources.data ? (
 					sources.data.length ? (
 						sources.data.map((x) => (
-							<Item key={`${x.scope}:${x.name}`} variant="outline" className="item">
+							<Item key={`${x.scope}:${x.name}`} variant="outline">
 								<ItemMedia><span className={cn("size-2 rounded-full", x.error ? "bg-destructive" : x.running ? "bg-primary" : "bg-muted-foreground")} /></ItemMedia>
 								<ItemContent className="min-w-0">
-									<ItemTitle className="name">
+									<ItemTitle>
 										{x.name}
-										<Badge variant="secondary" className="tag">{x.type}</Badge>
-										<Badge variant="secondary" className="tag">{scopeText(x.scope)}</Badge>
-										{x.trust === "owner" ? <Badge className="tag good">yours</Badge> : null}
+										<Badge variant="secondary">{x.type}</Badge>
+										<Badge variant="secondary">{scopeText(x.scope)}</Badge>
+										{x.trust === "owner" ? <Badge>yours</Badge> : null}
 									</ItemTitle>
 									<ItemDescription className="line-clamp-none wrap-anywhere">
 										{x.description ? <>{x.description}<br /></> : null}
@@ -1414,7 +1414,7 @@ function Sources() {
 										<Button variant="ghost" size="xs" onClick={() => void subscribe(x.name)}><PlusIcon data-icon="inline-start" />Subscribe</Button>
 									</div>
 								</ItemContent>
-								<ItemActions className="ctl">
+								<ItemActions>
 									<AlertDialog>
 										<Tooltip>
 											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this source"><Trash2Icon /></AlertDialogTrigger>} />
@@ -1437,7 +1437,7 @@ function Sources() {
 						<EmptyView icon={ZapIcon} title="No event sources yet">Add one, or ask an agent: “watch ~/Scans”, “tell me when the price drops”.</EmptyView>
 					)
 				) : sources.error ? (
-					<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{sources.error}</AlertDescription></Alert>
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{sources.error}</AlertDescription></Alert>
 				) : (
 					<Spinner className="m-auto" />
 				)}
@@ -1469,22 +1469,22 @@ function Schedules() {
 	return (
 		<>
 			<p className="text-muted-foreground">What happens because of the time. A schedule wakes an agent with a task, in your name.</p>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{list.data ? (
 					list.data.length ? (
 						list.data.map((x) => (
-							<Item key={`${x.scope}:${x.name}`} variant="outline" className="item">
+							<Item key={`${x.scope}:${x.name}`} variant="outline">
 								<ItemMedia variant="icon"><ClockIcon /></ItemMedia>
 								<ItemContent className="min-w-0">
-									<ItemTitle className="name">
+									<ItemTitle>
 										{x.name}
-										<Badge variant="secondary" className="tag">{scopeText(x.scope, x.session)}</Badge>
-										<Badge variant="secondary" className="tag">{x.when}</Badge>
-										{x.next ? <Badge className="tag good">next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</Badge> : null}
+										<Badge variant="secondary">{scopeText(x.scope, x.session)}</Badge>
+										<Badge variant="secondary">{x.when}</Badge>
+										{x.next ? <Badge>next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</Badge> : null}
 									</ItemTitle>
 									<ItemDescription className="line-clamp-none wrap-anywhere">{x.task ?? `publishes ${x.topic}`}</ItemDescription>
 								</ItemContent>
-								<ItemActions className="ctl">
+								<ItemActions>
 									<AlertDialog>
 										<Tooltip>
 											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this schedule"><Trash2Icon /></AlertDialogTrigger>} />
@@ -1507,17 +1507,17 @@ function Schedules() {
 						<EmptyView icon={ClockIcon} title="Nothing is scheduled">An agent schedules something when you ask it to (“every morning at seven …”, “remind me at five”).</EmptyView>
 					)
 				) : list.error ? (
-					<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
 				) : (
 					<Spinner className="m-auto" />
 				)}
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a schedule</FieldLegend>
-				<FieldGroup className="form grid grid-cols-2">
+				<FieldGroup className="grid grid-cols-2">
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="mono font-mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+						<Input id={`${field}-name`} className="font-mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-for`}>For</FieldLabel>
@@ -1548,7 +1548,7 @@ function Schedules() {
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-when`}>{WHEN[f.kind].name}</FieldLabel>
-						<Input id={`${field}-when`} className="mono font-mono" value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
+						<Input id={`${field}-when`} className="font-mono" value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
 						<FieldDescription>{WHEN[f.kind].hint}</FieldDescription>
 					</Field>
 					<Field className="col-span-full">
@@ -1584,21 +1584,21 @@ function Routes() {
 	return (
 		<>
 			<p className="text-muted-foreground">Rules that turn an event into something: wake an agent, write shared state, publish another event. A subscription is the simple case and needs no route.</p>
-			<ItemGroup className="set-group">
+			<ItemGroup>
 				{list.data ? (
 					list.data.length ? (
 						list.data.map((r) => (
-							<Item key={r.name} variant="outline" className="item">
+							<Item key={r.name} variant="outline">
 								<ItemContent className="min-w-0">
-									<ItemTitle className="name">
+									<ItemTitle>
 										{r.name}
-										<Badge variant="secondary" className="tag mono font-mono">on {r.on.join(", ")}</Badge>
-										{r.when ? <Badge variant="secondary" className="tag mono font-mono">when {short(JSON.stringify(r.when), 60)}</Badge> : null}
-										{r.trust === "owner" ? <Badge variant="outline" className="tag warn">counts as your words</Badge> : null}
+										<Badge variant="secondary" className="font-mono">on {r.on.join(", ")}</Badge>
+										{r.when ? <Badge variant="secondary" className="font-mono">when {short(JSON.stringify(r.when), 60)}</Badge> : null}
+										{r.trust === "owner" ? <Badge variant="outline">counts as your words</Badge> : null}
 									</ItemTitle>
 									<ItemDescription className="line-clamp-none wrap-anywhere">{does(r)}</ItemDescription>
 								</ItemContent>
-								<ItemActions className="ctl">
+								<ItemActions>
 									<AlertDialog>
 										<Tooltip>
 											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this route"><Trash2Icon /></AlertDialogTrigger>} />
@@ -1621,31 +1621,31 @@ function Routes() {
 						<p className="text-muted-foreground">No routes.</p>
 					)
 				) : list.error ? (
-					<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
 				) : (
 					<Spinner className="m-auto" />
 				)}
 			</ItemGroup>
 			<FieldSet>
 				<FieldLegend>Add a route</FieldLegend>
-				<FieldGroup className="form grid grid-cols-2">
+				<FieldGroup className="grid grid-cols-2">
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="mono font-mono" placeholder="door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+						<Input id={`${field}-name`} className="font-mono" placeholder="door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-on`}>On</FieldLabel>
-						<Input id={`${field}-on`} className="mono font-mono" placeholder="source/house/message" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
+						<Input id={`${field}-on`} className="font-mono" placeholder="source/house/message" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
 						<FieldDescription>Topic patterns, separated by commas.</FieldDescription>
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-when`}>Only when</FieldLabel>
-						<Input id={`${field}-when`} className="mono font-mono" placeholder={'{"payload.open": true}'} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
+						<Input id={`${field}-when`} className="font-mono" placeholder={'{"payload.open": true}'} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
 						<FieldDescription>Optional, as JSON.</FieldDescription>
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-throttle`}>At most one per</FieldLabel>
-						<Input id={`${field}-throttle`} className="mono font-mono" value={f.throttle} onChange={(e) => setF({ ...f, throttle: e.target.value })} />
+						<Input id={`${field}-throttle`} className="font-mono" value={f.throttle} onChange={(e) => setF({ ...f, throttle: e.target.value })} />
 						<FieldDescription>Optional, a time such as 5m.</FieldDescription>
 					</Field>
 					<Field>
@@ -1667,7 +1667,7 @@ function Routes() {
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-session`}>In the conversation</FieldLabel>
-						<Input id={`${field}-session`} className="mono font-mono" disabled={!f.agent} value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} />
+						<Input id={`${field}-session`} className="font-mono" disabled={!f.agent} value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} />
 						<FieldDescription>Empty: its main one. “new”: a fresh one for every event.</FieldDescription>
 					</Field>
 					<Field className="col-span-full">
@@ -1677,12 +1677,12 @@ function Routes() {
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-set`}>Set shared state</FieldLabel>
-						<Input id={`${field}-set`} className="mono font-mono" placeholder={'{"house/mode": "{{payload.value}}"}'} value={f.set} onChange={(e) => setF({ ...f, set: e.target.value })} />
+						<Input id={`${field}-set`} className="font-mono" placeholder={'{"house/mode": "{{payload.value}}"}'} value={f.set} onChange={(e) => setF({ ...f, set: e.target.value })} />
 						<FieldDescription>Optional, as JSON.</FieldDescription>
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-publish`}>Publish the event</FieldLabel>
-						<Input id={`${field}-publish`} className="mono font-mono" value={f.publish_topic} onChange={(e) => setF({ ...f, publish_topic: e.target.value })} />
+						<Input id={`${field}-publish`} className="font-mono" value={f.publish_topic} onChange={(e) => setF({ ...f, publish_topic: e.target.value })} />
 						<FieldDescription>Optional: a topic of your own.</FieldDescription>
 					</Field>
 				</FieldGroup>
@@ -1739,11 +1739,11 @@ function Instructions() {
 					)}
 				</FileTabs>
 			) : files.error ? (
-				<Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{files.error}</AlertDescription></Alert>
+				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{files.error}</AlertDescription></Alert>
 			) : (
 				<Spinner className="m-auto" />
 			)}
-			<Alert className="notice plain">
+			<Alert>
 				<InfoIcon />
 				<AlertDescription>What only one agent should know or do goes into that agent's own files, on its page under Agents.</AlertDescription>
 			</Alert>
@@ -1771,13 +1771,13 @@ function AppPage() {
 		<Page title="App" lead="How this window behaves, and the pine it talks to.">
 			<FieldSet>
 				<FieldLegend>This app</FieldLegend>
-				<FieldGroup className="set-group">
-					<Field orientation="horizontal" className="item">
+				<FieldGroup>
+					<Field orientation="horizontal">
 						<FieldContent>
-							<FieldTitle className="name">Appearance</FieldTitle>
+							<FieldTitle>Appearance</FieldTitle>
 							<FieldDescription>Light, dark, or what the system is set to.</FieldDescription>
 						</FieldContent>
-						<div className="ctl flex items-center gap-1.5">
+						<div className="flex items-center gap-1.5">
 							<ToggleGroup aria-label="Appearance" variant="outline" value={[s.prefs.theme]} onValueChange={one((theme) => void set({ theme }))}>
 								<ToggleGroupItem value="system">System</ToggleGroupItem>
 								<ToggleGroupItem value="light">Light</ToggleGroupItem>
@@ -1786,37 +1786,37 @@ function AppPage() {
 						</div>
 					</Field>
 					{s.updates ? (
-						<Field orientation="horizontal" className="item updates">
+						<Field orientation="horizontal" data-setting="updates">
 							<FieldContent>
-								<FieldTitle className="name">
+								<FieldTitle>
 									Pine {s.versions.app}
-									{newer ? <Badge variant="outline" className="tag warn">{newer.version} is available</Badge> : s.update?.status === "latest" ? <Badge className="tag good">the latest version</Badge> : null}
+									{newer ? <Badge variant="outline">{newer.version} is available</Badge> : s.update?.status === "latest" ? <Badge>the latest version</Badge> : null}
 								</FieldTitle>
 								<FieldDescription>{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</FieldDescription>
 							</FieldContent>
-							<div className="ctl flex items-center gap-1.5">
+							<div className="flex items-center gap-1.5">
 								{newer ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
 								<Button variant="outline" size="xs" disabled={s.updateLooking} onClick={() => void s.lookForUpdate(true)}><RotateCwIcon data-icon="inline-start" />Check now</Button>
 							</div>
 						</Field>
 					) : null}
 					{s.updates ? (
-						<Field orientation="horizontal" className="item">
+						<Field orientation="horizontal">
 							<FieldContent>
-								<FieldLabel htmlFor={`${field}-updates`} className="name">Look for a newer version at the start</FieldLabel>
+								<FieldLabel htmlFor={`${field}-updates`}>Look for a newer version at the start</FieldLabel>
 								<FieldDescription>One question to GitHub each time the app starts. It says nothing about this Mac or your pine.</FieldDescription>
 							</FieldContent>
-							<div className="ctl flex items-center gap-1.5">
+							<div className="flex items-center gap-1.5">
 								<Switch id={`${field}-updates`} checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} />
 							</div>
 						</Field>
 					) : null}
-					<Field orientation="horizontal" className="item">
+					<Field orientation="horizontal">
 						<FieldContent>
-							<FieldLabel htmlFor={`${field}-notify`} className="name">Notifications</FieldLabel>
+							<FieldLabel htmlFor={`${field}-notify`}>Notifications</FieldLabel>
 							<FieldDescription>When an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The text is pine's own, never the agent's.</FieldDescription>
 						</FieldContent>
-						<div className="ctl flex items-center gap-1.5">
+						<div className="flex items-center gap-1.5">
 							<Switch id={`${field}-notify`} checked={s.prefs.notify} onCheckedChange={(notify) => void set({ notify })} />
 						</div>
 					</Field>
@@ -1824,72 +1824,72 @@ function AppPage() {
 			</FieldSet>
 			<FieldSet>
 				<FieldLegend>pine</FieldLegend>
-				<FieldGroup className="set-group">
-					<Field orientation="horizontal" className="item">
+				<FieldGroup>
+					<Field orientation="horizontal">
 						<FieldContent>
-							<FieldTitle className="name">
+							<FieldTitle>
 								{service ? `pine ${service.version ?? ""}` : "pine"}
-								<Badge variant={s.connected ? "default" : "outline"} className={cn("tag", s.connected ? "good" : "warn")}>{s.connected ? "connected" : "not connected"}</Badge>
+								<Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "connected" : "not connected"}</Badge>
 							</FieldTitle>
 							<FieldDescription>{service ? (service.started ? `Started by this app (${service.mode}), from ${service.from}. It stops when the app quits unless the switch below is on.` : "Attached to a pine that was already running. It goes on when this app quits.") : "Not running."}</FieldDescription>
 						</FieldContent>
 						{service?.started ? (
-							<div className="ctl flex items-center gap-1.5">
+							<div className="flex items-center gap-1.5">
 								<Button variant="outline" size="xs" onClick={() => void s.attempt(() => bridge.restart())}><RotateCwIcon data-icon="inline-start" />Restart</Button>
 							</div>
 						) : null}
 					</Field>
-					<Field orientation="horizontal" className="item">
+					<Field orientation="horizontal">
 						<FieldContent>
-							<FieldLabel htmlFor={`${field}-keep-running`} className="name">Keep pine running after the app quits</FieldLabel>
+							<FieldLabel htmlFor={`${field}-keep-running`}>Keep pine running after the app quits</FieldLabel>
 							<FieldDescription>A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</FieldDescription>
 						</FieldContent>
-						<div className="ctl flex items-center gap-1.5">
+						<div className="flex items-center gap-1.5">
 							<Switch id={`${field}-keep-running`} checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} />
 						</div>
 					</Field>
 					{command && (command.state !== "unavailable" || command.why) ? (
-						<Field orientation="horizontal" className="item">
+						<Field orientation="horizontal">
 							<FieldContent>
-								<FieldTitle className="name">
+								<FieldTitle>
 									pine in a terminal
-									{command.state === "here" ? <Badge className="tag good">set up</Badge> : null}
+									{command.state === "here" ? <Badge>set up</Badge> : null}
 								</FieldTitle>
 								<FieldDescription>{command.text}</FieldDescription>
 							</FieldContent>
 							{command.state === "none" || command.state === "here" ? (
-								<div className="ctl flex items-center gap-1.5">
+								<div className="flex items-center gap-1.5">
 									{command.state === "none" ? <Button variant="outline" size="xs" onClick={() => void bridge.command("install").then(setCommand)}>Set up</Button> : <Button variant="outline" size="xs" onClick={() => void bridge.command("remove").then(setCommand)}>Remove</Button>}
 								</div>
 							) : null}
 						</Field>
 					) : null}
 					{s.browser !== undefined || s.browserFetching ? (
-						<Field orientation="horizontal" className="item browser">
+						<Field orientation="horizontal" data-setting="browser">
 							<FieldContent>
-								<FieldTitle className="name">
+								<FieldTitle>
 									Browser for the web tools
-									<Badge variant={s.browser ? "default" : "outline"} className={cn("tag", s.browser ? "good" : "warn")}>{s.browser ? "on this Mac" : "not on this Mac"}</Badge>
+									<Badge variant={s.browser ? "default" : "outline"}>{s.browser ? "on this Mac" : "not on this Mac"}</Badge>
 								</FieldTitle>
 								<FieldDescription>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</FieldDescription>
 								{!s.browser && s.initLines.length ? (
 									<CodeBlock size="sm">
-										<CodeBlockContent wrap className="log max-h-60 select-text">{s.initLines.slice(-12).join("\n")}</CodeBlockContent>
+										<CodeBlockContent wrap className="max-h-60 select-text">{s.initLines.slice(-12).join("\n")}</CodeBlockContent>
 									</CodeBlock>
 								) : null}
 							</FieldContent>
 							{s.browser ? null : <Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner data-icon="inline-start" />Fetching…</> : "Fetch it"}</Button>}
 						</Field>
 					) : null}
-					<Field orientation="horizontal" className="item">
+					<Field orientation="horizontal">
 						<FieldContent>
-							<FieldTitle className="name">Home folder</FieldTitle>
+							<FieldTitle>Home folder</FieldTitle>
 							<FieldDescription>
 								<span className="block font-mono">{tilde(service?.home ?? s.prefs.home ?? "~/.pine")}</span>
 								Where pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.
 							</FieldDescription>
 						</FieldContent>
-						<div className="ctl flex items-center gap-1.5">
+						<div className="flex items-center gap-1.5">
 							{s.prefs.home ? <Button variant="outline" size="xs" onClick={() => void set({ home: "" }).then(() => bridge.retry())}>Use ~/.pine</Button> : null}
 							<Button variant="outline" size="xs" onClick={() => void bridge.pickFolder("A pine home folder").then((dir: string | undefined) => dir && set({ home: dir }).then(() => (service?.started ? bridge.restart() : bridge.retry())))}><FolderIcon data-icon="inline-start" />Choose…</Button>
 						</div>
@@ -1908,7 +1908,7 @@ export function Settings() {
 			{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
 			    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
 			<SidebarProvider open className="min-h-0 w-auto flex-none">
-				<SidebarRoot collapsible="none" className="set-nav w-50 border-r border-line-soft bg-transparent">
+				<SidebarRoot collapsible="none" className="w-50 border-r border-line-soft bg-transparent">
 					<SidebarContent>
 						<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 							<SidebarGroup role="navigation" className="py-4">
@@ -1916,7 +1916,7 @@ export function Settings() {
 									<SidebarMenu>
 										{SECTIONS.map((x) => (
 											<SidebarMenuItem key={x.id}>
-												<SidebarMenuButton isActive={s.section === x.id} className="side-row" aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
+												<SidebarMenuButton isActive={s.section === x.id} aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
 											</SidebarMenuItem>
 										))}
 									</SidebarMenu>
@@ -1926,7 +1926,7 @@ export function Settings() {
 					</SidebarContent>
 				</SidebarRoot>
 			</SidebarProvider>
-			<ScrollArea className="set-page flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={s.section}>
+			<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={s.section}>
 				{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "app" ? <AppPage /> : <General />}
 			</ScrollArea>
 		</div>

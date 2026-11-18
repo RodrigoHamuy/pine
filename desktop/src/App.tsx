@@ -38,7 +38,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printed } from "@/components/printed";
 
 // Pieces of the frame drawn the same in several places.
-const DOT = "dot size-2 flex-none rounded-full";
+const DOT = "size-2 flex-none rounded-full";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -63,7 +63,7 @@ function Gate() {
 						"Welcome to pine",
 						`pine keeps its agents, their workspaces and its settings in a home folder (${s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).`,
 						<>
-							{s.initLines.length ? <Printed sm className="log w-full text-start" text={s.initLines.slice(-40).join("\n")} /> : null}
+							{s.initLines.length ? <Printed sm className="w-full text-start" text={s.initLines.slice(-40).join("\n")} /> : null}
 							<div className="flex items-center gap-2">
 								<Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Spinner data-icon="inline-start" />Setting up…</> : "Set up pine"}</Button>
 								<Button variant="outline" disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
@@ -82,7 +82,7 @@ function Gate() {
 					: ["Loading your agents…", "", <Spinner key="s" />];
 	// Before pine answers there is nothing to show yet: stock Empty, in a frame that moves the window.
 	return (
-		<div className="gate m-1.5 flex flex-1 rounded-xl border bg-background app-drag">
+		<div className="m-1.5 flex flex-1 rounded-xl border bg-background app-drag">
 			<Empty className="app-no-drag">
 				<EmptyHeader>
 					<EmptyMedia>
@@ -148,9 +148,9 @@ function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; dept
 	return (
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
 		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
-			<SidebarMenuButton isActive={on} className={cn("side-row side-conv", INDENT[Math.min(depth, INDENT.length - 1)], c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16", on && "on")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+			<SidebarMenuButton isActive={on} className={cn(INDENT[Math.min(depth, INDENT.length - 1)], c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`} />}>
 				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : tab?.unread ? <Badge className="size-2 p-0" /> : main || c.pinned ? <StarIcon className="text-faint" /> : depth || c.worktree ? <GitBranchIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
-				<span className="cut min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
+				<span className="min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
 			{/* The badge is drawn over the button, so the button keeps the room for the time (stock pr-8 fits an action alone; the same selector as stock, so it takes the place of its pr-8). */}
 			{c.tasks ? <SidebarMenuBadge className={cn(!main && "group-hover/menu-item:hidden")}>{ago(c.last).replace(" ago", "")}</SidebarMenuBadge> : null}
@@ -227,20 +227,20 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		if (picked === "remove") await s.removeAgent(a.id);
 	};
 	return (
-		<Collapsible className="side-group" open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
+		<Collapsible open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
 			<SidebarMenu>
-				<SidebarMenuItem className="side-agent app-no-drag" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
+				<SidebarMenuItem className="app-no-drag" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
 					{/* What folds the group is the agent's line but its buttons. Under the pointer the line makes room for all three. */}
 					<CollapsibleTrigger render={<SidebarMenuButton className="group-hover/menu-item:pr-20" />}>
 						{folded ? <ChevronRightIcon className="text-faint" /> : <ChevronDownIcon className="text-faint" />}
-						<Avatar size="sm" className="avatar">
+						<Avatar size="sm">
 							<AvatarFallback>{a.id.slice(0, 1).toUpperCase()}</AvatarFallback>
 						</Avatar>
 						{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
 						    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
-						<span className="who flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
+						<span data-slot="agent-label" className="flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
 							<span className="min-w-0 flex-initial truncate">{a.id}</span>
-							<span className="what @container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
+							<span className="@container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
 						</span>
 						{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : unread && folded ? <Badge className="size-2 p-0" /> : null}
 					</CollapsibleTrigger>
@@ -267,7 +267,7 @@ function Sidebar() {
 	// is left to the window behind it, which is the system's material on a Mac.
 	// Where nothing is to click, the side bar moves the window, like the bar along the top.
 	return (
-		<SidebarRoot collapsible="none" className="sidebar w-full min-w-0 bg-transparent app-drag">
+		<SidebarRoot collapsible="none" className="w-full min-w-0 bg-transparent app-drag">
 			<SidebarHeader className={cn("h-11 flex-none flex-row items-center justify-end gap-0.5 py-0 pr-2 app-drag", s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2.5")}>
 				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")} aria-label="Hide the sidebar" />}><PanelLeftIcon /></TooltipTrigger><TooltipContent>Hide the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>
 			</SidebarHeader>
@@ -276,7 +276,7 @@ function Sidebar() {
 					<SidebarGroup className="pt-1 pb-0">
 						<SidebarMenu>
 							<SidebarMenuItem className="app-no-drag">
-								<Tooltip><TooltipTrigger render={<SidebarMenuButton className="side-row" onClick={() => void s.command("palette")} />}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></TooltipTrigger><TooltipContent>Find a conversation by its name or by what was said in it, or a command, an agent, a settings page</TooltipContent></Tooltip>
+								<Tooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => void s.command("palette")} />}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></TooltipTrigger><TooltipContent>Find a conversation by its name or by what was said in it, or a command, an agent, a settings page</TooltipContent></Tooltip>
 							</SidebarMenuItem>
 						</SidebarMenu>
 					</SidebarGroup>
@@ -287,24 +287,24 @@ function Sidebar() {
 					</SidebarGroup>
 				</ScrollArea>
 			</SidebarContent>
-			<SidebarFooter className="side-foot gap-0">
+			<SidebarFooter className="gap-0">
 				<SidebarMenu>
 					{newer ? (
 						<SidebarMenuItem className="app-no-drag">
-							<Tooltip><TooltipTrigger render={<SidebarMenuButton className="side-row side-update text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></Tooltip>
+							<Tooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></Tooltip>
 						</SidebarMenuItem>
 					) : null}
 					<SidebarMenuItem className="app-no-drag">
-						<SidebarMenuButton isActive={front?.kind === "events"} className={cn("side-row", front?.kind === "events" && "on")} onClick={() => void s.openEvents()}><AudioLinesIcon /><span className="grow min-w-0 flex-1">Events</span></SidebarMenuButton>
+						<SidebarMenuButton isActive={front?.kind === "events"} onClick={() => void s.openEvents()}><AudioLinesIcon /><span className="grow min-w-0 flex-1">Events</span></SidebarMenuButton>
 					</SidebarMenuItem>
 					<SidebarMenuItem className="app-no-drag">
-						<SidebarMenuButton isActive={front?.kind === "settings"} className={cn("side-row", front?.kind === "settings" && "on")} onClick={() => s.openSettings()}><SettingsIcon /><span className="grow min-w-0 flex-1">Settings</span><Kbd>⌘,</Kbd></SidebarMenuButton>
+						<SidebarMenuButton isActive={front?.kind === "settings"} onClick={() => s.openSettings()}><SettingsIcon /><span className="grow min-w-0 flex-1">Settings</span><Kbd>⌘,</Kbd></SidebarMenuButton>
 					</SidebarMenuItem>
 				</SidebarMenu>
-				<div className="side-status flex items-center gap-2 px-2 pt-1.5 pb-0.5 text-xs text-faint app-no-drag" title={s.service.status === "ready" ? `${s.service.home} · ${s.service.started ? "started by this app" : "a pine that was already running"}` : ""}>
+				<div data-slot="service-status" className="flex items-center gap-2 px-2 pt-1.5 pb-0.5 text-xs text-faint app-no-drag" title={s.service.status === "ready" ? `${s.service.home} · ${s.service.started ? "started by this app" : "a pine that was already running"}` : ""}>
 					{/* The dot stands in the place of the icons in the rows above it: its middle under theirs, and what is written beside it under their names. */}
 					<span className="grid size-4 flex-none place-items-center"><span className={cn(DOT, !ready ? "bg-warn" : s.connected ? "bg-primary" : "bg-destructive")} /></span>
-					<span className="cut truncate">{!ready ? "starting" : !s.connected ? "pine does not answer" : `pine${s.service.status === "ready" && s.service.version ? ` ${s.service.version}` : ""} · ${s.service.status === "ready" && s.service.started ? "started here" : "attached"}`}</span>
+					<span className="truncate">{!ready ? "starting" : !s.connected ? "pine does not answer" : `pine${s.service.status === "ready" && s.service.version ? ` ${s.service.version}` : ""} · ${s.service.status === "ready" && s.service.started ? "started here" : "attached"}`}</span>
 				</div>
 			</SidebarFooter>
 		</SidebarRoot>
@@ -329,7 +329,9 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 	return (
 		<div
 			ref={ref}
-			className={cn("tab group/tab relative flex h-8 max-w-55 min-w-28 flex-initial items-center gap-2 rounded-md pr-1.5 pl-2.5 app-no-drag", on ? "on bg-background text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-hover hover:text-foreground", drop && "before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-primary")}
+			data-slot="tab"
+			data-active={on || undefined}
+			className={cn("group/tab relative flex h-8 max-w-55 min-w-28 flex-initial items-center gap-2 rounded-md pr-1.5 pl-2.5 app-no-drag", on ? "bg-background text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-hover hover:text-foreground", drop && "before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-primary")}
 			draggable
 			onDragStart={(e) => (e.dataTransfer.setData("application/x-pine-tab", String(index)), (e.dataTransfer.effectAllowed = "move"))}
 			onDragOver={(e) => e.dataTransfer.types.includes("application/x-pine-tab") && (e.preventDefault(), setDrop(true))}
@@ -342,11 +344,11 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 			<span className="grid min-w-3.5 flex-none place-items-center">
 				{tab.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : tab.busy ? <Spinner aria-label="Working" className="size-3" /> : tab.unread ? <Badge className="size-2 p-0" /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <Avatar size="sm"><AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>}
 			</span>
-			<span className="name truncate">
+			<span data-slot="tab-name" className="truncate">
 				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b className="font-medium">{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b className="font-medium">{tab.agent}</b> : <><b className="font-medium">{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
 			</span>
-			{kept && tab.session !== "main" ? <StarIcon size={10} className="star flex-none text-warn" /> : null}
-			<Button variant="ghost" size="icon-xs" aria-label="Close this tab" className={cn("close", !on && "opacity-0 group-hover/tab:opacity-100")} onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><XIcon /></Button>
+			{kept && tab.session !== "main" ? <StarIcon size={10} className="flex-none text-warn" /> : null}
+			<Button variant="ghost" size="icon-xs" aria-label="Close this tab" className={cn(!on && "opacity-0 group-hover/tab:opacity-100")} onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><XIcon /></Button>
 		</div>
 	);
 }
@@ -360,7 +362,7 @@ function TitleBar() {
 			{/* A row that scrolls cuts off what a tab draws outside itself (the line around the tab in front, the mark where a dragged tab
 			    would land): the padding is the room for both, and the margin keeps the tabs where they were. It scrolls without a bar;
 			    the fade at a cut end says there is more. */}
-			<ScrollArea className="tabs -mx-0.5 flex min-h-0 min-w-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
+			<ScrollArea className="-mx-0.5 flex min-h-0 min-w-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 				<div className="flex items-center gap-0.5 px-0.5 py-px">
 					{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
 				</div>
@@ -466,7 +468,7 @@ function BrowserAsk() {
 				</DialogHeader>
 				<div className="flex flex-col gap-3 select-text">
 					<p className="text-muted-foreground">Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
-					{s.initLines.length ? <Printed sm className="log" text={s.initLines.slice(-12).join("\n")} /> : null}
+					{s.initLines.length ? <Printed sm text={s.initLines.slice(-12).join("\n")} /> : null}
 				</div>
 				<DialogFooter>
 					<Button variant="outline" disabled={s.browserFetching} onClick={later}>Not now</Button>

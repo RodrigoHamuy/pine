@@ -67,8 +67,8 @@ export function Palette() {
 							<CommandGroup key={`${n}:${g.name}`} heading={g.name}>
 								{g.rows.map((r) => (
 									<CommandItem key={r.id} value={r.id} onSelect={() => run(r)}>
-										<span className="label max-w-3/5 flex-none truncate">{r.label}</span>
-										{r.about ? <span className="about min-w-0 truncate text-xs text-muted-foreground">{r.about}</span> : null}
+										<span className="max-w-3/5 flex-none truncate">{r.label}</span>
+										{r.about ? <span className="min-w-0 truncate text-xs text-muted-foreground">{r.about}</span> : null}
 										{r.keys ? <CommandShortcut>{r.keys}</CommandShortcut> : null}
 									</CommandItem>
 								))}

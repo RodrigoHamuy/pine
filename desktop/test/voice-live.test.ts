@@ -38,10 +38,10 @@ test("live: the real voice helper's words arrive in the app's input", { skip: pr
 
 		app = await electron.launch({ args: [root], env: { ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: listen } });
 		const page = await app.firstWindow();
-		await page.waitForSelector(".welcome h1", { timeout: 60_000 });
+		await page.waitForSelector("[data-slot=empty] h1", { timeout: 60_000 });
 		await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", "voice"));
-		await page.waitForFunction(() => /list the bills in my scans folder/i.test((document.querySelector(".composer textarea") as HTMLTextAreaElement).value), undefined, { timeout: 60_000 }).catch(async () => {
-			throw new Error(`nothing was heard. The input holds ${JSON.stringify(await page.inputValue(".composer textarea"))}; on screen: ${await page.evaluate(() => [...document.querySelectorAll(".banner, [data-slot=toast]")].map((e) => e.textContent).join(" | "))}`);
+		await page.waitForFunction(() => /list the bills in my scans folder/i.test((document.querySelector("[data-slot=composer] textarea") as HTMLTextAreaElement).value), undefined, { timeout: 60_000 }).catch(async () => {
+			throw new Error(`nothing was heard. The input holds ${JSON.stringify(await page.inputValue("[data-slot=composer] textarea"))}; on screen: ${await page.evaluate(() => [...document.querySelectorAll("[data-slot=alert], [data-slot=toast]")].map((e) => e.textContent).join(" | "))}`);
 		});
 		// Heard is not sent.
 		assert.equal(await page.$$eval(".it-user", (els: Element[]) => els.length), 0);

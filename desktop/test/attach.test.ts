@@ -64,14 +64,14 @@ after(async () => {
 test("attaches to a pine that runs, and leaves it running", async () => {
 	app = await electron.launch({ args: [root], env: { ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_DESKTOP_DEV_URL: "" } });
 	const page = await app.firstWindow();
-	await page.waitForSelector(".welcome h1", { timeout: 30_000 }).catch(async () => {
+	await page.waitForSelector("[data-slot=empty] h1", { timeout: 30_000 }).catch(async () => {
 		throw new Error(`the conversation did not appear. On screen: ${await page.evaluate(() => document.body.innerText.slice(0, 800))}`);
 	});
-	assert.match(await page.textContent(".side-status"), /attached/);
+	assert.match(await page.textContent("[data-slot=service-status]"), /attached/);
 	// It talks to that very daemon: a message is answered (the scripted model echoes).
-	await page.fill(".composer textarea", "hello there");
+	await page.fill("[data-slot=composer] textarea", "hello there");
 	await page.keyboard.press("Enter");
-	await page.waitForSelector(".md >> text=ECHO[hello there]", { timeout: 30_000 });
+	await page.waitForSelector("[data-slot=markdown] >> text=ECHO[hello there]", { timeout: 30_000 });
 	await app.close();
 	app = undefined;
 	// Asked a few times: a daemon that is busy for a moment is not a daemon that is gone.
@@ -96,16 +96,16 @@ test("with \"keep pine running\" a daemon the app started goes on after it", asy
 		write(path.join(kept, "desktop-data", "prefs.json"), JSON.stringify({ keepRunning: true }));
 		const second = await electron.launch({ args: [root], env: { ...process.env, PINE_HOME: kept, PINE_DESKTOP_DATA: path.join(kept, "desktop-data"), PINE_DESKTOP_DEV_URL: "" } });
 		const page = await second.firstWindow();
-		await page.waitForSelector(".welcome h1", { timeout: 60_000 });
-		assert.match((await page.textContent(".side-status")) ?? "", /started here/);
+		await page.waitForSelector("[data-slot=empty] h1", { timeout: 60_000 });
+		assert.match((await page.textContent("[data-slot=service-status]")) ?? "", /started here/);
 		await second.close();
 		await new Promise((r) => setTimeout(r, 800));
 		assert.ok(await up(), "the daemon stopped with the app although it was to be kept");
 		// The next start finds it and attaches.
 		const third = await electron.launch({ args: [root], env: { ...process.env, PINE_HOME: kept, PINE_DESKTOP_DATA: path.join(kept, "desktop-data"), PINE_DESKTOP_DEV_URL: "" } });
 		const again = await third.firstWindow();
-		await again.waitForSelector(".welcome h1", { timeout: 60_000 });
-		assert.match((await again.textContent(".side-status")) ?? "", /attached/);
+		await again.waitForSelector("[data-slot=empty] h1", { timeout: 60_000 });
+		assert.match((await again.textContent("[data-slot=service-status]")) ?? "", /attached/);
 		await third.close();
 	} finally {
 		// It is this test's to stop: found by the home it was started for.

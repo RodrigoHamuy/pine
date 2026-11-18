@@ -271,18 +271,18 @@ export function Composer({ tab }: { tab: Tab }) {
 	return (
 		<>
 			{goal && goal.status !== "active" ? (
-				<Alert className="banner mb-2">
+				<Alert className="mb-2">
 					<ClockIcon />
 					<AlertTitle>Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}</AlertTitle>
 					<AlertDescription className="truncate">{goal.note}</AlertDescription>
 					<AlertAction>
-						<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
-						<Button variant="link" size="xs" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</Button>
+						<Button variant="link" size="xs" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
+						<Button variant="link" size="xs" onClick={() => void store.setGoal(tab, "clear")}>Clear</Button>
 					</AlertAction>
 				</Alert>
 			) : null}
 			{voice !== "off" ? (
-				<Alert className="banner mb-2">
+				<Alert className="mb-2">
 					<MicIcon />
 					<AlertTitle>{voice === "starting" ? "getting ready to listen…" : "listening"}</AlertTitle>
 					<AlertDescription>{voice === "starting" ? "" : "speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</AlertDescription>
@@ -290,7 +290,7 @@ export function Composer({ tab }: { tab: Tab }) {
 			) : null}
 			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the daemon). */}
 			<form
-				className="composer"
+				data-slot="composer"
 				onSubmit={(e) => (e.preventDefault(), void send("steer"))}
 				onDragOver={(e) => {
 					if (![...e.dataTransfer.types].includes("Files")) return;

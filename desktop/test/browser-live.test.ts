@@ -39,13 +39,13 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		const page = await app.firstWindow();
 		const shot = async (name: string) => shots && (fs.mkdirSync(shots, { recursive: true }), await page.screenshot({ path: path.join(shots, `${name}.png`) }));
 		const say = async (words: string, steps: unknown[], done: string) => {
-			await page.fill(".composer textarea", mockMsg(steps, `${words} `));
+			await page.fill("[data-slot=composer] textarea", mockMsg(steps, `${words} `));
 			await page.keyboard.press("Enter");
-			return page.waitForSelector(`.md >> text=${done}`, { timeout: 60_000 });
+			return page.waitForSelector(`[data-slot=markdown] >> text=${done}`, { timeout: 60_000 });
 		};
 		const toolSaid = () => JSON.stringify(mock.state.requests.at(-1).body.messages.filter((m: any) => m.role === "tool").at(-1)?.content ?? "");
 		const address = (end: string) => page.waitForFunction((e: string) => (document.querySelector("[data-slot=browser] input[aria-label=Address]") as HTMLInputElement | null)?.value.endsWith(e), end, { timeout: 15_000 });
-		await page.waitForSelector(".welcome h1", { timeout: 60_000 });
+		await page.waitForSelector("[data-slot=empty] h1", { timeout: 60_000 });
 		const notNow = page.locator("[data-slot=dialog-footer]").getByRole("button", { name: "Not now" });
 		if (await notNow.count()) await notNow.click();
 

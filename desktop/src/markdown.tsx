@@ -200,14 +200,14 @@ const PLUGINS = { code: createCodePlugin({ themes: ["github-light", "poimandres"
 const CONTROLS: ControlsConfig = { code: { copy: true, download: false }, table: false, mermaid: false, image: false };
 
 // Streamdown draws every element with its own look, and a folded part written as raw HTML is
-// Details above. `md` and `md-live` are what the tests look for.
-const LOOK = "md cursor-auto select-text wrap-anywhere";
+// Details above. `data-slot="markdown"` and `data-live` are what the tests look for.
+const LOOK = "cursor-auto select-text wrap-anywhere";
 
 /** Markdown, drawn into the page. While `live`, the text grows; what the reader opened stays open. */
 export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }): ReactNode {
 	return (
 		<WhereContext.Provider value={where}>
-			<Streamdown className={`${LOOK}${live ? " md-live" : ""}`} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={["github-light", "poimandres"]} isAnimating={!!live} lineNumbers={false}>
+			<Streamdown data-slot="markdown" data-live={live || undefined} className={LOOK} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={["github-light", "poimandres"]} isAnimating={!!live} lineNumbers={false}>
 				{text}
 			</Streamdown>
 		</WhereContext.Provider>

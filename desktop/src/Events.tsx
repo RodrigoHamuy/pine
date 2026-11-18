@@ -73,13 +73,13 @@ export function Events({ tab }: { tab: Tab }) {
 			</div>
 			{/* The log follows its end while it is scrolled to there, and holds still while a line is open. */}
 			<MessageScrollerProvider autoScroll={open === undefined} defaultScrollPosition="end">
-				<MessageScroller className="events-list flex-1 cursor-auto font-mono text-xs select-text">
+				<MessageScroller className="flex-1 cursor-auto font-mono text-xs select-text">
 					<MessageScrollerViewport aria-label="Events">
 						<MessageScrollerContent className="gap-0 py-1.5">
 				{shown.length ? (
 					shown.map((e, i) => (
 						<Collapsible key={`${e.id}:${e.ts}:${i}`} open={open === i} onOpenChange={(now) => setOpen(now ? i : undefined)}>
-							<CollapsibleTrigger className="ev flex w-full items-center gap-3 px-4 py-0.5 text-start whitespace-nowrap hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60 data-panel-open:bg-hover">
+							<CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-0.5 text-start whitespace-nowrap hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60 data-panel-open:bg-hover">
 								<span className="flex-none text-faint">{new Date(e.ts).toLocaleTimeString("sv-SE")}</span>
 								<Badge variant={e.trust === "owner" ? "default" : "outline"} className="w-14">{e.trust === "owner" ? "owner" : "other"}</Badge>
 								<span className="flex-none font-semibold">{e.topic}</span>
