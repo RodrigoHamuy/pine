@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
+import { Sidebar as SidebarRoot, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1274,13 +1275,27 @@ export function Settings() {
 	const s = useModel(store);
 	return (
 		<div className="flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background">
-			<ScrollFadeArea className="w-50 flex-none border-r border-line-soft">
-				<nav className="set-nav flex flex-col gap-px px-2.5 py-4.5">
-					{SECTIONS.map((x) => (
-						<Button key={x.id} variant={s.section === x.id ? "secondary" : "ghost"} className="side-row justify-start" aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon data-icon="inline-start" />{x.label}</Button>
-					))}
-				</nav>
-			</ScrollFadeArea>
+			{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
+			    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
+			<SidebarProvider open className="min-h-0 w-auto flex-none">
+				<SidebarRoot collapsible="none" className="set-nav w-50 border-r border-line-soft bg-transparent">
+					<SidebarContent>
+						<ScrollFadeArea className="flex-1">
+							<SidebarGroup role="navigation" className="py-4">
+								<SidebarGroupContent>
+									<SidebarMenu>
+										{SECTIONS.map((x) => (
+											<SidebarMenuItem key={x.id}>
+												<SidebarMenuButton isActive={s.section === x.id} className="side-row" aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
+											</SidebarMenuItem>
+										))}
+									</SidebarMenu>
+								</SidebarGroupContent>
+							</SidebarGroup>
+						</ScrollFadeArea>
+					</SidebarContent>
+				</SidebarRoot>
+			</SidebarProvider>
 			<ScrollFadeArea className="set-page min-w-0 flex-1" key={s.section}>
 				{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "app" ? <AppPage /> : <General />}
 			</ScrollFadeArea>
