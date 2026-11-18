@@ -1408,12 +1408,12 @@ test("many tabs keep their width and scroll instead of stepping on each other", 
 
 test("the panel's Agent view scrolls up and down only, however narrow the panel and however long a line it shows", async () => {
 	// A memory with a line no space breaks, and a description as long: the view wraps them, it is never pushed sideways.
-	write(path.join(home, "agents", "main", "workspace", "MEMORY.md"), `# Memory\n\n${"x".repeat(240)}\n${"https://example.com/".repeat(12)}\n`);
-	await page.click(".tab >> nth=0");
-	if (!(await page.$(".code"))) await page.click(".conv-head button[aria-label*='workspace']");
-	await page.locator(".code").getByRole("tab", { name: "Agent" }).click();
-	await sees(".agent-view >> text=What it remembers");
-	const width = () => page.$eval(".code", (el: Element) => el.getBoundingClientRect().width);
+	write(path.join(home, "agents", "main", "workspace", "MEMORY.md"), `# Memory\n\n${"x".repeat(240)}\n${"https://example.com/".repeat(12)}\n${"- a line to remember\n".repeat(60)}`);
+	await page.click("[data-slot=tab] >> nth=0");
+	if (!(await page.$("[data-slot=code-panel]"))) await page.click("[data-slot=conversation-head] button[aria-label*='workspace']");
+	await page.locator("[data-slot=code-panel]").getByRole("tab", { name: "Agent" }).click();
+	await sees("[data-slot=code-panel] [data-slot=scroll-area] >> text=What it remembers");
+	const width = () => page.$eval("[data-slot=code-panel]", (el: Element) => el.getBoundingClientRect().width);
 	const was = await width();
 	const edge = await page.$eval(CODE_EDGE, (el: Element) => el.getBoundingClientRect());
 	await page.mouse.move(edge.x + edge.width / 2, 300);
@@ -1421,13 +1421,33 @@ test("the panel's Agent view scrolls up and down only, however narrow the panel 
 	await page.mouse.move(edge.x + edge.width / 2 + 600, 300, { steps: 6 });
 	await page.mouse.up();
 	assert.ok((await width()) < was, "the panel was not made narrower");
-	const fits = () => page.$eval(".agent-view > [data-slot=scroll-area-viewport]", (el: Element) => {
+	const fits = () => page.$eval("[data-slot=code-panel] [data-slot=scroll-area]:has-text(\"What it remembers\") > [data-slot=scroll-area-viewport]", (el: Element) => {
 		const wide = [...el.querySelectorAll("*")].filter((c) => c.getBoundingClientRect().right > el.getBoundingClientRect().right + 0.5).slice(0, 5).map((c) => `${c.tagName}.${c.className}`.slice(0, 120));
 		return { scroll: el.scrollWidth, client: el.clientWidth, wide };
 	});
 	const seen = await fits();
 	await shot("agent-view-narrow");
 	assert.ok(seen.scroll <= seen.client, `the Agent view is wider than the panel: ${JSON.stringify(seen)}`);
+	// Its scroll bar, like every scroll area's, is hidden at rest and shows under the pointer and while it scrolls.
+	// The fade is turned off for the reading: a window in the background runs its transitions slowly.
+	const area = "[data-slot=code-panel] [data-slot=scroll-area]:has-text(\"What it remembers\")";
+	const bar = `${area} > [data-slot=scroll-area-scrollbar][data-orientation=vertical]`;
+	const handle = await page.$(bar);
+	assert.ok(handle, "the Agent view has no scroll bar");
+	const settled = (state: string) => page.waitForFunction(([el, state]) => {
+		el.style.transition = "none";
+		const on = el.hasAttribute("data-hovering") || el.hasAttribute("data-scrolling");
+		return (state === "rest" ? !on : on) && getComputedStyle(el).opacity === (state === "rest" ? "0" : "1");
+	}, [handle, state] as const, { timeout: 3000 }).then(() => true, () => false);
+	await page.mouse.move(5, 5);
+	assert.ok(await settled("rest"), "a scroll bar shows at rest");
+	const box = await page.$eval(area, (el: Element) => el.getBoundingClientRect());
+	await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+	assert.ok(await settled("on"), "a scroll bar stays hidden under the pointer");
+	await page.mouse.move(5, 5);
+	assert.ok(await settled("rest"), "a scroll bar stays shown once the pointer has left");
+	await page.$eval(`${area} > [data-slot=scroll-area-viewport]`, (el: Element) => el.scrollBy(0, 40));
+	assert.ok(await settled("on"), "a scroll bar stays hidden while it scrolls");
 	// Back to the width it had, for the tests after this one.
 	const back = await page.$eval(CODE_EDGE, (el: Element) => el.getBoundingClientRect());
 	await page.mouse.move(back.x + back.width / 2, 300);

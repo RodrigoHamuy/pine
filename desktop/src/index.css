@@ -352,3 +352,12 @@
 		color: var(--background);
 	}
 }
+
+/* A scroll area's bar shows only while it scrolls or under the pointer: the fade at its cut edge already says there is more.
+   Outside the base layer, so that the stock bar's transition-colors utility does not take the fade away. */
+[data-slot="scroll-area-scrollbar"] {
+	@apply opacity-0 transition-opacity duration-200;
+}
+[data-slot="scroll-area-scrollbar"]:is([data-hovering], [data-scrolling], :hover) {
+	@apply opacity-100;
+}
