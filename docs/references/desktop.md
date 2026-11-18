@@ -599,8 +599,8 @@ desktop/
                    material-theme-builder's, the code colours (`--code-*`: M3 roles, and poimandres in
                    `.dark[data-code=poimandres]`), the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
-    theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
-                   which the Appearance setting decides; pine's palette (`DEFAULT_PALETTE`), which
+    theme.ts       the `.dark` class on the root element, from the Appearance setting: Light or Dark
+                   by itself, System by the system's appearance; pine's palette (`DEFAULT_PALETTE`), which
                    `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview; and
                    `cleanPalette`, which makes a stored or sent palette safe field by field
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
@@ -704,8 +704,10 @@ holds only tokens and base rules.
   surface for the appearance, computed with material-theme-builder's `builder` (on a Mac the window
   is transparent behind its vibrancy). The preview keeps the palette in its stand-in for the bridge,
   in memory.
-- Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` keeps in
-  step with the system's appearance; Electron's appearance setting drives that.
+- Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` sets from
+  the Appearance setting: Light or Dark by itself, System by `prefers-color-scheme`. The page reads
+  the setting and not only the query because in the preview nothing drives the query; in the app the
+  same setting also sets Electron's native theme, for the window and the system's own controls.
 - Tests and the few rules that reach into a component select by shadcn's `data-slot` attributes
   and by roles, not by utility classes. Where nothing stock tells one of pine's own elements
   apart, it carries a `data-slot` of its own (`composer`, `code-panel`, `tab`...), never a bare class.

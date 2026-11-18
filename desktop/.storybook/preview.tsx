@@ -11,17 +11,11 @@ import { allModes, viewports } from "./modes.ts";
 // as Settings.stories.tsx does): what is set on it is used, everything else still does nothing.
 window.pine ??= new Proxy({} as Record<PropertyKey, unknown>, { get: (own, key) => own[key] ?? (() => () => {}) }) as unknown as typeof window.pine;
 
-// The page is dark when its root element has the `.dark` class. In the app that class follows the
-// system (theme.ts); here the toolbar sets it, or lets it follow the system as the app does.
-function applyTheme(theme: string): (() => void) | undefined {
-	if (theme === "system") return followAppearance();
-	document.documentElement.classList.toggle("dark", theme === "dark");
-	return undefined;
-}
-
+// The page is dark when its root element has the `.dark` class. The toolbar's theme stands for
+// the app's Appearance setting, and theme.ts decides from it as it does in the app.
 const withTheme: Decorator = (Story, context) => {
 	const theme = context.globals.theme ?? "system";
-	useLayoutEffect(() => applyTheme(theme), [theme]);
+	useLayoutEffect(() => followAppearance(() => theme, () => () => {}), [theme]);
 	// The colours are the M3 scheme of pine's palette, as in the app (main.tsx).
 	return (
 		<Mtb {...DEFAULT_PALETTE}>

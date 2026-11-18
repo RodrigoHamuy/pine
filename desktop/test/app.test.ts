@@ -1240,6 +1240,31 @@ test("the appearance setting puts the page in dark or light, and System follows 
 	}
 });
 
+test("Light or Dark wins over what the page's prefers-color-scheme says, as in the preview where nothing drives that query", async () => {
+	// The page itself decides from the setting: in the preview (an ordinary browser) and under the
+	// driver's emulation, prefers-color-scheme is not Electron's native theme, and the choice must hold all the same.
+	const appearance = (label: string) => page.click(`[role=group][aria-label=Appearance] [data-slot=toggle-group-item]:text-is("${label}")`);
+	const waitDark = (want: boolean) => page.waitForFunction((w) => document.documentElement.classList.contains("dark") === w, want);
+	try {
+		await menu("settings");
+		await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
+		await page.emulateMedia({ colorScheme: "dark" });
+		await appearance("Light");
+		await waitDark(false);
+		await page.emulateMedia({ colorScheme: "light" });
+		await appearance("Dark");
+		await waitDark(true);
+		// Back to System: the query decides again, and a change of it is followed.
+		await appearance("System");
+		await waitDark(false);
+		await page.emulateMedia({ colorScheme: "dark" });
+		await waitDark(true);
+		await menu("settings");
+	} finally {
+		await page.emulateMedia({ colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light" });
+	}
+});
+
 test("the side bar is the agents: one made elsewhere appears, a group folds away, and what is new says for whom", async () => {
 	// An agent that another hand makes (the main agent, a `pine agent add`): asked of the daemon directly, not through the app.
 	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(fs.readFileSync(path.join(home, "data", "pine.log"), "utf8"))![1];
