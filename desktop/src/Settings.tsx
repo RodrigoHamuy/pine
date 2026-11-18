@@ -21,6 +21,7 @@ import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
+import type { DialogRootActions } from "@base-ui/react/dialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -1212,7 +1213,8 @@ function OptionField({ name, schema, required, value, onChange }: { name: string
 	);
 }
 
-function NewSource({ types, close, made }: { types: SourceType[]; close: () => void; made: () => void }) {
+/** The content of a stock Dialog: a new source in two steps, its options then what it will do. */
+function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 	const [f, setF] = useState({ name: "", type: "", description: "", agent: "", own: false, note: "" });
 	const [options, setOptions] = useState<Record<string, unknown>>({});
 	const [plan, setPlan] = useState<Awaited<ReturnType<typeof api.proposeSource>>>();
@@ -1256,107 +1258,105 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 		made();
 	};
 	return (
-		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} className="sm:max-w-2xl">
-				<DialogHeader>
-					<DialogTitle>A new event source</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-					<div className="flex flex-col gap-3 px-4 select-text">
-						{plan ? (
-							<>
-								<div><b>{f.name}</b> ({f.type}) for {f.agent || "all agents"} will:</div>
-								<ul className="list-disc pl-5">{plan.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
-								{plan.owner ? (
-									<Alert className="notice">
-										<TriangleAlertIcon />
-										<AlertDescription>What it reports is treated as your own words: the agent it wakes gets its full tools.</AlertDescription>
-									</Alert>
-								) : null}
-								<FieldGroup>
-									{plan.needs.map((n) => {
-										const at = n.label.indexOf(": ");
-										return (
-											<Field key={n.name}>
-												<FieldLabel htmlFor={`${field}-need-${n.name}`}>{at > 0 ? n.label.slice(0, at) : n.name}</FieldLabel>
-												<Input id={`${field}-need-${n.name}`} className="mono font-mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} />
-												<FieldDescription>{`${at > 0 ? n.label.slice(at + 2) : ""} It is not shown, goes into pine's .env file, and never reaches an agent.`.trim()}</FieldDescription>
-											</Field>
-										);
-									})}
-									<Field>
-										<FieldLabel htmlFor={`${field}-note`}>Subscribe right away</FieldLabel>
-										<Input id={`${field}-note`} placeholder="for example: file the scan and tell me what it is" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
-										<FieldDescription>{`What is to be done when it reports something. With a note, ${f.agent || "every agent"} is woken by its events; without one, nobody is subscribed yet.`}</FieldDescription>
-									</Field>
-								</FieldGroup>
-							</>
-						) : (
-							<FieldGroup className="form grid grid-cols-2">
+		<>
+			<DialogHeader>
+				<DialogTitle>A new event source</DialogTitle>
+			</DialogHeader>
+			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<div className="flex flex-col gap-3 px-4 select-text">
+					{plan ? (
+						<>
+							<div><b>{f.name}</b> ({f.type}) for {f.agent || "all agents"} will:</div>
+							<ul className="list-disc pl-5">{plan.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
+							{plan.owner ? (
+								<Alert className="notice">
+									<TriangleAlertIcon />
+									<AlertDescription>What it reports is treated as your own words: the agent it wakes gets its full tools.</AlertDescription>
+								</Alert>
+							) : null}
+							<FieldGroup>
+								{plan.needs.map((n) => {
+									const at = n.label.indexOf(": ");
+									return (
+										<Field key={n.name}>
+											<FieldLabel htmlFor={`${field}-need-${n.name}`}>{at > 0 ? n.label.slice(0, at) : n.name}</FieldLabel>
+											<Input id={`${field}-need-${n.name}`} className="mono font-mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} />
+											<FieldDescription>{`${at > 0 ? n.label.slice(at + 2) : ""} It is not shown, goes into pine's .env file, and never reaches an agent.`.trim()}</FieldDescription>
+										</Field>
+									);
+								})}
 								<Field>
-									<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-									<Input id={`${field}-name`} autoFocus className="mono font-mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
-									<FieldDescription>Lowercase letters, digits, - and _.</FieldDescription>
+									<FieldLabel htmlFor={`${field}-note`}>Subscribe right away</FieldLabel>
+									<Input id={`${field}-note`} placeholder="for example: file the scan and tell me what it is" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
+									<FieldDescription>{`What is to be done when it reports something. With a note, ${f.agent || "every agent"} is woken by its events; without one, nobody is subscribed yet.`}</FieldDescription>
 								</Field>
-								<Field>
-									<FieldLabel htmlFor={`${field}-for`}>For</FieldLabel>
-									<Select items={forItems} value={f.agent} onValueChange={(agent) => setF({ ...f, agent: agent ?? "" })}>
-										<SelectTrigger id={`${field}-for`}>
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectGroup>
-												{forItems.map((o) => (
-													<SelectItem key={o.value} value={o.value}>
-														{o.label}
-													</SelectItem>
-												))}
-											</SelectGroup>
-										</SelectContent>
-									</Select>
-								</Field>
-								<Field className="col-span-full">
-									<FieldLabel htmlFor={`${field}-type`}>Type</FieldLabel>
-									<Select items={typeItems} value={f.type} onValueChange={(next) => (setF({ ...f, type: next ?? "" }), setOptions({}))}>
-										<SelectTrigger id={`${field}-type`}>
-											<SelectValue />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectGroup>
-												{typeItems.map((o) => (
-													<SelectItem key={o.value} value={o.value}>
-														{o.label}
-													</SelectItem>
-												))}
-											</SelectGroup>
-										</SelectContent>
-									</Select>
-									{type?.summary ? <FieldDescription>{type.summary}</FieldDescription> : null}
-								</Field>
-								{type ? (
-									<Field className="col-span-full">
-										<FieldLabel htmlFor={`${field}-description`}>What it reports</FieldLabel>
-										<Input id={`${field}-description`} placeholder={type.summary} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
-									</Field>
-								) : null}
-								{props.map(([name, schema]) => <OptionField key={name} name={name} schema={schema} required={required.has(name)} value={options[name]} onChange={(v) => setOptions({ ...options, [name]: v })} />)}
-								{type ? (
-									<Field orientation="horizontal" className="col-span-full">
-										<FieldContent>
-											<FieldLabel htmlFor={`${field}-own`}>It is my own</FieldLabel>
-											<FieldDescription>Only for a device or folder nobody else can put content into: what it reports is then trusted like your own messages.</FieldDescription>
-										</FieldContent>
-										<Switch id={`${field}-own`} checked={f.own} onCheckedChange={(own) => setF({ ...f, own })} />
-									</Field>
-								) : null}
-								{type ? <FieldDescription className="col-span-full">A password or token it needs is asked for in the next step.</FieldDescription> : null}
 							</FieldGroup>
-						)}
-					</div>
-				</ScrollArea>
-				<DialogFooter>{plan ? <><Button variant="outline" onClick={() => setPlan(undefined)}>Back</Button><Button disabled={busy || plan.needs.some((n) => !values[n.name]?.trim())} onClick={() => void add()}>Add source</Button></> : <><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={busy || !f.name.trim() || !f.type} onClick={() => void check()}>Continue</Button></>}</DialogFooter>
-			</DialogContent>
-		</Dialog>
+						</>
+					) : (
+						<FieldGroup className="form grid grid-cols-2">
+							<Field>
+								<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
+								<Input id={`${field}-name`} autoFocus className="mono font-mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+								<FieldDescription>Lowercase letters, digits, - and _.</FieldDescription>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor={`${field}-for`}>For</FieldLabel>
+								<Select items={forItems} value={f.agent} onValueChange={(agent) => setF({ ...f, agent: agent ?? "" })}>
+									<SelectTrigger id={`${field}-for`}>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectGroup>
+											{forItems.map((o) => (
+												<SelectItem key={o.value} value={o.value}>
+													{o.label}
+												</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+							</Field>
+							<Field className="col-span-full">
+								<FieldLabel htmlFor={`${field}-type`}>Type</FieldLabel>
+								<Select items={typeItems} value={f.type} onValueChange={(next) => (setF({ ...f, type: next ?? "" }), setOptions({}))}>
+									<SelectTrigger id={`${field}-type`}>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectGroup>
+											{typeItems.map((o) => (
+												<SelectItem key={o.value} value={o.value}>
+													{o.label}
+												</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+								{type?.summary ? <FieldDescription>{type.summary}</FieldDescription> : null}
+							</Field>
+							{type ? (
+								<Field className="col-span-full">
+									<FieldLabel htmlFor={`${field}-description`}>What it reports</FieldLabel>
+									<Input id={`${field}-description`} placeholder={type.summary} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
+								</Field>
+							) : null}
+							{props.map(([name, schema]) => <OptionField key={name} name={name} schema={schema} required={required.has(name)} value={options[name]} onChange={(v) => setOptions({ ...options, [name]: v })} />)}
+							{type ? (
+								<Field orientation="horizontal" className="col-span-full">
+									<FieldContent>
+										<FieldLabel htmlFor={`${field}-own`}>It is my own</FieldLabel>
+										<FieldDescription>Only for a device or folder nobody else can put content into: what it reports is then trusted like your own messages.</FieldDescription>
+									</FieldContent>
+									<Switch id={`${field}-own`} checked={f.own} onCheckedChange={(own) => setF({ ...f, own })} />
+								</Field>
+							) : null}
+							{type ? <FieldDescription className="col-span-full">A password or token it needs is asked for in the next step.</FieldDescription> : null}
+						</FieldGroup>
+					)}
+				</div>
+			</ScrollArea>
+			<DialogFooter>{plan ? <><Button variant="outline" onClick={() => setPlan(undefined)}>Back</Button><Button disabled={busy || plan.needs.some((n) => !values[n.name]?.trim())} onClick={() => void add()}>Add source</Button></> : <><DialogClose render={<Button variant="outline" />}>Cancel</DialogClose><Button disabled={busy || !f.name.trim() || !f.type} onClick={() => void check()}>Continue</Button></>}</DialogFooter>
+		</>
 	);
 }
 
@@ -1364,7 +1364,7 @@ function Sources() {
 	const s = useModel(store);
 	const sources = useLoad(() => api.sources());
 	const types = useLoad(() => api.sourceTypes());
-	const [adding, setAdding] = useState(false);
+	const adding = useRef<DialogRootActions>(null);
 	const subscribe = async (name: string) => {
 		const agent = await store.pick({ title: `Who wakes on ${name}?`, items: [{ value: "*", label: "All agents", about: "each in its main conversation" }, ...s.agents.map((a) => ({ value: a.id, label: a.id, about: "in its main conversation" }))] });
 		if (!agent) return;
@@ -1381,7 +1381,10 @@ function Sources() {
 	};
 	return (
 		<>
-			<div className="flex items-center gap-2"><p className="grow text-muted-foreground">What can wake an agent: a folder, a web address, a chat, a device. A source costs nothing until somebody is subscribed to it.</p><Button disabled={!types.data} onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New source</Button></div>
+			<div className="flex items-center gap-2"><p className="grow text-muted-foreground">What can wake an agent: a folder, a web address, a chat, a device. A source costs nothing until somebody is subscribed to it.</p><Dialog actionsRef={adding}>
+				<DialogTrigger render={<Button disabled={!types.data} />}><PlusIcon data-icon="inline-start" />New source</DialogTrigger>
+				<DialogContent showCloseButton={false} className="sm:max-w-2xl">{types.data ? <NewSource types={types.data} made={() => (adding.current?.close(), sources.reload())} /> : null}</DialogContent>
+			</Dialog></div>
 			<ItemGroup className="set-group">
 				{sources.data ? (
 					sources.data.length ? (
@@ -1437,7 +1440,6 @@ function Sources() {
 					<Spinner className="m-auto" />
 				)}
 			</ItemGroup>
-			{adding && types.data ? <NewSource types={types.data} close={() => setAdding(false)} made={() => (setAdding(false), sources.reload())} /> : null}
 		</>
 	);
 }
