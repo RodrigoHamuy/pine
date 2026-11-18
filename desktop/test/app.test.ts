@@ -1648,12 +1648,15 @@ test("a phone-wide window lays the side bar and the panel over the conversation,
 		assert.equal(await page.locator("[data-slot=code-panel]").count(), 0);
 		assert.equal(await page.locator("[data-slot=resizable-handle]:has(+ #browser-panel)").count(), 0);
 		await sees(`${CODE_TOGGLE}[data-behind]`);
-		// Asking for the one behind brings it to the front; closing that one shows the other again.
+		// Asking for the one behind brings it to the front; closing that one leaves the other behind, until it is asked for.
 		await menu("code");
 		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
 		assert.equal(await page.locator("[data-slot=browser-aside]").count(), 0);
 		await sees(`${BROWSER_TOGGLE}[data-behind]`);
 		await menu("code");
+		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+		assert.equal(await page.locator("[data-slot=sheet-content]").count(), 0);
+		await menu("browser");
 		await sees("[data-slot=sheet-content] [data-slot=browser-aside]");
 		await menu("browser");
 		await page.waitForSelector("[data-slot=browser-aside]", { state: "detached" });
@@ -1670,6 +1673,47 @@ test("a phone-wide window lays the side bar and the panel over the conversation,
 		assert.equal(Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width)), wide);
 	} finally {
 		// The tests after this one have the width the start of this file set, whatever failed here.
+		await size(1280, 820);
+	}
+});
+
+test("in a window too narrow for columns, putting away the sheet in front leaves the other one open behind, not over the conversation", async () => {
+	const size = (width: number, height: number) => page.setViewportSize({ width, height });
+	const gone = (sel: string) => page.waitForSelector(sel, { state: "detached" });
+	try {
+		await page.click("[data-slot=tab] >> nth=0");
+		if (await page.$("[data-slot=code-panel]")) await menu("code");
+		if (await page.$("[data-slot=browser-aside]")) await menu("browser");
+		await size(900, 760);
+		await menu("browser");
+		await sees("[data-slot=sheet-content] [data-slot=browser-aside]");
+		await menu("code-agent");
+		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
+		// Escape puts the side panel away: the browser stays open, behind, and no sheet comes up in its place.
+		await page.keyboard.press("Escape");
+		await gone("[data-slot=code-panel]");
+		await new Promise((r) => setTimeout(r, 300));
+		assert.equal(await page.locator("[data-slot=sheet-content]").count(), 0, "no sheet comes up by itself");
+		await sees(`${BROWSER_TOGGLE}[aria-pressed=true][data-behind]`);
+		await sees(`${CODE_TOGGLE}[aria-pressed=false]`);
+		// Its own toggle brings it back as a sheet; its close button puts it away, and the side panel, open behind, stays there.
+		await menu("code");
+		await menu("browser");
+		await sees("[data-slot=sheet-content] [data-slot=browser-aside]");
+		await page.click("[data-slot=browser-aside] button[aria-label='Close the browser']");
+		await gone("[data-slot=browser-aside]");
+		await new Promise((r) => setTimeout(r, 300));
+		assert.equal(await page.locator("[data-slot=sheet-content]").count(), 0, "no sheet comes up by itself");
+		await sees(`${CODE_TOGGLE}[aria-pressed=true][data-behind]`);
+		// Wide again: the one left open shows as a column.
+		await size(1280, 820);
+		await sees("#code-panel [data-slot=code-panel]");
+		await menu("code");
+		await gone("[data-slot=code-panel]");
+	} finally {
+		await size(1800, 900);
+		if (await page.$("[data-slot=browser-aside]")) await menu("browser");
+		if (await page.$("[data-slot=code-panel]")) await menu("code");
 		await size(1280, 820);
 	}
 });

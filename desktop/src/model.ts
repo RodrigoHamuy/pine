@@ -249,6 +249,9 @@ export class Store extends Model {
 	aside = localStorage.getItem("pine.aside") === "shown";
 	/** Of the side panel and the aside, the one opened last: where there is room for one only, it is the one shown. */
 	last: Beside = "code";
+	/** In a window with sheets, the sheet in front was put away while the other was open: that one stays open behind,
+	 *  and comes forward by its own toggle, or as a column once the window is wide. */
+	tucked = false;
 	/** Whether the side panel and the aside lie over the conversation as sheets, one at a time: a window narrower than `ROOM`. */
 	get sheets(): boolean {
 		return !window.matchMedia(ROOM).matches;
@@ -263,6 +266,8 @@ export class Store extends Model {
 	measure(room: number): void {
 		const was = this.one;
 		this.room = room;
+		// Once the window has room for columns, the one left behind has shown as one: a sheet is no longer held back.
+		if (!this.sheets) this.tucked = false;
 		if (this.one !== was) this.touch();
 	}
 	palette = false;
@@ -331,7 +336,7 @@ export class Store extends Model {
 	 * conversation has no browser at all, the address goes to the owner's own browser.
 	 */
 	async showInBrowser(tab: Tab, url: string): Promise<void> {
-		const before = this.aside;
+		const before = { aside: this.aside, last: this.last, tucked: this.tucked };
 		this.open("aside");
 		this.touch();
 		const state = await api.browserOpen(tab.agent, tab.session, url).catch(() => undefined);
@@ -341,7 +346,10 @@ export class Store extends Model {
 			this.saveTabs();
 			return this.touch();
 		}
-		if (!before) this.close("aside");
+		// Put back as it was: closed if it was, and the side panel in front again if it was.
+		if (!before.aside) this.close("aside");
+		this.last = before.last;
+		this.tucked = before.tucked;
 		this.flash("This conversation has no browser, so the address was opened in your own.", "muted", 6000);
 		this.touch();
 		void bridge.open(url);
@@ -1405,7 +1413,7 @@ export class Store extends Model {
 	/** Whether the side panel or the aside is open, and drawn: where there is room for one only (`one`), only the one opened last is. */
 	shown(which: Beside): boolean {
 		const open = which === "code" ? this.code : this.aside;
-		return open && !(this.one && this.code && this.aside && this.last !== which);
+		return open && !(this.sheets && this.tucked) && !(this.one && this.code && this.aside && this.last !== which);
 	}
 
 	/** Open but not drawn: there is room for one only, and the other was opened last. */
@@ -1416,6 +1424,7 @@ export class Store extends Model {
 	/** Opens the side panel or the aside, in front of the other. */
 	open(which: Beside): void {
 		this.last = which;
+		this.tucked = false;
 		if (which === "code") {
 			this.code = true;
 			this.saveTabs();
@@ -1426,6 +1435,8 @@ export class Store extends Model {
 	}
 
 	close(which: Beside): void {
+		// A sheet put away does not bring up the other one in its place: that one stays open, behind. (Columns do show it.)
+		if (this.sheets && this.shown(which) && (which === "code" ? this.aside : this.code)) this.tucked = true;
 		if (which === "code") {
 			this.code = false;
 			this.saveTabs();

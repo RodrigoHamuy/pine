@@ -619,13 +619,13 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 	const turn = async (msg: any) => {
 		const show = msg.params.name === "browser_show";
 		const say = (text: string, isError = false) => answered({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text }], ...(isError ? { isError: true } : {}) } });
-		if (headed === show) return say(show ? "The browser is already a window on your owner's screen." : embedded ? "The browser has no window of its own. Your owner sees it in the Pine app, beside this conversation." : "The browser has no window.");
+		if (headed === show) return say(show ? "The browser is already a window on your owner's screen." : embedded ? "The browser has no window of its own. Your owner sees it in the Pine app, at the right of this conversation's window." : "The browser has no window.");
 		// The owner's own window shows the browser already: nothing is started anew, and no second window opens.
 		if (show && embedded) {
 			if (page !== undefined) seen ??= await tabsNow();
 			shared = true;
 			return say(
-				`Your owner sees the browser in the Pine app, in the Browser view beside this conversation, and uses it there too: they open pages in it, log in, solve a captcha, confirm something. Tell them to look there. From now on, what they ask you to find or do on the web, do on the page they are on; look at it first (browser_snapshot), because they may have changed it. When they have to do something themselves, wait until they say they are done.${page === undefined ? " No page is open yet: open the one they are to see." : ""}`,
+				`Your owner sees the browser in the Pine app, in the browser at the right of this conversation's window, and uses it there too: they open pages in it, log in, solve a captcha, confirm something. Tell them to look there. From now on, what they ask you to find or do on the web, do on the page they are on; look at it first (browser_snapshot), because they may have changed it. When they have to do something themselves, wait until they say they are done.${page === undefined ? " No page is open yet: open the one they are to see." : ""}`,
 			);
 		}
 		const at = page;

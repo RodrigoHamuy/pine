@@ -223,7 +223,7 @@ agent's:
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens (it stays open while the turn runs, with its last lines). A `↳ … ↗` line opens a sub-agent's or delegated task's work in a tab of its own. A request of the agent's waits in the conversation with its buttons until it is answered, then becomes a line. Above your last message a line offers to take it back (**Take back**, `/undo`). Scrolled up, the conversation holds still while the answer goes on, and a button at its foot brings you back to the end |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed) |
-| The top right of the title bar | Two buttons: the side panel (`⌥⌘B`) and the browser (`⇧⌘B`). Each is pressed while what it shows is open, and a click closes it again. On a tab that is not a conversation (Settings, Events) both stay in their place and cannot be pressed |
+| The top right of the title bar | Two buttons: the side panel (`⌥⌘B`) and the browser (`⇧⌘B`). Each is pressed while what it shows is open. A click opens what is closed, closes what is in front, and brings to the front one that is open but behind the other (in a window narrower than 1024 pixels the sheet covers these buttons: there `⌥⌘B` and `⇧⌘B` do it). On a tab that is not a conversation (Settings, Events) both stay in their place and cannot be pressed |
 | The bar under the input | `+` attaches files (or drop them on the input; a dropped folder is opened for the conversation); then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours). The model and the folder open a list to search, the reasoning and the mode a menu right above the button. `outside content` appears when the conversation has read something from outside; each button says what it is in a tooltip |
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
 | Browser | At the far right of the window, after the side panel (`⇧⌘B`): the browser the agent of the conversation works in. Drag its left edge to make it wider or narrower; its width is its own, apart from the side panel's. Its `×` closes it. See "The browser" |
@@ -238,14 +238,17 @@ for every conversation.
 | Window | Side bar | Side panel and browser |
 |---|---|---|
 | 1024 pixels and wider | A column | A column each. Both at once where the room beside the side bar is 1100 pixels or more; with less, only the one you opened last, the other open behind it |
-| 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes it. With both open, only the one you opened last lies there; the other one's button is pressed more lightly, and a click on it brings it to the front. Closing the one in front shows the other |
+| 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes it. With both open, only the one you opened last lies there, and the other stays open behind it. The sheet covers the buttons of the title bar, so its key (`⌥⌘B` or `⇧⌘B`) brings the other to the front. Closing the one in front does not bring the other up: it stays open behind, shown as a column when the window is wide again, or as a sheet by its key |
 | Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above: the whole width of a window narrower than 640 pixels, and at most 540 pixels wide from 640 to 767 |
 
 With both the side panel and the browser open and less room than they need side by side (a sheet each,
 or less than 1100 pixels beside the side bar), neither comes first: the one you opened last shows, and
-the other is open behind it. Its button is pressed more lightly; a click on it brings it to the front
-and puts the other behind, and a click on the button of the one in front closes it, which shows the
-other again. The agent's `browser_show` and a port's link under Running open the browser in front.
+the other is open behind it. Its button is pressed more lightly. In a window 1024 pixels and wider a
+click on that button brings it to the front and puts the other behind, and a click on the button of
+the one in front closes it, which shows the other again. Below 1024 pixels each is a sheet over the
+conversation, which covers the buttons of the title bar: there only `⌥⌘B` and `⇧⌘B` switch, and
+closing the sheet in front does not bring the other up. The other stays open behind, and shows as a
+column when the window is wide enough, or as a sheet by its key. The agent's `browser_show` and a port's link under Running open the browser in front.
 Narrowing the window never closes anything: when there is room again, both show without a click.
 
 Settings follow the room they have, not the window: narrower than about 720 pixels, the list of
@@ -298,7 +301,6 @@ daemon's doing. What differs is how it is drawn and reached.
 | `/model`, `/reasoning`, `/mode`, `/folder` | Also the bar under the input, and the Conversation menu |
 | `/sessions`, the conversation list | The side bar |
 | `/code` | The side panel (`⌥⌘B`), which begins with the agent and also edits |
-| `/browser` | The browser at the right of the window (`⇧⌘B`, View > Toggle Browser) |
 | `/mcp`, `/sources`, `/subscribe` | Also Settings > MCP servers and Settings > Events |
 | `/attach <path>`, `/paste` | Files from the Finder put on the input, a picture pasted into it, or the `+` in the bar under the input |
 | `/export` | Asks where to save the file |
@@ -318,6 +320,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Find | `⌘F` marks what you look for in the conversation |
 | The poimandres theme | The dark look is poimandres: its colours for the window, and for code in an answer, in a diff and in the editor. The light look has colours of its own |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
+| `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
 ### A sound in an answer
 
@@ -386,7 +389,7 @@ daemon writes the file inside a sandbox that reaches only that folder, so that a
 planted in its folder cannot make your save land somewhere else ([security.md](security.md)).
 On a system without a sandbox the daemon does not write, and the app says so.
 
-### The browser
+## The browser
 
 The browser (`⇧⌘B`, `/browser`, or its button at the top right of the title bar) shows the browser
 of the conversation at the right of the window, after the side panel: the same one the agent opens

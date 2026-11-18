@@ -7,9 +7,7 @@ import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, GlobeIcon, PlusIcon, Rotate
 import { useMediaQuery } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
-import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { ESCAPE_KEEPERS } from "./CodePanel.tsx";
+import { SideSheet } from "@/components/side-sheet";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -322,40 +320,26 @@ export const ASIDE_KEY = "pine.aside.width";
  * sheet over the conversation, like the side panel, and putting the sheet away closes it.
  */
 export function BrowserAside({ tab }: { tab: Tab }) {
-	const [width] = useState(() => Number(localStorage.getItem(ASIDE_KEY)) || 560);
-	const narrow = !useMediaQuery(ROOM);
-	const aside = (
-		<div data-slot="browser-aside" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
-			{/* A sheet as wide as a phone-wide window reaches under the window's buttons at the top left on a Mac. */}
-			<div className={cn("flex h-10 flex-none items-center gap-1.5 border-b border-line-soft pr-2 pl-3 text-sm font-medium", narrow && "max-sm:pl-window-buttons")}>
-				<GlobeIcon className="size-3.5 text-muted-foreground" />
-				<span className="min-w-0 flex-1 truncate">Browser</span>
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("browser")} aria-label="Close the browser"><XIcon /></Button>} /><TooltipContent>Close the browser<Kbd>⇧⌘B</Kbd></TooltipContent></Tooltip>
-			</div>
-			<BrowserView tab={tab} />
-		</div>
-	);
-	if (narrow)
-		return (
-			<Sheet open onOpenChange={(open, details) => {
-				if (open) return;
-				// An Escape the address line or the page took for itself is theirs (CodePanel.tsx says the same of its sheet).
-				if (details.reason === "escape-key" && details.event.target instanceof Element && details.event.target.closest(ESCAPE_KEEPERS)) return details.cancel();
-				void store.command("browser");
-			}}>
-				{/* Over the title bar's drag region, which Electron honours whatever is drawn on top. */}
-				<SheetContent side="right" showCloseButton={false} className="app-no-drag gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
-					<SheetTitle className="sr-only">Browser</SheetTitle>
-					{aside}
-				</SheetContent>
-			</Sheet>
-		);
+	const sheet = !useMediaQuery(ROOM);
 	return (
-		<>
-			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the browser wider or narrower" />
-			<ResizablePanel id="browser-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
-				{aside}
-			</ResizablePanel>
-		</>
+		<SideSheet
+			id="browser-panel"
+			slot="browser-aside"
+			title="Browser"
+			sheet={sheet}
+			widthKey={ASIDE_KEY}
+			defaultWidth={560}
+			barClassName="pl-3 text-sm font-medium"
+			onClose={() => void store.command("browser")}
+			bar={
+				<>
+					<GlobeIcon className="size-3.5 text-muted-foreground" />
+					<span className="min-w-0 flex-1 truncate">Browser</span>
+					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("browser")} aria-label="Close the browser"><XIcon /></Button>} /><TooltipContent>Close the browser<Kbd>⇧⌘B</Kbd></TooltipContent></Tooltip>
+				</>
+			}
+		>
+			<BrowserView tab={tab} />
+		</SideSheet>
 	);
 }
