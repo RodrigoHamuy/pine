@@ -479,9 +479,9 @@ test("what an answer points at on the web is not fetched by itself, and what it 
 	assert.match((await md.locator('img[alt="the plan"]').getAttribute("src")) ?? "", /^pine-media:\/\/daemon\/.*plan\.png/);
 	// Nothing to download a picture with.
 	assert.equal(await md.locator('button[title*="ownload"], button[aria-label*="ownload"]').count(), 0);
-	// What could act or restyle is gone, and the words stay.
+	// What could act or restyle is gone, and the words stay. The one svg allowed is pine's own arrow beside a link.
 	assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
-	assert.equal(await md.locator("script, style, form, input, button:not([data-remote]), iframe, svg, video, object, a[href]").count(), 0);
+	assert.equal(await md.locator("script, style, form, input, button:not([data-remote]), iframe, svg:not([data-target] > svg), video, object, a[href]").count(), 0);
 	assert.equal(await md.locator('[class~="evil"], #evil, [data-x], [aria-label="evil"], [onclick]').count(), 0);
 	assert.equal(await md.getByText("styled", { exact: true }).evaluate((el: HTMLElement) => el.getAttribute("style")), null);
 	assert.doesNotMatch(await md.textContent(), /display: none/);
