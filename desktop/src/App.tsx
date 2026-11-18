@@ -25,7 +25,7 @@ import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
 import { List, ListRow } from "./lists.tsx";
 import { Confirm } from "./Confirm.tsx";
-import { Logo, Notices, Pulse } from "./ui.tsx";
+import { Logo, Pulse } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -741,7 +741,6 @@ export function App() {
 			<Asking />
 			{help ? <Help close={() => setHelp(false)} /> : null}
 			<Lightbox />
-			<Notices />
 		</div>
 	);
 }
