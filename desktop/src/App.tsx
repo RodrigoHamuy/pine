@@ -29,6 +29,7 @@ import { Logo, Pulse } from "./ui.tsx";
 import { Hint } from "@/components/hint";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Item, ItemActions, ItemContent, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Kbd } from "@/components/ui/kbd";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
@@ -608,13 +609,15 @@ export function QuestionDialog({ req }: { req: Approval }) {
 				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="whitespace-pre-wrap">{req.summary}</div>
 					{choices.length ? (
-						<div>
+						<div className="flex flex-col">
 							{choices.map((c, i) => (
-								<div key={i} className={cn("flex items-baseline gap-2.5 rounded-md px-3 py-2", i === at && !own && "bg-hover")} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
-									<Kbd>{i + 1}</Kbd>
-									<span>{c}</span>
-									{i === 0 ? <Badge className="ml-auto">recommended</Badge> : null}
-								</div>
+								<Item key={i} size="sm" variant={i === at && !own ? "muted" : "default"} render={<button type="button" />} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
+									<ItemMedia><Kbd>{i + 1}</Kbd></ItemMedia>
+									<ItemContent>
+										<ItemTitle className="line-clamp-none text-left font-normal">{c}</ItemTitle>
+									</ItemContent>
+									{i === 0 ? <ItemActions><Badge>recommended</Badge></ItemActions> : null}
+								</Item>
 							))}
 						</div>
 					) : null}
