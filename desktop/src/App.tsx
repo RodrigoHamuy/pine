@@ -9,6 +9,7 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { type Layout, usePanelRef } from "react-resizable-panels";
 import { Field } from "@/components/ui/field";
 import { useEffect, useRef, useState } from "react";
+import { useMediaQuery } from "usehooks-ts";
 import { cn } from "cn";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,7 +19,7 @@ import { CODE_KEY, CodePanel } from "./CodePanel.tsx";
 import { COMMANDS } from "./commands.ts";
 import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
-import { store, type Tab, useModel, useSignal } from "./model.ts";
+import { ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
@@ -523,6 +524,10 @@ export function App() {
 	// own sheet. (The panel beside a conversation does the same below `lg`: CodePanel.tsx.)
 	const narrow = useIsMobile();
 	const column = s.sidebar && !narrow;
+	// The panel's sheet of a narrow window is put away when the window becomes narrow, so that a window made smaller
+	// shows the conversation and not a sheet that comes by itself, and when another tab comes to the front, as the side bar's.
+	const roomForPanel = useMediaQuery(ROOM);
+	useEffect(() => s.setCodeOverlay(false), [s, s.active?.id, roomForPanel]);
 	// The window itself: what shows between and around the panels. On a Mac the system's material lies behind it.
 	return (
 		<div className={cn("flex h-full", s.platform === "darwin" ? "bg-sidebar" : "bg-sunk")}>
@@ -550,7 +555,7 @@ export function App() {
 										<ResizablePanel id="view" className="flex" minSize={320}>
 											{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
 										</ResizablePanel>
-										{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+										{tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
 									</ResizablePanelGroup>
 								</div>
 							</div>
