@@ -1,6 +1,13 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+/* shadcn's tokens, pointed at the M3 roles that <Mtb> writes into the page (main.tsx). */
+@import "material-theme-builder/shadcn.css";
+/* The M3 roles as utilities (bg-surface-container-low, text-on-primary, bg-warn-container...), for what pine has no name of
+   its own for. Where a name is also shadcn's or pine's (primary, background, warn...), the @theme inline below wins. */
+@plugin "material-theme-builder/tailwind" {
+	custom-colors: warn, info, plan;
+}
 
 /* Streamdown draws answers with utilities of its own, which Tailwind finds only where it is told to look. */
 @source "../node_modules/streamdown/dist/*.js";
@@ -9,48 +16,53 @@
 /* Dark is a class on the root element, which theme.ts keeps in step with the system's appearance. */
 @custom-variant dark (&:is(.dark *));
 
-/* pine's colours. Light has its own; dark is the poimandres theme (github.com/drcmda/poimandres-theme):
-   its colours are the --p-* values, the app's names are set from them, and code is coloured the way the
-   theme colours it. Dark is a class on the root element, which theme.ts keeps in step with the system. */
+/* pine's colours. Every one is a role of the Material 3 scheme that <Mtb> generates from the palette in theme.ts
+   (`--md-sys-color-*`: light on :root, dark on .dark, both on the root element), so pine's names below only point at
+   roles and follow the class by themselves. Only the steps of the surfaces differ between light and dark. */
 :root {
 	color-scheme: light;
 	/* The density of the whole page: every rem size (text, spacing, shadcn's components) follows this one. */
 	font-size: 15px;
 	--font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
 	--mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+	--radius: 0.625rem;
 
-	--bg: #fdfdfc;
-	--surface: #ffffff;
-	--raised: #f4f5f2;
-	--sunk: #eff0ed;
-	--composer: #ffffff;
-	--hover: rgba(20, 30, 24, 0.055);
-	--press: rgba(20, 30, 24, 0.09);
-	--line: #e1e3de;
-	--line-soft: #ecedea;
-	--text: #1a1d1b;
-	--text-muted: #666e68;
-	--faint: #99a19b;
-	--brand: #1f7a55;
-	--brand-soft: rgba(31, 122, 85, 0.1);
-	--on-accent: #ffffff;
-	--warn: #a86a08;
-	--warn-soft: rgba(196, 136, 20, 0.12);
-	--bad: #c2413a;
-	--bad-soft: rgba(194, 65, 58, 0.1);
-	--info: #2a6fc0;
-	--plan: #7c4fd0;
-	--add: #1c7c4a;
-	--add-bg: rgba(40, 160, 95, 0.12);
-	--del: #b3382f;
-	--del-bg: rgba(210, 70, 60, 0.11);
+	--bg: var(--md-sys-color-surface);
+	--surface: var(--md-sys-color-surface-container-lowest);
+	--composer: var(--md-sys-color-surface-container-lowest);
+	--raised: var(--md-sys-color-surface-container);
+	--sunk: var(--md-sys-color-surface-container-low);
+	/* Hover and press are M3's state layers: the colour of the text over whatever surface is below, at 8% and 12%. */
+	--hover: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+	--press: color-mix(in srgb, var(--md-sys-color-on-surface) 12%, transparent);
+	--line: var(--md-sys-color-outline-variant);
+	--line-soft: var(--md-sys-color-surface-container-high);
+	--text: var(--md-sys-color-on-surface);
+	--text-muted: var(--md-sys-color-on-surface-variant);
+	--faint: var(--md-sys-color-outline);
+	--brand: var(--md-sys-color-primary);
+	--brand-soft: var(--md-sys-color-primary-container);
+	--on-accent: var(--md-sys-color-on-primary);
+	--warn: var(--md-sys-color-warn);
+	--warn-soft: var(--md-sys-color-warn-container);
+	--bad: var(--md-sys-color-error);
+	--bad-soft: var(--md-sys-color-error-container);
+	--info: var(--md-sys-color-info);
+	--plan: var(--md-sys-color-plan);
+	--add: var(--md-sys-color-primary);
+	--add-bg: var(--md-sys-color-primary-container);
+	--del: var(--md-sys-color-error);
+	--del-bg: var(--md-sys-color-error-container);
+	--select: color-mix(in srgb, var(--md-sys-color-primary) 28%, transparent);
+	/* The side bar lets the Mac's window material show through (main.ts sets the vibrancy). */
+	--side: color-mix(in srgb, var(--md-sys-color-surface-container-low) 86%, transparent);
+	--scrim: color-mix(in srgb, var(--md-sys-color-scrim) 28%, transparent);
 	--shadow: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 28px rgba(0, 0, 0, 0.1);
 	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.08), 0 24px 64px rgba(0, 0, 0, 0.22);
-	--side: rgba(236, 237, 233, 0.86);
-	--scrim: rgba(20, 24, 22, 0.28);
-	--select: color-mix(in srgb, var(--brand) 28%, transparent);
 }
 
+/* In dark the surfaces step the other way: what is set apart (a card, the composer) is lighter than the page, and what
+   is sunk darker. The --p-* values are the poimandres theme (github.com/drcmda/poimandres-theme), for code only (below). */
 .dark {
 	color-scheme: dark;
 	--p-bg: #1b1e28;
@@ -66,37 +78,15 @@
 	--p-yellow: #fffac2;
 	--p-pink: #d0679d;
 	--p-focus: #303340;
+	--p-select: rgba(113, 124, 180, 0.3);
 
-	--bg: var(--p-bg);
-	--surface: #1e212c;
-	--raised: #232633;
-	--sunk: #171922;
-	--composer: #1e212c;
-	--hover: rgba(166, 172, 205, 0.07);
-	--press: rgba(166, 172, 205, 0.12);
-	--line: #2b2e3c;
-	--line-soft: #242734;
-	--text: var(--p-bright);
-	--text-muted: var(--p-fg);
-	--faint: var(--p-comment);
-	--brand: var(--p-mint);
-	--brand-soft: rgba(93, 228, 199, 0.12);
-	--on-accent: #171922;
-	--warn: var(--p-yellow);
-	--warn-soft: rgba(255, 250, 194, 0.1);
-	--bad: var(--p-pink);
-	--bad-soft: rgba(208, 103, 157, 0.15);
-	--info: var(--p-blue);
-	--plan: var(--p-sky);
-	--add: var(--p-mint);
-	--add-bg: rgba(93, 228, 199, 0.1);
-	--del: var(--p-pink);
-	--del-bg: rgba(208, 103, 157, 0.14);
-	--select: rgba(113, 124, 180, 0.3);
+	--surface: var(--md-sys-color-surface-container-low);
+	--composer: var(--md-sys-color-surface-container-low);
+	--sunk: var(--md-sys-color-surface-container-lowest);
+	--side: color-mix(in srgb, var(--md-sys-color-surface-container-low) 88%, transparent);
+	--scrim: color-mix(in srgb, var(--md-sys-color-scrim) 55%, transparent);
 	--shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 28px rgba(0, 0, 0, 0.4);
 	--shadow-l: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 64px rgba(0, 0, 0, 0.6);
-	--side: rgba(19, 21, 29, 0.88);
-	--scrim: rgba(10, 11, 17, 0.55);
 }
 
 /* The code editor's colours (CodePanel.tsx: its CodeMirror theme and highlight style read only these).
@@ -144,7 +134,7 @@
 	--code-text: var(--p-fg);
 	--code-gutter: color-mix(in oklab, var(--p-comment) 55%, transparent);
 	--code-gutter-active: var(--p-fg);
-	--code-active-line: color-mix(in oklab, var(--select) 25%, transparent);
+	--code-active-line: color-mix(in oklab, var(--p-select) 25%, transparent);
 	--code-cursor: var(--p-fg);
 	--code-match: color-mix(in oklab, var(--p-blue) 25%, transparent);
 	--code-match-line: color-mix(in oklab, var(--p-blue) 50%, transparent);
@@ -192,9 +182,8 @@
 	--spacing-window-buttons: max(env(titlebar-area-x, 0px), calc(var(--spacing) * 2));
 }
 
-/* shadcn's tokens, set from pine's own colours (light in :root, poimandres in .dark, above).
-   They only point at pine's names, so one place holds each colour and the dark values follow the class
-   by themselves. The font is the system's, as it always was. */
+/* shadcn's tokens and pine's own names as utilities. shadcn's are set by shadcn.css (M3 roles) and by the block after
+   the utilities below; pine's by the blocks at the top. The font is the system's, as it always was. */
 @theme inline {
 	--font-sans: var(--font);
 	--font-mono: var(--mono);
@@ -280,41 +269,21 @@
 	-webkit-app-region: no-drag;
 }
 
-:root {
-	--background: var(--bg);
-	--foreground: var(--text);
-	--card: var(--surface);
-	--card-foreground: var(--text);
-	--popover: var(--surface);
-	--popover-foreground: var(--text);
-	--primary: var(--brand);
-	--primary-foreground: var(--on-accent);
-	--secondary: var(--raised);
-	--secondary-foreground: var(--text);
-	--muted: var(--sunk);
-	--muted-foreground: var(--text-muted);
-	--accent: var(--hover);
-	--accent-foreground: var(--text);
-	--destructive: var(--bad);
-	--border: var(--line);
-	--input: var(--line);
-	/* What has the keyboard is said in gray, never in the green: the green is for what is on or at work. */
-	--ring: var(--faint);
-	--chart-1: var(--brand);
-	--chart-2: var(--info);
-	--chart-3: var(--plan);
-	--chart-4: var(--warn);
-	--chart-5: var(--bad);
-	--radius: 0.625rem;
-	/* The side bar's rows are muted until the pointer is on one; the one in front stays pressed. */
+/* Where pine departs from material-theme-builder's mapping (shadcn.css), with its doubled selectors so that it wins. */
+:root:root,
+.dark.dark {
+	/* What has the keyboard is said in grey, never in the primary: the primary is for what is on or at work. */
+	--ring: var(--md-sys-color-outline);
+	--sidebar-ring: var(--md-sys-color-outline);
+	/* The side bar is translucent, for the Mac's window material behind it. */
 	--sidebar: var(--side);
-	--sidebar-foreground: var(--text-muted);
-	--sidebar-primary: var(--brand);
-	--sidebar-primary-foreground: var(--on-accent);
+	/* Hover and press are state layers over the surface below, not a colour of their own. */
+	--accent: var(--hover);
+	--accent-foreground: var(--md-sys-color-on-surface);
 	--sidebar-accent: var(--press);
-	--sidebar-accent-foreground: var(--text);
-	--sidebar-border: var(--line);
-	--sidebar-ring: var(--faint);
+	--sidebar-accent-foreground: var(--md-sys-color-on-surface);
+	/* The side bar's rows are muted until the pointer is on one; the one in front stays pressed. */
+	--sidebar-foreground: var(--md-sys-color-on-surface-variant);
 }
 
 @layer base {

@@ -330,7 +330,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| The poimandres theme | The dark look is poimandres: its colours for the window, and for code in an answer, in a diff and in the editor. The light look has colours of its own |
+| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source) and night blue (the neutral), light and dark alike. Code in an answer, in a diff and in the editor keeps poimandres' own colours in dark |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
@@ -563,11 +563,13 @@ desktop/
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
                    which are ui-sdk's, used directly (shadcn has neither); and the chosen line of
                    a palette's list, named to screen readers (`useNamedLine`)
-    index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
-                   shadcn's tokens set from them, the page's density and a few base rules
+    index.css      the only stylesheet: pine's colour names as aliases of the M3 roles, where pine
+                   departs from material-theme-builder's mapping of shadcn's tokens, the code colours
+                   (poimandres in `.dark`), the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
-                   which the Appearance setting decides
+                   which the Appearance setting decides; and pine's palette (`DEFAULT_PALETTE`), which
+                   `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
                    (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
@@ -624,9 +626,21 @@ holds only tokens and base rules.
   start of a bar along the top (`pl-window-buttons`, a token in `index.css`): the window says where
   the buttons end (`titleBarOverlay` in `electron/main.ts`, read as `env(titlebar-area-x)`), so it is
   none in full screen, in an ordinary browser (the preview, Storybook) and on another system.
-- Colours are tokens: pine's own names (`--brand`, `--text-muted`, `--warn`, the poimandres
-  `--p-*` values) are set in `index.css`, shadcn's tokens point at them, and the ones shadcn has no
-  name for are utilities too (`text-warn`, `bg-brand-soft`, `text-faint`...).
+- Colours come from Material 3, through material-theme-builder. `<Mtb>` (from
+  `material-theme-builder/react`) wraps the page in `main.tsx` and every story in
+  `.storybook/preview.tsx`; it writes the scheme of pine's palette (`DEFAULT_PALETTE` in `theme.ts`:
+  source `#5de4c7`, neutral `#1b1e28`, colour match on, and the custom colours `warn`, `info` and
+  `plan`, kept as given) into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`.
+  shadcn's tokens come from the package's `shadcn.css`; pine's own names (`--brand`, `--text-muted`,
+  `--warn`, `--hover`...) are aliases of M3 roles in `index.css`, and a role of the scheme, never a
+  literal colour, is what a new one points at. Four places depart from `shadcn.css`, after it and with
+  its doubled selectors: the focus ring is the outline (grey, never the primary), the side bar is
+  translucent, hover and press (`--accent`) are state layers of the text colour over the surface,
+  and the side bar's text is muted. The only literal colours left are the shadows and the
+  poimandres `--p-*` values, which colour code in dark. Pine's names are utilities too
+  (`text-warn`, `bg-brand-soft`, `text-faint`...), and the Tailwind plugin
+  (`material-theme-builder/tailwind`) adds every M3 role (`bg-surface-container-low`,
+  `text-on-primary`, `bg-warn-container`); where a name is both, pine's and shadcn's win.
 - Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` keeps in
   step with the system's appearance; Electron's appearance setting drives that.
 - Tests and the few rules that reach into a component select by shadcn's `data-slot` attributes
@@ -653,7 +667,7 @@ of rows to open) is ui-sdk's (`@ui-sdk/react`), used directly, with the row's lo
 piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk list drawn as the
 stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the list's
 option, so the rows look like the side bar's and the arrow keys move between them.
-The side bar's colours are the `--sidebar*` tokens in `index.css`, set from pine's own: rows are
+The side bar's colours are the `--sidebar*` tokens in `index.css`, set from M3 roles: rows are
 muted, the one in front pressed, and its background is left to the window behind it (the system's
 material on a Mac). A story sits beside the file of what it shows: `src/<File>.stories.tsx`
 for a file of `src/`, `src/components/<name>.stories.tsx` for a composition there (titled

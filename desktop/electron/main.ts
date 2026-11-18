@@ -188,7 +188,8 @@ function createWindow(): void {
 		titleBarOverlay: isMac,
 		vibrancy: isMac ? "sidebar" : undefined,
 		visualEffectState: "followWindow",
-		backgroundColor: isMac ? "#00000000" : nativeTheme.shouldUseDarkColors ? "#1b1e28" : "#fbfbf9",
+		// The M3 surface of the default palette (src/theme.ts), so that the window does not flash another colour before the page draws.
+		backgroundColor: isMac ? "#00000000" : nativeTheme.shouldUseDarkColors ? "#131314" : "#fcf8f9",
 		webPreferences: {
 			preload: path.join(HERE, "preload.cjs"),
 			contextIsolation: true,
