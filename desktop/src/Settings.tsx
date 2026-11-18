@@ -516,7 +516,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 				<DialogHeader>
 					<DialogTitle>A new agent</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-w-0 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 					<FieldGroup className="px-4 select-text">
 						<Field>
 							<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
@@ -645,7 +645,7 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 			<DialogHeader>
 				<DialogTitle>Sign in to {provider}</DialogTitle>
 			</DialogHeader>
-			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-w-0 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					{error || state?.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{error ?? state?.error}</AlertDescription></Alert> : null}
 					{state?.lines.length ? (
@@ -1270,7 +1270,7 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 			<DialogHeader>
 				<DialogTitle>A new event source</DialogTitle>
 			</DialogHeader>
-			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-w-0 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-3 px-4 select-text">
 					{plan ? (
 						<>
