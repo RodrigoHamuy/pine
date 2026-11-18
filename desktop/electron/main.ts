@@ -7,6 +7,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
+import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
 import { connect, findPine, type Launch, loginEnv, pineRoot, runPine, type Service, ServiceError } from "./service.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
 
@@ -118,112 +119,30 @@ async function startService(): Promise<void> {
 	}
 }
 
-/**
- * The daemon's live events, read here and handed to the page in small batches: a model that
- * writes fast sends a hundred events a second, and each as a message of its own would keep the
- * page busy with the post office.
- */
+/** The daemon's live events, handed to the page in small batches (`followEvents`). */
 function follow(s: Service): void {
-	const abort = (stream = new AbortController());
-	let batch: unknown[] = [];
-	let timer: NodeJS.Timeout | undefined;
-	const flush = () => {
-		timer = undefined;
-		if (batch.length) send("pine:events", batch);
-		batch = [];
-	};
-	const loop = async () => {
-		let down = 0;
-		while (!abort.signal.aborted) {
-			try {
-				const res = await fetch(`${s.base}/events/stream?topic=%23`, { headers: { authorization: `Bearer ${s.token}` }, signal: abort.signal });
-				if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
-				down = 0;
-				send("pine:connection", true);
-				let buf = "";
-				const decoder = new TextDecoder();
-				for await (const chunk of res.body as any) {
-					buf += decoder.decode(chunk, { stream: true });
-					for (let i = buf.indexOf("\n\n"); i >= 0; i = buf.indexOf("\n\n")) {
-						const block = buf.slice(0, i);
-						buf = buf.slice(i + 2);
-						if (!block.startsWith("data: ")) continue;
-						try {
-							batch.push(JSON.parse(block.slice(6)));
-							timer ??= setTimeout(flush, 24);
-						} catch {
-							// A malformed frame is skipped; the stream goes on.
-						}
-					}
-				}
-			} catch {
-				// fall through to the retry
-			}
-			if (abort.signal.aborted) return;
-			send("pine:connection", false);
-			down++;
-			// A daemon this app started and that is gone will not come back by waiting: start it again.
-			if (down === 5 && s.started && !quitting) return void startService();
-			await new Promise((r) => setTimeout(r, 1000));
-		}
-	};
-	void loop();
+	stream = new AbortController();
+	followEvents(s, stream.signal, {
+		batch: (events) => send("pine:events", events),
+		connection: (up) => send("pine:connection", up),
+		// A daemon this app started and that is gone will not come back by waiting: start it again.
+		lost: (times) => {
+			if (times !== 5 || !s.started || quitting) return false;
+			void startService();
+			return true;
+		},
+	});
 }
 
-/** One call of the control API in the owner's name. The page never holds the token. */
-async function call(method: string, url: string, body?: unknown): Promise<{ ok: boolean; status: number; data: any }> {
-	if (!service) return { ok: false, status: 503, data: { error: "pine is not running yet" } };
-	if ((method !== "GET" && method !== "POST") || typeof url !== "string" || !url.startsWith("/") || url.startsWith("//")) return { ok: false, status: 400, data: { error: "not a call of the control API" } };
-	try {
-		const res = await fetch(service.base + url, {
-			method,
-			headers: { authorization: `Bearer ${service.token}`, ...(body !== undefined ? { "content-type": "application/json" } : {}) },
-			body: body !== undefined ? JSON.stringify(body) : undefined,
-		});
-		const type = res.headers.get("content-type") ?? "";
-		if (type.startsWith("application/json")) return { ok: res.ok, status: res.status, data: await res.json().catch(() => ({})) };
-		// A picture: bytes and their kind.
-		return { ok: res.ok, status: res.status, data: { mime: type, base64: Buffer.from(await res.arrayBuffer()).toString("base64") } };
-	} catch (e) {
-		return { ok: false, status: 0, data: { error: `pine does not answer (${e instanceof Error ? e.message : e})` } };
-	}
-}
-
-/** What the page may show straight from the daemon: pictures, videos and sounds. Nothing else is served this way. */
-const MEDIA = [/^\/media\/tool\/[^/]+$/, /^\/tasks\/\d+\/images\/\d+$/, /^\/agents\/[^/]+\/image$/, /^\/agents\/[^/]+\/browser\/frame$/];
-
+/** A picture, video or sound of the daemon's, for the page's `pine-media:` addresses. */
 async function media(request: Request): Promise<Response> {
 	const url = new URL(request.url);
-	if (!service || request.method !== "GET" || !MEDIA.some((m) => m.test(url.pathname))) return new Response("not found", { status: 404 });
-	try {
-		const res = await fetch(service.base + url.pathname + url.search, { headers: { authorization: `Bearer ${service.token}` } });
-		if (!res.ok) return new Response("not found", { status: 404 });
-		const type = res.headers.get("content-type") ?? "application/octet-stream";
-		// Only what is drawn or played. A page of HTML or a script under this name would be content from outside.
-		if (!/^(image|video|audio)\//.test(type) || type.startsWith("image/svg")) return new Response("not shown", { status: 415 });
-		return new Response(res.body, { status: 200, headers: { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff" } });
-	} catch {
-		return new Response("not found", { status: 404 });
-	}
+	return mediaFromDaemon(service, request.method, url.pathname, url.search);
 }
 
 // ---- the page ----------------------------------------------------------------------------------
 
-const CSP = [
-	"default-src 'none'",
-	"script-src 'self'",
-	// The editor writes its styles into the page as it goes.
-	"style-src 'self' 'unsafe-inline'",
-	// No address on the web: a picture an answer points at is fetched by the daemon, on a click.
-	"img-src 'self' data: blob: pine-media:",
-	"media-src 'self' blob: pine-media:",
-	"font-src 'self' data:",
-	"connect-src 'self'",
-	"base-uri 'none'",
-	"form-action 'none'",
-	"frame-src 'none'",
-	"object-src 'none'",
-].join("; ");
+const CSP = pageCsp();
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json", ".map": "application/json" };
 
@@ -476,7 +395,7 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 
 function wire(): void {
 	handle("pine:state", () => ({ state, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, fullscreen: Boolean(win?.isFullScreen()), focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
-	handle("pine:call", (method: string, url: string, body?: unknown) => call(method, url, body));
+	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
 	handle("pine:retry", () => startService());
 	handle("pine:update", (again?: boolean) => update(again === true));
 	handle("pine:restart", async () => {

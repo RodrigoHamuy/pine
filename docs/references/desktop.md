@@ -432,6 +432,9 @@ desktop/
   electron/
     main.ts        the main process: the window, menus, dialogs, notifications; the daemon's token
                    and every call of the control API; the two addresses the page may load from
+    daemon.ts      what the page may ask the daemon for, without Electron: a call's check and
+                   forwarding, the media served straight from the daemon (`MEDIA`), the live events
+                   in batches, the page's content security policy
     preload.ts     the bridge: the short list of things the page may ask the main process for
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
