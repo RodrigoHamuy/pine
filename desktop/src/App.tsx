@@ -11,7 +11,7 @@ import { type Layout, usePanelRef } from "react-resizable-panels";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "cn";
-import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "@/components/ui/command";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type AgentInfo, api, type Approval, type Conversation as Conv } from "./api.ts";
@@ -24,7 +24,6 @@ import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
-import { Confirm } from "./Confirm.tsx";
 import { Logo } from "./ui.tsx";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -144,7 +143,21 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 			{c.tasks ? <SidebarMenuBadge className={cn(!main && "group-hover/menu-item:hidden")}>{ago(c.last).replace(" ago", "")}</SidebarMenuBadge> : null}
 			{main ? null : (
 				// Shown under the pointer only, so that it is no tab stop of its own; its keys are not the list's.
-				<Confirm icon={Trash2Icon} label="Remove this conversation for good" question={`Remove the conversation ${s.titleOf(agent, c.session)} for good?`} action="Remove" onConfirm={() => void s.removeConversation(agent, c.session)} trigger={<SidebarMenuAction className="hidden group-hover/menu-item:flex" onKeyDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} />} />
+				<AlertDialog>
+					<Tooltip>
+						<TooltipTrigger render={<AlertDialogTrigger render={<SidebarMenuAction className="hidden group-hover/menu-item:flex" onKeyDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} />} aria-label="Remove this conversation for good"><Trash2Icon /></AlertDialogTrigger>} />
+						<TooltipContent>Remove this conversation for good</TooltipContent>
+					</Tooltip>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Remove the conversation {s.titleOf(agent, c.session)} for good?</AlertDialogTitle>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogCancel variant="destructive" onClick={() => void s.removeConversation(agent, c.session)}>Remove</AlertDialogCancel>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 			)}
 		</SidebarMenuItem>
 	);

@@ -22,10 +22,10 @@ import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Confirm } from "./Confirm.tsx";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView, useLoad } from "./ui.tsx";
 import { Textarea } from "@/components/ui/textarea";
@@ -732,7 +732,18 @@ function Models() {
 								<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{s.models.map((m) => `${s.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</ItemDescription>
 							</ItemContent>
 							<ItemActions className="ctl">
-								<Confirm label="Remove" question={`Remove the model server ${s.name}?`} onConfirm={() => void store.attempt(() => api.removeModelServer(s.name)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} />
+								<AlertDialog>
+									<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
+									<AlertDialogContent>
+										<AlertDialogHeader>
+											<AlertDialogTitle>Remove the model server {s.name}?</AlertDialogTitle>
+										</AlertDialogHeader>
+										<AlertDialogFooter>
+											<AlertDialogCancel>Cancel</AlertDialogCancel>
+											<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeModelServer(s.name)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))}>Remove</AlertDialogCancel>
+										</AlertDialogFooter>
+									</AlertDialogContent>
+								</AlertDialog>
 							</ItemActions>
 						</Item>
 					))
@@ -791,7 +802,18 @@ function Models() {
 									<ItemDescription className="line-clamp-none wrap-anywhere">{plural(p.models, "model")}</ItemDescription>
 								</ItemContent>
 								<ItemActions className="ctl">
-									{p.signedIn ? <Confirm label="Sign out" question={`Sign out of ${p.name ?? p.id}?`} onConfirm={() => void store.attempt(() => api.logout(p.id)).then((r) => r && reload())} /> : null}
+									{p.signedIn ? <AlertDialog>
+										<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Sign out</AlertDialogTrigger>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle>Sign out of {p.name ?? p.id}?</AlertDialogTitle>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel>Cancel</AlertDialogCancel>
+												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.logout(p.id)).then((r) => r && reload())}>Sign out</AlertDialogCancel>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog> : null}
 									{p.oauth ? <Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "oauth" })}>Sign in</Button> : null}
 									<Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "api_key" })}>{p.signedIn ? "New key" : "API key"}</Button>
 								</ItemActions>
@@ -900,7 +922,18 @@ function Mcp() {
 									</ItemContent>
 									<ItemActions className="ctl">
 										{x.remote ? <Button variant="outline" size="xs" disabled={busy === x.name} onClick={() => void login(x.name, agent)}>{busy === x.name ? <><Spinner data-icon="inline-start" />In your browser…</> : "Sign in"}</Button> : null}
-										{x.target.startsWith("bundled:") ? null : <Confirm label="Remove" question={`Remove the MCP server ${x.name}?`} onConfirm={() => void store.attempt(() => api.removeMcp(x.name, agent)).then((r) => r && (store.flash(`Removed ${x.name}.`), reload()))} />}
+										{x.target.startsWith("bundled:") ? null : <AlertDialog>
+											<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
+											<AlertDialogContent>
+												<AlertDialogHeader>
+													<AlertDialogTitle>Remove the MCP server {x.name}?</AlertDialogTitle>
+												</AlertDialogHeader>
+												<AlertDialogFooter>
+													<AlertDialogCancel>Cancel</AlertDialogCancel>
+													<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeMcp(x.name, agent)).then((r) => r && (store.flash(`Removed ${x.name}.`), reload()))}>Remove</AlertDialogCancel>
+												</AlertDialogFooter>
+											</AlertDialogContent>
+										</AlertDialog>}
 									</ItemActions>
 								</Item>
 							);
@@ -1063,7 +1096,21 @@ function Skills() {
 									</ItemContent>
 									<ItemActions className="ctl">
 										<Button variant="outline" size="xs" onClick={() => setEdit({ name: x.name, description: x.description, instructions: x.instructions ?? "", agent: x.agent ?? "", isNew: false, managed })}>{managed ? "Edit" : "Read"}</Button>
-										{x.managed ? <Confirm icon={Trash2Icon} label="Remove this skill" question={`Remove the skill ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSkill(x.name, x.agent, x.session)).then((r) => r && (store.flash(`Removed the skill ${x.name}.`), skills.reload()))} /> : null}
+										{x.managed ? <AlertDialog>
+											<Tooltip>
+												<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this skill"><Trash2Icon /></AlertDialogTrigger>} />
+												<TooltipContent>Remove this skill</TooltipContent>
+											</Tooltip>
+											<AlertDialogContent>
+												<AlertDialogHeader>
+													<AlertDialogTitle>Remove the skill {x.name}?</AlertDialogTitle>
+												</AlertDialogHeader>
+												<AlertDialogFooter>
+													<AlertDialogCancel>Cancel</AlertDialogCancel>
+													<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeSkill(x.name, x.agent, x.session)).then((r) => r && (store.flash(`Removed the skill ${x.name}.`), skills.reload()))}>Remove</AlertDialogCancel>
+												</AlertDialogFooter>
+											</AlertDialogContent>
+										</AlertDialog> : null}
 									</ItemActions>
 								</Item>
 							);
@@ -1353,7 +1400,21 @@ function Sources() {
 									</div>
 								</ItemContent>
 								<ItemActions className="ctl">
-									<Confirm icon={Trash2Icon} label="Remove this source" question={`Remove the event source ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSource(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && (store.flash(`Removed the event source ${x.name}.`), sources.reload()))} />
+									<AlertDialog>
+										<Tooltip>
+											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this source"><Trash2Icon /></AlertDialogTrigger>} />
+											<TooltipContent>Remove this source</TooltipContent>
+										</Tooltip>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle>Remove the event source {x.name}?</AlertDialogTitle>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel>Cancel</AlertDialogCancel>
+												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeSource(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && (store.flash(`Removed the event source ${x.name}.`), sources.reload()))}>Remove</AlertDialogCancel>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog>
 								</ItemActions>
 							</Item>
 						))
@@ -1410,7 +1471,21 @@ function Schedules() {
 									<ItemDescription className="line-clamp-none wrap-anywhere">{x.task ?? `publishes ${x.topic}`}</ItemDescription>
 								</ItemContent>
 								<ItemActions className="ctl">
-									<Confirm icon={Trash2Icon} label="Remove this schedule" question={`Remove the schedule ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())} />
+									<AlertDialog>
+										<Tooltip>
+											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this schedule"><Trash2Icon /></AlertDialogTrigger>} />
+											<TooltipContent>Remove this schedule</TooltipContent>
+										</Tooltip>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle>Remove the schedule {x.name}?</AlertDialogTitle>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel>Cancel</AlertDialogCancel>
+												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())}>Remove</AlertDialogCancel>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog>
 								</ItemActions>
 							</Item>
 						))
@@ -1510,7 +1585,21 @@ function Routes() {
 									<ItemDescription className="line-clamp-none wrap-anywhere">{does(r)}</ItemDescription>
 								</ItemContent>
 								<ItemActions className="ctl">
-									<Confirm icon={Trash2Icon} label="Remove this route" question={`Remove the route ${r.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())} />
+									<AlertDialog>
+										<Tooltip>
+											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this route"><Trash2Icon /></AlertDialogTrigger>} />
+											<TooltipContent>Remove this route</TooltipContent>
+										</Tooltip>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle>Remove the route {r.name}?</AlertDialogTitle>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel>Cancel</AlertDialogCancel>
+												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())}>Remove</AlertDialogCancel>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog>
 								</ItemActions>
 							</Item>
 						))

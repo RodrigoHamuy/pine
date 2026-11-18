@@ -32,8 +32,7 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { Confirm } from "./Confirm.tsx";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { rowClass } from "./lists.tsx";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
@@ -514,7 +513,18 @@ function Running({ tab }: { tab: Tab }) {
 							{p.ports.map((port) => (
 								<Button key={port} variant="link" size="xs" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</Button>
 							))}
-							<Confirm label="Stop" question={`Stop ${short(p.command, 80)}?`} onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
+							<AlertDialog>
+								<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Stop</AlertDialogTrigger>
+								<AlertDialogContent>
+									<AlertDialogHeader>
+										<AlertDialogTitle>Stop {short(p.command, 80)}?</AlertDialogTitle>
+									</AlertDialogHeader>
+									<AlertDialogFooter>
+										<AlertDialogCancel>Cancel</AlertDialogCancel>
+										<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))}>Stop</AlertDialogCancel>
+									</AlertDialogFooter>
+								</AlertDialogContent>
+							</AlertDialog>
 						</ItemActions>
 					</Item>
 					{p.output ? <Printed text={p.output} sm /> : null}
