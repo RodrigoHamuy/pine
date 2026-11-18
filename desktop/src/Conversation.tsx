@@ -1,15 +1,18 @@
 // One tab's conversation: what was said, the work of each turn folded into a line, and what
 // waits for the owner. Each kind of line is a small component; the list only draws what changed.
 import { ArrowUpIcon, BrainIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
-import { memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 import { Confirmation, ConfirmationAction, ConfirmationActions, ConfirmationRequest, ConfirmationTitle } from "@/components/ai-elements/confirmation";
-import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Reasoning, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { Task, TaskContent, TaskItem, TaskTrigger } from "@/components/ai-elements/task";
 import { Tool, ToolContent, ToolOutput } from "@/components/ai-elements/tool";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
 import { Badge } from "@/components/ui/badge";
+import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
+import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
 import { CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,7 +21,7 @@ import { Composer } from "./Composer.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
-import { Pulse } from "./ui.tsx";
+import { Loading, Pulse } from "./ui.tsx";
 
 /** A picture that opens larger over the page, with a click or, focused, with Enter. */
 const zoomable = {
@@ -143,17 +146,42 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 	);
 }
 
+/** The owner's turn (or a task's prompt): a bubble on the owner's side, with the files it brought. */
+function OwnerTurn({ text, from, files }: { text: string; from?: string; files?: string[] }) {
+	return (
+		<Message align="end" data-item="user">
+			<MessageContent>
+				{from ? <MessageHeader>{from}</MessageHeader> : null}
+				<Bubble align="end" variant="muted">
+					<BubbleContent className="whitespace-pre-wrap select-text">{text}</BubbleContent>
+				</Bubble>
+				{files?.length ? (
+					<AttachmentGroup>
+						{files.map((f) => (
+							<Attachment size="xs" key={f}>
+								<AttachmentMedia>
+									<PaperclipIcon />
+								</AttachmentMedia>
+								<AttachmentContent>
+									<AttachmentTitle>{f}</AttachmentTitle>
+								</AttachmentContent>
+							</Attachment>
+						))}
+					</AttachmentGroup>
+				) : null}
+			</MessageContent>
+		</Message>
+	);
+}
+
 function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
-	if (entry.kind === "user")
-		return (
-			<Message from="user" data-item="user">
-				<MessageContent className="whitespace-pre-wrap select-text"><span className="text-faint text-xs">task</span>{entry.text}</MessageContent>
-			</Message>
-		);
+	if (entry.kind === "user") return <OwnerTurn text={entry.text ?? ""} from="task" />;
 	if (entry.kind === "text")
 		return (
-			<Message from="assistant" className="max-w-full">
-				<MessageContent className="w-full"><Markdown text={entry.text ?? ""} where={{ agent }} /></MessageContent>
+			<Message>
+				<MessageContent>
+					<Markdown text={entry.text ?? ""} where={{ agent }} />
+				</MessageContent>
 			</Message>
 		);
 	if (entry.kind === "thinking") return <Thought text={entry.text ?? ""} head="thought" />;
@@ -248,19 +276,11 @@ export function Steps({ items }: { items: Array<{ text: string; status: string }
 export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
 	switch (item.t) {
 		case "user":
-			return (
-				<Message from="user" className="py-1" data-item="user">
-					<MessageContent className="whitespace-pre-wrap break-words select-text">
-						{item.from ? <span className="text-faint text-xs">{item.from}</span> : null}
-						{item.text}
-						{item.files?.length ? <div className="flex flex-wrap gap-1">{item.files.map((f) => <Badge variant="outline" key={f}><PaperclipIcon data-icon="inline-start" />{f}</Badge>)}</div> : null}
-					</MessageContent>
-				</Message>
-			);
+			return <OwnerTurn text={item.text} from={item.from} files={item.files} />;
 		case "answer":
 			return (
-				<Message from="assistant" className="max-w-full py-1" data-item="answer">
-					<MessageContent className="w-full">
+				<Message data-item="answer">
+					<MessageContent>
 						<Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined }} />
 					</MessageContent>
 				</Message>
@@ -351,7 +371,7 @@ function Welcome({ tab }: { tab: Tab }) {
 	const h = has?.holdings;
 	const counts: Array<[string, number]> = h ? [["skill", h.skills.length], ["event source", h.sources.length], ["schedule", h.schedules.length], ["MCP server", h.servers.length], ["conversation", h.conversations.length]] : [];
 	return (
-		<div className="welcome my-auto flex flex-col items-start gap-2.5 py-10">
+		<div className="welcome flex flex-col items-start gap-2.5 py-10">
 			<span className="grid size-10 shrink-0 place-items-center rounded-xl bg-press font-semibold text-foreground text-xl">{tab.agent.slice(0, 1).toUpperCase()}</span>
 			<h1 className="mt-1.5 font-semibold text-2xl tracking-tight">{tab.agent}</h1>
 			{/* A long path is broken where the line ends, not pushed out of it. */}
@@ -549,49 +569,38 @@ export function Conversation({ tab }: { tab: Tab }) {
 	// The words are marked once what was said is on the page.
 	const loaded = tab.loaded;
 	const scroller = useRef<HTMLDivElement>(null);
-	const stick = useRef(true);
-	const [away, setAway] = useState(false);
-	const toEnd = () => {
-		const el = scroller.current;
-		if (el) el.scrollTop = el.scrollHeight;
-	};
-	// A new tab starts at its end; what arrives keeps the end in view unless the reader went up.
-	useLayoutEffect(() => {
-		stick.current = true;
-		toEnd();
-	}, [tab.id]);
-	useLayoutEffect(() => {
-		if (stick.current) toEnd();
-	});
-	useEffect(() => {
-		const el = scroller.current;
-		if (!el) return;
-		// Text that is drawn a frame later (an answer that is still arriving) grows the page after the layout above.
-		const ro = new ResizeObserver(() => stick.current && toEnd());
-		for (const child of el.children) ro.observe(child);
-		return () => ro.disconnect();
-	}, [tab.id]);
 	const chat = tab.kind === "chat";
 	return (
 		<div className="relative flex min-w-85 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 			<ConvHead tab={tab} />
 			{finding && loaded ? <FindBar key={looked ?? ""} initial={looked} root={() => scroller.current} close={() => (setFinding(false), setLooked(undefined))} /> : null}
-			<div
-				// No scroll anchoring: the code above keeps the end in view, and the browser's own would fight it.
-				className="flex-1 overflow-x-hidden overflow-y-auto [overflow-anchor:none]"
-				ref={scroller}
-				onScroll={(e) => {
-					const el = e.currentTarget;
-					const near = el.scrollHeight - el.scrollTop - el.clientHeight < 80;
-					stick.current = near;
-					if (away === near) setAway(!near);
-				}}
-			>
-				<div className="column mx-auto flex min-h-full max-w-3xl flex-col gap-3.5 px-7 pt-7 pb-2">
-					{!tab.loaded ? <div className="m-auto py-10"><Pulse /></div> : !tab.items.length && chat ? <Welcome tab={tab} /> : tab.items.map((item) => <Row key={item.id} item={item} v={item.v} tab={tab} />)}
-				</div>
-			</div>
-			{away ? <Button variant="outline" size="xs" className="absolute bottom-3 left-1/2 z-3 -translate-x-1/2 shadow-md" onClick={() => ((stick.current = true), toEnd(), setAway(false))}><ChevronDownIcon data-icon="inline-start" />Latest</Button> : null}
+			{!loaded ? (
+				<Loading />
+			) : (
+				// Message Scroller follows what arrives while the reader is at the end, holds still when
+				// they went up, and brings them back with its button. A tab opens at its end.
+				<MessageScrollerProvider autoScroll defaultScrollPosition="end">
+					<MessageScroller className="flex-1">
+						<MessageScrollerViewport ref={scroller}>
+							{/* The column of the conversation, under the head and above the input. */}
+							<MessageScrollerContent className="column mx-auto max-w-3xl px-7 pt-7 pb-2" aria-busy={tab.busy}>
+								{!tab.items.length && chat ? (
+									<MessageScrollerItem className="my-auto">
+										<Welcome tab={tab} />
+									</MessageScrollerItem>
+								) : (
+									tab.items.map((item) => (
+										<MessageScrollerItem key={item.id} messageId={String(item.id)} scrollAnchor={item.t === "user"}>
+											<Row item={item} v={item.v} tab={tab} />
+										</MessageScrollerItem>
+									))
+								)}
+							</MessageScrollerContent>
+						</MessageScrollerViewport>
+						<MessageScrollerButton />
+					</MessageScroller>
+				</MessageScrollerProvider>
+			)}
 			<div className="shrink-0 px-7 pb-4">
 				<div className="relative mx-auto max-w-3xl">
 					<StatusLine tab={tab} />
