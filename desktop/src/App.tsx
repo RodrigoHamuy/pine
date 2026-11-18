@@ -1,7 +1,9 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, ListIcon, MessageSquareIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
+import { useMediaQuery } from "usehooks-ts";
+import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -18,7 +20,8 @@ import { CODE_KEY, CodePanel } from "./CodePanel.tsx";
 import { COMMANDS } from "./commands.ts";
 import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
-import { store, type Tab, useModel, useSignal } from "./model.ts";
+import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
+import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
 import { Settings } from "./Settings.tsx";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
@@ -357,8 +360,38 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 	);
 }
 
+/**
+ * The icon of the side panel or of the browser's aside, at the top right of the title bar. Pressed while it is open; open
+ * but behind the other (a window with room for one only) it is pressed more lightly, and a click brings it to the front.
+ * Only a conversation has them: on another tab they stay in their place and cannot be pressed.
+ */
+function BesideToggle({ which, label, keys, icon }: { which: Beside; label: string; keys: string; icon: React.ReactNode }) {
+	const s = store;
+	const behind = s.behind(which);
+	return (
+		<Tooltip>
+			<TooltipTrigger render={<Toggle size="sm" data-toggle={which === "aside" ? "browser" : "code"} data-behind={behind || undefined} className="app-no-drag aria-pressed:bg-background aria-pressed:ring-1 aria-pressed:ring-border data-behind:bg-transparent data-behind:text-muted-foreground" disabled={s.active?.kind !== "chat"} pressed={which === "code" ? s.code : s.aside} onPressedChange={() => s.toggle(which)} aria-label={label} />}>{icon}</TooltipTrigger>
+			<TooltipContent>{label}<Kbd>{keys}</Kbd></TooltipContent>
+		</Tooltip>
+	);
+}
+
+/**
+ * Follows the width of the room beside the side bar, where the conversation, the side panel and the aside lie: with less
+ * than `BOTH`, the side panel and the aside are not both drawn (`store.one`). A ref of a callback, because the room is
+ * there only once the app is ready.
+ */
+function measureRoom(el: HTMLDivElement | null): (() => void) | undefined {
+	if (!el) return;
+	const observer = new ResizeObserver(([entry]) => store.measure(entry.contentRect.width));
+	observer.observe(el);
+	return () => observer.disconnect();
+}
+
 function TitleBar() {
 	const s = useModel(store);
+	// Drawn again when the window crosses the width where the panels become sheets: what the icons say depends on it.
+	useMediaQuery(ROOM);
 	const with_ = s.agentInFront();
 	const { isMobile, setOpenMobile, toggleSidebar } = useSidebar();
 	const column = s.sidebar && !isMobile;
@@ -380,6 +413,8 @@ function TitleBar() {
 			</ScrollArea>
 			<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.newConversation()} aria-label={with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"} />}><PlusIcon /></TooltipTrigger><TooltipContent>{with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"}<Kbd>⌘T</Kbd></TooltipContent></Tooltip>
 			<span className="min-w-0 flex-1" />
+			<BesideToggle which="code" label="Side panel: the agent, its files, changes, output and what is running" keys="⌥⌘B" icon={<PanelRightIcon />} />
+			<BesideToggle which="aside" label="Browser: the page the agent works in" keys="⇧⌘B" icon={<GlobeIcon />} />
 		</header>
 	);
 }
@@ -523,6 +558,9 @@ export function App() {
 	// own sheet. (The panel beside a conversation does the same below `lg`: CodePanel.tsx.)
 	const narrow = useIsMobile();
 	const column = s.sidebar && !narrow;
+	// Drawn again when the window crosses the width where the side panel and the aside become sheets, one at a time (`store.shown`).
+	useMediaQuery(ROOM);
+	const chat = tab?.kind === "chat";
 	// The window itself: what shows between and around the panels. On a Mac the system's material lies behind it.
 	return (
 		<div className={cn("flex h-full", s.platform === "darwin" ? "bg-sidebar" : "bg-sunk")}>
@@ -545,12 +583,15 @@ export function App() {
 						<ResizablePanel id="main" className="flex">
 							<div className="flex min-w-0 flex-1 flex-col">
 								<TitleBar />
-								<div className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !column && "pl-1.5")}>
-									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "code-panel", CODE_KEY)}>
+								<div ref={measureRoom} data-slot="room" className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !column && "pl-1.5")}>
+									{/* The conversation, the side panel beside it, and the browser's aside at the far right. Each panel's width is
+									    its own: dragging the edge between the two changes both, and both are kept. */}
+									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && (keepWidth(layout, "code-panel", CODE_KEY), keepWidth(layout, "browser-panel", ASIDE_KEY))}>
 										<ResizablePanel id="view" className="flex" minSize={320}>
 											{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
 										</ResizablePanel>
-										{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+										{chat && s.shown("code") ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+										{chat && s.shown("aside") ? <BrowserAside key={`aside:${tab!.id}`} tab={tab!} /> : null}
 									</ResizablePanelGroup>
 								</div>
 							</div>

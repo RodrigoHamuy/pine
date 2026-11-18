@@ -186,7 +186,8 @@ you quit (`⌘Q`). A daemon the app started that stops answering is started agai
  ● pine 0.22 · started here ──────────────────────────╯ ╰───────────────────────╯
 ```
 
-The panels lie as cards on the window: the conversation, and beside it the code panel.
+The panels lie as cards on the window: the conversation, beside it the code panel, and at the
+far right the browser.
 
 **The side bar is your agents.** Each agent is a group: its name and what it is for, and under
 it its conversations. Everything that starts something new stands on the agent's own line, so
@@ -221,21 +222,34 @@ agent's:
 | Tabs | One conversation each, with its agent's initial, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens (it stays open while the turn runs, with its last lines). A `↳ … ↗` line opens a sub-agent's or delegated task's work in a tab of its own. A request of the agent's waits in the conversation with its buttons until it is answered, then becomes a line. Above your last message a line offers to take it back (**Take back**, `/undo`). Scrolled up, the conversation holds still while the answer goes on, and a button at its foot brings you back to the end |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
-| The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |
+| The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed) |
+| The top right of the title bar | Two buttons: the side panel (`⌥⌘B`) and the browser (`⇧⌘B`). Each is pressed while what it shows is open. A click opens what is closed, closes what is in front, and brings to the front one that is open but behind the other (in a window narrower than 1024 pixels the sheet covers these buttons: there `⌥⌘B` and `⇧⌘B` do it). On a tab that is not a conversation (Settings, Events) both stay in their place and cannot be pressed |
 | The bar under the input | `+` attaches files (or drop them on the input; a dropped folder is opened for the conversation); then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours). The model and the folder open a list to search, the reasoning and the mode a menu right above the button. `outside content` appears when the conversation has read something from outside; each button says what it is in a tooltip |
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
+| Browser | At the far right of the window, after the side panel (`⇧⌘B`): the browser the agent of the conversation works in. Drag its left edge to make it wider or narrower; its width is its own, apart from the side panel's. Its `×` closes it. See "The browser" |
 | Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
 
 The window can be made as narrow as a phone (360 pixels). Where there is no room for columns,
-the side bar and the side panel lie over the conversation instead of beside it. What you chose
-(side bar shown or hidden, side panel open or closed) and how wide you dragged them is kept, and a
-wide window puts them back as they were.
+the side bar, the side panel and the browser lie over the conversation instead of beside it. What you chose
+(side bar shown or hidden, side panel and browser open or closed) and how wide you dragged them is kept, and a
+wide window puts them back as they were. Whether the side panel and the browser are open is the same
+for every conversation.
 
-| Window | Side bar | Side panel |
+| Window | Side bar | Side panel and browser |
 |---|---|---|
-| 1024 pixels and wider | A column | A column |
-| 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes the panel |
+| 1024 pixels and wider | A column | A column each. Both at once where the room beside the side bar is 1100 pixels or more; with less, only the one you opened last, the other open behind it |
+| 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes it. With both open, only the one you opened last lies there, and the other stays open behind it. The sheet covers the buttons of the title bar, so its key (`⌥⌘B` or `⇧⌘B`) brings the other to the front. Closing the one in front does not bring the other up: it stays open behind, shown as a column when the window is wide again, or as a sheet by its key |
 | Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above: the whole width of a window narrower than 640 pixels, and at most 540 pixels wide from 640 to 767 |
+
+With both the side panel and the browser open and less room than they need side by side (a sheet each,
+or less than 1100 pixels beside the side bar), neither comes first: the one you opened last shows, and
+the other is open behind it. Its button is pressed more lightly. In a window 1024 pixels and wider a
+click on that button brings it to the front and puts the other behind, and a click on the button of
+the one in front closes it, which shows the other again. Below 1024 pixels each is a sheet over the
+conversation, which covers the buttons of the title bar: there only `⌥⌘B` and `⇧⌘B` switch, and
+closing the sheet in front does not bring the other up. The other stays open behind, and shows as a
+column when the window is wide enough, or as a sheet by its key. The agent's `browser_show` and a port's link under Running open the browser in front.
+Narrowing the window never closes anything: when there is room again, both show without a click.
 
 Settings follow the room they have, not the window: narrower than about 720 pixels, the list of
 pages is a row along the top that scrolls sideways, and a setting's control goes under its text.
@@ -306,6 +320,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Find | `⌘F` marks what you look for in the conversation |
 | The poimandres theme | The dark look is poimandres: its colours for the window, and for code in an answer, in a diff and in the editor. The light look has colours of its own |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
+| `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
 ### A sound in an answer
 
@@ -358,9 +373,8 @@ agent's workspace):
 | Files | The folder as a tree, a search by name, and the editor. The tree is one Tab stop: the arrow keys move, open and close folders, typing goes to a name, Enter opens a file; the search's results and the changes are lists the arrow keys move in the same way |
 | Changes | What differs from the last commit (git): each file with its counts, and its diff on a click |
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
-| Browser | The browser the agent of this conversation works in, live, and yours to use too. See "The browser" below |
 | Output | The tool calls of the last messages, each with all it printed |
-| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the Browser view of the conversation, where the agent sees the same page; only where the conversation has no browser does it open in your own |
+| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the conversation's browser, at the right of the window, where the agent sees the same page; only where the conversation has no browser does it open in your own |
 
 While an agent keeps a list of steps, the open steps stand at the top of the panel.
 
@@ -375,18 +389,21 @@ daemon writes the file inside a sandbox that reaches only that folder, so that a
 planted in its folder cannot make your save land somewhere else ([security.md](security.md)).
 On a system without a sandbox the daemon does not write, and the app says so.
 
-### The browser
+## The browser
 
-The Browser view (`⇧⌘B`) shows the browser of the conversation: the same one the agent opens
+The browser (`⇧⌘B`, `/browser`, or its button at the top right of the title bar) shows the browser
+of the conversation at the right of the window, after the side panel: the same one the agent opens
 pages in, with its logins. In the terminal UI that browser has no window until the agent puts
-one on your screen (`browser_show`); in the app it is in the panel, and no other window opens.
+one on your screen (`browser_show`); in the app it is in its own place beside the conversation,
+and no other window opens. The side panel and the browser can be open at once, to watch the page
+and the agent's changes together.
 
 | | |
 |---|---|
-| What you see | The page the agent is on, as it is right now, a few times a second. The page is laid out for the room the panel has, so it is shown at its real size; make the panel wider and the page gets wider. The browser's tabs are a row of tabs above the page, the agent's and yours alike |
+| What you see | The page the agent is on, as it is right now, a few times a second. The page is laid out for the room the browser has, so it is shown at its real size; drag its edge to make it wider and the page gets wider. The browser's tabs are a row of tabs above the page, the agent's and yours alike |
 | What you can do | Click, type, turn the wheel, drag, paste (`⌘V` types what is in your clipboard), go back and forward, load again, open a tab (`+`), choose one, close one (closing the last one leaves the browser without a page, with its logins kept), and type an address into the line above the page. Enough to log in, solve a captcha or confirm something yourself |
 | An address of your own | Opened like any other, through pine's guard. One on this computer or your network (`localhost:3000`) is allowed for this conversation by your typing it, as a yes to the agent's question would. pine's own control port stays closed |
-| When the agent wants you to look | It calls `browser_show`: the panel opens on the Browser view. While the app runs, that call opens no window on your screen |
+| When the agent wants you to look | It calls `browser_show`: the browser opens at the right of the window, in front where there is room for one only. While the app runs, that call opens no window on your screen |
 | What the agent knows | What you do there, it sees when it next looks at the page. When you took the browser to another page, the agent is told so before it acts, and does not act on a page it has not seen ([mcp.md](mcp.md), "Seeing the browser, and logging in yourself") |
 | No page | Until the agent opens one, or you open an address, there is nothing to show. The browser of a conversation closes when the conversation has been idle for a while (`idleMs`, 15 minutes) and when pine restarts. Opening an address starts it again, without a turn of the agent's; its logins are kept |
 | Running in this conversation | While no page is open, the view lists the ports of the programs this conversation left running (a dev server the agent started), as under Running. A click opens `localhost:<port>` in this browser |
@@ -398,7 +415,7 @@ and what you press on it wakes the agent ([interfaces.md](interfaces.md)).
 It is a picture of the page, and not the page: nothing of a web page is loaded into the app's
 window. So what a browser does around a page is not there: no downloads to your disk, no file
 to choose for an upload, no passkey or system dialog, no copying out of the page, and text is
-typed without an input method. For those, close the app's Browser view and ask the agent in
+typed without an input method. For those, close the app's browser and ask the agent in
 the terminal UI to show the browser, or set `"headed": true` for the browser.
 
 ## Settings
@@ -454,7 +471,7 @@ the agent to write. So:
 | Notifications and the window's title | pine's own words only |
 | What is heard | Text for the input: never sent by itself |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
-| The agent's browser in the panel | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
+| The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | What the app itself asks the web | One thing: GitHub, for pine's last release (see "A newer version"). The question carries nothing about this Mac, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
@@ -521,7 +538,7 @@ desktop/
     Conversation.tsx, Composer.tsx, markdown.tsx     a conversation, the input, an answer drawn (a picture
                    in either opens larger in a stock Dialog of its own)
     CodePanel.tsx  changes, files and the editor, output, what is running
-    Browser.tsx    the agent's browser in the panel: its page as a picture, and what is done in it handed back
+    Browser.tsx    the agent's browser in its aside: its page as a picture, and what is done in it handed back
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
@@ -577,7 +594,7 @@ holds only tokens and base rules.
 | shadcn's core chat components (`src/components/ui/`), composed per shadcn's AI Elements patterns | The conversation, composed in `Conversation.tsx`: Message Scroller (the thread), Message, Bubble and Attachment (the turns), Trace (the work of a turn, tool calls, thoughts, sub-tasks, steps), Code Block (what a tool returned), Item (a request waiting for you), Marker (notes, dividers, the goal, the line above the input, the point to take back to), Hover Card and Progress (how full the context is). The input, in `Composer.tsx`, is the Prompt Input pattern: an Input Group with the attached files as Attachments above the text, the goal and dictation as Alerts, and the reasoning and the mode as the Model Selector pattern's Dropdown Menus. The code pane's output (`CodePanel.tsx`) is a Code Block, with the terminal's colours. AI Elements' own registry serves code written on Radix and has none on Base UI, so it is never added: its pages say which core components a pattern uses, and pine composes them in its own files. |
 | Streamdown | Answers drawn from markdown, with code coloured by Shiki. `markdown.tsx` replaces three of its defaults (see below). |
 | lucide | Every icon. The pine logo is the one drawing of pine's own (`Logo` in `components/logo.tsx`). |
-| usehooks-ts | `useMediaQuery`: the side panel's breakpoint (`CodePanel.tsx`). Nothing that stock shadcn already has a hook for. |
+| usehooks-ts | `useMediaQuery`: the breakpoint of the side panel and the browser (`ROOM`). Nothing that stock shadcn already has a hook for. |
 | ui-sdk (`@ui-sdk/react`) | Only what shadcn has no component for: the tree of files and the lists of rows (`src/lists.tsx`). Never a piece shadcn has (no second dialog, button or select). |
 
 - A stock shadcn component is never edited. Add and update them with the shadcn CLI
@@ -611,14 +628,14 @@ holds only tokens and base rules.
 ### Stories and Chromatic
 
 Buttons, switches, inputs, fields, toggle groups (the segmented controls), selects, the edges that resize
-the side bar and the code panel (Resizable), the side bar itself (Sidebar, fixed in place with
+the side bar, the code panel and the browser (Resizable), the side bar itself (Sidebar, fixed in place with
 `collapsible="none"` in a wide window and stock's own sheet, `offcanvas` with its `openMobile` and the
 breakpoint of its `useIsMobile`, in a narrow one: its header, groups, menu buttons, badges and actions),
-the side panel over a conversation in a narrow window (Sheet) and the agents' groups in it
+the side panel and the browser over a conversation in a narrow window (Sheet), the title bar's buttons for them (Toggle) and the agents' groups in it
 (Collapsible) are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. The page has three ways to follow the window's width, each in one place: stock `useIsMobile`
-(768 pixels) for the side bar in `App.tsx`, `useMediaQuery` of usehooks-ts (1024 pixels) for the side panel in
-`CodePanel.tsx`, and container queries on their own width (`@container/settings`) for the settings. A new
+(768 pixels) for the side bar in `App.tsx`, `useMediaQuery` of usehooks-ts (1024 pixels, `ROOM` in `model.ts`) for the side panel in
+`CodePanel.tsx` and the browser in `Browser.tsx`, and container queries on their own width (`@container/settings`) for the settings. A new
 breakpoint uses one of the three, not a fourth way. They have no stories of their own. What shadcn has no primitive for (a tree, a list
 of rows to open) is ui-sdk's (`@ui-sdk/react`), used directly, with the row's look from `src/lists.tsx`; ui-sdk is never used for a
 piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk list drawn as the

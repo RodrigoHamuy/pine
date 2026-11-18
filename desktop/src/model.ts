@@ -77,7 +77,20 @@ export interface Attachment {
 	preview?: string;
 }
 
-export type CodeView = "agent" | "files" | "changes" | "turn" | "browser" | "output" | "running";
+export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running";
+
+/** What can be shown beside a conversation: the side panel and the browser's aside. */
+export type Beside = "code" | "aside";
+
+/** Tailwind's `lg`: below it a conversation and the side panel beside it do not both fit, with the side bar as a column too.
+ *  There the side panel (CodePanel.tsx) and the browser's aside (Browser.tsx) are sheets over the conversation, one at a time. */
+export const ROOM = "(min-width: 64rem)";
+
+/** The room beside the side bar, in pixels, below which the side panel and the aside are not both drawn as columns: the
+ *  conversation, the panel and the aside at their least (320 each) with the edges between them, and a little more so
+ *  that none of the three is squeezed to its minimum. There only the one opened last is drawn; the other comes back
+ *  by itself when there is room again. */
+export const BOTH = 1100;
 
 const MEDIA_KIND = (name: string): "image" | "video" | "audio" | undefined => (/\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm|m4v)$/i.test(name) ? "video" : /\.(wav|mp3|m4a|ogg|flac|aiff?)$/i.test(name) ? "audio" : undefined);
 export const mediaKind = MEDIA_KIND;
@@ -229,8 +242,34 @@ export class Store extends Model {
 	folded = new Set<string>(JSON.parse(localStorage.getItem("pine.folded") ?? "[]"));
 	/** Whether the side bar shows as a column in a wide window. Kept like its width, so that it is after a restart as it was left. */
 	sidebar = localStorage.getItem("pine.sidebar") !== "hidden";
+	/** Whether the side panel is open. Kept by the daemon with the tabs, for the next start. */
 	code = false;
 	codeView: CodeView = "agent";
+	/** Whether the browser's aside is open: a matter of this window alone, kept like the side bar. */
+	aside = localStorage.getItem("pine.aside") === "shown";
+	/** Of the side panel and the aside, the one opened last: where there is room for one only, it is the one shown. */
+	last: Beside = "code";
+	/** In a window with sheets, the sheet in front was put away while the other was open: that one stays open behind,
+	 *  and comes forward by its own toggle, or as a column once the window is wide. */
+	tucked = false;
+	/** Whether the side panel and the aside lie over the conversation as sheets, one at a time: a window narrower than `ROOM`. */
+	get sheets(): boolean {
+		return !window.matchMedia(ROOM).matches;
+	}
+	/** The width of the room beside the side bar, as the window last measured it (`App.tsx`). */
+	room = Infinity;
+	/** Whether only one of the side panel and the aside is drawn at a time: as sheets, or as columns with less room than `BOTH`. */
+	get one(): boolean {
+		return this.sheets || this.room < BOTH;
+	}
+	/** Called as the room beside the side bar changes size; the page is drawn again only when that changes what shows. */
+	measure(room: number): void {
+		const was = this.one;
+		this.room = room;
+		// Once the window has room for columns, the one left behind has shown as one: a sheet is no longer held back.
+		if (!this.sheets) this.tucked = false;
+		if (this.one !== was) this.touch();
+	}
 	palette = false;
 	picker?: Picker;
 	/** The approval or question whose dialog is open. */
@@ -297,9 +336,8 @@ export class Store extends Model {
 	 * conversation has no browser at all, the address goes to the owner's own browser.
 	 */
 	async showInBrowser(tab: Tab, url: string): Promise<void> {
-		const before = this.codeView;
-		this.code = true;
-		this.codeView = "browser";
+		const before = { aside: this.aside, last: this.last, tucked: this.tucked };
+		this.open("aside");
 		this.touch();
 		const state = await api.browserOpen(tab.agent, tab.session, url).catch(() => undefined);
 		if (state?.open) {
@@ -308,7 +346,10 @@ export class Store extends Model {
 			this.saveTabs();
 			return this.touch();
 		}
-		this.codeView = before;
+		// Put back as it was: closed if it was, and the side panel in front again if it was.
+		if (!before.aside) this.close("aside");
+		this.last = before.last;
+		this.tucked = before.tucked;
 		this.flash("This conversation has no browser, so the address was opened in your own.", "muted", 6000);
 		this.touch();
 		void bridge.open(url);
@@ -381,7 +422,7 @@ export class Store extends Model {
 		for (const a of this.agents) learnHome(a.workspace);
 		void this.checkBrowser(true);
 		for (const t of this.timers) clearInterval(t);
-		// The app shows an agent's browser itself, in the panel: the daemon is told so while the app runs, and the browser opens no window.
+		// The app shows an agent's browser itself, in its aside: the daemon is told so while the app runs, and the browser opens no window.
 		const embedded = () => void api.browserEmbedded().catch(() => {});
 		embedded();
 		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000), window.setInterval(() => void this.refreshAgents(), 8000), window.setInterval(embedded, 30_000)];
@@ -1369,6 +1410,49 @@ export class Store extends Model {
 		this.touch();
 	}
 
+	/** Whether the side panel or the aside is open, and drawn: where there is room for one only (`one`), only the one opened last is. */
+	shown(which: Beside): boolean {
+		const open = which === "code" ? this.code : this.aside;
+		return open && !(this.sheets && this.tucked) && !(this.one && this.code && this.aside && this.last !== which);
+	}
+
+	/** Open but not drawn: there is room for one only, and the other was opened last. */
+	behind(which: Beside): boolean {
+		return (which === "code" ? this.code : this.aside) && !this.shown(which);
+	}
+
+	/** Opens the side panel or the aside, in front of the other. */
+	open(which: Beside): void {
+		this.last = which;
+		this.tucked = false;
+		if (which === "code") {
+			this.code = true;
+			this.saveTabs();
+		} else {
+			this.aside = true;
+			localStorage.setItem("pine.aside", "shown");
+		}
+	}
+
+	close(which: Beside): void {
+		// A sheet put away does not bring up the other one in its place: that one stays open, behind. (Columns do show it.)
+		if (this.sheets && this.shown(which) && (which === "code" ? this.aside : this.code)) this.tucked = true;
+		if (which === "code") {
+			this.code = false;
+			this.saveTabs();
+		} else {
+			this.aside = false;
+			localStorage.setItem("pine.aside", "hidden");
+		}
+	}
+
+	/** What the icon of each does: a closed one opens, one that is behind comes to the front, the one in front closes. */
+	toggle(which: Beside): void {
+		if (this.shown(which)) this.close(which);
+		else this.open(which);
+		this.touch();
+	}
+
 	/** Ask the parts of the page for something only they can do. */
 	ask_(name: string): void {
 		this.lastSignal = name;
@@ -1382,9 +1466,8 @@ export class Store extends Model {
 		if (name.startsWith("focus:")) return this.activate(this.tabs.find((t) => t.key === name.slice(6)));
 		if (name.startsWith("tab-")) return this.activate(this.tabs[Number(name.slice(4)) - 1]);
 		if (name.startsWith("code-")) {
-			this.code = true;
 			this.codeView = name.slice(5) as CodeView;
-			this.saveTabs();
+			this.open("code");
 			return this.touch();
 		}
 		if (name.startsWith("settings:")) return this.openSettings(name.slice(9));
@@ -1401,9 +1484,9 @@ export class Store extends Model {
 				// over the page for a moment and leaves the owner's choice as it is, in a wide one it calls `showSidebar`.
 				return this.ask_("sidebar");
 			case "code":
-				this.code = !this.code;
-				this.saveTabs();
-				return this.touch();
+				return this.toggle("code");
+			case "browser":
+				return this.toggle("aside");
 			case "events":
 				return this.openEvents();
 			case "updates":
@@ -1815,12 +1898,8 @@ export class Store extends Model {
 				tab.streamed.delete(p.task);
 				const key = `${p.task}:${p.call}`;
 				if (p.phase === "start") {
-					// The agent wants its owner to see the browser: it is in the panel beside the conversation.
-					if (/(^|_)browser_show$/.test(String(p.tool)) && tab === this.active && depth === 0) {
-						this.code = true;
-						this.codeView = "browser";
-						this.saveTabs();
-					}
+					// The agent wants its owner to see the browser: it is in the aside at the right of the window.
+					if (/(^|_)browser_show$/.test(String(p.tool)) && tab === this.active && depth === 0) this.open("aside");
 					tab.toolCalls++;
 					if (depth === 0) this.foldWords(tab, p.task);
 					const part: Extract<Part, { p: "tool" }> = { p: "tool", key, tool: p.tool, subject: p.subject ? short(oneLine(String(p.subject)), 200) : undefined, status: "run", depth };

@@ -343,7 +343,7 @@ function buildMenu(): void {
 				item("Agent", "code-agent", "CmdOrCtrl+Shift+I"),
 				item("Files", "code-files", "CmdOrCtrl+Shift+F"),
 				item("Changes", "code-changes", "CmdOrCtrl+Shift+G"),
-				item("Browser", "code-browser", "CmdOrCtrl+Shift+B"),
+				item("Toggle Browser", "browser", "CmdOrCtrl+Shift+B"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
 				{ role: "resetZoom" },

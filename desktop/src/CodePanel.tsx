@@ -6,9 +6,6 @@ import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon
 import { Badge } from "@/components/ui/badge";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
 import { Button } from "@/components/ui/button";
-import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
-import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
-import { cn } from "cn";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { defaultKeymap, history, historyKeymap, indentWithTab } from "@codemirror/commands";
 import { css } from "@codemirror/lang-css";
@@ -28,12 +25,12 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import { useMediaQuery } from "usehooks-ts";
 import { CodeBlock, CodeBlockContent, CodeBlockLine } from "@/components/ui/code-block";
 import { Printed } from "@/components/printed";
+import { SideSheet } from "@/components/side-sheet";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
 import { bridge } from "./bridge.ts";
-import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
-import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
+import { type CodeView, mediaKind, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { LISTBOX, onPick, rowClass, TREE_ITEM } from "./lists.tsx";
@@ -550,16 +547,9 @@ function Running({ tab }: { tab: Tab }) {
 
 export const CODE_KEY = "pine.code.width";
 
-/** Tailwind's `lg`: below it a conversation and the panel beside it do not both fit, with the side bar as a column too. */
-const ROOM = "(min-width: 64rem)";
-
-/** What in the panel takes Escape for itself: the editor (its search), a field, the page in the browser. */
-const ESCAPE_KEEPERS = ".cm-editor, input, textarea, [contenteditable], [data-slot=browser] canvas";
-
 export function CodePanel({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
-	const [width] = useState(() => Number(localStorage.getItem(CODE_KEY)) || 520);
 	const state = treeOf(tab.key);
 	const [, redraw] = useState(0);
 	const view = store.codeView;
@@ -568,73 +558,54 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
 	// In a window narrower than that there is no room beside the conversation: the panel is a stock sheet over it,
 	// from the right, and putting it away is closing the panel. The owner's choice (open or not) is the same either way.
-	const narrow = !useMediaQuery(ROOM);
-	const panel = (
-				<div data-slot="code-panel" className={cn("flex min-w-0 flex-1 flex-col overflow-hidden bg-background", !narrow && "rounded-xl border")}>
-					{/* A sheet as wide as a phone-wide window reaches under the window's buttons at the top left on a Mac. */}
-					<div className={cn("flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2", narrow && "max-sm:pl-window-buttons")}>
-						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
-						    for the line under the tab in front, which stock draws below the list. */}
-						<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
-						<div className="pb-1.5">
-						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
-							<TabsList variant="line" activateOnFocus>
-								<TabsTrigger value="agent">Agent</TabsTrigger>
-								<TabsTrigger value="files">Files</TabsTrigger>
-								<TabsTrigger value="changes">Changes</TabsTrigger>
-								<TabsTrigger value="turn">Last turn</TabsTrigger>
-								<TabsTrigger value="browser">Browser</TabsTrigger>
-								<TabsTrigger value="output">Output</TabsTrigger>
-								<TabsTrigger value="running">
-									Running
-									{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
-								</TabsTrigger>
-							</TabsList>
-						</Tabs>
-						</div>
-						</ScrollArea>
-						<span className="min-w-0 flex-1" />
-						<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></Tooltip>
-					</div>
-					{steps ? <ScrollArea className="flex max-h-48 min-h-0 flex-none flex-col border-b border-line-soft *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="px-3 py-2.5"><Steps items={steps} /></div></ScrollArea> : null}
-					{view === "agent" ? (
-						<AgentView tab={tab} />
-					) : view === "changes" || view === "turn" ? (
-						<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
-					) : view === "files" ? (
-						<Files tab={tab} file={state.file} setFile={setFile} />
-					) : view === "browser" ? (
-						<BrowserView tab={tab} />
-					) : view === "output" ? (
-						<Output tab={tab} />
-					) : (
-						<Running tab={tab} />
-					)}
-				</div>
-	);
-	if (narrow)
-		return (
-			<Sheet open onOpenChange={(open, details) => {
-				if (open) return;
-				// Base UI closes on any Escape, even one the editor's search, an address field or the page in the browser
-				// took for itself: that Escape is theirs. Escape anywhere else in the sheet still closes it.
-				if (details.reason === "escape-key" && details.event.target instanceof Element && details.event.target.closest(ESCAPE_KEEPERS)) return details.cancel();
-				void store.command("code");
-			}}>
-				{/* The sheet lies over the title bar's drag region, which Electron honours whatever is drawn on top:
-				    without this a click on the panel's tabs would move the window on a Mac. */}
-				<SheetContent side="right" showCloseButton={false} className="app-no-drag gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
-					<SheetTitle className="sr-only">Side panel</SheetTitle>
-					{panel}
-				</SheetContent>
-			</Sheet>
-		);
+	const sheet = !useMediaQuery(ROOM);
 	return (
-		<>
-			<ResizableHandle className="w-1.5 bg-transparent" disableDoubleClick title="Drag to make the panel wider or narrower" />
-			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
-				{panel}
-			</ResizablePanel>
-		</>
+		<SideSheet
+			id="code-panel"
+			slot="code-panel"
+			title="Side panel"
+			sheet={sheet}
+			widthKey={CODE_KEY}
+			defaultWidth={520}
+			onClose={() => void store.command("code")}
+			bar={
+				<>
+					{/* Six tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
+					    for the line under the tab in front, which stock draws below the list. */}
+					<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
+					<div className="pb-1.5">
+					<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+						<TabsList variant="line" activateOnFocus>
+							<TabsTrigger value="agent">Agent</TabsTrigger>
+							<TabsTrigger value="files">Files</TabsTrigger>
+							<TabsTrigger value="changes">Changes</TabsTrigger>
+							<TabsTrigger value="turn">Last turn</TabsTrigger>
+							<TabsTrigger value="output">Output</TabsTrigger>
+							<TabsTrigger value="running">
+								Running
+								{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
+							</TabsTrigger>
+						</TabsList>
+					</Tabs>
+					</div>
+					</ScrollArea>
+					<span className="min-w-0 flex-1" />
+					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></Tooltip>
+				</>
+			}
+		>
+			{steps ? <ScrollArea className="flex max-h-48 min-h-0 flex-none flex-col border-b border-line-soft *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="px-3 py-2.5"><Steps items={steps} /></div></ScrollArea> : null}
+			{view === "agent" ? (
+				<AgentView tab={tab} />
+			) : view === "changes" || view === "turn" ? (
+				<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
+			) : view === "files" ? (
+				<Files tab={tab} file={state.file} setFile={setFile} />
+			) : view === "output" ? (
+				<Output tab={tab} />
+			) : (
+				<Running tab={tab} />
+			)}
+		</SideSheet>
 	);
 }

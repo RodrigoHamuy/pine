@@ -108,7 +108,7 @@ test("a server the agent left running is one click away in the conversation's br
 	write(path.join(home, "data", "browser-view", `${encodeURIComponent("main:main")}.json`), JSON.stringify({ port: (door.address() as net.AddressInfo).port, token: "ef".repeat(32), pid: 1 }));
 
 	// The empty browser says what runs in this conversation, and a click opens it there.
-	await menu("code-browser");
+	await menu("browser");
 	await sees("[data-slot=browser] [data-slot=empty] >> text=No page is open");
 	const offered = page.locator("[data-slot=browser] [data-offer=running] button");
 	await offered.waitFor({ timeout: 20_000 });
@@ -120,11 +120,16 @@ test("a server the agent left running is one click away in the conversation's br
 	assert.equal(asked[0], `http://localhost:${port}`);
 	await sees(`[data-slot=browser] [data-slot=tabs-trigger][aria-selected=true] >> text=The server`);
 
-	// The same address under Running goes to the same browser, and the panel shows it.
+	// The same address under Running goes to the same browser, and opens the browser's aside where it was closed.
+	await menu("browser");
+	await page.waitForSelector("[data-slot=browser-aside]", { state: "detached" });
 	await menu("code-running");
 	await page.locator("[data-slot=code-panel]").getByRole("button", { name: `localhost:${port}` }).click();
 	await waitFor("the link under Running was opened in the conversation's browser", () => asked.length === 2);
 	assert.equal(asked[1], `http://localhost:${port}`);
-	await sees("[data-slot=browser] input[aria-label=Address]");
+	await sees("[data-slot=browser-aside] [data-slot=browser] input[aria-label=Address]");
+	// This window has room for one of the two beside the conversation: the browser, opened last, is in front of the side panel.
+	await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+	await sees("header [data-toggle=code][data-behind]");
 	assert.deepEqual(await app.evaluate(() => (globalThis as any).opened), [], "nothing went to the owner's own browser");
 });

@@ -1,16 +1,19 @@
-// The browser of a conversation, in the panel beside it. It is the browser the agent works in:
+// The browser of a conversation, in an aside of its own at the right of the window. It is the browser the agent works in:
 // another process, behind pine's guard, without a window. What is shown here is a picture of its
 // page that the daemon hands over again and again, and what is done in the picture (a click, the
 // wheel, keys, an address) goes back to it through the daemon. Nothing of a web page is loaded
 // into this window: the picture is drawn, and its address and title are text.
-import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, PlusIcon, RotateCwIcon, ShieldIcon, XIcon } from "lucide-react";
+import { ChevronLeftIcon, ChevronRightIcon, EyeIcon, GlobeIcon, PlusIcon, RotateCwIcon, ShieldIcon, XIcon } from "lucide-react";
+import { useMediaQuery } from "usehooks-ts";
 import { Button } from "@/components/ui/button";
+import { Kbd } from "@/components/ui/kbd";
+import { SideSheet } from "@/components/side-sheet";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
-import { store, type Tab, useModel } from "./model.ts";
+import { ROOM, store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -306,5 +309,37 @@ export function BrowserView({ tab }: { tab: Tab }) {
 			)}
 			{open ? <div className="flex flex-none items-center gap-1.5 border-t border-line-soft px-2.5 py-1 text-xs text-faint"><ShieldIcon size={11} /><span className="truncate">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
 		</div>
+	);
+}
+
+export const ASIDE_KEY = "pine.aside.width";
+
+/**
+ * The browser's aside, at the right of the window after the side panel: a bar with its name and
+ * its close button, and the browser under it. Where the window has no room for columns it is a
+ * sheet over the conversation, like the side panel, and putting the sheet away closes it.
+ */
+export function BrowserAside({ tab }: { tab: Tab }) {
+	const sheet = !useMediaQuery(ROOM);
+	return (
+		<SideSheet
+			id="browser-panel"
+			slot="browser-aside"
+			title="Browser"
+			sheet={sheet}
+			widthKey={ASIDE_KEY}
+			defaultWidth={560}
+			barClassName="pl-3 text-sm font-medium"
+			onClose={() => void store.command("browser")}
+			bar={
+				<>
+					<GlobeIcon className="size-3.5 text-muted-foreground" />
+					<span className="min-w-0 flex-1 truncate">Browser</span>
+					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("browser")} aria-label="Close the browser"><XIcon /></Button>} /><TooltipContent>Close the browser<Kbd>⇧⌘B</Kbd></TooltipContent></Tooltip>
+				</>
+			}
+		>
+			<BrowserView tab={tab} />
+		</SideSheet>
 	);
 }
