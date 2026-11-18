@@ -19,6 +19,8 @@ async function call<T>(method: "GET" | "POST", url: string, body?: unknown): Pro
 }
 
 const get = <T>(url: string) => call<T>("GET", url);
+/** A file's bytes, which the main process hands on as base64. */
+export const bytesOf = (base64: string) => Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
 const post = <T>(url: string, body: unknown = {}) => call<T>("POST", url, body);
 const e = encodeURIComponent;
 const qs = (o: Record<string, string | number | undefined>) => {
@@ -406,6 +408,8 @@ export const api = {
 	turn: (agent: string, session: string) => get<{ task?: number; prompt?: string; root?: string; files: Change[]; more: boolean; note?: string }>(`${a(agent)}/view/turn${s(session)}`),
 	turnDiff: (agent: string, session: string, file: string) => get<{ diff: string; truncated: boolean }>(`${a(agent)}/view/turndiff${s(session)}&path=${e(file)}`),
 	fetchImage: (url: string) => post<{ mime: string; base64: string }>("/images/fetch", { url }),
+	/** A sound file of an agent's workspace as bytes: what `media.workspace` plays, for the page to measure its levels. */
+	workspaceSound: async (agent: string, file: string, session?: string) => bytesOf((await get<{ mime: string; base64: string }>(`${a(agent)}/image?path=${e(file)}${session ? `&session=${e(session)}` : ""}`)).base64),
 
 	// sources and subscriptions
 	sources: () => get<SourceInfo[]>("/sources"),

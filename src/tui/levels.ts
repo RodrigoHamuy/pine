@@ -3,6 +3,11 @@
  * in each of a row of frequency bands. The sound line draws them as bars (see Sound in picture.ts).
  * pine does not hear what the system's player plays, so this is read from the file and shown by
  * the line's own clock.
+ *
+ * The Pine app's page measures with this file too (desktop/src/components/sound.tsx: `Meter` and
+ * `heights`, on samples its browser decoded), so that a sound has the same bars in both. A page
+ * has no Node: nothing here imports a module of Node's, and `Buffer` is named only inside the
+ * functions that read a file.
  */
 
 /** How many bars. */
@@ -254,21 +259,27 @@ export async function levelsOf(pieces: AsyncIterable<Buffer>, pcm?: Pcm): Promis
 const BLOCKS = "▁▂▃▄▅▆▇█";
 
 /**
- * The bars at a moment of the sound, lowest band first. Before the start and after the end they
- * lie flat. With room for fewer bars than there are bands, neighbouring bands share a bar, which
- * stands as high as the highest of them.
+ * How high each bar stands at a moment of the sound, 0 to 255, lowest band first. Before the start
+ * and after the end they lie flat. With room for fewer bars than there are bands, neighbouring
+ * bands share a bar, which stands as high as the highest of them. The Pine app draws its bars
+ * from this too, so that a sound looks the same in both.
  */
-export function bars(levels: Levels, seconds: number, count = levels.bands): string {
+export function heights(levels: Levels, seconds: number, count = levels.bands): number[] {
 	// A little more than the division gives: 0.3 seconds is the fourth row, though 0.3 / 0.1 comes out just under 3.
 	const row = Math.floor(seconds / levels.step + 1e-6);
 	const there = row >= 0 && row < levels.rows;
-	let out = "";
+	const out: number[] = [];
 	for (let bar = 0; bar < count; bar++) {
 		const from = Math.floor((bar * levels.bands) / count);
 		const to = Math.max(from + 1, Math.floor(((bar + 1) * levels.bands) / count));
 		let level = 0;
 		for (let band = from; there && band < to; band++) level = Math.max(level, levels.data[row * levels.bands + band]);
-		out += BLOCKS[Math.round((level / 255) * 7)];
+		out.push(level);
 	}
 	return out;
+}
+
+/** The bars at a moment of the sound as a row of blocks, for a terminal. */
+export function bars(levels: Levels, seconds: number, count = levels.bands): string {
+	return heights(levels, seconds, count).map((level) => BLOCKS[Math.round((level / 255) * 7)]).join("");
 }

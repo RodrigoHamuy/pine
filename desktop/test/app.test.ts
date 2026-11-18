@@ -552,6 +552,87 @@ test("a picture opens over the page, and Escape closes it back onto the picture"
 	assert.equal(await page.evaluate((s: string) => document.activeElement === document.querySelector(s), img), true);
 });
 
+/** A wav file with one tone in it: one channel, 16 bits, 16000 samples a second. */
+function tone(hz: number, seconds: number): Buffer {
+	const rate = 16_000;
+	const data = Buffer.alloc(Math.round(seconds * rate) * 2);
+	for (let i = 0; i < data.length / 2; i++) data.writeInt16LE(Math.round(Math.sin((2 * Math.PI * hz * i) / rate) * 12_000), i * 2);
+	const head = Buffer.alloc(44);
+	head.write("RIFF", 0, "latin1");
+	head.writeUInt32LE(36 + data.length, 4);
+	head.write("WAVEfmt ", 8, "latin1");
+	head.writeUInt32LE(16, 16);
+	head.writeUInt16LE(1, 20);
+	head.writeUInt16LE(1, 22);
+	head.writeUInt32LE(rate, 24);
+	head.writeUInt32LE(rate * 2, 28);
+	head.writeUInt16LE(2, 32);
+	head.writeUInt16LE(16, 34);
+	head.write("data", 36, "latin1");
+	head.writeUInt32LE(data.length, 40);
+	return Buffer.concat([head, data]);
+}
+
+test("a sound in an answer that arrives plays by itself and shows its bars; a click pauses it, it goes on behind another tab, and one from earlier waits", async () => {
+	// It plays for real: not out of the loudspeaker of whoever runs the tests.
+	await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.setAudioMuted(true));
+	fs.writeFileSync(path.join(home, "agents", "main", "workspace", "hello.wav"), tone(440, 20));
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ text: "Listen: ![hello world](hello.wav)\n\nAnd once more: ![the same again](hello.wav)" }], "sound "));
+	await page.keyboard.press("Enter");
+	const SOUND = "[data-slot=markdown] [data-slot=sound]";
+	await sees(`${SOUND}[data-sound=playing]`);
+	// The first sound of the answer, and that one alone.
+	const lines = page.locator(SOUND);
+	assert.equal(await lines.count(), 2);
+	assert.equal(await lines.nth(0).getAttribute("data-sound"), "playing");
+	assert.equal(await lines.nth(1).getAttribute("data-sound"), "idle");
+	assert.match(await lines.nth(0).textContent(), /hello world/);
+	// Its bars: one for each range of pitch, and for a tone at 440 Hz the ninth from the left stands highest.
+	const bars = (n: number) => lines.nth(n).locator("[data-slot=sound-bars] > span").evaluateAll((all: HTMLElement[]) => all.map((b) => Number.parseFloat(b.style.height)));
+	await page.waitForFunction((s: string) => [...document.querySelectorAll(`${s}[data-sound=playing] [data-slot=sound-bars] > span`)].some((b) => Number.parseFloat((b as HTMLElement).style.height) > 90), SOUND, { timeout: 20_000 });
+	const playing = await bars(0);
+	assert.equal(playing.length, 24);
+	assert.equal(playing.indexOf(Math.max(...playing)), 8);
+	assert.ok(playing[0] < 30 && playing[23] < 30, `the bars far from the tone lie low: ${playing}`);
+	// Nothing plays there: its bars lie flat.
+	assert.deepEqual(await bars(1), Array(24).fill(12.5));
+	// The player's own clock runs, and says how long the sound is.
+	const time = (n: number) => lines.nth(n).locator("[data-slot=sound-time]").textContent();
+	await page.waitForFunction((s: string) => /^0:0[1-9] \/ 0:20$/.test(document.querySelector(`${s} [data-slot=sound-time]`)?.textContent ?? ""), SOUND, { timeout: 20_000 });
+	// A click pauses: the clock and the bars stand still.
+	await lines.nth(0).getByRole("button", { name: "Pause hello world" }).click();
+	await sees(`${SOUND}[data-sound=paused]`);
+	const stood = await time(0);
+	await new Promise((r) => setTimeout(r, 300));
+	assert.equal(await time(0), stood);
+	assert.ok(Math.max(...(await bars(0))) > 90);
+	// And goes on from there with another click.
+	await lines.nth(0).getByRole("button", { name: "Play hello world" }).click();
+	await sees(`${SOUND}[data-sound=playing]`);
+	// One sound at a time: starting the other one stops this one, which is back at its start.
+	await lines.nth(1).getByRole("button", { name: "Play the same again" }).click();
+	await page.waitForFunction((s: string) => [...document.querySelectorAll(s)].map((l) => l.getAttribute("data-sound")).join() === "idle,playing", SOUND);
+	assert.equal(await time(0), "0:20");
+	assert.deepEqual(await bars(0), Array(24).fill(12.5));
+	await shot("02c-sound");
+	// It goes on while another tab is in front, and its line finds it again: still playing, further on.
+	const front = await page.evaluate(() => [...document.querySelectorAll("[data-slot=tab]")].findIndex((t) => t.hasAttribute("data-active")));
+	await menu("events");
+	await page.waitForFunction((s: string) => !document.querySelector(s), SOUND);
+	await menu("close");
+	await page.click(`[data-slot=tab] >> nth=${front}`);
+	await page.waitForFunction((s: string) => [...document.querySelectorAll(s)].map((l) => l.getAttribute("data-sound")).join() === "idle,playing", SOUND);
+	await page.waitForFunction((s: string) => /^0:0[1-9] /.test(document.querySelectorAll(`${s} [data-slot=sound-time]`)[1]?.textContent ?? ""), SOUND, { timeout: 20_000 });
+	assert.ok(Math.max(...(await bars(1))) > 90);
+	await lines.nth(1).getByRole("button", { name: "Pause the same again" }).click();
+	// The conversation opened again: the sounds are there, and none of them starts.
+	await page.reload();
+	await sees(SOUND);
+	await page.waitForFunction((s: string) => [...document.querySelectorAll(`${s} [data-slot=sound-time]`)].filter((t) => t.textContent === "0:20").length === 2, SOUND);
+	await new Promise((r) => setTimeout(r, 300));
+	assert.equal(await page.locator(`${SOUND}:not([data-sound=idle])`).count(), 0);
+});
+
 test("an approval is asked in a dialog and answered from it, and so is a question", async () => {
 	// The owner listed bash under "approve": it asks in every mode.
 	await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo hello" } }] }, { tools: [{ name: "question", args: { question: "Which database?", choices: ["the old one", "the new one"] } }] }, { text: "done" }], "run it "));

@@ -196,6 +196,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["can pine play speech or music", /^(tui#|agents#)/],
 		["the animated waveform next to a sound does not show for my mp3", /^(tui#pictures|stack#)/],
 		["what do the moving bars beside a playing sound mean", /^tui#pictures/],
+		["does the mac app start a voice message from the agent by itself, or do I have to click it", /^desktop#a-sound-in-an-answer/],
+		["how do I stop audio that keeps playing in the desktop app", /^desktop#a-sound-in-an-answer/],
 		["install a local mcp server with npx command", /^(mcp#adding-a-server|setup#the-tools)/],
 		["look at my dev server on localhost in the browser", /^mcp#local-addresses$/],
 		["click a button in an application on my mac", /^(computer|mcp#bundled-computer)/],

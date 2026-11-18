@@ -5,6 +5,7 @@
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
 import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Sound } from "@/components/sound";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -417,7 +418,7 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 			return (
 				<Message data-item="answer">
 					<MessageContent>
-						<Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined }} />
+						<Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined, id: `${tab.id}:${item.id}`, arrived: item.arrived }} />
 					</MessageContent>
 				</Message>
 			);
@@ -464,8 +465,8 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 								<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={item.url} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
 							</DialogContent>
 						</Dialog>
-					) : item.kind === "video" ? <video className={MEDIA.video} src={item.url} controls preload="metadata" /> : <audio className={MEDIA.audio} src={item.url} controls preload="metadata" />}
-					<div className={MEDIA.cap}>{item.name}</div>
+					) : item.kind === "video" ? <video className={MEDIA.video} src={item.url} controls preload="metadata" /> : <Sound src={item.url} name={item.name} />}
+					{item.kind === "audio" ? null : <div className={MEDIA.cap}>{item.name}</div>}
 				</div>
 			);
 		case "goal": {

@@ -299,13 +299,52 @@ daemon's doing. What differs is how it is drawn and reached.
 
 | | |
 |---|---|
-| Pictures, video, sound | A picture an answer points at is shown as it is; a click enlarges it. A video and a sound file get the system's own player controls, with sound |
+| Pictures, video, sound | A picture an answer points at is shown as it is; a click enlarges it. A video gets the system's own player controls, with sound. A sound is a line of its own, with bars, that plays by itself when its answer arrives: see "A sound in an answer" below |
 | Files from the Finder | Files put on the input with the mouse are attached to the next message (up to 10 files of 20 MB each); a folder put there is opened for the conversation, as with `/folder`. A folder put on the app's icon in the Dock opens a conversation that works in it, as `pine <folder>` does |
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
 | The poimandres theme | The dark look is poimandres: its colours for the window, and for code in an answer, in a diff and in the editor. The light look has colours of its own |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
+
+### A sound in an answer
+
+An agent points at a sound file in its workspace the way it points at a picture,
+`![caption](hello.wav)` (wav, mp3, m4a, ogg or flac, up to 100 MB), and the conversation shows
+one line for it: a button to play and to pause, a row of bars, its name (the caption, or the
+file's name), where it is and how long it runs. It is the sound line of the terminal UI
+([tui.md](tui.md), "Pictures"), and it behaves the same:
+
+- A sound in an answer that arrives while you are looking at its conversation is played at
+  once. One from earlier waits for a click: nothing starts when you open a conversation again
+  or start the app again, and nothing starts for an answer that arrived in a conversation that
+  was not in front. Of several sounds in one answer the first is played.
+- The button pauses, and goes on from there. At the end the line is back at the start. One
+  sound plays at a time: starting another stops the first, which goes back to its start.
+- A sound goes on while you look at something else in the app, and its line shows where it is
+  when you come back. To stop it, pause it in its line or start another one. It ends with the
+  app.
+- The bars show the sound itself while it plays: 24 of them, one for each range of pitch from
+  low (80 Hz, on the left) to high (8 kHz, on the right), each as high as that range is loud
+  at the moment being heard. They move while it plays, stand still at a pause, and lie flat
+  and grey while nothing plays. Their height is measured against the loudest moment of that
+  sound, so a quiet recording moves as much as a loud one.
+
+The bars are worked out by the app when a sound is first played, from the file as the daemon
+serves it: the app decodes it itself and measures it with the code the terminal UI uses, so
+the bars are the same in both and nothing has to be installed for them (no `ffmpeg`). They
+can come a moment after the sound started. A sound longer than ten minutes plays without
+bars.
+
+What is different from the terminal UI:
+
+| | |
+|---|---|
+| An aiff file | The app does not play it; its line says "cannot be played here". The terminal UI does |
+| A file that is not there | The same line, "cannot be played here" |
+| A sound at a web address | A line to click, `Load audio · https://…`, as for a picture: the daemon fetches it then, and it plays when it is there |
+| A sound file opened in the code panel (Files) | Has the system's own player controls, and does not start by itself |
+| `▸ open in player` | Not in the app |
 
 ## The code panel and the editor
 
@@ -410,7 +449,8 @@ the agent to write. So:
 | An answer is content, not a page | It is drawn from markdown (Streamdown, with code coloured on the page by Shiki) and cleaned of everything that could act or restyle: scripts, styles, forms, frames, svg, media tags, style, class and id attributes, `javascript:` links. A small picture written into the text (`data:` png, jpeg, gif, webp) is shown. The window's own policy lets it load nothing from the web |
 | A link says where it leads | The address stands next to a link whose words are not the address, and only `http` and `https` addresses open, in your browser |
 | Nothing is fetched because an answer contains it | A picture at a web address is a line to click (`Load picture · https://…`); the daemon then fetches it, with its guard against addresses in your network. A picture at a path in the agent's workspace is shown from there |
-| What is drawn straight from the daemon | Only pictures, video and sound, by fixed addresses of the control API |
+| Nothing plays because an answer contains an address | A sound plays by itself only where it is a file of the agent's workspace, which the daemon serves, and its answer has just arrived. One at a web address is a line to click, like a picture |
+| What is drawn straight from the daemon | Only pictures, video and sound, by fixed addresses of the control API. The bars of a sound are measured from the same bytes, which the app asks the daemon for; the page reads no file |
 | Notifications and the window's title | pine's own words only |
 | What is heard | Text for the input: never sent by itself |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
@@ -486,7 +526,8 @@ desktop/
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
     components/    only what stock components cannot express when composed in place (printed.tsx:
-                   what a tool or a program printed, a Code Block that follows its end), and pine's
+                   what a tool or a program printed, a Code Block that follows its end; sound.tsx:
+                   a sound's line, its player and its bars, measured with src/tui/levels.ts), and pine's
                    own small parts (logo.tsx: the logo; empty-view.tsx: a view with nothing in it);
                    no part there only renames or bundles a stock one
     use-load.ts    loading what a view shows

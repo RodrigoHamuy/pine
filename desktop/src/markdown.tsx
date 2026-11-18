@@ -12,6 +12,9 @@
 //     to click, and then the daemon fetches it (the page's own policy allows no address on the
 //     web). One at a path is shown from the agent's workspace, through the daemon; a `data:` png,
 //     jpeg, gif or webp is shown as it is. Nothing else, and no download button.
+//     A sound is a line of its own (components/sound.tsx). It plays by itself only where it is a
+//     file the daemon serves and its answer arrived while the owner was looking (`arrived`), as
+//     in the terminal UI: never one from earlier, and one at a web address only after its click.
 //
 // When Streamdown is upgraded, read its defaults again (`defaultRehypePlugins`, the components
 // it draws, its controls) and run the desktop suite: its markdown test fails without each of the three.
@@ -24,10 +27,11 @@ import { Streamdown, type Components, type ControlsConfig, type ExtraProps } fro
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { api, media } from "./api.ts";
+import { type Heard, Sound } from "@/components/sound";
+import { api, bytesOf, media } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { mediaKind } from "./model.ts";
-import { errText, short } from "./text.ts";
+import { baseName, errText, short } from "./text.ts";
 
 /** The tags and attributes an answer keeps. Everything else is taken away, its words kept; what is in `strip` goes with its words. */
 export const CLEAN: Schema = {
@@ -61,6 +65,10 @@ const DATA_IMAGE = /^data:image\/(png|jpeg|gif|webp);base64,/i;
 export interface Where {
 	agent: string;
 	session?: string;
+	/** A name for this answer that stays the same while the page lives: a sound of it that plays is found again by it. */
+	id?: string;
+	/** On an answer that arrived while the owner was looking at its conversation: its first sound plays by itself, once. */
+	arrived?: Heard;
 }
 
 /** Whose workspace a path in the answer is in: a context, so that the components below stay the same for every answer. */
@@ -105,11 +113,12 @@ export const MEDIA = {
 	box: { image: "block max-w-md", video: "block max-w-lg", audio: "block max-w-md" },
 	image: "block max-h-80 max-w-full cursor-zoom-in rounded-md border",
 	video: "block max-h-90 max-w-full rounded-md bg-black",
-	audio: "block w-full",
 	cap: "mt-1 block text-xs text-faint",
 };
 
-function Player({ kind, src, alt }: { kind: "image" | "video" | "audio"; src: string; alt: string }) {
+function Player({ kind, src, alt, sound }: { kind: "image" | "video" | "audio"; src: string; alt: string; sound?: { id?: string; name: string; bytes: () => Promise<ArrayBuffer>; auto?: Heard } }) {
+	// A sound says its name in its own line.
+	if (kind === "audio") return <span className={`my-2.5 ${MEDIA.box.audio}`}><Sound src={src} name={alt || sound?.name || "sound"} id={sound?.id} bytes={sound?.bytes} auto={sound?.auto} /></span>;
 	return (
 		<span className={`my-2.5 ${MEDIA.box[kind]}`}>
 			{kind === "image" ? (
@@ -121,7 +130,7 @@ function Player({ kind, src, alt }: { kind: "image" | "video" | "audio"; src: st
 						<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={src} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
 					</DialogContent>
 				</Dialog>
-			) : kind === "video" ? <video className={MEDIA.video} src={src} controls preload="metadata" /> : <audio className={MEDIA.audio} src={src} controls preload="metadata" />}
+			) : <video className={MEDIA.video} src={src} controls preload="metadata" />}
 			{alt ? <span className={MEDIA.cap}>{alt}</span> : null}
 		</span>
 	);
@@ -129,9 +138,9 @@ function Player({ kind, src, alt }: { kind: "image" | "video" | "audio"; src: st
 
 /** A line to click instead of a picture: the address is shown, and nothing is fetched before the click. */
 function Remote({ url, alt }: { url: string; alt: string }) {
-	const [state, setState] = useState<{ loading?: boolean; error?: string; got?: { kind: "image" | "video" | "audio"; src: string } }>({});
+	const [state, setState] = useState<{ loading?: boolean; error?: string; got?: { kind: "image" | "video" | "audio"; src: string; sound: { name: string; bytes: () => Promise<ArrayBuffer>; auto: Heard } } }>({});
 	useEffect(() => () => void (state.got && URL.revokeObjectURL(state.got.src)), [state.got]);
-	if (state.got) return <Player kind={state.got.kind} src={state.got.src} alt={alt} />;
+	if (state.got) return <Player kind={state.got.kind} src={state.got.src} alt={alt} sound={state.got.sound} />;
 	const kind = mediaKind(url.split(/[?#]/)[0]) ?? "image";
 	const load = async () => {
 		if (state.loading) return;
@@ -139,8 +148,9 @@ function Remote({ url, alt }: { url: string; alt: string }) {
 		try {
 			const got = await api.fetchImage(url);
 			const kind = got.mime.startsWith("video/") ? "video" : got.mime.startsWith("audio/") ? "audio" : "image";
-			const blob = new Blob([Uint8Array.from(atob(got.base64), (c) => c.charCodeAt(0))], { type: got.mime });
-			setState({ got: { kind, src: URL.createObjectURL(blob) } });
+			const blob = new Blob([bytesOf(got.base64)], { type: got.mime });
+			// The click asked for it: a sound that was loaded plays, as it does in the terminal UI.
+			setState({ got: { kind, src: URL.createObjectURL(blob), sound: { name: baseName(url.split(/[?#]/)[0]), bytes: () => blob.arrayBuffer(), auto: { heard: false } } } });
 		} catch (err) {
 			setState({ error: errText(err) });
 		}
@@ -153,7 +163,7 @@ function Remote({ url, alt }: { url: string; alt: string }) {
 	);
 }
 
-function Picture({ src, alt }: React.ComponentProps<"img"> & ExtraProps) {
+function Picture({ src, alt, node }: React.ComponentProps<"img"> & ExtraProps) {
 	const where = useContext(WhereContext);
 	const url = typeof src === "string" ? src : "";
 	const words = alt ?? "";
@@ -167,7 +177,9 @@ function Picture({ src, alt }: React.ComponentProps<"img"> & ExtraProps) {
 		} catch {
 			// as written
 		}
-		if (kind) return <Player kind={kind} src={media.workspace(where.agent, file, where.session)} alt={words} />;
+		// Where in the answer it stands tells two sounds of one answer apart.
+		const sound = kind === "audio" ? { id: where.id && `${where.id}:${node?.position?.start.offset ?? file}`, name: baseName(file), bytes: async () => (await api.workspaceSound(where.agent, file, where.session)).buffer, auto: where.arrived } : undefined;
+		if (kind) return <Player kind={kind} src={media.workspace(where.agent, file, where.session)} alt={words} sound={sound} />;
 	}
 	return <>{words || url}</>;
 }

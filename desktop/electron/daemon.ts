@@ -48,7 +48,9 @@ export async function mediaFromDaemon(daemon: Daemon | undefined, method: string
 		const type = res.headers.get("content-type") ?? "application/octet-stream";
 		// Only what is drawn or played. A page of HTML or a script under this name would be content from outside.
 		if (!/^(image|video|audio)\//.test(type) || type.startsWith("image/svg")) return new Response("not shown", { status: 415 });
-		return new Response(res.body, { status: 200, headers: { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff" } });
+		// With its size: a player is told by it how long a video or a sound runs.
+		const size = res.headers.get("content-length");
+		return new Response(res.body, { status: 200, headers: { "content-type": type, "cache-control": "no-store", "x-content-type-options": "nosniff", ...(size ? { "content-length": size } : {}) } });
 	} catch {
 		return new Response("not found", { status: 404 });
 	}

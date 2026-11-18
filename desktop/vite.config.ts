@@ -14,6 +14,9 @@ export default defineConfig({
 	// sets this true): in the app, in Storybook and in a build it is false, and the stand-in is left out.
 	define: { __PINE_PREVIEW__: "false" },
 	resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
+	// The one file from outside this folder that the page is made of: the bars of a sound are measured by
+	// pine's own code. A build takes it as it is; `vite dev` serves nothing from outside unless it is named.
+	server: { fs: { allow: [import.meta.dirname, path.resolve(import.meta.dirname, "../src/tui/levels.ts")] } },
 	// PINE_DESKTOP_DEBUG=1: a build that can be read, for an error that only says where it is in the bundle.
 	build: { outDir: "dist", emptyOutDir: true, target: "chrome140", chunkSizeWarningLimit: 4000, minify: !process.env.PINE_DESKTOP_DEBUG, cssMinify: process.env.PINE_DESKTOP_DEBUG ? false : "esbuild" },
 });

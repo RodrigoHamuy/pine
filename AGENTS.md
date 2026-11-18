@@ -105,7 +105,8 @@ src/
                     undo.ts (what the conversation says after /undo and /redo),
                     theme.ts (colours, markdown, and the parts of an answer that are folded into a line: `Answer`), highlight.ts (code colours),
                     picture.ts (pictures, video and sound: conversion with sips or ffmpeg, Kitty-protocol or half-block drawing, the system's player for sound),
-                    levels.ts (the bars of a sound: its levels by frequency band for each tenth of a second, from a wav file or a decoder's samples),
+                    levels.ts (the bars of a sound: its levels by frequency band for each tenth of a second, from a wav file or a decoder's samples;
+                    the Pine app's page is built with this file too, so nothing in it runs or imports Node's own when it is loaded),
                     voice.ts (dictating a message: builds and runs voice.swift, the macOS helper that listens and has the system
                     recognise the words on the device; on another system a sentence and nothing else)
   types.ts, util.ts shared types; topics, templates, filters, durations, logger; the folded parts of a text (`foldsIn`, for the

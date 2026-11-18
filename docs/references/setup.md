@@ -335,7 +335,8 @@ a conversation that has read outside content.
 that one", "open it in a tab", "close the tab", "remove the old ones": the main agent does
 these with four tools. They work on your own conversations with it and on those of every other
 agent, and they do what the list of conversations in the terminal UI does for your own hand
-([tui.md](tui.md)): the same pin, the same rename, the same removal.
+([tui.md](tui.md)): the same pin, the same rename, the same removal. To open a tab for your
+owner on a conversation, or to close one, the tool is `set_conversation` with `tab`.
 
 | Tool | Does |
 |---|---|

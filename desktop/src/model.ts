@@ -54,7 +54,7 @@ interface Base {
 export type Item = Base &
 	(
 		| { t: "user"; text: string; from?: string; files?: string[]; /** The owner's message as a task, to branch from. */ task?: number }
-		| { t: "answer"; task: number; agent: string; text: string; live: boolean }
+		| { t: "answer"; task: number; agent: string; text: string; live: boolean; /** It arrived while the owner was looking at its conversation: its first sound plays by itself, once. */ arrived?: { heard: boolean } }
 		| { t: "work"; parts: Part[]; done: boolean; open: boolean; startedAt: number; ms?: number }
 		| { t: "note"; tone: Tone; text: string; lines?: Array<{ text: string; tone?: Tone }>; action?: { label: string; run: () => void } }
 		| { t: "event"; label: string; body: string }
@@ -1790,6 +1790,8 @@ export class Store extends Model {
 				if (item) {
 					if (depth === 0) tab.lastAnswer = item.text;
 					tab.streamed.add(p.task);
+					// A sound that arrives while you are looking is played; one from earlier waits for a click.
+					if (tab === this.active) item.arrived = { heard: false };
 				}
 				this.endAnswer(tab, p.task);
 				if (depth === 0) {
@@ -1874,7 +1876,7 @@ export class Store extends Model {
 				if (p.status === "done") {
 					// Streaming normally showed the answer already; this covers a missed stream.
 					if (p.text) tab.lastAnswer = p.text;
-					if (!item && !tab.streamed.has(p.task) && p.text) tab.add({ t: "answer", task: p.task, agent: p.agent ?? tab.agent, text: p.text, live: false });
+					if (!item && !tab.streamed.has(p.task) && p.text) tab.add({ t: "answer", task: p.task, agent: p.agent ?? tab.agent, text: p.text, live: false, ...(tab === this.active ? { arrived: { heard: false } } : {}) });
 				} else if (p.status === "cancelled") tab.note("Stopped");
 				else tab.note(`${p.status === "failed" ? "Failed" : p.status}${p.error && p.error !== p.status ? `: ${p.error}` : ""}`, "bad");
 				tab.streamed.delete(p.task);
