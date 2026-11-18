@@ -492,6 +492,10 @@ These are invariants. A change that breaks one needs a test that shows why it is
    its cleaning rules (`CLEAN`), its link component and its image component. On every upgrade
    of Streamdown read its defaults again and run `npm run desktop:test`.
    `desktop/test/app.test.ts` has a test for it; keep it failing without each of the three.
+   The terminal beside a conversation (`desktop/electron/terminal.ts`) is the owner's own shell,
+   run by the main process; the page only types into it. What an answer holds reaches it only by
+   the owner's press on a code block's Run button, and only a block whose every character shows
+   as itself (`desktop/src/runnable.ts`): nothing types into it by itself, and the preview has none.
    The page in an ordinary browser (`npm run dev:preview` in `desktop/`, a development tool and
    no part of the app) is held to the same: Vite's server (`desktop/scripts/preview.ts`) stands
    where `main.ts` stands, holds the token and makes every call through the same module
@@ -709,6 +713,9 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   home's `data/browser-view/` that names a server of the test's own). The `live:` test in
   `desktop/test/browser-live.test.ts` (`PINE_LIVE=1`) puts the real browser behind the real
   app, on a page of its own on the loopback.
+- The terminal beside a conversation is tested without a window on a real pseudo-terminal with
+  `/bin/sh` (`desktop/test/terminal.test.ts`, with what a Run button refuses), and in the app with
+  `PINE_DESKTOP_SHELL=/bin/sh` (for tests only), so that no test loads the developer's shell profile.
 - `pine` for a terminal (`desktop/electron/command.ts`) is tested without a window
   (`desktop/test/command.test.ts`), on folders of the test's own as the PATH and the home:
   no test writes into a folder of the real PATH, and none runs what asks for a password.

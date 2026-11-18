@@ -8,7 +8,7 @@ import path from "node:path";
 const root = path.resolve(import.meta.dirname, "..");
 
 export async function buildMain() {
-	const common = { bundle: true, platform: "node", target: "node24", external: ["electron"], sourcemap: true, logLevel: "warning", absWorkingDir: root };
+	const common = { bundle: true, platform: "node", target: "node24", external: ["electron", "node-pty"], sourcemap: true, logLevel: "warning", absWorkingDir: root };
 	await build({ ...common, entryPoints: ["electron/main.ts"], outfile: "dist-electron/main.js", format: "esm" });
 	// A sandboxed preload is loaded as a classic script.
 	await build({ ...common, entryPoints: ["electron/preload.ts"], outfile: "dist-electron/preload.cjs", format: "cjs" });

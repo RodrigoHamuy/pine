@@ -16,21 +16,27 @@
 //     file the daemon serves and its answer arrived while the owner was looking (`arrived`), as
 //     in the terminal UI: never one from earlier, and one at a web address only after its click.
 //
+// A code block for a shell (```bash and the like, runnable.ts) has a Run button beside its copy
+// button: the owner's click types it into the conversation's terminal (Terminal.tsx), exactly as
+// it is shown, and never one that holds a character that does not show as itself. Nothing runs
+// without that click, and a block still being written has no button.
+//
 // When Streamdown is upgraded, read its defaults again (`defaultRehypePlugins`, the components
 // it draws, its controls) and run the desktop suite: its markdown test fails without each of the three.
 import { createCodePlugin } from "@streamdown/code";
-import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
-import { Children, createContext, isValidElement, memo, useContext, useEffect, useState, type ReactNode } from "react";
+import { ArrowRightIcon, ChevronRightIcon, PlayIcon } from "lucide-react";
+import { Children, createContext, createElement, isValidElement, memo, useContext, useEffect, useState, type ReactNode } from "react";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { type Options as Schema } from "rehype-sanitize";
-import { Streamdown, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
+import { CodeBlock, CodeBlockCopyButton, defaultComponents, Streamdown, useIsCodeFenceIncomplete, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { type Heard, Sound } from "@/components/sound";
 import { api, bytesOf, media } from "./api.ts";
 import { bridge } from "./bridge.ts";
-import { mediaKind } from "./model.ts";
+import { mediaKind, store } from "./model.ts";
+import { SHELLS } from "./runnable.ts";
 import { baseName, errText, short } from "./text.ts";
 
 /** The tags and attributes an answer keeps. Everything else is taken away, its words kept; what is in `strip` goes with its words. */
@@ -207,7 +213,31 @@ function Summary({ children }: React.ComponentProps<"summary"> & ExtraProps) {
 	);
 }
 
-const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary };
+const DefaultCode = defaultComponents.code as React.ComponentType<React.ComponentProps<"code"> & ExtraProps>;
+
+/** Code: Streamdown's own, and for a block of shell commands in a conversation, the same block with a Run button. */
+function Code(props: React.ComponentProps<"code"> & ExtraProps) {
+	const where = useContext(WhereContext);
+	const language = /(?:^|\s)language-(\S+)/.exec(props.className ?? "")?.[1]?.toLowerCase() ?? "";
+	if (!("data-block" in props) || !where?.session || !SHELLS.has(language)) return createElement(DefaultCode, props);
+	return <ShellBlock code={textOf(props.node).replace(/\n$/, "")} language={language} agent={where.agent} session={where.session} />;
+}
+
+function ShellBlock({ code, language, agent, session }: { code: string; language: string; agent: string; session: string }) {
+	const incomplete = useIsCodeFenceIncomplete();
+	return (
+		<CodeBlock code={code} language={language} isIncomplete={incomplete} lineNumbers={false} data-shell="">
+			<CodeBlockCopyButton />
+			{incomplete ? null : (
+				<Button variant="ghost" size="icon-xs" data-run="" aria-label="Run in the terminal" title="Run in this conversation's terminal" onClick={() => store.runInTerminal(agent, session, code)}>
+					<PlayIcon />
+				</Button>
+			)}
+		</CodeBlock>
+	);
+}
+
+const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary, code: Code };
 /**
  * The highlighter's theme for code in answers: every colour is a `--code-*` variable of index.css, the
  * ones the code editor reads, so that code in an answer and in the code pane look the same and both

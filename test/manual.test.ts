@@ -61,6 +61,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["where did the list of conversations go when I made the pine window narrow, to put it beside another app", /^desktop#the-window/],
 		["is there a settings panel where I can change pine's configuration by clicking", /^desktop#settings/],
 		["an editor to change a file myself beside the conversation", /^desktop#the-code-panel-and-the-editor/],
+		["can I run the commands the agent gives me with a play button", /^desktop#the-terminal/],
+		["can I open a terminal next to the conversation in the app", /^desktop#(the-terminal|what-the-app-adds)/],
 		["does the mac app start pine or do I have to start it first", /^desktop#the-daemon-started-or-reused/],
 		["where do I download the mac app, and do I have to install node first", /^desktop#getting-it/],
 		["I only installed the app, how do I get the pine command in my shell", /^desktop#pine-in-a-terminal/],

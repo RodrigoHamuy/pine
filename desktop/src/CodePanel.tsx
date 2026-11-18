@@ -38,6 +38,7 @@ import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
+import { TerminalView } from "./Terminal.tsx";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -97,7 +98,7 @@ const look = EditorView.theme({
 // ScrollArea that fades where it is cut (scroll-fade sits on its viewport, the element that
 // scrolls), a flex column so that its viewport shrinks to it, and a sideways bar where a diff can
 // be wider than the panel. Inside, a flex column at least its height, for an Empty centred with `m-auto`.
-const SUB = "flex min-h-9 flex-none items-center gap-1.5 border-b border-surface-container-high px-2.5 py-1.5 text-xs text-muted-foreground";
+export const SUB = "flex min-h-9 flex-none items-center gap-1.5 border-b border-surface-container-high px-2.5 py-1.5 text-xs text-muted-foreground";
 const PICTURE = "block max-h-80 max-w-full rounded-lg border sm:max-w-md";
 const STATUS: Record<string, string> = { M: "text-warn", A: "text-primary", "?": "text-primary", D: "text-destructive", R: "text-info" };
 
@@ -570,7 +571,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			onClose={() => void store.command("code")}
 			bar={
 				<>
-					{/* Six tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
+					{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
 					    for the line under the tab in front, which stock draws below the list. */}
 					<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 					<div className="pb-1.5">
@@ -585,6 +586,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 								Running
 								{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
 							</TabsTrigger>
+							<TabsTrigger value="terminal">Terminal</TabsTrigger>
 						</TabsList>
 					</Tabs>
 					</div>
@@ -603,6 +605,8 @@ export function CodePanel({ tab }: { tab: Tab }) {
 				<Files tab={tab} file={state.file} setFile={setFile} />
 			) : view === "output" ? (
 				<Output tab={tab} />
+			) : view === "terminal" ? (
+				<TerminalView tab={tab} />
 			) : (
 				<Running tab={tab} />
 			)}

@@ -80,6 +80,15 @@ function standIn(): Bridge {
 		},
 		voiceStop: async () => {},
 		pathOf: () => "",
+		// A shell for a page in a browser would be a shell for whatever reaches the preview's server: the app only.
+		termOpen: async () => {
+			throw new Error("The terminal is in the Pine app only.");
+		},
+		termWrite: async () => {},
+		termResize: async () => {},
+		termClose: async () => {},
+		onTermData: never,
+		onTermExit: never,
 		onService: on(listeners.service),
 		onEvents: on(listeners.events),
 		onConnection: on(listeners.connection),

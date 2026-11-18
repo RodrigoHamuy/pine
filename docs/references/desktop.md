@@ -337,6 +337,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Find | `⌘F` marks what you look for in the conversation |
 | A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor follows the palette too, in light and dark; turn off "Code follows the palette" to keep poimandres' own colours for code in dark |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
+| A terminal | A shell of yours beside each conversation, and ▶ on an answer's shell code blocks to run them in it: see "The terminal" |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
 ### A sound in an answer
@@ -392,6 +393,7 @@ agent's workspace):
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
 | Output | The tool calls of the last messages, each with all it printed |
 | Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the conversation's browser, at the right of the window, where the agent sees the same page; only where the conversation has no browser does it open in your own |
+| Terminal | A shell of your own for the conversation, in its folder: see "The terminal" below (`` ⌃` ``, View > Terminal, `/terminal`) |
 
 While an agent keeps a list of steps, the open steps stand at the top of the panel.
 
@@ -405,6 +407,28 @@ Saving goes through the daemon like everything else (`POST /agents/<id>/view/wri
 daemon writes the file inside a sandbox that reaches only that folder, so that a link an agent
 planted in its folder cannot make your save land somewhere else ([security.md](security.md)).
 On a system without a sandbox the daemon does not write, and the app says so.
+
+### The terminal
+
+The Terminal view is a shell of your own beside the conversation, as in Terminal.app: your login shell (`$SHELL`) with your
+environment, started in the conversation's folder (else the agent's workspace). It is not the
+agent's: no sandbox, no mode, no approvals, and the agent sees nothing of what runs there.
+
+| | |
+|---|---|
+| One per conversation | Starts when the view is first shown, and keeps running while Pine runs: another view or tab leaves it as it is, with its scrollback |
+| ↻ | Ends the shell and starts a new one. After `exit` it says so, with **Start it again** |
+| When it ends | With the conversation's last tab, and when Pine quits |
+
+**Run (▶, a play button).** A shell command block in an answer (```` ```bash ````, `sh`, `zsh`, `shell`, `fish`,
+`ksh`) has ▶ beside its copy button: it shows the terminal and types the block there as a
+paste, then Enter. Nothing runs without that press, and a block still streaming has none. A
+block holding a character that does not show as itself (a control character, an escape
+sequence, a direction override, a zero-width character) is refused, with the character named.
+Other languages get no ▶.
+
+For an agent: to hand the owner a command to run, put it in a block marked `bash`. In Pine it
+gets ▶; elsewhere it is a block to copy.
 
 ## The browser
 
@@ -487,6 +511,7 @@ the agent to write. So:
 | What is drawn straight from the daemon | Only pictures, video and sound, by fixed addresses of the control API. The bars of a sound are measured from the same bytes, which the app asks the daemon for; the page reads no file |
 | Notifications and the window's title | pine's own words only |
 | What is heard | Text for the input: never sent by itself |
+| A code block's Run button | Only your click types a block into your terminal, and only a block whose every character shows as itself: an answer cannot run anything by itself, nor hide a part of what it runs |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | What the app itself asks the web | One thing: GitHub, for pine's last release (see "A newer version"). The question carries nothing about this Mac, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered |

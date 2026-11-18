@@ -10,6 +10,7 @@ import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
 import { connect, findPine, type Launch, loginEnv, pineRoot, runPine, type Service, ServiceError } from "./service.ts";
+import { Terminals } from "./terminal.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanPalette, DEFAULT_PALETTE, type Palette } from "../src/theme.ts";
 
@@ -123,6 +124,9 @@ let listening: Listening | undefined;
 const send = (channel: string, ...args: unknown[]) => {
 	if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
 };
+
+/** The owner's terminal of each conversation (terminal.ts): their own shell, which ends with the app. */
+const terminals = new Terminals({ data: (id, data) => send("pine:term-data", id, data), exit: (id, code) => send("pine:term-exit", id, code) }, loginEnv, process.env.PINE_DESKTOP_SHELL ? [process.env.PINE_DESKTOP_SHELL] : undefined);
 
 function setState(next: ServiceState): void {
 	state = next;
@@ -368,6 +372,7 @@ function buildMenu(): void {
 				item("Agent", "code-agent", "CmdOrCtrl+Shift+I"),
 				item("Files", "code-files", "CmdOrCtrl+Shift+F"),
 				item("Changes", "code-changes", "CmdOrCtrl+Shift+G"),
+				item("Terminal", "code-terminal", "Ctrl+`"),
 				item("Toggle Browser", "browser", "CmdOrCtrl+Shift+B"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
@@ -518,6 +523,12 @@ function wire(): void {
 		if (cancel) (listening?.cancel(), (listening = undefined));
 		else listening?.stop();
 	});
+	// The owner's terminal beside a conversation. What is written into it comes from the page's
+	// keyboard, or from a code block of an answer that the owner ran with its button.
+	handle("pine:term-open", (id: string, cwd?: string, cols?: number, rows?: number) => terminals.open(String(id), cwd, cols, rows));
+	handle("pine:term-write", (id: string, data: string) => terminals.write(String(id), data));
+	handle("pine:term-resize", (id: string, cols: number, rows: number) => terminals.resize(String(id), cols, rows));
+	handle("pine:term-close", (id: string) => terminals.close(String(id)));
 	handle("pine:context-menu", (items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean }>) => {
 		return new Promise<string | undefined>((resolve) => {
 			let picked: string | undefined;
@@ -591,6 +602,7 @@ else {
 	app.on("before-quit", (e) => {
 		if (quitting) return;
 		savePrefs();
+		terminals.closeAll();
 		if (!service?.started || prefs.keepRunning) return;
 		// The daemon this app started ends with it, as the terminal UI's does: its agents are stopped
 		// and its database closed before the app is gone.
