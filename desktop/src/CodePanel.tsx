@@ -224,7 +224,7 @@ function ChangeRow({ c }: { c: Change }) {
 
 /** What differs from the last commit, or from before the owner's last message. */
 function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (file: string) => void }) {
-	const list = useLoad(async () => (turn ? { ...(await api.turn(tab.agent, tab.session)), repo: true, branch: undefined as string | undefined } : { ...(await api.changes(tab.agent, tab.session)), note: undefined as string | undefined, prompt: undefined as string | undefined }), [tab.key, tab.codeTick, turn]);
+	const list = useLoad(async () => (turn ? { ...(await api.turn(tab.agent, tab.session)), repo: true, branch: undefined as string | undefined, worktree: undefined } : { ...(await api.changes(tab.agent, tab.session)), note: undefined as string | undefined, prompt: undefined as string | undefined }), [tab.key, tab.codeTick, turn]);
 	const [file, setFile] = useState<string>();
 	const diff = useLoad(async () => (file ? (turn ? api.turnDiff(tab.agent, tab.session, file) : api.diff(tab.agent, tab.session, file)) : undefined), [tab.key, file, tab.codeTick, turn]);
 	useEffect(() => setFile(undefined), [tab.key, turn]);
@@ -253,7 +253,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 	return (
 		<>
 			<div className={SUB}>
-				{turn ? <><Undo2Icon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
+				{turn ? <><Undo2Icon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"}{data.worktree ? ` · ${data.worktree.ahead} ahead of ${data.worktree.base}${data.worktree.behind ? `, ${data.worktree.behind} behind` : ""}` : ""} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span>{data.worktree ? <Button variant="outline" size="xs" onClick={() => void store.worktreeMenu(tab)}>{data.worktree.ahead && !data.worktree.dirty ? "Merge…" : "Worktree…"}</Button> : null}</>}
 				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={list.reload} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
@@ -511,7 +511,10 @@ function Running({ tab }: { tab: Tab }) {
 						</ItemContent>
 						<ItemActions>
 							{p.ports.map((port) => (
-								<Button key={port} variant="link" size="xs" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</Button>
+								<Tooltip key={port}>
+									<TooltipTrigger render={<Button variant="link" size="xs" onClick={() => void store.showInBrowser(tab, `http://localhost:${port}`)} />}>localhost:{port}</TooltipTrigger>
+									<TooltipContent>Opens in the browser beside this conversation</TooltipContent>
+								</Tooltip>
 							))}
 							<AlertDialog>
 								<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Stop</AlertDialogTrigger>

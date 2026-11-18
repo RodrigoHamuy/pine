@@ -5,6 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { bwrapArgs, Guard, helperArgs, type Jail, jailed, noLocalSockets, protectedNow, SESSIONS, SHARED } from "../src/sandbox-linux.ts";
+import { gitRights } from "../src/worktrees.ts";
 import { harness, mockMsg } from "./support/harness.ts";
 
 /** A made-up machine on disk: an owner's home with pine's home in it, an agent's folders, a project elsewhere. */
@@ -132,6 +133,36 @@ test("linux sandbox: the same rules as on macOS, said with mounts", async (t) =>
 	assert.equal(fate(helper, path.join(m.sandboxHome, "t.png")), "bind");
 	assert.equal(fate(helper, path.join(m.workspace, "x")), "ro-bind");
 	assert.ok(helper.includes("--unshare-net"));
+});
+
+test("linux sandbox: a run in a worktree writes its own part of the shared git folder and nothing else of it; the main checkout's run cannot write the worktrees", (t) => {
+	const m = machine(t);
+	const common = m.mk("home/me/dev/shop/.git");
+	m.mk("home/me/dev/shop/.git/config", "[core]\n");
+	m.mk("home/me/dev/shop/.git/hooks");
+	m.mk("home/me/dev/shop/.git/objects/ab");
+	m.mk("home/me/dev/shop/.git/refs/heads/main", "x\n");
+	m.mk("home/me/dev/shop/.git/refs/heads/pine/fix", "x\n");
+	m.mk("home/me/dev/shop/.git/logs/refs/heads/pine/fix", "x\n");
+	const admin = m.mk("home/me/dev/shop/.git/worktrees/fix");
+	m.mk("home/me/dev/shop/.git/worktrees/fix/commondir", "../..\n");
+	m.mk("home/me/dev/shop/.git/worktrees/fix/gitdir", "x\n");
+	m.mk("home/me/dev/shop/.git/worktrees/other/index", "x");
+	const tree = m.mk("home/me/dev/shop/.pine/worktrees/fix");
+	m.mk("home/me/dev/shop/.pine/worktrees/fix/.git", `gitdir: ${admin}\n`);
+	const w = { repo: m.project, common, admin, path: tree, branch: "pine/fix", base: "main", from: "x", sub: "", made: 0, kind: "conversation" as const };
+	const rights = gitRights(w);
+	const args = bwrapArgs({ ...m.jail, read: [...m.jail.read, ...rights.read], write: [...m.jail.write.filter((p) => p !== m.project), ...rights.write], fixed: rights.fixed });
+	for (const p of [path.join(tree, "src", "a.ts"), path.join(common, "objects", "ab"), path.join(admin, "index"), path.join(common, "refs", "heads", "pine", "fix")]) assert.equal(fate(args, p), "bind", p);
+	for (const p of [path.join(tree, ".git"), path.join(admin, "commondir"), path.join(admin, "gitdir")]) assert.equal(fate(args, p), "ro-bind", p);
+	for (const p of [path.join(common, "config"), path.join(common, "hooks", "post-checkout"), path.join(common, "refs", "heads", "main"), path.join(common, "worktrees", "other", "index"), path.join(m.project, "README.md")]) assert.equal(fate(args, p), "ro-bind", p);
+
+	// The run in the main checkout: everything of it but the worktrees.
+	const top = bwrapArgs({ ...m.jail, fixed: [path.join(m.project, ".pine", "worktrees")] });
+	assert.equal(fate(top, path.join(m.project, "README.md")), "bind");
+	assert.equal(fate(top, path.join(tree, "src", "a.ts")), "ro-bind");
+	// A worktree's ".git" is a file; it is frozen like a repository's configuration after outside content.
+	assert.ok(protectedNow({ roots: [tree], files: [], names: [], dirs: [] }).paths.includes(path.join(tree, ".git")));
 });
 
 test("linux sandbox: without the network a command cannot make a socket to another program", () => {

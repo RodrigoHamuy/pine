@@ -50,6 +50,13 @@ export interface Roots {
 	/** The folder the owner opened for the conversation, if any. Its instruction files are guarded like the workspace's. */
 	folder?: string;
 	/**
+	 * What this run never writes, in any variant and whatever the owner grants: where the folder is
+	 * one of pine's worktrees, the files that say where its git folder is (`gitRights` in
+	 * src/worktrees.ts). Besides these, the worktrees of other conversations that lie in the folder
+	 * (`.pine/worktrees`, at any depth) are closed for writing (`fixedPath`).
+	 */
+	fixed?: string[];
+	/**
 	 * The files in pine's home that are in every agent's prompt (AGENTS.md, TOOLS.md, USER.md: what
 	 * holds for all agents). Only the main agent may write them.
 	 */
@@ -148,6 +155,9 @@ export function tilde(target: string): string {
 export function checkPath(roots: Roots, kind: "read" | "write", given: string, cwd: string, variant: SandboxVariant | boolean): string | undefined {
 	const target = tilde(given);
 	const p = realish(path.isAbsolute(target) ? target : path.join(cwd, target));
+	// The file tools take a relative path from where they start (`roots.cwd`), whatever `cwd` says.
+	const used = path.isAbsolute(target) ? p : realish(path.join(roots.cwd, target));
+	if (kind === "write" && fixedPath(roots, used)) return worktreeRefusal(roots, target, used);
 	const restricted = variant === true || variant === "restricted" || variant === "open-restricted";
 	// What a source received for this agent is read, wherever it lies. It is not written: pine keeps and deletes it.
 	const fromSource = roots.sources.some((s) => isInside(s, p));
@@ -169,11 +179,25 @@ export function checkPath(roots: Roots, kind: "read" | "write", given: string, c
 	return kind === "write" && restricted ? ownRules(roots, target, p) : undefined;
 }
 
+/** Where pine keeps the worktrees of a repository, from its top: what a run in the folder above never writes. */
+const WORKTREES_RX = /(^|\/)\.pine\/worktrees(\/|$)/;
+
+/** Whether a path is one this run never writes: see `Roots.fixed`. */
+export function fixedPath(roots: Roots, p: string): boolean {
+	if ((roots.fixed ?? []).some((f) => isInside(f, p))) return true;
+	return roots.folder !== undefined && isInside(roots.folder, p) && p !== roots.folder && WORKTREES_RX.test(path.relative(roots.folder, p));
+}
+
+function worktreeRefusal(roots: Roots, target: string, p: string): string {
+	if ((roots.fixed ?? []).some((f) => isInside(f, p))) return `${target} tells git where this worktree's repository is, and stays as pine made it. Work with git as usual; it finds the repository by itself`;
+	return `${target} is in a worktree of another conversation, which works there on a branch of its own. Leave its files to it; what it did comes into this folder when your owner merges it`;
+}
+
 /** Whether the owner can give a conversation this path at all: not pine's own files, not another agent's. What `request_access` refuses. */
 export function grantable(roots: Roots, kind: "read" | "write", p: string): boolean {
 	const about = (root: string) => isInside(root, p) || isInside(p, root);
 	if (roots.secrets.some(about) || about(roots.home)) return false;
-	if (kind === "write" && about(PINE_CODE)) return false;
+	if (kind === "write" && (about(PINE_CODE) || fixedPath(roots, p))) return false;
 	return !roots.others.some(about);
 }
 
@@ -335,6 +359,9 @@ export function sandboxProfile(_cfg: PineConfig, agent: AgentConfig, roots: Root
 		`(allow file-read* ${subpaths(roots.ownedRead)})`,
 		`(allow file-write* ${subpaths(roots.ownedWrite)})`,
 		`(deny file-read* file-write* ${subpaths([...roots.secrets, ...roots.others])}${said})`,
+		// What no run writes, in any variant (`Roots.fixed`): a worktree's pointers to its git folder,
+		// and the worktrees of other conversations that lie in the folder.
+		...(roots.fixed?.length || roots.folder ? [`(deny file-write* ${subpaths(roots.fixed ?? [])}${roots.folder ? ` (regex #"^${rx(roots.folder)}/(.*/)?\\.pine/worktrees(/|$)")` : ""}${said})`] : []),
 		// What its event sources received: read, and nothing more. The folders on the way there can be
 		// seen to exist, which a program that resolves a path needs, and not listed.
 		...(roots.sources.length ? [`(allow file-read* ${subpaths(roots.sources)})`] : []),
@@ -494,6 +521,8 @@ export function sandboxArgv(cfg: PineConfig, agent: AgentConfig, roots: Roots, v
 			ownedRead: roots.ownedRead,
 			ownedWrite: roots.ownedWrite,
 			closed: [...roots.secrets, ...roots.others, ...SESSIONS],
+			// A mount cannot say "at any depth": the worktrees at the top of the folder, which is where pine makes them.
+			fixed: [...(roots.fixed ?? []), ...(roots.folder ? [path.join(roots.folder, ".pine", "worktrees")] : [])].filter(present),
 			sources: roots.sources.filter(present),
 			network: net,
 			variant: v,

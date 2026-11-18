@@ -68,7 +68,7 @@ test("an agent proposes a remote server, the owner confirms, and it works withou
 	// server: it does not mark the conversation as having read outside content.
 	allow = true;
 	const yes = await h.pine.agents.run({ agent: "main", prompt: propose, ...owner });
-	assert.match(yes.text, /Your owner confirmed it\. Added "notes" for all agents.*names start with mcp__notes__.*\/mcp login notes/);
+	assert.match(yes.text, /Your owner confirmed it\. Added "notes" for all agents.*the actions of a tool called "notes".*\/mcp login notes/);
 	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(h.home, "pine.json"), "utf8")).mcp.notes, { url: stub.url, description: "the owner's notes", approve: "tainted" });
 	const used = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("mcp__notes__lookup", { q: "grundbuch" })] }]), ...owner });
 	assert.equal(used.text, "FINAL:: looked up: grundbuch");
@@ -168,7 +168,7 @@ test("a server that only one conversation has: the agent is told where it is, an
 
 	// Where it is, the agent sees it with its state, without looking into a file.
 	await run("side", [{ tools: [call("mcp_servers", {})] }]);
-	assert.match(h.toolResults().at(-1)!, /^Your MCP servers in this conversation:\n- notes \(http[^)]*\): the owner's notes\n    only this conversation has it; connected, \d+ tools? in your tool list, starting with mcp__notes__/);
+	assert.match(h.toolResults().at(-1)!, /^Your MCP servers in this conversation:\n- notes \(http[^)]*\): the owner's notes\n    only this conversation has it; connected: your tool "notes" has its \d+ tools? as actions/);
 
 	// Another conversation is told that it exists, where, and how to get it. It is not a dead end.
 	await run("other", [{ tools: [call("mcp_servers", {}), call("add_mcp_server", { name: "notes", url: stub.url })] }]);
@@ -198,7 +198,7 @@ test("a server that only one conversation has: the agent is told where it is, an
 
 	// Having it already is said as that, with where its tools are.
 	await run("third", [{ tools: [call("add_mcp_server", { name: "notes", url: stub.url }), call("add_mcp_server", { name: "notes", url: stub.url, scope: "agent" })] }]);
-	for (const result of h.toolResults().slice(-2)) assert.match(result, /a server named "notes" exists already: you have it, in all your conversations\. Its tools start with mcp__notes__/);
+	for (const result of h.toolResults().slice(-2)) assert.match(result, /a server named "notes" exists already: you have it, in all your conversations\. Its tools are the actions of your tool "notes"/);
 	await h.close();
 });
 

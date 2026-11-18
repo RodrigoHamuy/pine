@@ -290,7 +290,8 @@
 	--destructive: var(--bad);
 	--border: var(--line);
 	--input: var(--line);
-	--ring: var(--brand);
+	/* What has the keyboard is said in gray, never in the green: the green is for what is on or at work. */
+	--ring: var(--faint);
 	--chart-1: var(--brand);
 	--chart-2: var(--info);
 	--chart-3: var(--plan);
@@ -305,7 +306,7 @@
 	--sidebar-accent: var(--press);
 	--sidebar-accent-foreground: var(--text);
 	--sidebar-border: var(--line);
-	--sidebar-ring: var(--brand);
+	--sidebar-ring: var(--faint);
 }
 
 @layer base {

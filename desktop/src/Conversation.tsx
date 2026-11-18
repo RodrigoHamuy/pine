@@ -3,7 +3,7 @@
 // The parts are shadcn's chat components, composed the way its AI Elements pages show: the thread
 // is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
-import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useRef, useState } from "react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
@@ -20,7 +20,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGr
 import { Item as Card, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Kbd } from "@/components/ui/kbd";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
-import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
+import { Message, MessageContent, MessageFooter, MessageHeader } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -29,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
 import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
+import { bridge } from "./bridge.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
@@ -225,9 +226,10 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 }
 
 /** The owner's turn (or a task's prompt): a bubble on the owner's side, with the files it brought. */
-function OwnerTurn({ text, from, files }: { text: string; from?: string; files?: string[] }) {
+/** A message of the owner's. With `branch`, it can be branched from: a button under it while the pointer is on it, and its menu (`menu`). */
+export function OwnerTurn({ text, from, files, branch, menu }: { text: string; from?: string; files?: string[]; branch?: () => void; menu?: () => void }) {
 	return (
-		<Message align="end" data-item="user">
+		<Message align="end" data-item="user" onContextMenu={menu ? (e) => (e.preventDefault(), menu()) : undefined}>
 			<MessageContent>
 				{from ? <MessageHeader>{from}</MessageHeader> : null}
 				<Bubble align="end" variant="muted">
@@ -246,6 +248,14 @@ function OwnerTurn({ text, from, files }: { text: string; from?: string; files?:
 							</Attachment>
 						))}
 					</AttachmentGroup>
+				) : null}
+				{branch ? (
+					<MessageFooter className="opacity-0 transition-opacity group-hover/message:opacity-100 has-focus-visible:opacity-100">
+						<Tooltip>
+							<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Branch from here" onClick={branch} />}><GitBranchIcon /></TooltipTrigger>
+							<TooltipContent>Branch from here: a new conversation that goes on from this message, with what was said up to it. This one stays as it is.</TooltipContent>
+						</Tooltip>
+					</MessageFooter>
 				) : null}
 			</MessageContent>
 		</Message>
@@ -384,11 +394,19 @@ export function Steps({ items }: { items: Array<{ text: string; status: string }
 	);
 }
 
+/** The menu of a message of the owner's: what can be done from it. */
+async function branchMenu(tab: Tab, task: number): Promise<void> {
+	const picked = await bridge.contextMenu([{ id: "branch", label: "Branch from here" }, ...(tab.folder ? [{ id: "worktree", label: "Branch from here into a worktree" }] : [])]);
+	if (picked === "branch" || picked === "worktree") await store.branch(tab.agent, tab.session, task, picked === "worktree");
+}
+
 /** One item of a conversation, drawn as what it is. */
 export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab: Tab }) {
 	switch (item.t) {
-		case "user":
-			return <OwnerTurn text={item.text} from={item.from} files={item.files} />;
+		case "user": {
+			const task = tab.kind === "chat" ? item.task : undefined;
+			return <OwnerTurn text={item.text} from={item.from} files={item.files} branch={task === undefined ? undefined : () => void store.branch(tab.agent, tab.session, task)} menu={task === undefined ? undefined : () => void branchMenu(tab, task)} />;
+		}
 		case "answer":
 			return (
 				<Message data-item="answer">
@@ -726,9 +744,14 @@ function ConvHead({ tab }: { tab: Tab }) {
 					</BreadcrumbItem>
 				</BreadcrumbList>
 			</Breadcrumb>
-			{chat && tab.folder ? (
+			{chat && tab.worktree ? (
 				<Tooltip>
-					<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)} />}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></TooltipTrigger>
+					<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-worktree={tab.worktree.branch} onClick={() => void store.worktreeMenu(tab)} />}><GitBranchIcon data-icon="inline-start" /><span className="truncate">{tab.worktree.branch}</span></TooltipTrigger>
+					<TooltipContent>Works in the worktree {tab.worktree.branch} of {tab.worktree.base}{tab.folder ? `, at ${tab.folder}` : ""}: merge it, update it or discard it</TooltipContent>
+				</Tooltip>
+			) : chat && tab.folder ? (
+				<Tooltip>
+					<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-folder={tab.folder} onClick={() => void store.pickFolder(tab)} />}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></TooltipTrigger>
 					<TooltipContent>Works in {tab.folder}</TooltipContent>
 				</Tooltip>
 			) : null}

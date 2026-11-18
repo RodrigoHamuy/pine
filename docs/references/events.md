@@ -179,7 +179,7 @@ shows the task: what a web page says must not become something that is done ever
 | Tool | |
 |---|---|
 | `schedules` | What is scheduled for this agent, in which conversation, and when each is next due. |
-| `add_schedule` `name` `task` + one of `cron`, `every`, `at`, `in` [`scope`] | Schedules it. `cron`: set times; `every`: an interval, at least a minute; `at`: once, at a local time (`2026-12-24 17:00`); `in`: once, after this long (`20m`). |
+| `add_schedule` `name` `task` + one of `cron`, `every`, `at`, `in` [`scope`] | Schedules it. `cron`: set times; `every`: an interval, at least a minute; `at`: once, at a local time (`2026-12-24 17:00`); `in`: once, after this long (`10s`, `20m`). |
 | `remove_schedule` `name` | Ends one. This conversation's own goes without a question. |
 
 A schedule that happens once removes itself when it has fired. A one-off, or a `cron` schedule
@@ -189,7 +189,7 @@ late. An `every` schedule simply starts counting again. `pine
 schedules` lists everything that is scheduled.
 
 A name is unique among all schedules; a task has at most 4000 characters; an interval an agent
-sets is at least a minute; a time in the past is refused. In manual mode you are asked for
+sets (`every`) is at least a minute, while a one-off (`in`, `at`) can be seconds away; a time in the past is refused. In manual mode you are asked for
 every `add_schedule` and `remove_schedule`.
 
 ### In the files

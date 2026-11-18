@@ -6,7 +6,8 @@ import { type AgentConfig, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpSe
 import { AGENT_TOOLS, checkNewAgent, createAgent } from "./agent-admin.ts";
 import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkRoute, checkSetting, dropRoute, routesText, SETTINGS, settingsText } from "./admin.ts";
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
-import { SUBAGENT_CANNOT_ASK } from "./catalogue.ts";
+import { finish as finishWorktree, type Worktree, worktreeName } from "./worktrees.ts";
+import { SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
 import type { PineEvent, TaskResult } from "./types.ts";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { addServer, mcpEnvName, removeServer, splitCommand, validateServer } from "./mcp-config.ts";
@@ -43,6 +44,9 @@ function parseWhen(when: string | undefined): unknown {
  * The tools that are about what an agent has: event sources and subscriptions, MCP servers,
  * schedules, skills. The main agent calls each of them for another agent too (see the end of pineTools).
  */
+/** The `worktree` argument of subagent and delegate, said once. */
+const WORKTREE_PARAM = "true: each works on a checkout and branch of its own of your folder's git repository, from its last commit, so that changes do not collide. What it did comes back as a branch for you to merge";
+
 export const FOR_ANY_AGENT = ["sources", "subscribe", "unsubscribe", "add_source", "remove_source", "mcp_servers", "add_mcp_server", "remove_mcp_server", "schedules", "add_schedule", "remove_schedule", "skills", "add_skill", "remove_skill"];
 
 /** A file of an agent's, read without following a link: what lies there is the agent's to put. */
@@ -62,6 +66,9 @@ function readOwn(file: string, max: number): string | undefined {
 }
 
 /** The tools pine adds to a session, according to what this run's profile allows. */
+/** A conversation named as the owner names the one they are in. */
+const THIS_ONE = /^(this|current|here|the same|this[ _-]?(one|conversation|chat|thread|session)|current[ _-]?(conversation|chat|thread|session)|the[ _-]?current[ _-]?(conversation|chat|thread|session)|same[ _-]?(conversation|chat))$/i;
+
 export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live, profile: Profile, behalf?: { asker: string }): any[] {
 	const { cfg, bus, state } = manager;
 	const tools: any[] = [];
@@ -75,6 +82,32 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const t = run().task;
 		return t.event ? ({ id: t.event, hops: t.hops } as PineEvent) : ({ id: 0, hops: t.hops } as PineEvent);
 	};
+	/** Worktrees of the conversation's folder, one for each task of a call (`worktree` of subagent and delegate). */
+	const apart = async (n: number): Promise<Worktree[]> => {
+		if (!live.folder) throw new Error('"worktree": this conversation has no folder, so there is no repository to make a worktree of. Leave it out');
+		const made: Worktree[] = [];
+		try {
+			for (let i = 0; i < n; i++) made.push(await manager.taskWorktree(live.folder, worktreeName(`${live.key}-sub`)));
+		} catch (e) {
+			await gather(made, []);
+			throw new Error(`"worktree": ${errText(e)}`);
+		}
+		return made;
+	};
+	/** What became of each task's worktree: its work committed on its branch, the folder gone. Said to the agent that has to merge it. */
+	const gather = (trees: Worktree[], labels: string[]): Promise<string[]> =>
+		Promise.all(
+			trees.map(async (t, i) => {
+				try {
+					const f = await finishWorktree(t, truncate(labels[i] ?? "", 200));
+					if (!f.branch) return "It changed no file in its worktree.";
+					const files = `${f.files.slice(0, 12).join(", ")}${f.files.length > 12 ? `, and ${f.files.length - 12} more` : ""}`;
+					return `What it changed is on the branch ${f.branch} (${f.commits} commit${f.commits === 1 ? "" : "s"}; ${files}). It is not in your folder yet: bring it in with \`git merge ${f.branch}\`, then delete the branch with \`git branch -d ${f.branch}\`.`;
+				} catch (e) {
+					return `Its worktree ${t.path} could not be tidied (${errText(e)}). What it did is on the branch ${t.branch} or in that folder.`;
+				}
+			}),
+		);
 	const absorb = (from: string, res: TaskResult) => {
 		if (res.tainted) live.taint(`a result from ${from} (${res.tainted})`);
 	};
@@ -91,13 +124,16 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					task: Type.String({ description: "The complete task, self-contained" }),
 					wait: Type.Optional(Type.Boolean({ description: "false: do not wait; the answer arrives later as a message. Default true." })),
 					thread: Type.Optional(Type.String({ description: "Name of an ongoing thread with that agent, so it remembers earlier tasks of the same thread. Omit for a fresh start." })),
+					...(live.trust === "owner" ? { worktree: Type.Optional(Type.Boolean({ description: WORKTREE_PARAM })) } : {}),
 				}),
-				execute: async (_id, p, signal) => {
+				execute: async (_id, p: any, signal) => {
 					const r = run();
 					if (!profile.delegates.includes(p.agent)) throw new Error(`cannot delegate to "${p.agent}". Available: ${profile.delegates.join(", ")}`);
 					const chain = [...(r.task.meta.chain ?? []), agent.id];
 					if (chain.includes(p.agent)) throw new Error(`${p.agent} is already waiting in this chain (${chain.join(" -> ")}). Answer yourself or pick another agent.`);
 					if (r.task.depth + 1 > cfg.limits.maxDelegationDepth) throw new Error(`delegation depth limit (${cfg.limits.maxDelegationDepth}) reached; do the task yourself`);
+					if (p.worktree === true && (p.thread || p.wait === false)) throw new Error('"worktree" is for a task you wait for, without a thread: its work comes back as a branch for you to merge');
+					const [tree] = p.worktree === true ? await apart(1) : [];
 					const child = manager.submit({
 						agent: p.agent,
 						prompt: `[task from agent ${agent.id}]\n${p.task}`,
@@ -106,14 +142,19 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						parent: r.task,
 						tainted: live.tainted,
 						folder: live.folder,
+						worktree: tree,
 						notify: p.wait === false ? { agent: agent.id, session: r.task.session } : undefined,
 						label: truncate(p.task, 80),
 					});
 					if (p.wait === false) return ok(`Task #${child.id} handed to ${p.agent}. Its answer will arrive as a separate message later; do not wait for it now.`);
-					const res = await manager.awaitChildren(r, [child.id], signal);
+					const waited = await manager.awaitChildren(r, [child.id], signal).then((x) => ({ res: x }), (error) => ({ res: undefined, error }));
+					// Its worktree is tidied whatever became of the task: what it did stays on its branch.
+					const left = tree ? await gather([tree], [truncate(p.task, 200)]) : [];
+					if (!waited.res) throw waited.error;
+					const res = waited.res;
 					absorb(p.agent, res[0]);
-					if (res[0].status !== "done") throw new Error(`${p.agent} did not finish the task (${res[0].status}): ${res[0].error ?? "no details"}`);
-					return ok(`[${p.agent}] ${res[0].text || "(empty answer)"}`);
+					if (res[0].status !== "done") throw new Error(`${p.agent} did not finish the task (${res[0].status}): ${res[0].error ?? "no details"}${left.length ? `\n${left[0]}` : ""}`);
+					return ok(`[${p.agent}] ${res[0].text || "(empty answer)"}${left.length ? `\n\n${left[0]}` : ""}`);
 				},
 			}),
 		);
@@ -163,6 +204,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						? {
 								model: Type.Optional(Type.String({ description: "Another model for these sub-tasks, as provider/model. Leave out for your own. The models tool lists them" })),
 								thinking: Type.Optional(Type.String({ description: `Reasoning level for them, one of ${THINKING_LEVELS.join(", ")}. Leave out for your own` })),
+								worktree: Type.Optional(Type.Boolean({ description: WORKTREE_PARAM })),
 							}
 						: {}),
 				}),
@@ -173,13 +215,18 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					const model = p.model ? await pickModel(String(p.model)) : undefined;
 					const thinking = p.thinking ? String(p.thinking).trim().toLowerCase() : undefined;
 					if (thinking && !THINKING_LEVELS.includes(thinking)) throw new Error(`"thinking" is one of ${THINKING_LEVELS.join(", ")}`);
+					if (p.worktree === true && !choose) throw new Error('sub-agents of this run work where you do: leave out "worktree"');
+					const trees = p.worktree === true ? await apart(p.tasks.length) : [];
 					const ids = p.tasks.map(
-						(t: string) =>
-							manager.submit({ agent: agent.id, prompt: t, session: "new", kind: "subagent", parent: r.task, tainted: live.tainted, leaf: true, tools: agent.subagents.tools, model, thinking, label: truncate(t, 80) }).id,
+						(t: string, i: number) =>
+							manager.submit({ agent: agent.id, prompt: t, session: "new", kind: "subagent", parent: r.task, tainted: live.tainted, leaf: true, tools: agent.subagents.tools, model, thinking, label: truncate(t, 80), worktree: trees[i] }).id,
 					);
-					const res = await manager.awaitChildren(r, ids, signal);
+					const waited = await manager.awaitChildren(r, ids, signal).then((x) => ({ res: x }), (error) => ({ res: undefined, error }));
+					const left = await gather(trees, p.tasks);
+					if (!waited.res) throw waited.error;
+					const res = waited.res;
 					res.forEach((x, i) => absorb(`sub-agent ${i + 1}`, x));
-					return ok(res.map((x, i) => `## Sub-task ${i + 1}: ${x.status}\n${x.status === "done" ? x.text : (x.error ?? "")}`).join("\n\n"));
+					return ok(res.map((x, i) => `## Sub-task ${i + 1}: ${x.status}\n${x.status === "done" ? x.text : (x.error ?? "")}${left[i] ? `\n\n${left[i]}` : ""}`).join("\n\n"));
 				},
 			}),
 		);
@@ -665,8 +712,8 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const taken = (name: string): string => {
 			const own = agent.mcp[name];
 			if (own?.session && own.session !== here()) return `a server named "${name}" exists already, but only your conversation "${own.session}" has it, not this one. To have it in all your conversations, call add_mcp_server again with the same name and scope "agent": your owner is asked, and it takes the place of that one. For this conversation alone, give it another name.`;
-			if (own) return `a server named "${name}" exists already: ${own.session ? "this conversation has it" : "you have it, in all your conversations"}. Its tools start with ${mcpNamespace(name)}__; mcp_servers shows whether it is connected. ${own.session ? `To have it in all your conversations, call add_mcp_server again with the same name and scope "agent": your owner is asked. To change it otherwise` : "To change it"}, remove it first.`;
-			if (name in cfg.mcp) return `a server named "${name}" exists already, for all agents${name in effectiveMcp(cfg, agent, here()) ? `, you included: its tools start with ${mcpNamespace(name)}__` : ""}. Pick another name.`;
+			if (own) return `a server named "${name}" exists already: ${own.session ? "this conversation has it" : "you have it, in all your conversations"}. Its tools are the actions of your tool "${serverTool(mcpNamespace(name))}"; mcp_servers shows whether it is connected. ${own.session ? `To have it in all your conversations, call add_mcp_server again with the same name and scope "agent": your owner is asked. To change it otherwise` : "To change it"}, remove it first.`;
+			if (name in cfg.mcp) return `a server named "${name}" exists already, for all agents${name in effectiveMcp(cfg, agent, here()) ? `, you included: its tools are the actions of your tool "${serverTool(mcpNamespace(name))}"` : ""}. Pick another name.`;
 			return `a server named "${name}" exists already; pick another name`;
 		};
 		tools.push(
@@ -685,10 +732,12 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					}
 					const mine = Object.entries(effectiveMcp(cfg, agent, session));
 					const lines = mine.map(([name, sv]) => {
+						// The session knows a server's tools by their own names; the model, as the actions of one tool.
 						const prefix = `${mcpNamespace(name)}__`;
+						const tool = serverTool(mcpNamespace(name));
 						const count = names.filter((n) => n.startsWith(prefix)).length;
 						const whom = name in agent.mcp ? (sv.session ? "only this conversation has it" : "yours as an agent, in all your conversations") : "for all agents";
-						const state = !names.length ? `tools start with ${prefix}` : count ? `connected, ${count} ${count === 1 ? "tool" : "tools"} in your tool list, starting with ${prefix}` : `NOT connected: no tool starting with ${prefix} is in your tool list. It did not start, or it needs a sign-in`;
+						const state = !names.length ? `its tools are the actions of your tool "${tool}"` : count ? `connected: your tool "${tool}" has its ${count} ${count === 1 ? "tool" : "tools"} as actions` : `NOT connected: there is no tool "${tool}" in your tool list. It did not start, or it needs a sign-in`;
 						return `- ${name} (${targetOf(sv)})${sv.description ? `: ${sv.description}` : ""}\n    ${whom}; ${state}`;
 					});
 					const elsewhere = Object.entries(agent.mcp).filter(([, sv]) => sv.session && sv.session !== session && sv.enabled !== false);
@@ -701,7 +750,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 				label: "Add MCP server",
 				description: `Propose an MCP server to be added to pine: a remote one (its https URL) or a local one (the command that starts it, for example "npx -y some-package"). It is added for this conversation, for yourself as an agent${isMain ? ", or for all agents" : ""}. Your owner sees the proposal and decides; you cannot add it without them. Use it when your owner asks you to install or connect an MCP server: do not tell them to type a command instead.${isMain ? "" : ` A server for all agents is the main agent's to add (${mainId}).`}`,
 				parameters: Type.Object({
-					name: Type.String({ description: "Short name: lowercase letters, digits and _ (for example home_link). Tools will appear as mcp__<name>__<tool>" }),
+					name: Type.String({ description: "Short name: lowercase letters, digits and _ (for example home_link). Its tools will be the actions of a tool with this name" }),
 					url: Type.Optional(Type.String({ description: "For a remote server: its https URL" })),
 					command: Type.Optional(Type.String({ description: 'For a local server: the program and its arguments, as its documentation gives them, for example "npx -y @example/mcp@latest". One program, no shell operators' })),
 					secrets: Type.Optional(Type.Array(Type.String(), { description: 'For a local server that needs a key or token: the NAMES of the environment variables it reads them from, as its documentation gives them (for example ["EXAMPLE_API_KEY"]). Never a value: pine asks your owner to type each one' })),
@@ -774,7 +823,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 								kind: "notify",
 								trust: "owner",
 								reply: r.task.reply,
-								prompt: `[pine: the MCP server "${p.name}" that you added is connected now. Its tools are in your tool list; their names start with ${mcpNamespace(p.name)}__. Go on with what your owner asked for. If no tool with that prefix is in your list, the server did not start or still needs its sign-in: say that plainly${p.command ? ", and run its command in your shell to see what it prints" : ""}.]`,
+								prompt: `[pine: the MCP server "${p.name}" that you added is connected now. Your tool list has changed since your last answer: it has the tool "${serverTool(mcpNamespace(p.name))}" now, whose actions are the server's tools. What you said before about its tools not being there is out of date. Go on with what your owner asked for. If there is no tool "${serverTool(mcpNamespace(p.name))}" in your list, the server did not start or still needs its sign-in: say that plainly${p.command ? ", and run its command in your shell to see what it prints" : ""}.]`,
 							});
 							goesOn = true;
 						} catch {
@@ -787,14 +836,14 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					const when = goesOn
 						? `You do not have its tools in this turn yet. Finish what else there is to do now (a sign-in, if it needs one) and end your turn with one short line: pine calls you again at once, in this same conversation, and then the tools are in your tool list. Do not tell your owner to start a new chat or to send another message`
 						: `Its tools are available from your next message on, in this same conversation`;
-					return ok(`Your owner confirmed it. Added "${p.name}" for ${whose(scope)}. ${when}; their names start with ${mcpNamespace(p.name)}__ (look at your tool list for the exact names, do not guess them). ${signIn}`);
+					return ok(`Your owner confirmed it. Added "${p.name}" for ${whose(scope)}. ${when}; they are the actions of a tool called "${serverTool(mcpNamespace(p.name))}" (take the actions' names from that tool, do not guess them). ${signIn}`);
 				},
 			}),
 			defineTool({
 				name: "remove_mcp_server",
 				label: "Remove MCP server",
 				description: `Remove an MCP server from pine's configuration, when your owner no longer wants it. You can remove a server of this conversation or of your own agent${isMain ? ", and as the main agent one that is for all agents" : "; one that is for all agents is the main agent's to remove"}. Your owner confirms it unless it is this conversation's own.`,
-				parameters: Type.Object({ name: Type.String({ description: "The server's name, as in your tool names: mcp__<name>__..." }) }),
+				parameters: Type.Object({ name: Type.String({ description: "The server's name: the name of the tool its tools are actions of" }) }),
 				execute: async (_id, p, signal) => {
 					run();
 					const known = [...Object.keys(agent.mcp), ...Object.keys(cfg.mcp)];
@@ -842,7 +891,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						cron: Type.Optional(Type.String({ description: 'Set times, as five fields in local time: minute hour day-of-month month day-of-week, e.g. "0 7 * * 1-5" (weekdays at seven)' })),
 						every: Type.Optional(Type.String({ description: 'A fixed interval, e.g. "15m", "2h". At least "1m"' })),
 						at: Type.Optional(Type.String({ description: 'Once, at this local time: "2026-12-24 17:00". The note in front of each message tells you the time now' })),
-						in: Type.Optional(Type.String({ description: 'Once, after this long: "20m", "2h"' })),
+						in: Type.Optional(Type.String({ description: 'Once, after this long: "10s", "20m", "2h". Seconds are fine: only "every" has a least interval' })),
 						scope: Type.Optional(Type.String({ description: `Who is woken. ${forWhom("the schedule")}` })),
 					}),
 					execute: async (_id, p, signal) => {
@@ -1492,7 +1541,8 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				execute: async (id: string, p: any, signal: any, onUpdate: any) => {
 					const { agent: who, conversation, ...rest } = p ?? {};
 					const targetId = typeof who === "string" && who.trim() ? who.trim() : agent.id;
-					const session = typeof conversation === "string" && conversation.trim() ? safeName(conversation.trim()) : undefined;
+					// "This conversation" is the owner's words for where they are, not a conversation's name.
+					const session = typeof conversation === "string" && conversation.trim() && !THIS_ONE.test(conversation.trim()) ? safeName(conversation.trim()) : undefined;
 					const r = run();
 					if (targetId === agent.id && (session === undefined || session === here())) return tool.execute(id, rest, signal, onUpdate);
 					const target = cfg.agents[targetId];

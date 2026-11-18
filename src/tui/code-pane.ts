@@ -494,7 +494,7 @@ export class CodePane {
 		const ch = s?.view === "changes" && s.scope !== "turn" ? s.changes : undefined;
 		const last = s?.view === "changes" && s.scope === "turn" ? s.turn : undefined;
 		// What is asked for first comes first; the folder's name is what gets cut when the pane is narrow.
-		const info = [...(last ? [last.files.length ? `${last.files.length}${last.more ? "+" : ""} changed by your last message` : "last message"] : []), ...(ch?.repo ? [`${ch.branch || "no branch"}`, ch.files.length ? `${ch.files.length}${ch.more ? "+" : ""} changed` : "clean"] : []), ...(s?.view === "output" && s.calls ? [`${s.calls.length} tool call${s.calls.length === 1 ? "" : "s"}`] : []), ...(s?.view === "running" && s.programs ? [s.programs.length ? `${s.programs.length} running` : "nothing running"] : []), where].filter(Boolean).join(" · ");
+		const info = [...(last ? [last.files.length ? `${last.files.length}${last.more ? "+" : ""} changed by your last message` : "last message"] : []), ...(ch?.repo ? [`${ch.branch || "no branch"}${ch.worktree ? ` (worktree: ${ch.worktree.ahead} ahead of ${ch.worktree.base}${ch.worktree.behind ? `, ${ch.worktree.behind} behind` : ""})` : ""}`, ch.files.length ? `${ch.files.length}${ch.more ? "+" : ""} changed` : "clean"] : []), ...(s?.view === "output" && s.calls ? [`${s.calls.length} tool call${s.calls.length === 1 ? "" : "s"}`] : []), ...(s?.view === "running" && s.programs ? [s.programs.length ? `${s.programs.length} running` : "nothing running"] : []), where].filter(Boolean).join(" · ");
 		return [truncateToWidth(text, width), truncateToWidth(` ${c.gray(info)}`, width), c.gray("─".repeat(width)), ...this.stepsLines(width)];
 	}
 

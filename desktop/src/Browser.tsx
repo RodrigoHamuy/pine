@@ -12,7 +12,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
-import { EmptyView } from "@/components/empty-view";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Spinner } from "@/components/ui/spinner";
@@ -41,6 +41,9 @@ export function BrowserView({ tab }: { tab: Tab }) {
 	/** What was done and is not sent yet: typing and the wheel come in bursts, and go as one. */
 	const pending = useRef<{ ops: Op[]; timer?: number; sending: boolean }>({ ops: [], sending: false });
 	const front = state?.tabs[state.current];
+	/** What the empty view offers: the ports of the conversation's running programs, and what the agent opened that is not one of those. */
+	const running = tab.programs.flatMap((p) => p.ports.map((port) => ({ port, command: p.command })));
+	const visited = (state?.visited ?? []).filter((url) => !running.some((r) => new RegExp(`^https?://(localhost|127\\.0\\.0\\.1):${r.port}/?$`).test(url)));
 
 	const took = (next: BrowserState | undefined) => {
 		if (!next) return;
@@ -175,8 +178,8 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							<TabsTrigger value={i} className="min-w-0 justify-start">
 								<span className="min-w-0 flex-1 truncate text-left">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
 							</TabsTrigger>
-							{/* (The last tab stays: a browser without one would open one again.) */}
-							{state.tabs.length > 1 ? <Button variant="ghost" size="icon-xs" aria-label="Close this tab" className={cn("browser-tab-close", i !== state.current && "invisible group-hover/tab:visible")} onClick={() => act({ do: "closetab", index: i })}><XIcon /></Button> : null}
+							{/* (Closing the last tab leaves the browser up without a page: the view is empty again.) */}
+							<Button variant="ghost" size="icon-xs" aria-label={state.tabs.length > 1 ? "Close this tab" : "Close the page"} className={cn("browser-tab-close", i !== state.current && "invisible group-hover/tab:visible")} onClick={() => act({ do: "closetab", index: i })}><XIcon /></Button>
 						</div>
 					))}
 							</TabsList>
@@ -261,9 +264,39 @@ export function BrowserView({ tab }: { tab: Tab }) {
 					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Spinner /></div>}
 				</ScrollArea>
 			) : (
-				<EmptyView icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
-					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}
-				</EmptyView>
+				<Empty>
+					<EmptyHeader>
+						<EmptyMedia variant="icon">
+							<EyeIcon />
+						</EmptyMedia>
+						<EmptyTitle>{state ? "No page is open" : "Looking for the browser…"}</EmptyTitle>
+						{state ? <EmptyDescription>This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself.</EmptyDescription> : null}
+					</EmptyHeader>
+					{/* What the conversation's own programs listen on (the code pane's Running): a server the agent started is one click away. */}
+					{state && running.length ? (
+						<EmptyContent data-offer="running">
+							<EmptyDescription>Running in this conversation</EmptyDescription>
+							{running.map((r) => (
+								<Tooltip key={r.port}>
+									<TooltipTrigger render={<Button variant="link" size="xs" className="max-w-full font-mono" disabled={busy} onClick={() => void go(`http://localhost:${r.port}`)} />}><span className="truncate">localhost:{r.port}</span></TooltipTrigger>
+									<TooltipContent>{r.command}</TooltipContent>
+								</Tooltip>
+							))}
+						</EmptyContent>
+					) : null}
+					{visited.length ? (
+						<EmptyContent data-offer="visited">
+							<EmptyDescription>Opened by the agent before</EmptyDescription>
+							{/* (An address is text an agent chose: drawn as text, whole in the tooltip, and opened only by this click.) */}
+							{visited.map((url) => (
+								<Tooltip key={url}>
+									<TooltipTrigger render={<Button variant="link" size="xs" className="max-w-full font-mono" disabled={busy} onClick={() => void go(url)} />}><span className="truncate">{url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span></TooltipTrigger>
+									<TooltipContent>{url}</TooltipContent>
+								</Tooltip>
+							))}
+						</EmptyContent>
+					) : null}
+				</Empty>
 			)}
 			{open ? <div className="flex flex-none items-center gap-1.5 border-t border-line-soft px-2.5 py-1 text-xs text-faint"><ShieldIcon size={11} /><span className="truncate">The agent's browser, behind pine's guard. What you do here, the agent sees when it next looks.</span></div> : null}
 		</div>

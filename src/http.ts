@@ -160,6 +160,12 @@ export class HttpServer {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, { goal: this.manager.goals.get(parts[1], q.get("session") ?? "main") });
 				}
+				// A conversation's worktree and where it stands against its base; and every worktree of pine's.
+				if (parts[0] === "agents" && parts[2] === "worktree" && parts.length === 3) {
+					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+					return send(200, { worktree: (await this.manager.worktreeStatus(parts[1], q.get("session") ?? "main")) ?? null });
+				}
+				if (url.pathname === "/worktrees") return send(200, await this.manager.listWorktrees());
 				if (parts[0] === "agents" && parts[2] === "folders" && parts.length === 3) {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, this.manager.folders(parts[1]));
@@ -176,7 +182,7 @@ export class HttpServer {
 					const root = this.manager.viewRoot(parts[1], q.get("session") ?? "main");
 					if (!root) throw new HttpError(404, "no such agent");
 					const rel = q.get("path") ?? "";
-					const found = parts[3] === "find" ? { files: await findFiles(root, (q.get("q") ?? "").slice(0, 200)) } : parts[3] === "changes" ? { root, ...(await changes(root)) } : parts[3] === "diff" ? await diffOf(root, rel) : parts[3] === "tree" ? listDir(root, rel) : parts[3] === "file" ? readText(root, rel, q.has("max") ? Math.max(1, Math.min(MAX_EDIT, Math.floor(num("max") || 0))) : undefined) : undefined;
+					const found = parts[3] === "find" ? { files: await findFiles(root, (q.get("q") ?? "").slice(0, 200)) } : parts[3] === "changes" ? { root, ...(await changes(root)), worktree: await this.worktreeLine(parts[1], q.get("session") ?? "main") } : parts[3] === "diff" ? await diffOf(root, rel) : parts[3] === "tree" ? listDir(root, rel) : parts[3] === "file" ? readText(root, rel, q.has("max") ? Math.max(1, Math.min(MAX_EDIT, Math.floor(num("max") || 0))) : undefined) : undefined;
 					if (!found) throw new HttpError(404, "nothing there");
 					return send(200, found);
 				}
@@ -373,6 +379,32 @@ export class HttpServer {
 					throw new HttpError(409, errText(e));
 				}
 			}
+			// A new conversation that goes on from a message of the owner's. Only here, like undo: no agent has a tool for it.
+			if (parts[0] === "agents" && parts[2] === "branch" && parts.length === 3) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				if (body.at !== undefined && !Number.isInteger(body.at)) throw new HttpError(400, "at: the number of the message to branch after");
+				try {
+					return send(200, await this.manager.branchSession(parts[1], String(body.session ?? "main"), body.at as number | undefined, typeof body.to === "string" ? body.to : undefined, { worktree: body.worktree === true }));
+				} catch (e) {
+					throw new HttpError(409, errText(e));
+				}
+			}
+			// A conversation's worktree (src/worktrees.ts): made, merged, brought up to date and discarded by the owner alone.
+			if (parts[0] === "agents" && parts[2] === "worktree" && (parts.length === 3 || (parts.length === 4 && ["merge", "update", "remove"].includes(parts[3])))) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				if (typeof body.session !== "string" || !body.session) throw new HttpError(400, "session: the conversation's name");
+				if (parts[3] === "merge" && body.how !== undefined && body.how !== "merge" && body.how !== "squash") throw new HttpError(400, 'how: "merge" (the default) or "squash"');
+				try {
+					if (parts.length === 3) return send(200, await this.manager.makeWorktree(parts[1], body.session, { name: typeof body.name === "string" ? body.name : undefined }));
+					if (parts[3] === "merge") return send(200, await this.manager.mergeWorktree(parts[1], body.session, body.how === "squash" ? "squash" : "merge", typeof body.message === "string" ? body.message : undefined));
+					if (parts[3] === "update") return send(200, await this.manager.updateWorktree(parts[1], body.session));
+					return send(200, await this.manager.discardWorktree(parts[1], body.session, { keepBranch: body.keepBranch === true }));
+				} catch (e) {
+					const files = (e as { files?: unknown }).files;
+					if (Array.isArray(files)) return send(409, { error: errText(e), conflicts: files });
+					throw new HttpError(409, errText(e));
+				}
+			}
 			if (parts[0] === "agents" && parts[2] === "reset" && parts.length === 3) return send(200, { reset: await this.manager.resetSession(parts[1], body.session) });
 			if (parts[0] === "tasks" && parts[2] === "cancel" && parts.length === 3) return send(200, { cancelled: this.manager.cancel(Number(parts[1])) });
 			if (parts[0] === "approvals" && parts.length === 2) {
@@ -396,6 +428,12 @@ export class HttpServer {
 	}
 
 	/** DNS rebinding and cross-site requests: only accept a loopback (or configured) Host, never an Origin. */
+	/** What the code pane says of a conversation's worktree beside its changes: its branch, and how far it is from its base. */
+	private async worktreeLine(agent: string, session: string): Promise<{ branch: string; base: string; ahead: number; behind: number; dirty: number; merged: boolean } | undefined> {
+		const w = await this.manager.worktreeStatus(agent, session).catch(() => undefined);
+		return w && !w.gone ? { branch: w.branch, base: w.base, ahead: w.ahead, behind: w.behind, dirty: w.dirty, merged: w.merged } : undefined;
+	}
+
 	private guardBrowser(req: http.IncomingMessage): void {
 		if (req.headers.origin || req.headers["sec-fetch-site"]) throw new HttpError(403, "requests from web pages are not accepted");
 		const host = (req.headers.host ?? "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");

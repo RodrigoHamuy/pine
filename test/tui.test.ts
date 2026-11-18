@@ -811,6 +811,35 @@ test("tui: an event from a subscribed source arrives in the conversation the age
 	await t.close();
 });
 
+test("tui: /branch goes on in a new tab from a message picked in a list, or from all of it, and the original is left as it was", async () => {
+	const t = await open({ agents: { main: {} } });
+	await t.sees("type a message");
+	await t.send("/new idea");
+	await t.send("first thought");
+	await t.sees("ECHO[first thought");
+	await t.send("second thought");
+	await t.sees("ECHO[second thought");
+	// The list: all of it first, then the owner's messages, the latest first.
+	await t.send("/branch");
+	await t.sees("│ Branch idea from");
+	const order = ["all of it", "second thought", "first thought"].map((w) => t.text().indexOf(w, t.text().indexOf("Branch idea from")));
+	assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), t.text());
+	t.term.type([KEY.down, KEY.down, KEY.enter]);
+	await t.sees(/3 main·idea-branch ×/);
+	await t.sees("from the message you picked");
+	await t.send("only here");
+	await t.sees("ECHO[only here");
+	assert.deepEqual(t.h.pine.tasks.list({ agent: "main", session: "idea-branch" }).map((x) => x.prompt).reverse(), ["first thought", "only here"]);
+	assert.deepEqual(t.h.pine.tasks.list({ agent: "main", session: "idea" }).map((x) => x.prompt).reverse(), ["first thought", "second thought"]);
+	// With a name, all of it, without a list.
+	t.term.type([KEY.ctrlW]);
+	await until(() => !/main·idea-branch/.test(t.app.screen()[0]), 2000, "the branch's tab to close");
+	await t.send("/branch whole");
+	await t.sees(/main·whole ×/);
+	assert.deepEqual(t.h.pine.tasks.list({ agent: "main", session: "whole" }).map((x) => x.prompt).reverse(), ["first thought", "second thought"]);
+	await t.close();
+});
+
 test("tui: the same tabs open again next time; the list of conversations pins, removes and says what goes by itself; /rename", async () => {
 	const t = await open({ agents: { main: {} } });
 	await t.sees("type a message");

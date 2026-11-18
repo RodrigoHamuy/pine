@@ -9,7 +9,7 @@ import { Client } from "./client.ts";
  * Open the terminal UI. It attaches to a running daemon; if none answers, it starts one inside
  * this process (logging to data/pine.log) and stops it again on exit.
  */
-export async function runTui(cfg: PineConfig, opts: { folder?: string } = {}): Promise<void> {
+export async function runTui(cfg: PineConfig, opts: { folder?: string; worktree?: string | true } = {}): Promise<void> {
 	if (!cfg.http) throw new Error("the terminal UI needs the control API; remove \"http\": false from pine.json");
 	if (!process.stdout.isTTY || !process.stdin.isTTY) throw new Error("the terminal UI needs an interactive terminal");
 	const service = await ensureDaemon(cfg);
@@ -45,7 +45,7 @@ export async function runTui(cfg: PineConfig, opts: { folder?: string } = {}): P
 	try {
 		await app.start();
 		// Started as "pine <folder>": the same tabs as always, and one on that folder.
-		if (opts.folder) await app.openFolder(opts.folder);
+		if (opts.folder) await app.openFolder(opts.folder, opts.worktree);
 	} catch (e) {
 		await app.stop();
 		throw e;

@@ -938,7 +938,8 @@ for (const way of ["outline", "picture"] as const) {
 		const { mock, sees } = await liveModel(t);
 		if (way === "picture" && !sees) return t.skip("the model does not take pictures (PINE_LIVE_SEES=1 says that it does)");
 
-		const token = `pine was here ${Math.random().toString(36).slice(2, 8)}`;
+		// Typed, as by picture, macOS corrects what it can: a capital after a full stop is already there, and digits have no spelling.
+		const token = `Pine was here ${String(Math.floor(Math.random() * 1e6)).padStart(6, "0")}`;
 		// By outline the model gets no pictures; by picture it gets nothing that works by reference.
 		const { h, asked, used } = await liveAgent(t, mock, way === "outline" ? { helper: program, images: false } : { helper: program, block: ["app_snapshot", "app_press", "app_set_text"] });
 		// Whatever the agent did, look for ourselves afterwards, and put the document away again.

@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, ListIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, ListIcon, MessageSquareIcon, PanelLeftIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -102,18 +102,29 @@ function Gate() {
 // under it its conversations. What starts something new stands on the agent's own line, so it
 // is never a question whom a new conversation or a folder is for.
 
-function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
+/** How far a conversation's row stands in: a branch under the one it was made from, four steps at most. */
+const INDENT = ["pl-10", "pl-14", "pl-18", "pl-22", "pl-26"];
+
+function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; depth?: number }) {
 	const s = store;
 	const tab = s.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === c.session);
 	const main = c.session === "main";
 	const menu = async () => {
 		const picked = await bridge.contextMenu([
 			{ id: "open", label: "Open" },
+			...(c.tasks ? [{ id: "branch", label: "Branch" }] : []),
+			...(c.tasks && c.folder ? [{ id: "branch-worktree", label: "Branch into a Worktree" }] : []),
+			...(c.worktree ? [{ id: "worktree", label: "Worktree…" }] : []),
 			...(main ? [] : [{ id: "pin", label: c.pinned ? "Unpin" : "Pin" }, { id: "rename", label: "Rename…" }]),
 			{ id: "sep", label: "", separator: true },
 			main ? { id: "reset", label: "Start over…" } : { id: "remove", label: "Remove…" },
 		]);
 		if (picked === "open") await s.openTab(agent, c.session);
+		if (picked === "branch" || picked === "branch-worktree") await s.branch(agent, c.session, undefined, picked === "branch-worktree");
+		if (picked === "worktree") {
+			await s.openTab(agent, c.session);
+			if (s.active?.kind === "chat") await s.worktreeMenu(s.active);
+		}
 		if (picked === "pin") {
 			await s.attempt(() => api.pinSession(agent, c.session, !c.pinned));
 			await s.refreshConversations(agent);
@@ -137,8 +148,8 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	return (
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
 		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
-			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16", on && "on")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
-				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : tab?.unread ? <Badge className="size-2 p-0" /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
+			<SidebarMenuButton isActive={on} className={cn("side-row side-conv", INDENT[Math.min(depth, INDENT.length - 1)], c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16", on && "on")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : tab?.unread ? <Badge className="size-2 p-0" /> : main || c.pinned ? <StarIcon className="text-faint" /> : depth || c.worktree ? <GitBranchIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
 				<span className="cut min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
 			{/* The badge is drawn over the button, so the button keeps the room for the time (stock pr-8 fits an action alone; the same selector as stock, so it takes the place of its pr-8). */}
@@ -163,6 +174,25 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 			)}
 		</SidebarMenuItem>
 	);
+}
+
+/** The conversations in their order, with each branch right under the one it was made from, newest first. */
+function threaded(rows: Conv[]): Array<{ c: Conv; depth: number }> {
+	const names = new Set(rows.map((c) => c.session));
+	const kids = new Map<string, Conv[]>();
+	for (const c of rows) if (c.branch && names.has(c.branch.from) && c.branch.from !== c.session) kids.set(c.branch.from, [...(kids.get(c.branch.from) ?? []), c]);
+	const out: Array<{ c: Conv; depth: number }> = [];
+	const seen = new Set<string>();
+	const put = (c: Conv, depth: number) => {
+		if (seen.has(c.session)) return;
+		seen.add(c.session);
+		out.push({ c, depth });
+		for (const k of [...(kids.get(c.session) ?? [])].sort((x, y) => y.last - x.last)) put(k, depth + 1);
+	};
+	for (const c of rows) if (!(c.branch && names.has(c.branch.from))) put(c, 0);
+	// What is left was part of a circle of names (renames can make one): shown as it comes.
+	for (const c of rows) put(c, 0);
+	return out;
 }
 
 function AgentGroup({ a }: { a: AgentInfo }) {
@@ -221,7 +251,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 			</SidebarMenu>
 			<CollapsibleContent>
 				<Listbox aria-label={`Conversations with ${a.id}`} className="outline-none" {...LISTBOX} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onValueChange={onPick((session) => void s.openTab(a.id, session))} render={<SidebarMenu />}>
-					{rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
+					{threaded(rows).map(({ c, depth }) => <ConversationRow key={c.session} agent={a.id} c={c} depth={depth} />)}
 				</Listbox>
 			</CollapsibleContent>
 		</Collapsible>

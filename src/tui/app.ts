@@ -51,6 +51,8 @@ interface Tab {
 	session: string;
 	/** The folder of the owner's that this conversation works in, if one was opened for it. */
 	folder?: string;
+	/** The worktree it works in, if it has one: its branch and what it was made from. */
+	worktree?: { branch: string; base: string };
 	/** The goal set for this conversation with /goal, as the daemon last reported it. */
 	goal?: GoalInfo;
 	/** For a task tab: the task it shows, and how deep that task sits under its conversation. */
@@ -115,6 +117,14 @@ const SIDE_BY_SIDE = 100;
 const RULE = Array.from({ length: 400 }, () => c.gray("│"));
 
 const tilde = (p: string) => (p === os.homedir() ? "~" : p.startsWith(`${os.homedir()}/`) ? `~${p.slice(os.homedir().length)}` : p);
+/** What a tab keeps of a conversation's worktree. */
+const brief = (w: { branch: string; base: string } | null | undefined) => (w ? { branch: w.branch, base: w.base } : undefined);
+/** "--worktree" (or "-w") among a command's words, and the rest. */
+const worktreeFlag = (args: string) => {
+	const words = args.trim().split(/\s+/).filter(Boolean);
+	const flag = words.some((w) => w === "--worktree" || w === "-w");
+	return { flag, rest: words.filter((w) => w !== "--worktree" && w !== "-w").join(" ") };
+};
 
 /** The library's name for "this component lays out children". */
 const LAYOUT = Symbol.for("@earendil-works/pi-tui/layout-node");
@@ -893,7 +903,8 @@ class ConversationList implements Component {
 			// The agent's own conversation is kept without a pin: it has the mark of one.
 			const mark = conv.pinned || main ? c.accent("★") : " ";
 			const label = short(conv.session, name - 1).padEnd(name);
-			const left = `${mark} ${on ? c.accent(label) : label} ${c.gray(`${conv.tasks} message${conv.tasks === 1 ? "" : "s"} · ${since(conv.last)} · ${state}`)}`;
+			const tree = conv.worktree ? ` · ⎇ ${conv.worktree.branch}` : "";
+			const left = `${mark} ${on ? c.accent(label) : label} ${c.gray(`${conv.tasks} message${conv.tasks === 1 ? "" : "s"} · ${since(conv.last)} · ${state}${tree}`)}`;
 			// At the end of the row, the two things that can be done to it, as words to click.
 			const pin = main ? "" : conv.pinned ? "unpin" : "pin";
 			const x = main ? (this.asked === conv.session ? "reset? ×" : "reset") : this.asked === conv.session ? "remove? ×" : "×";
@@ -1444,8 +1455,9 @@ export class PineTui {
 		void this.refreshPins();
 		const info = this.agents.find((a) => a.id === agent);
 		tab.folder = (await this.client.folder(agent, session).catch(() => undefined))?.folder;
+		tab.worktree = brief((await this.client.worktree(agent, session).catch(() => undefined))?.worktree);
 		tab.goal = (await this.client.goal(agent, session).catch(() => undefined))?.goal;
-		this.say(tab, c.gray(`${c.bold(agent)}${info?.description ? ` · ${info.description}` : ""}\nsession ${session} · model ${info?.model ?? "?"}${tab.folder ? ` · works in ${tilde(tab.folder)}` : ""} · type a message, / for commands, or click the bar below`));
+		this.say(tab, c.gray(`${c.bold(agent)}${info?.description ? ` · ${info.description}` : ""}\nsession ${session} · model ${info?.model ?? "?"}${tab.folder ? ` · works in ${tilde(tab.folder)}` : ""}${tab.worktree ? ` (worktree ${tab.worktree.branch} of ${tab.worktree.base})` : ""} · type a message, / for commands, or click the bar below`));
 		try {
 			const history = (await this.client.history(agent, session)).filter((t) => t.depth === 0).reverse();
 			if (history.length) this.say(tab, c.gray(`── earlier in this session (${history.length}) ──`));
@@ -1620,11 +1632,61 @@ export class PineTui {
 		else if (process.platform !== "darwin" && !this.opts.chooseFolder) this.flash("type /folder <path> to open a folder", 6000);
 	}
 
+	/** What a conversation's tabs show of its folder and worktree, as the daemon says now. */
+	private async followWorktree(tab: Tab): Promise<void> {
+		const folder = (await this.client.folder(tab.agent, tab.session).catch(() => undefined))?.folder;
+		const worktree = brief((await this.client.worktree(tab.agent, tab.session).catch(() => undefined))?.worktree);
+		for (const t of this.tabs) if (t.kind === "chat" && t.agent === tab.agent && t.session === tab.session) Object.assign(t, { folder, worktree });
+		this.code.forget({ agent: tab.agent, session: tab.session });
+		this.tui.requestRender();
+	}
+
+	private worktreeMade(made: { branch: string; path: string; base?: string; copied: string[] }): string {
+		return `${c.gray("this conversation now works in the worktree")} ${c.bold(made.branch)} ${c.gray(`at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a checkout of its own, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} /worktree merges it back.`)}`;
+	}
+
+	/** What can be done with a conversation's worktree: merge it, bring its base in, discard it. */
+	private async worktreeMenu(t: Tab): Promise<void> {
+		const w = (await this.client.worktree(t.agent, t.session).catch(() => undefined))?.worktree;
+		if (!w) return this.flash("this conversation does not work in a worktree; /worktree makes one");
+		const stand = `${w.ahead} commit${w.ahead === 1 ? "" : "s"} ahead of ${w.base}${w.behind ? `, ${w.behind} behind` : ""}${w.dirty ? `, ${w.dirty} file${w.dirty === 1 ? "" : "s"} not committed` : ""}`;
+		const items: SelectItem[] = [];
+		if (w.mergeable && w.ahead) items.push({ value: "merge", label: `Merge into ${w.base}`, description: stand }, { value: "squash", label: `Squash into ${w.base}`, description: "all of it as one commit" });
+		if (w.behind) items.push({ value: "update", label: `Update from ${w.base}`, description: `bring the ${w.behind} new commit${w.behind === 1 ? "" : "s"} of ${w.base} into the worktree` });
+		if (w.dirty) items.push({ value: "commit", label: "Ask the agent to commit", description: "a merge takes what is committed" });
+		items.push({ value: "discard", label: "Discard the worktree…", description: w.merged && !w.dirty ? "everything of it is merged" : "its changes and its branch are deleted" });
+		items.push({ value: "keep", label: "Discard, keep the branch", description: `the folder goes, ${w.branch} stays for git` });
+		const chosen = await this.pick(`${w.branch} · ${stand}`, items, items[0].value);
+		if (!chosen) return;
+		try {
+			if (chosen === "merge" || chosen === "squash") {
+				const r = await this.client.mergeWorktree(t.agent, t.session, chosen);
+				this.say(t, c.gray(`${r.commits} commit${r.commits === 1 ? "" : "s"} of ${w.branch} ${r.how === "squash" ? "squashed into" : "merged into"} ${c.bold(w.base)}${r.how === "ff" ? " (a fast-forward)" : ""}${r.updated ? `; the files in ${tilde(r.updated)} are up to date` : ""}.`));
+			} else if (chosen === "update") {
+				const r = await this.client.updateWorktree(t.agent, t.session);
+				this.say(t, "conflicts" in r ? c.yellow(`${w.base} and the worktree both changed ${r.conflicts.join(", ")}; nothing was changed. Ask the agent to merge ${w.base} and settle it.`) : c.gray(`the worktree has the ${r.merged} new commit${r.merged === 1 ? "" : "s"} of ${w.base} now.`));
+			} else if (chosen === "commit") {
+				await this.submit("Commit what you changed in this worktree that is meant to stay, with a message that says what it does.", "queue");
+			} else {
+				if (chosen === "discard" && !(w.merged && !w.dirty)) {
+					const sure = await this.pick(`Delete ${w.branch} and what is in it?`, [{ value: "no", label: "No" }, { value: "yes", label: "Yes, delete it", description: `${w.ahead} commit${w.ahead === 1 ? "" : "s"} not merged${w.dirty ? `, ${w.dirty} changed files` : ""}` }], "no");
+					if (sure !== "yes") return;
+				}
+				const r = await this.client.discardWorktree(t.agent, t.session, chosen === "keep");
+				await this.followWorktree(t);
+				this.say(t, c.gray(`the worktree is gone${chosen === "keep" ? `; its branch ${w.branch} stays` : ""}. This conversation works in ${r.folder ? tilde(r.folder) : "its agent's workspace"} again.`));
+			}
+		} catch (e) {
+			this.say(t, c.red(errText(e)));
+		}
+		await this.followWorktree(t);
+	}
+
 	/**
 	 * `pine <folder>`: a tab on the conversation that works in that folder. The one that already
 	 * does is opened again; otherwise the main agent gets a new conversation named after the folder.
 	 */
-	async openFolder(dir: string): Promise<void> {
+	async openFolder(dir: string, worktree?: string | true): Promise<void> {
 		const agent = (this.agents.find((a) => a.main) ?? this.agents[0]).id;
 		let full = path.resolve(expandHome(dir));
 		try {
@@ -1634,17 +1696,22 @@ export class PineTui {
 		}
 		const used = await this.client.folders(agent).catch(() => [] as Array<{ session: string; folder: string }>);
 		const have = used.find((u) => u.folder === full);
-		if (have) return this.openTab(agent, have.session);
+		// In a worktree it is always a new conversation: one of its own, beside the others in that folder.
+		if (have && !worktree) return this.openTab(agent, have.session);
 		const taken = new Set(["main", ...used.map((u) => u.session), ...(await this.client.sessions(agent).catch(() => [] as Conversation[])).map((x) => x.session)]);
 		const base = (path.basename(full).replace(/[^A-Za-z0-9.-]+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "folder").slice(0, 24);
-		let name = base;
-		for (let n = 2; taken.has(name); n++) name = `${base}-${n}`;
+		const wanted = typeof worktree === "string" && worktree.trim() ? worktree.trim().replace(/[^A-Za-z0-9.-]+/g, "-").slice(0, 24) : base;
+		let name = wanted;
+		for (let n = 2; taken.has(name); n++) name = `${wanted}-${n}`;
+		let made: Awaited<ReturnType<Client["makeWorktree"]>> | undefined;
 		try {
 			await this.client.setFolder(agent, name, full);
+			if (worktree) made = await this.client.makeWorktree(agent, name, typeof worktree === "string" ? worktree : undefined);
 		} catch (e) {
-			return void this.say(this.active, c.red(`${tilde(full)} was not opened: ${errText(e)}`));
+			return void this.say(this.active, c.red(`${tilde(full)} was not opened${worktree ? " in a worktree" : ""}: ${errText(e)}`));
 		}
 		await this.openTab(agent, name);
+		if (made) this.say(this.active, this.worktreeMade(made));
 	}
 
 	// ---- transcript ------------------------------------------------------------------------------
@@ -2449,8 +2516,24 @@ export class PineTui {
 		this.commands = [
 			{ name: "help", description: "Commands and keys", run: () => this.help() },
 			{
-				name: "new", description: "New conversation with this agent in a new tab", argumentHint: "[name]",
-				run: (args) => this.openTab(this.active.kind === "chat" ? this.active.agent : this.agents[0].id, args.trim() || `s${Date.now().toString(36)}`),
+				name: "new", description: "New conversation with this agent in a new tab; --worktree: in a worktree of this conversation's folder", argumentHint: "[--worktree] [name]",
+				run: async (args) => {
+					const { flag, rest } = worktreeFlag(args);
+					const agent = this.active.kind === "chat" ? this.active.agent : this.agents[0].id;
+					const name = rest || `s${Date.now().toString(36)}`;
+					if (!flag) return this.openTab(agent, name);
+					const from = chat();
+					if (!from) return;
+					if (!from.folder) return this.flash("this conversation has no folder to make a worktree of: open one first with /folder");
+					try {
+						await this.client.setFolder(agent, name, from.folder);
+						const made = await this.client.makeWorktree(agent, name);
+						await this.openTab(agent, name);
+						this.say(this.active, this.worktreeMade(made));
+					} catch (e) {
+						this.say(from, c.red(`no worktree was made: ${errText(e)}`));
+					}
+				},
 			},
 			{
 				name: "agent", description: "Open a tab with another agent", argumentHint: "<id> [session]", getArgumentCompletions: agentIds,
@@ -2521,6 +2604,34 @@ export class PineTui {
 					this.freshen(t);
 				},
 			},
+			{
+				name: "branch", description: "Go on in a new conversation from one of your messages, or from all of this one; this one stays as it is. --worktree: the new one works in a worktree of its own", argumentHint: "[--worktree] [name]",
+				run: async (raw) => {
+					const t = chat();
+					if (!t) return;
+					const { flag: inWorktree, rest: args } = worktreeFlag(raw);
+					// With a name: all of it. Without: which message to go on from, the latest first.
+					let at: number | undefined;
+					if (!args) {
+						const mine = (await this.client.history(t.agent, t.session, 200).catch(() => [] as Task[])).filter((x) => x.kind === "prompt" && x.parent === undefined && x.meta?.trust === "owner" && x.meta?.steered === undefined && x.status !== "pending" && x.status !== "running");
+						if (!mine.length) return this.flash("nothing of yours was said in this conversation yet");
+						const items = [{ value: "all", label: "all of it", description: "everything said so far" }, ...mine.map((x) => ({ value: String(x.id), label: short(oneLine(x.prompt.replace(/[\x00-\x1f\x7f]/g, " ")), 70), description: `after this message and its answer · ${new Date(x.created).toLocaleString()}` }))];
+						const chosen = await this.pick(`Branch ${t.session} from`, items, "all");
+						if (!chosen) return;
+						at = chosen === "all" ? undefined : Number(chosen);
+					}
+					let r: Awaited<ReturnType<Client["branch"]>>;
+					try {
+						r = await this.client.branch(t.agent, t.session, at, args || undefined, inWorktree);
+					} catch (e) {
+						return void this.say(t, c.red(`not branched: ${errText(e)}`));
+					}
+					await this.openTab(t.agent, r.session);
+					await this.refreshTaints();
+					this.say(this.active, c.gray(`a branch of ${c.bold(t.session)}${at !== undefined ? ", from the message you picked" : ""}: what was said there up to it is here too, what you say here stays here${r.outside ? ". It holds outside content, as that conversation did" : ""}`));
+					if (r.worktree) this.say(this.active, this.worktreeMade({ ...r.worktree, base: t.worktree?.branch ?? "" }));
+				},
+			},
 			{ name: "undo", description: "Take back your last message: its files are restored, the conversation forgets it, its text returns to the input", run: () => this.undo(false) },
 			{ name: "redo", description: "Bring back what the last /undo took, until you send a new message", run: () => this.undo(true) },
 			{
@@ -2531,6 +2642,21 @@ export class PineTui {
 					const wanted = args.trim();
 					if (!wanted) return this.pickFolder();
 					return this.setFolder(t, /^(none|off|-)$/i.test(wanted) ? null : (droppedFiles(wanted, true)?.[0] ?? wanted));
+				},
+			},
+			{
+				name: "worktree", description: "Work in a checkout of the folder's repository of its own (a worktree); in one: merge it, update it, or discard it", argumentHint: "[name]",
+				run: async (args) => {
+					const t = chat();
+					if (!t) return;
+					if (t.worktree) return this.worktreeMenu(t);
+					try {
+						const made = await this.client.makeWorktree(t.agent, t.session, args.trim() || undefined);
+						await this.followWorktree(t);
+						this.say(t, this.worktreeMade(made));
+					} catch (e) {
+						this.say(t, c.red(`no worktree was made: ${errText(e)}`));
+					}
 				},
 			},
 			{
@@ -3400,7 +3526,7 @@ export class PineTui {
 			.add(c.gray(" · "))
 			.add(c.gray(t.session), () => void this.pickSession())
 			.add(c.gray(" · "))
-			.add(t.folder ? c.cyan(short(tilde(t.folder), 34)) : c.gray("no folder"), () => void this.pickFolder())
+			.add(t.worktree ? c.cyan(`⎇ ${short(t.worktree.branch, 30)}`) : t.folder ? c.cyan(short(tilde(t.folder), 34)) : c.gray("no folder"), () => void (t.worktree ? this.worktreeMenu(t) : this.pickFolder()))
 			.add(c.gray(" · "))
 			.add(c.gray(info?.model ?? ""), () => void this.pickModel())
 			.add(c.gray(" · "))
