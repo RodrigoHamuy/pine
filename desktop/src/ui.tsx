@@ -37,9 +37,9 @@ export function Pulse({ size = 14 }: { size?: number }) {
 	);
 }
 
-/** Where pine's passing notices (`store.flash`) show: at the bottom, up to four stacked, all in view. */
+/** Where pine's passing notices (`store.flash`) show: at the bottom, as Sonner's pile that opens on hover. */
 export function Notices() {
-	return <Toaster position="bottom-center" visibleToasts={4} expand />;
+	return <Toaster position="bottom-center" />;
 }
 
 /**
