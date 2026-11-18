@@ -823,7 +823,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 								kind: "notify",
 								trust: "owner",
 								reply: r.task.reply,
-								prompt: `[pine: the MCP server "${p.name}" that you added is connected now. Its tools are in your tool list, as the actions of the tool "${serverTool(mcpNamespace(p.name))}". Go on with what your owner asked for. If there is no tool "${serverTool(mcpNamespace(p.name))}" in your list, the server did not start or still needs its sign-in: say that plainly${p.command ? ", and run its command in your shell to see what it prints" : ""}.]`,
+								prompt: `[pine: the MCP server "${p.name}" that you added is connected now. Your tool list has changed since your last answer: it has the tool "${serverTool(mcpNamespace(p.name))}" now, whose actions are the server's tools. What you said before about its tools not being there is out of date. Go on with what your owner asked for. If there is no tool "${serverTool(mcpNamespace(p.name))}" in your list, the server did not start or still needs its sign-in: say that plainly${p.command ? ", and run its command in your shell to see what it prints" : ""}.]`,
 							});
 							goesOn = true;
 						} catch {
@@ -891,7 +891,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						cron: Type.Optional(Type.String({ description: 'Set times, as five fields in local time: minute hour day-of-month month day-of-week, e.g. "0 7 * * 1-5" (weekdays at seven)' })),
 						every: Type.Optional(Type.String({ description: 'A fixed interval, e.g. "15m", "2h". At least "1m"' })),
 						at: Type.Optional(Type.String({ description: 'Once, at this local time: "2026-12-24 17:00". The note in front of each message tells you the time now' })),
-						in: Type.Optional(Type.String({ description: 'Once, after this long: "20m", "2h"' })),
+						in: Type.Optional(Type.String({ description: 'Once, after this long: "10s", "20m", "2h". Seconds are fine: only "every" has a least interval' })),
 						scope: Type.Optional(Type.String({ description: `Who is woken. ${forWhom("the schedule")}` })),
 					}),
 					execute: async (_id, p, signal) => {

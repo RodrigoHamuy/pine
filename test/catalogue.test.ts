@@ -529,6 +529,9 @@ test("arguments that are nearly right are taken as what was meant, and only thos
 	// A name as the owner says it.
 	assert.equal(ease("add_schedule", { name: "Check mail", task: "x" }).name, "check-mail");
 	assert.equal(ease("add_mcp_server", { name: "Home Link" }).name, "home_link");
+	assert.deepEqual(ease("remove_source", { source: "inbox" }), { name: "inbox" }, "the thing named by what it is");
+	assert.deepEqual(ease("remove_mcp_server", { server: "notes" }), { name: "notes" });
+	assert.deepEqual(ease("remove_schedule", { name: "a", schedule: "b" }), { name: "a", schedule: "b" }, "a name given stays");
 	// Another word for an option that has one reading.
 	assert.deepEqual(ease("add_source", { type: "folder", options: { path: "/x", glob: "*.pdf" } }).options, { dir: "/x", mask: "*.pdf" });
 	assert.deepEqual(ease("add_source", { type: "folder", options: '{"dir": "/x"}' }).options, { dir: "/x" });

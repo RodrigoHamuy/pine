@@ -152,9 +152,9 @@ const ARG_HINT: Record<string, string> = {
 	"add_schedule.name": "short, like morning-mail",
 	"add_schedule.task": "what you are to do then, complete on its own",
 	"add_schedule.cron": 'five fields, local time: "0 7 * * 1-5" is weekdays at 7',
-	"add_schedule.every": '"15m", "2h"',
+	"add_schedule.every": '"15m", "2h"; at least "1m"',
 	"add_schedule.at": 'once, local time: "2026-12-24 17:00"',
-	"add_schedule.in": 'once, after: "20m", "2h"',
+	"add_schedule.in": 'once, after: "10s", "20m", "2h"',
 	"add_source.description": "one line: what it reports",
 	"add_source.options": 'the options of the type, e.g. {"dir": "~/Scans", "mask": "*.pdf"}',
 	"add_source.note": "what you are to do when it reports something; with it you are subscribed at once",
@@ -394,6 +394,9 @@ const SCOPES: Record<string, string> = { conversation: "local", this: "local", h
 const NAMED: Record<string, [arg: string, joint: string]> = { add_schedule: ["name", "-"], add_source: ["name", "-"], add_route: ["name", "-"], create_agent: ["id", "-"], add_skill: ["name", "-"], add_mcp_server: ["name", "_"] };
 
 /** Make arguments that have one reading into what the tool takes. Changes `args` in place and returns it. */
+/** The words a model uses for what a remove tool takes as "name". */
+const REMOVED: Record<string, string[]> = { remove_source: ["source", "source_name"], remove_schedule: ["schedule", "schedule_name"], remove_skill: ["skill", "skill_name"], remove_mcp_server: ["server", "mcp_server", "server_name"] };
+
 export function ease(name: string, args: any): any {
 	if (!args || typeof args !== "object") return args;
 	const local = name.replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "");
@@ -436,6 +439,15 @@ export function ease(name: string, args: any): any {
 			const o = args.options && typeof args.options === "object" ? args.options : {};
 			const what = [o.dir, o.url, o.run, o.topics, o.port].find((v) => v !== undefined && v !== "");
 			args.description = `${args.type}${what === undefined ? "" : `: ${Array.isArray(what) ? what.join(", ") : String(what)}`}`.slice(0, 200);
+		}
+	}
+	// The thing to remove named by what it is ("source": "inbox") where the tool takes "name".
+	const kind = REMOVED[local];
+	if (kind && (args.name === undefined || args.name === "")) {
+		const k = kind.find((x) => typeof args[x] === "string" && args[x] !== "");
+		if (k) {
+			args.name = args[k];
+			delete args[k];
 		}
 	}
 	if (local === "create_agent" && typeof args.model === "string" && /^(default|pine'?s default|)$/i.test(args.model.trim())) delete args.model;
