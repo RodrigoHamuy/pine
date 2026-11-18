@@ -6,14 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useNamedLine } from "./lists.tsx";
 import type { Picker } from "./model.ts";
 import { fuzzy } from "./text.ts";
-import { useOpener } from "./use-opener.ts";
 
 export function PickDialog({ p }: { p: Picker }) {
 	const [query, setQuery] = useState("");
 	const shown = useMemo(() => (query && !p.free ? p.items.map((i) => ({ i, rank: Math.min(...[fuzzy(query, i.label), fuzzy(query, i.about ?? "") + 10].filter((r) => r >= 0), 99) })).filter((x) => x.rank < 99).sort((a, b) => a.rank - b.rank).map((x) => x.i) : p.items), [query, p]);
 	// The list starts on the one in use.
 	const line = useNamedLine(query, p.current);
-	const opener = useOpener();
 	// A short list is chosen from with the arrows; its field is there for the keyboard and for screen readers, unseen.
 	const typing = p.free || p.items.length > 7;
 	const list = (
@@ -27,7 +25,7 @@ export function PickDialog({ p }: { p: Picker }) {
 			}}
 		>
 			<div className={typing ? undefined : "sr-only"}>
-				<CommandInput autoFocus placeholder={p.placeholder ?? "Type to narrow the list"} value={query} onValueChange={setQuery} />
+				<CommandInput placeholder={p.placeholder ?? "Type to narrow the list"} value={query} onValueChange={setQuery} />
 			</div>
 			<CommandList className="scroll-fade">
 				{shown.length ? (
@@ -48,7 +46,7 @@ export function PickDialog({ p }: { p: Picker }) {
 	if (p.items.some((i) => i.tone === "bad"))
 		return (
 			<AlertDialog open onOpenChange={close}>
-				<AlertDialogContent finalFocus={opener} className="data-[size=default]:sm:max-w-xl">
+				<AlertDialogContent className="data-[size=default]:sm:max-w-xl">
 					<AlertDialogHeader>
 						<AlertDialogTitle>{p.title}</AlertDialogTitle>
 					</AlertDialogHeader>
@@ -58,7 +56,7 @@ export function PickDialog({ p }: { p: Picker }) {
 		);
 	return (
 		<Dialog open onOpenChange={close}>
-			<DialogContent showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
+			<DialogContent showCloseButton={false} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>{p.title}</DialogTitle>
 				</DialogHeader>

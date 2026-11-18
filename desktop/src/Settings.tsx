@@ -492,6 +492,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 function NewAgent({ close, made }: { close: () => void; made: (id: string) => void }) {
 	const models = useLoad(() => api.models());
 	const [f, setF] = useState({ id: "", description: "", instructions: "", model: "" });
+	const name = useRef<HTMLInputElement>(null);
 	const field = useId();
 	const modelItems = [{ value: "", label: "pine's default" }, ...(models.data ?? []).map((m) => ({ value: m, label: m }))];
 	const create = async () => {
@@ -505,7 +506,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 	};
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} className="sm:max-w-xl">
+			<DialogContent showCloseButton={false} initialFocus={name} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>A new agent</DialogTitle>
 				</DialogHeader>
@@ -513,7 +514,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 					<FieldGroup className="px-4 select-text">
 						<Field>
 							<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-							<Input id={`${field}-name`} autoFocus className="mono font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} />
+							<Input id={`${field}-name`} ref={name} className="mono font-mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} />
 							<FieldDescription>Lowercase letters, digits, - and _ (for example research, home, books).</FieldDescription>
 						</Field>
 						<Field>

@@ -1,5 +1,5 @@
 import { TriangleAlertIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -10,7 +10,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printed } from "@/components/printed";
 import type { Approval } from "./api.ts";
 import { store } from "./model.ts";
-import { useOpener } from "./use-opener.ts";
 
 /** A label that reads "name: what it is" or "NAME (what it is)" is its name and, under it, the rest. */
 const labelParts = (label: string): [string, string] => {
@@ -23,7 +22,8 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 	const s = store;
 	const fields = req.inputs ?? [];
 	const [values, setValues] = useState<Record<string, string>>({});
-	const opener = useOpener();
+	// The first value asked for, where there is one; past what is to be approved, which comes first.
+	const first = useRef<HTMLInputElement>(null);
 	const allow = (always = false) => {
 		if (fields.length) {
 			const empty = fields.find((f) => !values[f.name]?.trim());
@@ -49,7 +49,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 	}, [req.id]);
 	return (
 		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
-			<DialogContent data-tone="warn" showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
+			<DialogContent data-tone="warn" showCloseButton={false} initialFocus={fields.length ? first : true} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><TriangleAlertIcon className="text-warn" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</DialogTitle>
 				</DialogHeader>
@@ -73,7 +73,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 							<Field key={f.name}>
 								<FieldLabel htmlFor={`ap-${f.name}`}>{name}{fields.length > 1 ? <span className="text-faint"> · {i + 1} of {fields.length}</span> : null}</FieldLabel>
 								{about ? <FieldDescription>{about}</FieldDescription> : null}
-								<Input id={`ap-${f.name}`} autoFocus={i === 0} className="font-mono" type={f.secret !== false ? "password" : "text"} autoComplete="off" spellCheck={false} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && allow()} />
+								<Input id={`ap-${f.name}`} ref={i === 0 ? first : undefined} className="font-mono" type={f.secret !== false ? "password" : "text"} autoComplete="off" spellCheck={false} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && allow()} />
 							</Field>
 						);
 					})}

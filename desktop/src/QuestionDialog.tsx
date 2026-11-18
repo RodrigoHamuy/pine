@@ -1,5 +1,5 @@
 import { MessageSquareIcon } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -9,7 +9,6 @@ import { Kbd } from "@/components/ui/kbd";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Approval } from "./api.ts";
 import { store } from "./model.ts";
-import { useOpener } from "./use-opener.ts";
 
 /** A question of the agent's: the answers it offers, and a line for the owner's own words. */
 export function QuestionDialog({ req }: { req: Approval }) {
@@ -17,11 +16,12 @@ export function QuestionDialog({ req }: { req: Approval }) {
 	const choices = req.choices ?? [];
 	const [own, setOwn] = useState("");
 	const [at, setAt] = useState(0);
-	const opener = useOpener();
+	// The answer field, not the first answer offered: a digit typed there picks an answer.
+	const field = useRef<HTMLInputElement>(null);
 	const answer = (text: string) => void s.decide(req.id, true, false, { answer: text });
 	return (
 		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
-			<DialogContent data-tone="accent" showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
+			<DialogContent data-tone="accent" showCloseButton={false} initialFocus={field} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><MessageSquareIcon className="text-primary" /> {req.agent} asks</DialogTitle>
 				</DialogHeader>
@@ -42,7 +42,7 @@ export function QuestionDialog({ req }: { req: Approval }) {
 						</div>
 					) : null}
 					<Input
-						autoFocus
+						ref={field}
 						placeholder={choices.length ? "Or answer in your own words" : "Your answer"}
 						value={own}
 						onChange={(e) => setOwn(e.target.value)}

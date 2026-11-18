@@ -432,7 +432,7 @@ desktop/
                    what a tool or a program printed, a Code Block that follows its end), and pine's
                    own small parts (logo.tsx: the logo; empty-view.tsx: a view with nothing in it);
                    no part there only renames or bundles a stock one
-    use-load.ts, use-opener.ts   loading what a view shows; what had focus before a dialog opened
+    use-load.ts    loading what a view shows
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
                    which are ui-sdk's, used directly (shadcn has neither); and the chosen line of
                    a palette's list, named to screen readers (`useNamedLine`)

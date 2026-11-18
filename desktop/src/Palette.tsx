@@ -5,13 +5,11 @@ import { COMMANDS } from "./commands.ts";
 import { useNamedLine } from "./lists.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, fuzzy } from "./text.ts";
-import { useOpener } from "./use-opener.ts";
 
 export function Palette() {
 	const s = store;
 	const [query, setQuery] = useState("");
 	const line = useNamedLine(query);
-	const opener = useOpener();
 	useModel(s);
 	type Row = { id: string; group: string; label: string; about?: string; keys?: string; run: () => void; conv?: { agent: string; session: string } };
 	const all = useMemo(() => {
@@ -60,10 +58,10 @@ export function Palette() {
 	const run = (r: Row) => (close(), r.run());
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} finalFocus={opener} className="gap-0 p-0 sm:max-w-xl">
+			<DialogContent showCloseButton={false} className="gap-0 p-0 sm:max-w-xl">
 				<DialogTitle className="sr-only">Search everything</DialogTitle>
 				<Command {...line} shouldFilter={false} loop>
-					<CommandInput autoFocus placeholder="Search conversations (by name or by what was said), commands, agents" value={query} onValueChange={setQuery} />
+					<CommandInput placeholder="Search conversations (by name or by what was said), commands, agents" value={query} onValueChange={setQuery} />
 					<CommandList className="scroll-fade">
 						{groups.map((g, n) => (
 							<CommandGroup key={`${n}:${g.name}`} heading={g.name}>
