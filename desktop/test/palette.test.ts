@@ -9,7 +9,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import { builder } from "material-theme-builder";
 import { _electron as electron } from "playwright-core";
-import { startMock } from "../../baseline/tests/mock.mjs";
+import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { DEFAULT_PALETTE, type Palette } from "../src/theme.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
@@ -59,13 +59,17 @@ async function start(): Promise<void> {
 	app = await electron.launch({ colorScheme: "light", args: [root], env: { ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
 	page = await app.firstWindow();
 	await page.setViewportSize?.({ width: 1280, height: 820 }).catch(() => {});
-	await page.waitForSelector("[data-slot=empty] h1", { timeout: 30_000 });
+	// The main agent's empty conversation, or the one a test before wrote in.
+	await page.waitForSelector("[data-slot=empty] h1, [data-item=answer]", { timeout: 30_000 });
 	const dialog = await page.waitForSelector("[data-slot=dialog-footer] button >> text=Not now", { timeout: 3000 }).catch(() => undefined);
 	if (dialog) await dialog.click();
 }
 
+/** What a menu item sends: the settings open and close with the same item. */
+const menu = (name: string) => app.evaluate(({ BrowserWindow }: any, n: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", n), name);
+
 async function colours(): Promise<void> {
-	await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", "settings"));
+	await menu("settings");
 	await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
 	await page.waitForSelector("[data-setting=colours]");
 }
@@ -135,6 +139,72 @@ test("the source colour set in Settings redraws the window, is kept after a rest
 	await primaryIs(DEFAULT_PALETTE);
 	assert.equal(await page.inputValue("input[type=color][name=source]"), DEFAULT_PALETTE.source);
 	assert.equal("palette" in JSON.parse(fs.readFileSync(prefsFile(), "utf8")), false);
+});
+
+/** The colour a string in code is drawn with: in the page's own variable, and in the answer's code block. */
+const codeString = async () => ({
+	variable: await resolved("var(--code-string)"),
+	answer: await page.evaluate(() => {
+		const span = [...document.querySelectorAll('[data-item=answer] [data-streamdown="code-block"] span[style]')].find((s) => s.textContent === '"x"');
+		return span ? getComputedStyle(span).color : "none";
+	}),
+});
+/** Waits until a string in code is drawn in that colour, in the variable and in the answer alike. */
+async function codeStringIs(want: string, what: string): Promise<void> {
+	for (let i = 0; i < 100; i++) {
+		const now = await codeString();
+		if (now.variable === want && now.answer === want) return;
+		await new Promise((r) => setTimeout(r, 50));
+	}
+	assert.deepEqual(await codeString(), { variable: want, answer: want }, what);
+}
+const POIMANDRES_MINT = rgb("#5de4c7");
+
+test("code follows the palette in dark, or keeps poimandres when the owner turns that off, which is kept after a restart", async () => {
+	const mine = { ...DEFAULT_PALETTE, source: "#3366cc" };
+	// (The settings as the test before left them: open. The same menu item puts them away.)
+	if (await page.$("[data-slot=settings-page]")) await menu("settings");
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ text: 'Here:\n\n```ts\nconst a = "x";\n```' }], "Some code. "));
+	await page.keyboard.press("Enter");
+	await page.waitForSelector('[data-item=answer] [data-streamdown="code-block"] span[style]');
+	await colours();
+	await page.fill("input[type=color][name=source]", mine.source);
+	await primaryIs(mine);
+	await menu("settings");
+
+	// On by default: in light and in dark, a string in code is the palette's primary, in the editor's variable and in the answer.
+	await codeStringIs(rgb(schemeOf(mine).light.primary), "light, following the palette");
+	await page.emulateMedia({ colorScheme: "dark" });
+	await codeStringIs(rgb(schemeOf(mine).dark.primary), "dark, following the palette");
+
+	// Off: code in dark is poimandres, whatever the palette; light still follows it.
+	await colours();
+	const toggle = page.locator("[data-setting=code-follows-palette] [role=switch]");
+	assert.equal(await toggle.getAttribute("aria-checked"), "true");
+	await toggle.click();
+	await menu("settings");
+	await codeStringIs(POIMANDRES_MINT, "dark, poimandres");
+	assert.equal(JSON.parse(fs.readFileSync(prefsFile(), "utf8")).codeFollowsPalette, false);
+	await page.emulateMedia({ colorScheme: "light" });
+	await codeStringIs(rgb(schemeOf(mine).light.primary), "light, while dark keeps poimandres");
+
+	// The same data, a new app: still poimandres in dark.
+	await app.close();
+	await start();
+	await page.emulateMedia({ colorScheme: "dark" });
+	await primaryIs(mine, "dark");
+	assert.equal(await resolved("var(--code-string)"), POIMANDRES_MINT);
+
+	// On again: dark code follows the palette.
+	await colours();
+	await page.locator("[data-setting=code-follows-palette] [role=switch]").click();
+	for (let i = 0; i < 100 && (await resolved("var(--code-string)")) !== rgb(schemeOf(mine).dark.primary); i++) await new Promise((r) => setTimeout(r, 50));
+	assert.equal(await resolved("var(--code-string)"), rgb(schemeOf(mine).dark.primary));
+	assert.equal(JSON.parse(fs.readFileSync(prefsFile(), "utf8")).codeFollowsPalette, true);
+	await page.emulateMedia({ colorScheme: "light" });
+	await page.getByRole("button", { name: "Reset colours" }).click();
+	await primaryIs(DEFAULT_PALETTE);
+	await menu("settings");
 });
 
 test("the window's own background is the stored palette's surface where the system draws none", async (t) => {

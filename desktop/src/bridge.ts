@@ -20,6 +20,8 @@ export interface Prefs {
 	updates: boolean;
 	/** The palette the colours are generated from (theme.ts), or none: pine's default. */
 	palette?: Palette;
+	/** Code in dark draws with roles of the palette (on) or keeps poimandres' own colours (off). */
+	codeFollowsPalette: boolean;
 }
 
 export type { Update } from "../electron/updates.ts";

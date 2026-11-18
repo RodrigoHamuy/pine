@@ -55,11 +55,13 @@ interface Prefs {
 	commandTried: boolean;
 	/** The palette the page's colours are generated from, made safe by cleanPalette. None: pine's default. */
 	palette?: Palette;
+	/** Code in dark draws with roles of the palette (on, the default) or keeps poimandres' own colours (off). */
+	codeFollowsPalette: boolean;
 	bounds?: { x?: number; y?: number; width: number; height: number };
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true, commandTried: false };
+let prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true, commandTried: false, codeFollowsPalette: true };
 
 function loadPrefs(): void {
 	try {
@@ -72,6 +74,7 @@ function loadPrefs(): void {
 			updates: raw.updates !== false,
 			commandTried: raw.commandTried === true,
 			palette: cleanPalette(raw.palette),
+			codeFollowsPalette: raw.codeFollowsPalette !== false,
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
 		};
 	} catch {
@@ -449,6 +452,7 @@ function wire(): void {
 		if (typeof change.notify === "boolean") prefs.notify = change.notify;
 		if (typeof change.updates === "boolean") prefs.updates = change.updates;
 		if (typeof change.keepRunning === "boolean") prefs.keepRunning = change.keepRunning;
+		if (typeof change.codeFollowsPalette === "boolean") prefs.codeFollowsPalette = change.codeFollowsPalette;
 		if ("home" in change) prefs.home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
 		// Reset sends none: nothing is stored, and the page draws pine's default.
 		if ("palette" in change) prefs.palette = cleanPalette(change.palette);

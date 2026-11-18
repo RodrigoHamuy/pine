@@ -208,7 +208,48 @@ function Summary({ children }: React.ComponentProps<"summary"> & ExtraProps) {
 }
 
 const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary };
-const PLUGINS = { code: createCodePlugin({ themes: ["github-light", "poimandres"] }) };
+/**
+ * The highlighter's theme for code in answers: every colour is a `--code-*` variable of index.css, the
+ * ones the code editor reads, so that code in an answer and in the code pane look the same and both
+ * follow the palette (or poimandres in dark, when the owner keeps it). The variables change with the
+ * look, so one theme serves light and dark. Scopes are TextMate's, mapped to the editor's kinds.
+ */
+const v = (name: string) => `var(--code-${name})`;
+const CODE_THEME = {
+	name: "pine-code",
+	type: "dark" as const,
+	fg: v("text"),
+	bg: "transparent",
+	colors: { "editor.foreground": v("text"), "editor.background": "transparent" },
+	settings: [
+		{ settings: { foreground: v("text") } },
+		{ scope: ["comment", "punctuation.definition.comment"], settings: { foreground: v("comment"), fontStyle: "italic" } },
+		{ scope: ["meta.decorator", "meta.preprocessor"], settings: { foreground: v("meta") } },
+		{ scope: ["keyword", "storage"], settings: { foreground: v("keyword") } },
+		{ scope: ["storage.type"], settings: { foreground: v("definition") } },
+		{ scope: ["keyword.control"], settings: { foreground: v("control") } },
+		{ scope: ["storage.modifier", "keyword.operator.new", "keyword.operator.expression", "variable.language.this", "variable.language.self"], settings: { foreground: v("modifier") } },
+		{ scope: ["string", "punctuation.definition.string"], settings: { foreground: v("string") } },
+		{ scope: ["string.regexp", "constant.character.escape"], settings: { foreground: v("regexp") } },
+		{ scope: ["constant.numeric", "constant.language.boolean", "constant.other", "markup.underline.link"], settings: { foreground: v("literal") } },
+		{ scope: ["constant.language.null", "constant.language.undefined", "constant.language.nil"], settings: { foreground: v("null") } },
+		{ scope: ["variable", "variable.other.property", "meta.object-literal.key", "support.type.property-name"], settings: { foreground: v("name") } },
+		{ scope: ["entity.other.attribute-name"], settings: { foreground: v("attribute") } },
+		{ scope: ["entity.name.function", "support.function", "meta.function-call entity.name.function"], settings: { foreground: v("call") } },
+		{ scope: ["meta.definition.function entity.name.function", "meta.function entity.name.function", "entity.name.class", "entity.name.type.class"], settings: { foreground: v("function") } },
+		{ scope: ["entity.name.type", "support.type", "support.class"], settings: { foreground: v("type") } },
+		{ scope: ["entity.name.namespace", "entity.name.module"], settings: { foreground: v("namespace") } },
+		{ scope: ["entity.name.tag"], settings: { foreground: v("tag") } },
+		{ scope: ["markup.heading", "entity.name.section"], settings: { foreground: v("heading"), fontStyle: "bold" } },
+		{ scope: ["markup.italic", "markup.bold"], settings: { foreground: v("emphasis") } },
+		{ scope: ["markup.inserted"], settings: { foreground: v("inserted") } },
+		{ scope: ["markup.deleted"], settings: { foreground: v("deleted") } },
+		{ scope: ["punctuation"], settings: { foreground: v("punctuation") } },
+		{ scope: ["keyword.operator"], settings: { foreground: v("operator") } },
+	],
+};
+const CODE_THEMES: [typeof CODE_THEME, typeof CODE_THEME] = [CODE_THEME, CODE_THEME];
+const PLUGINS = { code: createCodePlugin({ themes: CODE_THEMES }) };
 const CONTROLS: ControlsConfig = { code: { copy: true, download: false }, table: false, mermaid: false, image: false };
 
 // Streamdown draws every element with its own look, and a folded part written as raw HTML is
@@ -219,7 +260,7 @@ const LOOK = "cursor-auto select-text wrap-anywhere";
 export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }): ReactNode {
 	return (
 		<WhereContext.Provider value={where}>
-			<Streamdown data-slot="markdown" data-live={live || undefined} className={LOOK} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={["github-light", "poimandres"]} isAnimating={!!live} lineNumbers={false}>
+			<Streamdown data-slot="markdown" data-live={live || undefined} className={LOOK} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={CODE_THEMES} isAnimating={!!live} lineNumbers={false}>
 				{text}
 			</Streamdown>
 		</WhereContext.Provider>

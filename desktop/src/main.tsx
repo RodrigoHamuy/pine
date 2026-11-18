@@ -2,7 +2,7 @@
 // bridge.ts reads when it is first evaluated. Nothing anywhere else.
 import "./preview-bridge.ts";
 import { Mtb } from "material-theme-builder/react";
-import type { ReactNode } from "react";
+import { type ReactNode, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import "./index.css";
@@ -13,9 +13,14 @@ import { Toaster } from "@/components/ui/toast";
 /**
  * <Mtb> writes the M3 scheme of the owner's palette into the page (index.css draws every colour from
  * it): the one kept in the app's preferences, or pine's default. A change in Settings redraws it at once.
+ * Code in dark follows it too, unless the owner keeps poimandres for it (`data-code` on the root element).
  */
 function Themed({ children }: { children: ReactNode }) {
 	const s = useModel(store);
+	const code = s.prefs.codeFollowsPalette === false ? "poimandres" : "palette";
+	useEffect(() => {
+		document.documentElement.dataset.code = code;
+	}, [code]);
 	return <Mtb {...(s.prefs.palette ?? DEFAULT_PALETTE)}>{children}</Mtb>;
 }
 
