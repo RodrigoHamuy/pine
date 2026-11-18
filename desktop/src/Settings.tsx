@@ -1687,10 +1687,9 @@ function Routes() {
 }
 
 function EventsPage() {
-	const [tab, setTab] = useState<"sources" | "schedules" | "routes">("sources");
 	return (
 		<Page title="Events" lead="What reaches your agents without you typing: sources that report, schedules that fire, and routes between them." actions={<Button variant="outline" onClick={() => void store.openEvents()}><AudioLinesIcon data-icon="inline-start" />Open the event log</Button>}>
-			<Tabs value={tab} onValueChange={setTab}>
+			<Tabs defaultValue="sources">
 				<TabsList activateOnFocus>
 					<TabsTrigger value="sources"><ZapIcon data-icon="inline-start" />Sources</TabsTrigger>
 					<TabsTrigger value="schedules"><ClockIcon data-icon="inline-start" />Schedules</TabsTrigger>
