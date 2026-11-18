@@ -237,9 +237,16 @@ for every conversation.
 
 | Window | Side bar | Side panel and browser |
 |---|---|---|
-| 1024 pixels and wider | A column | A column each, both at once |
+| 1024 pixels and wider | A column | A column each. Both at once where the room beside the side bar is 1100 pixels or more; with less, only the one you opened last, the other open behind it |
 | 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes it. With both open, only the one you opened last lies there; the other one's button is pressed more lightly, and a click on it brings it to the front. Closing the one in front shows the other |
 | Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above: the whole width of a window narrower than 640 pixels, and at most 540 pixels wide from 640 to 767 |
+
+With both the side panel and the browser open and less room than they need side by side (a sheet each,
+or less than 1100 pixels beside the side bar), neither comes first: the one you opened last shows, and
+the other is open behind it. Its button is pressed more lightly; a click on it brings it to the front
+and puts the other behind, and a click on the button of the one in front closes it, which shows the
+other again. The agent's `browser_show` and a port's link under Running open the browser in front.
+Narrowing the window never closes anything: when there is room again, both show without a click.
 
 Settings follow the room they have, not the window: narrower than about 720 pixels, the list of
 pages is a row along the top that scrolls sideways, and a setting's control goes under its text.

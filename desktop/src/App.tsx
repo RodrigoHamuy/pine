@@ -376,6 +376,18 @@ function BesideToggle({ which, label, keys, icon }: { which: Beside; label: stri
 	);
 }
 
+/**
+ * Follows the width of the room beside the side bar, where the conversation, the side panel and the aside lie: with less
+ * than `BOTH`, the side panel and the aside are not both drawn (`store.one`). A ref of a callback, because the room is
+ * there only once the app is ready.
+ */
+function measureRoom(el: HTMLDivElement | null): (() => void) | undefined {
+	if (!el) return;
+	const observer = new ResizeObserver(([entry]) => store.measure(entry.contentRect.width));
+	observer.observe(el);
+	return () => observer.disconnect();
+}
+
 function TitleBar() {
 	const s = useModel(store);
 	// Drawn again when the window crosses the width where the panels become sheets: what the icons say depends on it.
@@ -571,7 +583,7 @@ export function App() {
 						<ResizablePanel id="main" className="flex">
 							<div className="flex min-w-0 flex-1 flex-col">
 								<TitleBar />
-								<div className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !column && "pl-1.5")}>
+								<div ref={measureRoom} data-slot="room" className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !column && "pl-1.5")}>
 									{/* The conversation, the side panel beside it, and the browser's aside at the far right. Each panel's width is
 									    its own: dragging the edge between the two changes both, and both are kept. */}
 									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && (keepWidth(layout, "code-panel", CODE_KEY), keepWidth(layout, "browser-panel", ASIDE_KEY))}>

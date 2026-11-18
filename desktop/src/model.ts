@@ -86,6 +86,12 @@ export type Beside = "code" | "aside";
  *  There the side panel (CodePanel.tsx) and the browser's aside (Browser.tsx) are sheets over the conversation, one at a time. */
 export const ROOM = "(min-width: 64rem)";
 
+/** The room beside the side bar, in pixels, below which the side panel and the aside are not both drawn as columns: the
+ *  conversation, the panel and the aside at their least (320 each) with the edges between them, and a little more so
+ *  that none of the three is squeezed to its minimum. There only the one opened last is drawn; the other comes back
+ *  by itself when there is room again. */
+export const BOTH = 1100;
+
 const MEDIA_KIND = (name: string): "image" | "video" | "audio" | undefined => (/\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm|m4v)$/i.test(name) ? "video" : /\.(wav|mp3|m4a|ogg|flac|aiff?)$/i.test(name) ? "audio" : undefined);
 export const mediaKind = MEDIA_KIND;
 
@@ -246,6 +252,18 @@ export class Store extends Model {
 	/** Whether the side panel and the aside lie over the conversation as sheets, one at a time: a window narrower than `ROOM`. */
 	get sheets(): boolean {
 		return !window.matchMedia(ROOM).matches;
+	}
+	/** The width of the room beside the side bar, as the window last measured it (`App.tsx`). */
+	room = Infinity;
+	/** Whether only one of the side panel and the aside is drawn at a time: as sheets, or as columns with less room than `BOTH`. */
+	get one(): boolean {
+		return this.sheets || this.room < BOTH;
+	}
+	/** Called as the room beside the side bar changes size; the page is drawn again only when that changes what shows. */
+	measure(room: number): void {
+		const was = this.one;
+		this.room = room;
+		if (this.one !== was) this.touch();
 	}
 	palette = false;
 	picker?: Picker;
@@ -1384,10 +1402,10 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/** Whether the side panel or the aside is open, and drawn: where they are sheets, only the one opened last is. */
+	/** Whether the side panel or the aside is open, and drawn: where there is room for one only (`one`), only the one opened last is. */
 	shown(which: Beside): boolean {
 		const open = which === "code" ? this.code : this.aside;
-		return open && !(this.sheets && this.code && this.aside && this.last !== which);
+		return open && !(this.one && this.code && this.aside && this.last !== which);
 	}
 
 	/** Open but not drawn: there is room for one only, and the other was opened last. */

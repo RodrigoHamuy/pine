@@ -1723,6 +1723,65 @@ test("what was typed in a file and not saved stays when the panel becomes a shee
 	}
 });
 
+test("a window too narrow for the side panel and the browser side by side shows the one opened last, and both again when it is wide", async () => {
+	const size = (width: number, height: number) => page.setViewportSize({ width, height });
+	const gone = (sel: string) => page.waitForSelector(sel, { state: "detached" });
+	try {
+		await page.click("[data-slot=tab] >> nth=0");
+		// Wide: the side panel and the browser beside the conversation, both columns.
+		await size(1800, 900);
+		await menu("code-agent");
+		await sees("#code-panel [data-slot=code-panel]");
+		if (!(await page.$("[data-slot=browser-aside]"))) await menu("browser");
+		await sees("#browser-panel [data-slot=browser-aside]");
+		// Narrower (room for a column beside the conversation, not for two): the browser, opened last, stays; the side panel is open behind.
+		await size(1280, 820);
+		await gone("[data-slot=code-panel]");
+		await sees("#browser-panel [data-slot=browser-aside]");
+		assert.equal(await page.locator("[data-slot=sheet-content]").count(), 0, "a column, not a sheet");
+		await sees(`${CODE_TOGGLE}[aria-pressed=true][data-behind]`);
+		await sees(`${BROWSER_TOGGLE}[aria-pressed=true]:not([data-behind])`);
+		// Wide again: both, without a click.
+		await size(1800, 900);
+		await sees("#code-panel [data-slot=code-panel]");
+		await sees("#browser-panel [data-slot=browser-aside]");
+		await sees(`${CODE_TOGGLE}:not([data-behind])`);
+		// Narrow: a click on the icon of the one behind brings it to the front and puts the other behind.
+		await size(1280, 820);
+		await gone("[data-slot=code-panel]");
+		await page.click(CODE_TOGGLE);
+		await sees("#code-panel [data-slot=code-panel]");
+		await gone("[data-slot=browser-aside]");
+		await sees(`${BROWSER_TOGGLE}[data-behind]`);
+		// A click on the icon of the one in front closes it, and the other one shows.
+		await page.click(CODE_TOGGLE);
+		await gone("[data-slot=code-panel]");
+		await sees("#browser-panel [data-slot=browser-aside]");
+		await sees(`${CODE_TOGGLE}[aria-pressed=false]`);
+		// The agent's browser_show brings the browser in front of the side panel.
+		await page.click(CODE_TOGGLE);
+		await sees("#code-panel [data-slot=code-panel]");
+		await gone("[data-slot=browser-aside]");
+		const tabs = await page.locator("[data-slot=tab]").count();
+		await menu("new");
+		await page.waitForFunction((n) => document.querySelectorAll("[data-slot=tab]").length > n, tabs);
+		await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "browser_show", args: {} }], text: "Have a look." }, { text: "There it is." }], "Show me the page. "));
+		await page.keyboard.press("Enter");
+		await sees("#browser-panel [data-slot=browser-aside]");
+		await sees("[data-slot=markdown] >> text=There it is.");
+		assert.equal(await page.locator("[data-slot=code-panel]").count(), 0);
+		await sees(`${CODE_TOGGLE}[data-behind]`);
+		await menu("close");
+		await page.waitForFunction((n) => document.querySelectorAll("[data-slot=tab]").length === n, tabs);
+	} finally {
+		// Both closed and the width the start of this file set, for the tests that follow. (Wide, where both show, a toggle closes.)
+		await size(1800, 900);
+		if (await page.$("[data-slot=browser-aside]")) await menu("browser");
+		if (await page.$("[data-slot=code-panel]")) await menu("code");
+		await size(1280, 820);
+	}
+});
+
 test("quitting stops the daemon it started", async () => {
 	const log = path.join(home, "data", "pine.log");
 	assert.ok(fs.existsSync(log));
