@@ -17,7 +17,7 @@ to change the code.
 | `node src/cli.ts <command>` | The CLI without installing it. |
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
 | `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
-| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a part of pine's own has its story in `desktop/src/ui/<Part>.stories.tsx`, a whole view beside its file (`desktop/src/Composer.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`). Add or update a story when you change `desktop/src/ui.tsx`. |
+| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a part of pine's own has its story in `desktop/src/ui/<Part>.stories.tsx`, a composition in `desktop/src/components/` and a whole view beside its file (`desktop/src/components/printed.stories.tsx`, `desktop/src/Composer.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`). Add or update a story when you change `desktop/src/ui.tsx`. |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
@@ -126,8 +126,9 @@ desktop/            the desktop app (Electron; a package of its own, not part of
                     `@ai-elements/message`). AI Elements means shadcn's pages of patterns (ui.shadcn.com/docs/ai-elements),
                     which are code to compose, not a package. Vercel's earlier `@ai-elements` registry, which shadcn's
                     pages replace, serves one version written on Radix for every style: it is never added. A stock component is never edited: add and
-                    update them with the shadcn CLI and components.json; a variant or composition lives elsewhere under
-                    src/components/ and wraps the stock one, and only for what stock cannot do. No hand-written stylesheet:
+                    update them with the shadcn CLI and components.json. Stock is used directly where it is needed:
+                    no wrapper that only renames or bundles stock components. src/components/ holds only a
+                    composition stock cannot express in place, and wraps the stock one. No hand-written stylesheet:
                     utilities on Tailwind's default scale, tokens and one root font-size in src/index.css.
                     docs/references/desktop.md describes it and its layout.
                     shadcn's agent skill lies in desktop/.agents/skills (desktop/.claude/skills links to it, skills-lock.json pins it):

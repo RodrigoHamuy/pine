@@ -175,7 +175,7 @@ it is never a question whom it is for.
 
 | On an agent's line | What it does |
 |---|---|
-| A click on the agent | Folds its conversations away, or shows them again. The app remembers which groups are folded. A folded agent still shows that it is at work (a green dot that pulses), waits for you (`!`) or has something new (a dot) |
+| A click on the agent | Folds its conversations away, or shows them again. The app remembers which groups are folded. A folded agent still shows that it is at work (a spinner), waits for you (`!`) or has something new (a dot) |
 | `+` | A new conversation with that agent |
 | The folder (when the pointer is on the line) | Opens a folder of yours for a new conversation with that agent |
 | The gear (when the pointer is on the line) | That agent's page in the settings |
@@ -184,7 +184,7 @@ it is never a question whom it is for.
 
 An agent that somebody else makes while the app is open (the main agent when you ask it to,
 `pine agent add`, the terminal UI) appears in the side bar within a few seconds, and one that
-is removed goes, with its tabs. A conversation in which an agent is at work has a green dot that pulses
+is removed goes, with its tabs. A conversation in which an agent is at work has a spinner
 whether or not a tab shows it.
 
 Where no agent is named, the app goes by the tab in front, and asks when that is not an
@@ -199,7 +199,7 @@ agent's:
 | Part | What it is |
 |---|---|
 | Side bar | Search at the top, then your agents (see above). Drag its right edge to make it wider or narrower, or focus the edge with Tab and use the arrow keys (a double click on the edge sets it back), `⌘B` hides it and shows it again, and it is after a restart as you left it; where nothing is to click, it moves the window. An agent's own conversation (`main conversation`) comes first, then pinned ones, then by when they were last used. A click on a conversation opens it in a tab, and so does Enter: Tab reaches an agent's line (Enter or Space folds it) and then its conversations, where the arrow keys move; a right click offers Pin, Rename, Remove (or Start over for an agent's own). At the bottom: the event log, the settings, and whether pine answers |
-| Tabs | One conversation each, with its agent's initial, as in the terminal UI: a green dot that pulses while the agent works (every such dot in the window pulses in step), a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
+| Tabs | One conversation each, with its agent's initial, as in the terminal UI: a spinner while the agent works, a dot when something arrived while you were elsewhere, `!` when it waits for your approval, `★` for a conversation that is kept for good. Drag a tab to move it. They are the same tabs the terminal UI opens: the daemon keeps the list |
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens (it stays open while the turn runs, with its last lines). A `↳ … ↗` line opens a sub-agent's or delegated task's work in a tab of its own. A request of the agent's waits in the conversation with its buttons until it is answered, then becomes a line. Above your last message a line offers to take it back (**Take back**, `/undo`). Scrolled up, the conversation holds still while the answer goes on, and a button at its foot brings you back to the end |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed), and the code panel's button |
@@ -425,11 +425,12 @@ desktop/
     Settings.tsx   the settings pages
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
-    components/    pine's own compositions of stock components (a labelled field, a choice,
-                   scroll-fade-area.tsx: every region that scrolls, a ScrollArea that fades where it is cut,
-                   and hint.tsx: a Tooltip whose text is also an icon button's accessible name)
-    ui.tsx         pine's own small parts, made of shadcn's components
-    lists.tsx      the tree of files and the lists to open a row from, on ui-sdk (shadcn has neither)
+    components/    only what stock components cannot express when composed in place (printed.tsx:
+                   what a tool or a program printed, a Code Block that follows its end); no part
+                   there only renames or bundles a stock one
+    ui.tsx         pine's own small parts, made of shadcn's components: the logo, an empty view
+    lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
+                   which are ui-sdk's, used directly (shadcn has neither)
     index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
                    shadcn's tokens set from them, the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
@@ -472,9 +473,11 @@ holds only tokens and base rules.
 - A stock shadcn component is never edited. Add and update them with the shadcn CLI
   (`npx shadcn@latest add <name>`; `--diff` shows what changed upstream); the project's style is
   declared in `components.json`. Everything is on Base UI: no file of the page imports Radix.
-- Prefer the stock component as it is, with its own look. A variant or a composition lives
-  elsewhere, under `src/components/` (or in the file that uses it), and wraps the stock one; add a
-  composition or a style override only for what stock cannot do.
+- Prefer the stock component as it is, with its own look, written where it is used: a confirmation
+  is stock AlertDialog at its place, work in progress is stock Spinner. There is no wrapper that only
+  renames or bundles stock components. `src/components/` holds only a composition stock cannot
+  express in place, and wraps the stock one; add one or a style override only for what stock
+  cannot do.
 - Sizes and spacing are Tailwind's default scale and shadcn's defaults, never arbitrary values.
   The page's density is one `font-size` on `:root` in `index.css`: every rem size (text, spacing,
   components) follows it, so no component sets a font size of its own. Corners come from shadcn's
@@ -499,15 +502,15 @@ the side bar and the code panel (Resizable), the side bar itself (Sidebar, fixed
 `collapsible="none"`: its header, groups, menu buttons, badges and actions) and the agents' groups in it
 (Collapsible) are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
-of rows to open) is ui-sdk's (`@ui-sdk/react`), in `src/lists.tsx`; ui-sdk is never used for a
+of rows to open) is ui-sdk's (`@ui-sdk/react`), used directly, with the row's look from `src/lists.tsx`; ui-sdk is never used for a
 piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk list drawn as the
 stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the list's
 option, so the rows look like the side bar's and the arrow keys move between them.
 The side bar's colours are the `--sidebar*` tokens in `index.css`, set from pine's own: rows are
 muted, the one in front pressed, and its background is left to the window behind it (the system's
-material on a Mac). pine's own parts (`src/ui.tsx`: the logo, the working dot, an empty view,
-the notices; dialogs; `src/lists.tsx`: the tree and the list) have stories beside
-them (`src/ui/<Part>.stories.tsx`, one file per part, titled by its path), and a whole view
+material on a Mac). pine's own parts (`src/ui.tsx`: the logo, an empty view; dialogs) have stories in
+`src/ui/<Part>.stories.tsx`, one file per part; a composition in `src/components/` has its
+story beside its file, titled `Components/<Name>` (`src/components/printed.stories.tsx`); and a whole view
 has its story beside its file (`src/Composer.stories.tsx`, `src/Conversation.stories.tsx`).
 None needs Electron or a daemon. A view that calls `api.ts` or the bridge is drawn on
 stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does nothing.
