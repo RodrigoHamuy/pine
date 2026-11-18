@@ -4,7 +4,7 @@
 // is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
 import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
-import { Fragment, memo, type ReactNode, useEffect, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -68,14 +68,29 @@ function Thought({ text, title, description, live = false }: { text: string; tit
 			{description ? <TraceDescription>{description}</TraceDescription> : null}
 		</TraceLine>
 	);
+	// While it streams, the box stays at the end of the text, unless the owner scrolled up to read.
+	const body = useRef<HTMLDivElement>(null);
+	const atEnd = useRef(true);
+	useLayoutEffect(() => {
+		const viewport = body.current?.closest<HTMLElement>("[data-slot=scroll-area-viewport]");
+		if (live && viewport && atEnd.current) viewport.scrollTop = viewport.scrollHeight;
+	}, [text, live]);
 	if (!text) return <div data-part="thought">{line}</div>;
-	const shown = live && text.length > 600 ? `…${text.slice(-600)}` : text;
 	return (
 		<TraceCollapsible open={open ?? live} onOpenChange={setOpen} data-part="thought">
 			<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
 			<TraceCollapsibleContent>
-				<ScrollArea className="flex max-h-80 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-					<div className="whitespace-pre-wrap select-text">{shown}</div>
+				{/* The whole text, always: a box that only grows up to its height, so the thread above never moves. */}
+				<ScrollArea
+					className="flex max-h-80 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"
+					onScrollCapture={(e) => {
+						const v = e.target as HTMLElement;
+						atEnd.current = v.scrollHeight - v.scrollTop - v.clientHeight < 8;
+					}}
+				>
+					<div ref={body} className="whitespace-pre-wrap select-text">
+						{text}
+					</div>
 				</ScrollArea>
 			</TraceCollapsibleContent>
 		</TraceCollapsible>

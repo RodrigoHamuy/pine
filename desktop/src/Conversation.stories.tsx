@@ -76,6 +76,31 @@ const working: Made[] = [
 ];
 export const Working: Story = { args: { items: working } };
 
+/** A long thought that goes on: its box at its full height, at the end of the text, faded above. */
+const reasons = [
+	"The owner asks for every feature that makes pine look like a coding agent.",
+	"I start with modes: safe and manual work in the sandbox, auto and bypass without one, plan only reads.",
+	"Approvals come next: once, always for this conversation, or no, from the app, Telegram or the command line.",
+	"Worktrees: a conversation can move into one, and its work is merged from the panel.",
+	"The code pane shows the changes of the folder, its files and what each tool returned.",
+	"Undo takes back the owner's last message and puts the folder back as it was.",
+	"Sub-agents run beside the conversation, each in a tab of its own.",
+];
+const thinking: Made[] = [
+	{ t: "user", text: "List every feature that makes pine similar to a coding agent." },
+	{
+		t: "work",
+		done: false,
+		open: false,
+		startedAt: now,
+		parts: [
+			{ p: "tool", key: "1", tool: "manual", subject: "modes", status: "ok", ms: 336, depth: 0 },
+			{ p: "thought", text: [...reasons, ...reasons, ...reasons].map((r) => `- ${r}`).join("\n"), done: false, startedAt: now },
+		],
+	},
+];
+export const Thinking: Story = { args: { items: thinking } };
+
 /** What pine says between turns: notes in each tone, an event, the goal, a divider. */
 const notes: Made[] = [
 	{ t: "divider", text: "yesterday" },
