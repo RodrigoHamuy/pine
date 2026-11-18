@@ -13,7 +13,9 @@ import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
-import { AutoText, Choice, Confirm, Dialog, Empty, LabeledField, Pulse, useLoad } from "./ui.tsx";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Confirm } from "./Confirm.tsx";
+import { AutoText, Choice, Empty, LabeledField, Pulse, useLoad } from "./ui.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -307,13 +309,21 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 		made(done.id);
 	};
 	return (
-		<Dialog title="A new agent" width={600} onClose={close} footer={<><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={!f.id.trim() || !f.description.trim()} onClick={() => void create()}>Create agent</Button></>}>
-			<LabeledField label="Name" hint="Lowercase letters, digits, - and _ (for example research, home, books)."><Input autoFocus className="mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} /></LabeledField>
-			<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to."><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField>
-			<LabeledField label="Instructions" hint="Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on."><AutoText value={f.instructions} onChange={(v) => setF({ ...f, instructions: v })} minRows={4} maxRows={12} placeholder="You are …" /></LabeledField>
-			<LabeledField label="Model">
-				<Choice value={f.model} onChange={(model) => setF({ ...f, model })} options={[{ value: "", label: "pine's default" }, ...(models.data ?? []).map((m) => ({ value: m, label: m }))]} />
-			</LabeledField>
+		<Dialog open onOpenChange={(open) => open || close()}>
+			<DialogContent showCloseButton={false} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[600px]">
+				<DialogHeader>
+					<DialogTitle>A new agent</DialogTitle>
+				</DialogHeader>
+				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+					<LabeledField label="Name" hint="Lowercase letters, digits, - and _ (for example research, home, books)."><Input autoFocus className="mono" value={f.id} onChange={(e) => setF({ ...f, id: e.target.value.toLowerCase() })} /></LabeledField>
+					<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to."><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField>
+					<LabeledField label="Instructions" hint="Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on."><AutoText value={f.instructions} onChange={(v) => setF({ ...f, instructions: v })} minRows={4} maxRows={12} placeholder="You are …" /></LabeledField>
+					<LabeledField label="Model">
+						<Choice value={f.model} onChange={(model) => setF({ ...f, model })} options={[{ value: "", label: "pine's default" }, ...(models.data ?? []).map((m) => ({ value: m, label: m }))]} />
+					</LabeledField>
+				</div>
+				<DialogFooter><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={!f.id.trim() || !f.description.trim()} onClick={() => void create()}>Create agent</Button></DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
@@ -393,30 +403,38 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 	};
 	const q = state?.question;
 	return (
-		<Dialog title={`Sign in to ${provider}`} width={560} onClose={cancel} footer={<Button variant={state?.done ? "default" : "outline"} onClick={cancel}>{state?.done ? "Done" : "Cancel"}</Button>}>
-			{error || state?.error ? <div className="notice bad"><TriangleAlertIcon />{error ?? state?.error}</div> : null}
-			{state?.lines.length ? <pre className="log">{state.lines.join("\n")}</pre> : null}
-			{state?.url && !state.done ? <div className="row"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono selectable">{state.code}</b></span> : null}</div> : null}
-			{q && !state?.done ? (
-				q.options?.length ? (
-					<div className="pick-list" style={{ padding: 0 }}>
-						<div className="muted" style={{ marginBottom: 4 }}>{q.message}</div>
-						{q.options.map((o) => <div key={o.id} className="pick-item" onClick={() => void send(o.id)}><span className="label">{o.label}</span><span className="about">{o.description}</span></div>)}
-					</div>
-				) : (
-					<LabeledField label={q.message} hint={q.secret ? "It is not shown, and is stored in auth.json in pine's home, where agents cannot read it." : undefined}>
-						<div className="row">
-							<Input autoFocus className="mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
-							<Button disabled={!answer.trim()} onClick={() => void send(answer.trim())}>Continue</Button>
-						</div>
-					</LabeledField>
-				)
-			) : !state?.done && !error ? (
-				<div className="row muted"><Pulse /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
-			) : null}
-			{state?.done && !state.error ? <div className="notice plain"><CheckIcon />{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</div> : null}
-			{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
-			{state?.done && !state.error && state.models?.length ? <div className="row"><Button onClick={() => close(true, state.models)}>Choose the model your agents run on…</Button><span className="muted">Or later: Change, on the Models page.</span></div> : null}
+		<Dialog open onOpenChange={(open) => open || cancel()}>
+			<DialogContent showCloseButton={false} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[560px]">
+				<DialogHeader>
+					<DialogTitle>Sign in to {provider}</DialogTitle>
+				</DialogHeader>
+				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+					{error || state?.error ? <div className="notice bad"><TriangleAlertIcon />{error ?? state?.error}</div> : null}
+					{state?.lines.length ? <pre className="log">{state.lines.join("\n")}</pre> : null}
+					{state?.url && !state.done ? <div className="row"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono selectable">{state.code}</b></span> : null}</div> : null}
+					{q && !state?.done ? (
+						q.options?.length ? (
+							<div className="pick-list" style={{ padding: 0 }}>
+								<div className="muted" style={{ marginBottom: 4 }}>{q.message}</div>
+								{q.options.map((o) => <div key={o.id} className="pick-item" onClick={() => void send(o.id)}><span className="label">{o.label}</span><span className="about">{o.description}</span></div>)}
+							</div>
+						) : (
+							<LabeledField label={q.message} hint={q.secret ? "It is not shown, and is stored in auth.json in pine's home, where agents cannot read it." : undefined}>
+								<div className="row">
+									<Input autoFocus className="mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
+									<Button disabled={!answer.trim()} onClick={() => void send(answer.trim())}>Continue</Button>
+								</div>
+							</LabeledField>
+						)
+					) : !state?.done && !error ? (
+						<div className="row muted"><Pulse /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
+					) : null}
+					{state?.done && !state.error ? <div className="notice plain"><CheckIcon />{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</div> : null}
+					{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
+					{state?.done && !state.error && state.models?.length ? <div className="row"><Button onClick={() => close(true, state.models)}>Choose the model your agents run on…</Button><span className="muted">Or later: Change, on the Models page.</span></div> : null}
+				</div>
+				<DialogFooter><Button variant={state?.done ? "default" : "outline"} onClick={cancel}>{state?.done ? "Done" : "Cancel"}</Button></DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
@@ -465,7 +483,7 @@ function Models() {
 								<div className="name">{s.name}<span className="tag mono">{s.baseUrl}</span><span className="tag">key: {s.key}</span></div>
 								<div className="about mono">{s.models.map((m) => `${s.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</div>
 							</div>
-							<div className="ctl"><Confirm label="Remove" sure="Remove it?" onConfirm={() => void store.attempt(() => api.removeModelServer(s.name)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} /></div>
+							<div className="ctl"><Confirm label="Remove" question={`Remove the model server ${s.name}?`} onConfirm={() => void store.attempt(() => api.removeModelServer(s.name)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} /></div>
 						</div>
 					))
 				) : servers.data ? (
@@ -493,7 +511,7 @@ function Models() {
 							<div className="item" key={p.id}>
 								<div className="info"><div className="name">{p.name ?? p.id}{p.name && p.name !== p.id ? <span className="tag mono">{p.id}</span> : null}{p.signedIn ? <span className="tag good">signed in</span> : null}</div><div className="about">{plural(p.models, "model")}</div></div>
 								<div className="ctl">
-									{p.signedIn ? <Confirm label="Sign out" sure="Sign out?" onConfirm={() => void store.attempt(() => api.logout(p.id)).then((r) => r && reload())} /> : null}
+									{p.signedIn ? <Confirm label="Sign out" question={`Sign out of ${p.name ?? p.id}?`} onConfirm={() => void store.attempt(() => api.logout(p.id)).then((r) => r && reload())} /> : null}
 									{p.oauth ? <Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "oauth" })}>Sign in</Button> : null}
 									<Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "api_key" })}>{p.signedIn ? "New key" : "API key"}</Button>
 								</div>
@@ -572,7 +590,7 @@ function Mcp() {
 									</div>
 									<div className="ctl">
 										{s.remote ? <Button variant="outline" size="xs" disabled={busy === s.name} onClick={() => void login(s.name, agent)}>{busy === s.name ? <><Pulse size={11} /> In your browser…</> : "Sign in"}</Button> : null}
-										{s.target.startsWith("bundled:") ? null : <Confirm label="Remove" sure="Remove it?" onConfirm={() => void store.attempt(() => api.removeMcp(s.name, agent)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} />}
+										{s.target.startsWith("bundled:") ? null : <Confirm label="Remove" question={`Remove the MCP server ${s.name}?`} onConfirm={() => void store.attempt(() => api.removeMcp(s.name, agent)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))} />}
 									</div>
 								</div>
 							);
@@ -642,7 +660,7 @@ function Skills() {
 									<div className="name">{s.name}<span className="tag">{s.scope === "global" ? "all agents" : s.scope === "agent" ? s.agent : `${s.agent} · ${s.session}`}</span>{s.managed ? null : <span className="tag">yours, from the configuration</span>}</div>
 									<div className="about">{short(s.description, 220)}</div>
 								</div>
-								<div className="ctl" onClick={(e) => e.stopPropagation()}>{s.managed ? <Confirm icon={Trash2Icon} label="Remove this skill" sure="Remove?" onConfirm={() => void store.attempt(() => api.removeSkill(s.name, s.agent, s.session)).then((r) => r && (store.flash(`Removed the skill ${s.name}.`), skills.reload()))} /> : null}</div>
+								<div className="ctl" onClick={(e) => e.stopPropagation()}>{s.managed ? <Confirm icon={Trash2Icon} label="Remove this skill" question={`Remove the skill ${s.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSkill(s.name, s.agent, s.session)).then((r) => r && (store.flash(`Removed the skill ${s.name}.`), skills.reload()))} /> : null}</div>
 							</div>
 						))
 					) : (
@@ -711,33 +729,41 @@ function NewSource({ types, close, made }: { types: SourceType[]; close: () => v
 		made();
 	};
 	return (
-		<Dialog title="A new event source" width={680} onClose={close} footer={plan ? <><Button variant="outline" onClick={() => setPlan(undefined)}>Back</Button><Button disabled={busy || plan.needs.some((n) => !values[n.name]?.trim())} onClick={() => void add()}>Add source</Button></> : <><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={busy || !f.name.trim() || !f.type} onClick={() => void check()}>Continue</Button></>}>
-			{plan ? (
-				<>
-					<div><b>{f.name}</b> ({f.type}) for {f.agent || "all agents"} will:</div>
-					<ul style={{ margin: 0, paddingLeft: 20 }}>{plan.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
-					{plan.owner ? <div className="notice"><TriangleAlertIcon />What it reports is treated as your own words: the agent it wakes gets its full tools.</div> : null}
-					{plan.needs.map((n) => {
-						const at = n.label.indexOf(": ");
-						return <LabeledField key={n.name} label={at > 0 ? n.label.slice(0, at) : n.name} hint={<>{at > 0 ? n.label.slice(at + 2) : ""} It is not shown, goes into pine's .env file, and never reaches an agent.</>}><Input className="mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} /></LabeledField>;
-					})}
-					<LabeledField label="Subscribe right away" hint={`What is to be done when it reports something. With a note, ${f.agent || "every agent"} is woken by its events; without one, nobody is subscribed yet.`}><Input placeholder="for example: file the scan and tell me what it is" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></LabeledField>
-				</>
-			) : (
-				<>
-					<div className="form" style={{ padding: 0 }}>
-						<LabeledField label="Name" hint="Lowercase letters, digits, - and _."><Input autoFocus className="mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
-						<LabeledField label="For"><Whom value={f.agent} onChange={(agent) => setF({ ...f, agent })} /></LabeledField>
-						<LabeledField label="Type" wide hint={type?.summary}>
-							<Choice value={f.type} onChange={(type) => (setF({ ...f, type }), setOptions({}))} options={[{ value: "", label: "Choose what it watches…" }, ...types.map((t) => ({ value: t.name, label: `${t.name}: ${short(t.summary, 80)}` }))]} />
-						</LabeledField>
-						{type ? <LabeledField label="What it reports" wide><Input placeholder={type.summary} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField> : null}
-						{props.map(([name, schema]) => <OptionField key={name} name={name} schema={schema} required={required.has(name)} value={options[name]} onChange={(v) => setOptions({ ...options, [name]: v })} />)}
-						{type ? <LabeledField label="It is my own" hint="Only for a device or folder nobody else can put content into: what it reports is then trusted like your own messages."><Switch checked={f.own} onCheckedChange={(own) => setF({ ...f, own })} /></LabeledField> : null}
-					</div>
-					{type ? <div className="faint" style={{ fontSize: 12 }}>A password or token it needs is asked for in the next step.</div> : null}
-				</>
-			)}
+		<Dialog open onOpenChange={(open) => open || close()}>
+			<DialogContent showCloseButton={false} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[680px]">
+				<DialogHeader>
+					<DialogTitle>A new event source</DialogTitle>
+				</DialogHeader>
+				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+					{plan ? (
+						<>
+							<div><b>{f.name}</b> ({f.type}) for {f.agent || "all agents"} will:</div>
+							<ul style={{ margin: 0, paddingLeft: 20 }}>{plan.does.map((d, i) => <li key={i}>{d}</li>)}</ul>
+							{plan.owner ? <div className="notice"><TriangleAlertIcon />What it reports is treated as your own words: the agent it wakes gets its full tools.</div> : null}
+							{plan.needs.map((n) => {
+								const at = n.label.indexOf(": ");
+								return <LabeledField key={n.name} label={at > 0 ? n.label.slice(0, at) : n.name} hint={<>{at > 0 ? n.label.slice(at + 2) : ""} It is not shown, goes into pine's .env file, and never reaches an agent.</>}><Input className="mono" type="password" autoComplete="off" value={values[n.name] ?? ""} onChange={(e) => setValues({ ...values, [n.name]: e.target.value })} /></LabeledField>;
+							})}
+							<LabeledField label="Subscribe right away" hint={`What is to be done when it reports something. With a note, ${f.agent || "every agent"} is woken by its events; without one, nobody is subscribed yet.`}><Input placeholder="for example: file the scan and tell me what it is" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} /></LabeledField>
+						</>
+					) : (
+						<>
+							<div className="form" style={{ padding: 0 }}>
+								<LabeledField label="Name" hint="Lowercase letters, digits, - and _."><Input autoFocus className="mono" placeholder="scans" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} /></LabeledField>
+								<LabeledField label="For"><Whom value={f.agent} onChange={(agent) => setF({ ...f, agent })} /></LabeledField>
+								<LabeledField label="Type" wide hint={type?.summary}>
+									<Choice value={f.type} onChange={(type) => (setF({ ...f, type }), setOptions({}))} options={[{ value: "", label: "Choose what it watches…" }, ...types.map((t) => ({ value: t.name, label: `${t.name}: ${short(t.summary, 80)}` }))]} />
+								</LabeledField>
+								{type ? <LabeledField label="What it reports" wide><Input placeholder={type.summary} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} /></LabeledField> : null}
+								{props.map(([name, schema]) => <OptionField key={name} name={name} schema={schema} required={required.has(name)} value={options[name]} onChange={(v) => setOptions({ ...options, [name]: v })} />)}
+								{type ? <LabeledField label="It is my own" hint="Only for a device or folder nobody else can put content into: what it reports is then trusted like your own messages."><Switch checked={f.own} onCheckedChange={(own) => setF({ ...f, own })} /></LabeledField> : null}
+							</div>
+							{type ? <div className="faint" style={{ fontSize: 12 }}>A password or token it needs is asked for in the next step.</div> : null}
+						</>
+					)}
+				</div>
+				<DialogFooter>{plan ? <><Button variant="outline" onClick={() => setPlan(undefined)}>Back</Button><Button disabled={busy || plan.needs.some((n) => !values[n.name]?.trim())} onClick={() => void add()}>Add source</Button></> : <><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={busy || !f.name.trim() || !f.type} onClick={() => void check()}>Continue</Button></>}</DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
@@ -779,7 +805,7 @@ function Sources() {
 										<Button variant="ghost" size="xs" onClick={() => void subscribe(x.name)}><PlusIcon data-icon="inline-start" />Subscribe</Button>
 									</div>
 								</div>
-								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this source" sure="Remove?" onConfirm={() => void store.attempt(() => api.removeSource(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && (store.flash(`Removed the event source ${x.name}.`), sources.reload()))} /></div>
+								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this source" question={`Remove the event source ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSource(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && (store.flash(`Removed the event source ${x.name}.`), sources.reload()))} /></div>
 							</div>
 						))
 					) : (
@@ -818,7 +844,7 @@ function Schedules() {
 									<div className="name">{x.name}<span className="tag">{scopeText(x.scope, x.session)}</span><span className="tag">{x.when}</span>{x.next ? <span className="tag good">next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</span> : null}</div>
 									<div className="about">{x.task ?? `publishes ${x.topic}`}</div>
 								</div>
-								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this schedule" sure="Remove?" onConfirm={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())} /></div>
+								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this schedule" question={`Remove the schedule ${x.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())} /></div>
 							</div>
 						))
 					) : (
@@ -866,7 +892,7 @@ function Routes() {
 									<div className="name">{r.name}<span className="tag mono">on {r.on.join(", ")}</span>{r.when ? <span className="tag mono">when {short(JSON.stringify(r.when), 60)}</span> : null}{r.trust === "owner" ? <span className="tag warn">counts as your words</span> : null}</div>
 									<div className="about">{does(r)}</div>
 								</div>
-								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this route" sure="Remove?" onConfirm={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())} /></div>
+								<div className="ctl"><Confirm icon={Trash2Icon} label="Remove this route" question={`Remove the route ${r.name}?`} action="Remove" onConfirm={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())} /></div>
 							</div>
 						))
 					) : (

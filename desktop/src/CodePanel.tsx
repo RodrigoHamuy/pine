@@ -29,8 +29,10 @@ import { BrowserView } from "./Browser.tsx";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, store, type Tab, useModel, useSignal } from "./model.ts";
 import { clock, errText, oneLine, plural, short, size, tilde, took } from "./text.ts";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Confirm } from "./Confirm.tsx";
 import { List, ListRow, Tree, TreeRow } from "./lists.tsx";
-import { Confirm, Empty, Pulse, useLoad } from "./ui.tsx";
+import { Empty, Pulse, useLoad } from "./ui.tsx";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -299,12 +301,25 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 		setSaving(false);
 	};
 	useSignal("save", () => void save());
+	// Leaving with what was typed and not saved is asked first.
+	const [leaving, setLeaving] = useState(false);
 	const changedOnDisk = dirty && text !== undefined && text !== base;
 	const root = tab.folder ?? tab.workspace;
 	return (
 		<>
 			<div className="code-sub">
-				<Button variant="ghost" size="icon-xs" onClick={() => (dirty && !window.confirm(`Leave ${file} without saving what you typed?`) ? undefined : close())} title="Back to the files"><ChevronLeftIcon /></Button>
+				<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())} title="Back to the files"><ChevronLeftIcon /></Button>
+				<AlertDialog open={leaving} onOpenChange={setLeaving}>
+					<AlertDialogContent>
+						<AlertDialogHeader>
+							<AlertDialogTitle>Leave {file} without saving what you typed?</AlertDialogTitle>
+						</AlertDialogHeader>
+						<AlertDialogFooter>
+							<AlertDialogCancel>Cancel</AlertDialogCancel>
+							<AlertDialogAction variant="destructive" onClick={() => (setLeaving(false), close())}>Leave</AlertDialogAction>
+						</AlertDialogFooter>
+					</AlertDialogContent>
+				</AlertDialog>
 				<span className="cut grow mono" title={file}>{file}{dirty ? <span style={{ color: "var(--warn)" }}> ●</span> : null}</span>
 				{disk.data?.truncated ? <span className="tag warn">too large to edit</span> : null}
 				{root ? <Button variant="ghost" size="icon-xs" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button> : null}
@@ -411,7 +426,7 @@ function Running({ tab }: { tab: Tab }) {
 					<div className="row">
 						<span className="dot good" />
 						<span className="mono cut grow" title={p.command}>{p.command}</span>
-						<Confirm label="Stop" sure="Stop it?" onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
+						<Confirm label="Stop" question={`Stop ${short(p.command, 80)}?`} onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
 					</div>
 					<div className="row faint" style={{ fontSize: 12 }}>
 						<span>running for {clock(p.seconds)}</span>

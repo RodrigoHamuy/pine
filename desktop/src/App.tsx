@@ -9,6 +9,11 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { type Layout, usePanelRef } from "react-resizable-panels";
 import { Field, FieldLabel, FieldDescription } from "@/components/ui/field";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { flushSync } from "react-dom";
+import { cn } from "cn";
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList, CommandShortcut } from "@/components/ui/command";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { type AgentInfo, api, type Approval, type Conversation as Conv } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { CODE_KEY, CodePanel } from "./CodePanel.tsx";
@@ -19,7 +24,8 @@ import { type Picker, store, type Tab, useModel, useSignal } from "./model.ts";
 import { Settings } from "./Settings.tsx";
 import { ago, fuzzy, until } from "./text.ts";
 import { List, ListRow } from "./lists.tsx";
-import { Confirm, Dialog, Logo, Notices, Pulse } from "./ui.tsx";
+import { Confirm } from "./Confirm.tsx";
+import { Logo, Notices, Pulse } from "./ui.tsx";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
@@ -114,8 +120,8 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 			<span className="cut grow">{s.titleOf(agent, c.session)}</span>
 			<span className="when">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
 			{main ? null : (
-				<span className="acts" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
-					<Confirm icon={Trash2Icon} label="Remove this conversation for good" sure="Remove?" onConfirm={() => void s.removeConversation(agent, c.session)} />
+				<span className="acts" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.currentTarget.contains(e.target as Node) && e.stopPropagation()} onKeyDown={(e) => e.currentTarget.contains(e.target as Node) && e.stopPropagation()}>
+					<Confirm icon={Trash2Icon} label="Remove this conversation for good" question={`Remove the conversation ${s.titleOf(agent, c.session)} for good?`} action="Remove" onConfirm={() => void s.removeConversation(agent, c.session)} />
 				</span>
 			)}
 		</ListRow>
@@ -257,65 +263,108 @@ function TitleBar() {
 
 // ---- what lies over the window for a moment --------------------------------------------------------------
 
-function PickDialog({ p }: { p: Picker }) {
+/**
+ * Which line of a cmdk list is active, announced to screen readers. cmdk names the active line in
+ * aria-activedescendant only when the choice is made outside React's effects (a key, the pointer):
+ * the line it picks by itself when the list is drawn or the text changes is shown but never named.
+ * So once the list is drawn (`redo` changed) the line is chosen again as the pointer would choose it:
+ * `start` the first time, then the first line. The value is let go of first, since cmdk ignores a
+ * choice of the line it already has: both drawn at once, so that no key comes between.
+ */
+function useActiveLine(root: React.RefObject<HTMLDivElement | null>, redo: unknown, start?: string) {
+	const [value, setValue] = useState(start ?? "");
+	const first = useRef(true);
+	useEffect(() => {
+		const target = first.current ? start : undefined;
+		first.current = false;
+		const frame = requestAnimationFrame(() => {
+			flushSync(() => setValue(""));
+			const line = root.current?.querySelector(target === undefined ? "[cmdk-item]" : `[cmdk-item][data-value="${CSS.escape(target)}"]`);
+			flushSync(() => line?.dispatchEvent(new PointerEvent("pointermove", { bubbles: true })));
+		});
+		return () => cancelAnimationFrame(frame);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [redo]);
+	return { value, onValueChange: setValue };
+}
+
+/**
+ * What had focus when a dialog opened, to give it back when it closes. A dialog whose field takes focus
+ * as it is drawn (autoFocus: the keys typed at once go there) would otherwise give it back to that field.
+ */
+function useOpener(): () => HTMLElement | null {
+	const [opener] = useState(() => document.activeElement as HTMLElement | null);
+	return () => opener;
+}
+
+export function PickDialog({ p }: { p: Picker }) {
 	const [query, setQuery] = useState("");
 	const shown = useMemo(() => (query && !p.free ? p.items.map((i) => ({ i, rank: Math.min(...[fuzzy(query, i.label), fuzzy(query, i.about ?? "") + 10].filter((r) => r >= 0), 99) })).filter((x) => x.rank < 99).sort((a, b) => a.rank - b.rank).map((x) => x.i) : p.items), [query, p]);
-	const [at, setAt] = useState(() => Math.max(0, p.items.findIndex((i) => i.value === p.current)));
-	const list = useRef<HTMLDivElement>(null);
-	useEffect(() => setAt(0), [query]);
-	useEffect(() => {
-		// (In a block: scrolling answers with a promise, and an effect may only give back a function.)
-		list.current?.querySelector(".on")?.scrollIntoView({ block: "nearest" });
-	}, [at]);
+	// The list starts on the one in use.
+	const root = useRef<HTMLDivElement>(null);
+	const line = useActiveLine(root, query, p.current);
+	const opener = useOpener();
+	// A short list is chosen from with the arrows; its field is there for the keyboard and for screen readers, unseen.
 	const typing = p.free || p.items.length > 7;
-	return (
-		<div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && p.done(undefined)}>
-			<div className="dialog" style={{ width: 560 }}>
-				<div className="pick-title">{p.title}</div>
-				<input
-					autoFocus
-					className="pick-input"
-					style={typing ? undefined : { position: "absolute", opacity: 0, pointerEvents: "none" }}
-					placeholder={p.placeholder ?? "Type to narrow the list"}
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Escape") return p.done(undefined);
-						if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-							e.preventDefault();
-							return setAt((at + (e.key === "ArrowDown" ? 1 : Math.max(1, shown.length) - 1)) % Math.max(1, shown.length));
-						}
-						if (e.key === "Enter") {
-							e.preventDefault();
-							// Words of the owner's own count before the list where both are possible.
-							if (p.free && query.trim()) return p.done(query.trim());
-							if (shown[at]) p.done(shown[at].value);
-						}
-					}}
-				/>
-				{shown.length ? (
-					<div className="pick-list" ref={list}>
-						{shown.map((i, n) => (
-							<div key={i.value} className={`pick-item${n === at ? " on" : ""}${i.tone === "bad" ? " bad" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => p.done(i.value)}>
-								<span className="label">{i.label}</span>
-								{i.about ? <span className="about">{i.about}</span> : null}
-								{i.value === p.current ? <span className="cur"><CheckIcon size={13} /></span> : null}
-							</div>
-						))}
-					</div>
-				) : p.free ? null : (
-					<div className="empty" style={{ padding: 24 }}>Nothing fits.</div>
-				)}
+	const list = (
+		<Command
+			ref={root}
+			{...line}
+			shouldFilter={false}
+			loop
+			onKeyDown={(e) => {
+				// Words of the owner's own count before the list where both are possible.
+				if (e.key === "Enter" && p.free && query.trim()) (e.preventDefault(), p.done(query.trim()));
+			}}
+		>
+			<div className={typing ? undefined : "sr-only"}>
+				<CommandInput autoFocus placeholder={p.placeholder ?? "Type to narrow the list"} value={query} onValueChange={setQuery} />
 			</div>
-		</div>
+			<CommandList className="max-h-[52vh]">
+				{shown.length ? (
+					<CommandGroup>
+						{shown.map((i) => (
+							<CommandItem key={i.value} value={i.value} data-checked={i.value === p.current} onSelect={() => p.done(i.value)}>
+								<span className={cn("label max-w-[60%] flex-none truncate", i.tone === "bad" && "text-destructive")}>{i.label}</span>
+								{i.about ? <span className="about min-w-0 truncate text-xs text-muted-foreground">{i.about}</span> : null}
+							</CommandItem>
+						))}
+					</CommandGroup>
+				) : null}
+				{p.free ? null : <CommandEmpty>Nothing fits.</CommandEmpty>}
+			</CommandList>
+		</Command>
+	);
+	const close = (open: boolean) => open || p.done(undefined);
+	if (p.items.some((i) => i.tone === "bad"))
+		return (
+			<AlertDialog open onOpenChange={close}>
+				<AlertDialogContent finalFocus={opener} className="gap-2 p-2 data-[size=default]:sm:max-w-[560px]">
+					<AlertDialogHeader className="px-2 pt-2">
+						<AlertDialogTitle>{p.title}</AlertDialogTitle>
+					</AlertDialogHeader>
+					{list}
+				</AlertDialogContent>
+			</AlertDialog>
+		);
+	return (
+		<Dialog open onOpenChange={close}>
+			<DialogContent showCloseButton={false} finalFocus={opener} className="gap-2 p-2 sm:max-w-[560px]">
+				<DialogHeader className="px-2 pt-2">
+					<DialogTitle>{p.title}</DialogTitle>
+				</DialogHeader>
+				{list}
+			</DialogContent>
+		</Dialog>
 	);
 }
 
-function Palette() {
+export function Palette() {
 	const s = store;
 	const [query, setQuery] = useState("");
-	const [at, setAt] = useState(0);
-	const list = useRef<HTMLDivElement>(null);
+	const root = useRef<HTMLDivElement>(null);
+	const line = useActiveLine(root, query);
+	const opener = useOpener();
 	useModel(s);
 	type Row = { id: string; group: string; label: string; about?: string; keys?: string; run: () => void; conv?: { agent: string; session: string } };
 	const all = useMemo(() => {
@@ -357,46 +406,34 @@ function Palette() {
 		return [...byName, ...said, ...described.filter((r) => !holds(r) || !listed.has(`${r.conv!.agent}:${r.conv!.session}`)), ...loose.filter((r) => !r.conv || !listed.has(`${r.conv.agent}:${r.conv.session}`))].slice(0, 80);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [query, all, s.said]);
-	useEffect(() => setAt(0), [query]);
-	useEffect(() => {
-		// (In a block: scrolling answers with a promise, and an effect may only give back a function.)
-		list.current?.querySelector(".on")?.scrollIntoView({ block: "nearest" });
-	}, [at]);
+	// Rows that follow each other under the same heading are one group.
+	const groups: Array<{ name: string; rows: Row[] }> = [];
+	for (const r of shown) groups.at(-1)?.name === r.group ? groups.at(-1)!.rows.push(r) : groups.push({ name: r.group, rows: [r] });
 	const close = () => ((s.palette = false), s.touch());
-	const run = (r: (typeof all)[number]) => (close(), r.run());
+	const run = (r: Row) => (close(), r.run());
 	return (
-		<div className="scrim" onMouseDown={(e) => e.target === e.currentTarget && close()}>
-			<div className="dialog" style={{ width: 620 }}>
-				<input
-					autoFocus
-					className="pick-input"
-					placeholder="Search conversations (by name or by what was said), commands, agents"
-					value={query}
-					onChange={(e) => setQuery(e.target.value)}
-					onKeyDown={(e) => {
-						if (e.key === "Escape") return close();
-						if (e.key === "ArrowDown" || e.key === "ArrowUp") {
-							e.preventDefault();
-							return setAt((at + (e.key === "ArrowDown" ? 1 : Math.max(1, shown.length) - 1)) % Math.max(1, shown.length));
-						}
-						if (e.key === "Enter" && shown[at]) run(shown[at]);
-					}}
-				/>
-				<div className="pick-list" ref={list}>
-					{shown.map((r, n) => (
-						<div key={r.id}>
-							{n === 0 || shown[n - 1].group !== r.group ? <div className="pick-group">{r.group}</div> : null}
-							<div className={`pick-item${n === at ? " on" : ""}`} onMouseMove={() => at !== n && setAt(n)} onClick={() => run(r)}>
-								<span className="label">{r.label}</span>
-								{r.about ? <span className="about">{r.about}</span> : null}
-								{r.keys ? <kbd style={{ marginLeft: "auto", flex: "none" }}>{r.keys}</kbd> : null}
-							</div>
-						</div>
-					))}
-					{shown.length ? null : <div className="empty" style={{ padding: 24 }}>Nothing fits.</div>}
-				</div>
-			</div>
-		</div>
+		<Dialog open onOpenChange={(open) => open || close()}>
+			<DialogContent showCloseButton={false} finalFocus={opener} className="gap-0 p-0 sm:max-w-[620px]">
+				<DialogTitle className="sr-only">Search everything</DialogTitle>
+				<Command ref={root} {...line} shouldFilter={false} loop>
+					<CommandInput autoFocus placeholder="Search conversations (by name or by what was said), commands, agents" value={query} onValueChange={setQuery} />
+					<CommandList className="max-h-[52vh]">
+						{groups.map((g, n) => (
+							<CommandGroup key={`${n}:${g.name}`} heading={g.name}>
+								{g.rows.map((r) => (
+									<CommandItem key={r.id} value={r.id} onSelect={() => run(r)}>
+										<span className="label max-w-[60%] flex-none truncate">{r.label}</span>
+										{r.about ? <span className="about min-w-0 truncate text-xs text-muted-foreground">{r.about}</span> : null}
+										{r.keys ? <CommandShortcut>{r.keys}</CommandShortcut> : null}
+									</CommandItem>
+								))}
+							</CommandGroup>
+						))}
+						<CommandEmpty>Nothing fits.</CommandEmpty>
+					</CommandList>
+				</Command>
+			</DialogContent>
+		</Dialog>
 	);
 }
 
@@ -407,10 +444,11 @@ const labelParts = (label: string): [string, string] => {
 };
 
 /** A request for the owner's approval. Values only the owner has are typed here and go straight to the daemon. */
-function ApprovalDialog({ req }: { req: Approval }) {
+export function ApprovalDialog({ req }: { req: Approval }) {
 	const s = store;
 	const fields = req.inputs ?? [];
 	const [values, setValues] = useState<Record<string, string>>({});
+	const opener = useOpener();
 	const allow = (always = false) => {
 		if (fields.length) {
 			const empty = fields.find((f) => !values[f.name]?.trim());
@@ -435,80 +473,94 @@ function ApprovalDialog({ req }: { req: Approval }) {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [req.id]);
 	return (
-		<Dialog
-			tone="warn"
-			width={560}
-			onClose={() => s.closeAsking()}
-			title={<><TriangleAlertIcon /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</>}
-			footer={
-				<>
+		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
+			<DialogContent data-tone="warn" showCloseButton={false} finalFocus={opener} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[560px]">
+				<DialogHeader>
+					<DialogTitle className="flex items-center gap-2"><TriangleAlertIcon className="text-warn" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</DialogTitle>
+				</DialogHeader>
+				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+					<div className="row muted">
+						<span>{req.agent}</span>
+						{req.task ? <span className="faint">task #{req.task}</span> : null}
+						<span className="tag mono">{req.tool}</span>
+					</div>
+					<pre className="log" style={{ maxHeight: 220, color: "var(--text)" }}>{req.summary}</pre>
+					<div className="muted" style={{ fontSize: 12.5 }}>
+						Why you are asked: {req.why}
+						{req.holds ? <div>“Allow” holds for {req.holds}: you are not asked about it again there.</div> : null}
+						{req.remember ? <div>“Always here” stops asking about {req.remember} in this conversation.</div> : null}
+						{!req.remember && !req.holds && !fields.length ? <div>This one is asked every time: there is no “always” for it.</div> : null}
+					</div>
+					{fields.map((f, i) => {
+						const [name, about] = labelParts(f.label ?? f.name);
+						return (
+							<Field key={f.name}>
+								<FieldLabel htmlFor={`ap-${f.name}`}>{name}{fields.length > 1 ? <span className="faint"> · {i + 1} of {fields.length}</span> : null}</FieldLabel>
+								{about ? <FieldDescription>{about}</FieldDescription> : null}
+								<Input id={`ap-${f.name}`} autoFocus={i === 0} className="mono" type={f.secret !== false ? "password" : "text"} autoComplete="off" spellCheck={false} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && allow()} />
+							</Field>
+						);
+					})}
+					{fields.length ? <div className="faint" style={{ fontSize: 12 }}>{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</div> : null}
+				</div>
+				<DialogFooter>
 					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button>
 					<span className="grow" />
 					<Button variant="destructive" onClick={() => void s.decide(req.id, false)}>Deny{fields.length ? "" : <kbd>d</kbd>}</Button>
 					{req.remember && !fields.length ? <Button variant="outline" onClick={() => allow(true)}>Always here <kbd>s</kbd></Button> : null}
 					<Button onClick={() => allow()}>{fields.length ? "Save and allow" : req.holds ? "Allow" : "Allow once"}{fields.length ? "" : <kbd>a</kbd>}</Button>
-				</>
-			}
-		>
-			<div className="row muted">
-				<span>{req.agent}</span>
-				{req.task ? <span className="faint">task #{req.task}</span> : null}
-				<span className="tag mono">{req.tool}</span>
-			</div>
-			<pre className="log" style={{ maxHeight: 220, color: "var(--text)" }}>{req.summary}</pre>
-			<div className="muted" style={{ fontSize: 12.5 }}>
-				Why you are asked: {req.why}
-				{req.holds ? <div>“Allow” holds for {req.holds}: you are not asked about it again there.</div> : null}
-				{req.remember ? <div>“Always here” stops asking about {req.remember} in this conversation.</div> : null}
-				{!req.remember && !req.holds && !fields.length ? <div>This one is asked every time: there is no “always” for it.</div> : null}
-			</div>
-			{fields.map((f, i) => {
-				const [name, about] = labelParts(f.label ?? f.name);
-				return (
-					<Field key={f.name}>
-						<FieldLabel htmlFor={`ap-${f.name}`}>{name}{fields.length > 1 ? <span className="faint"> · {i + 1} of {fields.length}</span> : null}</FieldLabel>
-						{about ? <FieldDescription>{about}</FieldDescription> : null}
-						<Input id={`ap-${f.name}`} autoFocus={i === 0} className="mono" type={f.secret !== false ? "password" : "text"} autoComplete="off" spellCheck={false} value={values[f.name] ?? ""} onChange={(e) => setValues({ ...values, [f.name]: e.target.value })} onKeyDown={(e) => e.key === "Enter" && allow()} />
-					</Field>
-				);
-			})}
-			{fields.length ? <div className="faint" style={{ fontSize: 12 }}>{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</div> : null}
+				</DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
 
 /** A question of the agent's: the answers it offers, and a line for the owner's own words. */
-function QuestionDialog({ req }: { req: Approval }) {
+export function QuestionDialog({ req }: { req: Approval }) {
 	const s = store;
 	const choices = req.choices ?? [];
 	const [own, setOwn] = useState("");
 	const [at, setAt] = useState(0);
+	const opener = useOpener();
 	const answer = (text: string) => void s.decide(req.id, true, false, { answer: text });
 	return (
-		<Dialog tone="accent" width={560} onClose={() => s.closeAsking()} title={<><MessageSquareIcon /> {req.agent} asks</>} footer={<><Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button><span className="grow" /><Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button><Button disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button></>}>
-			<div style={{ whiteSpace: "pre-wrap" }}>{req.summary}</div>
-			{choices.length ? (
-				<div className="pick-list" style={{ padding: 0 }}>
-					{choices.map((c, i) => (
-						<div key={i} className={`pick-item${i === at && !own ? " on" : ""}`} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
-							<kbd>{i + 1}</kbd>
-							<span style={{ whiteSpace: "normal" }}>{c}</span>
-							{i === 0 ? <span className="tag good" style={{ marginLeft: "auto" }}>recommended</span> : null}
+		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
+			<DialogContent data-tone="accent" showCloseButton={false} finalFocus={opener} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[560px]">
+				<DialogHeader>
+					<DialogTitle className="flex items-center gap-2"><MessageSquareIcon className="text-primary" /> {req.agent} asks</DialogTitle>
+				</DialogHeader>
+				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+					<div style={{ whiteSpace: "pre-wrap" }}>{req.summary}</div>
+					{choices.length ? (
+						<div className="pick-list" style={{ padding: 0 }}>
+							{choices.map((c, i) => (
+								<div key={i} className={`pick-item${i === at && !own ? " on" : ""}`} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
+									<kbd>{i + 1}</kbd>
+									<span style={{ whiteSpace: "normal" }}>{c}</span>
+									{i === 0 ? <span className="tag good" style={{ marginLeft: "auto" }}>recommended</span> : null}
+								</div>
+							))}
 						</div>
-					))}
+					) : null}
+					<Input
+						autoFocus
+						placeholder={choices.length ? "Or answer in your own words" : "Your answer"}
+						value={own}
+						onChange={(e) => setOwn(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") return own.trim() ? answer(own.trim()) : choices.length ? answer(choices[at]) : undefined;
+							if (!own && /^[1-9]$/.test(e.key) && Number(e.key) <= choices.length) return (e.preventDefault(), answer(choices[Number(e.key) - 1]));
+							if (!own && (e.key === "ArrowDown" || e.key === "ArrowUp") && choices.length) (e.preventDefault(), setAt((at + (e.key === "ArrowDown" ? 1 : choices.length - 1)) % choices.length));
+						}}
+					/>
 				</div>
-			) : null}
-			<Input
-				autoFocus
-				placeholder={choices.length ? "Or answer in your own words" : "Your answer"}
-				value={own}
-				onChange={(e) => setOwn(e.target.value)}
-				onKeyDown={(e) => {
-					if (e.key === "Enter") return own.trim() ? answer(own.trim()) : choices.length ? answer(choices[at]) : undefined;
-					if (!own && /^[1-9]$/.test(e.key) && Number(e.key) <= choices.length) return (e.preventDefault(), answer(choices[Number(e.key) - 1]));
-					if (!own && (e.key === "ArrowDown" || e.key === "ArrowUp") && choices.length) (e.preventDefault(), setAt((at + (e.key === "ArrowDown" ? 1 : choices.length - 1)) % choices.length));
-				}}
-			/>
+				<DialogFooter>
+					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd>esc</kbd></Button>
+					<span className="grow" />
+					<Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button>
+					<Button disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button>
+				</DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
@@ -518,7 +570,7 @@ function Asking() {
 	if (!s.asking) return null;
 	const req = s.tabs.map((t) => t.approvals.get(s.asking!)).find(Boolean)?.req;
 	if (!req) return null;
-	return req.tool === "question" ? <QuestionDialog req={req} /> : <ApprovalDialog req={req} />;
+	return req.tool === "question" ? <QuestionDialog key={req.id} req={req} /> : <ApprovalDialog key={req.id} req={req} />;
 }
 
 function Help({ close }: { close: () => void }) {
@@ -536,31 +588,42 @@ function Help({ close }: { close: () => void }) {
 		["⌃⇥", "Next tab"],
 	];
 	return (
-		<Dialog title="Keys and commands" width={640} onClose={close} footer={<Button variant="outline" onClick={close}>Close</Button>}>
-			<div style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: "6px 14px", fontSize: 12.5 }}>
-				{keys.map(([k, about]) => [<span key={k}><kbd>{k}</kbd></span>, <span key={`${k}-a`} className="muted">{about}</span>])}
-				{COMMANDS.map((c) => [<span key={c.name} className="mono">/{c.name}</span>, <span key={`${c.name}-a`} className="muted">{c.about}{c.keys ? <> <kbd>{c.keys}</kbd></> : null}</span>])}
-			</div>
+		<Dialog open onOpenChange={(open) => open || close()}>
+			<DialogContent showCloseButton={false} className="max-h-[76vh] grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-[640px]">
+				<DialogHeader>
+					<DialogTitle>Keys and commands</DialogTitle>
+				</DialogHeader>
+				<div className="-mx-4 min-h-0 overflow-y-auto px-4 select-text" style={{ display: "grid", gridTemplateColumns: "92px 1fr", gap: "6px 14px", fontSize: 12.5 }}>
+					{keys.map(([k, about]) => [<span key={k}><kbd>{k}</kbd></span>, <span key={`${k}-a`} className="muted">{about}</span>])}
+					{COMMANDS.map((c) => [<span key={c.name} className="mono">/{c.name}</span>, <span key={`${c.name}-a`} className="muted">{c.about}{c.keys ? <> <kbd>{c.keys}</kbd></> : null}</span>])}
+				</div>
+				<DialogFooter>
+					<Button variant="outline" onClick={close}>Close</Button>
+				</DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
 
-function Lightbox() {
+/** A picture of the conversation, larger, over the page. A click on it, beside it, or Escape closes it. */
+export function Lightbox() {
 	const [src, setSrc] = useState<string>();
 	useEffect(() => {
 		const show = (e: Event) => setSrc((e as CustomEvent<string>).detail);
-		const key = (e: KeyboardEvent) => e.key === "Escape" && setSrc(undefined);
 		window.addEventListener("pine:zoom", show);
-		window.addEventListener("keydown", key);
-		return () => (window.removeEventListener("pine:zoom", show), window.removeEventListener("keydown", key));
+		return () => window.removeEventListener("pine:zoom", show);
 	}, []);
-	return src ? <div className="lightbox" onClick={() => setSrc(undefined)}><img src={src} alt="" /></div> : null;
+	if (!src) return null;
+	return (
+		<Dialog open onOpenChange={(open) => open || setSrc(undefined)}>
+			<DialogContent showCloseButton={false} className="w-auto max-w-[calc(100vw-64px)] p-2 sm:max-w-[calc(100vw-64px)]">
+				<DialogTitle className="sr-only">The picture, larger</DialogTitle>
+				<img src={src} alt="" className="max-h-[calc(100vh-96px)] max-w-full rounded-md" onClick={() => setSrc(undefined)} />
+			</DialogContent>
+		</Dialog>
+	);
 }
 
-/**
- * The browser the web tools drive is not on this Mac in the build this pine needs: asked at the
- * start, once for a version of pine. Settings > App offers the same at any time.
- */
 /** After "Check for Updates…" found a newer app: where it is. The app fetches and installs nothing itself. */
 function UpdateAsk() {
 	const s = useModel(store);
@@ -568,40 +631,47 @@ function UpdateAsk() {
 	const close = () => ((s.updateAsk = false), s.touch());
 	if (u?.status !== "newer") return null;
 	return (
-		<Dialog
-			title={`Pine ${u.version} is available`}
-			width={520}
-			onClose={close}
-			footer={
-				<>
+		<Dialog open onOpenChange={(open) => open || close()}>
+			<DialogContent showCloseButton={false} className="sm:max-w-[520px]">
+				<DialogHeader>
+					<DialogTitle>Pine {u.version} is available</DialogTitle>
+				</DialogHeader>
+				<div className="select-text">
+					<p className="muted" style={{ margin: 0 }}>This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
+					<p className="faint mono selectable update-link" style={{ margin: "10px 0 0", fontSize: 12 }}>{u.url}</p>
+				</div>
+				<DialogFooter>
 					<Button variant="outline" onClick={close}>Not now</Button>
 					<Button onClick={() => (void bridge.open(u.url), close())}><ExternalLinkIcon data-icon="inline-start" />Open the release page</Button>
-				</>
-			}
-		>
-			<p className="muted" style={{ margin: 0 }}>This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
-			<p className="faint mono selectable update-link" style={{ margin: "10px 0 0", fontSize: 12 }}>{u.url}</p>
+				</DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
 
+/**
+ * The browser the web tools drive is not on this Mac in the build this pine needs: asked at the
+ * start, once for a version of pine. Settings > App offers the same at any time. While it is
+ * fetched, the dialog stays.
+ */
 function BrowserAsk() {
 	const s = useModel(store);
 	const later = () => void s.browserLater();
 	return (
-		<Dialog
-			title="The browser for the web tools is not on this Mac"
-			width={560}
-			onClose={s.browserFetching ? undefined : later}
-			footer={
-				<>
+		<Dialog open onOpenChange={(open) => open || s.browserFetching || later()}>
+			<DialogContent showCloseButton={false} className="sm:max-w-[560px]">
+				<DialogHeader>
+					<DialogTitle>The browser for the web tools is not on this Mac</DialogTitle>
+				</DialogHeader>
+				<div className="flex flex-col gap-3 select-text">
+					<p className="muted" style={{ margin: 0 }}>Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
+					{s.initLines.length ? <pre className="log">{s.initLines.slice(-12).join("\n")}</pre> : null}
+				</div>
+				<DialogFooter>
 					<Button variant="outline" disabled={s.browserFetching} onClick={later}>Not now</Button>
 					<Button disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={12} /> Fetching…</> : "Fetch it"}</Button>
-				</>
-			}
-		>
-			<p className="muted" style={{ margin: 0 }}>Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
-			{s.initLines.length ? <pre className="log">{s.initLines.slice(-12).join("\n")}</pre> : null}
+				</DialogFooter>
+			</DialogContent>
 		</Dialog>
 	);
 }
