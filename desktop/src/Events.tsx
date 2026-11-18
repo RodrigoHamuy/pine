@@ -1,7 +1,8 @@
 // The event log: everything pine publishes, as it happens. A line opens to its whole payload.
 import { AudioLinesIcon, PlayIcon, SearchIcon, SquareIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Hint } from "@/components/hint";
 import { cn } from "cn";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type PineEvent } from "./api.ts";
@@ -67,13 +68,17 @@ export function Events({ tab }: { tab: Tab }) {
 	return (
 		<div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 			<div className="flex flex-none items-center gap-2 border-b border-line-soft px-4 py-2.5">
-				<SearchIcon className="size-3.5 text-faint" />
-				<Input className="max-w-90" placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
+				<InputGroup className="max-w-90">
+					<InputGroupAddon>
+						<SearchIcon />
+					</InputGroupAddon>
+					<InputGroupInput aria-label="Filter the events" placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
+				</InputGroup>
 				<span className="text-faint">{shown.length} shown · text deltas are left out</span>
 				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
 				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>
-				<Button variant="ghost" size="icon-xs" title="Clear the view" onClick={() => ((tab.log = []), tab.touch())}><Trash2Icon /></Button>
+				<Hint label="Clear the view"><Button variant="ghost" size="icon-xs" onClick={() => ((tab.log = []), tab.touch())}><Trash2Icon /></Button></Hint>
 			</div>
 			<ScrollFadeArea axis="both" bar={false} className="events-list flex-1 cursor-auto font-mono text-xs select-text" viewportRef={scroller}>
 				<div className="flex min-h-full flex-col py-1.5">

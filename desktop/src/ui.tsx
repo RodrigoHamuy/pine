@@ -1,7 +1,9 @@
 // The small parts of pine's own that everything else is built from, on shadcn's components: the
-// logo, the working dot, a text that grows, an empty view, where notices show.
+// logo, the working dot, a text that grows, an empty view, a view being read, where notices show.
 import type { LucideIcon } from "lucide-react";
 import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Empty as StockEmpty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Spinner } from "@/components/ui/spinner";
 import { Textarea } from "@/components/ui/textarea";
 import { Toaster } from "@/components/ui/sonner";
 import { cn } from "@/lib/utils";
@@ -55,12 +57,31 @@ export function AutoText({ value, onChange, minRows = 3, maxRows = 24, mono, cla
 	return <Textarea ref={ref} className={cn(mono && "font-mono", className)} value={value} onChange={(e) => onChange(e.target.value)} spellCheck={!mono} {...rest} />;
 }
 
+/**
+ * A view with nothing in it: stock Empty, its icon, title and what to do. One line for the twenty
+ * places that say so, each with an icon, a title and at most a sentence.
+ */
 export function Empty({ icon: Icon, title, children }: { icon?: LucideIcon; title: string; children?: ReactNode }) {
 	return (
-		<div className="empty m-auto flex max-w-md flex-col items-center gap-1.5 px-6 py-10 text-center text-faint">
-			{Icon ? <Icon size={22} /> : null}
-			<div className="font-medium text-muted-foreground">{title}</div>
-			{children ? <div className="text-xs">{children}</div> : null}
+		<StockEmpty>
+			<EmptyHeader>
+				{Icon ? (
+					<EmptyMedia variant="icon">
+						<Icon />
+					</EmptyMedia>
+				) : null}
+				<EmptyTitle>{title}</EmptyTitle>
+				{children ? <EmptyDescription>{children}</EmptyDescription> : null}
+			</EmptyHeader>
+		</StockEmpty>
+	);
+}
+
+/** Something is being read: stock Spinner in the middle of the view it will fill. (Not an agent at work: that is Pulse.) */
+export function Loading() {
+	return (
+		<div className="m-auto grid place-items-center p-6">
+			<Spinner />
 		</div>
 	);
 }

@@ -285,10 +285,10 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		await page.mouse.wheel(0, 120);
 		await page.click(".browser-tab >> nth=1");
 		// A tab of the owner's own, and one closed.
-		await page.click(".browser-tabs [data-slot=button][title='A new tab']");
+		await page.click(".browser-tabs button[aria-label='A new tab']");
 		await page.click(".browser-tab >> nth=1 >> .browser-tab-close", { force: true });
 		await waitFor("a new tab and a closed one arrived", () => ops().some((o) => o.do === "newtab") && ops().some((o) => o.do === "closetab" && o.index === 1));
-		await page.click(".browser-bar [data-slot=button][title='Back']");
+		await page.click(".browser-bar button[aria-label='Back']");
 		await waitFor("wheel, tab and back arrived", () => ["wheel", "tab", "back"].every((d) => ops().some((o) => o.do === d)));
 		// (How far a turn of the wheel goes is the system's to say; that it went down, and all of it, is what counts.)
 		assert.ok(ops().filter((o) => o.do === "wheel").reduce((sum, o) => sum + o.dy, 0) >= 240, JSON.stringify(ops().filter((o) => o.do === "wheel")));
@@ -304,7 +304,7 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 
 		// Without a browser the view says so and draws nothing.
 		fs.rmSync(file);
-		await sees(".browser .empty >> text=No page is open");
+		await sees(".browser [data-slot=empty] >> text=No page is open");
 	} finally {
 		// (The panel as it was, for the tests that follow.)
 		await menu("code-agent");
@@ -575,12 +575,12 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await shot("05-editor");
 	// Leaving what was typed and not saved is asked in the app: staying keeps it, leaving drops it.
 	await page.keyboard.type("// draft");
-	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.click(".code-sub button[aria-label='Back to the files']");
 	await sees("[role=alertdialog] >> text=without saving");
 	await page.click("[role=alertdialog] [data-slot=alert-dialog-cancel] >> text=Cancel");
 	await page.waitForFunction(() => !document.querySelector("[role=alertdialog]"));
 	assert.ok(await page.$(".editor .cm-content"));
-	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.click(".code-sub button[aria-label='Back to the files']");
 	await page.click("[role=alertdialog] [data-slot=alert-dialog-action] >> text=Leave");
 	await page.waitForFunction(() => !document.querySelector(".editor"));
 	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n");
@@ -595,7 +595,7 @@ const focused = () =>
 test("a file is opened from the panel's tree, its changes and its search with the keyboard alone", async () => {
 	if (!(await page.$(".code"))) await page.click(".conv-head [data-slot=button][title*='workspace']");
 	// The test before left a file open in the editor.
-	if (await page.$(".editor")) await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	if (await page.$(".editor")) await page.click(".code-sub button[aria-label='Back to the files']");
 	await page.click(".code [data-slot=tabs-trigger] >> text=Files");
 	await sees(".code [role=tree] [role=treeitem]");
 	// From the find field, Tab reaches the tree after the refresh button: one stop.
@@ -617,7 +617,7 @@ test("a file is opened from the panel's tree, its changes and its search with th
 	await page.keyboard.press("Enter");
 	await sees(".editor .cm-content");
 	assert.match(await page.textContent(".editor .cm-content"), /answer = 43/);
-	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.click(".code-sub button[aria-label='Back to the files']");
 	// The file search's results are a list: Tab reaches it, Enter opens one.
 	await page.fill(".code-sub input", "index");
 	await sees(".code [role=listbox] [role=option] >> text=src/index.ts");
@@ -627,17 +627,17 @@ test("a file is opened from the panel's tree, its changes and its search with th
 	assert.equal((await focused()).role, "option");
 	await page.keyboard.press("Enter");
 	await sees(".editor .cm-content");
-	await page.click(".code-sub [data-slot=button][title='Back to the files']");
+	await page.click(".code-sub button[aria-label='Back to the files']");
 	await page.fill(".code-sub input", "");
 	// So are the changes: Tab from the refresh button, Enter opens the diff.
 	await page.click(".code [data-slot=tabs-trigger] >> text=Changes");
 	await sees(".code [role=listbox] [role=option]");
-	await page.focus(".code-sub [data-slot=button][title='Read again']");
+	await page.focus(".code-sub button[aria-label='Read again']");
 	await page.keyboard.press("Tab");
 	assert.equal((await focused()).role, "option");
 	await page.keyboard.press("Enter");
 	await sees(".diff");
-	await page.click(".code-sub [data-slot=button][title='Back to the list']");
+	await page.click(".code-sub button[aria-label='Back to the list']");
 	await page.click(".code [data-slot=tabs-trigger] >> text=Files");
 });
 
@@ -999,7 +999,7 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	await group.locator(".side-agent .who").click();
 	assert.equal(await group.locator(".side-conv").count(), 1);
 	// The plus on an agent's own line starts a conversation with that agent.
-	await group.locator(".side-agent [data-slot=button][title='New conversation with scout']").click();
+	await group.locator(".side-agent button[aria-label='New conversation with scout']").click();
 	await sees(".tab.on .name >> text=scout");
 	assert.equal(await page.textContent(".welcome h1"), "scout");
 	assert.match(await page.textContent(".welcome"), /Looks things up on the web/);
@@ -1052,7 +1052,7 @@ test("a conversation is opened from the side bar with the keyboard alone, and a 
 	assert.ok((await group.locator(".side-conv").count()) > 0);
 	// Its conversations are one stop after the agent's plus: Tab goes in, the arrows move, Enter opens.
 	await page.keyboard.press("Tab");
-	assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("title")), "New conversation with scout");
+	assert.equal(await page.evaluate(() => document.activeElement?.getAttribute("aria-label")), "New conversation with scout");
 	await page.keyboard.press("Tab");
 	const at = () => page.evaluate(() => ({ role: document.activeElement?.getAttribute("role"), text: document.activeElement?.textContent ?? "" }));
 	assert.equal((await at()).role, "option");

@@ -26,13 +26,17 @@ import { ago, fuzzy, until } from "./text.ts";
 import { List, ListRow } from "./lists.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { Logo, Pulse } from "./ui.tsx";
+import { Hint } from "@/components/hint";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
+import { Kbd } from "@/components/ui/kbd";
+import { Spinner } from "@/components/ui/spinner";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 // Pieces of the frame drawn the same in several places.
 /** A row of the side bar: its hover, the one in front, and its focus from the keyboard. */
 const ROW = "group/row app-no-drag flex h-8 items-center gap-2 rounded-md pr-1.5 pl-2 text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60";
 const ROW_ON = "bg-press text-foreground hover:bg-press";
-const KEY = "rounded-sm border bg-card px-1 font-sans text-xs text-faint";
 /** Something waits for the owner: an exclamation mark on the warning colour. */
 const NEEDS = "grid size-3.5 flex-none place-items-center rounded-full bg-warn text-xs leading-none font-bold text-background";
 const DOT = "dot size-2 flex-none rounded-full";
@@ -60,38 +64,44 @@ function Gate() {
 		if (code === 0) await bridge.retry();
 		else s.flash("pine init did not finish. What it said is shown above.", "bad");
 	};
+	const [title, about, actions]: [string, React.ReactNode, React.ReactNode] =
+		state.status === "starting"
+			? ["Starting pine", "Looking for a running pine, or starting one…", <Spinner key="s" />]
+			: state.status === "error" && state.kind === "no-home"
+				? [
+						"Welcome to pine",
+						`pine keeps its agents, their workspaces and its settings in a home folder (${s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).`,
+						<>
+							{s.initLines.length ? <Log className="w-full text-start">{s.initLines.slice(-40).join("\n")}</Log> : null}
+							<div className="flex items-center gap-2">
+								<Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Spinner data-icon="inline-start" />Setting up…</> : "Set up pine"}</Button>
+								<Button variant="outline" disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
+							</div>
+						</>,
+					]
+				: state.status === "error"
+					? [
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : "pine did not start",
+							state.message,
+							<div key="b" className="flex items-center gap-2">
+								<Button onClick={() => void bridge.retry()}>Try again</Button>
+								{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
+							</div>,
+						]
+					: ["Loading your agents…", "", <Spinner key="s" />];
+	// Before pine answers there is nothing to show yet: stock Empty, in a frame that moves the window.
 	return (
-		<div className="gate m-1.5 grid flex-1 place-items-center rounded-xl border bg-background app-drag">
-			<div className="flex w-120 max-w-11/12 flex-col items-start gap-3.5 app-no-drag [&_h1]:text-2xl [&_h1]:font-semibold [&_p]:text-muted-foreground [&_p]:select-text">
-				<Logo size={36} />
-				{state.status === "starting" ? (
-					<>
-						<h1>Starting pine</h1>
-						<p className="flex items-center gap-2"><Pulse /> Looking for a running pine, or starting one…</p>
-					</>
-				) : state.status === "error" && state.kind === "no-home" ? (
-					<>
-						<h1>Welcome to pine</h1>
-						<p>pine keeps its agents, their workspaces and its settings in a home folder ({s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).</p>
-						{s.initLines.length ? <Log className="w-full">{s.initLines.slice(-40).join("\n")}</Log> : null}
-						<div className="flex items-center gap-2">
-							<Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Pulse size={12} /> Setting up…</> : "Set up pine"}</Button>
-							<Button variant="outline" disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
-						</div>
-					</>
-				) : state.status === "error" ? (
-					<>
-						<h1>{state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : "pine did not start"}</h1>
-						<p>{state.message}</p>
-						<div className="flex items-center gap-2">
-							<Button onClick={() => void bridge.retry()}>Try again</Button>
-							{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
-						</div>
-					</>
-				) : (
-					<p className="flex items-center gap-2"><Pulse /> Loading your agents…</p>
-				)}
-			</div>
+		<div className="gate m-1.5 flex flex-1 rounded-xl border bg-background app-drag">
+			<Empty className="app-no-drag">
+				<EmptyHeader>
+					<EmptyMedia>
+						<Logo size={36} />
+					</EmptyMedia>
+					<EmptyTitle>{title}</EmptyTitle>
+					{about ? <EmptyDescription className="select-text">{about}</EmptyDescription> : null}
+				</EmptyHeader>
+				<EmptyContent>{actions}</EmptyContent>
+			</Empty>
 		</div>
 	);
 }
@@ -133,7 +143,7 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	return (
-		<ListRow value={c.session} label={s.titleOf(agent, c.session)} className={cn("side-row side-conv", ROW, "pl-8", tab && tab === s.active && ["on", ROW_ON])} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
+		<ListRow value={c.session} label={s.titleOf(agent, c.session)} className={cn("side-row side-conv", ROW, "pl-9", tab && tab === s.active && ["on", ROW_ON])} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
 			<span className="grid size-3 flex-none place-items-center">{tab?.approvals.size ? <Needs /> : working ? <Pulse size={11} /> : tab?.unread ? <Unread /> : main || c.pinned ? <StarIcon size={12} className="text-faint" /> : c.folder ? <FolderIcon size={12} className="text-faint" /> : <MessageSquareIcon size={12} className="text-faint" />}</span>
 			<span className="cut grow min-w-0 flex-1 truncate">{s.titleOf(agent, c.session)}</span>
 			<span className="flex-none text-xs text-faint group-hover/row:hidden">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
@@ -183,7 +193,9 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 				{/* What folds the group is the agent's line but its buttons: a button that looks like none. */}
 				<CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60">
 					{folded ? <ChevronRightIcon className="size-2.5 text-faint" /> : <ChevronDownIcon className="size-2.5 text-faint" />}
-					<span className="avatar grid size-5 flex-none place-items-center rounded-sm bg-press text-xs font-semibold text-muted-foreground">{a.id.slice(0, 1).toUpperCase()}</span>
+					<Avatar size="sm" className="avatar">
+						<AvatarFallback>{a.id.slice(0, 1).toUpperCase()}</AvatarFallback>
+					</Avatar>
 					{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
 					    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
 					<span className="who flex min-w-0 flex-1 items-baseline gap-2 font-semibold">
@@ -193,10 +205,10 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 					{waits ? <Needs /> : working ? <Pulse size={11} /> : unread && folded ? <Unread /> : null}
 				</CollapsibleTrigger>
 				<span className="hidden group-hover/agent:flex">
-					<Button variant="ghost" size="icon-xs" title={`Settings of ${a.id}`} onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></Button>
-					<Button variant="ghost" size="icon-xs" title={`Open a folder for a conversation with ${a.id}`} onClick={() => void pickFolder()}><FolderIcon /></Button>
+					<Hint label={`Settings of ${a.id}`}><Button variant="ghost" size="icon-xs" onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></Button></Hint>
+					<Hint label={`Open a folder for a conversation with ${a.id}`}><Button variant="ghost" size="icon-xs" onClick={() => void pickFolder()}><FolderIcon /></Button></Hint>
 				</span>
-				<Button variant="ghost" size="icon-xs" title={`New conversation with ${a.id}`} onClick={() => void s.newConversation(a.id)}><PlusIcon /></Button>
+				<Hint label={`New conversation with ${a.id}`}><Button variant="ghost" size="icon-xs" onClick={() => void s.newConversation(a.id)}><PlusIcon /></Button></Hint>
 			</div>
 			<CollapsibleContent>
 				<List label={`Conversations with ${a.id}`} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onOpen={(session) => void s.openTab(a.id, session)}>
@@ -216,19 +228,19 @@ function Sidebar() {
 	return (
 		<aside className="sidebar flex min-h-0 min-w-0 flex-1 flex-col app-drag">
 			<div className={cn("flex h-11 flex-none items-center justify-end gap-0.5 pr-2 app-drag", s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2.5")}>
-				<Button variant="ghost" size="icon" className="app-no-drag" title="Hide the sidebar (⌘B)" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button>
+				<Hint label="Hide the sidebar" keys="⌘B"><Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button></Hint>
 			</div>
 			<ScrollFadeArea className="flex-1">
 				<div className="px-2 pt-1 pb-2">
-				<div className={cn("side-row", ROW)} onClick={() => void s.command("palette")} title="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page"><SearchIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Search</span><kbd className={KEY}>⌘K</kbd></div>
-				<div className="flex items-center pt-3.5 pr-1.5 pb-0.5 pl-2 text-xs text-faint">Agents<span className="min-w-0 flex-1" /><Button variant="ghost" size="icon-xs" className="app-no-drag" title="New agent" onClick={() => s.openSettings("agents", "+")}><PlusIcon /></Button></div>
+				<Hint label="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page" describes><div className={cn("side-row", ROW)} onClick={() => void s.command("palette")}><SearchIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></div></Hint>
+				<div className="flex items-center pt-3.5 pr-1.5 pb-0.5 pl-2 text-xs text-faint">Agents<span className="min-w-0 flex-1" /><Hint label="New agent"><Button variant="ghost" size="icon-xs" className="app-no-drag" onClick={() => s.openSettings("agents", "+")}><PlusIcon /></Button></Hint></div>
 				{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}
 				</div>
 			</ScrollFadeArea>
 			<div className="side-foot flex flex-none flex-col gap-px p-2">
-				{newer ? <div className={cn("side-row side-update", ROW, "text-primary hover:text-primary")} onClick={() => void bridge.open(newer.url)} title={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}><ArrowUpIcon className="size-3.5" /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon size={12} /></div> : null}
+				{newer ? <Hint label={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`} describes><div className={cn("side-row side-update", ROW, "text-primary hover:text-primary")} onClick={() => void bridge.open(newer.url)}><ArrowUpIcon className="size-3.5" /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon size={12} /></div></Hint> : null}
 				<div className={cn("side-row", ROW, front?.kind === "events" && ["on", ROW_ON])} onClick={() => void s.openEvents()}><AudioLinesIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Events</span></div>
-				<div className={cn("side-row", ROW, front?.kind === "settings" && ["on", ROW_ON])} onClick={() => s.openSettings()}><SettingsIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Settings</span><kbd className={KEY}>⌘,</kbd></div>
+				<div className={cn("side-row", ROW, front?.kind === "settings" && ["on", ROW_ON])} onClick={() => s.openSettings()}><SettingsIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Settings</span><Kbd>⌘,</Kbd></div>
 				<div className="side-status flex items-center gap-2 px-2 pt-1.5 pb-0.5 text-xs text-faint app-no-drag" title={s.service.status === "ready" ? `${s.service.home} · ${s.service.started ? "started by this app" : "a pine that was already running"}` : ""}>
 					{/* The dot stands in the place of the icons in the rows above it: its middle under theirs, and what is written beside it under their names. */}
 					<span className="grid size-3.5 flex-none place-items-center"><span className={cn(DOT, !ready ? "bg-warn" : s.connected ? "bg-primary" : "bg-destructive")} /></span>
@@ -259,14 +271,14 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 			onAuxClick={(e) => e.button === 1 && s.closeTab(tab)}
 			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 		>
-			<span className="grid w-3.5 flex-none place-items-center">
-				{tab.approvals.size ? <Needs /> : tab.busy ? <Pulse size={11} /> : tab.unread ? <Unread /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <span className="grid size-4 flex-none place-items-center rounded-sm bg-press text-xs font-semibold text-muted-foreground">{tab.agent.slice(0, 1).toUpperCase()}</span>}
+			<span className="grid min-w-3.5 flex-none place-items-center">
+				{tab.approvals.size ? <Needs /> : tab.busy ? <Pulse size={11} /> : tab.unread ? <Unread /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <Avatar size="sm"><AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback></Avatar>}
 			</span>
-			<span className="name truncate [&_b]:font-medium">
-				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b>{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b>{tab.agent}</b> : <><b>{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
+			<span className="name truncate">
+				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b className="font-medium">{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b className="font-medium">{tab.agent}</b> : <><b className="font-medium">{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
 			</span>
 			{kept && tab.session !== "main" ? <StarIcon size={10} className="star flex-none text-warn" /> : null}
-			<span className={cn("close grid size-4.5 flex-none place-items-center rounded-sm text-muted-foreground hover:bg-press hover:text-foreground", on ? "opacity-100" : "opacity-0 group-hover/tab:opacity-100")} onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><XIcon size={11} /></span>
+			<Button variant="ghost" size="icon-xs" aria-label="Close this tab" className={cn("close", !on && "opacity-0 group-hover/tab:opacity-100")} onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><XIcon /></Button>
 		</div>
 	);
 }
@@ -276,7 +288,7 @@ function TitleBar() {
 	const with_ = s.agentInFront();
 	return (
 		<header className={cn("flex h-11 flex-none items-center gap-1 pr-2 app-drag", s.sidebar ? "pl-0.5" : s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2")}>
-			{s.sidebar ? null : <Button variant="ghost" size="icon" className="app-no-drag" title="Show the sidebar (⌘B)" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button>}
+			{s.sidebar ? null : <Hint label="Show the sidebar" keys="⌘B"><Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button></Hint>}
 			{/* A row that scrolls cuts off what a tab draws outside itself (the line around the tab in front, the mark where a dragged tab
 			    would land): the padding is the room for both, and the margin keeps the tabs where they were. It scrolls without a bar;
 			    the fade at a cut end says there is more. */}
@@ -285,7 +297,7 @@ function TitleBar() {
 					{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
 				</div>
 			</ScrollFadeArea>
-			<Button variant="ghost" size="icon" className="app-no-drag" title={with_ ? `New conversation with ${with_} (⌘T)` : "New conversation (⌘T): you are asked with which agent"} onClick={() => void s.newConversation()}><PlusIcon /></Button>
+			<Hint label={with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"} keys="⌘T"><Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.newConversation()}><PlusIcon /></Button></Hint>
 			<span className="min-w-0 flex-1" />
 		</header>
 	);
@@ -384,8 +396,8 @@ export function PickDialog({ p }: { p: Picker }) {
 	if (p.items.some((i) => i.tone === "bad"))
 		return (
 			<AlertDialog open onOpenChange={close}>
-				<AlertDialogContent finalFocus={opener} className="gap-2 p-2 data-[size=default]:sm:max-w-xl">
-					<AlertDialogHeader className="px-2 pt-2">
+				<AlertDialogContent finalFocus={opener} className="data-[size=default]:sm:max-w-xl">
+					<AlertDialogHeader>
 						<AlertDialogTitle>{p.title}</AlertDialogTitle>
 					</AlertDialogHeader>
 					{list}
@@ -394,8 +406,8 @@ export function PickDialog({ p }: { p: Picker }) {
 		);
 	return (
 		<Dialog open onOpenChange={close}>
-			<DialogContent showCloseButton={false} finalFocus={opener} className="gap-2 p-2 sm:max-w-xl">
-				<DialogHeader className="px-2 pt-2">
+			<DialogContent showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
+				<DialogHeader>
 					<DialogTitle>{p.title}</DialogTitle>
 				</DialogHeader>
 				{list}
@@ -550,11 +562,11 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 				</div>
 				</ScrollFadeArea>
 				<DialogFooter>
-					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd className={KEY}>esc</kbd></Button>
+					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <Kbd>esc</Kbd></Button>
 					<span className="min-w-0 flex-1" />
-					<Button variant="destructive" onClick={() => void s.decide(req.id, false)}>Deny{fields.length ? "" : <kbd className={KEY}>d</kbd>}</Button>
-					{req.remember && !fields.length ? <Button variant="outline" onClick={() => allow(true)}>Always here <kbd className={KEY}>s</kbd></Button> : null}
-					<Button onClick={() => allow()}>{fields.length ? "Save and allow" : req.holds ? "Allow" : "Allow once"}{fields.length ? "" : <kbd className={KEY}>a</kbd>}</Button>
+					<Button variant="destructive" onClick={() => void s.decide(req.id, false)}>Deny{fields.length ? "" : <Kbd>d</Kbd>}</Button>
+					{req.remember && !fields.length ? <Button variant="outline" onClick={() => allow(true)}>Always here <Kbd>s</Kbd></Button> : null}
+					<Button onClick={() => allow()}>{fields.length ? "Save and allow" : req.holds ? "Allow" : "Allow once"}{fields.length ? "" : <Kbd>a</Kbd>}</Button>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
@@ -582,9 +594,9 @@ export function QuestionDialog({ req }: { req: Approval }) {
 						<div>
 							{choices.map((c, i) => (
 								<div key={i} className={cn("flex items-baseline gap-2.5 rounded-md px-3 py-2", i === at && !own && "bg-hover")} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
-									<kbd className={KEY}>{i + 1}</kbd>
+									<Kbd>{i + 1}</Kbd>
 									<span>{c}</span>
-									{i === 0 ? <Badge className="ml-auto bg-brand-soft text-primary">recommended</Badge> : null}
+									{i === 0 ? <Badge className="ml-auto">recommended</Badge> : null}
 								</div>
 							))}
 						</div>
@@ -603,7 +615,7 @@ export function QuestionDialog({ req }: { req: Approval }) {
 				</div>
 				</ScrollFadeArea>
 				<DialogFooter>
-					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd className={KEY}>esc</kbd></Button>
+					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <Kbd>esc</Kbd></Button>
 					<span className="min-w-0 flex-1" />
 					<Button variant="ghost" onClick={() => void s.decide(req.id, false)}>No answer</Button>
 					<Button disabled={!own.trim() && !choices.length} onClick={() => answer(own.trim() || choices[at])}>Answer</Button>
@@ -643,8 +655,8 @@ function Help({ close }: { close: () => void }) {
 				</DialogHeader>
 				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
 				<div className="grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-1.5 px-4 text-xs select-text">
-					{keys.map(([k, about]) => [<span key={k}><kbd className={KEY}>{k}</kbd></span>, <span key={`${k}-a`} className="text-muted-foreground">{about}</span>])}
-					{COMMANDS.map((c) => [<span key={c.name} className="font-mono">/{c.name}</span>, <span key={`${c.name}-a`} className="text-muted-foreground">{c.about}{c.keys ? <> <kbd className={KEY}>{c.keys}</kbd></> : null}</span>])}
+					{keys.map(([k, about]) => [<span key={k}><Kbd>{k}</Kbd></span>, <span key={`${k}-a`} className="text-muted-foreground">{about}</span>])}
+					{COMMANDS.map((c) => [<span key={c.name} className="font-mono">/{c.name}</span>, <span key={`${c.name}-a`} className="text-muted-foreground">{c.about}{c.keys ? <> <Kbd>{c.keys}</Kbd></> : null}</span>])}
 				</div>
 				</ScrollFadeArea>
 				<DialogFooter>
@@ -666,7 +678,7 @@ export function Lightbox() {
 	if (!src) return null;
 	return (
 		<Dialog open onOpenChange={(open) => open || setSrc(undefined)}>
-			<DialogContent showCloseButton={false} className="w-auto max-w-[calc(100vw-64px)] p-2 sm:max-w-[calc(100vw-64px)]">
+			<DialogContent showCloseButton={false} className="w-auto max-w-11/12 sm:max-w-11/12">
 				<DialogTitle className="sr-only">The picture, larger</DialogTitle>
 				<img src={src} alt="" className="max-h-[calc(100vh-96px)] max-w-full rounded-md" onClick={() => setSrc(undefined)} />
 			</DialogContent>
@@ -719,7 +731,7 @@ function BrowserAsk() {
 				</div>
 				<DialogFooter>
 					<Button variant="outline" disabled={s.browserFetching} onClick={later}>Not now</Button>
-					<Button disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse size={12} /> Fetching…</> : "Fetch it"}</Button>
+					<Button disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner data-icon="inline-start" />Fetching…</> : "Fetch it"}</Button>
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>

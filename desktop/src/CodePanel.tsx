@@ -33,7 +33,11 @@ import { clock, errText, oneLine, plural, short, size, tilde, took } from "./tex
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Confirm } from "./Confirm.tsx";
 import { List, ListRow, rowClass, Tree, TreeRow } from "./lists.tsx";
-import { Empty, Pulse, useLoad } from "./ui.tsx";
+import { Empty, Loading, useLoad } from "./ui.tsx";
+import { Hint } from "@/components/hint";
+import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
+import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 // ---- the editor ------------------------------------------------------------------------------------
@@ -204,24 +208,24 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		return prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
 	};
 	if (list.error) return <Empty icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</Empty>;
-	if (!data) return <Empty title=""><Pulse /></Empty>;
+	if (!data) return <Loading />;
 	if (!turn && !data.repo) return <Empty icon={GitBranchIcon} title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</Empty>;
 	if (file)
 		return (
 			<>
 				<div className={SUB}>
-					<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} title="Back to the list"><ChevronLeftIcon /></Button>
+					<Hint label="Back to the list"><Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)}><ChevronLeftIcon /></Button></Hint>
 					<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}</span>
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className={OUT}>… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</Body>
+				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className={OUT}>… the rest of this diff is too long to show.</div> : null}</> : diff.error ? <Empty icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</Empty> : <Loading />}</Body>
 			</>
 		);
 	return (
 		<>
 			<div className={SUB}>
 				{turn ? <><Undo2Icon size={13} /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon size={13} /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
-				<Button variant="ghost" size="icon-xs" onClick={list.reload} title="Read again"><RotateCwIcon /></Button>
+				<Hint label="Read again"><Button variant="ghost" size="icon-xs" onClick={list.reload}><RotateCwIcon /></Button></Hint>
 			</div>
 			<Body>
 				{data.note ? <div className={OUT}>{data.note}</div> : null}
@@ -256,7 +260,7 @@ function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void;
 		<>
 			{failed ? <Empty icon={FolderIcon} title="This folder cannot be read">{failed}</Empty> : null}
 			{entries && !entries.length ? <Empty icon={FolderIcon} title="This folder is empty" /> : null}
-			{entries || failed ? null : <Empty title=""><Pulse /></Empty>}
+			{entries || failed ? null : <Loading />}
 			<Tree label="Files" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} onOpen={(full) => !isDir(full) && pick(full)}>
 				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
 			</Tree>
@@ -339,7 +343,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	return (
 		<>
 			<div className={SUB}>
-				<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())} title="Back to the files"><ChevronLeftIcon /></Button>
+				<Hint label="Back to the files"><Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : close())}><ChevronLeftIcon /></Button></Hint>
 				<AlertDialog open={leaving} onOpenChange={setLeaving}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
@@ -352,15 +356,17 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 					</AlertDialogContent>
 				</AlertDialog>
 				<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}{dirty ? <span className="text-warn"> ●</span> : null}</span>
-				{disk.data?.truncated ? <Badge variant="secondary" className="bg-warn-soft text-warn">too large to edit</Badge> : null}
-				{root ? <Button variant="ghost" size="icon-xs" title="Show in the Finder" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button> : null}
+				{disk.data?.truncated ? <Badge variant="outline">too large to edit</Badge> : null}
+				{root ? <Hint label="Show in the Finder"><Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)}><ExternalLinkIcon /></Button></Hint> : null}
 				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
 			</div>
 			{changedOnDisk ? (
-				<div className="m-2 flex items-center gap-2.5 rounded-lg bg-warn-soft px-3 py-2 text-xs">
-					<span className="min-w-0 flex-1">This file changed on disk while you were typing.</span>
-					<Button variant="link" size="xs" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</Button>
-				</div>
+				<Alert className="m-2 w-auto">
+					<AlertDescription>This file changed on disk while you were typing.</AlertDescription>
+					<AlertAction>
+						<Button variant="outline" size="xs" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</Button>
+					</AlertAction>
+				</Alert>
 			) : null}
 			{/* The editor scrolls itself (CodeMirror draws only the lines in view): around it nothing scrolls. */}
 			{!kind && !disk.error && disk.data && !disk.data.binary ? (
@@ -374,7 +380,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				) : disk.error ? (
 					<Empty icon={FileIcon} title="This file cannot be shown">{disk.error}</Empty>
 				) : !disk.data ? (
-					<Empty title=""><Pulse /></Empty>
+					<Loading />
 				) : (
 					<Empty icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
 				)}
@@ -394,13 +400,17 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 	return (
 		<>
 			<div className={SUB}>
-				<SearchIcon size={13} />
-				<input className="min-w-0 flex-1 bg-transparent outline-none select-text" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
-				<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} title="Read again"><RotateCwIcon /></Button>
+				<InputGroup>
+					<InputGroupAddon>
+						<SearchIcon />
+					</InputGroupAddon>
+					<InputGroupInput aria-label="Find a file" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
+				</InputGroup>
+				<Hint label="Read again"><Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)}><RotateCwIcon /></Button></Hint>
 			</div>
 			<Body>
 				{query.trim() ? (
-					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className={rowClass()}><FileIcon size={13} className="text-faint" /><span className="truncate">{f}</span></ListRow>)}</List> : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
+					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className={rowClass()}><FileIcon size={13} className="text-faint" /><span className="truncate">{f}</span></ListRow>)}</List> : found.loading ? <Loading /> : <Empty icon={SearchIcon} title="No file fits" />
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
@@ -421,14 +431,14 @@ function Output({ tab }: { tab: Tab }) {
 		return out;
 	}, [tab.key, tab.codeTick]);
 	const [open, setOpen] = useState<string>();
-	if (!calls.data) return <Empty title="">{calls.error ?? <Pulse />}</Empty>;
+	if (!calls.data) return calls.error ? <Empty icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</Empty> : <Loading />;
 	if (!calls.data.length) return <Empty icon={SquareTerminalIcon} title="No tool calls yet">What the agent's commands and tools print appears here.</Empty>;
 	const shown = calls.data.find((c) => `${c.task}:${c.n}` === open);
 	if (shown)
 		return (
 			<>
 				<div className={SUB}>
-					<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)}><ChevronLeftIcon /></Button>
+					<Hint label="Back to the list"><Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)}><ChevronLeftIcon /></Button></Hint>
 					<span className="font-mono">{shown.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
@@ -440,15 +450,17 @@ function Output({ tab }: { tab: Tab }) {
 		);
 	return (
 		<Body>
+			<List label="Tool calls" onOpen={setOpen}>
 			{calls.data.map((c) => (
-				<div key={`${c.task}:${c.n}`} className={rowClass()} onClick={() => setOpen(`${c.task}:${c.n}`)}>
+				<ListRow key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
 					<span className={`w-3.5 flex-none text-center font-mono text-xs font-semibold ${c.entry.ok === false ? "text-destructive" : c.entry.ok ? "text-primary" : "text-warn"}`}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="text-xs text-faint">{took(c.entry.ms)}</span> : null}
-				</div>
+				</ListRow>
 			))}
-		</Body>
+				</List>
+			</Body>
 	);
 }
 
@@ -458,21 +470,26 @@ function Running({ tab }: { tab: Tab }) {
 	return (
 		<Body>
 			{tab.programs.map((p) => (
-				<div className="flex flex-col gap-1 border-b border-line-soft px-3 py-2.5 text-xs" key={p.id}>
-					<div className="flex items-center gap-2">
-						<span className="size-2 flex-none rounded-full bg-primary" />
-						<span className="min-w-0 flex-1 truncate font-mono" title={p.command}>{p.command}</span>
-						<Confirm label="Stop" question={`Stop ${short(p.command, 80)}?`} onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
-					</div>
-					<div className="flex items-center gap-2 text-xs text-faint">
-						<span>running for {clock(p.seconds)}</span>
-						<span>· {plural(p.processes, "process", "processes")}</span>
-						{p.background ? <span>· in the background</span> : null}
-						{p.ports.map((port) => (
-							<Button key={port} variant="link" size="xs" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</Button>
-						))}
-					</div>
-					{p.output ? <Terminal output={p.output} className="mt-1" /> : null}
+				<div className="flex flex-col gap-1 border-b border-line-soft p-2" key={p.id}>
+					<Item size="sm">
+						<ItemMedia>
+							<span className="size-2 rounded-full bg-primary" />
+						</ItemMedia>
+						<ItemContent>
+							<ItemTitle className="font-mono">{p.command}</ItemTitle>
+							<ItemDescription>
+								running for {clock(p.seconds)} · {plural(p.processes, "process", "processes")}
+								{p.background ? " · in the background" : null}
+							</ItemDescription>
+						</ItemContent>
+						<ItemActions>
+							{p.ports.map((port) => (
+								<Button key={port} variant="link" size="xs" onClick={() => void bridge.open(`http://localhost:${port}`)}>localhost:{port}</Button>
+							))}
+							<Confirm label="Stop" question={`Stop ${short(p.command, 80)}?`} onConfirm={() => void store.attempt(() => api.stopProgram(tab.agent, tab.session, p.id)).then(() => store.flash("Stopping…"))} />
+						</ItemActions>
+					</Item>
+					{p.output ? <Terminal output={p.output} /> : null}
 				</div>
 			))}
 		</Body>
@@ -497,8 +514,10 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
 				<div className="code flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 					<div className="flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2">
-						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. */}
+						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
+						    for the line under the tab in front, which stock draws below the list. */}
 						<ScrollFadeArea axis="x" bar={false} className="min-w-0 flex-initial">
+						<div className="pb-1.5">
 						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
 							<TabsList variant="line" activateOnFocus>
 								<TabsTrigger value="agent">Agent</TabsTrigger>
@@ -513,9 +532,10 @@ export function CodePanel({ tab }: { tab: Tab }) {
 								</TabsTrigger>
 							</TabsList>
 						</Tabs>
+						</div>
 						</ScrollFadeArea>
 						<span className="min-w-0 flex-1" />
-						<Button variant="ghost" size="icon-xs" title="Close the panel" onClick={() => void store.command("code")}><XIcon /></Button>
+						<Hint label="Close the panel"><Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")}><XIcon /></Button></Hint>
 					</div>
 					{steps ? <ScrollFadeArea className="max-h-48 flex-none border-b border-line-soft"><div className="px-3 py-2.5"><Steps items={steps} /></div></ScrollFadeArea> : null}
 					{view === "agent" ? (

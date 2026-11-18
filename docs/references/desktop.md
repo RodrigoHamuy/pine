@@ -426,8 +426,9 @@ desktop/
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
     components/ai-elements/  AI Elements' components for the conversation, added the same way
-    components/    pine's own compositions of stock components (a labelled field, a choice, and
-                   scroll-fade-area.tsx: every region that scrolls, a ScrollArea that fades where it is cut)
+    components/    pine's own compositions of stock components (a labelled field, a choice,
+                   scroll-fade-area.tsx: every region that scrolls, a ScrollArea that fades where it is cut,
+                   and hint.tsx: a Tooltip whose text is also an icon button's accessible name)
     ui.tsx         pine's own small parts, made of shadcn's components
     lists.tsx      the tree of files and the lists to open a row from, on ui-sdk (shadcn has neither)
     index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),

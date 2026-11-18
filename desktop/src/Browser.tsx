@@ -10,7 +10,10 @@ import { useEffect, useRef, useState } from "react";
 import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
-import { Empty, Pulse } from "./ui.tsx";
+import { Empty } from "./ui.tsx";
+import { Hint } from "@/components/hint";
+import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 type Op = Record<string, unknown> & { do: string };
@@ -168,18 +171,18 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						<div key={i} className={`browser-tab group/tab flex h-6 min-w-15 flex-initial basis-44 items-center gap-1 rounded-md pr-1 pl-2 text-xs ${i === state.current ? "on bg-press text-foreground" : "text-muted-foreground hover:bg-hover"}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
 							<span className="min-w-0 flex-1 truncate">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
 							{/* (The last tab stays: a browser without one would open one again.) */}
-							{state.tabs.length > 1 ? <button type="button" className={`browser-tab-close grid size-4 flex-none place-items-center rounded-sm text-faint hover:bg-press hover:text-foreground ${i === state.current ? "" : "invisible group-hover/tab:visible"}`} title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><XIcon size={10} /></button> : null}
+							{state.tabs.length > 1 ? <Button variant="ghost" size="icon-xs" aria-label="Close this tab" className={cn("browser-tab-close", i !== state.current && "invisible group-hover/tab:visible")} onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><XIcon /></Button> : null}
 						</div>
 					))}
 						</div>
 					</ScrollFadeArea>
-					<Button variant="ghost" size="icon-xs" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())}><PlusIcon /></Button>
+					<Hint label="A new tab"><Button variant="ghost" size="icon-xs" onClick={() => (act({ do: "newtab" }), line.current?.focus())}><PlusIcon /></Button></Hint>
 				</div>
 			) : null}
 			<div className="browser-bar flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
-				<Button variant="ghost" size="icon-xs" title="Back" disabled={!open} onClick={() => act({ do: "back" })}><ChevronLeftIcon /></Button>
-				<Button variant="ghost" size="icon-xs" title="Forward" disabled={!open} onClick={() => act({ do: "forward" })}><ChevronRightIcon /></Button>
-				<Button variant="ghost" size="icon-xs" title="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })}><RotateCwIcon /></Button>
+				<Hint label="Back"><Button variant="ghost" size="icon-xs" disabled={!open} onClick={() => act({ do: "back" })}><ChevronLeftIcon /></Button></Hint>
+				<Hint label="Forward"><Button variant="ghost" size="icon-xs" disabled={!open} onClick={() => act({ do: "forward" })}><ChevronRightIcon /></Button></Hint>
+				<Hint label="Load the page again"><Button variant="ghost" size="icon-xs" disabled={!open} onClick={() => act({ do: "reload" })}><RotateCwIcon /></Button></Hint>
 				<Input
 					className="browser-address ml-1 min-w-0 flex-1"
 					spellCheck={false}
@@ -194,7 +197,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						if (e.key === "Escape") (setAddress(undefined), e.currentTarget.blur());
 					}}
 				/>
-				{busy ? <Pulse size={12} /> : null}
+				{busy ? <Spinner /> : null}
 			</div>
 			{open ? (
 				<ScrollFadeArea className="browser-page flex-1 bg-press" viewportRef={room}>
@@ -233,7 +236,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) (e.preventDefault(), act({ do: "text", text: e.key }, 90));
 						}}
 					/>
-					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Pulse size={14} /></div>}
+					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Spinner /></div>}
 				</ScrollFadeArea>
 			) : (
 				<Empty icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
