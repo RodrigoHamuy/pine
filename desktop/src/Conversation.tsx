@@ -4,7 +4,7 @@
 // is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
 import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PanelRightIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
-import { Fragment, memo, type ReactNode, useEffect, useRef, useState } from "react";
+import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -52,9 +52,6 @@ function StatusIcon({ status }: { status: RunStatus }) {
 	return status === "ok" || status === "done" ? <CheckIcon /> : <XIcon />;
 }
 
-/** How much of a thought that streams is drawn: far more than its box holds, in the narrowest column. */
-const LIVE_TAIL = 4000;
-
 /**
  * Thinking, as a line (Reasoning). It is open while the model thinks, showing the end of what it
  * thinks, and folds when it is done; once the owner opened or closed it, that choice stays. Its
@@ -71,24 +68,30 @@ function Thought({ text, title, description, live = false }: { text: string; tit
 			{description ? <TraceDescription>{description}</TraceDescription> : null}
 		</TraceLine>
 	);
+	// While it streams, the box stays at the end of the text, unless the owner scrolled up to read.
+	const body = useRef<HTMLDivElement>(null);
+	const atEnd = useRef(true);
+	useLayoutEffect(() => {
+		const viewport = body.current?.closest<HTMLElement>("[data-slot=scroll-area-viewport]");
+		if (live && viewport && atEnd.current) viewport.scrollTop = viewport.scrollHeight;
+	}, [text, live]);
 	if (!text) return <div data-part="thought">{line}</div>;
 	return (
 		<TraceCollapsible open={open ?? live} onOpenChange={setOpen} data-part="thought">
 			<TraceCollapsibleTrigger>{line}</TraceCollapsibleTrigger>
 			<TraceCollapsibleContent>
-				{live ? (
-					// While it streams, the end of the thought sits at the bottom of a box that only grows,
-					// up to its height, and cuts what is above. Its height must never shrink: the thread
-					// follows its end, so a line less here moves the whole conversation. A tail of the
-					// text is enough to fill the box at any width.
-					<div className="flex max-h-80 flex-col justify-end overflow-hidden">
-						<div className="whitespace-pre-wrap select-text">{text.slice(-LIVE_TAIL)}</div>
+				{/* The whole text, always: a box that only grows up to its height, so the thread above never moves. */}
+				<ScrollArea
+					className="flex max-h-80 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"
+					onScrollCapture={(e) => {
+						const v = e.target as HTMLElement;
+						atEnd.current = v.scrollHeight - v.scrollTop - v.clientHeight < 8;
+					}}
+				>
+					<div ref={body} className="whitespace-pre-wrap select-text">
+						{text}
 					</div>
-				) : (
-					<ScrollArea className="flex max-h-80 min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-						<div className="whitespace-pre-wrap select-text">{text}</div>
-					</ScrollArea>
-				)}
+				</ScrollArea>
 			</TraceCollapsibleContent>
 		</TraceCollapsible>
 	);
