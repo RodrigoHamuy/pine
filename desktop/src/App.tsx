@@ -26,6 +26,7 @@ import { ago, fuzzy, until } from "./text.ts";
 import { List, ListRow } from "./lists.tsx";
 import { Confirm } from "./Confirm.tsx";
 import { Logo, Pulse } from "./ui.tsx";
+import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 // Pieces of the frame drawn the same in several places.
 /** A row of the side bar: its hover, the one in front, and its focus from the keyboard. */
@@ -35,7 +36,12 @@ const KEY = "rounded-sm border bg-card px-1 font-sans text-xs text-faint";
 /** Something waits for the owner: an exclamation mark on the warning colour. */
 const NEEDS = "grid size-3.5 flex-none place-items-center rounded-full bg-warn text-xs leading-none font-bold text-background";
 const DOT = "dot size-2 flex-none rounded-full";
-const LOG = "m-0 max-h-60 overflow-auto rounded-md bg-sunk px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text";
+/** What a command printed: monospace, kept as it was written, and scrolled when it is long. */
+const Log = ({ className, children }: { className?: string; children: React.ReactNode }) => (
+	<ScrollFadeArea className={cn("max-h-60 rounded-md bg-sunk text-muted-foreground", className)}>
+		<pre className="m-0 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere select-text">{children}</pre>
+	</ScrollFadeArea>
+);
 const Needs = () => <span className={NEEDS}>!</span>;
 const Unread = () => <span className={cn(DOT, "bg-info")} />;
 
@@ -67,7 +73,7 @@ function Gate() {
 					<>
 						<h1>Welcome to pine</h1>
 						<p>pine keeps its agents, their workspaces and its settings in a home folder ({s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).</p>
-						{s.initLines.length ? <pre className={cn(LOG, "w-full")}>{s.initLines.slice(-40).join("\n")}</pre> : null}
+						{s.initLines.length ? <Log className="w-full">{s.initLines.slice(-40).join("\n")}</Log> : null}
 						<div className="flex items-center gap-2">
 							<Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Pulse size={12} /> Setting up…</> : "Set up pine"}</Button>
 							<Button variant="outline" disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
@@ -212,11 +218,13 @@ function Sidebar() {
 			<div className={cn("flex h-11 flex-none items-center justify-end gap-0.5 pr-2 app-drag", s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2.5")}>
 				<Button variant="ghost" size="icon" className="app-no-drag" title="Hide the sidebar (⌘B)" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button>
 			</div>
-			<div className="flex-1 overflow-y-auto px-2 pt-1 pb-2">
+			<ScrollFadeArea className="flex-1">
+				<div className="px-2 pt-1 pb-2">
 				<div className={cn("side-row", ROW)} onClick={() => void s.command("palette")} title="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page"><SearchIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Search</span><kbd className={KEY}>⌘K</kbd></div>
 				<div className="flex items-center pt-3.5 pr-1.5 pb-0.5 pl-2 text-xs text-faint">Agents<span className="min-w-0 flex-1" /><Button variant="ghost" size="icon-xs" className="app-no-drag" title="New agent" onClick={() => s.openSettings("agents", "+")}><PlusIcon /></Button></div>
 				{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}
-			</div>
+				</div>
+			</ScrollFadeArea>
 			<div className="side-foot flex flex-none flex-col gap-px p-2">
 				{newer ? <div className={cn("side-row side-update", ROW, "text-primary hover:text-primary")} onClick={() => void bridge.open(newer.url)} title={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}><ArrowUpIcon className="size-3.5" /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon size={12} /></div> : null}
 				<div className={cn("side-row", ROW, front?.kind === "events" && ["on", ROW_ON])} onClick={() => void s.openEvents()}><AudioLinesIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Events</span></div>
@@ -270,10 +278,13 @@ function TitleBar() {
 		<header className={cn("flex h-11 flex-none items-center gap-1 pr-2 app-drag", s.sidebar ? "pl-0.5" : s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2")}>
 			{s.sidebar ? null : <Button variant="ghost" size="icon" className="app-no-drag" title="Show the sidebar (⌘B)" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button>}
 			{/* A row that scrolls cuts off what a tab draws outside itself (the line around the tab in front, the mark where a dragged tab
-			    would land): the padding is the room for both, and the margin keeps the tabs where they were. */}
-			<div className="tabs -mx-0.5 flex min-w-0 items-center gap-0.5 overflow-x-auto px-0.5 py-px [scrollbar-width:none]">
-				{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
-			</div>
+			    would land): the padding is the room for both, and the margin keeps the tabs where they were. It scrolls without a bar;
+			    the fade at a cut end says there is more. */}
+			<ScrollFadeArea axis="x" bar={false} className="tabs -mx-0.5 min-w-0">
+				<div className="flex items-center gap-0.5 px-0.5 py-px">
+					{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
+				</div>
+			</ScrollFadeArea>
 			<Button variant="ghost" size="icon" className="app-no-drag" title={with_ ? `New conversation with ${with_} (⌘T)` : "New conversation (⌘T): you are asked with which agent"} onClick={() => void s.newConversation()}><PlusIcon /></Button>
 			<span className="min-w-0 flex-1" />
 		</header>
@@ -354,7 +365,7 @@ export function PickDialog({ p }: { p: Picker }) {
 			<div className={typing ? undefined : "sr-only"}>
 				<CommandInput autoFocus placeholder={p.placeholder ?? "Type to narrow the list"} value={query} onValueChange={setQuery} />
 			</div>
-			<CommandList className="max-h-96">
+			<CommandList className="scroll-fade">
 				{shown.length ? (
 					<CommandGroup>
 						{shown.map((i) => (
@@ -450,7 +461,7 @@ export function Palette() {
 				<DialogTitle className="sr-only">Search everything</DialogTitle>
 				<Command {...line} shouldFilter={false} loop>
 					<CommandInput autoFocus placeholder="Search conversations (by name or by what was said), commands, agents" value={query} onValueChange={setQuery} />
-					<CommandList className="max-h-96">
+					<CommandList className="scroll-fade">
 						{groups.map((g, n) => (
 							<CommandGroup key={`${n}:${g.name}`} heading={g.name}>
 								{g.rows.map((r) => (
@@ -507,17 +518,18 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 	}, [req.id]);
 	return (
 		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
-			<DialogContent data-tone="warn" showCloseButton={false} finalFocus={opener} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
+			<DialogContent data-tone="warn" showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><TriangleAlertIcon className="text-warn" /> {fields.length ? "Approval needed, and something only you have" : "Approval needed"}</DialogTitle>
 				</DialogHeader>
-				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="flex items-center gap-2 text-muted-foreground">
 						<span>{req.agent}</span>
 						{req.task ? <span className="text-faint">task #{req.task}</span> : null}
 						<Badge variant="secondary" className="font-mono">{req.tool}</Badge>
 					</div>
-					<pre className={cn(LOG, "max-h-56 text-foreground")}>{req.summary}</pre>
+					<Log className="max-h-56 text-foreground">{req.summary}</Log>
 					<div className="text-xs text-muted-foreground">
 						Why you are asked: {req.why}
 						{req.holds ? <div>“Allow” holds for {req.holds}: you are not asked about it again there.</div> : null}
@@ -536,6 +548,7 @@ export function ApprovalDialog({ req }: { req: Approval }) {
 					})}
 					{fields.length ? <div className="text-xs text-faint">{fields.some((f) => f.secret !== false) ? "What you type is not shown, goes into pine's .env file, and never reaches the agent or its model." : "Without it, this cannot be allowed."}</div> : null}
 				</div>
+				</ScrollFadeArea>
 				<DialogFooter>
 					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd className={KEY}>esc</kbd></Button>
 					<span className="min-w-0 flex-1" />
@@ -558,14 +571,15 @@ export function QuestionDialog({ req }: { req: Approval }) {
 	const answer = (text: string) => void s.decide(req.id, true, false, { answer: text });
 	return (
 		<Dialog open onOpenChange={(open) => open || s.closeAsking()}>
-			<DialogContent data-tone="accent" showCloseButton={false} finalFocus={opener} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-xl">
+			<DialogContent data-tone="accent" showCloseButton={false} finalFocus={opener} className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle className="flex items-center gap-2"><MessageSquareIcon className="text-primary" /> {req.agent} asks</DialogTitle>
 				</DialogHeader>
-				<div className="-mx-4 flex min-h-0 flex-col gap-3 overflow-y-auto px-4 select-text">
+				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<div className="flex flex-col gap-3 px-4 select-text">
 					<div className="whitespace-pre-wrap">{req.summary}</div>
 					{choices.length ? (
-						<div className="max-h-96 overflow-y-auto">
+						<div>
 							{choices.map((c, i) => (
 								<div key={i} className={cn("flex items-baseline gap-2.5 rounded-md px-3 py-2", i === at && !own && "bg-hover")} onMouseMove={() => at !== i && setAt(i)} onClick={() => answer(c)}>
 									<kbd className={KEY}>{i + 1}</kbd>
@@ -587,6 +601,7 @@ export function QuestionDialog({ req }: { req: Approval }) {
 						}}
 					/>
 				</div>
+				</ScrollFadeArea>
 				<DialogFooter>
 					<Button variant="ghost" onClick={() => s.closeAsking()}>Later <kbd className={KEY}>esc</kbd></Button>
 					<span className="min-w-0 flex-1" />
@@ -622,14 +637,16 @@ function Help({ close }: { close: () => void }) {
 	];
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
-			<DialogContent showCloseButton={false} className="max-h-3/4 grid-rows-[auto_minmax(0,1fr)_auto] sm:max-w-2xl">
+			<DialogContent showCloseButton={false} className="sm:max-w-2xl">
 				<DialogHeader>
 					<DialogTitle>Keys and commands</DialogTitle>
 				</DialogHeader>
-				<div className="-mx-4 grid min-h-0 grid-cols-[auto_1fr] gap-x-3.5 gap-y-1.5 overflow-y-auto px-4 text-xs select-text">
+				<ScrollFadeArea className="-mx-4 max-h-[60vh]">
+				<div className="grid grid-cols-[auto_1fr] gap-x-3.5 gap-y-1.5 px-4 text-xs select-text">
 					{keys.map(([k, about]) => [<span key={k}><kbd className={KEY}>{k}</kbd></span>, <span key={`${k}-a`} className="text-muted-foreground">{about}</span>])}
 					{COMMANDS.map((c) => [<span key={c.name} className="font-mono">/{c.name}</span>, <span key={`${c.name}-a`} className="text-muted-foreground">{c.about}{c.keys ? <> <kbd className={KEY}>{c.keys}</kbd></> : null}</span>])}
 				</div>
+				</ScrollFadeArea>
 				<DialogFooter>
 					<Button variant="outline" onClick={close}>Close</Button>
 				</DialogFooter>
@@ -698,7 +715,7 @@ function BrowserAsk() {
 				</DialogHeader>
 				<div className="flex flex-col gap-3 select-text">
 					<p className="text-muted-foreground">Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
-					{s.initLines.length ? <pre className={LOG}>{s.initLines.slice(-12).join("\n")}</pre> : null}
+					{s.initLines.length ? <Log>{s.initLines.slice(-12).join("\n")}</Log> : null}
 				</div>
 				<DialogFooter>
 					<Button variant="outline" disabled={s.browserFetching} onClick={later}>Not now</Button>

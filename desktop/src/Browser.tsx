@@ -11,6 +11,7 @@ import { api, type BrowserState, media } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
 import { Empty, Pulse } from "./ui.tsx";
+import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 type Op = Record<string, unknown> & { do: string };
 
@@ -158,9 +159,11 @@ export function BrowserView({ tab }: { tab: Tab }) {
 	};
 
 	return (
-		<div className="browser flex min-h-0 flex-1 flex-col overflow-auto">
+		<div className="browser flex min-h-0 flex-1 flex-col overflow-hidden">
 			{open && state.tabs.length ? (
-				<div className="browser-tabs flex flex-none items-center gap-0.5 overflow-x-auto border-b border-line-soft px-2 py-1">
+				<div className="browser-tabs flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1">
+					<ScrollFadeArea axis="x" bar={false} className="min-w-0 flex-initial">
+						<div className="flex items-center gap-0.5">
 					{state.tabs.map((t, i) => (
 						<div key={i} className={`browser-tab group/tab flex h-6 min-w-15 flex-initial basis-44 items-center gap-1 rounded-md pr-1 pl-2 text-xs ${i === state.current ? "on bg-press text-foreground" : "text-muted-foreground hover:bg-hover"}`} title={t.url} onClick={() => i !== state.current && act({ do: "tab", index: i })}>
 							<span className="min-w-0 flex-1 truncate">{t.title || (t.url === "about:blank" ? "New tab" : t.url)}</span>
@@ -168,6 +171,8 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							{state.tabs.length > 1 ? <button type="button" className={`browser-tab-close grid size-4 flex-none place-items-center rounded-sm text-faint hover:bg-press hover:text-foreground ${i === state.current ? "" : "invisible group-hover/tab:visible"}`} title="Close this tab" onClick={(e) => (e.stopPropagation(), act({ do: "closetab", index: i }))}><XIcon size={10} /></button> : null}
 						</div>
 					))}
+						</div>
+					</ScrollFadeArea>
 					<Button variant="ghost" size="icon-xs" title="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())}><PlusIcon /></Button>
 				</div>
 			) : null}
@@ -192,7 +197,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 				{busy ? <Pulse size={12} /> : null}
 			</div>
 			{open ? (
-				<div className="browser-page relative min-h-0 flex-1 overflow-auto bg-press" ref={room}>
+				<ScrollFadeArea className="browser-page flex-1 bg-press" viewportRef={room}>
 					{/* The page keeps its shape: as wide as the panel, and scrolled down to when it is taller than the room. */}
 					<canvas
 						ref={canvas}
@@ -229,7 +234,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						}}
 					/>
 					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Pulse size={14} /></div>}
-				</div>
+				</ScrollFadeArea>
 			) : (
 				<Empty icon={EyeIcon} title={state ? "No page is open" : "Looking for the browser…"}>
 					{state ? "This is the browser the agent of this conversation works in. A page it opens is shown here as it is, and you can use it too: click, type, log in. Type an address above to open one yourself." : null}

@@ -34,6 +34,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Confirm } from "./Confirm.tsx";
 import { List, ListRow, rowClass, Tree, TreeRow } from "./lists.tsx";
 import { Empty, Pulse, useLoad } from "./ui.tsx";
+import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
@@ -86,8 +87,15 @@ const EDITOR = [
 ].join(" ");
 
 // The panel's parts: a bar of controls with a line under it, and what scrolls below.
+/** What scrolls under a bar; `wide` for what can be wider than the panel (a diff), which scrolls sideways too. */
+function Body({ wide, children }: { wide?: boolean; children: React.ReactNode }) {
+	return (
+		<ScrollFadeArea axis={wide ? "both" : "y"} className="flex-1">
+			<div className="flex min-h-full flex-col">{children}</div>
+		</ScrollFadeArea>
+	);
+}
 const SUB = "code-sub flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
-const BODY = "flex min-h-0 flex-1 flex-col overflow-auto";
 const PICTURE = "block max-h-80 max-w-full rounded-lg border sm:max-w-md";
 const OUT = "whitespace-pre-wrap wrap-anywhere px-3 py-2.5 font-mono text-xs text-muted-foreground select-text cursor-text";
 const STATUS: Record<string, string> = { M: "text-warn", A: "text-add", "?": "text-add", D: "text-del", R: "text-info" };
@@ -206,7 +214,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 					<span className="min-w-0 flex-1 truncate font-mono" title={file}>{file}</span>
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<div className={BODY}>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className={OUT}>… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</div>
+				<Body wide>{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <div className={OUT}>… the rest of this diff is too long to show.</div> : null}</> : <Empty title="">{diff.error ?? <Pulse />}</Empty>}</Body>
 			</>
 		);
 	return (
@@ -215,11 +223,11 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 				{turn ? <><Undo2Icon size={13} /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon size={13} /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span></>}
 				<Button variant="ghost" size="icon-xs" onClick={list.reload} title="Read again"><RotateCwIcon /></Button>
 			</div>
-			<div className={BODY}>
+			<Body>
 				{data.note ? <div className={OUT}>{data.note}</div> : null}
 				{data.files.length ? <List label={turn ? "Files the last message changed" : "Changed files"} onOpen={setFile}>{data.files.map((c) => <ChangeRow key={c.path} c={c} />)}</List> : <Empty icon={CheckIcon} title={turn ? "The last message changed no files" : "Nothing changed since the last commit"} />}
 				{data.more ? <div className={OUT}>… and more.</div> : null}
-			</div>
+			</Body>
 		</>
 	);
 }
@@ -354,19 +362,24 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 					<Button variant="link" size="xs" onClick={() => (setBase(text), setDraft(undefined))}>Take the new one</Button>
 				</div>
 			) : null}
-			<div className={BODY}>
+			{/* The editor scrolls itself (CodeMirror draws only the lines in view): around it nothing scrolls. */}
+			{!kind && !disk.error && disk.data && !disk.data.binary ? (
+				<div className="flex min-h-0 flex-1 flex-col">
+					<Editor file={file} text={dirty ? draft! : (base ?? text ?? "")} readOnly={disk.data.truncated} onChange={setDraft} onSave={() => void save()} />
+				</div>
+			) : (
+			<Body>
 				{kind ? (
 					<div className="p-3.5">{kind === "image" ? <img className={PICTURE} src={media.workspace(tab.agent, file, tab.session)} alt={file} /> : kind === "video" ? <video className="block max-h-90 max-w-full rounded-lg bg-black sm:max-w-lg" src={media.workspace(tab.agent, file, tab.session)} controls /> : <audio className="block w-full max-w-md" src={media.workspace(tab.agent, file, tab.session)} controls />}</div>
 				) : disk.error ? (
 					<Empty icon={FileIcon} title="This file cannot be shown">{disk.error}</Empty>
 				) : !disk.data ? (
 					<Empty title=""><Pulse /></Empty>
-				) : disk.data.binary ? (
-					<Empty icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
 				) : (
-					<Editor file={file} text={dirty ? draft! : (base ?? text ?? "")} readOnly={disk.data.truncated} onChange={setDraft} onSave={() => void save()} />
+					<Empty icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</Empty>
 				)}
-			</div>
+			</Body>
+			)}
 		</>
 	);
 }
@@ -385,13 +398,13 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 				<input className="min-w-0 flex-1 bg-transparent outline-none select-text" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
 				<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} title="Read again"><RotateCwIcon /></Button>
 			</div>
-			<div className={BODY}>
+			<Body>
 				{query.trim() ? (
 					found.data?.length ? <List label="Files that fit" onOpen={setFile}>{found.data.map((f) => <ListRow key={f} value={f} label={f} className={rowClass()}><FileIcon size={13} className="text-faint" /><span className="truncate">{f}</span></ListRow>)}</List> : <Empty title={found.loading ? "" : "No file fits"}>{found.loading ? <Pulse /> : null}</Empty>
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
-			</div>
+			</Body>
 		</>
 	);
 }
@@ -419,14 +432,14 @@ function Output({ tab }: { tab: Tab }) {
 					<span className="font-mono">{shown.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
-				<div className={BODY}>
+				<Body>
 					<Terminal output={shown.entry.result || "(it printed nothing)"} className="m-2" data-status={shown.entry.ok === false ? "fail" : "ok"} />
 					{(shown.entry.images ?? []).map((id) => <div className="p-3" key={id}><img className={PICTURE} src={media.tool(id)} alt="" /></div>)}
-				</div>
+				</Body>
 			</>
 		);
 	return (
-		<div className={BODY}>
+		<Body>
 			{calls.data.map((c) => (
 				<div key={`${c.task}:${c.n}`} className={rowClass()} onClick={() => setOpen(`${c.task}:${c.n}`)}>
 					<span className={`w-3.5 flex-none text-center font-mono text-xs font-semibold ${c.entry.ok === false ? "text-destructive" : c.entry.ok ? "text-primary" : "text-warn"}`}>{c.entry.ok === false ? "✗" : c.entry.ok ? "✓" : "●"}</span>
@@ -435,7 +448,7 @@ function Output({ tab }: { tab: Tab }) {
 					{c.entry.ms !== undefined ? <span className="text-xs text-faint">{took(c.entry.ms)}</span> : null}
 				</div>
 			))}
-		</div>
+		</Body>
 	);
 }
 
@@ -443,7 +456,7 @@ function Output({ tab }: { tab: Tab }) {
 function Running({ tab }: { tab: Tab }) {
 	if (!tab.programs.length) return <Empty icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</Empty>;
 	return (
-		<div className={BODY}>
+		<Body>
 			{tab.programs.map((p) => (
 				<div className="flex flex-col gap-1 border-b border-line-soft px-3 py-2.5 text-xs" key={p.id}>
 					<div className="flex items-center gap-2">
@@ -462,7 +475,7 @@ function Running({ tab }: { tab: Tab }) {
 					{p.output ? <Terminal output={p.output} className="mt-1" /> : null}
 				</div>
 			))}
-		</div>
+		</Body>
 	);
 }
 
@@ -484,8 +497,10 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			<ResizablePanel id="code-panel" className="flex" defaultSize={width} minSize={320} groupResizeBehavior="preserve-pixel-size">
 				<div className="code flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 					<div className="flex h-10 flex-none items-center gap-1.5 border-b border-line-soft px-2">
+						{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. */}
+						<ScrollFadeArea axis="x" bar={false} className="min-w-0 flex-initial">
 						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
-							<TabsList variant="line" activateOnFocus className="max-w-full overflow-x-auto">
+							<TabsList variant="line" activateOnFocus>
 								<TabsTrigger value="agent">Agent</TabsTrigger>
 								<TabsTrigger value="files">Files</TabsTrigger>
 								<TabsTrigger value="changes">Changes</TabsTrigger>
@@ -498,10 +513,11 @@ export function CodePanel({ tab }: { tab: Tab }) {
 								</TabsTrigger>
 							</TabsList>
 						</Tabs>
+						</ScrollFadeArea>
 						<span className="min-w-0 flex-1" />
 						<Button variant="ghost" size="icon-xs" title="Close the panel" onClick={() => void store.command("code")}><XIcon /></Button>
 					</div>
-					{steps ? <div className="max-h-48 flex-none overflow-y-auto border-b border-line-soft px-3 py-2.5"><Steps items={steps} /></div> : null}
+					{steps ? <ScrollFadeArea className="max-h-48 flex-none border-b border-line-soft"><div className="px-3 py-2.5"><Steps items={steps} /></div></ScrollFadeArea> : null}
 					{view === "agent" ? (
 						<AgentView tab={tab} />
 					) : view === "changes" || view === "turn" ? (

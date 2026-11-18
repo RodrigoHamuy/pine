@@ -8,6 +8,7 @@ import { api, type PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { short } from "./text.ts";
 import { Empty } from "./ui.tsx";
+import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 /** "agent/#" fits every topic under agent; "+" fits one level; a word without either is looked for anywhere. */
 function fits(pattern: string, e: PineEvent): boolean {
@@ -37,6 +38,14 @@ export function Events({ tab }: { tab: Tab }) {
 		const el = scroller.current;
 		if (el && stick.current && open === undefined) el.scrollTop = el.scrollHeight;
 	});
+	// The log follows its end while it is scrolled to there. (The viewport's scroll does not reach React's onScroll on the Root.)
+	useEffect(() => {
+		const el = scroller.current;
+		if (!el) return;
+		const follow = () => (stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60);
+		el.addEventListener("scroll", follow);
+		return () => el.removeEventListener("scroll", follow);
+	}, []);
 	useEffect(() => {
 		tab.logFilter = filter;
 	}, [filter, tab]);
@@ -66,14 +75,8 @@ export function Events({ tab }: { tab: Tab }) {
 				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>
 				<Button variant="ghost" size="icon-xs" title="Clear the view" onClick={() => ((tab.log = []), tab.touch())}><Trash2Icon /></Button>
 			</div>
-			<div
-				className="events-list flex-1 cursor-auto overflow-auto py-1.5 font-mono text-xs select-text"
-				ref={scroller}
-				onScroll={(e) => {
-					const el = e.currentTarget;
-					stick.current = el.scrollHeight - el.scrollTop - el.clientHeight < 60;
-				}}
-			>
+			<ScrollFadeArea axis="both" bar={false} className="events-list flex-1 cursor-auto font-mono text-xs select-text" viewportRef={scroller}>
+				<div className="flex min-h-full flex-col py-1.5">
 				{shown.length ? (
 					shown.map((e, i) => (
 						<div key={`${e.id}:${e.ts}:${i}`}>
@@ -89,7 +92,8 @@ export function Events({ tab }: { tab: Tab }) {
 				) : (
 					<Empty icon={AudioLinesIcon} title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</Empty>
 				)}
-			</div>
+				</div>
+			</ScrollFadeArea>
 		</div>
 	);
 }

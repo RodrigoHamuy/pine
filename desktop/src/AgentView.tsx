@@ -10,11 +10,12 @@ import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
 import { Pulse, useLoad } from "./ui.tsx";
+import { ScrollFadeArea } from "@/components/scroll-fade-area";
 
 const FACT = "inline-flex items-center gap-1.5 rounded-md border border-line-soft bg-raised px-2 py-0.5 text-xs text-muted-foreground [&_b]:font-medium [&_b]:text-foreground";
 const CLICK = "hover:border-faint hover:text-foreground";
 const NONE = "px-3.5 py-0.5 text-faint wrap-anywhere";
-const LOG = "m-0 max-h-56 overflow-auto rounded-md bg-sunk px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text";
+const LOG = "m-0 px-3 py-2.5 font-mono text-xs whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text";
 const LINE = "agent-line flex min-h-7 items-center gap-2 px-3.5";
 const NAME = "name max-w-2/5 flex-none truncate font-medium";
 const ABOUT = "about min-w-0 flex-1 truncate text-muted-foreground";
@@ -64,7 +65,8 @@ export function AgentView({ tab }: { tab: Tab }) {
 	const elsewhere = [...s.busy].filter(([key, tasks]) => tasks.size && key.startsWith(`${tab.agent}:`) && key !== tab.key).map(([key]) => key.slice(tab.agent.length + 1));
 	const memory = detail.data?.files.memory?.trim();
 	return (
-		<div className="agent-view flex min-h-0 flex-1 cursor-auto flex-col gap-3 overflow-auto pb-2 text-xs select-text">
+		<ScrollFadeArea className="agent-view flex-1 cursor-auto text-xs select-text">
+		<div className="flex flex-col gap-3 pb-2">
 			<div className="flex items-start gap-3 px-3.5 pt-4 pb-0.5">
 				<span className="grid size-10 flex-none place-items-center rounded-lg bg-press text-xl font-semibold text-foreground">{tab.agent.slice(0, 1).toUpperCase()}</span>
 				<div className="min-w-0 flex-1">
@@ -117,10 +119,11 @@ export function AgentView({ tab }: { tab: Tab }) {
 			) : null}
 			{memory !== undefined ? (
 				<Section title="What it remembers">
-					{memory ? <pre className={cn(LOG, "mx-3.5")}>{short(memory, 6000)}</pre> : <div className={NONE}>Its MEMORY.md is empty.</div>}
+					{memory ? <ScrollFadeArea className="mx-3.5 max-h-56 rounded-md bg-sunk"><pre className={LOG}>{short(memory, 6000)}</pre></ScrollFadeArea> : <div className={NONE}>Its MEMORY.md is empty.</div>}
 				</Section>
 			) : null}
 			{detail.data ? <div className={cn(NONE, "pb-4")}>Its workspace is {detail.data.workspace}; the Files view shows {tab.folder ? "the folder this conversation works in" : "it"}.</div> : null}
 		</div>
+		</ScrollFadeArea>
 	);
 }
