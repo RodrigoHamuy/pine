@@ -81,7 +81,7 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		await page.fill(".browser-address", `${at.replace("http://", "")}/three`);
 		await page.press(".browser-address", "Enter");
 		await address("/three");
-		await page.click(".browser-bar [data-slot=button][title='Back']");
+		await page.click(".browser-bar [data-slot=button][aria-label='Back']");
 		await address("/two");
 		await shot("b3-second");
 
