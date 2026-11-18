@@ -80,6 +80,22 @@ try {
 	const shown = await page.evaluate(() => document.visibilityState);
 	console.log(`ok: ${status?.trim()}; pine found in: ${from}; a message was answered; the window is ${shown}`);
 	if (shown !== "visible") throw new Error("the app's window never showed");
+	// The terminal: node-pty is the one native module of the app's own, and outside the archive.
+	const printed = await page.evaluate(
+		() =>
+			new Promise((resolve, reject) => {
+				let out = "";
+				const stop = window.pine.onTermData((id, data) => {
+					if (id !== "smoke:term") return;
+					out += data;
+					if (/smoke-\d+/.test(out)) (stop(), void window.pine.termClose("smoke:term"), resolve(/smoke-\d+/.exec(out)[0]));
+				});
+				setTimeout(() => (stop(), reject(new Error(`the terminal printed: ${JSON.stringify(out.slice(-400))}`))), 15_000);
+				window.pine.termOpen("smoke:term", undefined, 80, 24).then(() => window.pine.termWrite("smoke:term", "echo smoke-$((40+2))\r"), reject);
+			}),
+	);
+	if (printed !== "smoke-42") throw new Error(`the terminal printed ${printed}`);
+	console.log("ok: a terminal runs in the app's own node-pty");
 	// PINE_SMOKE_HOLD=<seconds>: stays open that long, for somebody to look at the window.
 	if (Number(process.env.PINE_SMOKE_HOLD) > 0) await new Promise((r) => setTimeout(r, Number(process.env.PINE_SMOKE_HOLD) * 1000));
 	if (from !== "the app") throw new Error(`the app used the pine of "${from}", not the one it carries`);

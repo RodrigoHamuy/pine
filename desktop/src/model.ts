@@ -10,6 +10,7 @@ import { toast } from "@/components/ui/toast";
 import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, media, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
+import { runnable } from "./runnable.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
 export const REASONING_ABOUT: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
@@ -77,7 +78,7 @@ export interface Attachment {
 	preview?: string;
 }
 
-export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running";
+export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running" | "terminal";
 
 /** What can be shown beside a conversation: the side panel and the browser's aside. */
 export type Beside = "code" | "aside";
@@ -153,6 +154,8 @@ export class Tab extends Model {
 
 	// the panel beside it
 	codeTick = 0;
+	/** Code blocks the owner ran from an answer, waiting for the terminal to type them (Terminal.tsx). */
+	runs: string[] = [];
 
 	constructor(kind: Tab["kind"], agent: string, session: string) {
 		super();
@@ -205,7 +208,7 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
 	connected = false;
-	prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true };
+	prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true, codeFollowsPalette: true };
 	platform = "darwin";
 	focused = true;
 	versions = { app: "", electron: "" };
@@ -855,6 +858,8 @@ export class Store extends Model {
 		if (i < 0) return;
 		if (this.tabs.length === 1) return this.flash("The last tab stays open.");
 		this.tabs.splice(i, 1);
+		// The conversation's terminal ends with its last tab.
+		if (tab.kind === "chat" && !this.tabs.some((t) => t.kind === "chat" && t.key === tab.key)) void bridge.termClose(tab.key).catch(() => {});
 		// What a conversation was subscribed to on its own ends when its tab closes (not for an agent's main one).
 		if (tab.kind === "chat" && tab.session !== "main") {
 			void api
@@ -1460,6 +1465,23 @@ export class Store extends Model {
 	ask_(name: string): void {
 		this.lastSignal = name;
 		this.signal.touch();
+	}
+
+	/**
+	 * A code block of an answer, run by the owner's click: typed into the terminal of the conversation
+	 * the answer is in, as it was shown (runnable.ts), and the terminal shown.
+	 */
+	runInTerminal(agent: string, session: string, code: string): void {
+		const ok = runnable(code);
+		if (!ok.ok) return this.flash(ok.why, "warn", 8000);
+		const tab = this.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === session) ?? (this.active?.kind === "chat" ? this.active : undefined);
+		if (!tab) return this.flash("This answer's conversation is not open in a tab: open it to run its code.", "warn");
+		tab.runs.push(ok.text);
+		tab.touch();
+		if (this.active !== tab) this.activate(tab);
+		this.codeView = "terminal";
+		this.open("code");
+		this.touch();
 	}
 
 	async command(name: string): Promise<void> {

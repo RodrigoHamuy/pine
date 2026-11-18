@@ -83,6 +83,7 @@ const SYNONYMS: string[][] = [
 	["webhook", "hook", "callback", "http", "post"],
 	["http", "url", "website", "web", "page", "site", "address", "poll", "scrape"],
 	["command", "shell", "bash", "script", "terminal", "cli"],
+	["run", "play", "execute", "launch"],
 	["background", "detach", "async", "asynchronous", "nohup", "meanwhile", "wait", "await", "blocking"],
 	["folder", "directory", "dir", "path", "file"],
 	["mqtt", "broker", "iot", "device", "topic", "publish"],

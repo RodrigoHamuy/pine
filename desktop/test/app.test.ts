@@ -13,9 +13,11 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
+import { builder } from "material-theme-builder";
 import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { httpMcp } from "../../test/support/http-mcp.ts";
+import { DEFAULT_PALETTE } from "../src/theme.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const shots = process.env.PINE_DESKTOP_SHOTS;
@@ -109,7 +111,7 @@ process.stdin.resume();
 		// (The driver shows every page in light unless it is told otherwise, whatever the app says.)
 		colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light",
 		args: [root],
-		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest` },
+		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_SHELL: "/bin/sh", PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest` },
 	});
 	page = await app.firstWindow();
 	page.on("pageerror", (e: Error) => pageErrors.push(String(e.stack ?? e.message).slice(0, 600)));
@@ -380,7 +382,7 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 		// The side panel shows no browser of its own any more.
 		await page.fill("[data-slot=composer] textarea", "/code browser");
 		await page.press("[data-slot=composer] textarea", "Enter");
-		await sees("[data-slot=toast] >> text=The panel shows: agent, files, changes, turn, output, running.");
+		await sees("[data-slot=toast] >> text=The panel shows: agent, files, changes, turn, output, running, terminal.");
 		// The agent puts its browser in front of the owner: the aside opens. (In a conversation of its own, so that main's stays as the tests after this one expect it.)
 		const tabs = await page.locator("[data-slot=tab]").count();
 		await menu("new");
@@ -576,6 +578,43 @@ test("what an answer points at on the web is not fetched by itself, and what it 
 	assert.equal(await md.locator("table").evaluate((t: HTMLElement) => getComputedStyle(t.parentElement!).overflowX), "auto");
 	assert.deepEqual(await page.evaluate(() => (window as any).refused), []);
 	await shot("02b-pictures");
+});
+
+const terminalText = () => page.$eval("[data-slot=terminal] .xterm-rows", (el: Element) => el.textContent ?? "").catch(() => "");
+const terminalShows = (text: string) => page.waitForFunction((t) => (document.querySelector("[data-slot=terminal] .xterm-rows")?.textContent ?? "").includes(t), text, { timeout: 10_000 });
+
+test("a shell block of an answer runs in the conversation's terminal with its button, and only as it is shown", async () => {
+	const text = ["Run this:", "```bash\necho pine-ran-$((6*7))\n```", "Not this one:", "```ts\nconst a = 1;\n```", "Nor this:", "```sh\necho shown\u202Ehidden-ran\n```"].join("\n\n");
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ text }], "commands "));
+	await page.keyboard.press("Enter");
+	const md = page.locator("[data-slot=markdown]", { hasText: "Run this" }).last();
+	await md.locator("[data-run]").first().waitFor();
+	// Only a block for a shell has the button, beside its copy button.
+	assert.equal(await md.locator("[data-run]").count(), 2);
+	assert.equal(await md.locator('[data-streamdown="code-block"]', { hasText: "const a = 1" }).locator("[data-run]").count(), 0);
+	// The click opens the terminal beside the conversation, in its agent's workspace, and runs the block there.
+	await md.locator("[data-run]").first().click();
+	await sees("[data-slot=code-panel] [data-slot=terminal]");
+	await terminalShows("pine-ran-42");
+	assert.match(await page.textContent("[data-slot=terminal-cwd]"), /agents\/main\/workspace/);
+	// The terminal is the owner's: what is typed into it runs too.
+	await page.click("[data-slot=terminal]");
+	await page.keyboard.type("echo typed-$((1+1))");
+	await page.keyboard.press("Enter");
+	await terminalShows("typed-2");
+	// A block that holds a character that does not show as itself is not typed.
+	await md.locator("[data-run]").nth(1).click();
+	await sees("[data-slot=toast] >> text=does not show as itself (U+202E)");
+	await new Promise((r) => setTimeout(r, 200));
+	assert.doesNotMatch(await terminalText(), /hidden-ran/);
+	// Another view of the panel and back: the same shell, with what it printed.
+	await menu("code-agent");
+	await page.waitForSelector("[data-slot=terminal]", { state: "detached" });
+	await menu("code-terminal");
+	await terminalShows("typed-2");
+	await shot("02c-terminal");
+	await menu("code");
+	await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
 });
 
 test("a folded part that was opened stays open while the answer goes on", async () => {
@@ -1123,6 +1162,53 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await menu("settings");
 });
 
+/** The M3 scheme of pine's palette, as material-theme-builder generates it: what the window should draw. */
+const SCHEMES = builder(DEFAULT_PALETTE.source, DEFAULT_PALETTE).toJson().schemes;
+const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
+/** The colour a CSS colour value resolves to in the page, read from an element of the test's own. */
+const resolved = (value: string) =>
+	page.evaluate((v: string) => {
+		const probe = document.body.appendChild(document.createElement("div"));
+		probe.style.backgroundColor = v;
+		const colour = getComputedStyle(probe).backgroundColor;
+		probe.remove();
+		return colour;
+	}, value);
+/** The alpha of a computed colour: rgba(..., a), color(srgb ... / a), or 1. */
+const alphaOf = (colour: string) => Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(colour)?.[1] ?? /\/\s*([\d.]+)\)/.exec(colour)?.[1] ?? 1);
+
+test("every colour is a role of the M3 scheme of pine's palette, in light and in dark", async () => {
+	try {
+		for (const look of ["light", "dark"] as const) {
+			await page.emulateMedia({ colorScheme: look });
+			await page.waitForFunction((d: boolean) => document.documentElement.classList.contains("dark") === d, look === "dark");
+			const scheme = SCHEMES[look];
+			// <Mtb> wrote the scheme into the page...
+			assert.equal(await resolved("var(--md-sys-color-surface)"), rgb(scheme.surface), `${look}: the M3 surface is in the page`);
+			// ...and shadcn's tokens point at its roles.
+			assert.equal(await resolved("var(--background)"), rgb(scheme.surface), `${look}: shadcn's background is the surface`);
+			assert.equal(await resolved("var(--primary)"), rgb(scheme.primary), `${look}: shadcn's primary is the primary`);
+			assert.equal(await resolved("var(--destructive)"), rgb(scheme.error), `${look}: shadcn's destructive is the error`);
+			// pine's own mapping on top of the package's: the line is the highest container, a popover sits just above the page.
+			assert.equal(await resolved("var(--border)"), rgb(scheme.surfaceContainerHighest), `${look}: the border is surface container highest`);
+			assert.equal(await resolved("var(--popover)"), rgb(scheme.surfaceContainerLow), `${look}: a popover is surface container low`);
+			// Hover and press are state layers over what is below, not an opaque colour.
+			for (const [token, alpha] of [["--accent", 0.08], ["--sidebar-accent", 0.12]] as const) {
+				const colour = await resolved(`var(${token})`);
+				assert.ok(Math.abs(alphaOf(colour) - alpha) < 0.01, `${look}: ${token} is the text colour at ${alpha * 100}%, not ${colour}`);
+			}
+			// What has the keyboard is grey, never the primary.
+			assert.equal(await resolved("var(--ring)"), rgb(scheme.outline), `${look}: the focus ring is the outline`);
+			assert.notEqual(await resolved("var(--ring)"), rgb(scheme.primary));
+			// The side bar lets the Mac's window material show through.
+			const side = await resolved("var(--sidebar)");
+			assert.ok(alphaOf(side) > 0 && alphaOf(side) < 1, `${look}: the side bar is translucent, not ${side}`);
+		}
+	} finally {
+		await page.emulateMedia({ colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light" });
+	}
+});
+
 test("the appearance setting puts the page in dark or light, and System follows the system", async () => {
 	// The driver forces light on every page; here the app's own setting has to decide, as it does
 	// for the owner (Electron's native theme drives the page's prefers-color-scheme).
@@ -1135,13 +1221,13 @@ test("the appearance setting puts the page in dark or light, and System follows 
 		await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
 		await appearance("Dark");
 		await waitDark(true);
-		// What the stylesheet draws follows the class: the tab in front is poimandres' background, then the light one.
+		// What the stylesheet draws follows the class: the tab in front is the dark M3 surface, then the light one.
 		const tab = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-slot=tab][data-active]")!).backgroundColor);
-		assert.equal(await tab(), "rgb(27, 30, 40)");
+		assert.equal(await tab(), rgb(SCHEMES.dark.surface));
 		await appearance("Light");
 		await waitDark(false);
 		assert.equal(await dark(), false);
-		assert.equal(await tab(), "rgb(253, 253, 252)");
+		assert.equal(await tab(), rgb(SCHEMES.light.surface));
 		// System: whatever the system says, the class says the same.
 		await appearance("System");
 		await page.emulateMedia({ colorScheme: "dark" });

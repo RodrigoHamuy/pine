@@ -1,7 +1,8 @@
 import type { Decorator, Preview } from "@storybook/react-vite";
+import { Mtb } from "material-theme-builder/react";
 import { useLayoutEffect } from "react";
 import "../src/index.css";
-import { followAppearance } from "../src/theme.ts";
+import { DEFAULT_PALETTE, followAppearance } from "../src/theme.ts";
 import { allModes, viewports } from "./modes.ts";
 
 // No preload script here: the bridge is a stand-in whose every call does nothing (a listener it
@@ -15,7 +16,12 @@ window.pine ??= new Proxy({} as Record<PropertyKey, unknown>, { get: (own, key) 
 const withTheme: Decorator = (Story, context) => {
 	const theme = context.globals.theme ?? "system";
 	useLayoutEffect(() => followAppearance(() => theme, () => () => {}), [theme]);
-	return <Story />;
+	// The colours are the M3 scheme of pine's palette, as in the app (main.tsx).
+	return (
+		<Mtb {...DEFAULT_PALETTE}>
+			<Story />
+		</Mtb>
+	);
 };
 
 const preview: Preview = {

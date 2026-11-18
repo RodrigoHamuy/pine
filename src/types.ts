@@ -69,6 +69,8 @@ export interface TaskMeta {
 	steered?: number;
 	/** Not a message for the model: the conversation is to be shortened (its earlier part summarised). */
 	compact?: boolean;
+	/** The owner wrote this message in the Pine app, which draws a Run button on a shell code block (`via` of the control API). */
+	via?: "app";
 	/** A steered message that the work it was meant for did not read any more; it is answered as work of its own. */
 	requeued?: boolean;
 	/** Trust of whatever started this task. Children inherit the weaker of theirs and their parent's. */

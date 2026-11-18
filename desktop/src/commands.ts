@@ -61,15 +61,16 @@ export const COMMANDS: Command[] = [
 		},
 	},
 	{
-		name: "code", title: "Side panel", about: "The agent, its files, changes, tool output and what is running, beside the conversation", hint: "[agent|files|changes|turn|output|running|off]", keys: "⌥⌘B",
+		name: "code", title: "Side panel", about: "The agent, its files, changes, tool output, what is running and a terminal, beside the conversation", hint: "[agent|files|changes|turn|output|running|terminal|off]", keys: "⌥⌘B",
 		run: (args) => {
 			const word = args.trim().toLowerCase();
 			if (!word) return store.command("code");
 			if (word === "off") return void (store.close("code"), store.touch());
-			if (!["agent", "changes", "turn", "files", "output", "running"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, output, running.");
+			if (!["agent", "changes", "turn", "files", "output", "running", "terminal"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, output, running, terminal.");
 			return store.command(`code-${word}`);
 		},
 	},
+	{ name: "terminal", title: "Terminal", about: "A shell of your own in the conversation's folder, in the side panel", keys: "⌃`", chat: true, run: () => store.command("code-terminal") },
 	{ name: "browser", title: "Browser", about: "The agent's browser, in an aside at the right of the window", keys: "⇧⌘B", run: menu("browser") },
 	{ name: "goal", title: "Goal", about: "Keep the agent working until something is reached", hint: "[objective|pause|resume|clear]", chat: true, run: (args, tab) => (chat(tab) ? (args.trim() ? store.setGoal(tab!, args) : store.askGoal(tab!)) : undefined) },
 	{ name: "stop", title: "Stop", about: "Stop what the agent is doing", keys: "⌘.", run: (_a, tab) => (tab?.busy ? store.stop(tab) : store.flash("Nothing is running.")) },

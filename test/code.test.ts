@@ -283,3 +283,20 @@ test("tui: the code pane shows changes, files and tool output; the folder is set
 	await narrow.stop();
 	await h.close();
 });
+
+test("app: a message written in the Pine app tells the agent that a bash block there has a Run button; one from elsewhere does not", async () => {
+	const h = await harness({ pine: { http: { port: 0 } }, agents: { main: {} } });
+	const send = (body: Record<string, unknown>) => fetch(`http://127.0.0.1:${h.pine.http!.port}/agents/main/prompt`, { method: "POST", headers: { authorization: `Bearer ${h.pine.token}`, "content-type": "application/json" }, body: JSON.stringify({ wait: true, ...body }) }).then((r) => r.json());
+	const told = (n: number) => notesOf(h.mock.state.requests.at(n)).join("\n").includes("Your owner is in the Pine app");
+	await send({ prompt: "from the app", session: "s1", via: "app" });
+	assert.ok(told(-1), "the app's message says where it is read");
+	assert.match(notesOf(h.mock.state.requests.at(-1)).join("\n"), /code block marked bash: the app shows a Run button/);
+	await send({ prompt: "from a terminal", session: "s2" });
+	assert.ok(!told(-1), "a message without via says nothing of the app");
+	await send({ prompt: "pretending", session: "s3", via: "telegram" });
+	assert.ok(!told(-1), "only the app's own word counts");
+	// A run started from outside is never told, whatever it carries.
+	await h.pine.agents.run({ agent: "main", prompt: "an event", session: "s4", trust: "untrusted", via: "app" } as any);
+	assert.ok(!told(-1));
+	await h.close();
+});

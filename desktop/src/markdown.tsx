@@ -16,21 +16,27 @@
 //     file the daemon serves and its answer arrived while the owner was looking (`arrived`), as
 //     in the terminal UI: never one from earlier, and one at a web address only after its click.
 //
+// A code block for a shell (```bash and the like, runnable.ts) has a Run button beside its copy
+// button: the owner's click types it into the conversation's terminal (Terminal.tsx), exactly as
+// it is shown, and never one that holds a character that does not show as itself. Nothing runs
+// without that click, and a block still being written has no button.
+//
 // When Streamdown is upgraded, read its defaults again (`defaultRehypePlugins`, the components
 // it draws, its controls) and run the desktop suite: its markdown test fails without each of the three.
 import { createCodePlugin } from "@streamdown/code";
-import { ArrowRightIcon, ChevronRightIcon } from "lucide-react";
-import { Children, createContext, isValidElement, memo, useContext, useEffect, useState, type ReactNode } from "react";
+import { ArrowRightIcon, ChevronRightIcon, PlayIcon } from "lucide-react";
+import { Children, createContext, createElement, isValidElement, memo, useContext, useEffect, useState, type ReactNode } from "react";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { type Options as Schema } from "rehype-sanitize";
-import { Streamdown, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
+import { CodeBlock, CodeBlockCopyButton, defaultComponents, Streamdown, useIsCodeFenceIncomplete, type Components, type ControlsConfig, type ExtraProps } from "streamdown";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { type Heard, Sound } from "@/components/sound";
 import { api, bytesOf, media } from "./api.ts";
 import { bridge } from "./bridge.ts";
-import { mediaKind } from "./model.ts";
+import { mediaKind, store } from "./model.ts";
+import { SHELLS } from "./runnable.ts";
 import { baseName, errText, short } from "./text.ts";
 
 /** The tags and attributes an answer keeps. Everything else is taken away, its words kept; what is in `strip` goes with its words. */
@@ -99,7 +105,7 @@ function Link({ href, children, node }: React.ComponentProps<"a"> & ExtraProps) 
 			{/* Beside the link, not inside it: it is the address in plain letters, not more of the link's words.
 			    It flows with the sentence: a line of its own would cut the link off from where it leads. */}
 			{plain ? null : (
-				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-faint wrap-anywhere" title={url} onClick={open(url)}>
+				<span data-target="" className="ml-1 inline cursor-pointer font-mono text-xs text-outline wrap-anywhere" title={url} onClick={open(url)}>
 					<ArrowRightIcon className="mr-1 inline size-3" aria-hidden />
 					{short(url.replace(/^https?:\/\//, ""), 72)}
 				</span>
@@ -113,7 +119,7 @@ export const MEDIA = {
 	box: { image: "block max-w-md", video: "block max-w-lg", audio: "block max-w-md" },
 	image: "block max-h-80 max-w-full cursor-zoom-in rounded-md border",
 	video: "block max-h-90 max-w-full rounded-md bg-black",
-	cap: "mt-1 block text-xs text-faint",
+	cap: "mt-1 block text-xs text-outline",
 };
 
 function Player({ kind, src, alt, sound }: { kind: "image" | "video" | "audio"; src: string; alt: string; sound?: { id?: string; name: string; bytes: () => Promise<ArrayBuffer>; auto?: Heard } }) {
@@ -207,8 +213,73 @@ function Summary({ children }: React.ComponentProps<"summary"> & ExtraProps) {
 	);
 }
 
-const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary };
-const PLUGINS = { code: createCodePlugin({ themes: ["github-light", "poimandres"] }) };
+const DefaultCode = defaultComponents.code as React.ComponentType<React.ComponentProps<"code"> & ExtraProps>;
+
+/** Code: Streamdown's own, and for a block of shell commands in a conversation, the same block with a Run button. */
+function Code(props: React.ComponentProps<"code"> & ExtraProps) {
+	const where = useContext(WhereContext);
+	const language = /(?:^|\s)language-(\S+)/.exec(props.className ?? "")?.[1]?.toLowerCase() ?? "";
+	if (!("data-block" in props) || !where?.session || !SHELLS.has(language)) return createElement(DefaultCode, props);
+	return <ShellBlock code={textOf(props.node).replace(/\n$/, "")} language={language} agent={where.agent} session={where.session} />;
+}
+
+function ShellBlock({ code, language, agent, session }: { code: string; language: string; agent: string; session: string }) {
+	const incomplete = useIsCodeFenceIncomplete();
+	return (
+		<CodeBlock code={code} language={language} isIncomplete={incomplete} lineNumbers={false} data-shell="">
+			<CodeBlockCopyButton />
+			{incomplete ? null : (
+				<Button variant="ghost" size="icon-xs" data-run="" aria-label="Run in the terminal" title="Run in this conversation's terminal" onClick={() => store.runInTerminal(agent, session, code)}>
+					<PlayIcon />
+				</Button>
+			)}
+		</CodeBlock>
+	);
+}
+
+const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary, code: Code };
+/**
+ * The highlighter's theme for code in answers: every colour is a `--code-*` variable of index.css, the
+ * ones the code editor reads, so that code in an answer and in the code pane look the same and both
+ * follow the palette (or poimandres in dark, when the owner keeps it). The variables change with the
+ * look, so one theme serves light and dark. Scopes are TextMate's, mapped to the editor's kinds.
+ */
+const v = (name: string) => `var(--code-${name})`;
+const CODE_THEME = {
+	name: "pine-code",
+	type: "dark" as const,
+	fg: v("text"),
+	bg: "transparent",
+	colors: { "editor.foreground": v("text"), "editor.background": "transparent" },
+	settings: [
+		{ settings: { foreground: v("text") } },
+		{ scope: ["comment", "punctuation.definition.comment"], settings: { foreground: v("comment"), fontStyle: "italic" } },
+		{ scope: ["meta.decorator", "meta.preprocessor"], settings: { foreground: v("meta") } },
+		{ scope: ["keyword", "storage"], settings: { foreground: v("keyword") } },
+		{ scope: ["storage.type"], settings: { foreground: v("definition") } },
+		{ scope: ["keyword.control"], settings: { foreground: v("control") } },
+		{ scope: ["storage.modifier", "keyword.operator.new", "keyword.operator.expression", "variable.language.this", "variable.language.self"], settings: { foreground: v("modifier") } },
+		{ scope: ["string", "punctuation.definition.string"], settings: { foreground: v("string") } },
+		{ scope: ["string.regexp", "constant.character.escape"], settings: { foreground: v("regexp") } },
+		{ scope: ["constant.numeric", "constant.language.boolean", "constant.other", "markup.underline.link"], settings: { foreground: v("literal") } },
+		{ scope: ["constant.language.null", "constant.language.undefined", "constant.language.nil"], settings: { foreground: v("null") } },
+		{ scope: ["variable", "variable.other.property", "meta.object-literal.key", "support.type.property-name"], settings: { foreground: v("name") } },
+		{ scope: ["entity.other.attribute-name"], settings: { foreground: v("attribute") } },
+		{ scope: ["entity.name.function", "support.function", "meta.function-call entity.name.function"], settings: { foreground: v("call") } },
+		{ scope: ["meta.definition.function entity.name.function", "meta.function entity.name.function", "entity.name.class", "entity.name.type.class"], settings: { foreground: v("function") } },
+		{ scope: ["entity.name.type", "support.type", "support.class"], settings: { foreground: v("type") } },
+		{ scope: ["entity.name.namespace", "entity.name.module"], settings: { foreground: v("namespace") } },
+		{ scope: ["entity.name.tag"], settings: { foreground: v("tag") } },
+		{ scope: ["markup.heading", "entity.name.section"], settings: { foreground: v("heading"), fontStyle: "bold" } },
+		{ scope: ["markup.italic", "markup.bold"], settings: { foreground: v("emphasis") } },
+		{ scope: ["markup.inserted"], settings: { foreground: v("inserted") } },
+		{ scope: ["markup.deleted"], settings: { foreground: v("deleted") } },
+		{ scope: ["punctuation"], settings: { foreground: v("punctuation") } },
+		{ scope: ["keyword.operator"], settings: { foreground: v("operator") } },
+	],
+};
+const CODE_THEMES: [typeof CODE_THEME, typeof CODE_THEME] = [CODE_THEME, CODE_THEME];
+const PLUGINS = { code: createCodePlugin({ themes: CODE_THEMES }) };
 const CONTROLS: ControlsConfig = { code: { copy: true, download: false }, table: false, mermaid: false, image: false };
 
 // Streamdown draws every element with its own look, and a folded part written as raw HTML is
@@ -219,7 +290,7 @@ const LOOK = "cursor-auto select-text wrap-anywhere";
 export const Markdown = memo(function Markdown({ text, where, live }: { text: string; where?: Where; live?: boolean }): ReactNode {
 	return (
 		<WhereContext.Provider value={where}>
-			<Streamdown data-slot="markdown" data-live={live || undefined} className={LOOK} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={["github-light", "poimandres"]} isAnimating={!!live} lineNumbers={false}>
+			<Streamdown data-slot="markdown" data-live={live || undefined} className={LOOK} caret="block" rehypePlugins={REHYPE as never} components={COMPONENTS} plugins={PLUGINS} controls={CONTROLS} linkSafety={{ enabled: false }} shikiTheme={CODE_THEMES} isAnimating={!!live} lineNumbers={false}>
 				{text}
 			</Streamdown>
 		</WhereContext.Provider>

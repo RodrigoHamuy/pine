@@ -31,6 +31,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
+import { DEFAULT_PALETTE, type Palette, SCHEMES } from "./theme.ts";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -1757,6 +1759,129 @@ function Instructions() {
 
 // ---- the app itself ----------------------------------------------------------------------------------------
 
+/** The custom colours' names: every palette has exactly those of pine's (cleanPalette). */
+type CustomName = (typeof DEFAULT_PALETTE.customColors)[number]["name"];
+const CUSTOM_LABELS: Record<CustomName, { title: string; about: string }> = {
+	warn: { title: "Warning colour", about: "Warnings and approvals, modified or unsaved files, literals in code." },
+	info: { title: "Info colour", about: "Renamed files, and function and type names in code." },
+	plan: { title: "Keyword colour", about: "Keywords in code (if, const, class)." },
+};
+const schemeItems = Object.entries(SCHEMES).map(([value, label]) => ({ value, label }));
+
+/** A colour to pick, with its hex beside it. */
+function ColourInput({ id, name, value, onChange }: { id: string; name: string; value: string; onChange: (hex: string) => void }) {
+	return (
+		<div className="flex items-center gap-1.5">
+			<span className="font-mono text-xs text-muted-foreground">{value}</span>
+			<Input id={id} name={name} type="color" className="w-10 p-0.5" value={value} onChange={(e) => onChange(e.target.value)} />
+		</div>
+	);
+}
+
+/**
+ * The palette the window's colours are generated from (theme.ts): an app preference like Appearance,
+ * kept by the app's main process. Every change redraws the window at once; Reset stores none.
+ */
+export function Colours() {
+	const s = useModel(store);
+	const palette = s.prefs.palette ?? DEFAULT_PALETTE;
+	const set = async (change: Partial<Palette> | undefined) => {
+		s.prefs = await bridge.prefs({ palette: change ? { ...palette, ...change } : undefined });
+		s.touch();
+	};
+	const followCode = async (codeFollowsPalette: boolean) => {
+		s.prefs = await bridge.prefs({ codeFollowsPalette });
+		s.touch();
+	};
+	const field = useId();
+	return (
+		<FieldSet data-setting="colours">
+			<FieldLegend>Colours</FieldLegend>
+			<FieldDescription>Every colour of the window is a role of one Material 3 scheme, made from these.</FieldDescription>
+			<FieldGroup>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-source`}>Source colour</FieldLabel>
+						<FieldDescription>The accent, and the colour the whole scheme is made from.</FieldDescription>
+					</FieldContent>
+					<ColourInput id={`${field}-source`} name="source" value={palette.source} onChange={(source) => void set({ source })} />
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-neutral`}>Neutral colour</FieldLabel>
+						<FieldDescription>The tint of the surfaces and the lines.</FieldDescription>
+					</FieldContent>
+					<ColourInput id={`${field}-neutral`} name="neutral" value={palette.neutral} onChange={(neutral) => void set({ neutral })} />
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-neutral-variant`}>Neutral variant colour</FieldLabel>
+						<FieldDescription>The tint of muted text and outlines.</FieldDescription>
+					</FieldContent>
+					<ColourInput id={`${field}-neutral-variant`} name="neutralVariant" value={palette.neutralVariant} onChange={(neutralVariant) => void set({ neutralVariant })} />
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-match`}>Colour match</FieldLabel>
+						<FieldDescription>Stay true to the source colour, at the cost of the neutrals' tint, which turns grey. Off, the scheme below tones the source as it does.</FieldDescription>
+					</FieldContent>
+					<Switch id={`${field}-match`} checked={palette.colorMatch} onCheckedChange={(colorMatch) => void set({ colorMatch })} />
+				</Field>
+				<Field orientation="responsive" data-disabled={palette.colorMatch || undefined}>
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-scheme`}>Scheme</FieldLabel>
+						<FieldDescription>How the source colour is spread over the roles, while colour match is off.</FieldDescription>
+					</FieldContent>
+					<Select items={schemeItems} value={palette.scheme} disabled={palette.colorMatch} onValueChange={(scheme) => scheme && void set({ scheme: scheme as Palette["scheme"] })}>
+						<SelectTrigger id={`${field}-scheme`} className="w-40">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectGroup>
+								{schemeItems.map((item) => (
+									<SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+								))}
+							</SelectGroup>
+						</SelectContent>
+					</Select>
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-contrast`}>Contrast</FieldLabel>
+						<FieldDescription>Less to the left, more to the right, standard in the middle. Now {palette.contrast.toFixed(1)}.</FieldDescription>
+					</FieldContent>
+					<div className="flex w-40 shrink-0">
+						<Slider id={`${field}-contrast`} aria-label="Contrast" min={-1} max={1} step={0.1} value={[palette.contrast]} onValueChange={(v) => void set({ contrast: Math.round((Array.isArray(v) ? v[0] : v) * 10) / 10 })} />
+					</div>
+				</Field>
+				{palette.customColors.map(({ name, hex }) => (
+					<Field key={name} orientation="horizontal">
+						<FieldContent>
+							<FieldLabel htmlFor={`${field}-${name}`}>{CUSTOM_LABELS[name as CustomName].title}</FieldLabel>
+							<FieldDescription>{CUSTOM_LABELS[name as CustomName].about} Not an M3 role: its hue is kept, darker in light and lighter in dark.</FieldDescription>
+						</FieldContent>
+						<ColourInput id={`${field}-${name}`} name={name} value={hex} onChange={(hex) => void set({ customColors: palette.customColors.map((c) => (c.name === name ? { ...c, hex } : c)) })} />
+					</Field>
+				))}
+				<Field orientation="horizontal" data-setting="code-follows-palette">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-code`}>Code follows the palette</FieldLabel>
+						<FieldDescription>Code in dark draws with the scheme's roles, like the rest of the window. Off, it keeps the poimandres theme's own colours. Code in light always follows the palette.</FieldDescription>
+					</FieldContent>
+					<Switch id={`${field}-code`} checked={s.prefs.codeFollowsPalette !== false} onCheckedChange={(on) => void followCode(on)} />
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldTitle>pine's colours</FieldTitle>
+						<FieldDescription>Poimandres' mint on its night blue, toned by M3's tonal spot scheme.</FieldDescription>
+					</FieldContent>
+					<Button variant="outline" size="xs" disabled={!s.prefs.palette} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
+				</Field>
+			</FieldGroup>
+		</FieldSet>
+	);
+}
+
 function AppPage() {
 	const s = useModel(store);
 	const set = async (change: Record<string, unknown>) => {
@@ -1826,6 +1951,7 @@ function AppPage() {
 					</Field>
 				</FieldGroup>
 			</FieldSet>
+			<Colours />
 			<FieldSet>
 				<FieldLegend>pine</FieldLegend>
 				<FieldGroup>
@@ -1916,7 +2042,7 @@ export function Settings() {
 				{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
 				    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
 				<SidebarProvider open className="min-h-0 w-full flex-none @3xl/settings:w-auto">
-					<SidebarRoot collapsible="none" className="w-full border-b border-line-soft bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
+					<SidebarRoot collapsible="none" className="w-full border-b border-surface-container-high bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
 						<SidebarContent>
 							<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x @3xl/settings:*:data-[slot=scroll-area-viewport]:scroll-fade">
 								<SidebarGroup role="navigation" className="py-2 @3xl/settings:py-4">

@@ -1,6 +1,7 @@
 // The app's main process. It owns three things the page must not: the daemon's token, the
 // operating system (windows, menus, dialogs, notifications), and the child that is the daemon
 // when this app had to start one. The page gets a narrow bridge (preload.ts) and nothing else.
+import { builder } from "material-theme-builder";
 import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, session, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
@@ -9,7 +10,9 @@ import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
 import { connect, findPine, type Launch, loginEnv, pineRoot, runPine, type Service, ServiceError } from "./service.ts";
+import { Terminals } from "./terminal.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
+import { cleanPalette, DEFAULT_PALETTE, type Palette } from "../src/theme.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(HERE, "..");
@@ -51,11 +54,15 @@ interface Prefs {
 	updates: boolean;
 	/** `pine` for a terminal was looked after once (see firstCommand): a link the owner removed stays removed. */
 	commandTried: boolean;
+	/** The palette the page's colours are generated from, made safe by cleanPalette. None: pine's default. */
+	palette?: Palette;
+	/** Code in dark draws with roles of the palette (on, the default) or keeps poimandres' own colours (off). */
+	codeFollowsPalette: boolean;
 	bounds?: { x?: number; y?: number; width: number; height: number };
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true, commandTried: false };
+let prefs: Prefs = { keepRunning: false, theme: "system", notify: true, updates: true, commandTried: false, codeFollowsPalette: true };
 
 function loadPrefs(): void {
 	try {
@@ -67,12 +74,30 @@ function loadPrefs(): void {
 			notify: raw.notify !== false,
 			updates: raw.updates !== false,
 			commandTried: raw.commandTried === true,
+			palette: cleanPalette(raw.palette),
+			codeFollowsPalette: raw.codeFollowsPalette !== false,
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
 		};
 	} catch {
 		// first start
 	}
 	nativeTheme.themeSource = prefs.theme;
+}
+
+/**
+ * What the window shows before the page draws: the surface of the owner's palette in the current
+ * appearance (material-theme-builder's root entry, no React). On a Mac the window is transparent,
+ * behind its vibrancy.
+ */
+function windowBackground(): string {
+	if (isMac) return "#00000000";
+	const palette = prefs.palette ?? DEFAULT_PALETTE;
+	return builder(palette.source, palette).toJson().schemes[nativeTheme.shouldUseDarkColors ? "dark" : "light"].surface;
+}
+
+/** Repaints the window's background for the current palette and appearance; a no-op before the window exists. */
+function refreshBackground(): void {
+	if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
 }
 
 function savePrefs(): void {
@@ -99,6 +124,9 @@ let listening: Listening | undefined;
 const send = (channel: string, ...args: unknown[]) => {
 	if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
 };
+
+/** The owner's terminal of each conversation (terminal.ts): their own shell, which ends with the app. */
+const terminals = new Terminals({ data: (id, data) => send("pine:term-data", id, data), exit: (id, code) => send("pine:term-exit", id, code) }, loginEnv, process.env.PINE_DESKTOP_SHELL ? [process.env.PINE_DESKTOP_SHELL] : undefined);
 
 function setState(next: ServiceState): void {
 	state = next;
@@ -188,7 +216,8 @@ function createWindow(): void {
 		titleBarOverlay: isMac,
 		vibrancy: isMac ? "sidebar" : undefined,
 		visualEffectState: "followWindow",
-		backgroundColor: isMac ? "#00000000" : nativeTheme.shouldUseDarkColors ? "#1b1e28" : "#fbfbf9",
+		// So that the window does not flash another colour before the page draws.
+		backgroundColor: windowBackground(),
 		webPreferences: {
 			preload: path.join(HERE, "preload.cjs"),
 			contextIsolation: true,
@@ -343,6 +372,7 @@ function buildMenu(): void {
 				item("Agent", "code-agent", "CmdOrCtrl+Shift+I"),
 				item("Files", "code-files", "CmdOrCtrl+Shift+F"),
 				item("Changes", "code-changes", "CmdOrCtrl+Shift+G"),
+				item("Terminal", "code-terminal", "Ctrl+`"),
 				item("Toggle Browser", "browser", "CmdOrCtrl+Shift+B"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
@@ -394,6 +424,8 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 }
 
 function wire(): void {
+	// "updated" fires both when Settings sets themeSource and when the system's own appearance flips.
+	nativeTheme.on("updated", refreshBackground);
 	handle("pine:state", () => ({ state, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
 	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
 	handle("pine:retry", () => startService());
@@ -425,7 +457,12 @@ function wire(): void {
 		if (typeof change.notify === "boolean") prefs.notify = change.notify;
 		if (typeof change.updates === "boolean") prefs.updates = change.updates;
 		if (typeof change.keepRunning === "boolean") prefs.keepRunning = change.keepRunning;
+		if (typeof change.codeFollowsPalette === "boolean") prefs.codeFollowsPalette = change.codeFollowsPalette;
 		if ("home" in change) prefs.home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
+		// Reset sends none: nothing is stored, and the page draws pine's default.
+		if ("palette" in change) prefs.palette = cleanPalette(change.palette);
+		// A change of theme reaches the window through nativeTheme's "updated" (see wire()).
+		if ("palette" in change) refreshBackground();
 		savePrefs();
 		return { ...prefs, bounds: undefined };
 	});
@@ -486,6 +523,12 @@ function wire(): void {
 		if (cancel) (listening?.cancel(), (listening = undefined));
 		else listening?.stop();
 	});
+	// The owner's terminal beside a conversation. What is written into it comes from the page's
+	// keyboard, or from a code block of an answer that the owner ran with its button.
+	handle("pine:term-open", (id: string, cwd?: string, cols?: number, rows?: number) => terminals.open(String(id), cwd, cols, rows));
+	handle("pine:term-write", (id: string, data: string) => terminals.write(String(id), data));
+	handle("pine:term-resize", (id: string, cols: number, rows: number) => terminals.resize(String(id), cols, rows));
+	handle("pine:term-close", (id: string) => terminals.close(String(id)));
 	handle("pine:context-menu", (items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean }>) => {
 		return new Promise<string | undefined>((resolve) => {
 			let picked: string | undefined;
@@ -559,6 +602,7 @@ else {
 	app.on("before-quit", (e) => {
 		if (quitting) return;
 		savePrefs();
+		terminals.closeAll();
 		if (!service?.started || prefs.keepRunning) return;
 		// The daemon this app started ends with it, as the terminal UI's does: its agents are stopped
 		// and its database closed before the app is gone.

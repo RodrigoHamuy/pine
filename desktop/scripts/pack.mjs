@@ -158,6 +158,12 @@ async function notarise(app) {
 // (Tried a few times: the Finder and the system's index write into a folder that is being looked at.)
 fs.rmSync(out, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
 
+// node-pty's helper has to be executable, which npm leaves undone where install scripts may not run.
+for (const dir of fs.existsSync(path.join(root, "node_modules", "node-pty", "prebuilds")) ? fs.readdirSync(path.join(root, "node_modules", "node-pty", "prebuilds")) : []) {
+	const helper = path.join(root, "node_modules", "node-pty", "prebuilds", dir, "spawn-helper");
+	if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
+}
+
 const targets = flags.has("--dmg") ? ["dmg", "dir"] : ["dir"];
 await packApp({
 	projectDir: root,
@@ -170,7 +176,10 @@ await packApp({
 		// The app has the version of the pine it carries: they are made and handed out together.
 		extraMetadata: { version: pineVersion },
 		// Everything the app runs is in the two built folders: the page and the main process are bundles.
+		// The one exception is node-pty, the terminal's pseudo-terminal (a dependency of the app's,
+		// which the packer adds by itself): native, so it lies outside the archive.
 		files: ["dist/**", "dist-electron/**", "package.json"],
+		asarUnpack: ["node_modules/node-pty/**"],
 		// pine goes in whole, with what it depends on, before the app is signed. (Listed as a resource,
 		// the packer would leave its node_modules out.) With it the Node it runs on and `pine` for a terminal.
 		afterPack: (context) => {
