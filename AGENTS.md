@@ -17,7 +17,7 @@ to change the code.
 | `node src/cli.ts <command>` | The CLI without installing it. |
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
 | `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
-| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page (`desktop/src/*.stories.tsx`), at port 6006; `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`). Add or update a story when you change `desktop/src/ui.tsx`. |
+| `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a part of pine's own has its story in `desktop/src/ui/<Part>.stories.tsx`, a whole view beside its file (`desktop/src/Composer.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`). Add or update a story when you change `desktop/src/ui.tsx`. |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
@@ -121,7 +121,9 @@ desktop/            the desktop app (Electron; a package of its own, not part of
                     page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
                     patterns for the conversation and the input, Streamdown for answers, lucide icons;
                     ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
-                    A stock shadcn component (src/components/ui) is never edited: add and
+                    The stock components are src/components/ui and nothing else: AI Elements' own registry
+                    serves code written on Radix and has none on Base UI, so its patterns are followed on
+                    core components, and that registry is never added. A stock component is never edited: add and
                     update them with the shadcn CLI and components.json; a variant or composition lives elsewhere under
                     src/components/ and wraps the stock one, and only for what stock cannot do. No hand-written stylesheet:
                     utilities on Tailwind's default scale, tokens and one root font-size in src/index.css.
@@ -657,8 +659,10 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   is tested with a stand-in for the helper (`PINE_DESKTOP_VOICE`, for tests only); the `live:`
   test in `desktop/test/voice-live.test.ts` (`PINE_LIVE=1`) puts the real helper behind it,
   listening to a recording. No test shows the app's real window with its title bar: after a
-  change to the frame (`.side-top`, `.titlebar`, the window's options in `main.ts`), look at
-  it once in light and dark.
+  change to the frame (`app-drag` and `app-no-drag` in `src/index.css`, the parts of
+  `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the window's options in
+  `electron/main.ts`: `titleBarStyle`, `trafficLightPosition`, `vibrancy`), look at it once in
+  light and dark.
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).

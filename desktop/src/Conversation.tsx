@@ -648,9 +648,12 @@ function StatusLine({ tab }: { tab: Tab }) {
 function ContextUsage({ tab, percent }: { tab: Tab; percent: number }) {
 	const total = tab.tokens.input + tab.tokens.cached;
 	const speed = speedText(tab.speed);
+	// Nearly full is a warning, about to be compacted is danger.
+	const tone = percent >= 85 ? "bad" : percent >= 65 ? "warn" : undefined;
+	const colour = tone === "bad" ? "text-destructive" : tone === "warn" ? "text-warn" : "text-muted-foreground";
 	return (
 		<HoverCard>
-			<HoverCardTrigger delay={10} closeDelay={100} render={<Button variant="ghost" size="xs" className="tabular-nums" />}>
+			<HoverCardTrigger delay={10} closeDelay={100} data-tone={tone} render={<Button variant="ghost" size="xs" className={`tabular-nums ${colour}`} />}>
 				{total ? `${count(total)} · ` : ""}
 				{Math.round(percent)}%
 			</HoverCardTrigger>

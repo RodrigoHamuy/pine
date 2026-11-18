@@ -432,11 +432,11 @@ desktop/
     lists.tsx      the tree of files and the lists to open a row from, on ui-sdk (shadcn has neither)
     index.css      the only stylesheet: pine's colours (light in `:root`, poimandres in `.dark`),
                    shadcn's tokens set from them, the page's density and a few base rules
-                   (components.json is shadcn's configuration: Base UI, lucide icons, registries)
-  .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
-                   skills-lock.json; .claude/skills links to it for Claude Code)
+                   (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
                    which the Appearance setting decides
+  .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
+                   skills-lock.json; .claude/skills links to it for Claude Code)
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
                    launcher that becomes Resources/bin/pine)
   test/            the app from end to end, driven through its real window; command.test.ts
@@ -464,7 +464,7 @@ holds only tokens and base rules.
 | Piece | What it is for |
 |---|---|
 | shadcn (`src/components/ui/`) | Every control and overlay: buttons, switches, fields, selects, tabs, dialogs, alert dialogs, the command palette, notices (Toast), the combobox, resizable panels, collapsibles, badges, alerts. |
-| shadcn's core chat components (`src/components/ui/`), composed per shadcn's AI Elements patterns | The conversation, composed in `Conversation.tsx`: Message Scroller (the thread), Message, Bubble and Attachment (the turns), Trace (the work of a turn, tool calls, thoughts, sub-tasks, steps), Code Block (what a tool returned), Item (a request waiting for you), Marker (notes, dividers, the goal, the line above the input, the point to take back to), Hover Card and Progress (how full the context is). The input, in `Composer.tsx`, is the Prompt Input pattern: an Input Group with the attached files as Attachments above the text, the goal and dictation as Alerts, and the reasoning and the mode as the Model Selector pattern's Dropdown Menus. The code pane's output (`CodePanel.tsx`) is a Code Block, with the terminal's colours. AI Elements patterns have no registry item: their pages say which core components to add, and pine composes them in its own files. |
+| shadcn's core chat components (`src/components/ui/`), composed per shadcn's AI Elements patterns | The conversation, composed in `Conversation.tsx`: Message Scroller (the thread), Message, Bubble and Attachment (the turns), Trace (the work of a turn, tool calls, thoughts, sub-tasks, steps), Code Block (what a tool returned), Item (a request waiting for you), Marker (notes, dividers, the goal, the line above the input, the point to take back to), Hover Card and Progress (how full the context is). The input, in `Composer.tsx`, is the Prompt Input pattern: an Input Group with the attached files as Attachments above the text, the goal and dictation as Alerts, and the reasoning and the mode as the Model Selector pattern's Dropdown Menus. The code pane's output (`CodePanel.tsx`) is a Code Block, with the terminal's colours. AI Elements' own registry serves code written on Radix and has none on Base UI, so it is never added: its pages say which core components a pattern uses, and pine composes them in its own files. |
 | Streamdown | Answers drawn from markdown, with code coloured by Shiki. `markdown.tsx` replaces three of its defaults (see below). |
 | lucide | Every icon. The pine logo is the one drawing of pine's own (`Logo` in `ui.tsx`). |
 | ui-sdk (`@ui-sdk/react`) | Only what shadcn has no component for: the tree of files and the lists of rows (`src/lists.tsx`). Never a piece shadcn has (no second dialog, button or select). |
@@ -501,9 +501,10 @@ are lucide's. They have no stories of their own. What shadcn has no primitive fo
 of rows to open) is ui-sdk's (`@ui-sdk/react`), in `src/lists.tsx`; ui-sdk is never used for a
 piece shadcn has. pine's own parts (`src/ui.tsx`: the logo, the working dot, an empty view,
 the notices; dialogs; `src/lists.tsx`: the tree and the list) have stories beside
-them (`src/ui/<Component>.stories.tsx`, one file per component, titled by its path), which need
-neither Electron nor a daemon. Story only parts that take everything as props; a part that calls
-`api.ts` or the bridge has no story.
+them (`src/ui/<Part>.stories.tsx`, one file per part, titled by its path), and a whole view
+has its story beside its file (`src/Composer.stories.tsx`, `src/Conversation.stories.tsx`).
+None needs Electron or a daemon. A view that calls `api.ts` or the bridge is drawn on
+stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does nothing.
 
 | Command (in `desktop/`) | What it does |
 |---|---|

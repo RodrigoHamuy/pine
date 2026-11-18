@@ -455,7 +455,9 @@ export function Composer({ tab }: { tab: Tab }) {
 							</Hint>
 						) : (
 							<Hint label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} keys="↩">
-								<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full" disabled={!text.trim()}><ArrowUpIcon /></InputGroupButton>
+								{/* Said as disabled, not disabled: a disabled button inside an InputGroup dims the whole
+								    composer (`has-disabled:`). With nothing to send, `send` does nothing. */}
+								<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" aria-disabled={!text.trim() || undefined}><ArrowUpIcon /></InputGroupButton>
 							</Hint>
 						)}
 					</InputGroupAddon>
