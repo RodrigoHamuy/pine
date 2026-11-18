@@ -14,3 +14,8 @@ export const ApprovalDialog: Story = { args: approval };
 export const ApprovalDialogWithSecret: Story = {
 	args: { req: { id: "a2", agent: "main", task: 13, tool: "add_source", summary: "telegram source: chat with you", why: "it needs a token.", expires: 0, inputs: [{ name: "TELEGRAM_TOKEN", label: "TELEGRAM_TOKEN: the bot's token from @BotFather" }] } },
 };
+
+/** A long line with nowhere to break, such as a sign-in address, wraps inside the dialog and does not widen it. */
+export const ApprovalDialogLongLine: Story = {
+	args: { req: { ...approval.req!, id: "a3", summary: "curl https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A53692%2Fcallback&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference", why: "it opens https://claude.ai/oauth/authorize?code=true&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A53692%2Fcallback&state=wNksy2qMnpoNppegVo6Vhs9bq4axuelqcQci2zHAN9s." } },
+};

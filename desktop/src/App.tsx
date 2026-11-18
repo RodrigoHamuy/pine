@@ -449,7 +449,7 @@ function Help({ close }: { close: () => void }) {
 				<DialogHeader>
 					<DialogTitle>Keys and commands</DialogTitle>
 				</DialogHeader>
-				<ScrollArea className="-mx-4 max-h-(--dialog-scroll) flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<ScrollArea className="-mx-4 max-h-(--dialog-scroll) min-w-0 wrap-break-word flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
 				<div className="flex flex-col gap-1.5 px-4 text-xs select-text">
 					{keys.map(([k, about]) => (
 						<Field key={k} orientation="horizontal" className="items-baseline">
