@@ -117,14 +117,16 @@ export function followEvents(daemon: Daemon, signal: AbortSignal, on: EventHandl
 /**
  * The page's content security policy. `media` are the sources pictures, video and sound come from
  * besides the page's own origin (the app's scheme for them by default); `connect` adds to where the
- * page may connect (a development server's socket for reloading).
+ * page may connect (a development server's socket for reloading); `script` adds to where scripts
+ * come from (the nonce of the scripts a development server writes into the page).
  */
-export function pageCsp(opts: { media?: string[]; connect?: string[] } = {}): string {
+export function pageCsp(opts: { media?: string[]; connect?: string[]; script?: string[] } = {}): string {
 	const media = (opts.media ?? ["pine-media:"]).map((s) => ` ${s}`).join("");
 	const connect = (opts.connect ?? []).map((s) => ` ${s}`).join("");
+	const script = (opts.script ?? []).map((s) => ` ${s}`).join("");
 	return [
 		"default-src 'none'",
-		"script-src 'self'",
+		`script-src 'self'${script}`,
 		// The editor writes its styles into the page as it goes.
 		"style-src 'self' 'unsafe-inline'",
 		// No address on the web: a picture an answer points at is fetched by the daemon, on a click.

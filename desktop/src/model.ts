@@ -7,7 +7,7 @@
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "@/components/ui/toast";
-import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
+import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, media, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 
@@ -759,7 +759,7 @@ export class Store extends Model {
 		if (t.kind === "event" && t.meta?.label) tab.add({ t: "event", label: t.meta.label, body: eventBody(t.prompt) });
 		else if (isGoalRound(t.kind, t.meta?.label)) tab.note(`↻ ${t.meta.label}`);
 		else tab.add({ t: "user", text: t.prompt, from: t.kind === "prompt" ? undefined : t.kind, task: t.kind === "prompt" && t.meta?.trust === "owner" && t.meta?.steered === undefined ? t.id : undefined });
-		(t.meta?.images ?? []).forEach((_, i) => tab.add({ t: "media", kind: "image", name: `attached picture ${i + 1}`, url: `pine-media://daemon/tasks/${t.id}/images/${i}` }));
+		(t.meta?.images ?? []).forEach((_, i) => tab.add({ t: "media", kind: "image", name: `attached picture ${i + 1}`, url: media.task(t.id, i) }));
 		// It was read by work that was already running; the answer is that work's.
 		if (t.meta?.steered !== undefined) return;
 		if (t.status === "done") {
@@ -1604,7 +1604,7 @@ export class Store extends Model {
 				// A round of a goal was announced by the goal's own line; its text is the same every round.
 				else if (!isGoalRound(p.kind, p.label)) tab.add({ t: "user", text: String(p.prompt ?? ""), from: p.kind === "prompt" ? "elsewhere" : p.kind });
 				// What came with it and was not typed here: a photo sent on Telegram, a picture a camera saved.
-				for (let n = 0; n < Number(p.images ?? 0); n++) tab.add({ t: "media", kind: "image", name: `picture ${n + 1}`, url: `pine-media://daemon/tasks/${p.task}/images/${n}` });
+				for (let n = 0; n < Number(p.images ?? 0); n++) tab.add({ t: "media", kind: "image", name: `picture ${n + 1}`, url: media.task(p.task, n) });
 			}
 			tab.roots.add(p.task);
 			tab.running.add(p.task);
@@ -1832,7 +1832,7 @@ export class Store extends Model {
 					if (images.length) {
 						// A picture a tool returned is for the owner: it stands where it happened, not folded away.
 						this.endWork(tab);
-						for (const id of images) tab.add({ t: "media", kind: "image", name: `from ${p.tool}`, url: `pine-media://daemon/media/tool/${encodeURIComponent(id)}` });
+						for (const id of images) tab.add({ t: "media", kind: "image", name: `from ${p.tool}`, url: media.tool(id) });
 					}
 					tab.codeTick++;
 				}

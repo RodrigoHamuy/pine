@@ -90,4 +90,5 @@ test("the page's CSP loads nothing from the web, and names the media source it i
 	assert.match(dev, /media-src 'self' blob:;/);
 	assert.match(dev, /connect-src 'self' ws:\/\/localhost:5173/);
 	assert.doesNotMatch(dev, /pine-media:/);
+	assert.match(pageCsp({ script: ["'nonce-abc'"] }), /script-src 'self' 'nonce-abc';/);
 });

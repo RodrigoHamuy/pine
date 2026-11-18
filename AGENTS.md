@@ -489,6 +489,13 @@ These are invariants. A change that breaks one needs a test that shows why it is
    its cleaning rules (`CLEAN`), its link component and its image component. On every upgrade
    of Streamdown read its defaults again and run `npm run desktop:test`.
    `desktop/test/app.test.ts` has a test for it; keep it failing without each of the three.
+   The page in an ordinary browser (`npm run dev:preview` in `desktop/`, a development tool and
+   no part of the app) is held to the same: Vite's server (`desktop/scripts/preview.ts`) stands
+   where `main.ts` stands, holds the token and makes every call through the same module
+   (`desktop/electron/daemon.ts`), only for a POST of JSON from the page's own loopback origin,
+   and sends the same policy. The page's stand-in for the bridge (`desktop/src/preview-bridge.ts`)
+   exists only in that dev mode and in no build; `desktop/test/preview.test.ts` fails without
+   the check of the origin and the content type, and when the stand-in reaches a build.
 11. **Only the owner opens a folder for a conversation, and looking at one runs nothing.**
    `setFolder` in `src/agents.ts` is reached from the control API only; there is no tool for it.
    It refuses pine's home, pine's code and other agents' workspaces in either direction, and a

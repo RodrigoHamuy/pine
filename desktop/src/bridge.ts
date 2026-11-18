@@ -5,6 +5,8 @@ declare global {
 	interface Window {
 		pine: Bridge;
 	}
+	/** Set by `npm run dev:preview` only (vite.config.ts): the page runs in an ordinary browser, with src/preview-bridge.ts. */
+	const __PINE_PREVIEW__: boolean;
 }
 
 export type ServiceState = { status: "starting" } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string } | { status: "error"; kind: "no-home" | "no-node" | "no-pine" | "failed"; message: string };
@@ -20,3 +22,6 @@ export interface Prefs {
 export type { Update } from "../electron/updates.ts";
 
 export const bridge = window.pine;
+
+/** Where the daemon's pictures, video and sound are fetched from: the app's scheme, or in the preview its server's path. */
+export const MEDIA_BASE = import.meta.env.DEV && __PINE_PREVIEW__ ? "/__pine/media" : "pine-media://daemon";

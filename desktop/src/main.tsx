@@ -1,3 +1,6 @@
+// First: in the preview (`npm run dev:preview`) the page's stand-in for the bridge, which
+// bridge.ts reads when it is first evaluated. Nothing anywhere else.
+import "./preview-bridge.ts";
 import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import "./index.css";
