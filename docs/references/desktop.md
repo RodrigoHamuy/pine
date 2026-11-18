@@ -564,9 +564,9 @@ desktop/
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
                    which are ui-sdk's, used directly (shadcn has neither); and the chosen line of
                    a palette's list, named to screen readers (`useNamedLine`)
-    index.css      the only stylesheet: pine's colour names as aliases of the M3 roles, where pine
-                   departs from material-theme-builder's mapping of shadcn's tokens, the code colours
-                   (poimandres in `.dark`), the page's density and a few base rules
+    index.css      the only stylesheet: pine's mapping of shadcn's tokens to M3 roles on top of
+                   material-theme-builder's, the code colours (M3 roles in light, poimandres in
+                   `.dark`), the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
                    which the Appearance setting decides; pine's palette (`DEFAULT_PALETTE`), which
@@ -637,21 +637,24 @@ holds only tokens and base rules.
   dark) into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`. Colour match is off
   because with it the package uses M3's content variant, as Google's Material Theme Builder does, and
   that variant divides a neutral's chroma by 8: the night blue would come out grey.
-  shadcn's tokens come from the package's `shadcn.css`; pine's own names (`--brand`, `--text-muted`,
-  `--warn`, `--hover`...) are aliases of M3 roles in `index.css`, and a role of the scheme, never a
-  literal colour, is what a new one points at. The soft backgrounds (`--brand-soft`, `--add-bg`,
-  `--warn-soft`, `--bad-soft`, `--del-bg`) are their role at 12% over what is below, like the
-  selection. In dark pine's surfaces sit one step above M3's: `--bg` is surface container low, a card
-  and the composer surface container, what is raised and the lines surface container high, what is
-  sunk the surface. In light the lines are surface container highest and muted text is the outline.
-  Four places depart from `shadcn.css`, after it and with
-  its doubled selectors: the focus ring is the outline (grey, never the primary), the side bar is
-  translucent, hover and press (`--accent`) are state layers of the text colour over the surface,
+  pine has no colour names of its own. A component uses shadcn's token where one means the same
+  (`text-foreground`, `text-muted-foreground`, `bg-muted`, `border-border`, `bg-primary`,
+  `text-destructive`, `bg-accent`...), and otherwise an M3 role through the package's Tailwind plugin
+  (`material-theme-builder/tailwind`: `text-outline` for faint text, `bg-surface-container-high`,
+  `border-surface-container-high` for a soft line, `text-warn`, `text-info`, `text-plan`); where a
+  name is both, shadcn's wins. A tint or a state layer is a role with Tailwind's opacity modifier:
+  `bg-primary/12` for a soft background, `bg-on-surface/8` for hover and `bg-on-surface/12` for press.
+  A role of the scheme, never a literal colour, is what a new colour points at.
+  shadcn's tokens come from the package's `shadcn.css`, and pine overrides them in `index.css`, after
+  it and with its doubled selectors. That mapping is pine's own reading of the bridge between shadcn
+  and M3, chosen token by token as the role closest to how the app looked before M3, not the
+  package's: popovers are surface container low, secondary surface container high with the text
+  colour on it, muted surface container, the border, the side bar's border and inputs surface
+  container highest, the charts the primary, info, plan, warn and error. The focus ring is the
+  outline (grey, never the primary), the side bar is surface container low made translucent, hover
+  and press (`--accent`, `--sidebar-accent`) are state layers of the text colour over the surface,
   and the side bar's text is muted. The only literal colours left are the shadows and the
-  poimandres `--p-*` values, which colour code in dark. Pine's names are utilities too
-  (`text-warn`, `bg-brand-soft`, `text-faint`...), and the Tailwind plugin
-  (`material-theme-builder/tailwind`) adds every M3 role (`bg-surface-container-low`,
-  `text-on-primary`, `bg-warn-container`); where a name is both, pine's and shadcn's win.
+  poimandres `--p-*` values, which colour code in dark; in light the code colours are M3 roles.
 - The owner's palette (Settings > App > Colours) is an app preference, kept by the main process in
   `prefs.json` in the app's data folder (`palette`, beside `theme`) and set through the same `prefs`
   call. The main process checks each field when it is set and when it is read (`cleanPalette`: a
@@ -689,7 +692,7 @@ piece shadcn has. The two meet in the side bar: each agent's list is a ui-sdk li
 stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the list's
 option, so the rows look like the side bar's and the arrow keys move between them.
 The side bar's colours are the `--sidebar*` tokens in `index.css`, set from M3 roles: rows are
-muted, the one in front pressed, and its background is left to the window behind it (the system's
+muted (on surface variant), the one in front pressed (the text colour at 12%), and its background is left to the window behind it (the system's
 material on a Mac). A story sits beside the file of what it shows: `src/<File>.stories.tsx`
 for a file of `src/`, `src/components/<name>.stories.tsx` for a composition there (titled
 `Components/<Name>`: `Components/Logo`, `Components/EmptyView`). One story per part and state,

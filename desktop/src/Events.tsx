@@ -55,14 +55,14 @@ export function Events({ tab }: { tab: Tab }) {
 	};
 	return (
 		<div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
-			<div className="flex flex-none flex-wrap items-center gap-2 border-b border-line-soft px-4 py-2.5">
+			<div className="flex flex-none flex-wrap items-center gap-2 border-b border-surface-container-high px-4 py-2.5">
 				<InputGroup className="max-w-90">
 					<InputGroupAddon>
 						<SearchIcon />
 					</InputGroupAddon>
 					<InputGroupInput aria-label="Filter the events" placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
 				</InputGroup>
-				<span className="whitespace-nowrap text-faint">{shown.length} shown · text deltas are left out</span>
+				<span className="whitespace-nowrap text-outline">{shown.length} shown · text deltas are left out</span>
 				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
 				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>
@@ -79,8 +79,8 @@ export function Events({ tab }: { tab: Tab }) {
 				{shown.length ? (
 					shown.map((e, i) => (
 						<Collapsible key={`${e.id}:${e.ts}:${i}`} open={open === i} onOpenChange={(now) => setOpen(now ? i : undefined)}>
-							<CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-0.5 text-start whitespace-nowrap hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60 data-panel-open:bg-hover">
-								<span className="flex-none text-faint">{new Date(e.ts).toLocaleTimeString("sv-SE")}</span>
+							<CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-0.5 text-start whitespace-nowrap hover:bg-accent focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60 data-panel-open:bg-accent">
+								<span className="flex-none text-outline">{new Date(e.ts).toLocaleTimeString("sv-SE")}</span>
 								<Badge variant={e.trust === "owner" ? "default" : "outline"} className="w-14">{e.trust === "owner" ? "owner" : "other"}</Badge>
 								<span className="flex-none font-semibold">{e.topic}</span>
 								<span className="truncate text-muted-foreground">{short(JSON.stringify(e.payload ?? null), 220)}</span>

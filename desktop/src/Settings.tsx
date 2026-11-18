@@ -2031,7 +2031,7 @@ export function Settings() {
 				{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
 				    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
 				<SidebarProvider open className="min-h-0 w-full flex-none @3xl/settings:w-auto">
-					<SidebarRoot collapsible="none" className="w-full border-b border-line-soft bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
+					<SidebarRoot collapsible="none" className="w-full border-b border-surface-container-high bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
 						<SidebarContent>
 							<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x @3xl/settings:*:data-[slot=scroll-area-viewport]:scroll-fade">
 								<SidebarGroup role="navigation" className="py-2 @3xl/settings:py-4">

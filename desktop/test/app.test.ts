@@ -1148,17 +1148,17 @@ test("every colour is a role of the M3 scheme of pine's palette, in light and in
 			const scheme = SCHEMES[look];
 			// <Mtb> wrote the scheme into the page...
 			assert.equal(await resolved("var(--md-sys-color-surface)"), rgb(scheme.surface), `${look}: the M3 surface is in the page`);
-			// ...and shadcn's tokens and pine's names point at its roles.
+			// ...and shadcn's tokens point at its roles.
 			assert.equal(await resolved("var(--background)"), rgb(scheme.surface), `${look}: shadcn's background is the surface`);
 			assert.equal(await resolved("var(--primary)"), rgb(scheme.primary), `${look}: shadcn's primary is the primary`);
-			assert.equal(await resolved("var(--brand)"), rgb(scheme.primary), `${look}: pine's brand is the primary`);
-			assert.equal(await resolved("var(--bad)"), rgb(scheme.error), `${look}: pine's bad is the error`);
-			// pine's page is a step above M3's surface in dark.
-			assert.equal(await resolved("var(--bg)"), rgb(look === "dark" ? scheme.surfaceContainerLow : scheme.surface), `${look}: pine's bg`);
-			// The soft backgrounds are their role as a light tint over what is below, not an opaque container.
-			for (const soft of ["--brand-soft", "--add-bg", "--warn-soft", "--bad-soft", "--del-bg"]) {
-				const colour = await resolved(`var(${soft})`);
-				assert.ok(Math.abs(alphaOf(colour) - 0.12) < 0.01, `${look}: ${soft} is its role at 12%, not ${colour}`);
+			assert.equal(await resolved("var(--destructive)"), rgb(scheme.error), `${look}: shadcn's destructive is the error`);
+			// pine's own mapping on top of the package's: the line is the highest container, a popover sits just above the page.
+			assert.equal(await resolved("var(--border)"), rgb(scheme.surfaceContainerHighest), `${look}: the border is surface container highest`);
+			assert.equal(await resolved("var(--popover)"), rgb(scheme.surfaceContainerLow), `${look}: a popover is surface container low`);
+			// Hover and press are state layers over what is below, not an opaque colour.
+			for (const [token, alpha] of [["--accent", 0.08], ["--sidebar-accent", 0.12]] as const) {
+				const colour = await resolved(`var(${token})`);
+				assert.ok(Math.abs(alphaOf(colour) - alpha) < 0.01, `${look}: ${token} is the text colour at ${alpha * 100}%, not ${colour}`);
 			}
 			// What has the keyboard is grey, never the primary.
 			assert.equal(await resolved("var(--ring)"), rgb(scheme.outline), `${look}: the focus ring is the outline`);

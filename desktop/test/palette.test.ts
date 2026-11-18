@@ -95,7 +95,7 @@ after(async () => {
 test("a malformed stored palette opens the app with the default for each field that is wrong", async () => {
 	// The good field is kept, every wrong one is pine's default: the scheme is the one of the default palette with that source.
 	await primaryIs({ ...DEFAULT_PALETTE, source: SOURCE });
-	assert.equal(await resolved("var(--surface)"), rgb(schemeOf({ ...DEFAULT_PALETTE, source: SOURCE }).light.surfaceContainerLowest));
+	assert.equal(await resolved("var(--md-sys-color-surface-container-lowest)"), rgb(schemeOf({ ...DEFAULT_PALETTE, source: SOURCE }).light.surfaceContainerLowest));
 	// The outline is made from the neutral variant: the default one, since "grey" is not a colour.
 	await outlineIs({ ...DEFAULT_PALETTE, source: SOURCE });
 	// A custom colour of another name is not in the page; warn is there, and is the default one (checked against Reset below).

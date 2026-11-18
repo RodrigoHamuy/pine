@@ -17,7 +17,7 @@ export function followAppearance(root: HTMLElement = document.documentElement): 
 /**
  * What the page's colours are generated from: a Material 3 scheme that `<Mtb>` (material-theme-builder)
  * writes into the page as `--md-sys-color-*`, light on `:root` and dark on `.dark`. index.css points
- * shadcn's tokens and pine's own colour names at roles of that scheme.
+ * shadcn's tokens at roles of that scheme, and components use the roles as utilities for the rest.
  */
 export type Palette = Required<Pick<MtbConfig, "source" | "neutral" | "neutralVariant" | "colorMatch" | "scheme" | "contrast" | "customColors">>;
 
@@ -29,7 +29,7 @@ export type Palette = Required<Pick<MtbConfig, "source" | "neutral" | "neutralVa
  * into a plain grey. Tonal spot keeps the neutrals' tint. Warnings, info and keywords in code (`plan`) have
  * no role in M3: they are custom colours that keep their hue (`blend: false`) so that they do not drift
  * towards the mint, while their tone follows the look (darker in light, lighter in dark). Their names are
- * fixed: index.css aliases `--md-sys-color-warn` and the others.
+ * fixed: components use them as `text-warn`, `text-info`, `text-plan`, and index.css reads `--md-sys-color-warn` and the others.
  */
 export const DEFAULT_PALETTE = {
 	source: "#5de4c7",
