@@ -477,6 +477,78 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await shot("05-editor");
 });
 
+/** The composer's field, and the suggestion it marks active, as a screen reader hears them. */
+const composerState = () =>
+	page.evaluate(() => {
+		const field = document.querySelector(".composer textarea") as HTMLTextAreaElement;
+		const id = field.getAttribute("aria-activedescendant");
+		const option = id ? document.getElementById(id) : null;
+		return { focused: document.activeElement === field, value: field.value, controls: Boolean(field.getAttribute("aria-controls")), option: option?.getAttribute("role"), text: option?.textContent ?? "" };
+	});
+const suggestion = "[role=listbox] [role=option][data-slot=combobox-item]";
+
+test("a command is picked from the composer's suggestions with the arrows and Enter, and the input keeps focus", async () => {
+	const area = ".composer textarea";
+	await page.fill(area, "");
+	await page.focus(area);
+	await page.keyboard.type("/");
+	await sees(suggestion);
+	const names = await page.$$eval(`${suggestion} [data-part=label]`, (els: Element[]) => els.map((e) => e.textContent ?? ""));
+	assert.ok(names.length > 2, JSON.stringify(names));
+	// Arrows move the highlight, announced on the field, and focus stays in it.
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowDown");
+	await page.keyboard.press("ArrowUp");
+	let at = await composerState();
+	assert.deepEqual([at.focused, at.controls, at.option], [true, true, "option"], JSON.stringify(at));
+	assert.equal(at.text.split(" ")[0], names[1].split(" ")[0]);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector(suggestion, { state: "detached" });
+	at = await composerState();
+	assert.equal(at.value, `${names[1].split(" ")[0]} `);
+	assert.equal(at.focused, true);
+	// Escape dismisses the list and keeps the text.
+	await page.fill(area, "");
+	await page.keyboard.type("/");
+	await sees(suggestion);
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(suggestion, { state: "detached" });
+	assert.equal((await composerState()).value, "/");
+	// A command typed out whole is run by Enter, not picked again.
+	await page.fill(area, "");
+	await page.keyboard.type("/copy");
+	await sees(suggestion);
+	await page.keyboard.press("Enter");
+	await page.waitForSelector(suggestion, { state: "detached" });
+	assert.equal((await composerState()).value, "");
+});
+
+test("a file of the conversation's folder is mentioned with @, picked from the suggestions", async () => {
+	const area = ".composer textarea";
+	await page.fill(area, "");
+	await page.focus(area);
+	await page.keyboard.type("look at @indx");
+	await sees(`${suggestion} >> text=src/index.ts`);
+	// Escape closes the list and keeps the text; typing on brings it back, and a click picks.
+	await page.keyboard.press("Escape");
+	await page.waitForSelector(suggestion, { state: "detached" });
+	assert.equal((await composerState()).value, "look at @indx");
+	await page.keyboard.type(".");
+	await sees(`${suggestion} >> text=src/index.ts`);
+	await page.click(`${suggestion} >> text=src/index.ts`);
+	await page.waitForSelector(suggestion, { state: "detached" });
+	let at = await composerState();
+	assert.deepEqual([at.value, at.focused], ["look at @src/index.ts ", true], JSON.stringify(at));
+	// Tab picks the highlighted one too.
+	await page.keyboard.type("and @indx");
+	await sees(`${suggestion} >> text=src/index.ts`);
+	await page.keyboard.press("Tab");
+	await page.waitForSelector(suggestion, { state: "detached" });
+	at = await composerState();
+	assert.deepEqual([at.value, at.focused], ["look at @src/index.ts and @src/index.ts ", true], JSON.stringify(at));
+	await page.fill(area, "");
+});
+
 test("settings: a setting is changed, an agent made, a schedule added, a provider signed in to, a skill and a source added", async () => {
 	await menu("settings");
 	await sees(".set-in h1 >> text=General");

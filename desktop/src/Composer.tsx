@@ -1,8 +1,11 @@
 // Where the owner writes: the message, the files that go with it, and under it what the
 // conversation runs on (folder, model, reasoning, mode), each a click away.
-import { ArrowUpIcon, ClockIcon, CpuIcon, EyeIcon, FileIcon, FolderIcon, MicIcon, PlusIcon, ShieldIcon, SparkleIcon, SquareIcon, XIcon } from "lucide-react";
+import { Combobox as ComboboxPrimitive } from "@base-ui/react";
+import { ArrowUpIcon, ClockIcon, CpuIcon, EyeIcon, FileIcon, FolderIcon, MicIcon, PlusIcon, ShieldIcon, SparkleIcon, XIcon } from "lucide-react";
+import { PromptInput, PromptInputBody, PromptInputButton, PromptInputFooter, PromptInputHeader, PromptInputSubmit, PromptInputTextarea, PromptInputTools } from "@/components/ai-elements/prompt-input";
 import { Button } from "@/components/ui/button";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Combobox, ComboboxContent, ComboboxItem, ComboboxList } from "@/components/ui/combobox";
+import { useEffect, useRef, useState } from "react";
 import { api } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
@@ -42,6 +45,11 @@ interface Suggestion {
 	about?: string;
 }
 
+/** A key event that went through Base UI: `preventBaseUIHandler` keeps the combobox's own handling out of it. */
+type ListKeyEvent = React.KeyboardEvent<HTMLTextAreaElement> & { preventBaseUIHandler: () => void };
+
+const TONE: Record<string, string> = { good: "text-primary", warn: "text-warn", bad: "text-destructive", plan: "text-plan" };
+
 export function Composer({ tab }: { tab: Tab }) {
 	useModel(tab);
 	useModel(store);
@@ -49,7 +57,7 @@ export function Composer({ tab }: { tab: Tab }) {
 	const picker = useRef<HTMLInputElement>(null);
 	const [over, setOver] = useState(false);
 	const [items, setItems] = useState<Suggestion[]>([]);
-	const [at, setAt] = useState(0);
+	const highlighted = useRef<Suggestion | undefined>(undefined);
 	const [kind, setKind] = useState<"slash" | "file" | undefined>();
 	const recall = useRef(-1);
 	// Dictating: what is heard is put after what was typed, and is text in the input and nothing
@@ -66,12 +74,10 @@ export function Composer({ tab }: { tab: Tab }) {
 		tab.touch();
 	};
 
-	useLayoutEffect(() => {
-		const el = area.current;
-		if (!el) return;
-		el.style.height = "auto";
-		el.style.height = `${Math.min(el.scrollHeight, window.innerHeight * 0.4)}px`;
-	}, [text, tab.id]);
+	const close = () => {
+		setItems([]);
+		setKind(undefined);
+	};
 
 	useEffect(() => {
 		area.current?.focus();
@@ -134,7 +140,6 @@ export function Composer({ tab }: { tab: Tab }) {
 		if (/^\/[a-z]*$/i.test(before)) {
 			const word = before.slice(1).toLowerCase();
 			setKind("slash");
-			setAt(0);
 			return setItems(COMMANDS.filter((c) => c.name.startsWith(word)).map((c) => ({ value: c.name, label: `/${c.name}${c.hint ? ` ${c.hint}` : ""}`, about: c.about })));
 		}
 		const mention = /(?:^|\s)@([^\s@]*)$/.exec(before);
@@ -144,11 +149,9 @@ export function Composer({ tab }: { tab: Tab }) {
 			if (area.current && area.current.value.slice(0, area.current.selectionStart) !== before) return;
 			for (const f of found.files) tab.files.add(f);
 			setKind("file");
-			setAt(0);
 			return setItems(found.files.slice(0, 12).map((f) => ({ value: f, label: f })));
 		}
-		setKind(undefined);
-		setItems([]);
+		close();
 	};
 
 	const take = (s: Suggestion) => {
@@ -158,8 +161,7 @@ export function Composer({ tab }: { tab: Tab }) {
 		const next = kind === "slash" ? `/${s.value} ` : `${before.replace(/@([^\s@]*)$/, `@${s.value} `)}`;
 		const whole = kind === "slash" ? next : next + text.slice(cursor);
 		set(whole);
-		setItems([]);
-		setKind(undefined);
+		close();
 		requestAnimationFrame(() => {
 			el.focus();
 			const pos = kind === "slash" ? whole.length : next.length;
@@ -171,7 +173,7 @@ export function Composer({ tab }: { tab: Tab }) {
 		const value = text.trim();
 		if (!value) return;
 		recall.current = -1;
-		setItems([]);
+		close();
 		if (value.startsWith("/") && !value.startsWith("//")) {
 			tab.inputs.push(value);
 			set("");
@@ -180,27 +182,27 @@ export function Composer({ tab }: { tab: Tab }) {
 		await store.submit(tab, value, whenBusy);
 	};
 
-	const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+	const onKey = (e: ListKeyEvent) => {
 		if (e.nativeEvent.isComposing) return;
 		if (voice !== "off") {
 			// Enter says "that was all" and sends nothing; escape throws away what was heard.
-			if (e.key === "Enter") return (e.preventDefault(), endVoice(false));
-			if (e.key === "Escape") return (e.preventDefault(), endVoice(true), set(typed.current));
+			if (e.key === "Enter") return (e.preventBaseUIHandler(), e.preventDefault(), endVoice(false));
+			if (e.key === "Escape") return (e.preventBaseUIHandler(), e.preventDefault(), endVoice(true), set(typed.current));
 		}
-		if (items.length) {
-			if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+		// While suggestions show, the arrows, Enter and Escape are the combobox's: they move the
+		// highlight, pick it (`take`) and close the list. Everything else is the composer's.
+		const s = highlighted.current;
+		if (items.length && s && !e.altKey) {
+			if (e.key === "Tab" && !e.shiftKey) {
+				e.preventBaseUIHandler();
 				e.preventDefault();
-				return setAt((at + (e.key === "ArrowDown" ? 1 : items.length - 1)) % items.length);
+				return take(s);
 			}
-			if (e.key === "Tab" || (e.key === "Enter" && !e.shiftKey && (kind === "file" || items[at].value !== text.slice(1).trim()))) {
-				e.preventDefault();
-				return take(items[at]);
-			}
-			if (e.key === "Escape") {
-				e.preventDefault();
-				return setItems([]);
-			}
+			// A command typed out whole is run, not picked again.
+			const whole = e.key === "Enter" && !e.shiftKey && kind === "slash" && s.value === text.slice(1).trim();
+			if (!whole && (e.key === "ArrowDown" || e.key === "ArrowUp" || e.key === "Escape" || (e.key === "Enter" && !e.shiftKey))) return;
 		}
+		e.preventBaseUIHandler();
 		if (e.key === "Enter" && !e.shiftKey) {
 			e.preventDefault();
 			return void send(e.altKey ? "queue" : "steer");
@@ -263,24 +265,19 @@ export function Composer({ tab }: { tab: Tab }) {
 					<button type="button" className="open-link" onClick={() => void store.setGoal(tab, "clear")}>Clear</button>
 				</div>
 			) : null}
-			{items.length ? (
-				<div className="suggest">
-					{items.map((s, i) => (
-						<div key={s.value} className={`pick-item${i === at ? " on" : ""}`} onMouseMove={() => at !== i && setAt(i)} onMouseDown={(e) => (e.preventDefault(), take(s))}>
-							<span className="label mono">{s.label}</span>
-							{s.about ? <span className="about">{s.about}</span> : null}
-						</div>
-					))}
-				</div>
-			) : null}
 			{voice !== "off" ? (
 				<div className="banner">
 					<span className="dot bad" />
 					<span className="grow">{voice === "starting" ? "getting ready to listen…" : "listening · speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</span>
 				</div>
 			) : null}
-			<div
-				className={`composer${over ? " over" : ""}`}
+			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the
+			    daemon), so the Prompt Input keeps none of its own: maxFiles 0. */}
+			<PromptInput
+				className="composer [&_[data-slot=input-group]]:rounded-xl [&_[data-slot=input-group]]:bg-(--composer)! [&[data-over]_[data-slot=input-group]]:border-dashed [&[data-over]_[data-slot=input-group]]:border-primary [&[data-over]_[data-slot=input-group]]:bg-brand-soft!"
+				data-over={over || undefined}
+				maxFiles={0}
+				onSubmit={() => void send("steer")}
 				onDragOver={(e) => {
 					if (![...e.dataTransfer.types].includes("Files")) return;
 					e.preventDefault();
@@ -290,7 +287,7 @@ export function Composer({ tab }: { tab: Tab }) {
 				onDrop={(e) => void onDrop(e)}
 			>
 				{tab.attachments.length ? (
-					<div className="attachments">
+					<PromptInputHeader>
 						{tab.attachments.map((f, i) => (
 							<span className="attachment" key={`${f.name}:${i}`}>
 								{f.preview ? <img src={f.preview} alt="" /> : <FileIcon size={13} />}
@@ -299,58 +296,88 @@ export function Composer({ tab }: { tab: Tab }) {
 								<Button variant="ghost" size="icon-xs" title="Remove" onClick={() => (tab.attachments.splice(i, 1), tab.touch())}><XIcon /></Button>
 							</span>
 						))}
-					</div>
+					</PromptInputHeader>
 				) : null}
-				<textarea
-					ref={area}
-					rows={1}
-					value={text}
-					placeholder={tab.busy ? `Say something to ${tab.agent} while it works…` : `Message ${tab.agent} · / for commands · @ for files`}
-					onChange={(e) => {
-						// A key that types ends the listening: what was heard stays, and nothing more is put into the input.
-						if (voice !== "off") endVoice(true);
-						recall.current = -1;
-						set(e.target.value);
-						void suggest(e.target.value, e.target.selectionStart);
-					}}
-					onKeyDown={onKey}
-					onPaste={(e) => {
-						const files = [...e.clipboardData.files];
-						if (!files.length) return;
-						e.preventDefault();
-						void attach(tab, files);
-					}}
-					onBlur={() => window.setTimeout(() => setItems([]), 120)}
-				/>
-				<div className="composer-bar">
-					<button type="button" className="chip plus-btn" title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><PlusIcon size={15} /></button>
-					<button type="button" className="chip gives model" title={`Model: ${info?.model ?? "none"}`} onClick={() => void store.pickModel(tab)}>
-						<CpuIcon size={13} />
-						<span className="cut">{info?.model?.split("/").pop() ?? "model"}</span>
-					</button>
-					<button type="button" className="chip thinks" title={`How much the model thinks before it answers: ${info?.thinking ?? "off"}`} onClick={() => void store.pickReasoning(tab)}>
-						<SparkleIcon size={13} />
-						<span>{info?.thinking ?? "off"}</span>
-					</button>
-					<button type="button" className={`chip ${modeTone}`} title="How much this agent does without asking" onClick={() => void store.pickMode(tab)}>
-						<ShieldIcon size={13} />
-						<span>{mode}{paused ? " (paused)" : ""}</span>
-					</button>
-					<button type="button" className="chip gives" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
-						<FolderIcon size={13} />
-						<span className="cut">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
-					</button>
-					{tainted ? <span className="chip warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><EyeIcon size={13} /><span className="label">outside content</span></span> : null}
-					<span className="grow" />
-					{store.platform === "darwin" ? <button type="button" className={`chip${voice !== "off" ? " bad" : ""}`} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><MicIcon size={14} /></button> : null}
-					{tab.busy && !text.trim() ? (
-						<button type="button" className="send stop" title="Stop (esc)" onClick={() => void store.stop(tab)}><SquareIcon size={12} /></button>
-					) : (
-						<button type="button" className="send" title={tab.busy ? "Give it to the agent while it works (↩) · ⌥↩ waits its turn" : "Send (↩)"} disabled={!text.trim()} onClick={() => void send("steer")}><ArrowUpIcon size={15} /></button>
-					)}
-				</div>
-				<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />
-			</div>
+				<PromptInputBody>
+					{/* The `/` commands and `@` files: pine finds them (`suggest`) and the combobox shows them. */}
+					<Combobox<Suggestion>
+						items={items}
+						filter={null}
+						autoHighlight
+						open={items.length > 0}
+						onOpenChange={(open) => void (!open && close())}
+						inputValue={text}
+						value={null}
+						onValueChange={(s) => void (s && take(s))}
+						onItemHighlighted={(s) => void (highlighted.current = s)}
+						itemToStringLabel={(s) => s.label}
+					>
+						<ComboboxPrimitive.Input
+							ref={area as unknown as React.Ref<HTMLInputElement>}
+							render={<PromptInputTextarea rows={1} />}
+							className="max-h-[40vh] min-h-0 px-3.5 pt-3 text-sm"
+							placeholder={tab.busy ? `Say something to ${tab.agent} while it works…` : `Message ${tab.agent} · / for commands · @ for files`}
+							onChange={(e) => {
+								// A key that types ends the listening: what was heard stays, and nothing more is put into the input.
+								if (voice !== "off") endVoice(true);
+								recall.current = -1;
+								set(e.target.value);
+								void suggest(e.target.value, e.target.selectionStart ?? e.target.value.length);
+							}}
+							onKeyDown={(e) => onKey(e as unknown as ListKeyEvent)}
+							onPaste={(e) => {
+								const files = [...e.clipboardData.files];
+								if (!files.length) return;
+								e.preventDefault();
+								void attach(tab, files);
+							}}
+						/>
+						<ComboboxContent side="top">
+							<ComboboxList>
+								{(s: Suggestion) => (
+									<ComboboxItem key={s.value} value={s}>
+										<span data-part="label" className="shrink-0 font-mono">{s.label}</span>
+										{s.about ? <span className="truncate text-muted-foreground">{s.about}</span> : null}
+									</ComboboxItem>
+								)}
+							</ComboboxList>
+						</ComboboxContent>
+					</Combobox>
+				</PromptInputBody>
+				{/* A narrow input keeps every button on one line and whole: only the model's and the folder's
+				    names are cut, and what has no room for its words stands as its sign alone, with the words in its tooltip. */}
+				<PromptInputFooter className="@container/bar">
+					<PromptInputTools className="grow">
+						<PromptInputButton title="Attach files (or drop them here)" onClick={() => picker.current?.click()}><PlusIcon /></PromptInputButton>
+						<PromptInputButton size="sm" className="min-w-0 shrink" title={`Model: ${info?.model ?? "none"}`} onClick={() => void store.pickModel(tab)}>
+							<CpuIcon />
+							<span className="truncate @max-[400px]/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
+						</PromptInputButton>
+						<PromptInputButton size="sm" title={`How much the model thinks before it answers: ${info?.thinking ?? "off"}`} onClick={() => void store.pickReasoning(tab)}>
+							<SparkleIcon />
+							<span className="@max-[320px]/bar:hidden">{info?.thinking ?? "off"}</span>
+						</PromptInputButton>
+						<PromptInputButton size="sm" className={TONE[modeTone]} title="How much this agent does without asking" onClick={() => void store.pickMode(tab)}>
+							<ShieldIcon />
+							<span>{mode}{paused ? " (paused)" : ""}</span>
+						</PromptInputButton>
+						<PromptInputButton size="sm" className="min-w-0 shrink" title={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} onClick={() => void store.pickFolder(tab)}>
+							<FolderIcon />
+							<span className="truncate @max-[290px]/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
+						</PromptInputButton>
+						{tainted ? <span className="flex shrink-0 items-center gap-1.5 px-2 text-xs text-warn" title={`This conversation has read outside content (${tainted}): the agent asks before it sends something out.`}><EyeIcon className="size-3.5" /><span className="@max-[490px]/bar:hidden">outside content</span></span> : null}
+					</PromptInputTools>
+					<PromptInputTools className="shrink-0">
+						{store.platform === "darwin" ? <PromptInputButton className={voice !== "off" ? TONE.bad : undefined} title={voice === "off" ? "Dictate the message (⌃R)" : "End the listening"} onClick={() => void dictate()}><MicIcon /></PromptInputButton> : null}
+						{tab.busy && !text.trim() ? (
+							<PromptInputSubmit status="streaming" onStop={() => void store.stop(tab)} title="Stop (esc)" />
+						) : (
+							<PromptInputSubmit title={tab.busy ? "Give it to the agent while it works (↩) · ⌥↩ waits its turn" : "Send (↩)"} disabled={!text.trim()}><ArrowUpIcon /></PromptInputSubmit>
+						)}
+					</PromptInputTools>
+				</PromptInputFooter>
+			</PromptInput>
+			<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />
 			{tab.folder && !tab.items.length ? <div className="faint" style={{ fontSize: 11.5, padding: "6px 4px 0" }}>{tab.agent}'s tools start in {tilde(tab.folder)} and may read and change what is in it.</div> : null}
 		</>
 	);
