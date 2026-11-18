@@ -8,7 +8,8 @@ import { cn } from "@/lib/utils";
 import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
-import { Pulse, useLoad } from "./ui.tsx";
+import { useLoad } from "./ui.tsx";
+import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -71,7 +72,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					<FieldLegend className={TITLE}>At work</FieldLegend>
 					{tab.busy ? (
 						<Item size="xs" className="agent-line">
-							<ItemMedia><Pulse className="size-3" /></ItemMedia>
+							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
 							<ItemContent>
 								<ItemTitle className="name">this conversation</ItemTitle>
 								<ItemDescription className="about">{`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`}</ItemDescription>
@@ -80,7 +81,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					) : null}
 					{helpers.map(([id, c]) => (
 						<Item key={id} size="xs" className="agent-line" render={<button type="button" onClick={() => void s.openTask(id)} />}>
-							<ItemMedia>{c.running ? <Pulse className="size-3" /> : <CheckIcon />}</ItemMedia>
+							<ItemMedia>{c.running ? <Spinner aria-label="Working" className="size-3" /> : <CheckIcon />}</ItemMedia>
 							<ItemContent>
 								<ItemTitle className="name">{c.agent}</ItemTitle>
 								<ItemDescription className="about">{`${childKind(c.kind)} #${id}: ${c.label}`}</ItemDescription>
@@ -90,7 +91,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					))}
 					{elsewhere.map((session) => (
 						<Item key={session} size="xs" className="agent-line" render={<button type="button" onClick={() => void s.openTab(tab.agent, session)} />}>
-							<ItemMedia><Pulse className="size-3" /></ItemMedia>
+							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
 							<ItemContent>
 								<ItemTitle className="name">{session}</ItemTitle>
 								<ItemDescription className="about">another conversation of {tab.agent}</ItemDescription>

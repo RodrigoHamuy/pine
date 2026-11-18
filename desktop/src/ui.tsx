@@ -1,7 +1,7 @@
 // The small parts of pine's own that everything else is built from, on shadcn's components: the
-// logo, the working dot, an empty view, and loading what a view shows.
+// logo, an empty view, and loading what a view shows.
 import type { LucideIcon } from "lucide-react";
-import { type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { cn } from "@/lib/utils";
 
@@ -14,24 +14,6 @@ export function Logo({ className }: { className?: string }) {
 			<rect x="0" y="280" width="240" height="240" />
 			<path d="M560 0H280V240H560V520H800V0H560Z" />
 		</svg>
-	);
-}
-
-/**
- * Something is at work: a green dot that breathes. `className` sizes the room it stands in (an
- * icon's, `size-*`), so that what it takes the place of does not move. Every such dot on screen
- * breathes in step, whenever it appeared: each one's animation is set to have begun when the page did.
- */
-export function Pulse({ className }: { className?: string }) {
-	const dot = useRef<HTMLSpanElement>(null);
-	useLayoutEffect(() => {
-		for (const breath of dot.current?.getAnimations() ?? []) breath.startTime = 0;
-	}, []);
-	return (
-		<span role="status" aria-label="working" className={cn("inline-grid size-3.5 flex-none place-items-center", className)}>
-			{/* Tailwind's own pulse: slow, and every dot in step (above). */}
-			<span ref={dot} className="size-2 animate-pulse rounded-full bg-primary motion-reduce:animate-none" />
-		</span>
 	);
 }
 

@@ -539,11 +539,10 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	await sees("[data-slot=dialog-content][data-tone=warn]");
 	assert.match(await page.textContent("[data-slot=dialog-content][data-tone=warn]"), /Approval needed[\s\S]*echo hello/);
 	await shot("03-approval");
-	// What is at work is a dot that breathes, and all of them breathe in step, whenever each appeared:
-	// here the line of the turn's work and the line under the conversation, which came one after the other.
-	const breaths = await page.evaluate(() => document.getAnimations().filter((a) => (a as CSSAnimation).animationName === "pulse").map((a) => ({ start: a.startTime, every: (a.effect as KeyframeEffect).getTiming().duration })));
-	assert.ok(breaths.length >= 2, `${breaths.length} dots at work`);
-	assert.deepEqual([...new Set(breaths.map((b: any) => `${b.start}/${b.every}`))], ["0/2000"], JSON.stringify(breaths));
+	// What is at work is stock Spinner, announced as working: here the line of the turn's work and the
+	// line under the conversation, which came one after the other.
+	const working = await page.locator("[data-slot=spinner][role=status][aria-label=Working]").count();
+	assert.ok(working >= 2, `${working} spinners at work`);
 	assert.equal(await page.$$eval(".spinner", (els: Element[]) => els.length), 0);
 	await page.locator("[data-slot=dialog-content][data-tone=warn]").getByRole("button", { name: /^Allow/ }).click();
 	await sees('[data-item="approval"][data-state="allowed"]');

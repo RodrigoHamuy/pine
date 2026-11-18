@@ -37,7 +37,7 @@ import { Confirm } from "./Confirm.tsx";
 import { rowClass } from "./lists.tsx";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
-import { EmptyView, Pulse, useLoad } from "./ui.tsx";
+import { EmptyView, useLoad } from "./ui.tsx";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
@@ -481,7 +481,7 @@ function Output({ tab }: { tab: Tab }) {
 			<Listbox aria-label="Tool calls" className="outline-none" activation="manual" value={null} onValueChange={(next) => typeof next === "string" && setOpen(next)}>
 			{calls.data.map((c) => (
 				<ListboxItem key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
-					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Pulse />}
+					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Spinner aria-label="Working" className="size-3.5" />}
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}
