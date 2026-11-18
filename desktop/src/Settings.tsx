@@ -31,6 +31,8 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
+import { Slider } from "@/components/ui/slider";
+import { DEFAULT_PALETTE, type Palette, SCHEMES } from "./theme.ts";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -1757,6 +1759,110 @@ function Instructions() {
 
 // ---- the app itself ----------------------------------------------------------------------------------------
 
+const CUSTOM_LABELS: Record<string, { title: string; about: string }> = {
+	warn: { title: "Warning colour", about: "Warnings." },
+	info: { title: "Info colour", about: "Notes that only inform." },
+	plan: { title: "Plan mode colour", about: "Plan mode." },
+};
+const schemeItems = Object.entries(SCHEMES).map(([value, label]) => ({ value, label }));
+
+/** A colour to pick, with its hex beside it. */
+function ColourInput({ id, name, value, onChange }: { id: string; name: string; value: string; onChange: (hex: string) => void }) {
+	return (
+		<div className="flex items-center gap-1.5">
+			<span className="font-mono text-xs text-muted-foreground">{value}</span>
+			<Input id={id} name={name} type="color" className="w-10 p-0.5" value={value} onChange={(e) => onChange(e.target.value)} />
+		</div>
+	);
+}
+
+/**
+ * The palette the window's colours are generated from (theme.ts): an app preference like Appearance,
+ * kept by the app's main process. Every change redraws the window at once; Reset stores none.
+ */
+export function Colours() {
+	const s = useModel(store);
+	const palette = s.prefs.palette ?? DEFAULT_PALETTE;
+	const set = async (change: Partial<Palette> | undefined) => {
+		s.prefs = await bridge.prefs({ palette: change ? { ...palette, ...change } : undefined });
+		s.touch();
+	};
+	const hexOf = (name: string) => palette.customColors?.find((c) => c.name === name)?.hex ?? "#000000";
+	const field = useId();
+	return (
+		<FieldSet data-setting="colours">
+			<FieldLegend>Colours</FieldLegend>
+			<FieldDescription>Every colour of the window is a role of one Material 3 scheme, made from these. Code in dark keeps its own colours.</FieldDescription>
+			<FieldGroup>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-source`}>Source colour</FieldLabel>
+						<FieldDescription>The accent, and the colour the whole scheme is made from.</FieldDescription>
+					</FieldContent>
+					<ColourInput id={`${field}-source`} name="source" value={palette.source} onChange={(source) => void set({ source })} />
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-neutral`}>Neutral colour</FieldLabel>
+						<FieldDescription>The tint of the surfaces and the lines.</FieldDescription>
+					</FieldContent>
+					<ColourInput id={`${field}-neutral`} name="neutral" value={palette.neutral ?? DEFAULT_PALETTE.neutral} onChange={(neutral) => void set({ neutral })} />
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-match`}>Colour match</FieldLabel>
+						<FieldDescription>Stay true to these colours. Off, the scheme below tones them as it does.</FieldDescription>
+					</FieldContent>
+					<Switch id={`${field}-match`} checked={palette.colorMatch ?? false} onCheckedChange={(colorMatch) => void set({ colorMatch })} />
+				</Field>
+				<Field orientation="responsive" data-disabled={palette.colorMatch || undefined}>
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-scheme`}>Scheme</FieldLabel>
+						<FieldDescription>How the source colour is spread over the roles, while colour match is off.</FieldDescription>
+					</FieldContent>
+					<Select items={schemeItems} value={palette.scheme ?? DEFAULT_PALETTE.scheme} disabled={palette.colorMatch} onValueChange={(scheme) => scheme && void set({ scheme: scheme as Palette["scheme"] })}>
+						<SelectTrigger id={`${field}-scheme`} className="w-40">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							<SelectGroup>
+								{schemeItems.map((item) => (
+									<SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+								))}
+							</SelectGroup>
+						</SelectContent>
+					</Select>
+				</Field>
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldLabel htmlFor={`${field}-contrast`}>Contrast</FieldLabel>
+						<FieldDescription>Less to the left, more to the right, standard in the middle. Now {(palette.contrast ?? 0).toFixed(1)}.</FieldDescription>
+					</FieldContent>
+					<div className="flex w-40 shrink-0">
+						<Slider id={`${field}-contrast`} aria-label="Contrast" min={-1} max={1} step={0.1} value={[palette.contrast ?? 0]} onValueChange={(v) => void set({ contrast: Math.round((Array.isArray(v) ? v[0] : v) * 10) / 10 })} />
+					</div>
+				</Field>
+				{DEFAULT_PALETTE.customColors.map(({ name }) => (
+					<Field key={name} orientation="horizontal">
+						<FieldContent>
+							<FieldLabel htmlFor={`${field}-${name}`}>{CUSTOM_LABELS[name].title}</FieldLabel>
+							<FieldDescription>{CUSTOM_LABELS[name].about} M3 has no role for it: it is kept as it is.</FieldDescription>
+						</FieldContent>
+						<ColourInput id={`${field}-${name}`} name={name} value={hexOf(name)} onChange={(hex) => void set({ customColors: palette.customColors?.map((c) => (c.name === name ? { ...c, hex } : c)) })} />
+					</Field>
+				))}
+				<Field orientation="horizontal">
+					<FieldContent>
+						<FieldTitle>pine's colours</FieldTitle>
+						<FieldDescription>Poimandres' mint on its night blue, with colour match on.</FieldDescription>
+					</FieldContent>
+					<Button variant="outline" size="xs" disabled={!s.prefs.palette} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
+				</Field>
+			</FieldGroup>
+		</FieldSet>
+	);
+}
+
 function AppPage() {
 	const s = useModel(store);
 	const set = async (change: Record<string, unknown>) => {
@@ -1826,6 +1932,7 @@ function AppPage() {
 					</Field>
 				</FieldGroup>
 			</FieldSet>
+			<Colours />
 			<FieldSet>
 				<FieldLegend>pine</FieldLegend>
 				<FieldGroup>

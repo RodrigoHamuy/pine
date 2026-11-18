@@ -1,5 +1,6 @@
 // What the page has of the world outside itself: the bridge the preload script exposes.
 import type { Bridge } from "../electron/preload.ts";
+import type { Palette } from "./theme.ts";
 
 declare global {
 	interface Window {
@@ -17,6 +18,8 @@ export interface Prefs {
 	theme: "system" | "light" | "dark";
 	notify: boolean;
 	updates: boolean;
+	/** The palette the colours are generated from (theme.ts), or none: pine's default. */
+	palette?: Palette;
 }
 
 export type { Update } from "../electron/updates.ts";

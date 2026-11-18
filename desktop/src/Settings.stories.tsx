@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { AgentInfo, McpServer, Overview, Setting } from "./api.ts";
 import { store } from "./model.ts";
-import { Settings } from "./Settings.tsx";
+import { Colours as ColoursSection, Settings } from "./Settings.tsx";
+import { DEFAULT_PALETTE } from "./theme.ts";
 
 // The settings tab as the app shows it, without a daemon: the bridge's `call` is a stand-in that
 // answers each address with what is written below, as the control API would. An address it does
@@ -76,3 +77,32 @@ export const Agents: Story = { args: { section: "agents" } };
 
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
 export const McpServers: Story = { args: { section: "mcp" } };
+
+// The app's preferences as the main process keeps them: what is set is answered back, as `pine:prefs` does.
+window.pine.prefs = async (change) => ({ ...store.prefs, ...change });
+
+/** The Colours section of the App page with a palette of the owner's: colour match off, so the scheme can be chosen, and Reset on. */
+export const Colours: Story = {
+	args: { section: "app" },
+	render: () => {
+		store.prefs = { ...store.prefs, palette: { ...DEFAULT_PALETTE, source: "#3366cc", colorMatch: false, scheme: "vibrant", contrast: 0.5 } };
+		return (
+			<div className="w-full max-w-200">
+				<ColoursSection />
+			</div>
+		);
+	},
+};
+
+/** The Colours section on pine's own palette: colour match on, the scheme disabled, nothing to reset. */
+export const ColoursDefault: Story = {
+	args: { section: "app" },
+	render: () => {
+		store.prefs = { ...store.prefs, palette: undefined };
+		return (
+			<div className="w-full max-w-200">
+				<ColoursSection />
+			</div>
+		);
+	},
+};

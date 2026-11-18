@@ -4,6 +4,7 @@
 // dictation, updates, the dock) does nothing here. In the app and in Storybook there is a
 // `window.pine` already, and in a build `__PINE_PREVIEW__` is false and none of this is kept.
 import type { Bridge } from "../electron/preload.ts";
+import { cleanPalette } from "./theme.ts";
 
 if (import.meta.env.DEV && __PINE_PREVIEW__ && !window.pine) window.pine = standIn();
 
@@ -13,7 +14,7 @@ function standIn(): Bridge {
 	const on = (set: Set<Listener>) => (fn: Listener) => (set.add(fn), () => void set.delete(fn));
 	const never = () => () => undefined;
 	const tell = (set: Set<Listener>, ...args: unknown[]) => set.forEach((fn) => fn(...args));
-	let prefs = { keepRunning: false, theme: "system", notify: false, updates: false };
+	let prefs: Record<string, unknown> = { keepRunning: false, theme: "system", notify: false, updates: false };
 
 	const service = async () => {
 		const res = await fetch("/__pine/state");
@@ -51,7 +52,8 @@ function standIn(): Bridge {
 		},
 		init: async () => 1,
 		browserInstall: async () => 1,
-		prefs: async (change: Record<string, unknown>) => (prefs = { ...prefs, ...change }),
+		// Kept in memory while the page is open; a palette made safe as the app's main process makes it (none: the default).
+		prefs: async (change: Record<string, unknown>) => (prefs = { ...prefs, ...change, ...("palette" in change ? { palette: cleanPalette(change.palette) } : {}) }),
 		// No system dialog in a browser: a folder is named by its path.
 		pickFolder: async (title?: string) => window.prompt(`${title ?? "Choose a folder"}: its path`)?.trim() || undefined,
 		saveText: async (name: string, text: string) => {

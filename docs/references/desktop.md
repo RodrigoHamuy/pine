@@ -176,6 +176,7 @@ pine packed into the app; the `pine` of your shell.
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
 | pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
+| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), colour match, the scheme (while colour match is off), the contrast, and the warning, info and plan mode colours. Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
@@ -330,7 +331,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source) and night blue (the neutral), light and dark alike. Code in an answer, in a diff and in the editor keeps poimandres' own colours in dark |
+| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source) and night blue (the neutral), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor keeps poimandres' own colours in dark |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
 
@@ -448,7 +449,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
 | Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: add (at set times, every so often, once), remove. **Routes**: add, remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
-| App | The app's own settings (appearance, notifications, whether there is a newer app and whether that is asked at the start), and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
+| App | The app's own settings (appearance, colours, notifications, whether there is a newer app and whether that is asked at the start), and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
 key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is
@@ -568,8 +569,9 @@ desktop/
                    (poimandres in `.dark`), the page's density and a few base rules
                    (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
-                   which the Appearance setting decides; and pine's palette (`DEFAULT_PALETTE`), which
-                   `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview
+                   which the Appearance setting decides; pine's palette (`DEFAULT_PALETTE`), which
+                   `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview; and
+                   `cleanPalette`, which makes a stored or sent palette safe field by field
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
                    (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
@@ -641,6 +643,16 @@ holds only tokens and base rules.
   (`text-warn`, `bg-brand-soft`, `text-faint`...), and the Tailwind plugin
   (`material-theme-builder/tailwind`) adds every M3 role (`bg-surface-container-low`,
   `text-on-primary`, `bg-warn-container`); where a name is both, pine's and shadcn's win.
+- The owner's palette (Settings > App > Colours) is an app preference, kept by the main process in
+  `prefs.json` in the app's data folder (`palette`, beside `theme`) and set through the same `prefs`
+  call. The main process checks each field when it is set and when it is read (`cleanPalette`: a
+  colour is `#rrggbb`, colour match a boolean, the scheme one of material-theme-builder's variants,
+  the contrast in [-1, 1], the custom colours exactly `warn`, `info` and `plan`); a field that is
+  wrong is pine's default. Reset stores no palette. The page hands the stored palette, or
+  `DEFAULT_PALETTE`, to `<Mtb>`. The window's background before the page draws is the palette's
+  surface for the appearance, computed with material-theme-builder's `builder` (on a Mac the window
+  is transparent behind its vibrancy). The preview keeps the palette in its stand-in for the bridge,
+  in memory.
 - Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` keeps in
   step with the system's appearance; Electron's appearance setting drives that.
 - Tests and the few rules that reach into a component select by shadcn's `data-slot` attributes
