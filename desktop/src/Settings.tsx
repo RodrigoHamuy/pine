@@ -97,8 +97,8 @@ function Log({ children }: { children: ReactNode }) {
 	);
 }
 
-/** The heading above a list. */
-const H2 = "flex items-center gap-2 font-medium";
+/** The heading above a list: the size and weight of stock FieldLegend, the heading above a form. */
+const H2 = "flex items-center gap-2 text-base font-medium";
 
 /** A short word beside a name, on stock Badge. `tone` picks the stock variant; the class is for the tests. */
 function Tag({ tone, mono, children }: { tone?: "good" | "warn" | "bad"; mono?: boolean; children: ReactNode }) {
@@ -291,7 +291,7 @@ const FILES: Array<{ key: "instructions" | "soul" | "tooling" | "memory" | "rule
 /** Files to read and change, one tab each: what the file is for, and the file in an editor. */
 function FileTabs<K extends string>({ files, value, onChange, children }: { files: Array<{ key: K; label: string; about?: string }>; value: K; onChange: (v: K) => void; children: (key: K) => ReactNode }) {
 	return (
-		<Tabs value={value} onValueChange={onChange} className="set-group">
+		<Tabs value={value} onValueChange={onChange}>
 			<TabsList activateOnFocus>
 				{files.map((f) => (
 					<TabsTrigger key={f.key} value={f.key}>
@@ -362,7 +362,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 			}
 		>
 			<Back to="Agents" onClick={back} />
-			<FieldGroup className="form set-group grid grid-cols-2">
+			<FieldGroup className="form grid grid-cols-2">
 				<LabeledField label="What it is for" hint="One line. Other agents read it when they decide whom to hand work to." wide>
 					<Input value={now("description")} onChange={(e) => put("description", e.target.value)} />
 				</LabeledField>
@@ -837,7 +837,7 @@ function Skills() {
 			<Page title={edit.isNew ? "A new skill" : edit.name} lead="A skill is how something is done, written down so that an agent can do it again: a name, one or two sentences on when to use it, and the steps." actions={edit.managed ? <Button disabled={!edit.name.trim() || !edit.description.trim() || !edit.instructions.trim()} onClick={() => void save()}>Save skill</Button> : undefined}>
 				<Back to="Skills" onClick={() => setEdit(undefined)} />
 				{edit.managed ? null : <Notice tone="plain" icon={InfoIcon}>This skill lies in a folder of yours that the configuration names. pine shows it and does not change it.</Notice>}
-				<FieldGroup className="form set-group grid grid-cols-2">
+				<FieldGroup className="form grid grid-cols-2">
 					<LabeledField label="Name" hint="Lowercase letters, digits and single hyphens."><Input className="mono font-mono" disabled={!edit.isNew} value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value.toLowerCase() })} placeholder="invoices" /></LabeledField>
 					<LabeledField label="For">{edit.isNew ? <Whom value={edit.agent} onChange={(agent) => setEdit({ ...edit, agent })} /> : <Input disabled value={edit.agent || "all agents"} />}</LabeledField>
 					<LabeledField label="When to use it" wide hint="This line is always in front of the agent; it decides by it whether to read the rest."><AutoText value={edit.description} onChange={(description) => setEdit({ ...edit, description })} minRows={2} maxRows={5} readOnly={!edit.managed} /></LabeledField>
@@ -1148,7 +1148,7 @@ function EventsPage() {
 	const [tab, setTab] = useState<"sources" | "schedules" | "routes">("sources");
 	return (
 		<Page title="Events" lead="What reaches your agents without you typing: sources that report, schedules that fire, and routes between them." actions={<Button variant="outline" onClick={() => void store.openEvents()}><AudioLinesIcon data-icon="inline-start" />Open the event log</Button>}>
-			<Tabs value={tab} onValueChange={setTab} className="gap-6">
+			<Tabs value={tab} onValueChange={setTab}>
 				<TabsList activateOnFocus>
 					<TabsTrigger value="sources"><ZapIcon data-icon="inline-start" />Sources</TabsTrigger>
 					<TabsTrigger value="schedules"><ClockIcon data-icon="inline-start" />Schedules</TabsTrigger>
