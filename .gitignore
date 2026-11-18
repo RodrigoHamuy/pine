@@ -37,8 +37,9 @@ Thumbs.db
 !.claude/settings.json
 !desktop/.claude/skills/
 
-# mattpocock-skills: each contributor's own specs and tickets (docs/agents/issue-tracker.md)
-.scratch/
+# mattpocock-skills: each contributor's own specs and tickets (docs/agents/issue-tracker.md); no
+# trailing slash, so that it also matches .scratch when it is a link (a Claude Code worktree's)
+.scratch
 
 # The package made for npm (npm run build)
 build/

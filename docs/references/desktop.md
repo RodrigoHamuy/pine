@@ -484,16 +484,22 @@ desktop/
                    (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
                    which the Appearance setting decides
+    preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
+                   (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
                    skills-lock.json; .claude/skills links to it for Claude Code)
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
-                   launcher that becomes Resources/bin/pine)
-  test/            the app from end to end, driven through its real window; command.test.ts
-                   and updates.test.ts need no window
+                   launcher that becomes Resources/bin/pine), preview.ts (the page in an ordinary
+                   browser, `npm run dev:preview`: Vite's server makes every call for the page,
+                   on a throwaway pine or the home `--home` names)
+  test/            the app from end to end, driven through its real window; command.test.ts,
+                   updates.test.ts, daemon.test.ts and preview.test.ts need no window
 ```
 
 - The page asks for something new through `preload.ts` and a handler in `main.ts`, never by
   getting more of the system. A handler checks that the call comes from the app's own page.
+  `src/preview-bridge.ts` implements it too: it returns the `Bridge` type, so a missing method
+  fails `npm run check`. If it needs the daemon, `scripts/preview.ts` routes it under `/__pine/`.
 - What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a
   test there, then to `api.ts`. The app never does a daemon's work itself.
 - Text an answer or a tool produced is drawn through `markdown.tsx` or as plain text, never

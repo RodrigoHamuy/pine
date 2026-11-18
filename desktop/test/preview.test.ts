@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
@@ -93,6 +94,32 @@ test("the event stream and media are refused to another origin", async () => {
 	assert.equal(stream.status, 200);
 	assert.match(stream.headers.get("content-type") ?? "", /^text\/event-stream/);
 	await stream.body?.cancel();
+});
+
+/** A request under a name of the requester's choice: fetch cannot set `Host`, a rebound name can. */
+function asHost(route: string, host: string, options: { method: string; body?: string }): Promise<number> {
+	const { hostname, port } = new URL(page);
+	const headers: Record<string, string> = { host, origin: `http://${host}` };
+	if (options.body !== undefined) headers["content-type"] = "application/json";
+	return new Promise((resolve, reject) => {
+		const req = http.request({ hostname, port, path: route, method: options.method, headers }, (res) => {
+			res.resume();
+			resolve(res.statusCode ?? 0);
+		});
+		req.on("error", reject);
+		req.end(options.body);
+	});
+}
+
+test("a name that is not the loopback (a rebound one) is refused, even with an origin to match", async () => {
+	const host = `evil.example:${new URL(page).port}`;
+	assert.equal(await asHost("/__pine/call", host, { method: "POST", body: JSON.stringify({ method: "GET", url: "/agents" }) }), 403);
+	assert.equal(await asHost("/__pine/events", host, { method: "GET" }), 403);
+});
+
+test("a call whose body is not an object is refused, and the preview goes on", async () => {
+	for (const body of [null, 1, "x", []]) assert.equal((await call(body)).status, 400);
+	assert.equal((await call({ method: "GET", url: "/agents" })).status, 200);
 });
 
 test("the page is served with the app's content security policy", async () => {

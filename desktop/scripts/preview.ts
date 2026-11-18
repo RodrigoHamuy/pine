@@ -15,6 +15,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { Readable } from "node:stream";
+import { pipeline } from "node:stream/promises";
 import { parseArgs } from "node:util";
 import { createServer, type Plugin } from "vite";
 import { startMock } from "../../baseline/tests/mock.mjs";
@@ -45,7 +46,11 @@ function throwawayHome(modelServer: string): string {
 
 // ---- the routes the page's stand-in calls ------------------------------------------------------
 
-/** The names the preview is reached by: the loopback only, so that no other name (a rebound one) passes for the page. */
+/**
+ * The names the preview is reached by: the loopback only, so that no other name (a rebound one)
+ * passes for the page. Vite refuses such a name before this (`server.allowedHosts`); this holds
+ * when somebody opens that up to reach the preview from another machine.
+ */
 const LOOPBACK = /^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?$/;
 
 /** The page's own origin, from the address it was asked for; none for a name that is not the loopback. */
@@ -64,7 +69,7 @@ function fromPage(req: IncomingMessage, kind: "call" | "get"): boolean {
 }
 
 /** A call's body: an attachment travels inside it, so the limit is a large one. */
-async function readJson(req: IncomingMessage, limit = 64 * 1024 * 1024): Promise<any> {
+async function readJson(req: IncomingMessage, limit = 64 * 1024 * 1024): Promise<unknown> {
 	let size = 0;
 	const chunks: Buffer[] = [];
 	for await (const chunk of req) {
@@ -83,7 +88,15 @@ function previewServer(service: Service, nonce: string): Plugin {
 		name: "pine-preview",
 		configureServer(server) {
 			server.httpServer?.once("close", () => streams.forEach((s) => s.abort()));
-			server.middlewares.use(async (req, res, next) => {
+			// A route that throws answers 500 and the preview goes on: a rejection that escaped would end Node.
+			server.middlewares.use((req, res, next) => {
+				answer(req, res, next).catch((e) => {
+					console.error(`preview: ${req.method} ${req.url} failed: ${e instanceof Error ? e.message : e}`);
+					if (!res.headersSent) json(res, 500, { error: "the preview failed on this call: its terminal says why" });
+					else res.destroy();
+				});
+			});
+			async function answer(req: IncomingMessage, res: ServerResponse, next: () => void): Promise<void> {
 				const url = new URL(req.url ?? "/", "http://preview");
 				if (!url.pathname.startsWith("/__pine/")) {
 					// The page and everything Vite serves for it: the app's policy, with the nonce of the
@@ -95,12 +108,15 @@ function previewServer(service: Service, nonce: string): Plugin {
 				const route = url.pathname.slice("/__pine".length);
 				if (route === "/call") {
 					if (!fromPage(req, "call")) return json(res, 403, { error: "not from the page" });
-					let asked: { method?: unknown; url?: unknown; body?: unknown };
+					const notACall = () => json(res, 400, { error: "not a call of the control API: send a JSON object with method, url and body" });
+					let parsed: unknown;
 					try {
-						asked = await readJson(req);
+						parsed = await readJson(req);
 					} catch {
-						return json(res, 400, { error: "not a call of the control API" });
+						return notACall();
 					}
+					if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return notACall();
+					const asked = parsed as { method?: unknown; url?: unknown; body?: unknown };
 					return json(res, 200, await callDaemon(service, String(asked.method), String(asked.url), asked.body));
 				}
 				if (!fromPage(req, "get")) return json(res, 403, { error: "not from the page" });
@@ -120,12 +136,13 @@ function previewServer(service: Service, nonce: string): Plugin {
 				if (route.startsWith("/media/")) {
 					const media = await mediaFromDaemon(service, req.method ?? "GET", route.slice("/media".length), url.search);
 					res.writeHead(media.status, Object.fromEntries(media.headers));
-					if (media.body) Readable.fromWeb(media.body as any).pipe(res);
+					// The daemon can drop the answer halfway: that ends this one response, not the preview.
+					if (media.body) await pipeline(Readable.fromWeb(media.body as any), res).catch(() => res.destroy());
 					else res.end();
 					return;
 				}
 				json(res, 404, { error: "no such route" });
-			});
+			}
 		},
 	};
 }
@@ -163,8 +180,14 @@ async function stop(code = 0): Promise<never> {
 	}
 	process.exit(code);
 }
-process.on("SIGINT", () => void stop());
-process.on("SIGTERM", () => void stop());
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => void stop());
+// Whatever goes wrong, the throwaway home and the scripted model server go with the preview.
+const crashed = (e: unknown) => {
+	console.error("The preview stopped on an error:", e);
+	void stop(1);
+};
+process.on("uncaughtException", crashed);
+process.on("unhandledRejection", crashed);
 
 try {
 	// pine's command line of this checkout, on this Node. `connect` holds its input open: that is
