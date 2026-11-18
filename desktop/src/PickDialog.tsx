@@ -6,7 +6,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { useNamedLine } from "./lists.tsx";
 import type { Picker } from "./model.ts";
 import { fuzzy } from "./text.ts";
-import { useOpener } from "./ui.tsx";
+import { useOpener } from "./use-opener.ts";
 
 export function PickDialog({ p }: { p: Picker }) {
 	const [query, setQuery] = useState("");

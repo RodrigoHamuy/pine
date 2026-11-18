@@ -36,7 +36,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { LISTBOX, onPick, rowClass, TREE_ITEM } from "./lists.tsx";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
-import { EmptyView, useLoad } from "./ui.tsx";
+import { EmptyView } from "@/components/empty-view";
+import { useLoad } from "./use-load.ts";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";

@@ -27,7 +27,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { EmptyView, useLoad } from "./ui.tsx";
+import { EmptyView } from "@/components/empty-view";
+import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [

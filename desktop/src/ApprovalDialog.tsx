@@ -10,7 +10,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printed } from "@/components/printed";
 import type { Approval } from "./api.ts";
 import { store } from "./model.ts";
-import { useOpener } from "./ui.tsx";
+import { useOpener } from "./use-opener.ts";
 
 /** A label that reads "name: what it is" or "NAME (what it is)" is its name and, under it, the rest. */
 const labelParts = (label: string): [string, string] => {

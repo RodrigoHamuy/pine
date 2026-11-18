@@ -28,7 +28,7 @@ import { QuestionDialog } from "./QuestionDialog.tsx";
 import { ago, until } from "./text.ts";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { LISTBOX, onPick } from "./lists.tsx";
-import { Logo } from "./ui.tsx";
+import { Logo } from "@/components/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";

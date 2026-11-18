@@ -11,7 +11,7 @@ import { useEffect, useState } from "react";
 import { api, type PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { short } from "./text.ts";
-import { EmptyView } from "./ui.tsx";
+import { EmptyView } from "@/components/empty-view";
 
 /** "agent/#" fits every topic under agent; "+" fits one level; a word without either is looked for anywhere. */
 function fits(pattern: string, e: PineEvent): boolean {

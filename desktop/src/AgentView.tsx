@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
-import { useLoad } from "./ui.tsx";
+import { useLoad } from "./use-load.ts";
 import { Spinner } from "@/components/ui/spinner";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FieldLegend, FieldSet } from "@/components/ui/field";

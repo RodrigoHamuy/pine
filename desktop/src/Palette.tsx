@@ -5,7 +5,7 @@ import { COMMANDS } from "./commands.ts";
 import { useNamedLine } from "./lists.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, fuzzy } from "./text.ts";
-import { useOpener } from "./ui.tsx";
+import { useOpener } from "./use-opener.ts";
 
 export function Palette() {
 	const s = store;

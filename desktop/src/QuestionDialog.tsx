@@ -9,7 +9,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Approval } from "./api.ts";
 import { store } from "./model.ts";
-import { useOpener } from "./ui.tsx";
+import { useOpener } from "./use-opener.ts";
 
 /** A question of the agent's: the answers it offers, and a line for the owner's own words. */
 export function QuestionDialog({ req }: { req: Approval }) {

@@ -428,9 +428,10 @@ desktop/
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
     components/    only what stock components cannot express when composed in place (printed.tsx:
-                   what a tool or a program printed, a Code Block that follows its end); no part
-                   there only renames or bundles a stock one
-    ui.tsx         pine's own small parts, made of shadcn's components: the logo, an empty view
+                   what a tool or a program printed, a Code Block that follows its end), and pine's
+                   own small parts (logo.tsx: the logo; empty-view.tsx: a view with nothing in it);
+                   no part there only renames or bundles a stock one
+    use-load.ts, use-opener.ts   loading what a view shows; what had focus before a dialog opened
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
                    which are ui-sdk's, used directly (shadcn has neither); and the chosen line of
                    a palette's list, named to screen readers (`useNamedLine`)
@@ -470,7 +471,7 @@ holds only tokens and base rules.
 | shadcn (`src/components/ui/`) | Every control and overlay: buttons, switches, fields, selects, tabs, dialogs, alert dialogs, the command palette, notices (Toast), the combobox, resizable panels, collapsibles, badges, alerts. |
 | shadcn's core chat components (`src/components/ui/`), composed per shadcn's AI Elements patterns | The conversation, composed in `Conversation.tsx`: Message Scroller (the thread), Message, Bubble and Attachment (the turns), Trace (the work of a turn, tool calls, thoughts, sub-tasks, steps), Code Block (what a tool returned), Item (a request waiting for you), Marker (notes, dividers, the goal, the line above the input, the point to take back to), Hover Card and Progress (how full the context is). The input, in `Composer.tsx`, is the Prompt Input pattern: an Input Group with the attached files as Attachments above the text, the goal and dictation as Alerts, and the reasoning and the mode as the Model Selector pattern's Dropdown Menus. The code pane's output (`CodePanel.tsx`) is a Code Block, with the terminal's colours. AI Elements' own registry serves code written on Radix and has none on Base UI, so it is never added: its pages say which core components a pattern uses, and pine composes them in its own files. |
 | Streamdown | Answers drawn from markdown, with code coloured by Shiki. `markdown.tsx` replaces three of its defaults (see below). |
-| lucide | Every icon. The pine logo is the one drawing of pine's own (`Logo` in `ui.tsx`). |
+| lucide | Every icon. The pine logo is the one drawing of pine's own (`Logo` in `components/logo.tsx`). |
 | ui-sdk (`@ui-sdk/react`) | Only what shadcn has no component for: the tree of files and the lists of rows (`src/lists.tsx`). Never a piece shadcn has (no second dialog, button or select). |
 
 - A stock shadcn component is never edited. Add and update them with the shadcn CLI
@@ -513,9 +514,9 @@ The side bar's colours are the `--sidebar*` tokens in `index.css`, set from pine
 muted, the one in front pressed, and its background is left to the window behind it (the system's
 material on a Mac). A story sits beside the file of what it shows: `src/<File>.stories.tsx`
 for a file of `src/`, `src/components/<name>.stories.tsx` for a composition there (titled
-`Components/<Name>`). pine's own parts (`src/ui.tsx`: the logo, an empty view) are in
-`src/ui.stories.tsx`, one story per part and state, named after it (`PickDialogRemoving`); a dialog
-or a whole view is in its own (`src/PickDialog.stories.tsx`, `src/Composer.stories.tsx`).
+`Components/<Name>`: `Components/Logo`, `Components/EmptyView`). One story per part and state,
+named after it (`PickDialogRemoving`); a dialog or a whole view is in its own
+(`src/PickDialog.stories.tsx`, `src/Composer.stories.tsx`).
 None needs Electron or a daemon. A view that calls `api.ts` or the bridge is drawn on
 stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does nothing.
 
