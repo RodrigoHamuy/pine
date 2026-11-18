@@ -99,7 +99,7 @@ after(async () => {
 
 test("a server the agent left running is one click away in the conversation's browser, from the empty browser and from Running", async () => {
 	await sees(".welcome h1", 30_000);
-	const dialog = await page.waitForSelector(".dialog-foot .btn >> text=Not now", { timeout: 5000 }).catch(() => undefined);
+	const dialog = await page.waitForSelector("[data-slot=dialog-footer] button >> text=Not now", { timeout: 5000 }).catch(() => undefined);
 	if (dialog) await dialog.click();
 	await page.fill(".composer textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "node serve.mjs", background: true } }] }, { text: "The server runs." }], "Start the server. "));
 	await page.press(".composer textarea", "Enter");
@@ -109,11 +109,12 @@ test("a server the agent left running is one click away in the conversation's br
 
 	// The empty browser says what runs in this conversation, and a click opens it there.
 	await menu("code-browser");
-	await sees(".browser .empty >> text=No page is open");
-	const offered = page.locator(".browser-visited", { hasText: "Running in this conversation" }).locator(".open-link");
+	await sees(".browser [data-slot=empty] >> text=No page is open");
+	const offered = page.locator(".browser [data-offer=running] button");
 	await offered.waitFor({ timeout: 20_000 });
 	assert.equal(await offered.textContent(), `localhost:${port}`);
-	assert.equal(await offered.getAttribute("title"), "node serve.mjs");
+	await offered.hover();
+	await sees("[data-slot=tooltip-content] >> text=node serve.mjs");
 	await offered.click();
 	await waitFor("the address of the running server was opened in the conversation's browser", () => asked.length === 1);
 	assert.equal(asked[0], `http://localhost:${port}`);
@@ -121,7 +122,7 @@ test("a server the agent left running is one click away in the conversation's br
 
 	// The same address under Running goes to the same browser, and the panel shows it.
 	await menu("code-running");
-	await page.click(`.prog .open-link >> text=localhost:${port}`);
+	await page.locator(".code").getByRole("button", { name: `localhost:${port}` }).click();
 	await waitFor("the link under Running was opened in the conversation's browser", () => asked.length === 2);
 	assert.equal(asked[1], `http://localhost:${port}`);
 	await sees(".browser .browser-bar");

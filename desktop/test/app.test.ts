@@ -320,11 +320,11 @@ test("the agent's browser is shown in the panel as a picture, and what is done i
 		db.exec("PRAGMA busy_timeout = 5000");
 		db.prepare("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run("visited:main:main", JSON.stringify(["https://shop.example/<img src=x onerror=window.hacked=4>", "http://127.0.0.1:4173/"]));
 		db.close();
-		await sees(".browser-visited .open-link >> nth=1");
-		assert.deepEqual(await page.$$eval(".browser-visited .open-link", (els: Element[]) => els.map((e) => e.textContent)), ["shop.example/<img src=x onerror=window.hacked=4>", "127.0.0.1:4173"]);
+		await sees(".browser [data-offer=visited] button >> nth=1");
+		assert.deepEqual(await page.$$eval(".browser [data-offer=visited] button", (els: Element[]) => els.map((e) => e.textContent)), ["shop.example/<img src=x onerror=window.hacked=4>", "127.0.0.1:4173"]);
 		assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
 		await shot("05-browser-empty");
-		await page.click(".browser-visited .open-link >> nth=1");
+		await page.click(".browser [data-offer=visited] button >> nth=1");
 		await waitFor("the address the agent had opened arrived", () => asked.some((a) => a.at === "/open" && a.body.url === "http://127.0.0.1:4173/"));
 
 		// Without a browser the view says so and draws nothing.
@@ -1259,18 +1259,18 @@ test("a message is branched from: a new conversation with what was said up to it
 	}
 	const from = await page.textContent(".tab.on .name");
 	// The button stands beside a message of the owner's while the pointer is on it.
-	await page.hover(".it-user:has-text('BRANCH-ONE')");
-	await page.click(".it-user:has-text('BRANCH-ONE') .branch-from button");
-	await sees(".toast >> text=from that message");
+	await page.hover("[data-item=user]:has-text('BRANCH-ONE')");
+	await page.click("[data-item=user]:has-text('BRANCH-ONE') button[aria-label='Branch from here']");
+	await sees("[data-slot=toast] >> text=from that message");
 	await sees(".tab.on .name >> text=· branch");
 	assert.ok((await page.textContent(".tab.on .name")).startsWith(`${from!.trim()} · branch`));
 	await sees(".md >> text=answer to BRANCH-ONE");
 	assert.doesNotMatch(await page.textContent(".column"), /BRANCH-TWO/);
 	// In the side bar it is under the conversation it was made from, one step in.
 	await page.waitForFunction(() => [...document.querySelectorAll(".side-conv")].some((r) => /a branch of/.test(r.getAttribute("title") ?? "")));
-	const rows = await page.$$eval(".side-conv", (els: Element[]) => els.map((e) => ({ title: e.getAttribute("title") ?? "", indent: (e as HTMLElement).style.paddingLeft })));
+	const rows = await page.$$eval(".side-conv", (els: Element[]) => els.map((e) => ({ title: e.getAttribute("title") ?? "", indent: parseFloat(getComputedStyle(e).paddingLeft) })));
 	const at = rows.findIndex((r) => /a branch of/.test(r.title));
-	assert.equal(rows[at].indent, "45px");
+	assert.ok(rows[at].indent > rows[at - 1].indent, JSON.stringify(rows));
 	assert.match(rows[at].title, new RegExp(`a branch of ${rows[at - 1].title.split(" · ")[1]}`), JSON.stringify(rows));
 	await shot("15-branch");
 	// What is said in the branch stays there.
@@ -1285,14 +1285,14 @@ test("a message is branched from: a new conversation with what was said up to it
 
 test("a conversation moves into a worktree of its folder: the chip names the branch, and its work is merged from the panel", async () => {
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
-	await sees(".pick-title >> text=Which agent works in");
+	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
 	await page.keyboard.press("Enter");
 	await sees(".tab.on .name >> text=pine-desktop-folder");
 	await menu("worktree");
-	await sees(".pick-title >> text=Work in a worktree?");
+	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Work in a worktree?");
 	await page.keyboard.press("Enter");
-	await sees(".conv-head .chip.worktree >> text=pine/");
-	const branch = (await page.textContent(".conv-head .chip.worktree"))!.trim();
+	await sees(".conv-head [data-worktree] >> text=pine/");
+	const branch = (await page.textContent(".conv-head [data-worktree]"))!.trim();
 	const tree = path.join(folder, ".pine", "worktrees", branch.slice(5));
 	assert.ok(fs.existsSync(path.join(tree, "README.md")), "a checkout of its own");
 	await sees(".column >> text=now works in the worktree");
@@ -1307,22 +1307,22 @@ test("a conversation moves into a worktree of its folder: the chip names the bra
 	execFileSync("git", ["-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "add", "WORKTREE.md"], { stdio: "ignore" });
 	execFileSync("git", ["-C", tree, "-c", "user.name=t", "-c", "user.email=t@example.invalid", "-c", "commit.gpgsign=false", "commit", "-qm", "apart"], { stdio: "ignore" });
 	await menu("code-changes");
-	await page.click(".code .segmented button >> text=Files");
-	await page.click(".code .segmented button >> text=Changes");
+	await page.locator(".code").getByRole("tab", { name: "Files" }).click();
+	await page.locator(".code").getByRole("tab", { name: "Changes" }).click();
 	await sees(".code-sub >> text=1 ahead of");
 	await shot("16-worktree");
-	await page.click(".code-sub .btn >> text=Merge…");
-	await sees(".pick-title >> text=1 commit ahead of");
+	await page.locator(".code-sub").getByRole("button", { name: "Merge…" }).click();
+	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=1 commit ahead of");
 	await page.keyboard.press("Enter");
-	await sees(".toast >> text=merged into");
+	await sees("[data-slot=toast] >> text=merged into");
 	assert.equal(fs.readFileSync(path.join(folder, "WORKTREE.md"), "utf8"), "made apart\n");
 	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n", "what was not committed in the folder stayed");
 
 	// Discarded once merged: the folder's chip is back.
 	await menu("worktree");
-	await sees(".pick-title >> text=ahead of");
+	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=ahead of");
 	await page.keyboard.press("Enter");
-	await sees(".conv-head .chip:not(.worktree) >> text=pine-desktop-folder");
+	await sees(".conv-head [data-folder] >> text=pine-desktop-folder");
 	assert.ok(!fs.existsSync(tree));
 	await page.click(".tab.on .close");
 });

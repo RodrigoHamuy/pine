@@ -19,7 +19,7 @@ function Items({ items }: { items: Made[] }) {
 
 const now = Date.now();
 const conversation: Made[] = [
-	{ t: "user", text: "What do the notes say?", files: ["notes.md"] },
+	{ t: "user", text: "What do the notes say?", files: ["notes.md"], task: 1 },
 	{
 		t: "work",
 		done: true,

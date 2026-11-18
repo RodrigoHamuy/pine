@@ -91,8 +91,8 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 
 		// The owner closes the last tab: the browser has no page any more, the view is empty, and what the agent opened is offered again.
 		await page.click(".browser-tab-close");
-		await page.waitForSelector(".browser .empty >> text=No page is open", { timeout: 15_000 });
-		const again = page.locator(".browser-visited", { hasText: "Opened by the agent before" }).locator(".open-link").first();
+		await page.waitForSelector(".browser [data-slot=empty] >> text=No page is open", { timeout: 15_000 });
+		const again = page.locator(".browser [data-offer=visited] button").first();
 		await again.waitFor({ timeout: 15_000 });
 		await shot("b4-closed");
 		await again.click();
