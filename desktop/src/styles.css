@@ -45,6 +45,10 @@
 	--side: rgba(236, 237, 233, 0.86);
 	--scrim: rgba(20, 24, 22, 0.28);
 	--select: color-mix(in srgb, var(--accent) 28%, transparent);
+	/* What has the keyboard is said in gray, never in the green: the green is for what is on or at work.
+	   --focus is the border of a field that is typed into, --ring the line around a control reached with Tab. */
+	--focus: color-mix(in srgb, var(--faint) 75%, var(--line));
+	--ring: color-mix(in srgb, var(--text) 50%, transparent);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -126,6 +130,12 @@ select {
 }
 ::selection {
 	background: var(--select);
+}
+/* One ring for every control, in place of the browser's own blue one. A field that is typed into shows
+   its border instead (outline: none further down). */
+:focus-visible {
+	outline: 2px solid var(--ring);
+	outline-offset: 1px;
 }
 ::-webkit-scrollbar {
 	width: 10px;
@@ -612,12 +622,6 @@ html:not([data-platform="darwin"]) .app.no-sidebar .titlebar {
 .btn:disabled {
 	opacity: 0.45;
 }
-.btn:focus-visible,
-.input:focus-visible,
-.switch:focus-visible {
-	outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
-	outline-offset: 1px;
-}
 .btn-small {
 	height: 24px;
 	padding: 0 8px;
@@ -678,7 +682,7 @@ kbd {
 	user-select: text;
 }
 .input:focus {
-	border-color: color-mix(in srgb, var(--accent) 70%, var(--line));
+	border-color: var(--focus);
 }
 textarea.input {
 	resize: none;
@@ -1962,11 +1966,10 @@ select.input {
 	border-radius: var(--r-l);
 	background: var(--composer);
 	box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
-	transition: border-color 0.12s, box-shadow 0.12s;
+	transition: border-color 0.12s;
 }
 .composer:focus-within {
-	border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
-	box-shadow: 0 0 0 3px var(--accent-soft);
+	border-color: var(--focus);
 }
 .composer.over {
 	border-style: dashed;
