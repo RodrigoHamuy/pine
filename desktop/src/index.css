@@ -212,11 +212,12 @@
 	--chart-4: var(--warn);
 	--chart-5: var(--bad);
 	--radius: 0.625rem;
+	/* The side bar's rows are muted until the pointer is on one; the one in front stays pressed. */
 	--sidebar: var(--side);
-	--sidebar-foreground: var(--text);
+	--sidebar-foreground: var(--text-muted);
 	--sidebar-primary: var(--brand);
 	--sidebar-primary-foreground: var(--on-accent);
-	--sidebar-accent: var(--hover);
+	--sidebar-accent: var(--press);
 	--sidebar-accent-foreground: var(--text);
 	--sidebar-border: var(--line);
 	--sidebar-ring: var(--brand);

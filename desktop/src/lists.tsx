@@ -1,7 +1,7 @@
 // Lists the keyboard walks: a tree of folders and files, and a list of rows to open. shadcn has
 // neither primitive, and AI Elements' file tree gives every row a tab stop and no arrow keys, so
 // both are ui-sdk's, which keeps them one tab stop with the arrows, typing and Enter of the ARIA patterns.
-import { type ReactNode } from "react";
+import { type ReactElement, type ReactNode } from "react";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { Tree as UiTree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
 
@@ -39,18 +39,19 @@ export function TreeRow({ value, label, row, on, depth, branch, children }: { va
 
 /**
  * A list of rows to open, one tab stop: Tab goes in, the arrow keys move, Enter or a click opens a row
- * with `onOpen`. `value` is the row that is open, if one of them is.
+ * with `onOpen`. `value` is the row that is open, if one of them is. `render` draws the list as another
+ * element (the side bar's stock `SidebarMenu`), which keeps the keyboard.
  */
-export function List({ label, value = null, onOpen, className, children }: { label: string; value?: string | null; onOpen: (value: string) => void; className?: string; children: ReactNode }) {
+export function List({ label, value = null, onOpen, className, render, children }: { label: string; value?: string | null; onOpen: (value: string) => void; className?: string; render?: ReactElement<Record<string, unknown>>; children: ReactNode }) {
 	return (
-		<Listbox aria-label={label} className={`outline-none ${className ?? ""}`} activation="manual" value={value} onValueChange={(next) => typeof next === "string" && onOpen(next)}>
+		<Listbox aria-label={label} className={`outline-none ${className ?? ""}`} activation="manual" value={value} onValueChange={(next) => typeof next === "string" && onOpen(next)} render={render}>
 			{children}
 		</Listbox>
 	);
 }
 
-/** One row of a `List`. */
-export function ListRow({ value, label, className, children, ...rest }: { value: string; label?: string; className?: string; children: ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, "children">) {
+/** One row of a `List`. Its children may come from the element that renders it (`render={<ListRow />}`). */
+export function ListRow({ value, label, className, children, ...rest }: { value: string; label?: string; className?: string; children?: ReactNode } & Omit<React.HTMLAttributes<HTMLDivElement>, "children">) {
 	return (
 		<ListboxItem value={value} label={label} className={className} {...rest}>
 			{children}

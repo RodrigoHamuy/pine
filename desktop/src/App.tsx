@@ -30,14 +30,12 @@ import { Hint } from "@/components/hint";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
+import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Spinner } from "@/components/ui/spinner";
 import { ScrollFadeArea } from "@/components/scroll-fade-area";
 import { Log } from "@/components/log";
 
 // Pieces of the frame drawn the same in several places.
-/** A row of the side bar: its hover, the one in front, and its focus from the keyboard. */
-const ROW = "group/row app-no-drag flex h-8 items-center gap-2 rounded-md pr-1.5 pl-2 text-muted-foreground hover:bg-hover hover:text-foreground focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60";
-const ROW_ON = "bg-press text-foreground hover:bg-press";
 /** Something waits for the owner: an exclamation mark on the warning colour. */
 const NEEDS = "grid size-3.5 flex-none place-items-center rounded-full bg-warn text-xs leading-none font-bold text-background";
 const DOT = "dot size-2 flex-none rounded-full";
@@ -137,17 +135,20 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	};
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
+	const on = Boolean(tab && tab === s.active);
 	return (
-		<ListRow value={c.session} label={s.titleOf(agent, c.session)} className={cn("side-row side-conv", ROW, "pl-9", tab && tab === s.active && ["on", ROW_ON])} onContextMenu={(e) => (e.preventDefault(), void menu())} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`}>
-			<span className="grid size-3 flex-none place-items-center">{tab?.approvals.size ? <Needs /> : working ? <Pulse size={11} /> : tab?.unread ? <Unread /> : main || c.pinned ? <StarIcon size={12} className="text-faint" /> : c.folder ? <FolderIcon size={12} className="text-faint" /> : <MessageSquareIcon size={12} className="text-faint" />}</span>
-			<span className="cut grow min-w-0 flex-1 truncate">{s.titleOf(agent, c.session)}</span>
-			<span className="flex-none text-xs text-faint group-hover/row:hidden">{c.tasks ? ago(c.last).replace(" ago", "") : ""}</span>
+		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
+		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
+			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", on && "on")} render={<ListRow value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Needs /> : working ? <Pulse size={11} /> : tab?.unread ? <Unread /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
+				<span className="cut min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
+			</SidebarMenuButton>
+			{c.tasks ? <SidebarMenuBadge className={cn(!main && "group-hover/menu-item:hidden")}>{ago(c.last).replace(" ago", "")}</SidebarMenuBadge> : null}
 			{main ? null : (
-				<span className="hidden group-hover/row:flex" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.currentTarget.contains(e.target as Node) && e.stopPropagation()} onKeyDown={(e) => e.currentTarget.contains(e.target as Node) && e.stopPropagation()}>
-					<Confirm icon={Trash2Icon} label="Remove this conversation for good" question={`Remove the conversation ${s.titleOf(agent, c.session)} for good?`} action="Remove" onConfirm={() => void s.removeConversation(agent, c.session)} />
-				</span>
+				// Shown under the pointer only, so that it is no tab stop of its own; its keys are not the list's.
+				<Confirm icon={Trash2Icon} label="Remove this conversation for good" question={`Remove the conversation ${s.titleOf(agent, c.session)} for good?`} action="Remove" onConfirm={() => void s.removeConversation(agent, c.session)} trigger={<SidebarMenuAction className="hidden group-hover/menu-item:flex" onKeyDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} />} />
 			)}
-		</ListRow>
+		</SidebarMenuItem>
 	);
 }
 
@@ -183,30 +184,30 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		if (picked === "remove") await s.removeAgent(a.id);
 	};
 	return (
-		<Collapsible className="side-group mb-1" open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
-			<div className="side-agent group/agent flex h-8 items-center gap-2 rounded-md pr-1 pl-1.5 app-no-drag hover:bg-hover" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
-				{/* What folds the group is the agent's line but its buttons: a button that looks like none. */}
-				<CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-2 self-stretch rounded-md text-start focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60">
-					{folded ? <ChevronRightIcon className="size-2.5 text-faint" /> : <ChevronDownIcon className="size-2.5 text-faint" />}
-					<Avatar size="sm" className="avatar">
-						<AvatarFallback>{a.id.slice(0, 1).toUpperCase()}</AvatarFallback>
-					</Avatar>
-					{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
-					    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
-					<span className="who flex min-w-0 flex-1 items-baseline gap-2 font-semibold">
-						<span className="min-w-0 flex-initial truncate">{a.id}</span>
-						<span className="what @container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/agent:text-clip"><span className="group-hover/agent:inline-block group-hover/agent:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
-					</span>
-					{waits ? <Needs /> : working ? <Pulse size={11} /> : unread && folded ? <Unread /> : null}
-				</CollapsibleTrigger>
-				<span className="hidden group-hover/agent:flex">
-					<Hint label={`Settings of ${a.id}`}><Button variant="ghost" size="icon-xs" onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></Button></Hint>
-					<Hint label={`Open a folder for a conversation with ${a.id}`}><Button variant="ghost" size="icon-xs" onClick={() => void pickFolder()}><FolderIcon /></Button></Hint>
-				</span>
-				<Hint label={`New conversation with ${a.id}`}><Button variant="ghost" size="icon-xs" onClick={() => void s.newConversation(a.id)}><PlusIcon /></Button></Hint>
-			</div>
+		<Collapsible className="side-group" open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
+			<SidebarMenu>
+				<SidebarMenuItem className="side-agent app-no-drag" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
+					{/* What folds the group is the agent's line but its buttons. Under the pointer the line makes room for all three. */}
+					<CollapsibleTrigger render={<SidebarMenuButton className="group-hover/menu-item:pr-20" />}>
+						{folded ? <ChevronRightIcon className="text-faint" /> : <ChevronDownIcon className="text-faint" />}
+						<Avatar size="sm" className="avatar">
+							<AvatarFallback>{a.id.slice(0, 1).toUpperCase()}</AvatarFallback>
+						</Avatar>
+						{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
+						    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
+						<span className="who flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
+							<span className="min-w-0 flex-initial truncate">{a.id}</span>
+							<span className="what @container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
+						</span>
+						{waits ? <Needs /> : working ? <Pulse size={11} /> : unread && folded ? <Unread /> : null}
+					</CollapsibleTrigger>
+					<Hint label={`Settings of ${a.id}`}><SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)}><SettingsIcon /></SidebarMenuAction></Hint>
+					<Hint label={`Open a folder for a conversation with ${a.id}`}><SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()}><FolderIcon /></SidebarMenuAction></Hint>
+					<Hint label={`New conversation with ${a.id}`}><SidebarMenuAction onClick={() => void s.newConversation(a.id)}><PlusIcon /></SidebarMenuAction></Hint>
+				</SidebarMenuItem>
+			</SidebarMenu>
 			<CollapsibleContent>
-				<List label={`Conversations with ${a.id}`} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onOpen={(session) => void s.openTab(a.id, session)}>
+				<List label={`Conversations with ${a.id}`} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onOpen={(session) => void s.openTab(a.id, session)} render={<SidebarMenu />}>
 					{rows.map((c) => <ConversationRow key={c.session} agent={a.id} c={c} />)}
 				</List>
 			</CollapsibleContent>
@@ -219,30 +220,51 @@ function Sidebar() {
 	const ready = s.service.status === "ready";
 	const front = s.active;
 	const newer = s.update?.status === "newer" ? s.update : undefined;
+	// shadcn's stock Sidebar, fixed in its place (the panel around it sets its width). Its background
+	// is left to the window behind it, which is the system's material on a Mac.
 	// Where nothing is to click, the side bar moves the window, like the bar along the top.
 	return (
-		<aside className="sidebar flex min-h-0 min-w-0 flex-1 flex-col app-drag">
-			<div className={cn("flex h-11 flex-none items-center justify-end gap-0.5 pr-2 app-drag", s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2.5")}>
+		<SidebarRoot collapsible="none" className="sidebar w-full min-w-0 bg-transparent app-drag">
+			<SidebarHeader className={cn("h-11 flex-none flex-row items-center justify-end gap-0.5 py-0 pr-2 app-drag", s.platform === "darwin" && !s.fullscreen ? "pl-21" : "pl-2.5")}>
 				<Hint label="Hide the sidebar" keys="⌘B"><Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.command("sidebar")}><PanelLeftIcon /></Button></Hint>
-			</div>
-			<ScrollFadeArea className="flex-1">
-				<div className="px-2 pt-1 pb-2">
-				<Hint label="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page" describes><div className={cn("side-row", ROW)} onClick={() => void s.command("palette")}><SearchIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></div></Hint>
-				<div className="flex items-center pt-3.5 pr-1.5 pb-0.5 pl-2 text-xs text-faint">Agents<span className="min-w-0 flex-1" /><Hint label="New agent"><Button variant="ghost" size="icon-xs" className="app-no-drag" onClick={() => s.openSettings("agents", "+")}><PlusIcon /></Button></Hint></div>
-				{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}
-				</div>
-			</ScrollFadeArea>
-			<div className="side-foot flex flex-none flex-col gap-px p-2">
-				{newer ? <Hint label={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`} describes><div className={cn("side-row side-update", ROW, "text-primary hover:text-primary")} onClick={() => void bridge.open(newer.url)}><ArrowUpIcon className="size-3.5" /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon size={12} /></div></Hint> : null}
-				<div className={cn("side-row", ROW, front?.kind === "events" && ["on", ROW_ON])} onClick={() => void s.openEvents()}><AudioLinesIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Events</span></div>
-				<div className={cn("side-row", ROW, front?.kind === "settings" && ["on", ROW_ON])} onClick={() => s.openSettings()}><SettingsIcon className="size-3.5" /><span className="grow min-w-0 flex-1">Settings</span><Kbd>⌘,</Kbd></div>
+			</SidebarHeader>
+			<SidebarContent>
+				<ScrollFadeArea className="flex-1">
+					<SidebarGroup className="pt-1 pb-0">
+						<SidebarMenu>
+							<SidebarMenuItem className="app-no-drag">
+								<Hint label="Find a conversation by its name or by what was said in it, or a command, an agent, a settings page" describes><SidebarMenuButton className="side-row" onClick={() => void s.command("palette")}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></SidebarMenuButton></Hint>
+							</SidebarMenuItem>
+						</SidebarMenu>
+					</SidebarGroup>
+					<SidebarGroup>
+						<SidebarGroupLabel>Agents</SidebarGroupLabel>
+						<Hint label="New agent"><SidebarGroupAction className="app-no-drag" onClick={() => s.openSettings("agents", "+")}><PlusIcon /></SidebarGroupAction></Hint>
+						<SidebarGroupContent className="flex flex-col gap-1">{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}</SidebarGroupContent>
+					</SidebarGroup>
+				</ScrollFadeArea>
+			</SidebarContent>
+			<SidebarFooter className="side-foot gap-0">
+				<SidebarMenu>
+					{newer ? (
+						<SidebarMenuItem className="app-no-drag">
+							<Hint label={`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`} describes><SidebarMenuButton className="side-row side-update text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)}><ArrowUpIcon /><span className="grow cut min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></SidebarMenuButton></Hint>
+						</SidebarMenuItem>
+					) : null}
+					<SidebarMenuItem className="app-no-drag">
+						<SidebarMenuButton isActive={front?.kind === "events"} className={cn("side-row", front?.kind === "events" && "on")} onClick={() => void s.openEvents()}><AudioLinesIcon /><span className="grow min-w-0 flex-1">Events</span></SidebarMenuButton>
+					</SidebarMenuItem>
+					<SidebarMenuItem className="app-no-drag">
+						<SidebarMenuButton isActive={front?.kind === "settings"} className={cn("side-row", front?.kind === "settings" && "on")} onClick={() => s.openSettings()}><SettingsIcon /><span className="grow min-w-0 flex-1">Settings</span><Kbd>⌘,</Kbd></SidebarMenuButton>
+					</SidebarMenuItem>
+				</SidebarMenu>
 				<div className="side-status flex items-center gap-2 px-2 pt-1.5 pb-0.5 text-xs text-faint app-no-drag" title={s.service.status === "ready" ? `${s.service.home} · ${s.service.started ? "started by this app" : "a pine that was already running"}` : ""}>
 					{/* The dot stands in the place of the icons in the rows above it: its middle under theirs, and what is written beside it under their names. */}
-					<span className="grid size-3.5 flex-none place-items-center"><span className={cn(DOT, !ready ? "bg-warn" : s.connected ? "bg-primary" : "bg-destructive")} /></span>
+					<span className="grid size-4 flex-none place-items-center"><span className={cn(DOT, !ready ? "bg-warn" : s.connected ? "bg-primary" : "bg-destructive")} /></span>
 					<span className="cut truncate">{!ready ? "starting" : !s.connected ? "pine does not answer" : `pine${s.service.status === "ready" && s.service.version ? ` ${s.service.version}` : ""} · ${s.service.status === "ready" && s.service.started ? "started here" : "attached"}`}</span>
 				</div>
-			</div>
-		</aside>
+			</SidebarFooter>
+		</SidebarRoot>
 	);
 }
 
@@ -778,29 +800,32 @@ export function App() {
 			{!ready ? (
 				<Gate />
 			) : (
-				<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "sidebar-panel", SIDE_KEY)}>
-					{s.sidebar ? (
-						<>
-							<ResizablePanel id="sidebar-panel" className="flex" panelRef={side} defaultSize={Number(localStorage.getItem(SIDE_KEY)) || SIDE_WIDTH} minSize={190} maxSize={460} groupResizeBehavior="preserve-pixel-size">
-								<Sidebar />
-							</ResizablePanel>
-							<ResizableHandle className="bg-transparent" disableDoubleClick onDoubleClick={() => (side.current?.resize(SIDE_WIDTH), localStorage.setItem(SIDE_KEY, String(SIDE_WIDTH)))} title="Drag to make the side bar wider or narrower" />
-						</>
-					) : null}
-					<ResizablePanel id="main" className="flex">
-						<div className="flex min-w-0 flex-1 flex-col">
-							<TitleBar />
-							<div className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !s.sidebar && "pl-1.5")}>
-								<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "code-panel", CODE_KEY)}>
-									<ResizablePanel id="view" className="flex" minSize={420}>
-										{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
-									</ResizablePanel>
-									{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
-								</ResizablePanelGroup>
+				// The stock provider follows the model: its own ⌘B, where the page gets the key before the menu, toggles the same setting.
+				<SidebarProvider open={s.sidebar} onOpenChange={(open) => open !== s.sidebar && void s.command("sidebar")}>
+					<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "sidebar-panel", SIDE_KEY)}>
+						{s.sidebar ? (
+							<>
+								<ResizablePanel id="sidebar-panel" className="flex" panelRef={side} defaultSize={Number(localStorage.getItem(SIDE_KEY)) || SIDE_WIDTH} minSize={190} maxSize={460} groupResizeBehavior="preserve-pixel-size">
+									<Sidebar />
+								</ResizablePanel>
+								<ResizableHandle className="bg-transparent" disableDoubleClick onDoubleClick={() => (side.current?.resize(SIDE_WIDTH), localStorage.setItem(SIDE_KEY, String(SIDE_WIDTH)))} title="Drag to make the side bar wider or narrower" />
+							</>
+						) : null}
+						<ResizablePanel id="main" className="flex">
+							<div className="flex min-w-0 flex-1 flex-col">
+								<TitleBar />
+								<div className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !s.sidebar && "pl-1.5")}>
+									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "code-panel", CODE_KEY)}>
+										<ResizablePanel id="view" className="flex" minSize={420}>
+											{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
+										</ResizablePanel>
+										{s.code && tab!.kind === "chat" ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
+									</ResizablePanelGroup>
+								</div>
 							</div>
-						</div>
-					</ResizablePanel>
-				</ResizablePanelGroup>
+						</ResizablePanel>
+					</ResizablePanelGroup>
+				</SidebarProvider>
 			)}
 			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.updateAsk ? <UpdateAsk /> : null}

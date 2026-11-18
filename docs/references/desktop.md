@@ -495,11 +495,17 @@ holds only tokens and base rules.
 ### Stories and Chromatic
 
 Buttons, switches, inputs, fields, toggle groups (the segmented controls), selects, the edges that resize
-the side bar and the code panel (Resizable) and the agents' groups in the side bar (Collapsible)
-are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
+the side bar and the code panel (Resizable), the side bar itself (Sidebar, fixed in place with
+`collapsible="none"`: its header, groups, menu buttons, badges and actions) and the agents' groups in it
+(Collapsible) are shadcn's own components (`src/components/ui/`, added with the shadcn CLI and left as they are), and the icons
 are lucide's. They have no stories of their own. What shadcn has no primitive for (a tree, a list
 of rows to open) is ui-sdk's (`@ui-sdk/react`), in `src/lists.tsx`; ui-sdk is never used for a
-piece shadcn has. pine's own parts (`src/ui.tsx`: the logo, the working dot, an empty view,
+piece shadcn has. The two meet in the side bar: an agent's conversations are a ui-sdk list drawn
+as the stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` drawn as the
+list's option, so the rows look like the side bar's and the list stays one tab stop with the arrows.
+The side bar's colours are the `--sidebar*` tokens in `index.css`, set from pine's own: rows are
+muted, the one in front pressed, and its background is left to the window behind it (the system's
+material on a Mac). pine's own parts (`src/ui.tsx`: the logo, the working dot, an empty view,
 the notices; dialogs; `src/lists.tsx`: the tree and the list) have stories beside
 them (`src/ui/<Part>.stories.tsx`, one file per part, titled by its path), and a whole view
 has its story beside its file (`src/Composer.stories.tsx`, `src/Conversation.stories.tsx`).
