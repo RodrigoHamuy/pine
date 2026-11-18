@@ -1,3 +1,5 @@
+import type { Prefs } from "./bridge.ts";
+
 // Dark mode is a `.dark` class on the root element, the way shadcn's tokens expect it. What decides
 // it is the app's Appearance setting: Light or Dark by itself, and System by the system's
 // `prefers-color-scheme`. The page reads the setting rather than only the query, because the query
@@ -6,7 +8,7 @@
 const query = "(prefers-color-scheme: dark)";
 
 /** The app's Appearance setting, as its preferences keep it. */
-export type Appearance = "system" | "light" | "dark";
+export type Appearance = Prefs["theme"];
 
 /**
  * Keeps the `.dark` class of the root element in step with the Appearance setting (`chosen`) and,
