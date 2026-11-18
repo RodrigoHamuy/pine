@@ -508,10 +508,12 @@ stock `SidebarMenu` (`render`), and each row is the stock `SidebarMenuButton` dr
 option, so the rows look like the side bar's and the arrow keys move between them.
 The side bar's colours are the `--sidebar*` tokens in `index.css`, set from pine's own: rows are
 muted, the one in front pressed, and its background is left to the window behind it (the system's
-material on a Mac). pine's own parts (`src/ui.tsx`: the logo, an empty view; dialogs) have stories in
-`src/ui/<Part>.stories.tsx`, one file per part; a composition in `src/components/` has its
-story beside its file, titled `Components/<Name>` (`src/components/printed.stories.tsx`); and a whole view
-has its story beside its file (`src/Composer.stories.tsx`, `src/Conversation.stories.tsx`).
+material on a Mac). A story sits beside the file of what it shows: `src/<File>.stories.tsx`
+for a file of `src/`, `src/components/<name>.stories.tsx` for a composition there (titled
+`Components/<Name>`). pine's own parts (`src/ui.tsx`: the logo, an empty view) are in
+`src/ui.stories.tsx`, the dialogs of `src/App.tsx` in `src/App.stories.tsx`, one story per part
+and state, named after it (`PickDialogRemoving`); a whole view is in its own
+(`src/Composer.stories.tsx`, `src/Conversation.stories.tsx`).
 None needs Electron or a daemon. A view that calls `api.ts` or the bridge is drawn on
 stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does nothing.
 
