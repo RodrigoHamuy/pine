@@ -21,7 +21,7 @@ import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -583,8 +583,11 @@ function Agents() {
 
 // ---- models -----------------------------------------------------------------------------------------
 
-/** pi's sign-in, shown step by step: a page to open, a code to type there, or a key to paste here. */
-function SignIn({ provider, type, close }: { provider: string; type?: "api_key" | "oauth"; close: (done: boolean, choose?: string[]) => void }) {
+/**
+ * pi's sign-in, shown step by step: a page to open, a code to type there, or a key to paste here. It is the
+ * content of a stock Dialog, which unmounts it when it closes: a sign-in that is not done then is cancelled.
+ */
+function SignIn({ provider, type, reload }: { provider: string; type?: "api_key" | "oauth"; reload: () => void }) {
 	const [id, setId] = useState<string>();
 	const [state, setState] = useState<LoginState>();
 	const [answer, setAnswer] = useState("");
@@ -601,10 +604,12 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 	useEffect(() => {
 		if (!id) return;
 		let live = true;
+		let done = false;
 		const look = async () => {
 			try {
 				const next = await api.loginState(id);
 				if (!live) return;
+				done = next.done;
 				setState(next);
 				// The page is opened here, where the owner sits; once.
 				if (next.url && opened.current !== next.url) (opened.current = next.url), void bridge.open(next.url);
@@ -617,12 +622,9 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 		return () => {
 			live = false;
 			window.clearTimeout(timer);
+			if (!done) void api.loginAnswer(id, { cancel: true }).catch(() => {});
 		};
 	}, [id]);
-	const cancel = () => {
-		if (id && !state?.done) void api.loginAnswer(id, { cancel: true }).catch(() => {});
-		close(Boolean(state?.done && !state.error));
-	};
 	const send = async (text: string) => {
 		if (!id) return;
 		setAnswer("");
@@ -630,61 +632,59 @@ function SignIn({ provider, type, close }: { provider: string; type?: "api_key" 
 	};
 	const q = state?.question;
 	return (
-		<Dialog open onOpenChange={(open) => open || cancel()}>
-			<DialogContent showCloseButton={false} className="sm:max-w-xl">
-				<DialogHeader>
-					<DialogTitle>Sign in to {provider}</DialogTitle>
-				</DialogHeader>
-				<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
-					<div className="flex flex-col gap-3 px-4 select-text">
-						{error || state?.error ? <Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{error ?? state?.error}</AlertDescription></Alert> : null}
-						{state?.lines.length ? (
-							<CodeBlock size="sm">
-								<CodeBlockContent wrap className="log max-h-60 select-text">{state.lines.join("\n")}</CodeBlockContent>
-							</CodeBlock>
-						) : null}
-						{state?.url && !state.done ? <div className="flex items-center gap-2"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono cursor-auto font-mono">{state.code}</b></span> : null}</div> : null}
-						{q && !state?.done ? (
-							q.options?.length ? (
-								<FieldSet>
-									<FieldLegend variant="label">{q.message}</FieldLegend>
-									<ItemGroup>
-										{q.options.map((o) => (
-											<Item key={o.id} variant="outline" size="sm" render={<button type="button" />} onClick={() => void send(o.id)}>
-												<ItemContent className="min-w-0">
-													<ItemTitle>{o.label}</ItemTitle>
-													{o.description ? <ItemDescription>{o.description}</ItemDescription> : null}
-												</ItemContent>
-											</Item>
-										))}
-									</ItemGroup>
-								</FieldSet>
-							) : (
-								<Field>
-									<FieldLabel htmlFor={`${field}-answer`}>{q.message}</FieldLabel>
-									<div className="flex items-center gap-2">
-										<Input id={`${field}-answer`} autoFocus className="mono font-mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
-										<Button disabled={!answer.trim()} onClick={() => void send(answer.trim())}>Continue</Button>
-									</div>
-									{q.secret ? <FieldDescription>It is not shown, and is stored in auth.json in pine's home, where agents cannot read it.</FieldDescription> : null}
-								</Field>
-							)
-						) : !state?.done && !error ? (
-							<div className="flex items-center gap-2 text-muted-foreground"><Spinner /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
-						) : null}
-						{state?.done && !state.error ? (
-							<Alert className="notice plain">
-								<CheckIcon />
-								<AlertDescription>{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</AlertDescription>
-							</Alert>
-						) : null}
-						{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
-						{state?.done && !state.error && state.models?.length ? <div className="flex items-center gap-2"><Button onClick={() => close(true, state.models)}>Choose the model your agents run on…</Button><span className="text-muted-foreground">Or later: Change, on the Models page.</span></div> : null}
-					</div>
-				</ScrollArea>
-				<DialogFooter><Button variant={state?.done ? "default" : "outline"} onClick={cancel}>{state?.done ? "Done" : "Cancel"}</Button></DialogFooter>
-			</DialogContent>
-		</Dialog>
+		<>
+			<DialogHeader>
+				<DialogTitle>Sign in to {provider}</DialogTitle>
+			</DialogHeader>
+			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<div className="flex flex-col gap-3 px-4 select-text">
+					{error || state?.error ? <Alert variant="destructive" className="notice"><TriangleAlertIcon /><AlertDescription>{error ?? state?.error}</AlertDescription></Alert> : null}
+					{state?.lines.length ? (
+						<CodeBlock size="sm">
+							<CodeBlockContent wrap className="log max-h-60 select-text">{state.lines.join("\n")}</CodeBlockContent>
+						</CodeBlock>
+					) : null}
+					{state?.url && !state.done ? <div className="flex items-center gap-2"><Button variant="outline" onClick={() => void bridge.open(state.url!)}><ExternalLinkIcon data-icon="inline-start" />Open the sign-in page again</Button>{state.code ? <span>Code: <b className="mono cursor-auto font-mono">{state.code}</b></span> : null}</div> : null}
+					{q && !state?.done ? (
+						q.options?.length ? (
+							<FieldSet>
+								<FieldLegend variant="label">{q.message}</FieldLegend>
+								<ItemGroup>
+									{q.options.map((o) => (
+										<Item key={o.id} variant="outline" size="sm" render={<button type="button" />} onClick={() => void send(o.id)}>
+											<ItemContent className="min-w-0">
+												<ItemTitle>{o.label}</ItemTitle>
+												{o.description ? <ItemDescription>{o.description}</ItemDescription> : null}
+											</ItemContent>
+										</Item>
+									))}
+								</ItemGroup>
+							</FieldSet>
+						) : (
+							<Field>
+								<FieldLabel htmlFor={`${field}-answer`}>{q.message}</FieldLabel>
+								<div className="flex items-center gap-2">
+									<Input id={`${field}-answer`} autoFocus className="mono font-mono" type={q.secret ? "password" : "text"} autoComplete="off" spellCheck={false} value={answer} onChange={(e) => setAnswer(e.target.value)} onKeyDown={(e) => e.key === "Enter" && answer.trim() && void send(answer.trim())} />
+									<Button disabled={!answer.trim()} onClick={() => void send(answer.trim())}>Continue</Button>
+								</div>
+								{q.secret ? <FieldDescription>It is not shown, and is stored in auth.json in pine's home, where agents cannot read it.</FieldDescription> : null}
+							</Field>
+						)
+					) : !state?.done && !error ? (
+						<div className="flex items-center gap-2 text-muted-foreground"><Spinner /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
+					) : null}
+					{state?.done && !state.error ? (
+						<Alert className="notice plain">
+							<CheckIcon />
+							<AlertDescription>{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</AlertDescription>
+						</Alert>
+					) : null}
+					{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
+					{state?.done && !state.error && state.models?.length ? <div className="flex items-center gap-2"><DialogClose render={<Button />} onClick={() => void store.chooseDefaultModel(state.models).then(reload)}>Choose the model your agents run on…</DialogClose><span className="text-muted-foreground">Or later: Change, on the Models page.</span></div> : null}
+				</div>
+			</ScrollArea>
+			<DialogFooter><DialogClose render={<Button variant={state?.done ? "default" : "outline"} />}>{state?.done ? "Done" : "Cancel"}</DialogClose></DialogFooter>
+		</>
 	);
 }
 
@@ -692,7 +692,6 @@ function Models() {
 	const providers = useLoad(() => api.providers());
 	const servers = useLoad(() => api.modelServers());
 	const models = useLoad(() => api.models());
-	const [signIn, setSignIn] = useState<{ provider: string; type?: "api_key" | "oauth" }>();
 	const [f, setF] = useState({ name: "", url: "", key: "", context: "" });
 	const [locked, setLocked] = useState(false);
 	const [busy, setBusy] = useState(false);
@@ -820,8 +819,14 @@ function Models() {
 											</AlertDialogFooter>
 										</AlertDialogContent>
 									</AlertDialog> : null}
-									{p.oauth ? <Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "oauth" })}>Sign in</Button> : null}
-									<Button variant="outline" size="xs" onClick={() => setSignIn({ provider: p.id, type: "api_key" })}>{p.signedIn ? "New key" : "API key"}</Button>
+									{p.oauth ? <Dialog onOpenChange={(open) => open || reload()}>
+										<DialogTrigger render={<Button variant="outline" size="xs" />}>Sign in</DialogTrigger>
+										<DialogContent showCloseButton={false} className="sm:max-w-xl"><SignIn provider={p.id} type="oauth" reload={reload} /></DialogContent>
+									</Dialog> : null}
+									<Dialog onOpenChange={(open) => open || reload()}>
+										<DialogTrigger render={<Button variant="outline" size="xs" />}>{p.signedIn ? "New key" : "API key"}</DialogTrigger>
+										<DialogContent showCloseButton={false} className="sm:max-w-xl"><SignIn provider={p.id} type="api_key" reload={reload} /></DialogContent>
+									</Dialog>
 								</ItemActions>
 							</Item>
 						))
@@ -864,7 +869,6 @@ function Models() {
 			) : (
 				<p className="text-muted-foreground">…</p>
 			)}
-			{signIn ? <SignIn provider={signIn.provider} type={signIn.type} close={(_done, choose) => (setSignIn(undefined), reload(), choose ? void store.chooseDefaultModel(choose).then(reload) : undefined)} /> : null}
 		</Page>
 	);
 }
