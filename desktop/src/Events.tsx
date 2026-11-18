@@ -1,9 +1,11 @@
-// The event log: everything pine publishes, as it happens. A line opens to its whole payload.
+// The event log: everything pine publishes, as it happens. A line is a collapsible: it opens, by click or key, to its whole payload.
 import { AudioLinesIcon, PlayIcon, SearchIcon, SquareIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Hint } from "@/components/hint";
-import { cn } from "cn";
+import { Log } from "@/components/log";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { api, type PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
@@ -84,15 +86,17 @@ export function Events({ tab }: { tab: Tab }) {
 				<div className="flex min-h-full flex-col py-1.5">
 				{shown.length ? (
 					shown.map((e, i) => (
-						<div key={`${e.id}:${e.ts}:${i}`}>
-							<div className={cn("ev flex gap-3 px-4 py-0.5 whitespace-nowrap hover:bg-hover", open === i && "bg-hover")} onClick={() => setOpen(open === i ? undefined : i)}>
+						<Collapsible key={`${e.id}:${e.ts}:${i}`} open={open === i} onOpenChange={(now) => setOpen(now ? i : undefined)}>
+							<CollapsibleTrigger className="ev flex w-full items-center gap-3 px-4 py-0.5 text-start whitespace-nowrap hover:bg-hover focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-primary/60 data-panel-open:bg-hover">
 								<span className="flex-none text-faint">{new Date(e.ts).toLocaleTimeString("sv-SE")}</span>
-								<span className={cn("w-11 flex-none", e.trust === "owner" ? "text-primary" : "text-faint")}>{e.trust === "owner" ? "owner" : "other"}</span>
+								<Badge variant={e.trust === "owner" ? "default" : "outline"} className="w-14">{e.trust === "owner" ? "owner" : "other"}</Badge>
 								<span className="flex-none font-semibold">{e.topic}</span>
 								<span className="truncate text-muted-foreground">{short(JSON.stringify(e.payload ?? null), 220)}</span>
-							</div>
-							{open === i ? <div className="mx-4 mb-1.5 ml-20 rounded-md bg-sunk px-2.5 py-2 whitespace-pre-wrap wrap-anywhere text-muted-foreground select-text">{`#${e.id} · from ${e.source}\n${JSON.stringify(e.payload ?? null, null, 2)}`}</div> : null}
-						</div>
+							</CollapsibleTrigger>
+							<CollapsibleContent>
+								<Log className="mx-4 mb-1.5 ml-20">{`#${e.id} · from ${e.source}\n${JSON.stringify(e.payload ?? null, null, 2)}`}</Log>
+							</CollapsibleContent>
+						</Collapsible>
 					))
 				) : (
 					<Empty icon={AudioLinesIcon} title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</Empty>
