@@ -140,10 +140,11 @@ function ConversationRow({ agent, c }: { agent: string; c: Conv }) {
 	return (
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
 		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
-			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", on && "on")} render={<ListRow value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+			<SidebarMenuButton isActive={on} className={cn("side-row side-conv pl-10", c.tasks && "pr-16!", on && "on")} render={<ListRow value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.folder ? ` · works in ${c.folder}` : ""}`} />}>
 				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Needs /> : working ? <Pulse size={11} /> : tab?.unread ? <Unread /> : main || c.pinned ? <StarIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
 				<span className="cut min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
+			{/* The badge is drawn over the button, so the button keeps the room for the time (stock pr-8 is for an action alone). */}
 			{c.tasks ? <SidebarMenuBadge className={cn(!main && "group-hover/menu-item:hidden")}>{ago(c.last).replace(" ago", "")}</SidebarMenuBadge> : null}
 			{main ? null : (
 				// Shown under the pointer only, so that it is no tab stop of its own; its keys are not the list's.
