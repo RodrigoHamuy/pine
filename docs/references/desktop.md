@@ -112,6 +112,7 @@ it was built on. See "Packing and signing" for what it carries and how it is sig
 |---|---|
 | `npm start` | Builds the app and opens it |
 | `npm run dev` | Opens it with the page served by Vite, reloading on every change |
+| `npm run dev:preview` | The app's page in an ordinary browser, reloading on every change, on a throwaway pine. `-- --home <dir>` puts it on that pine home instead. See below |
 | `npm run check` | Type check |
 | `npm test` | The app from end to end: the real app on a pine home of its own with a scripted model. Needs a screen. With `PINE_LIVE=1` on a Mac it also dictates with the real voice helper, from a recording |
 | `npm run pack` | `release/mac-arm64/Pine.app`, with pine, Node and the helpers inside |
@@ -123,6 +124,24 @@ Electron. The pine of a packed app runs on the Node the app carries. From a chec
 looks for `node` the way your shell finds it (it asks your login shell for its environment,
 since an app started from the Finder has none of it); a packed app does the same for a pine
 that is not its own, and falls back to its own Node where the Mac has none.
+
+### The page in a browser
+
+`npm run dev:preview` serves the app's page at `http://localhost:5173` (the port from `$PORT`),
+for an editor's preview pane or any browser, without the app's window. It is a tool for
+working on the app, not a way to use pine. In Claude Code it is the `desktop-preview` entry
+of `.claude/launch.json`.
+
+| How it is started | What it runs on |
+|---|---|
+| `npm run dev:preview` | A throwaway pine: a home in a temp folder with two agents (`main` and `scout`) and the scripted model of pine's tests. The home and its daemon are removed when the preview stops |
+| `npm run dev:preview -- --home <dir>` | That pine home, with its own models and conversations. The daemon that runs there is used and left running; if none runs, one is started and stopped with the preview. The home is never removed |
+
+The preview's server stands where the app's main process stands: it holds the daemon's token
+and makes every call for the page, with the same checks, and it answers only the page on the
+same computer. What only the app can do does nothing in a browser: menus, system
+notifications, the dock badge, dictation, update checks, `pine` for a terminal, restarting
+pine, setting pine up. To open a folder for a conversation you type its path.
 
 ## The daemon: started or reused
 
@@ -432,6 +451,9 @@ desktop/
   electron/
     main.ts        the main process: the window, menus, dialogs, notifications; the daemon's token
                    and every call of the control API; the two addresses the page may load from
+    daemon.ts      what the page may ask the daemon for, without Electron: a call's check and
+                   forwarding, the media served straight from the daemon (`MEDIA`), the live events
+                   in batches, the page's content security policy
     preload.ts     the bridge: the short list of things the page may ask the main process for
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
@@ -462,16 +484,22 @@ desktop/
                    (components.json is shadcn's configuration: Base UI, lucide icons)
     theme.ts       the `.dark` class on the root element, kept in step with the system's appearance,
                    which the Appearance setting decides
+    preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
+                   (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
                    skills-lock.json; .claude/skills links to it for Claude Code)
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
-                   launcher that becomes Resources/bin/pine)
-  test/            the app from end to end, driven through its real window; command.test.ts
-                   and updates.test.ts need no window
+                   launcher that becomes Resources/bin/pine), preview.ts (the page in an ordinary
+                   browser, `npm run dev:preview`: Vite's server makes every call for the page,
+                   on a throwaway pine or the home `--home` names)
+  test/            the app from end to end, driven through its real window; command.test.ts,
+                   updates.test.ts, daemon.test.ts and preview.test.ts need no window
 ```
 
 - The page asks for something new through `preload.ts` and a handler in `main.ts`, never by
   getting more of the system. A handler checks that the call comes from the app's own page.
+  `src/preview-bridge.ts` implements it too: it returns the `Bridge` type, so a missing method
+  fails `npm run check`. If it needs the daemon, `scripts/preview.ts` routes it under `/__pine/`.
 - What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a
   test there, then to `api.ts`. The app never does a daemon's work itself.
 - Text an answer or a tool produced is drawn through `markdown.tsx` or as plain text, never

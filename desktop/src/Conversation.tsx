@@ -28,7 +28,7 @@ import { Toggle } from "@/components/ui/toggle";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
-import { type AgentDetail, api, type TranscriptEntry } from "./api.ts";
+import { type AgentDetail, api, media, type TranscriptEntry } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Composer } from "./Composer.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
@@ -131,10 +131,10 @@ function Call({ tool, subject, status, ms, depth = 0, output, error, images }: {
 				{(images ?? []).map((id) => (
 					<div className={MEDIA.box.image} key={id}>
 						<Dialog>
-							<DialogTrigger nativeButton={false} aria-label="The picture, larger" render={<img className={MEDIA.image} src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" />} />
+							<DialogTrigger nativeButton={false} aria-label="The picture, larger" render={<img className={MEDIA.image} src={media.tool(id)} alt="" />} />
 							<DialogContent showCloseButton={false} className="flex max-h-11/12 w-auto max-w-11/12 flex-col items-center sm:max-w-11/12">
 								<DialogTitle className="sr-only">The picture, larger</DialogTitle>
-								<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={`pine-media://daemon/media/tool/${encodeURIComponent(id)}`} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
+								<DialogClose nativeButton={false} aria-label="Close the picture" render={<img src={media.tool(id)} alt="" className="min-h-0 max-w-full rounded-md object-contain" />} />
 							</DialogContent>
 						</Dialog>
 					</div>

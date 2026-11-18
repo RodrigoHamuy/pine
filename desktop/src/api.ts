@@ -1,5 +1,5 @@
 // The control API, typed. Every call goes through the main process, which holds the token.
-import { bridge } from "./bridge.ts";
+import { bridge, MEDIA_BASE } from "./bridge.ts";
 
 export class ApiError extends Error {
 	status: number;
@@ -469,8 +469,8 @@ export interface BrowserState {
 
 export const media = {
 	/** The page of a conversation's browser as a picture; `n` only makes each address a new one. */
-	browser: (agent: string, session: string, n: number) => `pine-media://daemon${a(agent)}/browser/frame?session=${e(session)}&n=${n}`,
-	tool: (id: string) => `pine-media://daemon/media/tool/${e(id)}`,
-	task: (task: number, n: number) => `pine-media://daemon/tasks/${task}/images/${n}`,
-	workspace: (agent: string, file: string, session?: string) => `pine-media://daemon${a(agent)}/image?path=${e(file)}${session ? `&session=${e(session)}` : ""}`,
+	browser: (agent: string, session: string, n: number) => `${MEDIA_BASE}${a(agent)}/browser/frame?session=${e(session)}&n=${n}`,
+	tool: (id: string) => `${MEDIA_BASE}/media/tool/${e(id)}`,
+	task: (task: number, n: number) => `${MEDIA_BASE}/tasks/${task}/images/${n}`,
+	workspace: (agent: string, file: string, session?: string) => `${MEDIA_BASE}${a(agent)}/image?path=${e(file)}${session ? `&session=${e(session)}` : ""}`,
 };

@@ -10,6 +10,9 @@ export default defineConfig({
 	// `scroll-fade` then never fades in a build (it does with `vite dev`). esbuild keeps the longhand.
 	plugins: [react(), tailwindcss({ optimize: false })],
 	// "@/": the page's sources, the alias shadcn's components are written with.
+	// The page's stand-in for the preload's bridge is for `npm run dev:preview` only (scripts/preview.ts
+	// sets this true): in the app, in Storybook and in a build it is false, and the stand-in is left out.
+	define: { __PINE_PREVIEW__: "false" },
 	resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
 	// PINE_DESKTOP_DEBUG=1: a build that can be read, for an error that only says where it is in the bundle.
 	build: { outDir: "dist", emptyOutDir: true, target: "chrome140", chunkSizeWarningLimit: 4000, minify: !process.env.PINE_DESKTOP_DEBUG, cssMinify: process.env.PINE_DESKTOP_DEBUG ? false : "esbuild" },
