@@ -803,7 +803,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await signedIn.locator("[data-slot=alert-dialog-trigger] >> text=Sign out").click();
 	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=/^Sign out of /");
 	await page.click("[data-slot=alert-dialog-action] >> text=Sign out");
-	await sees(".item .notice >> text=/main cannot answer: .* needs a sign-in to opencode/");
+	await sees(".set-group .notice >> text=/main cannot answer: .* needs a sign-in to opencode/");
 	await page.click(".tab:has-text('pine-desktop-folder')");
 	await sees(".welcome .notice >> text=/needs a sign-in to opencode/");
 	await shot("09-no-model");
@@ -814,7 +814,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees("[data-slot=dialog-title] >> text=Model for every agent that has none of its own");
 	await page.click("[data-slot=command-item] >> text=mock/m");
 	await sees("[data-sonner-toast] >> text=Your agents now run on mock/m");
-	await page.waitForSelector(".item .notice", { state: "detached" });
+	await page.waitForSelector(".set-group .notice", { state: "detached" });
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, "mock/m");
 	// MCP servers: a remote one is added, pine says whether it connects, and "Sign in" runs pi's own
 	// sign-in for it (which for a server that wants none says so; a browser opens only where one is needed).
@@ -902,7 +902,7 @@ test("the appearance setting puts the page in dark or light, and System follows 
 	// for the owner (Electron's native theme drives the page's prefers-color-scheme).
 	await page.emulateMedia({ colorScheme: null });
 	const dark = () => page.evaluate(() => document.documentElement.classList.contains("dark"));
-	const appearance = (label: string) => page.click(`.item:has(.name:text-is("Appearance")) [role=tab]:text-is("${label}")`);
+	const appearance = (label: string) => page.click(`.item:has(.name:text-is("Appearance")) [data-slot=toggle-group-item]:text-is("${label}")`);
 	const waitDark = (want: boolean) => page.waitForFunction((w) => document.documentElement.classList.contains("dark") === w, want);
 	try {
 		await menu("settings");
