@@ -4,7 +4,7 @@ import type { Look } from "./theme.ts";
 
 declare global {
 	interface Window {
-		pine: Bridge;
+		pine: PageBridge;
 	}
 	/** Set by `npm run dev:preview` only (vite.config.ts): the page runs in an ordinary browser, with src/preview-bridge.ts. */
 	const __PINE_PREVIEW__: boolean;
@@ -30,7 +30,42 @@ export interface Prefs {
 
 export type { Update } from "../electron/updates.ts";
 
+/** What the bridge's `state()` answers when the page starts. */
+export interface AppState {
+	state: ServiceState;
+	/** Whether the event stream is up. */
+	connected?: boolean;
+	home?: string;
+	prefs: Prefs;
+	platform: string;
+	focused: boolean;
+	/** Whether this app asks for a newer one at all. */
+	updates: boolean;
+	versions: { app: string; electron: string };
+	/**
+	 * Whether there is a "this computer" whose pine the app can use. Set to false by a bridge that
+	 * only reaches other machines (the mobile app's): the page then offers no local machine and
+	 * never asks `use()` for one. The desktop app and the preview leave it out, which means there is.
+	 */
+	local?: boolean;
+}
+
+/**
+ * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the
+ * preview's, the mobile app's).
+ */
+export type PageBridge = Omit<Bridge, "state"> & {
+	state: () => Promise<AppState>;
+	/**
+	 * Where the daemon's pictures, video and sound are fetched from, set by a bridge whose page
+	 * fetches them from another address than the app's scheme (the mobile app's, on its own origin).
+	 * The desktop app and the preview leave it out.
+	 */
+	mediaBase?: string;
+};
+
 export const bridge = window.pine;
 
-/** Where the daemon's pictures, video and sound are fetched from: the app's scheme, or in the preview its server's path. */
-export const MEDIA_BASE = import.meta.env.DEV && __PINE_PREVIEW__ ? "/__pine/media" : "pine-media://daemon";
+/** Where the daemon's pictures, video and sound are fetched from: what the bridge says, else the app's scheme, or in the preview its server's path. */
+// (Asked by its type: Storybook's stand-in answers every name with a function.)
+export const MEDIA_BASE = typeof bridge.mediaBase === "string" ? bridge.mediaBase : import.meta.env.DEV && __PINE_PREVIEW__ ? "/__pine/media" : "pine-media://daemon";

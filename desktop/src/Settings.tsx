@@ -2085,9 +2085,9 @@ function Environments() {
 		</Item>
 	);
 	return (
-		<Page title="Environments" lead="The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them.">
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
 			<ItemGroup>
-				{row(undefined)}
+				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
 			<FieldSet>
@@ -2108,8 +2108,13 @@ function Environments() {
 				<InfoIcon />
 				<AlertDescription>
 					<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
-					<p>Its pine stays closed to the network: the app runs pine service there over ssh and forwards a port of this computer to it. Switching shows the other pine and stops none: an agent at work in one goes on. A pine the app started there stops when the app quits; one that was running already goes on.</p>
-					<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
+					{/* What follows is about a port of this computer and its terminal: not said where there is no local machine. */}
+					{s.local ? (
+						<>
+							<p>Its pine stays closed to the network: the app runs pine service there over ssh and forwards a port of this computer to it. Switching shows the other pine and stops none: an agent at work in one goes on. A pine the app started there stops when the app quits; one that was running already goes on.</p>
+							<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
+						</>
+					) : null}
 				</AlertDescription>
 			</Alert>
 		</Page>
@@ -2126,9 +2131,12 @@ function AppPage() {
 	const newer = s.update?.status === "newer" ? s.update : undefined;
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
 	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
-	useEffect(() => void bridge.command().then(setCommand), []);
+	// Under a bridge with no local machine (`s.local`), what only this computer has is neither asked nor shown:
+	// its home folder, Keep running, Restart, the pine command, the browser build, the Electron version.
+	const local = s.local;
+	useEffect(() => void (local && bridge.command().then(setCommand)), [local]);
 	// (Looked at again whenever this page is opened: the browser may have been fetched in a terminal.)
-	useEffect(() => void store.checkBrowser(), []);
+	useEffect(() => void (local && store.checkBrowser()), [local]);
 	// (And the themes: a file may have been put into the folder by hand.)
 	useEffect(() => void store.refreshThemes(), []);
 	const field = useId();
@@ -2187,22 +2195,24 @@ function AppPage() {
 							</FieldTitle>
 							<FieldDescription>{service?.host ? `The pine on ${service.host}, over SSH (Settings › Environments). ${service.started ? "This app started it there; it stops when the app quits." : "It was already running there, and goes on when this app quits."}` : service ? (service.started ? `Started by this app (${service.mode}), from ${service.from}. It stops when the app quits unless the switch below is on.` : "Attached to a pine that was already running. It goes on when this app quits.") : "Not running."}</FieldDescription>
 						</FieldContent>
-						{service?.started ? (
+						{service?.started && local ? (
 							<div className="flex items-center gap-1.5">
 								<Button variant="outline" size="xs" onClick={() => void s.attempt(() => bridge.restart())}><RotateCwIcon data-icon="inline-start" />Restart</Button>
 							</div>
 						) : null}
 					</Field>
-					<Field orientation="horizontal">
-						<FieldContent>
-							<FieldLabel htmlFor={`${field}-keep-running`}>Keep pine running after the app quits</FieldLabel>
-							<FieldDescription>A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</FieldDescription>
-						</FieldContent>
-						<div className="flex items-center gap-1.5">
-							<Switch id={`${field}-keep-running`} checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} />
-						</div>
-					</Field>
-					{command && (command.state !== "unavailable" || command.why) ? (
+					{local ? (
+						<Field orientation="horizontal">
+							<FieldContent>
+								<FieldLabel htmlFor={`${field}-keep-running`}>Keep pine running after the app quits</FieldLabel>
+								<FieldDescription>A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</FieldDescription>
+							</FieldContent>
+							<div className="flex items-center gap-1.5">
+								<Switch id={`${field}-keep-running`} checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} />
+							</div>
+						</Field>
+					) : null}
+					{local && command && (command.state !== "unavailable" || command.why) ? (
 						<Field orientation="responsive">
 							<FieldContent>
 								<FieldTitle>
@@ -2218,7 +2228,7 @@ function AppPage() {
 							) : null}
 						</Field>
 					) : null}
-					{s.browser !== undefined || s.browserFetching ? (
+					{local && (s.browser !== undefined || s.browserFetching) ? (
 						<Field orientation="responsive" data-setting="browser">
 							<FieldContent>
 								<FieldTitle>
@@ -2235,22 +2245,24 @@ function AppPage() {
 							{s.browser ? null : <Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner data-icon="inline-start" />Fetching…</> : "Fetch it"}</Button>}
 						</Field>
 					) : null}
-					<Field orientation="responsive">
-						<FieldContent>
-							<FieldTitle>Home folder</FieldTitle>
-							<FieldDescription>
-								<span className="block font-mono">{tilde((service?.host ? undefined : service?.home) ?? s.prefs.home ?? "~/.pine")}</span>
-								Where this computer's pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.
-							</FieldDescription>
-						</FieldContent>
-						<div className="flex items-center gap-1.5">
-							{s.prefs.home ? <Button variant="outline" size="xs" onClick={() => void set({ home: "" }).then(() => !s.remote && bridge.retry())}>Use ~/.pine</Button> : null}
-							<Button variant="outline" size="xs" onClick={() => void bridge.pickFolder("A pine home folder").then((dir: string | undefined) => dir && set({ home: dir }).then(() => (s.remote ? undefined : service?.started ? bridge.restart() : bridge.retry())))}><FolderIcon data-icon="inline-start" />Choose…</Button>
-						</div>
-					</Field>
+					{local ? (
+						<Field orientation="responsive">
+							<FieldContent>
+								<FieldTitle>Home folder</FieldTitle>
+								<FieldDescription>
+									<span className="block font-mono">{tilde((service?.host ? undefined : service?.home) ?? s.prefs.home ?? "~/.pine")}</span>
+									Where this computer's pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.
+								</FieldDescription>
+							</FieldContent>
+							<div className="flex items-center gap-1.5">
+								{s.prefs.home ? <Button variant="outline" size="xs" onClick={() => void set({ home: "" }).then(() => !s.remote && bridge.retry())}>Use ~/.pine</Button> : null}
+								<Button variant="outline" size="xs" onClick={() => void bridge.pickFolder("A pine home folder").then((dir: string | undefined) => dir && set({ home: dir }).then(() => (s.remote ? undefined : service?.started ? bridge.restart() : bridge.retry())))}><FolderIcon data-icon="inline-start" />Choose…</Button>
+							</div>
+						</Field>
+					) : null}
 				</FieldGroup>
 			</FieldSet>
-			<p className="text-muted-foreground">Pine {s.versions.app} · Electron {s.versions.electron}</p>
+			<p className="text-muted-foreground">Pine {s.versions.app}{local ? ` · Electron ${s.versions.electron}` : ""}</p>
 		</Page>
 	);
 }

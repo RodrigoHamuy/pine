@@ -96,7 +96,9 @@ const answers: Record<string, unknown> = {
 
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
 
-function Tab({ section, agent }: { section: string; agent?: string }) {
+function Tab({ section, agent, local = true }: { section: string; agent?: string; local?: boolean }) {
+	// What the bridge's `state()` says: false under a bridge with no "this computer" (the phone).
+	store.local = local;
 	store.section = section;
 	store.settingsAgent = agent;
 	store.agents = agents;
@@ -205,6 +207,15 @@ export const NewRouteAsk: Story = {
 		if (viewport && then) viewport.scrollTop += then.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
 	},
 };
+
+/** A bridge with no local machine: only the machines added, no row for this computer, and nothing about a port of it or its terminal. */
+export const EnvironmentsWithoutLocal: Story = {
+	args: { section: "environments", local: false },
+	render: Environments.render,
+};
+
+/** The App page under a bridge with no local machine: appearance, notifications, colours and the pine in use, without what only this computer has (its home folder, Keep running, Restart, the pine command, the browser build, the Electron version). */
+export const AppWithoutLocal: Story = { args: { section: "app", local: false } };
 
 // The app's preferences as the main process keeps them: what is set is answered back, as `pine:prefs` does.
 window.pine.prefs = async (change) => ({ ...store.prefs, ...change });

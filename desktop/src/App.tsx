@@ -67,7 +67,7 @@ function Gate() {
 	const [title, about, actions]: [string, React.ReactNode, React.ReactNode] =
 		state.status === "starting"
 			? host
-				? [`Connecting to ${host}`, "Reaching its pine over SSH, or starting one there…", <div key="s" className="flex items-center gap-2"><Spinner /><Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button></div>]
+				? [`Connecting to ${host}`, "Reaching its pine over SSH, or starting one there…", <div key="s" className="flex items-center gap-2"><Spinner />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>]
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Spinner key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
@@ -76,7 +76,7 @@ function Gate() {
 						<>
 							{s.initLines.length ? <Printed sm className="w-full text-start" text={s.initLines.slice(-40).join("\n")} /> : null}
 							<div className="flex items-center gap-2">
-								<Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Spinner data-icon="inline-start" />Setting up…</> : "Set up pine"}</Button>
+								{s.local ? <Button disabled={s.initRunning} onClick={() => void init()}>{s.initRunning ? <><Spinner data-icon="inline-start" />Setting up…</> : "Set up pine"}</Button> : null}
 								<Button variant="outline" disabled={s.initRunning} onClick={() => void bridge.retry()}>Try again</Button>
 							</div>
 						</>,
@@ -88,7 +88,7 @@ function Gate() {
 							<div key="b" className="flex items-center gap-2">
 								<Button onClick={() => void bridge.retry()}>Try again</Button>
 								{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
-								{host ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
+								{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
 							</div>,
 						]
 					: ["Loading your agents…", "", <Spinner key="s" />];
@@ -452,9 +452,10 @@ function Sidebar() {
 /**
  * The pine the app uses, at the foot of the side bar, as large as the rows above it: its state and
  * version, and on which machine it runs. A click lists the machines (this one, and those added in
- * Settings > Environments) to use another, and leads to those settings.
+ * Settings > Environments) to use another, and leads to those settings. Under a bridge with no
+ * local machine (`store.local`), only the machines added.
  */
-function Machines() {
+export function Machines() {
 	const s = useModel(store);
 	const state = s.service;
 	const here = s.platform === "darwin" ? "This Mac" : "This computer";
@@ -483,7 +484,7 @@ function Machines() {
 					<DropdownMenuGroup>
 						<DropdownMenuLabel>Use the pine on</DropdownMenuLabel>
 						<DropdownMenuRadioGroup value={state.host ?? ""} onValueChange={(host: string) => void s.useMachine(host || undefined)}>
-							<DropdownMenuRadioItem value="" closeOnClick><LaptopIcon />{here}</DropdownMenuRadioItem>
+							{s.local ? <DropdownMenuRadioItem value="" closeOnClick><LaptopIcon />{here}</DropdownMenuRadioItem> : null}
 							{s.prefs.hosts.map((host) => (
 								<DropdownMenuRadioItem key={host} value={host} closeOnClick data-host={host}><ServerIcon /><span className="truncate">{host}</span></DropdownMenuRadioItem>
 							))}
