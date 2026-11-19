@@ -297,6 +297,11 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["/goal", /^(agents#goal-mode|tui#goals|tui#commands\/goal)/],
 		["limits.goalRounds", /^configuration#.*limits-goalrounds$/],
 		["limits.goalIdleRounds", /^configuration#.*limits-goalidlerounds$/],
+		// The web client, asked for by somebody who does not know it exists.
+		["can I use pine from a browser on another computer", /^web/],
+		["reach my pine from a work laptop where I cannot install anything", /^web/],
+		["the browser shows a fingerprint SHA256 what do I do with it", /^web#/],
+		["where is the key of the browser kept and can a web page steal it", /^web#/],
 	];
 	const missed = cases.filter(([q, want]) => !top(q).some((id) => want.test(id))).map(([q]) => `${q} → ${top(q).join(", ")}`);
 	assert.deepEqual(missed, []);

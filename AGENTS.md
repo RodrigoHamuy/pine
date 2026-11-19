@@ -25,6 +25,9 @@ to change the code.
 | `swift test` (in `mobile/ios-core/`) | The iOS plugin's Swift core on the Mac: a real OpenSSH `sshd` started by the test on a loopback port and a stand-in daemon, and the same cases as the Kotlin core (`mobile/cases/`). Run it when you change `mobile/ios-core/`, `mobile/cases/` or `src/remote.ts`. The `ios` job of the Release workflow runs it. |
 | `npm run ipa`, `npm run smoke:ios`, `npm run ios:run` (in `mobile/`) | The IPA of a release, not signed (`scripts/ipa.ts`: `npm run ipa -- <version>`, written to `ios/App/output/`, checked unsigned and arm64); the iOS app from end to end on a simulator of its own without a window, against the Android smoke run's test SSH server; and the app opened in the Simulator app, by hand. The smoke test is the test of the web view's hardening in `PineViewController.swift` and `PinePlugin.swift`, of the return from the background and of the key kept in the Keychain: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. They need Xcode 27 with an iOS simulator runtime, and the smoke run a JDK as `npm run smoke` does. |
 | `npm run apk`, `npm run apk:release`, `npm run smoke` (in `mobile/`) | A debug APK; a release APK (signed when `ANDROID_KEYSTORE_FILE` and the three other variables of the release job name a key, versioned by `PINE_VERSION` and `PINE_VERSION_CODE`); and the app from end to end on an emulator without a window, against a test SSH server of its own running the real `pine service`. The smoke test is the test of the WebView's hardening in `PinePlugin.kt` and of the back button and the app's return from the background: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. The Gradle commands need the Android SDK (`ANDROID_HOME`, default `~/Library/Android/sdk`) and a JDK of 21 or later: `JAVA_HOME`, default Android Studio's (`/Applications/Android Studio.app/Contents/jbr/Contents/Home`), since a Mac has no `java` on its PATH by default. |
+| `npm test`, `npm run check`, `npm run build` (in `web/`) | The web client: the web bridge as the page calls it, in Node with a stand-in for SSH, and its SSH core in headless Chrome for Testing against a `sshd` of the test's own on a loopback port; its type check; and its build into `web/dist` (the bridge's document, and the desktop page built for the browser under `page/`). `npm install` in `web/` once. Run them when you change `web/`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. |
+| `npm test`, `npm run check` (in `web/relay/`) | The relay Worker's fetch handler with a stand-in TCP server on a loopback port, and its type check. `npm install` in `web/relay/` once. `npm run dev` there serves the deployment (relay and `web/dist`) under `wrangler dev`; `npx wrangler deploy` there deploys it, by hand only: no workflow does. |
+| `npm run smoke` (in `web/`) | After `npm run build`: the page and the relay as one deployment under `wrangler dev`, in headless Chrome for Testing, against a `sshd` of its own on the loopback running the real `pine service` on a home of its own with the scripted model server. Named checks, each of which fails the run. It is the one test of the page's isolation in a real browser. Run it before a release that changes `web/`; no workflow runs it. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
 helpers such as `mcp/computer.swift`, are built by pine on the Mac it runs on, on first use;
@@ -169,6 +172,15 @@ mobile/             the Android and iOS app (Capacitor; a package of its own, no
                     scripts/ runs Gradle (`gradle.mjs`), derives the release's versionCode (`version-code.ts`),
                     drives the emulator (`smoke.mjs`) and the simulator (`smoke-ios.mjs`), and makes the IPA (`ipa.ts`).
                     docs/references/mobile.md describes it; docs/adr/0001-mobile-app.md and 0002-ios-app.md say why it is so
+web/                the web client (a package of its own, not part of what goes to npm): the desktop page in a
+                    browser, for the owner's own pine over SSH, no daemon in the browser. src/ is the web bridge,
+                    the top-level document (`bridge-main.ts`, `host.ts`: the browser's key, machines, trusted host
+                    keys, the SSH connection and the daemon's token), its door for the page's messages (`serve.ts`,
+                    the fixed list in `protocol.ts`), SSH in the browser (`ssh.ts`: @microsoft/dev-tunnels-ssh with
+                    Ed25519 on WebCrypto), what runs over it (`tunnel.ts`, `remote-command.ts`), and what the page
+                    carries inside its sandboxed iframe (`frame-bridge.ts`, `page-*.ts`). scripts/ builds it and
+                    runs the smoke. relay/ is the relay, a Cloudflare Worker of its own package that carries SSH
+                    and nothing else and serves the build beside it. docs/references/web.md describes it
 ```
 
 ## What agents know about pine
@@ -540,7 +552,8 @@ These are invariants. A change that breaks one needs a test that shows why it is
    and sends the same policy. The page's stand-in for the bridge (`desktop/src/preview-bridge.ts`)
    exists only in that dev mode and in no build; `desktop/test/preview.test.ts` fails without
    the check of the origin and the content type, and when the stand-in reaches a build.
-   The mobile app (`mobile/`) is the other holder of the token, and is held to the same: its
+   The mobile app (`mobile/`) is another holder of the token, beside `main.ts` and the preview's
+   server, and is held to the same: its
    native plugin (`mobile/android/.../PinePlugin.kt` on `mobile/core` on Android,
    `mobile/ios/App/App/PinePlugin.swift` on `mobile/ios-core` on iOS) plays `main.ts`'s part.
    It makes every call for the page through a channel of its SSH connection (no port on the
@@ -562,6 +575,25 @@ These are invariants. A change that breaks one needs a test that shows why it is
    media come only through the `pine-media:` scheme under the same rules (`MediaScheme.swift`
    on the core's `mediaRequest`), the one media origin of the iOS page's policy. The phone's key
    is kept in the Keychain on this device only. `npm run smoke:ios` proves each as a named check.
+   The web client (`web/`) is the fourth holder of the token, beside `main.ts`, the preview's
+   server and the mobile app's native plugin, and is held to the same: its web bridge (`web/src/host.ts`) plays `main.ts`'s
+   part as the top-level document, and the page runs in an iframe sandboxed with scripts only,
+   under an opaque origin, so that what it draws reaches neither the bridge's IndexedDB, nor the
+   browser's key, nor the token. The bridge answers messages from that iframe's window alone,
+   only a method of the fixed list (`web/src/protocol.ts`), with its arguments checked one by one
+   as `main.ts` checks its IPC; never add `allow-same-origin`, or any other permission, to the
+   iframe. The browser's key is made non-extractable by WebCrypto and only its public half is ever
+   exported. A host key is trusted only as the owner confirmed it in the page, exactly the
+   fingerprint shown, before the key is offered, and a changed one is refused. The daemon is
+   reached through a direct-tcpip channel to the server's loopback and nowhere else, media come to
+   the page as bytes under `MEDIA`'s rules, and only `http(s)` addresses are opened, in a new tab
+   with `noopener`. The page carries the desktop page's policy and loads nothing from the web. The
+   relay (`web/relay`) sees neither key nor token: it carries SSH and nothing else, to public
+   addresses only, capped per client address, and keeps and logs nothing. Its one way to the
+   loopback, `RELAY_ALLOW_LOOPBACK`, is the smoke's, given to `wrangler dev` on its command line;
+   `web/relay/test/loopback.test.ts` fails when a configuration that is deployed sets it. What no
+   suite of `npm test` reaches (the opaque origin, a message from another window, the token kept
+   from the page) `npm run smoke` in `web/` proves as named checks.
 11. **Only the owner opens a folder for a conversation, and looking at one runs nothing.**
    `setFolder` in `src/agents.ts` is reached from the control API only; there is no tool for it.
    It refuses pine's home, pine's code and other agents' workspaces in either direction, and a
@@ -838,6 +870,21 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   iOS (the policy, the UI delegate's refusals, no file access, the media scheme and its ranges,
   no window, the navigation rules), each a named check that fails the run, of the return from
   the background, of the status bar, and of the Keychain key across a relaunch.
+- The web client has its own suites in `web/` and `web/relay/`, not run by `npm test` at the
+  root. `npm test` in `web/`: the web bridge through the contract the page calls, in Node with a
+  stand-in for SSH (`test/support/fake-ssh.ts`): the message door (another window, a method not
+  on the list, bad arguments), host-key trust and change, `local: false`, media and link rules,
+  reconnecting; and the SSH core in headless Chrome for Testing against a real `sshd` on a
+  loopback port with its own host key and `authorized_keys` (`test/support/machine.ts`): no test
+  touches `~/.ssh` or the system's sshd. `npm test` in `web/relay/`: the relay's fetch handler
+  with `connect()`, the name lookup and the WebSocket pair handed in (a stand-in TCP server on a
+  loopback port; a pair that delivers Blobs unless asked otherwise, as workerd does). One root
+  test, `test/web-remote.test.ts`, fails when the command the web bridge runs over SSH differs
+  from `remoteCommand()`. `npm run smoke` in `web/` is by hand: the deployment under `wrangler
+  dev` (local, never logged in to Cloudflare, its files in a temp folder), headless Chrome for
+  Testing with a throwaway profile, a `sshd` of its own running the real `pine service` on a
+  home of its own with the scripted model server; each named check fails the run. Run it before
+  a release that changes `web/` or upgrades wrangler, Chrome or the SSH library.
 - A new security property needs a test that fails without the code that provides it.
 
 ## Style
