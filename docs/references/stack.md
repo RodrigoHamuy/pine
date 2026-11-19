@@ -11,7 +11,7 @@
 | `@earendil-works/pi-mcp` | MCP naming | pi's MCP package; pine uses its function that turns a server name into the prefix of its tool names. |
 | `mqtt` | MQTT client | Only loaded when an `mqtt` source starts. |
 | `@earendil-works/pi-tui` | Terminal UI toolkit | pi's own: full-screen layout, editor with completion, Markdown rendering. Used by `src/tui/`. |
-| `highlight.js` | Code colours | Colours code blocks in the terminal UI. |
+| `highlight.js` | Code colors | Colors code blocks in the terminal UI. |
 | `@playwright/mcp` | Browser automation | Started as a child of `mcp/browser.ts`, which filters its tools and proxies its traffic. `pine init` downloads the browser it drives. |
 | `sandbox-exec`, `bwrap` | Containment | The system's sandbox: Apple's on macOS, driven by a generated profile; bubblewrap on Linux, driven by generated mounts. One set of rules for both (`src/security.ts`, `src/sandbox-linux.ts`). Agents in `safe` and `manual` mode and every run started from outside work in it; `auto` and `bypass` mode work without. |
 | `git` | Changes, diffs and undo | The system's own. The code pane asks it what changed in a folder, and `/undo` keeps the states of a folder as git trees in `data/snapshots`. It always runs inside a sandbox, without network and with everything a repository's settings could make it start turned off; only undo may write, and only pine's own snapshot folder and the conversation's folder (`src/workspace-view.ts`, `src/snapshots.ts`). |

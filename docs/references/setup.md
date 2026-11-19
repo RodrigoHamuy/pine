@@ -204,9 +204,9 @@ Ask the main agent: "create an agent that keeps my books". It calls `create_agen
 its instructions, whose first paragraph says what the agent is for (other agents read that
 line when they choose whom to hand work to), and optionally a model, a list of
 built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`; all of them by default)
-and its colour in the Pine app (`color`, `#rrggbb`: "make it coral" gives it `#e0805a`;
-you see the colour in what you confirm). What cannot work (a bad id, a name that is taken, an
-unknown tool or model, a colour that is not `#rrggbb`) is said before you are asked anything. After your yes:
+and its color in the Pine app (`color`, `#rrggbb`: "make it coral" gives it `#e0805a`;
+you see the color in what you confirm). What cannot work (a bad id, a name that is taken, an
+unknown tool or model, a color that is not `#rrggbb`) is said before you are asked anything. After your yes:
 
 ```
 agents/books/
@@ -274,7 +274,7 @@ Tell the main agent what to change about another agent ("give the books agent an
 
 | Value | What it is |
 |---|---|
-| `color` | Its own colour in the Pine app, `#rrggbb` (its avatar is drawn in it); `"none"` takes it away. "Make scout blue" is a `color` change, which you confirm like any other; anything that is not `#rrggbb` is refused before you are asked |
+| `color` | Its own color in the Pine app, `#rrggbb` (its avatar is drawn in it); `"none"` takes it away. "Make scout blue" is a `color` change, which you confirm like any other; anything that is not `#rrggbb` is refused before you are asked |
 | `instructions` | The whole new text of its `AGENTS.md`, whose first paragraph says what it is for. It replaces the file, so the main agent reads the present text first (`agents` with `id`) |
 | `soul` | The whole new text of its `SOUL.md`: who it is, its character and tone. It replaces the file the same way. This is what the main agent uses when you speak of an agent's personality or how it should sound |
 | `tooling` | The whole new text of its own `TOOLS.md`: tooling defaults and preferences for it alone. It replaces the file the same way; empty takes them back |
@@ -422,7 +422,7 @@ What holds for them:
 | `security.approvalTimeout` | How long a question waits for your answer before it counts as a no. From the next start |
 | `security.taint` | Outside content: how long pine asks before an agent sends something out, after its conversation has read something from outside |
 | `security.bypassWhenTainted` | Bypass after outside content: whether bypass mode stays in force in such a conversation |
-| `ui.theme` | Theme: the colours of the Pine app, a theme in the `themes` folder of pine's home by its name (`dracula`, `github-light`). Any VS Code colour theme file put there can be chosen |
+| `ui.theme` | Theme: the colors of the Pine app, a theme in the `themes` folder of pine's home by its name (`dracula`, `github-light`). Any VS Code color theme file put there can be chosen |
 
 A value is checked for what it has to be (a model that exists, one of a few words, a number in
 a range, a time), you see the old and the new value, and where the new one gives something up

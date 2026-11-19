@@ -5,7 +5,7 @@ import { highlightCode } from "./highlight.ts";
 const on = !process.env.NO_COLOR;
 const sgr = (open: string, close: string) => (s: string) => (on ? `\x1b[${open}m${s}\x1b[${close}m` : s);
 
-/** Plain 16/256-colour styling, so the UI follows the terminal's own palette. */
+/** Plain 16/256-color styling, so the UI follows the terminal's own palette. */
 export const c = {
 	bold: sgr("1", "22"),
 	dim: sgr("2", "22"),
@@ -67,7 +67,7 @@ export const markdownTheme: MarkdownTheme = {
 
 export const SPINNER = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
-/** Markdown drawn: headings, lists, tables, quotes, and code in colour. */
+/** Markdown drawn: headings, lists, tables, quotes, and code in color. */
 class Prose extends Markdown {
 	private from?: string[];
 	private drawn: string[] = [];
@@ -119,7 +119,7 @@ export interface Block {
 /** What a line of an answer is: the line of a block that opens and closes it, a line of what a block holds, or text. */
 type AnswerRow = { block: Block; y?: number } | undefined;
 
-/** A summary as one line, with the bold and code in it drawn. Nothing in it may move the cursor or colour the screen. */
+/** A summary as one line, with the bold and code in it drawn. Nothing in it may move the cursor or color the screen. */
 function drawLabel(summary: string): string {
 	// Inside a tag, models write tags for what markdown has marks for.
 	const text = stripTerminalSequences(summary).replace(/[\x00-\x1f\x7f]+/g, " ").replace(/<\/?(?:b|strong)>/gi, "**").replace(/<\/?(?:i|em)>/gi, "*").replace(/<\/?code>/gi, "`");

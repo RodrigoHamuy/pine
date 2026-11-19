@@ -582,7 +582,7 @@ of its own.
 | NATS, Kafka, RabbitMQ | `nats sub 'orders.>'`, `kcat -C -b broker -t topic -o end`, `amqp-consume -q queue cat` |
 | A folder on another machine | `ssh nas inotifywait -m -e close_write /volume1/scans` |
 
-A line is cleaned of the colour codes a terminal would act on and cut at 2000 characters; a
+A line is cleaned of the color codes a terminal would act on and cut at 2000 characters; a
 line that is JSON also arrives parsed, so a subscription's `when` can look into it
 (`{"payload.value.status": "die"}` for a container that stopped).
 

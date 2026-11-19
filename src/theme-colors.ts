@@ -1,24 +1,24 @@
-// What a theme file says, turned into pine's own colours. A theme is a VS Code colour theme (the
+// What a theme file says, turned into pine's own colors. A theme is a VS Code color theme (the
 // format nearly every editor theme is published in): `type`, `colors` (the workbench) and
-// `tokenColors` (TextMate scopes for code). pine reads the few workbench colours that mean the same
-// as one of its roles, finds the code colours by scope as an editor would, and derives the rest
+// `tokenColors` (TextMate scopes for code). pine reads the few workbench colors that mean the same
+// as one of its roles, finds the code colors by scope as an editor would, and derives the rest
 // from those, so that any such file gives every role. A theme may add a `pine` object with roles
 // of pine's own by name: those win over everything read or derived (pmndre.json uses it to keep
-// pine's own pmndre colours). Nothing here touches a file: src/themes.ts reads them.
+// pine's own pmndre colors). Nothing here touches a file: src/themes.ts reads them.
 //
 // The result is a flat record of CSS custom property names without their dashes ("bg",
-// "line-soft", "code-keyword", "term-3") whose values are colours as #rrggbb or #rrggbbaa, and two
+// "line-soft", "code-keyword", "term-3") whose values are colors as #rrggbb or #rrggbbaa, and two
 // font styles. That is all a UI gets: no value is a string of the file's own.
 
 export type ThemeKind = "dark" | "light";
 
 /** The roles of pine's look (the app's index.css draws with each as `--<name>`). */
 export const UI_ROLES = ["bg", "surface", "raised", "sunk", "composer", "side", "hover", "press", "line", "line-soft", "text", "text-muted", "faint", "brand", "brand-soft", "on-accent", "warn", "warn-soft", "bad", "bad-soft", "info", "plan", "add", "add-bg", "del", "del-bg", "select", "scrim"] as const;
-/** The colours of code, in the code pane and in answers (`--code-<name>`). */
+/** The colors of code, in the code pane and in answers (`--code-<name>`). */
 export const CODE_ROLES = ["text", "gutter", "gutter-active", "active-line", "cursor", "match", "match-line", "comment", "meta", "keyword", "definition", "control", "modifier", "string", "regexp", "literal", "null", "name", "attribute", "call", "function", "type", "namespace", "tag", "heading", "emphasis", "link", "inserted", "deleted", "punctuation", "operator"] as const;
 /** The font style of two kinds of code: "italic" or "normal". */
 export const CODE_STYLES = ["meta-style", "attribute-style"] as const;
-/** The terminal beside a conversation: its 16 colours, then the rest (`--term-<name>`). */
+/** The terminal beside a conversation: its 16 colors, then the rest (`--term-<name>`). */
 export const TERM_ROLES = [...Array.from({ length: 16 }, (_, i) => String(i)), "bg", "fg", "cursor", "select"] as const;
 
 /** Every name a resolved theme has, and a `pine` object may set. */
@@ -30,13 +30,13 @@ export interface ResolvedTheme {
 	colors: Record<string, string>;
 }
 
-// ---- colours ----------------------------------------------------------------------------------------
+// ---- colors ----------------------------------------------------------------------------------------
 
 type Rgba = [number, number, number, number];
 
 const HEX = /^#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i;
 
-/** A hex colour as numbers (0-255, alpha 0-1); anything else is undefined. VS Code themes write hex only. */
+/** A hex color as numbers (0-255, alpha 0-1); anything else is undefined. VS Code themes write hex only. */
 export function parseHex(value: unknown): Rgba | undefined {
 	if (typeof value !== "string" || !HEX.test(value.trim())) return undefined;
 	let h = value.trim().slice(1);
@@ -48,12 +48,12 @@ export function parseHex(value: unknown): Rgba | undefined {
 const two = (n: number) => Math.round(Math.min(255, Math.max(0, n))).toString(16).padStart(2, "0");
 const hex = ([r, g, b, a]: Rgba) => `#${two(r)}${two(g)}${two(b)}${a >= 0.999 ? "" : two(a * 255)}`;
 
-/** `a` laid over `b`: what a translucent colour looks like on an opaque one. */
+/** `a` laid over `b`: what a translucent color looks like on an opaque one. */
 function over(a: Rgba, b: Rgba): Rgba {
 	const t = a[3];
 	return [a[0] * t + b[0] * (1 - t), a[1] * t + b[1] * (1 - t), a[2] * t + b[2] * (1 - t), 1];
 }
-/** `t` of `a` and the rest `b`, as CSS's color-mix in srgb does for opaque colours. */
+/** `t` of `a` and the rest `b`, as CSS's color-mix in srgb does for opaque colors. */
 const mix = (a: Rgba, b: Rgba, t: number): Rgba => [a[0] * t + b[0] * (1 - t), a[1] * t + b[1] * (1 - t), a[2] * t + b[2] * (1 - t), a[3] * t + b[3] * (1 - t)];
 const alpha = (a: Rgba, t: number): Rgba => [a[0], a[1], a[2], t];
 
@@ -62,12 +62,12 @@ const linear = (c: number) => {
 	return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
 };
 const luminance = ([r, g, b]: Rgba) => 0.2126 * linear(r) + 0.7152 * linear(g) + 0.0722 * linear(b);
-/** WCAG's contrast ratio of two opaque colours. */
+/** WCAG's contrast ratio of two opaque colors. */
 export const contrast = (a: Rgba, b: Rgba) => {
 	const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p);
 	return (x + 0.05) / (y + 0.05);
 };
-/** How colourful a colour is: OKLCH's chroma (grey 0, a vivid colour 0.1 to 0.3). */
+/** How colorful a color is: OKLCH's chroma (grey 0, a vivid color 0.1 to 0.3). */
 export function chroma([r, g, b]: Rgba): number {
 	const [lr, lg, lb] = [linear(r), linear(g), linear(b)];
 	const l = Math.cbrt(0.4122214708 * lr + 0.5363325363 * lg + 0.0514459929 * lb);
@@ -120,7 +120,7 @@ const SCOPES: Partial<Record<(typeof CODE_ROLES)[number], string>> = {
  * pine has no scope stack to match them against.
  */
 function ruleFor(rules: TokenRule[], scope: string, field: "foreground" | "fontStyle"): string | undefined {
-	// Each field on its own, as an editor merges them: a rule that sets only a font style leaves the colour of a wider one.
+	// Each field on its own, as an editor merges them: a rule that sets only a font style leaves the color of a wider one.
 	let best: { depth: number; value: string } | undefined;
 	for (const rule of rules) {
 		const value = rule?.settings?.[field];
@@ -160,14 +160,14 @@ export function parseJsonc(text: string): unknown {
 }
 
 /**
- * A VS Code colour theme (already parsed) as pine's colours. Throws, with what to do, when the
+ * A VS Code color theme (already parsed) as pine's colors. Throws, with what to do, when the
  * object is not a theme pine can draw: it needs `colors` with `editor.background` (or a `pine`
  * object with `bg` and `text`).
  */
 export function resolveTheme(raw: unknown, fallbackName: string): ResolvedTheme {
-	if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("not a theme: a theme is a VS Code colour theme, a JSON object with \"type\", \"colors\" and \"tokenColors\"");
+	if (!raw || typeof raw !== "object" || Array.isArray(raw)) throw new Error("not a theme: a theme is a VS Code color theme, a JSON object with \"type\", \"colors\" and \"tokenColors\"");
 	const t = raw as Record<string, any>;
-	if (t.include !== undefined) throw new Error('"include" (a theme built on another file) is not supported: use a theme file that holds all of its colours');
+	if (t.include !== undefined) throw new Error('"include" (a theme built on another file) is not supported: use a theme file that holds all of its colors');
 	const colors: Record<string, unknown> = t.colors && typeof t.colors === "object" ? t.colors : {};
 	const own: Record<string, unknown> = t.pine && typeof t.pine === "object" && !Array.isArray(t.pine) ? t.pine : {};
 	const rules: TokenRule[] = Array.isArray(t.tokenColors) ? t.tokenColors : [];
@@ -182,18 +182,18 @@ export function resolveTheme(raw: unknown, fallbackName: string): ResolvedTheme 
 		}
 		return undefined;
 	};
-	const ownColour = (name: string) => parseHex(own[name]);
+	const ownColor = (name: string) => parseHex(own[name]);
 
-	const bgRaw = ownColour("bg") ?? read("editor.background") ?? parseHex(global?.background);
-	const textRaw = ownColour("text") ?? read("editor.foreground", "foreground") ?? parseHex(global?.foreground);
-	if (!bgRaw || !textRaw) throw new Error('it names no colour for the page: a theme needs "editor.background" and "editor.foreground" in "colors"');
+	const bgRaw = ownColor("bg") ?? read("editor.background") ?? parseHex(global?.background);
+	const textRaw = ownColor("text") ?? read("editor.foreground", "foreground") ?? parseHex(global?.foreground);
+	if (!bgRaw || !textRaw) throw new Error('it names no color for the page: a theme needs "editor.background" and "editor.foreground" in "colors"');
 	const bg = over(bgRaw, dark ? [0, 0, 0, 1] : [255, 255, 255, 1]);
 	const text = over(textRaw, bg);
 	const solid = (c: Rgba | undefined) => (c ? over(c, bg) : undefined);
 	const ansi = (name: string) => solid(read(`terminal.ansi${name}`));
-	const tokenColour = (scope: string) => solid(parseHex(ruleFor(rules, scope, "foreground")));
+	const tokenColor = (scope: string) => solid(parseHex(ruleFor(rules, scope, "foreground")));
 
-	// The accent: the first of the workbench's accents that is a colour (not a grey) and stands out
+	// The accent: the first of the workbench's accents that is a color (not a grey) and stands out
 	// from the page. Themes put theirs in different places; a grey button is common.
 	const accents = ["button.background", "activityBarBadge.background", "progressBar.background", "textLink.foreground", "focusBorder", "editorCursor.foreground", "terminal.ansiBlue"].map((k) => solid(read(k)));
 	const brand = accents.find((c) => c && chroma(c) >= 0.05 && contrast(c, bg) >= (dark ? 2.6 : 2)) ?? (dark ? mix(text, bg, 0.9) : mix(text, bg, 0.8));
@@ -201,7 +201,7 @@ export function resolveTheme(raw: unknown, fallbackName: string): ResolvedTheme 
 	const buttonText = solid(read("button.foreground"));
 	const onAccent = fromButton && buttonText && contrast(buttonText, brand) >= 3 ? buttonText : contrast([255, 255, 255, 1], brand) >= contrast(bg, brand) && contrast([255, 255, 255, 1], brand) >= 3 ? ([255, 255, 255, 1] as Rgba) : dark ? mix([0, 0, 0, 1], bg, 0.15) : ([20, 20, 20, 1] as Rgba);
 
-	// What is quieter than the text: the theme's own description colour, or the text towards the page.
+	// What is quieter than the text: the theme's own description color, or the text towards the page.
 	// Many themes make it too dim to read as text pine shows (hints, the side bar's rows): it is moved
 	// towards the text until it reads, 4.5:1 for muted text and 3:1 for the faintest.
 	const readable = (c: Rgba, ratio: number): Rgba => {
@@ -212,7 +212,7 @@ export function resolveTheme(raw: unknown, fallbackName: string): ResolvedTheme 
 		return text;
 	};
 	const muted = readable(solid(read("descriptionForeground")) ?? mix(text, bg, 0.72), 4.5);
-	const comment = tokenColour("comment");
+	const comment = tokenColor("comment");
 	const faint = readable(comment && chroma(comment) < 0.06 ? comment : mix(text, bg, 0.5), 3);
 
 	const warn = ansi("Yellow") ?? solid(read("editorWarning.foreground")) ?? ([196, 136, 20, 1] as Rgba);
@@ -258,11 +258,11 @@ export function resolveTheme(raw: unknown, fallbackName: string): ResolvedTheme 
 		scrim: dark ? [10, 11, 17, 0.55] : [20, 24, 22, 0.28],
 	};
 
-	// Code: the token colours by scope, each kind falling back on a kin and finally on the text.
+	// Code: the token colors by scope, each kind falling back on a kin and finally on the text.
 	const code: Record<string, Rgba> = {};
 	for (const role of CODE_ROLES) {
 		const scope = SCOPES[role];
-		const c = scope ? tokenColour(scope) : undefined;
+		const c = scope ? tokenColor(scope) : undefined;
 		if (c) code[role] = c;
 	}
 	const kin: Record<string, string[]> = {
@@ -301,7 +301,7 @@ export function resolveTheme(raw: unknown, fallbackName: string): ResolvedTheme 
 	code["match-line"] = read("editor.findMatchBackground") ?? alpha(warn, 0.5);
 	const italic = (scope: string) => (/italic/.test(ruleFor(rules, scope, "fontStyle") ?? "") ? "italic" : "normal");
 
-	// The terminal: the theme's own sixteen, or the colours above where it has none.
+	// The terminal: the theme's own sixteen, or the colors above where it has none.
 	const names = ["Black", "Red", "Green", "Yellow", "Blue", "Magenta", "Cyan", "White"];
 	const term: Record<string, Rgba> = {};
 	const base: Rgba[] = [dark ? mix([0, 0, 0, 1], bg, 0.3) : mix(text, bg, 0.9), bad, add, warn, info, plan, mix(info, add, 0.5), dark ? muted : mix(text, bg, 0.3)];
@@ -335,7 +335,7 @@ export function resolveTheme(raw: unknown, fallbackName: string): ResolvedTheme 
 	return { name: name.slice(0, 60), kind, colors: out };
 }
 
-/** Whether a resolved theme is one a UI may draw as it is: every value a colour or a style, no name missing. */
+/** Whether a resolved theme is one a UI may draw as it is: every value a color or a style, no name missing. */
 export function isResolved(value: unknown): value is ResolvedTheme {
 	if (!value || typeof value !== "object") return false;
 	const t = value as ResolvedTheme;

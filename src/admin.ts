@@ -22,7 +22,7 @@ export const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "ma
 
 /** What can be changed about an agent. Everything is optional; what is left out stays. */
 export interface AgentChange {
-	/** Its colour in the Pine app, `#rrggbb`; "none" or empty takes it away. */
+	/** Its color in the Pine app, `#rrggbb`; "none" or empty takes it away. */
 	color?: string;
 	/** The whole new text of its instruction file (AGENTS.md in its workspace), whose first paragraph says what it is for. */
 	instructions?: string;
@@ -48,13 +48,13 @@ export interface AgentChange {
 }
 
 /**
- * An agent's colour as a change gives it: `#rrggbb` in any case, kept in lower case; "none" (in any case) or
- * empty is no colour (undefined). Throws on anything else, before the owner is asked.
+ * An agent's color as a change gives it: `#rrggbb` in any case, kept in lower case; "none" (in any case) or
+ * empty is no color (undefined). Throws on anything else, before the owner is asked.
  */
 export function checkColor(given: unknown): string | undefined {
 	const text = typeof given === "string" ? given.trim() : given;
 	if (text === "" || (typeof text === "string" && text.toLowerCase() === "none")) return undefined;
-	if (!isColor(text)) throw new Error(`a colour is written #rrggbb, for example #e0805a (got ${JSON.stringify(given)}); "none" takes it away`);
+	if (!isColor(text)) throw new Error(`a color is written #rrggbb, for example #e0805a (got ${JSON.stringify(given)}); "none" takes it away`);
 	return text.toLowerCase();
 }
 
@@ -744,7 +744,7 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	"ui.theme": {
 		title: "Theme",
-		about: "The colours of the Pine app: a VS Code colour theme, by the name of its file in the themes folder of pine's home (one-dark-pro for one-dark-pro.json). Any VS Code theme file put there can be chosen.",
+		about: "The colors of the Pine app: a VS Code color theme, by the name of its file in the themes folder of pine's home (one-dark-pro for one-dark-pro.json). Any VS Code theme file put there can be chosen.",
 		kind: "theme",
 		now: (c) => c.ui.theme ?? DEFAULT_THEME,
 		live: true,

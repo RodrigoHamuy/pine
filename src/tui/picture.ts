@@ -12,8 +12,8 @@ import { c } from "./theme.ts";
  * Pictures in the conversation. Display only: nothing here is sent to a model.
  *
  * Two ways to draw one. A terminal with the Kitty graphics protocol (kitty, Ghostty, WezTerm) gets
- * the real picture. Every other terminal gets coloured half blocks: each character cell shows two
- * pixels, one as the colour of "▀" and one as its background. For that the picture has to be
+ * the real picture. Every other terminal gets colored half blocks: each character cell shows two
+ * pixels, one as the color of "▀" and one as its background. For that the picture has to be
  * decoded and scaled, which macOS's own `sips` does; it also turns jpg, gif and webp into the png
  * the Kitty protocol wants.
  */
@@ -61,7 +61,7 @@ export function scaled(dir: string, source: string, limit: number, format: "png"
 	const target = path.join(dir, `out.${format}`);
 	if (tool === "sips") return finished(confined(SIPS, ["-s", "format", format, "-Z", String(limit), source, "--out", target], "ignore", dir), 15_000);
 	if (tool !== "ffmpeg" || !FFMPEG) return Promise.resolve(false);
-	// bgr24: the bmp then has no alpha and no colour table, which is all `parseBmp` reads.
+	// bgr24: the bmp then has no alpha and no color table, which is all `parseBmp` reads.
 	return finished(confined(FFMPEG, ["-loglevel", "error", "-y", "-i", source, "-frames:v", "1", "-vf", `scale=${limit}:${limit}:force_original_aspect_ratio=decrease`, ...(format === "bmp" ? ["-pix_fmt", "bgr24"] : []), target], "ignore", dir), 15_000);
 }
 const converter = () => (hasSips ? "sips" : FFMPEG ? "ffmpeg" : undefined);
@@ -140,7 +140,7 @@ async function convert(bytes: Buffer, mime: string, name: string): Promise<Prepa
 	return out;
 }
 
-/** Average colour of a rectangle of the source, for scaling down without speckle. */
+/** Average color of a rectangle of the source, for scaling down without speckle. */
 function sample(p: Pixels, x0: number, y0: number, x1: number, y1: number): [number, number, number] {
 	const ax = Math.max(0, Math.min(p.width - 1, Math.floor(x0)));
 	const bx = Math.max(ax + 1, Math.min(p.width, Math.ceil(x1)));

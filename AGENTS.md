@@ -67,9 +67,9 @@ src/
                     selector, a number), line differences, a page's text; and `capped`, the limit on how often a type that is told may report
   mime.ts           an e-mail message read into sender, subject, text and attachments, for the mail and smtp types
   env-file.ts       sets and removes entries in .env (secrets of sources that agents set up)
-  themes.ts         the themes of the owner's UIs: VS Code colour theme files in <home>/themes (seeded once from
+  themes.ts         the themes of the owner's UIs: VS Code color theme files in <home>/themes (seeded once from
                     examples/home/themes), listed for `GET /themes`, the one `ui.theme` names
-  theme-colors.ts   a VS Code colour theme resolved into pine's colour roles, as hex colours and nothing else (no
+  theme-colors.ts   a VS Code color theme resolved into pine's color roles, as hex colors and nothing else (no
                     fs: Storybook uses it too); a theme's `pine` object overrides a role by name
   update.ts         `pine update`: brings pine up to date the way it was installed (git or npm) and fetches what the new version needs;
                     a pine inside the Pine app says where the new app is
@@ -115,7 +115,7 @@ src/
                     (this home's daemon, or with `--ssh` another machine's through src/remote.ts),
                     code-pane.ts (the pane beside a conversation: changes, files, tool output),
                     undo.ts (what the conversation says after /undo and /redo),
-                    theme.ts (colours, markdown, and the parts of an answer that are folded into a line: `Answer`), highlight.ts (code colours),
+                    theme.ts (colors, markdown, and the parts of an answer that are folded into a line: `Answer`), highlight.ts (code colors),
                     picture.ts (pictures, video and sound: conversion with sips or ffmpeg, Kitty-protocol or half-block drawing, the system's player for sound),
                     levels.ts (the bars of a sound: its levels by frequency band for each tenth of a second, from a wav file or a decoder's samples;
                     the Pine app's page is built with this file too, so nothing in it runs or imports Node's own when it is loaded),

@@ -36,7 +36,7 @@ import { LISTBOX, onPick } from "./lists.tsx";
 import { Logo } from "@/components/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { AgentColourPicker, AgentNameInput } from "@/components/agent-identity";
+import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
@@ -346,9 +346,9 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		const dir = await s.chooseFolder(`A folder for a conversation with ${a.id}`);
 		if (dir) await s.openFolder(dir, a.id);
 	};
-	// Its name and its colour are changed where they are shown: the name turns into a field, the colour opens over the avatar.
+	// Its name and its color are changed where they are shown: the name turns into a field, the color opens over the avatar.
 	const [renaming, setRenaming] = useState(false);
-	const [colouring, setColouring] = useState(false);
+	const [coloring, setColoring] = useState(false);
 	const menu = async () => {
 		const picked = await bridge.contextMenu([
 			{ id: "new", label: `New conversation with ${a.id}` },
@@ -359,7 +359,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 			{ id: "name", label: "Sort by Name", checked: byName },
 			{ id: "sep", label: "", separator: true },
 			{ id: "rename", label: "Rename…" },
-			{ id: "colour", label: "Colour…" },
+			{ id: "color", label: "Color…" },
 			{ id: "settings", label: "Agent settings…" },
 			// The main agent administers pine and stays.
 			...(a.main ? [] : [{ id: "sep2", label: "", separator: true }, { id: "remove", label: `Remove ${a.id}…` }]),
@@ -369,7 +369,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		if (picked === "group") await s.newGroup(a.id);
 		if ((picked === "recent" && byName) || (picked === "name" && !byName)) await s.sortConversations(a.id, picked);
 		if (picked === "rename") setRenaming(true);
-		if (picked === "colour") setColouring(true);
+		if (picked === "color") setColoring(true);
 		if (picked === "settings") s.openSettings("agents", a.id);
 		if (picked === "remove") await s.removeAgent(a.id);
 	};
@@ -378,7 +378,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 			<SidebarMenu>
 				{/* Dropped on the agent's line, a conversation leaves its group. */}
 				<SidebarMenuItem {...lineDrop} className="app-no-drag rounded-md data-[drop]:bg-accent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
-					<AgentColourPicker agent={a} open={colouring} onOpenChange={setColouring} onChange={(c) => void s.colourAgent(a.id, c)} nativeButton={false} trigger={<span aria-hidden tabIndex={-1} className="pointer-events-none absolute top-1 left-8 size-6" />} />
+					<AgentColorPicker agent={a} open={coloring} onOpenChange={setColoring} onChange={(c) => void s.colorAgent(a.id, c)} nativeButton={false} trigger={<span aria-hidden tabIndex={-1} className="pointer-events-none absolute top-1 left-8 size-6" />} />
 					{renaming ? (
 						<div className="flex h-8 items-center gap-2 px-2">
 							<AgentAvatar agent={a} size="sm" />

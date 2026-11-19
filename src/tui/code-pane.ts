@@ -65,7 +65,7 @@ const plain = (s: string) => s.replace(/\t/g, "  ").replace(/[\x00-\x08\x0b-\x1f
 const size = (n: number) => (n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`);
 const took = (ms?: number) => (ms === undefined ? "" : ms < 1000 ? `${Math.round(ms)} ms` : `${(ms / 1000).toFixed(1)} s`);
 
-/** The lines of a diff as git prints it, in colours, without the lines that only name the file. */
+/** The lines of a diff as git prints it, in colors, without the lines that only name the file. */
 export function diffLines(diff: string): string[] {
 	const out: string[] = [];
 	for (const raw of diff.replace(/\n$/, "").split("\n")) {

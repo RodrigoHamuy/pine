@@ -52,7 +52,7 @@ test("background: what a conversation is told is pine's frame around output that
 	assert.equal(howEnded(job({ ended: { code: 143, seconds: 3 }, stopped: "owner" })), "your owner stopped it after 3 s");
 	assert.equal(howEnded(job({ ended: {} })), "it ended while pine was not running, and how it ended is not known");
 
-	// Colours go, long output is cut to its end, and every line carries the mark.
+	// Colors go, long output is cut to its end, and every line carries the mark.
 	assert.equal(quoted("one\r\n\x1b[31mtwo\x1b[0m\n\n\n\x07three\n", 3), "| two\n| \n| three");
 	assert.equal(quoted(Array.from({ length: 50 }, (_, i) => `line ${i}`).join("\n"), 3), "| line 47\n| line 48\n| line 49");
 	assert.equal(quoted("\n\n", 5), "");

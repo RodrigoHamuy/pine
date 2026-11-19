@@ -48,9 +48,9 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
-// The editor says what a token is and what it looks like. The colours are tokens of index.css
+// The editor says what a token is and what it looks like. The colors are tokens of index.css
 // (`--code-*`), so light and dark differ there and nowhere else.
-const colours = HighlightStyle.define([
+const colors = HighlightStyle.define([
 	{ tag: [t.comment], color: "var(--code-comment)", fontStyle: "italic" },
 	{ tag: [t.meta], color: "var(--code-meta)", fontStyle: "var(--code-meta-style)" },
 	{ tag: [t.keyword], color: "var(--code-keyword)" },
@@ -140,7 +140,7 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 					highlightSelectionMatches(),
 					search({ top: true }),
 					look,
-					syntaxHighlighting(colours),
+					syntaxHighlighting(colors),
 					language(file),
 					EditorView.lineWrapping,
 					keymap.of([{ key: "Mod-s", run: () => (live.current.onSave?.(), true) }, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
@@ -167,10 +167,10 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 // What a line of a unified diff is: a change is drawn by the stock line variants, which put the
 // sign in front themselves, so its own sign is taken off; a hunk header is highlighted; the
 // lines about the file itself are muted. The stock variants mark a line by its sign and a tint
-// (added is the neutral muted one), so pine's diff colours are laid over them.
+// (added is the neutral muted one), so pine's diff colors are laid over them.
 const META = ["+++", "---", "diff ", "index ", "new file", "deleted file", "similarity", "rename "];
 
-/** A unified diff, coloured line by line. */
+/** A unified diff, colored line by line. */
 export function Diff({ text }: { text: string }) {
 	const lines = text.split("\n");
 	return (

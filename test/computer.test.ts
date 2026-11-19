@@ -847,7 +847,7 @@ async function liveAgent(t: { after(fn: () => unknown): void }, mock: any, optio
 	return { h, asked, used };
 }
 
-/** A picture of flat colours, as a PNG. */
+/** A picture of flat colors, as a PNG. */
 function png(width: number, height: number, rects: Array<{ x: number; y: number; w: number; h: number; rgb: [number, number, number] }>): Buffer {
 	const row = width * 3 + 1;
 	const raw = Buffer.alloc(row * height, 255);

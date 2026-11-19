@@ -230,7 +230,7 @@ export interface AgentConfig {
 	/** pi agent dir of this agent: AGENTS.md, skills/, extensions/, settings.json, sessions/. */
 	dir: string;
 	description: string;
-	/** Its own colour in the Pine app (`#rrggbb`, lower case): the seed of its avatar's scheme. Display only. */
+	/** Its own color in the Pine app (`#rrggbb`, lower case): the seed of its avatar's scheme. Display only. */
 	color?: string;
 	workspace: string;
 	model?: string;
@@ -408,7 +408,7 @@ const noPlugins = (list: unknown, where: string, problems: string[]): void => {
 	if (Array.isArray(list) && list.length) problems.push(`${where}: plugins are gone. Telegram, MQTT and watched folders are event sources now, which an agent sets up when you ask it to ("watch telegram", "watch ~/Scans"); see docs/references/sources.md. Take the "plugins" entry out`);
 };
 
-/** An agent's colour as agent.json keeps it: `#rrggbb`, in any case. */
+/** An agent's color as agent.json keeps it: `#rrggbb`, in any case. */
 export const isColor = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
 
 const strings = (v: unknown, fallback: string[]): string[] => (Array.isArray(v) ? v.map(String) : fallback);
@@ -432,7 +432,7 @@ function loadAgent(id: string, dir: string, raw: any, cfg: PineConfig, problems:
 		id,
 		dir,
 		description: raw.description ?? "",
-		// Always a key, also without a colour: a change that takes it away is taken over with Object.assign.
+		// Always a key, also without a color: a change that takes it away is taken over with Object.assign.
 		color: isColor(raw.color) ? raw.color.toLowerCase() : undefined,
 		workspace,
 		model: raw.model,

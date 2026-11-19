@@ -86,7 +86,7 @@ export interface AgentInfo {
 	main: boolean;
 	/** What it is for: the first paragraph of its AGENTS.md (or, in an older home, `description` in its agent.json). */
 	description: string;
-	/** Its own colour (`#rrggbb`), where it has one: the source of its avatar's scheme. */
+	/** Its own color (`#rrggbb`), where it has one: the source of its avatar's scheme. */
 	color?: string;
 	workspace: string;
 	model: string;
@@ -469,7 +469,7 @@ export const api = {
 	overview: () => get<Overview>("/overview"),
 	settings: () => get<Setting[]>("/settings"),
 	setSetting: (key: string, value: unknown) => post<{ key: string; now: string; live: boolean }>("/settings", { key, value }),
-	// The themes of pine's home, as colours (theme.ts), and the one in force. A pine older than themes has none: an empty list.
+	// The themes of pine's home, as colors (theme.ts), and the one in force. A pine older than themes has none: an empty list.
 	themes: () => get<{ theme: string; chosen: string | null; themes: ThemeEntry[] }>("/themes"),
 	agentDetail: (agent: string) => get<AgentDetail>(`${a(agent)}/detail`),
 	// What it is for is the first paragraph of `instructions` (the daemon's `purposeOf`).

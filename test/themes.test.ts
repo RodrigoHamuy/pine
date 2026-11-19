@@ -7,8 +7,8 @@ import { isResolved, parseJsonc, resolveTheme, ROLE_NAMES } from "../src/theme-c
 import { listThemes, seedThemes, themeInForce } from "../src/themes.ts";
 import { type Harness, harness, until } from "./support/harness.ts";
 
-// The themes of the owner's UIs (src/themes.ts, src/theme-colors.ts): VS Code colour theme files in
-// <home>/themes, resolved into pine's colours, chosen with `ui.theme`.
+// The themes of the owner's UIs (src/themes.ts, src/theme-colors.ts): VS Code color theme files in
+// <home>/themes, resolved into pine's colors, chosen with `ui.theme`.
 
 const BUNDLED = path.resolve(import.meta.dirname, "..", "examples", "home", "themes");
 const tmp = (t: { after(fn: () => void): void }) => {
@@ -17,13 +17,13 @@ const tmp = (t: { after(fn: () => void): void }) => {
 	return dir;
 };
 
-test("every theme pine brings resolves into every role, as colours, and pmndre keeps pine's own colours", () => {
+test("every theme pine brings resolves into every role, as colors, and pmndre keeps pine's own colors", () => {
 	const files = fs.readdirSync(BUNDLED).filter((f) => f.endsWith(".json"));
 	assert.ok(files.length >= 10, "a set of popular themes, dark and light");
 	const kinds = new Set<string>();
 	for (const f of files) {
 		const t = resolveTheme(parseJsonc(fs.readFileSync(path.join(BUNDLED, f), "utf8")), f);
-		assert.ok(isResolved(t), `${f} gives every role as a colour`);
+		assert.ok(isResolved(t), `${f} gives every role as a color`);
 		kinds.add(t.kind);
 	}
 	assert.deepEqual([...kinds].sort(), ["dark", "light"]);
@@ -59,7 +59,7 @@ test("a VS Code theme with little in it still gives every role: what it names is
 	assert.equal(t.colors["code-string"], "#008800");
 	assert.equal(t.colors["code-regexp"], "#cc5500", "the longer selector wins");
 	assert.equal(t.colors["code-function"], "#222222", "no rule for it: the text");
-	// A theme's `pine` object has the last word, on pine's roles only, and only with colours.
+	// A theme's `pine` object has the last word, on pine's roles only, and only with colors.
 	const own = resolveTheme({ type: "dark", colors: { "editor.background": "#000000", "editor.foreground": "#ffffff" }, pine: { brand: "#123456", "code-meta-style": "italic", bg: "url(https://example.com/x.png)", nonsense: "#ffffff" } }, "own");
 	assert.equal(own.colors.brand, "#123456");
 	assert.equal(own.colors["code-meta-style"], "italic");

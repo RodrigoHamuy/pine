@@ -37,7 +37,7 @@ import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal }
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
 import { Spinner } from "@/components/ui/spinner";
 
-/** A note's tone is information (a warning, a failure), so it colours the note's icon. */
+/** A note's tone is information (a warning, a failure), so it colors the note's icon. */
 const NOTE_TONE: Record<string, string | undefined> = { warn: "text-warn", bad: "text-destructive", good: "text-primary", accent: "text-primary" };
 
 const TONE_ICON: Record<Tone, LucideIcon> = { muted: InfoIcon, warn: TriangleAlertIcon, bad: TriangleAlertIcon, good: CheckIcon, accent: Undo2Icon };
@@ -709,10 +709,10 @@ function ContextUsage({ tab, percent }: { tab: Tab; percent: number }) {
 	const speed = speedText(tab.speed);
 	// Nearly full is a warning, about to be compacted is danger.
 	const tone = percent >= 85 ? "bad" : percent >= 65 ? "warn" : undefined;
-	const colour = tone === "bad" ? "text-destructive" : tone === "warn" ? "text-warn" : "text-muted-foreground";
+	const color = tone === "bad" ? "text-destructive" : tone === "warn" ? "text-warn" : "text-muted-foreground";
 	return (
 		<HoverCard>
-			<HoverCardTrigger delay={10} closeDelay={100} data-tone={tone} render={<Button variant="ghost" size="xs" className={`tabular-nums ${colour}`} />}>
+			<HoverCardTrigger delay={10} closeDelay={100} data-tone={tone} render={<Button variant="ghost" size="xs" className={`tabular-nums ${color}`} />}>
 				{total ? `${count(total)} · ` : ""}
 				{Math.round(percent)}%
 			</HoverCardTrigger>

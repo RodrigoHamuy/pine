@@ -17,7 +17,7 @@ import { SUB } from "./CodePanel.tsx";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText, tilde } from "./text.ts";
 
-/** A colour of the page's tokens, as xterm.js takes it: the browser says what any CSS colour is in sRGB. */
+/** A color of the page's tokens, as xterm.js takes it: the browser says what any CSS color is in sRGB. */
 function resolved(css: string, fallback: string): string {
 	const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
 	if (!ctx || !css.trim()) return fallback;
@@ -30,17 +30,17 @@ function resolved(css: string, fallback: string): string {
 
 const ANSI = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"] as const;
 
-/** The terminal's colours: the theme's (`--term-*`, set with the rest of the theme in theme.ts). */
+/** The terminal's colors: the theme's (`--term-*`, set with the rest of the theme in theme.ts). */
 function theme(): ITheme {
 	const style = getComputedStyle(document.documentElement);
 	const token = (name: string, fallback: string) => resolved(style.getPropertyValue(name), fallback);
-	const colours: Record<string, string> = {};
+	const colors: Record<string, string> = {};
 	ANSI.forEach((name, i) => {
-		colours[name] = token(`--term-${i}`, "#808080");
-		colours[`bright${name[0].toUpperCase()}${name.slice(1)}`] = token(`--term-${i + 8}`, colours[name]);
+		colors[name] = token(`--term-${i}`, "#808080");
+		colors[`bright${name[0].toUpperCase()}${name.slice(1)}`] = token(`--term-${i + 8}`, colors[name]);
 	});
 	return {
-		...colours,
+		...colors,
 		background: token("--term-bg", token("--background", "#1b1e28")),
 		foreground: token("--term-fg", token("--foreground", "#e4f0fb")),
 		cursor: token("--term-cursor", token("--code-cursor", "#e4f0fb")),
@@ -80,9 +80,9 @@ export function TerminalView({ tab }: { tab: Tab }) {
 			}
 		});
 		resize.observe(host.current!);
-		const recolour = () => (xterm.options.theme = theme());
+		const recolor = () => (xterm.options.theme = theme());
 		// A new theme (Settings > App) sets the root element's variables (its style attribute).
-		const restyled = new MutationObserver(recolour);
+		const restyled = new MutationObserver(recolor);
 		restyled.observe(document.documentElement, { attributes: true });
 		bridge
 			.termOpen(id, tab.folder ?? tab.workspace, xterm.cols, xterm.rows)

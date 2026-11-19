@@ -96,7 +96,7 @@ test("voice: what is heard arrives as it is heard, ends when the listening is en
 	assert.deepEqual(await h.done(), { text: "list the bills", error: undefined });
 	assert.ok(!h.l.active);
 	assert.equal(fs.readFileSync(log, "utf8").trim(), "--locale de-DE");
-	// Words from a microphone are shown in a terminal: nothing in them moves the cursor or colours the screen.
+	// Words from a microphone are shown in a terminal: nothing in them moves the cursor or colors the screen.
 	h = heard(standIn(dir, [{ type: "partial", text: "delete\x1b[2J all\nof  it\x07" }]));
 	await until(() => h.log.length === 1, 3000, "the words");
 	assert.equal(h.log[0], "partial delete [2J all of it");

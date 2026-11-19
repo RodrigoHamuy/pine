@@ -404,7 +404,7 @@ answer the one before it or put it off.
 When the action needs something only you have (a bot's token, a device's password), the dialog
 has a field for it: the value's name, under it what it is, and a bar to type into. When it needs
 several (the two tokens of a Slack app), each is a block of its own, numbered "1 of 2", and the
-name of the one you are typing into is in colour. Type or paste it: a secret is shown as dots, goes into pine's `.env` and is
+name of the one you are typing into is in color. Type or paste it: a secret is shown as dots, goes into pine's `.env` and is
 never seen by the agent or its model. (Pairing a Telegram account uses the same dialog for the
 six-digit code the bot sent to your phone; the code is shown as you type and is not stored.)
 `enter` saves and allows, `tab` and `shift+tab`, the arrow keys or a click on a field move between fields, `ctrl+u`
@@ -444,18 +444,18 @@ An answer is markdown, and it is drawn, not shown as written:
 
 | In the answer | On screen |
 |---|---|
-| A code block | A bar down its left side with the language above it, without the lines of backticks. Code in a language it knows is coloured (about 190 languages, by the name after the backticks) |
+| A code block | A bar down its left side with the language above it, without the lines of backticks. Code in a language it knows is colored (about 190 languages, by the name after the backticks) |
 | A `diff` or `patch` block | Removed lines red, added lines green |
-| A code block without a language | The same bar, no colours: guessing the language would colour plain text at random |
+| A code block without a language | The same bar, no colors: guessing the language would color plain text at random |
 | A table | A grid. Columns follow the alignment of the table's second line (`---:` right, `:---:` centred); a `<br>` in a cell is a line break; cells wrap when the table is wider than the terminal |
-| Headings | Bold and in colour, without their `#`; the first level is underlined |
+| Headings | Bold and in color, without their `#`; the first level is underlined |
 | Lists, task lists, quotes, rules, links, bold, italic, strikethrough, inline code | As such |
 | A `<details>` block | One line with its summary, which a click opens. See [Folded parts of an answer](#folded-parts-of-an-answer) |
 
 Shown as written: other HTML tags and footnotes. A table too wide to fit even with one
-character per column is shown as written too. Code is coloured with the terminal's own sixteen
-colours; the accent and the background of your own messages come from the 256-colour palette.
-`NO_COLOR` turns colours off.
+character per column is shown as written too. Code is colored with the terminal's own sixteen
+colors; the accent and the background of your own messages come from the 256-color palette.
+`NO_COLOR` turns colors off.
 
 ## Folded parts of an answer
 
@@ -531,7 +531,7 @@ Pictures are drawn in the conversation:
 How they look depends on the terminal. kitty, Ghostty, WezTerm and Warp (every terminal that
 is recognised as speaking the Kitty graphics protocol) get the real picture. Every other
 terminal (Apple's Terminal, iTerm2, anything inside tmux) gets a thumbnail made of
-coloured half blocks, two pixels per character. The half-block thumbnail and the conversion of
+colored half blocks, two pixels per character. The half-block thumbnail and the conversion of
 jpg, gif and webp use macOS's `sips`, and `ffmpeg` on Linux; without either only png files
 show, and only on a terminal with real pictures.
 

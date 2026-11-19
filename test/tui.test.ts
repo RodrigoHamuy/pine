@@ -944,7 +944,7 @@ test("tui: the tab of a pinned conversation has the mark it has in the list", as
 	await t.h.close();
 });
 
-test("tui: an answer's markdown is drawn, not shown raw: code in colour without its backticks, diffs red and green, tables aligned, headings without #", async () => {
+test("tui: an answer's markdown is drawn, not shown raw: code in color without its backticks, diffs red and green, tables aligned, headings without #", async () => {
 	const { Answer } = await import("../src/tui/theme.ts");
 	const { highlightCode, languageOf } = await import("../src/tui/highlight.ts");
 	const plain = (lines: string[]) => lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
@@ -955,9 +955,9 @@ test("tui: an answer's markdown is drawn, not shown raw: code in colour without 
 	assert.deepEqual(plain(diff), [" Here:", "", " diff", " │ --- a/README.md", " │ +++ b/README.md", " │ @@ -1,4 +1,4 @@", " │ -# Weather Stationn", " │ +# Weather Station", " │", " │  Turn a sensor", "", " done"]);
 	assert.ok(diff.some((l) => l.includes("\x1b[31m-# Weather Stationn")) && diff.some((l) => l.includes("\x1b[32m+# Weather Station")));
 
-	// Code in a language it knows is coloured; one it does not know, or none, is left as it is.
+	// Code in a language it knows is colored; one it does not know, or none, is left as it is.
 	assert.deepEqual(highlightCode("const a = 1; // one", "ts"), ["\x1b[35mconst\x1b[39m a = \x1b[33m1\x1b[39m; \x1b[90m// one\x1b[39m"]);
-	assert.deepEqual(highlightCode("/* a\nb */ x", "js"), ["\x1b[90m/* a\x1b[39m", "\x1b[90mb */\x1b[39m x"], "a colour that spans lines is closed and opened again on each");
+	assert.deepEqual(highlightCode("/* a\nb */ x", "js"), ["\x1b[90m/* a\x1b[39m", "\x1b[90mb */\x1b[39m x"], "a color that spans lines is closed and opened again on each");
 	assert.deepEqual(highlightCode("if (a < b && c) {}", "nosuchlanguage"), ["if (a < b && c) {}"]);
 	assert.deepEqual(highlightCode('<a href="x">&amp;</a>', undefined), ['<a href="x">&amp;</a>']);
 	assert.ok(highlightCode('{"a": "<b>&"}', "json")[0].includes('"<b>&"'), "what the highlighter escaped is the original text again");
@@ -1065,7 +1065,7 @@ test("tui: a part of an answer that is folded away is one line; a click opens it
 	tail.setText("a is smaller: a <");
 	assert.deepEqual(plain(tail.render(70)), [" a is smaller: a <"]);
 
-	// An answer that folds nothing is drawn as it always was, to the last colour.
+	// An answer that folds nothing is drawn as it always was, to the last color.
 	const usual = "# Title\n\nSome **bold** text with a [link](https://example.com) and <b>a tag</b>.\n\n- one\n- two\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\n</details>";
 	assert.deepEqual(new Answer(usual).render(64), new Markdown(usual, 1, 0, markdownTheme).render(64));
 

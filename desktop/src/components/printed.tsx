@@ -4,7 +4,7 @@ import { useHighlightedCode } from "@/hooks/use-highlighted-code";
 
 /**
  * What a tool or a program printed: a stock Code Block, as shadcn's Terminal pattern shows a
- * command's output, with the terminal's colours read by the stock highlighter ("ansi"). The panel
+ * command's output, with the terminal's colors read by the stock highlighter ("ansi"). The panel
  * is already the viewer, so there is no Trace line around it. `sm` caps it where several follow
  * each other (the pattern's `max-h-64`).
  */

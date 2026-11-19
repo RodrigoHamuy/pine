@@ -31,7 +31,7 @@ test("command, followed: every line it prints is an event as it comes, in the ag
 	assert.deepEqual(events("log").map((e: any) => [e.topic, e.payload.line, e.payload.value, e.trust]), [
 		["source/log/line", "started", undefined, "untrusted"],
 		["source/log/line", '{"state": "FINISH", "layer": 12}', { state: "FINISH", layer: 12 }, "untrusted"],
-		// Colours of a terminal are not text.
+		// Colors of a terminal are not text.
 		["source/log/line", "ERROR disk full", undefined, "untrusted"],
 	]);
 	assert.deepEqual(events("errors").map((e: any) => [e.payload.line, e.payload.value]), [["ERROR disk full", "disk"]]);

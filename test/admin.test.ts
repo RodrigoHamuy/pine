@@ -339,10 +339,10 @@ test("admin: an agent renamed by the owner takes everything that named it along,
 	await h.close();
 });
 
-test("admin: the main agent gives an agent a colour, when it makes one and later, with the owner's yes; a bad colour is refused before anyone is asked", async () => {
+test("admin: the main agent gives an agent a color, when it makes one and later, with the owner's yes; a bad color is refused before anyone is asked", async () => {
 	const { h, asked, main, file } = await pine({ helper: { agent: { description: "Reads papers" } } });
 
-	// Made with a colour: the owner sees it, and it is written in lower case.
+	// Made with a color: the owner sees it, and it is written in lower case.
 	let out = await main(call("create_agent", { id: "watcher", instructions: "You are WATCHER. You watch the feeds.", color: "#E0805A" }));
 	assert.equal(asked.length, 1);
 	assert.equal(asked[0].summary, `create the agent "watcher": You are WATCHER. You watch the feeds.\nModel: mock/m (the default) · tools: read, bash, edit, write, grep, find, ls · color: #e0805a\nInstructions:\nYou are WATCHER. You watch the feeds.`);
@@ -350,10 +350,10 @@ test("admin: the main agent gives an agent a colour, when it makes one and later
 	assert.equal(json(file("watcher")).color, "#e0805a");
 	assert.equal(h.pine.cfg.agents.watcher.color, "#e0805a");
 
-	// A colour that is not one is refused before anything is asked or written.
+	// A color that is not one is refused before anything is asked or written.
 	out = await main(call("create_agent", { id: "scout", instructions: "You are SCOUT.", color: "coral" }), call("update_agent", { id: "helper", color: "blue" }));
-	assert.match(out[0], /a colour is written #rrggbb/);
-	assert.match(out[1], /a colour is written #rrggbb/);
+	assert.match(out[0], /a color is written #rrggbb/);
+	assert.match(out[1], /a color is written #rrggbb/);
 	assert.equal(asked.length, 1);
 	assert.ok(!fs.existsSync(path.join(h.home, "agents", "scout")));
 	assert.equal(json(file("helper")).color, undefined);
@@ -371,7 +371,7 @@ test("admin: the main agent gives an agent a colour, when it makes one and later
 	out = await main(call("agents"));
 	assert.doesNotMatch(out[0], /- helper:[^\n]*\n[^\n]*color/);
 
-	// "None" as the app labels it, in any case, takes the colour away too.
+	// "None" as the app labels it, in any case, takes the color away too.
 	await main(call("update_agent", { id: "helper", color: "#3366cc" }));
 	assert.equal(json(file("helper")).color, "#3366cc");
 	await main(call("update_agent", { id: "helper", color: " None " }));

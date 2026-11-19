@@ -90,7 +90,7 @@ function loadPrefs(): void {
 }
 
 /**
- * What the window shows before the page draws: the page colour of the theme it was last drawn in
+ * What the window shows before the page draws: the page color of the theme it was last drawn in
  * (pmndre's before there was one). On a Mac the window is transparent, behind its vibrancy.
  */
 function windowBackground(): string {
@@ -281,7 +281,7 @@ function createWindow(): void {
 		titleBarOverlay: isMac,
 		vibrancy: isMac ? "sidebar" : undefined,
 		visualEffectState: "followWindow",
-		// So that the window does not flash another colour before the page draws.
+		// So that the window does not flash another color before the page draws.
 		backgroundColor: windowBackground(),
 		webPreferences: {
 			preload: path.join(HERE, "preload.cjs"),

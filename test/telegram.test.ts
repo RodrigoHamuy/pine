@@ -169,9 +169,9 @@ test("telegram: set up by asking, paired by the owner in pine, then a conversati
 	assert.ok(/never ask your owner to write one into the conversation/i.test(h.system(h.mock.state.requests[0])) || JSON.stringify(h.mock.state.requests[0].body.tools).includes("never ask your owner to write one into the conversation"), "the agent is told that secrets are not its to handle");
 
 	// A question of the agent's reaches the phone with one button for each answer it offers.
-	tg.message(1001, mockMsg([{ tools: [call("question", { question: "Which colour for the header?", choices: ["Blue", "Green"] })] }]));
-	await until(() => tg.sent().some((m) => /asks:\nWhich colour/.test(m.text)), 5000, "the question");
-	const asking = tg.sent().find((m) => /Which colour/.test(m.text));
+	tg.message(1001, mockMsg([{ tools: [call("question", { question: "Which color for the header?", choices: ["Blue", "Green"] })] }]));
+	await until(() => tg.sent().some((m) => /asks:\nWhich color/.test(m.text)), 5000, "the question");
+	const asking = tg.sent().find((m) => /Which color/.test(m.text));
 	assert.deepEqual(asking.reply_markup.inline_keyboard.map((row: any) => row[0].text), ["Blue", "Green", "No answer"]);
 	tg.callback(2002, asking.reply_markup.inline_keyboard[1][0].callback_data);
 	await sleep(120);

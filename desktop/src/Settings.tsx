@@ -33,7 +33,7 @@ import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
-import { AgentColourPicker, AgentNameInput } from "@/components/agent-identity";
+import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -262,16 +262,16 @@ function FileTabs<K extends string>({ files, value, onChange, children }: { file
 
 /**
  * An agent's avatar and name at the top of its page, each the place where it is changed: the avatar
- * opens its colour, the name turns into a field that renames it. Both are saved at once, apart from
+ * opens its color, the name turns into a field that renames it. Both are saved at once, apart from
  * the page's other changes.
  */
 function AgentHeading({ id, color }: { id: string; color?: string }) {
 	const [editing, setEditing] = useState(false);
 	return (
 		<span className="flex items-center gap-2">
-			<AgentColourPicker agent={{ id, color }} onChange={(c) => void store.colourAgent(id, c)} trigger={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Colour of ${id}`} title="Change its colour" />}>
+			<AgentColorPicker agent={{ id, color }} onChange={(c) => void store.colorAgent(id, c)} trigger={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Color of ${id}`} title="Change its color" />}>
 				<AgentAvatar agent={{ id, color }} />
-			</AgentColourPicker>
+			</AgentColorPicker>
 			{editing ? (
 				<AgentNameInput id={id} className="max-w-60" onDone={(to) => (setEditing(false), to && void store.renameAgent(id, to))} />
 			) : (
@@ -1948,7 +1948,7 @@ function Instructions() {
 
 // ---- the app itself ----------------------------------------------------------------------------------------
 
-/** A theme's look in a few colours: the page, the text, the accent and three kinds of code. */
+/** A theme's look in a few colors: the page, the text, the accent and three kinds of code. */
 function Swatch({ colors }: { colors: Record<string, string> }) {
 	const dots = [colors.brand, colors["code-keyword"], colors["code-string"], colors["code-function"]];
 	return (
@@ -1960,9 +1960,9 @@ function Swatch({ colors }: { colors: Record<string, string> }) {
 }
 
 /**
- * The theme of the window: a VS Code colour theme from the themes folder of pine's home, chosen as
- * pine's setting `ui.theme`. The colours are pine's (theme.ts): the page draws nothing a file says
- * but colours. A file pine cannot read is named with what is wrong with it.
+ * The theme of the window: a VS Code color theme from the themes folder of pine's home, chosen as
+ * pine's setting `ui.theme`. The colors are pine's (theme.ts): the page draws nothing a file says
+ * but colors. A file pine cannot read is named with what is wrong with it.
  */
 export function ThemePicker() {
 	const s = useModel(store);
@@ -1976,7 +1976,7 @@ export function ThemePicker() {
 			<Field orientation="responsive" data-setting="theme">
 				<FieldContent>
 					<FieldLabel htmlFor={id}>Theme</FieldLabel>
-					<FieldDescription>Any VS Code colour theme: put its .json file into {folder}, and it is offered here. The choice is pine's (ui.theme in pine.json), so every Pine app that uses this pine shows it.</FieldDescription>
+					<FieldDescription>Any VS Code color theme: put its .json file into {folder}, and it is offered here. The choice is pine's (ui.theme in pine.json), so every Pine app that uses this pine shows it.</FieldDescription>
 				</FieldContent>
 				<Select items={items} value={s.theme} onValueChange={(v) => v && v !== s.theme && void s.setTheme(v)} disabled={!usable.length}>
 					<SelectTrigger id={id} className="w-56">

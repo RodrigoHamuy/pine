@@ -1034,7 +1034,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						instructions: Type.String({ description: "Who it is and how it works, written to the agent itself (\"You are ...\"): its job, what it should and should not do, how it reports. This becomes its instruction file. Its first paragraph says in a sentence or two what it is for: other agents read that line when they decide whom to hand work to" }),
 						model: Type.Optional(Type.String({ description: "Model for it, as provider/model. Leave out to use pine's default" })),
 						tools: Type.Optional(Type.String({ description: `Built-in tools it gets, separated by commas. Default: all of ${AGENT_TOOLS.join(", ")}. Leave out bash, edit and write for an agent that should only read` })),
-						color: Type.Optional(Type.String({ description: "Its colour in the Pine app, as #rrggbb (for example #e0805a for coral). Only when your owner names one; leave out for none" })),
+						color: Type.Optional(Type.String({ description: "Its color in the Pine app, as #rrggbb (for example #e0805a for coral). Only when your owner names one; leave out for none" })),
 					}),
 					execute: async (_id, p, signal) => {
 						run();
@@ -1144,10 +1144,10 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				defineTool({
 					name: "update_agent",
 					label: "Change agent",
-					description: `Change an agent's settings, when your owner asks for it: its colour in the Pine app, its instructions (whose first paragraph says what it is for), its model, how much it reasons, its mode, its built-in tools, whom it may hand work to, how far its shell and file tools reach, and folders outside its workspace that it may use. Give only what changes; the rest stays. Your owner sees the change and confirms it, and it holds from the agent's next message on. What an agent has (event sources, MCP servers, schedules, skills) is not changed here: use those tools with "agent".`,
+					description: `Change an agent's settings, when your owner asks for it: its color in the Pine app, its instructions (whose first paragraph says what it is for), its model, how much it reasons, its mode, its built-in tools, whom it may hand work to, how far its shell and file tools reach, and folders outside its workspace that it may use. Give only what changes; the rest stays. Your owner sees the change and confirms it, and it holds from the agent's next message on. What an agent has (event sources, MCP servers, schedules, skills) is not changed here: use those tools with "agent".`,
 					parameters: Type.Object({
 						id: Type.String({ description: `The agent. Agents: ${Object.keys(cfg.agents).join(", ")}` }),
-						color: Type.Optional(Type.String({ description: 'Its colour in the Pine app, as #rrggbb (for example #3366cc for blue). "none" takes it away' })),
+						color: Type.Optional(Type.String({ description: 'Its color in the Pine app, as #rrggbb (for example #3366cc for blue). "none" takes it away' })),
 						instructions: Type.Optional(Type.String({ description: "The whole new text of its instructions, written to the agent itself; its first paragraph says what it is for. It replaces what is there: read the present text with agents (id) first and give back all of it with your change" })),
 						soul: Type.Optional(Type.String({ description: "The whole new text of its SOUL.md: who it is, its character and tone, written to the agent itself. It replaces what is there: read the present text with agents (id) first and give back all of it with your change. Use this, not instructions, when your owner speaks of its personality or how it should sound" })),
 						tooling: Type.Optional(Type.String({ description: "The whole new text of its own TOOLS.md: defaults and preferences for tools that are for this agent alone, on top of the TOOLS.md for all agents. It replaces what is there: read the present text with agents (id) first and give back all of it with your change. What is for all agents is not set here: you write that into the TOOLS.md in pine's home" })),

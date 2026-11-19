@@ -50,7 +50,7 @@ export function howEnded(job: Background): string {
 /** What a program printed, made safe to show inside a message: no control characters, and every line marked as output. */
 export function quoted(output: string, lines: number): string {
 	const clean = output
-		// Colours and cursor moves of a terminal, then whatever other control characters are left.
+		// Colors and cursor moves of a terminal, then whatever other control characters are left.
 		.replace(/\x1b\[[0-9;?]*[A-Za-z]|\x1b\][^\x07]*\x07/g, "")
 		.replace(/\r\n?/g, "\n")
 		.replace(/[\x00-\x08\x0b-\x1f\x7f]/g, "")

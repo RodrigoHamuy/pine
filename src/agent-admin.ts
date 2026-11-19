@@ -16,7 +16,7 @@ export interface NewAgent {
 	instructions: string;
 	model?: string;
 	tools?: string[];
-	/** Its colour in the Pine app, `#rrggbb`; left out or "none" for no colour. */
+	/** Its color in the Pine app, `#rrggbb`; left out or "none" for no color. */
 	color?: string;
 }
 

@@ -289,7 +289,7 @@ export class OwnerApi {
 				files: Object.fromEntries(Object.entries(files).filter(([, text]) => text !== undefined)),
 			};
 		}
-		// The themes of the owner's UIs, each as the colours it gives (src/theme-colors.ts), and the one in force.
+		// The themes of the owner's UIs, each as the colors it gives (src/theme-colors.ts), and the one in force.
 		if (at === "themes") {
 			const themes = listThemes(cfg.home);
 			return { theme: themeInForce(cfg.home, cfg.ui.theme, themes).id, chosen: cfg.ui.theme ?? null, themes };

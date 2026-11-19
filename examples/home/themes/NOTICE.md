@@ -1,6 +1,6 @@
 # Themes
 
-Each `.json` file here is a VS Code colour theme, and a theme pine can draw: pick one in the Pine
+Each `.json` file here is a VS Code color theme, and a theme pine can draw: pick one in the Pine
 app (Settings > App), or set `ui.theme` in `pine.json` to its file name without `.json`. Put any
 other VS Code theme's `.json` here to use it. pine's manual says more ("Themes" in desktop.md).
 
@@ -9,7 +9,7 @@ each under the MIT licence of its authors:
 
 | File | Theme | From |
 |---|---|---|
-| pmndre.json | Poimandres, with pine's own colours added (`pine`) | github.com/drcmda/poimandres-theme |
+| pmndre.json | Poimandres, with pine's own colors added (`pine`) | github.com/drcmda/poimandres-theme |
 | one-dark-pro.json | One Dark Pro | github.com/Binaryify/OneDark-Pro |
 | dracula.json | Dracula | github.com/dracula/visual-studio-code |
 | tokyo-night.json | Tokyo Night, with pine's accent (`pine`) | github.com/enkia/tokyo-night-vscode-theme |

@@ -491,7 +491,7 @@ test("a message is answered, with the turn's work folded into a line", async () 
 	assert.equal(await page.$$eval("[data-slot=markdown] a[href]", (els: Element[]) => els.length), 0);
 	// A folded part is there and closed.
 	assert.equal(await page.getAttribute("[data-slot=markdown] [data-details] [data-slot=collapsible-trigger]", "aria-expanded"), "false");
-	// Code is coloured on the page, with its language and a copy button, and nothing to download.
+	// Code is colored on the page, with its language and a copy button, and nothing to download.
 	await page.waitForFunction(() => document.querySelectorAll('[data-slot=markdown] [data-streamdown="code-block"] span[style]').length > 0);
 	assert.match(await page.textContent('[data-slot=markdown] [data-streamdown="code-block-header"]'), /ts/);
 	assert.ok(await page.$('[data-slot=markdown] [data-streamdown="code-block"] button[title="Copy Code"], [data-slot=markdown] [data-streamdown="code-block"] button[aria-label="Copy Code"]'));
@@ -870,7 +870,7 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 });
 
 test("what is asked is answered from the conversation too: an approval by its buttons, a question by one of its answers", async () => {
-	await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo again" } }] }, { tools: [{ name: "question", args: { question: "Which colour?", choices: ["green", "blue"] } }] }, { text: "answered from the line" }], "ask in line "));
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo again" } }] }, { tools: [{ name: "question", args: { question: "Which color?", choices: ["green", "blue"] } }] }, { text: "answered from the line" }], "ask in line "));
 	await page.keyboard.press("Enter");
 	// The dialog is put off ("Later"); the request stays in the conversation, with what it is and why.
 	await sees("[data-slot=dialog-content][data-tone=warn]");
@@ -886,7 +886,7 @@ test("what is asked is answered from the conversation too: an approval by its bu
 	await sees("[data-slot=dialog-content][data-tone=accent]");
 	await page.keyboard.press("Escape");
 	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
-	await sees(`${asked} >> text=Which colour?`);
+	await sees(`${asked} >> text=Which color?`);
 	await page.click(`${asked} button:has-text("blue")`);
 	await sees('[data-item="approval"][data-state="allowed"] >> text=Answered');
 	await sees("[data-slot=markdown] >> text=answered from the line");
@@ -1297,26 +1297,26 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 });
 
 const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-/** The colour a CSS colour value resolves to in the page, read from an element of the test's own. */
+/** The color a CSS color value resolves to in the page, read from an element of the test's own. */
 const resolved = (value: string) =>
 	page.evaluate((v: string) => {
 		const probe = document.body.appendChild(document.createElement("div"));
 		probe.style.backgroundColor = v;
-		const colour = getComputedStyle(probe).backgroundColor;
+		const color = getComputedStyle(probe).backgroundColor;
 		probe.remove();
-		return colour;
+		return color;
 	}, value);
-/** The alpha of a computed colour: rgba(..., a), color(srgb ... / a), or 1. */
-const alphaOf = (colour: string) => Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(colour)?.[1] ?? /\/\s*([\d.]+)\)/.exec(colour)?.[1] ?? 1);
+/** The alpha of a computed color: rgba(..., a), color(srgb ... / a), or 1. */
+const alphaOf = (color: string) => Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(color)?.[1] ?? /\/\s*([\d.]+)\)/.exec(color)?.[1] ?? 1);
 /** The theme the window is drawn in, by its name (theme.ts sets it on the root element). */
 const themeIs = (id: string) => page.waitForFunction((t: string) => document.documentElement.dataset.theme === t, id, { timeout: 10_000 });
-/** The tab in front: drawn in the page colour of the theme. */
-const tabColour = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-slot=tab][data-active]")!).backgroundColor);
+/** The tab in front: drawn in the page color of the theme. */
+const tabColor = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-slot=tab][data-active]")!).backgroundColor);
 
-test("the window is drawn in pmndre, the theme pine names when pine.json names none, with pine's own colours", { skip: Boolean(process.env.PINE_DESKTOP_THEME) }, async () => {
+test("the window is drawn in pmndre, the theme pine names when pine.json names none, with pine's own colors", { skip: Boolean(process.env.PINE_DESKTOP_THEME) }, async () => {
 	await themeIs("pmndre");
 	assert.equal(await page.evaluate(() => document.documentElement.classList.contains("dark")), true);
-	assert.equal(await tabColour(), rgb("#1b1e28"));
+	assert.equal(await tabColor(), rgb("#1b1e28"));
 	assert.equal(await resolved("var(--primary)"), rgb("#5de4c7"), "the accent is pmndre's mint");
 	assert.equal(await resolved("var(--foreground)"), rgb("#e4f0fb"));
 	assert.equal(await resolved("var(--border)"), rgb("#2b2e3c"));
@@ -1346,12 +1346,12 @@ test("a theme picked in Settings draws the window and is pine's setting; a VS Co
 		await menu("settings");
 		await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
 		await sees("[data-setting=theme]");
-		await sees("text=broken.json: it names no colour for the page");
+		await sees("text=broken.json: it names no color for the page");
 
 		await pick("GitHub Light Default");
 		await themeIs("github-light");
 		assert.equal(await page.evaluate(() => document.documentElement.classList.contains("dark")), false);
-		assert.equal(await tabColour(), rgb("#ffffff"));
+		assert.equal(await tabColor(), rgb("#ffffff"));
 		assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).ui.theme, "github-light");
 		// The app keeps it, to open in it next time.
 		const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
@@ -1359,14 +1359,14 @@ test("a theme picked in Settings draws the window and is pine's setting; a VS Co
 
 		await pick("Mine");
 		await themeIs("mine");
-		assert.equal(await tabColour(), rgb("#102030"));
+		assert.equal(await tabColor(), rgb("#102030"));
 		assert.equal(await resolved("var(--primary)"), rgb("#ff8800"));
 		assert.equal(await resolved("var(--code-keyword)"), rgb("#ff00aa"));
 
 		// Another hand (the main agent's set_setting, another UI) changes it through pine: the window follows.
 		await api("POST", "/settings", { key: "ui.theme", value: "dracula" });
 		await themeIs("dracula");
-		assert.equal(await tabColour(), rgb("#282a36"));
+		assert.equal(await tabColor(), rgb("#282a36"));
 		// A theme pine cannot draw is not taken.
 		const refused = await api("POST", "/settings", { key: "ui.theme", value: "broken" });
 		assert.equal(refused.ok, false);
@@ -1514,7 +1514,7 @@ test("a conversation is opened from the side bar with the keyboard alone, and a 
 	await page.click("[data-slot=tab][data-active] button[aria-label='Close this tab']");
 });
 
-test("a right click on an agent renames it in place, colours it, and offers to remove it, and never the main agent", async () => {
+test("a right click on an agent renames it in place, colors it, and offers to remove it, and never the main agent", async () => {
 	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(fs.readFileSync(path.join(home, "data", "pine.log"), "utf8"))![1];
 	const token = fs.readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
 	const made = await fetch(`http://127.0.0.1:${port}/agents`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ id: "spare", description: "Not needed for long", instructions: "You are spare." }) });
@@ -1541,9 +1541,9 @@ test("a right click on an agent renames it in place, colours it, and offers to r
 		throw new Error(`no menu for ${agent}`);
 	};
 	// Folding is a click on the line and no menu item; the main agent has nothing to remove it with.
-	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Colour…", "Agent settings…"]);
+	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Color…", "Agent settings…"]);
 	// Rename turns its name in the side bar into a field: Escape keeps the name, Enter gives it the new one, and everything follows it.
-	assert.deepEqual(await shown("spare", "rename"), ["New conversation with spare", "Open a folder with spare…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Colour…", "Agent settings…", "Remove spare…"]);
+	assert.deepEqual(await shown("spare", "rename"), ["New conversation with spare", "Open a folder with spare…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Color…", "Agent settings…", "Remove spare…"]);
 	await page.getByLabel("New name for spare").press("Escape");
 	await sees("[data-slot=agent-label] >> text=spare");
 	await shown("spare", "rename");
@@ -1552,13 +1552,13 @@ test("a right click on an agent renames it in place, colours it, and offers to r
 	await sees("[data-slot=toast] >> text=spare is called spare-hands now.");
 	await sees("[data-slot=agent-label] >> text=spare-hands");
 	assert.ok(fs.existsSync(path.join(home, "agents", "spare-hands", "agent.json")) && !fs.existsSync(path.join(home, "agents", "spare")));
-	// Colour opens the colour over its avatar, and a pick is kept at once.
-	await shown("spare-hands", "colour");
-	await page.locator("[data-slot=agent-colour][data-open]").getByRole("button", { name: "Blue", exact: true }).click();
+	// Color opens the color over its avatar, and a pick is kept at once.
+	await shown("spare-hands", "color");
+	await page.locator("[data-slot=agent-color][data-open]").getByRole("button", { name: "Blue", exact: true }).click();
 	for (let i = 0; i < 100 && !JSON.parse(fs.readFileSync(path.join(home, "agents", "spare-hands", "agent.json"), "utf8")).color; i++) await new Promise((r) => setTimeout(r, 30));
 	assert.match(JSON.parse(fs.readFileSync(path.join(home, "agents", "spare-hands", "agent.json"), "utf8")).color, /^#[0-9a-f]{6}$/);
 	await page.keyboard.press("Escape");
-	assert.deepEqual(await shown("spare-hands", "remove"), ["New conversation with spare-hands", "Open a folder with spare-hands…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Colour…", "Agent settings…", "Remove spare-hands…"]);
+	assert.deepEqual(await shown("spare-hands", "remove"), ["New conversation with spare-hands", "Open a folder with spare-hands…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Color…", "Agent settings…", "Remove spare-hands…"]);
 	// It asks first, and how: nothing is removed by the menu alone.
 	// It is an alert dialog: it does not go away with a stray click beside it.
 	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the agent spare-hands?");

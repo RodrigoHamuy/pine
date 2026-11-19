@@ -202,7 +202,7 @@ second time by a global one.
 
 A source that reports all day (a camera, a sensor, a busy folder) would fill one conversation
 with hundreds of events: it grows, it is shortened again and again, and what an early event
-said colours how a late one is read. An agent can be woken differently: with `fresh` on its
+said colors how a late one is read. An agent can be woken differently: with `fresh` on its
 `subscribe` tool (`"session": "new"` in the configuration, `--fresh` on `pine subscribe`),
 every event starts a conversation of its own. It holds the agent's instruction files, the note
 and that one event, and it is closed when the agent has answered.

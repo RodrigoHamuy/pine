@@ -101,7 +101,7 @@ test("pine agent list, add, update and remove: in the files when no daemon runs,
 	assert.match(await pine("agent", "list"), /books: You are books\. Keeps the books\.\n/);
 	assert.match(await pine("agent", "update", "books", "--color", "#E0805A"), /^Updated the agent books \(it is there when pine is started\):\n  color: #e0805a$/);
 	assert.equal(json(file("agents", "books", "agent.json")).color, "#e0805a");
-	assert.match(await fails("agent", "update", "books", "--color", "coral"), /a colour is written #rrggbb/);
+	assert.match(await fails("agent", "update", "books", "--color", "coral"), /a color is written #rrggbb/);
 	assert.match(await pine("agent", "update", "books", "--color", "none"), /color: none$/);
 	assert.ok(!("color" in json(file("agents", "books", "agent.json"))));
 	assert.match(await fails("agent", "update", "ghost", "--description", "x"), /there is no agent "ghost"/);

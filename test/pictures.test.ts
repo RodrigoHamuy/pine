@@ -31,7 +31,7 @@ test("pictures: which ones an answer points at", () => {
 	assert.equal(picturesIn(Array.from({ length: 20 }, (_, i) => `![p](p${i}.png)`).join(" ")).length, 6, "an answer cannot flood the screen");
 });
 
-test("pictures: a picture becomes half blocks that keep its colours and shape", mac, async () => {
+test("pictures: a picture becomes half blocks that keep its colors and shape", mac, async () => {
 	const p = await prepare(png(64, 40), "image/png", "two halves");
 	assert.equal(`${p.widthPx}x${p.heightPx}`, "64x40");
 	assert.ok(p.pixels && p.pixels.width === 64 && p.pixels.height === 40, "small pictures are not enlarged");
@@ -40,7 +40,7 @@ test("pictures: a picture becomes half blocks that keep its colours and shape", 
 	assert.ok(lines.every((l) => l.split("▀").length - 1 === 32));
 	assert.ok(lines[0].startsWith(" \x1b[38;2;220;40;40m\x1b[48;2;220;40;40m▀") && lines[0].includes("\x1b[38;2;40;60;220m\x1b[48;2;40;60;220m▀\x1b[0m"), JSON.stringify(lines[0].slice(0, 80)));
 	assert.equal(halfBlocks(p.pixels!, 100, 5).length, 5, "the height limit wins and the width follows");
-	assert.ok(halfBlocks(p.pixels!, 8, 14, false)[0].includes("\x1b[38;5;"), "256 colours where true colour is missing");
+	assert.ok(halfBlocks(p.pixels!, 8, 14, false)[0].includes("\x1b[38;5;"), "256 colors where true color is missing");
 	// Something that is not a picture, and a broken file: no drawing, no crash.
 	assert.equal((await prepare(Buffer.from("not a picture at all"), "image/png", "x")).pixels, undefined);
 	assert.equal(parseBmp(Buffer.from("BM")), undefined);
@@ -55,7 +55,7 @@ test("pictures: ffmpeg converts where sips is missing", hasFfmpeg, async (t) => 
 	assert.ok(await scaled(dir, path.join(dir, "in"), 64, "bmp", "ffmpeg"));
 	const same = parseBmp(fs.readFileSync(path.join(dir, "out.bmp")))!;
 	assert.equal(`${same.width}x${same.height}`, "64x40");
-	assert.deepEqual([...same.rgb.subarray(0, 3)], [220, 40, 40], "the colours and which way is up survive");
+	assert.deepEqual([...same.rgb.subarray(0, 3)], [220, 40, 40], "the colors and which way is up survive");
 	assert.deepEqual([...same.rgb.subarray((39 * 64 + 63) * 3, (39 * 64 + 63) * 3 + 3)], [40, 60, 220]);
 	assert.ok(await scaled(dir, path.join(dir, "in"), 32, "bmp", "ffmpeg"));
 	const small = parseBmp(fs.readFileSync(path.join(dir, "out.bmp")))!;
@@ -492,7 +492,7 @@ test("sound: the line shows the levels as bars that follow the clock while it pl
 	assert.equal(plain(line()), ` ▶ play  ${FLAT}  ♪ two tones · 0:02   ▸ open in player`);
 	assert.ok(line().includes(c.gray(FLAT)));
 
-	// Playing: the bars are the levels at the place the clock is at, in the accent colour, and the line is drawn again ten times a second.
+	// Playing: the bars are the levels at the place the clock is at, in the accent color, and the line is drawn again ten times a second.
 	sound.play();
 	assert.equal(top(line()), low, plain(line()));
 	assert.ok(line().includes(c.accent(bars(prepared.levels!, 0))));

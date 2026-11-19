@@ -527,7 +527,7 @@ class Thought implements Component {
 
 	private lines(width: number): string[] {
 		if (this.wrapped?.width !== width) {
-			// A model's text, shown as it is: nothing in it may move the cursor or colour the screen.
+			// A model's text, shown as it is: nothing in it may move the cursor or color the screen.
 			const clean = stripTerminalSequences(this.text).replace(/\t/g, "  ").replace(/[\x00-\x09\x0b-\x1f\x7f]/g, "").replace(/\n{3,}/g, "\n\n").trim();
 			this.wrapped = { width, lines: clean ? wrapTextWithAnsi(clean, Math.max(10, width - 4)) : [] };
 		}
@@ -1432,7 +1432,7 @@ export class PineTui {
 		await this.opts.onQuit?.();
 	}
 
-	/** What is on screen, without colours. For tests and debugging. */
+	/** What is on screen, without colors. For tests and debugging. */
 	screen(): string[] {
 		this.tui.renderNow(true);
 		return this.tui.getScreenLines().map((l) => stripTerminalSequences(l).replace(/\s+$/, ""));
@@ -1829,7 +1829,7 @@ export class PineTui {
 		if (!(last instanceof Linked) || last.inner !== said.block.md) return;
 		shown.pop();
 		if (shown.at(-1) instanceof Spacer) shown.pop();
-		// A model's text on one line: nothing in it may move the cursor or colour the screen.
+		// A model's text on one line: nothing in it may move the cursor or color the screen.
 		this.work(tab).add({ component: last, brief: () => short(oneLine(stripTerminalSequences(unfolded(said.block.text)).replace(/[\x00-\x1f\x7f]/g, " ")), 160) });
 	}
 

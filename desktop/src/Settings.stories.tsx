@@ -47,7 +47,7 @@ const mcp: McpServer[] = [
 	{ name: "calendar", scope: "main", session: "planning", agents: ["main"], target: "https://calendar.example.com/mcp", remote: true, taints: false, approve: "never", enabled: false },
 ];
 
-/** The page of the agent scout: its colour (coral) among the presets, and the rest of what can be changed. */
+/** The page of the agent scout: its color (coral) among the presets, and the rest of what can be changed. */
 const scout: AgentDetail = {
 	id: "scout",
 	main: false,
@@ -134,7 +134,7 @@ export const General: Story = { args: { section: "general" } };
 /** The list of agents, each a row to open: main, its mode, its model and workspace. */
 export const Agents: Story = { args: { section: "agents" } };
 
-/** One agent's page: at the top its avatar in its colour (coral), which opens the colour, and its name, which renames it; then its model, mode, tools and files. */
+/** One agent's page: at the top its avatar in its color (coral), which opens the color, and its name, which renames it; then its model, mode, tools and files. */
 export const AgentPage: Story = { args: { section: "agents", agent: "scout" } };
 
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
@@ -283,7 +283,7 @@ window.pine.prefs = async (change) => ({ ...store.prefs, ...change });
 export const Theme: Story = {
 	args: { section: "app" },
 	render: () => {
-		store.themes = [...THEMES, { id: "half-done", name: "half-done", problem: 'it names no colour for the page: a theme needs "editor.background" and "editor.foreground" in "colors"' } satisfies ThemeEntry];
+		store.themes = [...THEMES, { id: "half-done", name: "half-done", problem: 'it names no color for the page: a theme needs "editor.background" and "editor.foreground" in "colors"' } satisfies ThemeEntry];
 		store.theme = "pmndre";
 		return (
 			<div className="w-full max-w-200">

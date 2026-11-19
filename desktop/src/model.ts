@@ -447,8 +447,8 @@ export class Store extends Model {
 		return true;
 	}
 
-	/** An agent's colour, set at once: a preset, any other `#rrggbb`, or "none". */
-	async colourAgent(id: string, color: string): Promise<void> {
+	/** An agent's color, set at once: a preset, any other `#rrggbb`, or "none". */
+	async colorAgent(id: string, color: string): Promise<void> {
 		if (!(await this.attempt(() => api.updateAgent(id, { color })))) return;
 		this.agents = await this.askAgents().catch(() => this.agents);
 		this.touch();
