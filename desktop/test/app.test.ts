@@ -12,7 +12,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import { after, before, test } from "node:test";
+import { after, afterEach, before, test } from "node:test";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { httpMcp } from "../../test/support/http-mcp.ts";
 import { launchApp } from "./support/app.ts";
@@ -160,6 +160,23 @@ after(async () => {
 	await mock?.close?.().catch(() => {});
 	github?.close();
 	for (const dir of [home, far, folder]) if (dir) fs.rmSync(dir, { recursive: true, force: true });
+});
+
+/** What lies over the page and takes its clicks and keys: a dialog, a menu. */
+const OVER = "[role=dialog], [role=alertdialog], [role=menu]";
+
+// Every test here works in the one window. A test that fails halfway leaves what it had open (the
+// model picker, a menu) over the page, and each test after it then fails on that and not on what
+// it is about. So after a failed test, what is open is closed as the owner would close it.
+afterEach(async (t) => {
+	if (t.passed || !page) return;
+	for (let i = 0; i < 5; i++) {
+		const open = await page.$$eval(OVER, (els: Element[]) => els.length).catch(() => 0);
+		if (!open) return;
+		await page.keyboard.press("Escape").catch(() => {});
+		// One Escape closes the topmost; when nothing closes (a question that has to be answered), the next try ends it.
+		await page.waitForFunction(([s, n]: [string, number]) => document.querySelectorAll(s).length < n, [OVER, open], { timeout: 2000 }).catch(() => {});
+	}
 });
 
 /** The context window of the mock model (models.json above). */
@@ -363,7 +380,10 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 		await page.click("[data-slot=browser] button[aria-label='A new tab']");
 		// The tabs are drawn again once the new one is asked for: a click before that can land on a button that is gone.
 		await waitFor("a new tab arrived", () => ops().some((o) => o.do === "newtab"));
-		await page.click("[data-slot=browser] [data-slot=tabs-list] button[aria-label^='Close'] >> nth=1", { force: true });
+		// The button to close a tab that is not in front shows under the pointer only. So the pointer goes to the tab
+		// first, as the owner's does: a click forced onto the unseen button is sent wherever it was a moment ago.
+		await page.hover("[data-slot=browser] [data-slot=tabs-trigger] >> nth=1");
+		await page.click("[data-slot=browser] [data-slot=tabs-list] button[aria-label^='Close'] >> nth=1");
 		await waitFor("a closed tab arrived", () => ops().some((o) => o.do === "closetab" && o.index === 1));
 		await page.click("[data-slot=browser] button[aria-label='Back']");
 		await waitFor("wheel, tab and back arrived", () => ["wheel", "tab", "back"].every((d) => ops().some((o) => o.do === d)));
@@ -488,6 +508,40 @@ const activeOption = () =>
 		return { inDialog: Boolean(field.closest("[role=dialog]")), role: field.getAttribute("role"), option: option?.getAttribute("role"), selected: option?.getAttribute("aria-selected"), text: option?.textContent ?? "", list: Boolean(option?.closest("[role=listbox]")) };
 	});
 
+/**
+ * Waits until the keyboard is in a list's field and the line it names reads as `pattern` (or, with
+ * `is` false, as something else). A dialog takes focus a moment after it is drawn, and a line is
+ * named a moment after a key: an arrow pressed before the first goes to what is behind the dialog,
+ * and a look before the second finds the line from before, or none.
+ */
+const named = (pattern: RegExp, is = true) =>
+	page.waitForFunction(
+		([source, is]: [string, boolean]) => {
+			const field = document.activeElement;
+			const id = field?.getAttribute("aria-activedescendant");
+			const option = id ? document.getElementById(id) : null;
+			return field?.getAttribute("role") === "combobox" && option !== null && new RegExp(source).test(option.textContent ?? "") === is;
+		},
+		[pattern.source, is],
+		{ timeout: 20_000 },
+	);
+
+/**
+ * Waits until a dialog that was drawn has the keyboard, and its list, where it has one, a chosen line.
+ * Both come a moment after the dialog: an Enter pressed before goes to the page behind it, or chooses nothing.
+ */
+const inDialog = () =>
+	page.waitForFunction(
+		() => {
+			const at = document.activeElement;
+			const dialog = at?.closest("[role=dialog], [role=alertdialog]");
+			if (!at || !dialog || at.hasAttribute("data-base-ui-focus-guard")) return false;
+			return !dialog.querySelector("[role=option]") || Boolean(dialog.querySelector("[role=option][aria-selected=true]"));
+		},
+		undefined,
+		{ timeout: 20_000 },
+	);
+
 /** Tab stays inside the dialog: past its last stop, the dialog's focus guard hands focus back to its first (in the next frame). */
 const stillInside = () => page.waitForFunction(() => Boolean(document.activeElement?.closest("[role=dialog]")) && !document.activeElement?.hasAttribute("data-base-ui-focus-guard"), undefined, { timeout: 2000 });
 
@@ -501,7 +555,7 @@ test("a model is chosen from its picker with the keyboard alone, and focus goes 
 	await page.focus(chip);
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=dialog-content] [role=listbox] [role=option]");
-	await sees("[data-slot=dialog-content] [role=combobox][aria-activedescendant]");
+	await named(/mock\/m/);
 	// It is announced by its title.
 	assert.match(await announced("[data-slot=dialog-content]"), /^Model for main/);
 	// Its models are options in a list, the one in use marked active, and Tab stays inside.
@@ -517,12 +571,12 @@ test("a model is chosen from its picker with the keyboard alone, and focus goes 
 	// Arrows move, Enter chooses.
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=dialog-content] [role=listbox] [role=option]");
+	await named(/mock\/m/);
 	const count = await page.$$eval("[data-slot=dialog-content] [role=option]", (els: Element[]) => els.length);
 	await page.keyboard.press("ArrowDown");
-	if (count > 1) assert.doesNotMatch((await activeOption()).text, /^mock\/m/);
+	if (count > 1) await named(/^mock\/m/, false);
 	await page.keyboard.press("ArrowUp");
-	at = await activeOption();
-	assert.match(at.text, /mock\/m/);
+	await named(/mock\/m/);
 	await page.keyboard.press("Enter");
 	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	assert.equal(await focused(), true);
@@ -836,6 +890,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
 	// With several agents the app asks whose folder it is; the one in front is offered first.
 	await sees("[data-slot=dialog-title] >> text=Which agent works in");
+	await inDialog();
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
 	await page.click(CODE_TOGGLE);
@@ -1612,7 +1667,7 @@ test("conversations are kept in groups: one made from the agent's menu is filled
 test("a conversation is opened from the palette with the keyboard alone", async () => {
 	await menu("palette");
 	await sees("[data-slot=dialog-content] [role=listbox]");
-	assert.equal((await activeOption()).role, "combobox");
+	await named(/./);
 	assert.equal(await announced("[data-slot=dialog-content]"), "Search everything");
 	await page.keyboard.press("Tab");
 	await stillInside();
@@ -1625,9 +1680,9 @@ test("a conversation is opened from the palette with the keyboard alone", async 
 	await sees("[role=option] >> text=scout · where is the okapi invoice");
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.press("ArrowUp");
+	await named(/scout · where is the okapi invoice/);
 	const at = await activeOption();
 	assert.deepEqual([at.option, at.selected, at.list], ["option", "true", true], JSON.stringify(at));
-	assert.match(at.text, /scout · where is the okapi invoice/);
 	await page.keyboard.press("Enter");
 	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=where is the okapi invoice");
@@ -1705,6 +1760,9 @@ test("a message is branched from: a new conversation with what was said up to it
 		await page.keyboard.press("Enter");
 		await sees(`[data-slot=markdown] >> text=answer to ${word}`);
 	}
+	// A conversation is called by the first thing said in it, once the app has asked the daemon what was said: read
+	// before that, its name is still "new conversation", and is another one by the time it is compared below.
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=BRANCH-ONE");
 	const from = await page.textContent("[data-slot=tab][data-active] [data-slot=tab-name]");
 	// A right click on a message of the owner's offers it. The menu is the system's: what it shows is noted, and the test picks.
 	await app.evaluate(({ ipcMain }: any) => {
@@ -1750,10 +1808,12 @@ test("a message is branched from: a new conversation with what was said up to it
 test("a conversation moves into a worktree of its folder: the chip names the branch, and its work is merged from the panel", async () => {
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
 	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
+	await inDialog();
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
 	await menu("worktree");
 	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Work in a worktree?");
+	await inDialog();
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=conversation-head] [data-worktree] >> text=pine/");
 	const branch = (await page.textContent("[data-slot=conversation-head] [data-worktree]"))!.trim();
@@ -1777,6 +1837,7 @@ test("a conversation moves into a worktree of its folder: the chip names the bra
 	await shot("16-worktree");
 	await page.locator("[data-slot=code-panel]").getByRole("button", { name: "Merge…" }).click();
 	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=1 commit ahead of");
+	await inDialog();
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=toast] >> text=merged into");
 	assert.equal(fs.readFileSync(path.join(folder, "WORKTREE.md"), "utf8"), "made apart\n");
@@ -1785,6 +1846,7 @@ test("a conversation moves into a worktree of its folder: the chip names the bra
 	// Discarded once merged: the folder's chip is back.
 	await menu("worktree");
 	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=ahead of");
+	await inDialog();
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=conversation-head] [data-folder] >> text=pine-desktop-folder");
 	assert.ok(!fs.existsSync(tree));
@@ -2121,6 +2183,7 @@ test("what was typed in a file and not saved stays when the panel becomes a shee
 		// The folder's conversation from before is in a worktree by now: a new one in the folder itself.
 		await menu(`folder:${folder}`);
 		await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
+		await inDialog();
 		await page.keyboard.press("Enter");
 		await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
 		await menu("code-files");
