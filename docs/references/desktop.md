@@ -111,11 +111,11 @@ it was built on. See "Packing and signing" for what it carries and how it is sig
 | Command (in `desktop/`) | What it does |
 |---|---|
 | `npm start` | Builds the app and opens it |
-| `npm run dev` | Opens it with the page served by Vite, reloading on every change |
+| `npm run dev` | Opens it with the page served by Vite, reloading on every change. It ends, with the app and the daemon the app started, when whatever started it is gone |
 | `npm run dev:preview` | The app's page in an ordinary browser, reloading on every change, on a throwaway pine. `-- --home <dir>` puts it on that pine home instead. See below |
-| `npm run dev:preview:home` | The same on your own pine home, `~/.pine`, at port 5174, so that it runs beside the throwaway one. Its agents are your real ones. See below |
+| `npm run dev:preview:home` | The same on your own pine home, `~/.pine`, at the port after the throwaway one's, so that it runs beside it. Its agents are your real ones. See below |
 | `npm run check` | Type check |
-| `npm test` | The app from end to end: the real app on a pine home of its own with a scripted model. Needs a screen. With `PINE_LIVE=1` on a Mac it also dictates with the real voice helper, from a recording |
+| `npm test` | The app from end to end: the real app on a pine home of its own with a scripted model. Needs a screen. The app is built once for the run, into a temp folder of its own that every test starts (`scripts/test.mjs`, `test/support/app.ts`), two test files at a time, two minutes at most for a test. A test file run on its own with `node --test` builds for itself. With `PINE_LIVE=1` on a Mac it also dictates with the real voice helper, from a recording |
 | `npm run pack` | `release/mac-arm64/Pine.app`, with pine, Node and the helpers inside |
 | `npm run dist` | The same, and a disk image |
 | `node scripts/smoke.mjs` | Starts a packed app from a folder of its own, on a home of its own, and checks that it answers a message with the pine and the Node it carries, that `pine` works through a link, and that pine finds the helpers in the app |
@@ -128,23 +128,28 @@ that is not its own, and falls back to its own Node where the Mac has none.
 
 ### The page in a browser
 
-`npm run dev:preview` serves the app's page at `http://localhost:5173` (the port from `$PORT`),
-for an editor's preview pane or any browser, without the app's window. It is a tool for
-working on the app, not a way to use pine.
+`npm run dev:preview` serves the app's page at `http://localhost:<port>`, for an editor's preview
+pane or any browser, without the app's window. It is a tool for working on the app, not a way to
+use pine. The port is the checkout's own, made from its path (`scripts/launch-json.mjs`: between
+5200 and 5903), so that the previews of two checkouts on one Mac (git worktrees) never meet;
+`$PORT` wins. The preview says where it answers. It ends, with its throwaway pine, when whatever
+started it is gone, also when that was not a signal (an editor or an agent session that ended).
 
 | How it is started | What it runs on |
 |---|---|
 | `npm run dev:preview` | A throwaway pine: a home in a temp folder with two agents (`main` and `scout`) and the scripted model of pine's tests. The home and its daemon are removed when the preview stops |
-| `npm run dev:preview -- --home <dir>` | That pine home, with its own models and conversations. The daemon that runs there is used and left running; if none runs, one is started and stopped with the preview. The home is never removed. `~` in `<dir>` is your home folder |
-| `npm run dev:preview:home` | `--home ~/.pine` at `http://localhost:5174` (`$PORT` still wins). What you do in the page, your real agents do, with your real models, sources and files: a message is a real one |
+| `npm run dev:preview -- --home <dir>` | That pine home, with its own models and conversations. The daemon that runs there is used; if none runs, one is started that goes on after the preview, as with the app's "keep pine running". The preview never stops that daemon and never removes the home. `~` in `<dir>` is your home folder |
+| `npm run dev:preview:home` | `--home ~/.pine`, at the port after the throwaway preview's (`$PORT` still wins). What you do in the page, your real agents do, with your real models, sources and files: a message is a real one |
 
 `.claude/launch.json` has one entry for each, so that the preview pane of Claude Code starts the
-one you name, and both can run side by side:
+one you name, and both can run side by side. It is not kept in git: `npm install` in `desktop/`
+writes it with the checkout's ports (`node scripts/launch-json.mjs` does it by hand, and the
+preview writes it when it is missing), keeping any entry of another name.
 
 | Entry | Command | Port |
 |---|---|---|
-| `desktop-preview` | `npm run dev:preview` (the throwaway pine) | 5173 |
-| `desktop-preview-home` | `npm run dev:preview:home` (your pine home) | 5174 |
+| `desktop-preview` | `npm run dev:preview` (the throwaway pine) | the checkout's own |
+| `desktop-preview-home` | `npm run dev:preview:home` (your pine home) | the next one |
 
 The throwaway pine has neither a web browser nor your models, so what needs them (the agent's
 browser in the side panel, an answer of a real model) is seen on `desktop-preview-home`.
@@ -738,9 +743,13 @@ desktop/
   scripts/         build, dev, pack, the icon, the smoke test of a packed app, pine.sh (the
                    launcher that becomes Resources/bin/pine), preview.ts (the page in an ordinary
                    browser, `npm run dev:preview`: Vite's server makes every call for the page,
-                   on a throwaway pine or the home `--home` names)
+                   on a throwaway pine or the home `--home` names), test.mjs (`npm test`: the
+                   app built once for the run), launch-json.mjs (the checkout's ports and
+                   .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter)
   test/            the app from end to end, driven through its real window; command.test.ts,
-                   updates.test.ts, daemon.test.ts and preview.test.ts need no window
+                   updates.test.ts, daemon.test.ts and preview.test.ts need no window.
+                   support/: the build a test starts (app.ts), and a daemon of the test's own
+                   told from another run's by its token (daemon.ts)
 ```
 
 - The page asks for something new through `preload.ts` and a handler in `main.ts`, never by

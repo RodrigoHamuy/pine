@@ -1,0 +1,69 @@
+// The ports of this checkout's previews, and the `.claude/launch.json` that names them.
+//
+// Several checkouts of pine (git worktrees) run on one Mac at once, each with its previews. Fixed
+// ports had them attach to each other's page and daemon, so each checkout gets ports of its own,
+// from its path: the same every time for one checkout, most likely different for another. They
+// lie between 5200 and 5903, away from Vite's 5173 and Storybook's 6006. $PORT still wins.
+//
+// `.claude/launch.json` is not kept in git: it is written here, on `npm install` in desktop/ and
+// by the preview when it is missing, with the ports of this checkout.
+//   node scripts/launch-json.mjs
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import path from "node:path";
+
+const checkout = path.resolve(import.meta.dirname, "..", "..");
+
+/** This checkout's ports: the throwaway preview, the preview on ~/.pine beside it, and `npm run dev`'s page. */
+export function ports() {
+	let where = checkout;
+	try {
+		where = fs.realpathSync(checkout);
+	} catch {
+		// as it is
+	}
+	const hash = createHash("sha256").update(where).digest().readUInt32BE(0);
+	// Four ports a checkout, so that two checkouts never share one.
+	const base = 5200 + 4 * (hash % 176);
+	return { preview: base, home: base + 1, dev: base + 2 };
+}
+
+/** The entries of the preview pane, as the file had them when it was kept in git. */
+function entries() {
+	const p = ports();
+	return [
+		{ name: "desktop-preview", runtimeExecutable: "npm", runtimeArgs: ["--prefix", "desktop", "run", "dev:preview"], port: p.preview },
+		{ name: "desktop-preview-home", runtimeExecutable: "npm", runtimeArgs: ["--prefix", "desktop", "run", "dev:preview:home"], port: p.home },
+	];
+}
+
+/**
+ * Write `.claude/launch.json` with this checkout's ports. Entries of other names that somebody
+ * added are kept. With `onlyIfMissing`, a file that is there is left alone.
+ */
+export function writeLaunchJson({ onlyIfMissing = false } = {}) {
+	const file = path.join(checkout, ".claude", "launch.json");
+	if (onlyIfMissing && fs.existsSync(file)) return file;
+	let kept = [];
+	try {
+		const old = JSON.parse(fs.readFileSync(file, "utf8"));
+		const ours = new Set(entries().map((e) => e.name));
+		kept = (old.configurations ?? []).filter((c) => !ours.has(c?.name));
+	} catch {
+		// none yet, or not one that can be read: written anew
+	}
+	const text = `${JSON.stringify({ version: "0.0.1", configurations: [...entries(), ...kept] }, null, 2)}\n`;
+	fs.mkdirSync(path.dirname(file), { recursive: true });
+	if (!fs.existsSync(file) || fs.readFileSync(file, "utf8") !== text) fs.writeFileSync(file, text);
+	return file;
+}
+
+if (import.meta.filename === process.argv[1]) {
+	// From `npm install`: a file that cannot be written is said, and the install goes on.
+	try {
+		const p = ports();
+		console.log(`${path.relative(process.cwd(), writeLaunchJson())}: previews at ${p.preview} and ${p.home}`);
+	} catch (e) {
+		console.warn(`.claude/launch.json was not written: ${e instanceof Error ? e.message : e}`);
+	}
+}

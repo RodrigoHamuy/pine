@@ -1,10 +1,15 @@
 // The app's page in an ordinary browser (an editor's preview pane), reloading as you edit, on a
 // throwaway pine: a home in a temp folder with two agents and the scripted model server of pine's
 // tests, removed when the preview stops. With --home, on that pine home instead: the daemon that
-// runs there, or one started for the preview and stopped with it; the home is never removed.
-//   npm run dev:preview                     (the port from $PORT, 5173 by default)
+// runs there, or one started for it that goes on after the preview; neither the home nor its
+// daemon is ever stopped or removed by the preview.
+//   npm run dev:preview                     (the port from $PORT, this checkout's own by default)
 //   npm run dev:preview -- --home ~/.pine
-//   npm run dev:preview:home                (the same, at port 5174: beside the throwaway one)
+//   npm run dev:preview:home                (the same, at the next port: beside the throwaway one)
+//
+// The ports are this checkout's (scripts/launch-json.mjs), so that the previews of two checkouts
+// on one Mac never meet; .claude/launch.json is written with them when it is missing. The preview
+// ends, with its throwaway pine, when whatever started it is gone (scripts/leash.mjs).
 //
 // Vite's server stands where the app's main process stands: it holds the daemon's token and makes
 // every call for the page (electron/daemon.ts, the same module as the app), and the page holds no
@@ -22,6 +27,8 @@ import { createServer, type Plugin } from "vite";
 import { startMock } from "../../baseline/tests/mock.mjs";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "../electron/daemon.ts";
 import { connect, type Service } from "../electron/service.ts";
+import { ports, writeLaunchJson } from "./launch-json.mjs";
+import { whenParentGone } from "./leash.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -173,7 +180,8 @@ async function stop(code = 0): Promise<never> {
 	if (!stopping) {
 		stopping = true;
 		await server?.close().catch(() => {});
-		// A daemon that ran before the preview goes on: `stop` ends only one that `pine service` started.
+		// The throwaway daemon ends here. One of a chosen home was connected with `keep`, so `stop`
+		// leaves it running, whether it ran before the preview or was started for it.
 		await service?.stop().catch(() => {});
 		await mock?.close?.().catch(() => {});
 		// A chosen home is the developer's: it is never removed.
@@ -181,7 +189,8 @@ async function stop(code = 0): Promise<never> {
 	}
 	process.exit(code);
 }
-for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => void stop());
+// On SIGINT, SIGTERM and SIGHUP too.
+whenParentGone(() => void stop());
 // Whatever goes wrong, the throwaway home and the scripted model server go with the preview.
 const crashed = (e: unknown) => {
 	console.error("The preview stopped on an error:", e);
@@ -191,13 +200,21 @@ process.on("uncaughtException", crashed);
 process.on("unhandledRejection", crashed);
 
 try {
+	writeLaunchJson({ onlyIfMissing: true });
+} catch (e) {
+	console.warn(`.claude/launch.json was not written: ${e instanceof Error ? e.message : e}`);
+}
+
+try {
 	// pine's command line of this checkout, on this Node. `connect` holds its input open: that is
 	// how `pine service` knows its caller is alive.
-	service = await connect({ argv: [process.execPath, path.join(root, "..", "bin", "pine.js")], env: { ...process.env }, from: "this checkout" }, { home });
+	// A chosen home (~/.pine) is the developer's: its daemon outlives the preview, as with the Pine
+	// app's "keep pine running", and nothing in the preview's end can stop it.
+	service = await connect({ argv: [process.execPath, path.join(root, "..", "bin", "pine.js")], env: { ...process.env }, from: "this checkout" }, { home, keep: Boolean(chosen) });
 	const nonce = randomBytes(16).toString("base64");
 	server = await createServer({
 		root,
-		server: { host: "localhost", port: Number(process.env.PORT ?? 5173), strictPort: true },
+		server: { host: "localhost", port: Number(process.env.PORT ?? (chosen ? ports().home : ports().preview)), strictPort: true },
 		// The page's stand-in for the bridge exists only where this is true (vite.config.ts sets it false).
 		define: { __PINE_PREVIEW__: "true" },
 		html: { cspNonce: nonce },
@@ -206,7 +223,7 @@ try {
 	await server.listen();
 	console.log(`preview  ${server.resolvedUrls?.local[0]}`);
 	if (!chosen) console.log(`pine     ${service.base} on a throwaway home in ${home} (removed when the preview stops)`);
-	else console.log(`pine     ${service.base} on ${home} (${service.started ? "started for the preview, stopped with it" : "the daemon that runs there, left running"})`);
+	else console.log(`pine     ${service.base} on ${home} (${service.started ? "started for the preview, left running after it" : "the daemon that runs there, left running"})`);
 } catch (e) {
 	console.error(`The preview could not start: ${e instanceof Error ? e.message : e}`);
 	await stop(1);

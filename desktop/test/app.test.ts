@@ -13,9 +13,10 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
-import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { httpMcp } from "../../test/support/http-mcp.ts";
+import { launchApp } from "./support/app.ts";
+import { daemonGone, ours } from "./support/daemon.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const shots = process.env.PINE_DESKTOP_SHOTS;
@@ -63,7 +64,6 @@ const menu = (command: string) => app.evaluate(({ BrowserWindow }: any, c: strin
 const api = (method: string, url: string, body?: unknown) => page.evaluate(([m, u, b]: [string, string, unknown]) => (window as any).pine.call(m, u, b), [method, url, body]);
 
 before(async () => {
-	if (!fs.existsSync(path.join(root, "dist", "index.html")) || !fs.existsSync(path.join(root, "dist-electron", "main.js"))) execFileSync(process.execPath, [path.join(root, "scripts", "build.mjs")], { stdio: "inherit" });
 	mock = await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g, promptTokens: (body: any, raw: string) => contextAt(body) ?? Math.ceil(raw.length / 4) });
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
@@ -148,10 +148,7 @@ if (args.includes("-O")) {
 `);
 	fs.chmodSync(ssh, 0o755);
 
-	app = await electron.launch({
-		args: [root],
-		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_SHELL: "/bin/bash", PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest`, PINE_DESKTOP_SSH: ssh },
-	});
+	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_SHELL: "/bin/bash", PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest`, PINE_DESKTOP_SSH: ssh });
 	page = await app.firstWindow();
 	page.on("pageerror", (e: Error) => pageErrors.push(String(e.stack ?? e.message).slice(0, 600)));
 	page.on("console", (m: any) => m.type() === "error" && pageErrors.push(m.text().slice(0, 600)));
@@ -304,8 +301,9 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 	const file = path.join(home, "data", "browser-view", `${encodeURIComponent("main:main")}.json`);
 	write(file, JSON.stringify({ port: (door.address() as any).port, token: word, pid: 1 }));
 	const ops = () => asked.filter((a) => a.at === "/input").flatMap((a) => a.body.ops as any[]);
+	// As long as `sees` waits (20 s): on a computer that runs other tests too, 5 s was not enough.
 	const waitFor = async (what: string, test: () => boolean) => {
-		for (let i = 0; i < 100 && !test(); i++) await new Promise((r) => setTimeout(r, 50));
+		for (let i = 0; i < 400 && !test(); i++) await new Promise((r) => setTimeout(r, 50));
 		assert.ok(test(), `${what}. Asked: ${JSON.stringify(asked)}`);
 	};
 	await page.click("[data-slot=tab] >> nth=0");
@@ -363,8 +361,10 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 		await page.click("[data-slot=browser] [data-slot=tabs-trigger] >> nth=1");
 		// A tab of the owner's own, and one closed.
 		await page.click("[data-slot=browser] button[aria-label='A new tab']");
+		// The tabs are drawn again once the new one is asked for: a click before that can land on a button that is gone.
+		await waitFor("a new tab arrived", () => ops().some((o) => o.do === "newtab"));
 		await page.click("[data-slot=browser] [data-slot=tabs-list] button[aria-label^='Close'] >> nth=1", { force: true });
-		await waitFor("a new tab and a closed one arrived", () => ops().some((o) => o.do === "newtab") && ops().some((o) => o.do === "closetab" && o.index === 1));
+		await waitFor("a closed tab arrived", () => ops().some((o) => o.do === "closetab" && o.index === 1));
 		await page.click("[data-slot=browser] button[aria-label='Back']");
 		await waitFor("wheel, tab and back arrived", () => ["wheel", "tab", "back"].every((d) => ops().some((o) => o.do === d)));
 		// (How far a turn of the wheel goes is the system's to say; that it went down, and all of it, is what counts.)
@@ -2279,8 +2279,7 @@ test("another machine's pine is used from the foot of the side bar, and this Mac
 	assert.doesNotMatch(await agents(), /helper/);
 	assert.match(await page.textContent("[data-slot=service-status]"), /started here/);
 	assert.doesNotMatch((await page.textContent("[data-slot=message-scroller-content]").catch(() => "")) ?? "", /hello from this side/);
-	const up = (port: string) => fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(300) }).then((r) => r.ok, () => false);
-	assert.equal(await up(farPort), true);
+	assert.equal(await ours(farPort, far), true);
 	assert.equal((await page.evaluate(() => (window as any).pine.state())).prefs.use, undefined);
 
 	// Forgotten: the connection ends, and the pine the app started there with it.
@@ -2288,12 +2287,7 @@ test("another machine's pine is used from the foot of the side bar, and this Mac
 	await page.locator("[data-environment='you@elsewhere']").getByRole("button", { name: "Forget" }).click();
 	await page.locator("[data-environment='you@elsewhere']").waitFor({ state: "detached" });
 	assert.deepEqual((await page.evaluate(() => (window as any).pine.state())).prefs.hosts, []);
-	let still = true;
-	for (let i = 0; i < 100 && still; i++) {
-		still = await up(farPort);
-		if (still) await new Promise((r) => setTimeout(r, 150));
-	}
-	assert.equal(still, false);
+	assert.equal(await daemonGone(farPort, far), true);
 	await menu("settings");
 });
 
@@ -2307,10 +2301,5 @@ test("quitting stops the daemon it started", async () => {
 	assert.match(said, /pine is up/);
 	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(said)?.[1];
 	assert.ok(port);
-	let up = true;
-	for (let i = 0; i < 100 && up; i++) {
-		up = await fetch(`http://127.0.0.1:${port}/health`, { signal: AbortSignal.timeout(300) }).then((r) => r.ok, () => false);
-		if (up) await new Promise((r) => setTimeout(r, 150));
-	}
-	assert.equal(up, false);
+	assert.equal(await daemonGone(port!, home), true);
 });
