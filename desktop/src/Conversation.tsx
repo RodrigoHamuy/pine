@@ -833,6 +833,13 @@ export function Conversation({ tab }: { tab: Tab }) {
 	// The words are marked once what was said is on the page.
 	const loaded = tab.loaded;
 	const scroller = useRef<HTMLDivElement>(null);
+	// What the conversation held when this view of it was opened: its history, or what was said while another tab
+	// was in front. Message Scroller goes to a message of the owner's when it arrives (`scrollAnchor`), and takes
+	// for arrived whichever such message it has not gone to yet. So one that was there from the start is no
+	// anchor: it would be gone to, the oldest first, as soon as a line of the list is exchanged for another
+	// (the mark before the last message for a message that comes), and the view would jump to the very top.
+	const before = useRef<Set<number> | undefined>(undefined);
+	if (loaded && !before.current) before.current = new Set(tab.items.map((item) => item.id));
 	const chat = tab.kind === "chat";
 	const checkpoint = chat && !tab.busy ? lastOwnerMessage(tab.items) : -1;
 	return (
@@ -861,7 +868,7 @@ export function Conversation({ tab }: { tab: Tab }) {
 													<Checkpoint tab={tab} />
 												</MessageScrollerItem>
 											) : null}
-											<MessageScrollerItem messageId={String(item.id)} scrollAnchor={item.t === "user"}>
+											<MessageScrollerItem messageId={String(item.id)} scrollAnchor={item.t === "user" && !before.current?.has(item.id)}>
 												<Row item={item} v={item.v} tab={tab} />
 											</MessageScrollerItem>
 										</Fragment>
