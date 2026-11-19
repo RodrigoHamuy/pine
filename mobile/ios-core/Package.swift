@@ -23,12 +23,13 @@ let package = Package(
 			dependencies: [
 				.product(name: "NIOSSH", package: "swift-nio-ssh"),
 				.product(name: "NIOCore", package: "swift-nio"),
+				.product(name: "NIOPosix", package: "swift-nio"),
 				.product(name: "Crypto", package: "swift-crypto"),
 			],
 			// remote-command.txt is a link to ../cases/remote-command.txt, the one file both cores
 			// read: SwiftPM copies what it points at into the bundle when it builds.
 			resources: [.copy("Resources/remote-command.txt")]
 		),
-		.testTarget(name: "PineCoreTests", dependencies: ["PineCore"]),
+		.testTarget(name: "PineCoreTests", dependencies: ["PineCore", .product(name: "NIOCore", package: "swift-nio"), .product(name: "NIOPosix", package: "swift-nio")]),
 	]
 )
