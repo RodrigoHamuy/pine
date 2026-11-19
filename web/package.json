@@ -1,0 +1,23 @@
+{
+  "name": "@pmndre/pine-web",
+  "private": true,
+  "type": "module",
+  "description": "The Pine page in a web browser, connected to the owner's pine over SSH. Not part of what goes to npm.",
+  "scripts": {
+    "test": "node --test --test-force-exit \"test/*.test.ts\"",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@microsoft/dev-tunnels-ssh": "^3.12.42",
+    "@microsoft/dev-tunnels-ssh-tcp": "^3.12.42",
+    "buffer": "^5.7.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "playwright-core": "^1.65.1",
+    "typescript": "^7.0.2",
+    "ws": "^8.23.0"
+  }
+}
