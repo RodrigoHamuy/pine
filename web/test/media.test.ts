@@ -10,6 +10,7 @@ import { frameBridge } from "../src/frame-bridge.ts";
 import { webBridge, type Store } from "../src/host.ts";
 import { mediaUrls } from "../src/page-media.ts";
 import { serve } from "../src/serve.ts";
+import { callDaemon } from "../src/tunnel.ts";
 import { fakeMachine, startDaemon, type Daemon } from "./support/fake-ssh.ts";
 import { windows } from "./support/windows.ts";
 
@@ -127,4 +128,22 @@ test("the page's object URLs: a media address becomes one for its bytes, made on
 	assert.deepEqual(asked, ["/media/tool/t1"]);
 	assert.equal(made[0].type, "image/png");
 	assert.equal(await urls.resolve("pine-media://daemon/media/tool/gone"), undefined);
+});
+
+test("a control API call whose path would break its request line is answered 400, and nothing is sent", async () => {
+	const forwarded: string[] = [];
+	const connection = {
+		forward: async (host: string, port: number) => {
+			forwarded.push(`${host}:${port}`);
+			throw new Error("no tunnel in this test");
+		},
+	};
+	const stand = { connection, host: "127.0.0.1", port: 1, token: "secret" } as unknown as Parameters<typeof callDaemon>[0];
+	for (const bad of ["/x HTTP/1.1\r\nX-Injected: 1\r\n\r\nGET /y", "/agents\nX: 1", "/agents x", "/agents\tx", "/agents\0", "/agents\x7f", "/agents#x"]) {
+		const answer = await callDaemon(stand, "GET", bad);
+		assert.deepEqual(answer, { ok: false, status: 400, data: { error: "not a call of the control API" } }, JSON.stringify(bad));
+	}
+	assert.deepEqual(forwarded, []);
+	assert.equal((await callDaemon(stand, "GET", "/agents")).status, 0);
+	assert.deepEqual(forwarded, ["127.0.0.1:1"]);
 });

@@ -78,6 +78,13 @@ test("arguments that are not what a method takes are refused before the bridge s
 		["call", ["DELETE", "/agents"]],
 		["call", ["GET", "//elsewhere.example/"]],
 		["call", ["GET", "https://elsewhere.example/"]],
+		// The path goes into a request line of HTTP/1.1 at the top: a break there would add headers and a second request.
+		["call", ["GET", "/x HTTP/1.1\r\nX-Injected: 1\r\n\r\nGET /y"]],
+		["call", ["GET", "/agents\nX: 1"]],
+		["call", ["GET", "/agents x"]],
+		["call", ["GET", "/agents\0"]],
+		["call", ["GET", "/agents\x7f"]],
+		["call", ["GET", "/agents#x"]],
 		["call", ["GET"]],
 		["prefs", ["notify"]],
 		["prefs", [[]]],

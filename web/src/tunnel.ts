@@ -179,7 +179,9 @@ const hostHeader = (d: Daemon) => (d.host.includes(":") ? `[${d.host}]:${d.port}
 /** One call of the control API in the owner's name, answered as desktop/electron/daemon.ts's `callDaemon` answers. */
 export async function callDaemon(daemon: Daemon | undefined, method: string, url: string, body?: unknown): Promise<{ ok: boolean; status: number; data: any }> {
 	if (!daemon) return { ok: false, status: 503, data: { error: "pine is not running yet" } };
-	if ((method !== "GET" && method !== "POST") || typeof url !== "string" || !url.startsWith("/") || url.startsWith("//")) return { ok: false, status: 400, data: { error: "not a call of the control API" } };
+	// The path goes into the request line as it is: a space, a control character or a fragment
+	// would add headers or a second request with the token, which the desktop's fetch would have encoded.
+	if ((method !== "GET" && method !== "POST") || typeof url !== "string" || !url.startsWith("/") || url.startsWith("//") || /[\s\0-\x1f\x7f#]/.test(url)) return { ok: false, status: 400, data: { error: "not a call of the control API" } };
 	try {
 		const channel = await daemon.connection.forward(daemon.host, daemon.port);
 		let head: Head | undefined;

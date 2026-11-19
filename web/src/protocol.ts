@@ -2,7 +2,7 @@
 // list: a method that is not here is refused, and each one's arguments are checked here before
 // the bridge sees them, as desktop/electron/main.ts checks what comes through its IPC.
 
-/** A host as the page names it: user@host or user@host:port (`hosts.ts` reads it). */
+/** A host as the page names it: user@host or user@host:port (`host.ts` reads it). */
 const host = (v: unknown) => typeof v === "string" && v.length > 0 && v.length <= 300;
 const none = (args: unknown[]) => args.length === 0;
 /** A host key's fingerprint as OpenSSH prints it: SHA256 and 43 characters of unpadded base64. */
@@ -13,9 +13,20 @@ export const METHODS = {
 	state: none,
 	ready: none,
 	retry: none,
-	/** One call of the control API: a path on the daemon, never an address. */
+	/**
+	 * One call of the control API: a path on the daemon, never an address. The path is written
+	 * into a request line of HTTP/1.1 (tunnel.ts), so a space, a control character or a fragment
+	 * would add headers or a second request: the desktop's fetch would have encoded them.
+	 */
 	call: (args: unknown[]) =>
-		args.length >= 2 && args.length <= 3 && (args[0] === "GET" || args[0] === "POST") && typeof args[1] === "string" && args[1].length <= 4096 && args[1].startsWith("/") && !args[1].startsWith("//"),
+		args.length >= 2 &&
+		args.length <= 3 &&
+		(args[0] === "GET" || args[0] === "POST") &&
+		typeof args[1] === "string" &&
+		args[1].length <= 4096 &&
+		args[1].startsWith("/") &&
+		!args[1].startsWith("//") &&
+		!/[\s\0-\x1f\x7f#]/.test(args[1]),
 	prefs: (args: unknown[]) => args.length === 1 && typeof args[0] === "object" && args[0] !== null && !Array.isArray(args[0]),
 	use: (args: unknown[]) => args.length === 0 || (args.length === 1 && (args[0] === undefined || host(args[0]))),
 	addHost: (args: unknown[]) => args.length === 1 && host(args[0]),
