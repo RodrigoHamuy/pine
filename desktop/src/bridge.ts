@@ -1,6 +1,6 @@
 // What the page has of the world outside itself: the bridge the preload script exposes.
 import type { Bridge } from "../electron/preload.ts";
-import type { Palette } from "./theme.ts";
+import type { Family, Palette } from "./theme.ts";
 
 declare global {
 	interface Window {
@@ -27,6 +27,8 @@ export interface Prefs {
 	palette?: Palette;
 	/** Code in dark draws with roles of the palette (on) or keeps poimandres' own colours (off). */
 	codeFollowsPalette: boolean;
+	/** The role families the window takes from the agent in front, when it has a colour (theme.ts `cleanFamilies`). */
+	agentFamilies: Family[];
 }
 
 export type { Update } from "../electron/updates.ts";

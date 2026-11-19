@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { AgentInfo, McpServer, Overview, Setting } from "./api.ts";
+import type { AgentDetail, AgentInfo, McpServer, Overview, Setting } from "./api.ts";
 import { store } from "./model.ts";
 import { Colours as ColoursSection, Settings } from "./Settings.tsx";
-import { DEFAULT_PALETTE } from "./theme.ts";
+import { DEFAULT_FAMILIES, DEFAULT_PALETTE } from "./theme.ts";
 
 // The settings tab as the app shows it, without a daemon: the bridge's `call` is a stand-in that
 // answers each address with what is written below, as the control API would. An address it does
@@ -33,7 +33,7 @@ const models = ["anthropic/claude-sonnet", "anthropic/claude-haiku", "local/qwen
 
 const agents: AgentInfo[] = [
 	{ id: "main", main: true, description: "Your assistant: it runs pine and hands work to the others.", workspace: "/Users/owner/.pine/agents/main/workspace", model: "anthropic/claude-sonnet", mode: "safe", thinking: "medium", delegates: ["scout", "mail"] },
-	{ id: "scout", main: false, description: "Looks things up on the web and reports what it found.", workspace: "/Users/owner/.pine/agents/scout/workspace", model: "local/qwen3-coder", mode: "bypass", thinking: "low", delegates: [] },
+	{ id: "scout", main: false, description: "Looks things up on the web and reports what it found.", color: "#e0805a", workspace: "/Users/owner/.pine/agents/scout/workspace", model: "local/qwen3-coder", mode: "bypass", thinking: "low", delegates: [] },
 	{ id: "mail", main: false, description: "", workspace: "/Users/owner/.pine/agents/mail/workspace", model: "anthropic/claude-haiku", mode: "auto", thinking: "off", delegates: [] },
 ];
 
@@ -44,8 +44,31 @@ const mcp: McpServer[] = [
 	{ name: "calendar", scope: "main", session: "planning", agents: ["main"], target: "https://calendar.example.com/mcp", remote: true, taints: false, approve: "never", enabled: false },
 ];
 
+/** The page of the agent scout: its colour (coral) among the presets, and the rest of what can be changed. */
+const scout: AgentDetail = {
+	id: "scout",
+	main: false,
+	description: "Looks things up on the web and reports what it found.",
+	color: "#e0805a",
+	workspace: "/Users/owner/.pine/agents/scout/workspace",
+	dir: "/Users/owner/.pine/agents/scout",
+	model: "local/qwen3-coder",
+	defaultModel: "anthropic/claude-sonnet",
+	thinking: "low",
+	mode: "bypass",
+	tools: ["read", "bash", "grep"],
+	allTools: ["read", "bash", "edit", "write", "grep", "find", "ls"],
+	delegates: [],
+	network: true,
+	read: [],
+	write: [],
+	holdings: { conversations: ["main"], sources: [], servers: ["notes"], schedules: [], skills: [], routes: [], files: 3, outside: true },
+	files: { instructions: "You look things up on the web.\n" },
+};
+
 const answers: Record<string, unknown> = {
 	"/overview": overview,
+	"/agents/scout/detail": scout,
 	"/settings": settings,
 	"/models": models,
 	"/mcp": mcp,
@@ -54,9 +77,9 @@ const answers: Record<string, unknown> = {
 
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
 
-function Tab({ section }: { section: string }) {
+function Tab({ section, agent }: { section: string; agent?: string }) {
 	store.section = section;
-	store.settingsAgent = undefined;
+	store.settingsAgent = agent;
 	store.agents = agents;
 	return (
 		<div className="flex h-180 w-full max-w-250">
@@ -74,6 +97,9 @@ export const General: Story = { args: { section: "general" } };
 
 /** The list of agents, each a row to open: main, its mode, its model and workspace. */
 export const Agents: Story = { args: { section: "agents" } };
+
+/** One agent's page: its colour (a preset, coral) beside None and Other, then its model, mode, tools and files. */
+export const AgentPage: Story = { args: { section: "agents", agent: "scout" } };
 
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
 export const McpServers: Story = { args: { section: "mcp" } };
@@ -109,7 +135,7 @@ export const Colours: Story = {
 export const ColoursDefault: Story = {
 	args: { section: "app" },
 	render: () => {
-		store.prefs = { ...store.prefs, palette: undefined };
+		store.prefs = { ...store.prefs, palette: undefined, agentFamilies: [...DEFAULT_FAMILIES] };
 		return (
 			<div className="w-full max-w-200">
 				<ColoursSection />
@@ -123,6 +149,19 @@ export const ColoursCodePoimandres: Story = {
 	args: { section: "app" },
 	render: () => {
 		store.prefs = { ...store.prefs, palette: undefined, codeFollowsPalette: false };
+		return (
+			<div className="w-full max-w-200">
+				<ColoursSection />
+			</div>
+		);
+	},
+};
+
+/** The Colours section with the agent in front colouring its primary, its surfaces and its outlines: three families ticked, Reset on. */
+export const ColoursAgentFamilies: Story = {
+	args: { section: "app" },
+	render: () => {
+		store.prefs = { ...store.prefs, palette: undefined, agentFamilies: ["primary", "surfaces", "outlines"] };
 		return (
 			<div className="w-full max-w-200">
 				<ColoursSection />

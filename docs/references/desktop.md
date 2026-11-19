@@ -176,7 +176,7 @@ pine packed into the app; the `pine` of your shell.
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
 | pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
-| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, the warning, info and keyword colours (their hue is kept, their shade follows light or dark), and whether code follows the palette (on by default: code in dark draws with the scheme's roles; off, it keeps the poimandres theme's own colours). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
+| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, the warning, info and keyword colours (their hue is kept, their shade follows light or dark), and whether code follows the palette (on by default: code in dark draws with the scheme's roles; off, it keeps the poimandres theme's own colours), and which roles a coloured agent in front takes over (primary by default; secondary, tertiary, surfaces, outlines). Each change redraws the window at once; Reset brings back pine's palette and primary only. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
@@ -384,7 +384,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor follows the palette too, in light and dark; turn off "Code follows the palette" to keep poimandres' own colours for code in dark |
+| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor follows the palette too, in light and dark; turn off "Code follows the palette" to keep poimandres' own colours for code in dark. An agent with a colour of its own gives the window its primary while its conversation is in front, and more roles if you tick them under "The agent in front colours" |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | A terminal | A shell of yours beside each conversation, and ▶ on an answer's shell code blocks to run them in it: see "The terminal" |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
@@ -541,7 +541,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Page | What you do there | The same by command or by asking the main agent |
 |---|---|---|
 | General | pine's settings, each by a name with its key in `pine.json` beside it and a sentence on what it does: the model, reasoning and mode agents start from, how long a command and a task may run, how many agents work at once, and what pine asks you about. What only tunes pine to a model server is not there: that is written into `pine.json` by hand ([setup.md](setup.md), "pine's settings"). And the notes `pine check` would print about this setup | `set_setting`; `pine check` |
-| Agents | Every agent. On an agent's page: what it is for, its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). New agent; Remove, with or without its folder | `create_agent`, `update_agent`, `remove_agent`; `pine agent …` |
+| Agents | Every agent. On an agent's page: what it is for, its colour (None, a preset, or Other… with any colour: its avatar in the side bar, on its tabs, in its panel and on an empty conversation is drawn in it, and the window takes its primary while its conversation is in front), its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). New agent; Remove, with or without its folder | `create_agent`, `update_agent`, `remove_agent`; `pine agent …` |
 | Models | Model servers of your own (add by name and address, with its key when it wants one; remove). Providers: sign in through the browser or with an API key, sign out; after a sign-in, the choice of the model your agents run on. That model (`defaults.model`) with Change, and each agent whose model cannot answer with the reason. The models you can use now | `add_model_server`; `pine model …`, `pine login`, `pine logout`; `set_setting` |
 | MCP servers | Every server with whom it is for and whether it connects. Add a remote one (its https address) or a program on this computer, for all agents or one. Sign in to a remote one through the browser. Remove | `add_mcp_server`; `pine mcp …` |
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
@@ -658,7 +658,8 @@ desktop/
     components/    only what stock components cannot express when composed in place (printed.tsx:
                    what a tool or a program printed, a Code Block that follows its end; sound.tsx:
                    a sound's line, its player and its bars, measured with src/tui/levels.ts), and pine's
-                   own small parts (logo.tsx: the logo; empty-view.tsx: a view with nothing in it);
+                   own small parts (logo.tsx: the logo; empty-view.tsx: a view with nothing in it;
+                   agent-avatar.tsx: an agent's initial on the stock avatar, in its own colour);
                    no part there only renames or bundles a stock one
     use-load.ts    loading what a view shows
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
@@ -671,7 +672,11 @@ desktop/
     theme.ts       the `.dark` class on the root element, from the Appearance setting: Light or Dark
                    by itself, System by the system's appearance; pine's palette (`DEFAULT_PALETTE`), which
                    `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview; and
-                   `cleanPalette`, which makes a stored or sent palette safe field by field
+                   `cleanPalette`, which makes a stored or sent palette safe field by field; the
+                   preset colours of an agent (`AGENT_COLOURS`) and the scheme of an agent's colour
+                   (`agentScheme`: the owner's palette with that colour as its source, its own
+                   neutrals for the families that ask for them); the role families the agent in
+                   front can colour (`FAMILIES`, `cleanFamilies`) and their variables (`agentVariables`)
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
                    (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
@@ -779,6 +784,19 @@ holds only tokens and base rules.
   surface for the appearance, computed with material-theme-builder's `builder` (on a Mac the window
   is transparent behind its vibrancy). The preview keeps the palette in its stand-in for the bridge,
   in memory.
+- An agent may have a colour of its own (`color` in its `agent.json`, set on its page in Settings >
+  Agents: None, nine presets apart from each other and from the mint, or Other… with any colour).
+  `AgentAvatar` (`src/components/agent-avatar.tsx`) draws an agent's initial wherever the window
+  shows one: without a colour it is the stock avatar; with one, its fallback takes the primary and
+  on-primary of `agentScheme(color, palette)`, the owner's palette (variant, contrast, custom colours)
+  with the agent's colour as the source, light and dark each from its half of that scheme. The
+  values are set on the avatar itself, so the window's own tokens stay the owner's palette.
+- The ticked families (`agentFamilies` in `prefs.json`, `["primary"]` by default, made safe by
+  `cleanFamilies`) follow `agentInFront()`: `Themed` in `main.tsx` sets their `--md-sys-color-*` and
+  `--md-ref-palette-*` variables as inline style on the root element, from
+  `agentScheme(color, palette, families)` (without the owner's neutral for surfaces, nor its neutral
+  variant for outlines), for the root's current `.dark`. Inline style wins over `<Mtb>` and
+  `index.css`; no shadcn token is declared again. Without such an agent they are removed.
 - Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` sets from
   the Appearance setting: Light or Dark by itself, System by `prefers-color-scheme`. The page reads
   the setting and not only the query because in the preview nothing drives the query; in the app the

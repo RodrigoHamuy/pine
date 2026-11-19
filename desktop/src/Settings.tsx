@@ -32,7 +32,9 @@ import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { DEFAULT_PALETTE, type Palette, SCHEMES } from "./theme.ts";
+import { AGENT_COLOURS, DEFAULT_FAMILIES, DEFAULT_PALETTE, FAMILIES, type Family, type Palette, SCHEMES } from "./theme.ts";
+import { Checkbox } from "@/components/ui/checkbox";
+import { AgentAvatar } from "@/components/agent-avatar";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -259,6 +261,41 @@ function FileTabs<K extends string>({ files, value, onChange, children }: { file
 	);
 }
 
+/**
+ * An agent's own colour: None (the owner's palette), one of the presets, or any other under "Other…".
+ * Each preset is shown as the agent's avatar would be drawn in it. "none" is how a change takes it away.
+ */
+function AgentColour({ id, value, onChange }: { id: string; value?: string; onChange: (color: string) => void }) {
+	const [other, setOther] = useState(false);
+	const field = useId();
+	const color = value && value !== "none" ? value : undefined;
+	const preset = AGENT_COLOURS.some((c) => c.hex === color);
+	const choice = other ? "other" : !color ? "none" : preset ? color : "other";
+	const pick = (next: string | undefined) => {
+		if (!next) return;
+		setOther(next === "other");
+		// Other only opens the input: the colour changes when the owner sets one there.
+		if (next !== "other") onChange(next);
+	};
+	return (
+		<Field className="col-span-full" data-setting="agent-colour">
+			<FieldLabel id={`${field}-label`}>Colour</FieldLabel>
+			<ToggleGroup aria-labelledby={`${field}-label`} variant="outline" size="sm" className="flex-wrap" value={[choice]} onValueChange={(v) => pick(v[0])}>
+				<ToggleGroupItem value="none">None</ToggleGroupItem>
+				{AGENT_COLOURS.map((c) => (
+					<ToggleGroupItem key={c.hex} value={c.hex} aria-label={c.name} title={c.name}>
+						<AgentAvatar agent={{ id, color: c.hex }} size="sm" />
+					</ToggleGroupItem>
+				))}
+				<ToggleGroupItem value="other">Other…</ToggleGroupItem>
+			</ToggleGroup>
+			{/* Without a colour the input shows a neutral grey, which is no change until the owner sets one. */}
+			{choice === "other" ? <ColourInput id={`${field}-other`} name="color" value={color ?? "#808080"} onChange={onChange} /> : null}
+			<FieldDescription>Its avatar is drawn in it, in the side bar, on its tabs and in its panel, and while its conversation is in front the window takes it for the roles ticked in Settings &gt; App &gt; Colours. None keeps the window's own colours.</FieldDescription>
+		</Field>
+	);
+}
+
 function AgentPage({ id, back }: { id: string; back: () => void }) {
 	const detail = useLoad(() => api.agentDetail(id), [id]);
 	const models = useLoad(() => api.models());
@@ -328,6 +365,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 					<Input id={`${field}-description`} value={now("description")} onChange={(e) => put("description", e.target.value)} />
 					<FieldDescription>One line. Other agents read it when they decide whom to hand work to.</FieldDescription>
 				</Field>
+				<AgentColour id={d.id} value={now("color")} onChange={(color) => put("color", color)} />
 				<Field>
 					<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
 					<Select items={modelItems} value={(change.model as string) ?? d.model ?? ""} onValueChange={(v) => put("model", v || "default")}>
@@ -1786,8 +1824,15 @@ function ColourInput({ id, name, value, onChange }: { id: string; name: string; 
 export function Colours() {
 	const s = useModel(store);
 	const palette = s.prefs.palette ?? DEFAULT_PALETTE;
+	const families = s.prefs.agentFamilies ?? DEFAULT_FAMILIES;
+	const isDefault = !s.prefs.palette && families.join() === DEFAULT_FAMILIES.join();
+	// Reset brings back pine's palette and the families of the agent in front alike.
 	const set = async (change: Partial<Palette> | undefined) => {
-		s.prefs = await bridge.prefs({ palette: change ? { ...palette, ...change } : undefined });
+		s.prefs = await bridge.prefs(change ? { palette: { ...palette, ...change } } : { palette: undefined, agentFamilies: DEFAULT_FAMILIES });
+		s.touch();
+	};
+	const follow = async (family: Family, on: boolean) => {
+		s.prefs = await bridge.prefs({ agentFamilies: on ? [...families, family] : families.filter((f) => f !== family) });
 		s.touch();
 	};
 	const followCode = async (codeFollowsPalette: boolean) => {
@@ -1871,12 +1916,24 @@ export function Colours() {
 					</FieldContent>
 					<Switch id={`${field}-code`} checked={s.prefs.codeFollowsPalette !== false} onCheckedChange={(on) => void followCode(on)} />
 				</Field>
+				<FieldSet data-setting="agent-families">
+					<FieldLegend variant="label">The agent in front colours</FieldLegend>
+					<FieldDescription>While the conversation of an agent with a colour of its own is in front, these roles come from a scheme made from its colour. With surfaces or outlines, their tint is the agent's too.</FieldDescription>
+					<FieldGroup className="flex-row flex-wrap gap-4">
+						{(Object.keys(FAMILIES) as Family[]).map((family) => (
+							<Field key={family} orientation="horizontal" data-family={family} className="w-auto">
+								<Checkbox id={`${field}-family-${family}`} checked={families.includes(family)} onCheckedChange={(on) => void follow(family, on)} />
+								<FieldLabel htmlFor={`${field}-family-${family}`} className="font-normal">{FAMILIES[family]}</FieldLabel>
+							</Field>
+						))}
+					</FieldGroup>
+				</FieldSet>
 				<Field orientation="horizontal">
 					<FieldContent>
 						<FieldTitle>pine's colours</FieldTitle>
-						<FieldDescription>Poimandres' mint on its night blue, toned by M3's tonal spot scheme.</FieldDescription>
+						<FieldDescription>Poimandres' mint on its night blue, toned by M3's tonal spot scheme, and the agent in front colouring its primary only.</FieldDescription>
 					</FieldContent>
-					<Button variant="outline" size="xs" disabled={!s.prefs.palette} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
+					<Button variant="outline" size="xs" disabled={isDefault} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
 				</Field>
 			</FieldGroup>
 		</FieldSet>

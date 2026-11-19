@@ -11,6 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, m
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
+import { DEFAULT_FAMILIES } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
 export const REASONING_ABOUT: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
@@ -208,7 +209,7 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
 	connected = false;
-	prefs: Prefs = { keepRunning: false, hosts: [], theme: "system", notify: true, updates: true, codeFollowsPalette: true };
+	prefs: Prefs = { keepRunning: false, hosts: [], theme: "system", notify: true, updates: true, codeFollowsPalette: true, agentFamilies: [...DEFAULT_FAMILIES] };
 	platform = "darwin";
 	focused = true;
 	versions = { app: "", electron: "" };
@@ -528,8 +529,8 @@ export class Store extends Model {
 		if (this.service.status !== "ready") return;
 		const list = await this.askAgents().catch(() => undefined);
 		if (!list) return;
-		const was = this.agents.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}|${a.modelProblem ?? ""}`).join("\n");
-		const now = list.map((a) => `${a.id}|${a.description}|${a.model}|${a.mode}|${a.thinking}|${a.modelProblem ?? ""}`).join("\n");
+		const was = this.agents.map((a) => `${a.id}|${a.description}|${a.color ?? ""}|${a.model}|${a.mode}|${a.thinking}|${a.modelProblem ?? ""}`).join("\n");
+		const now = list.map((a) => `${a.id}|${a.description}|${a.color ?? ""}|${a.model}|${a.mode}|${a.thinking}|${a.modelProblem ?? ""}`).join("\n");
 		if (was === now) return;
 		const fresh = list.filter((a) => !this.agents.some((x) => x.id === a.id)).map((a) => a.id);
 		const gone = this.agents.filter((a) => !list.some((x) => x.id === a.id)).map((a) => a.id);
