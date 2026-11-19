@@ -324,6 +324,26 @@ test("the relay's refusals reach the page as what to do", async () => {
 	c.stop();
 });
 
+test("a machine of a tailnet that the relay cannot reach is told to turn Tailscale Funnel on for its port", async () => {
+	const machine = fakeMachine(daemon);
+	machine.reachable = "refused";
+	const c = client(machine);
+	await c.page.state();
+	await c.page.addHost("me@pine.example-tailnet.ts.net:10000");
+	await c.page.use("me@pine.example-tailnet.ts.net:10000");
+	const refused = (await becomes(c, (x) => x.status === "error")) as { message: string };
+	assert.match(refused.message, /Funnel.*443, 8443 or 10000.*tailscale funnel --bg --tls-terminated-tcp=10000 tcp:\/\/localhost:22/);
+	for (const reachable of ["tls", false] as const) {
+		machine.reachable = reachable;
+		const mark = c.states.length;
+		await c.page.retry();
+		const said = () => c.states.slice(mark).find((x) => x.status === "error" && /did not answer through Tailscale Funnel/.test(x.message)) as { message: string } | undefined;
+		await until(() => said() !== undefined, `the Funnel advice after "${reachable}"`);
+		assert.match(said()!.message, /pine\.example-tailnet\.ts\.net.*port 10000.*tailscale funnel --bg --tls-terminated-tcp=10000 tcp:\/\/localhost:22/);
+	}
+	c.stop();
+});
+
 test("the page's own storage (the side panel's widths, what is folded) is kept through prefs: only its keys, as text, within bounds", async () => {
 	const store = memoryStore();
 	const c = client(fakeMachine(daemon), store);

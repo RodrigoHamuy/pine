@@ -589,7 +589,9 @@ These are invariants. A change that breaks one needs a test that shows why it is
    the page as bytes under `MEDIA`'s rules, and only `http(s)` addresses are opened, in a new tab
    with `noopener`. The page carries the desktop page's policy and loads nothing from the web. The
    relay (`web/relay`) sees neither key nor token: it carries SSH and nothing else, to public
-   addresses only, capped per client address, and keeps and logs nothing. Its one way to the
+   addresses only, capped per client address, and keeps and logs nothing. To a Tailscale Funnel
+   name (`.ts.net`, on Funnel's ports alone) it connects by that name through TLS, the
+   certificate checked for it, after the name's addresses passed the same check. Its one way to the
    loopback, `RELAY_ALLOW_LOOPBACK`, is the smoke's, given to `wrangler dev` on its command line;
    `web/relay/test/loopback.test.ts` fails when a configuration that is deployed sets it. What no
    suite of `npm test` reaches (the opaque origin, a message from another window, the token kept

@@ -5,7 +5,8 @@ pine on another machine over SSH: from a work laptop, a borrowed computer or a t
 cannot install anything. Nothing is installed on the computer you use: you open the
 address of a deployment of the web client, and you are in your conversations, tabs, settings
 and theme, as in the desktop app ([desktop.md](desktop.md)). It is for a pine that runs on a
-server, a Mac mini at home or a VPS, which you reach with `ssh` from the internet.
+server, a Mac mini at home or a VPS, which you reach with `ssh` from the internet, or a machine
+on your Tailscale network that Tailscale Funnel publishes (see "A machine on a tailnet").
 
 It is a package of its own in pine's repository (`web/`), not part of what goes to npm. Whoever
 runs a deployment of it builds it and deploys it by hand; the address is theirs to choose. A pull
@@ -18,7 +19,7 @@ pull request").
 |---|---|
 | Open it | The deployment's address, in Chrome 137 or later, Firefox 130 or later, or Safari 17 or later. Another browser, without Ed25519 in WebCrypto, is told which browsers work and nothing else starts |
 | This device's key | On first use the browser makes an SSH key of its own (Ed25519) and keeps it. The start screen shows its public half as a line of `authorized_keys`, with Copy and Share. Add that line to `~/.ssh/authorized_keys` of the user you sign in as on your server. The key is kept in the browser's own storage for this site, where the page cannot reach it: its private half cannot be read or exported, by you or by any script, and a web page an answer shows cannot steal it; no other key can be used (no pasted key, no ssh-agent, no security key) |
-| Add a machine | Type it as `user@host`, or `user@host:port` for SSH on another port, and Add. A host is a name or an address on the internet: the relay refuses private, loopback and link-local addresses, so a server on your home network is reached from the desktop app instead |
+| Add a machine | Type it as `user@host`, or `user@host:port` for SSH on another port, and Add. A host is a name or an address on the internet: the relay refuses private, loopback and link-local addresses, so a server on your home network is reached from the desktop app instead, or through Tailscale Funnel (see "A machine on a tailnet") |
 | The host key | The first time, the machine's host key fingerprint (`SHA256:...`) is shown before anything of yours is sent. Compare it with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and trust it. From then on that fingerprint and no other is accepted: a changed key is refused with the old and the new fingerprint, and nothing connects until you forget the machine and add it again |
 | Forget a machine | Forget on its line. Its trusted host key goes with it |
 | What is remembered | In this browser only: its key, your machines, their trusted host keys, the one in use, and the page's own preferences (theme, the side panel's widths, what is folded). Clearing the site's data in the browser forgets all of it, the key included: add the new key to the server again |
@@ -34,9 +35,27 @@ When a machine is not reached, the start screen says why, in words that say what
 | The relay did not open a connection | The address is a public one; the relay allows a browser a few connections a minute: wait a minute |
 | could not be reached on port ... | The machine is on, SSH listens on that port, and its firewall lets connections in from the internet |
 | answers ..., but not with SSH | The port |
+| did not answer through Tailscale Funnel | Funnel is on for that port on the machine (see "A machine on a tailnet"), and the machine is on |
 | did not accept this browser's key | The line of This device's key is in `~/.ssh/authorized_keys` of that user |
 | pine is not installed ... / too old | Install or update pine there (`pine update`); it must be on the PATH of the login shell |
 | pine ... is not answering | `pine status` there, or restart it |
+
+## A machine on a tailnet
+
+A machine that is only on your Tailscale network (a tailnet) has no address the relay may
+reach: Tailscale's own addresses (`100.64.0.0/10`) are refused like any private one. Tailscale
+Funnel publishes the machine's `sshd` on the internet instead, behind Tailscale's TLS, at the
+machine's name in the tailnet, `<machine>.<tailnet>.ts.net`. The relay opens TLS to any host
+whose name ends in `.ts.net`, checks the certificate for that name, and carries SSH inside it:
+SSH, the host key and this browser's key are end to end as for any machine.
+
+| What | How |
+|---|---|
+| Turn it on | On the machine: `tailscale funnel --bg --tls-terminated-tcp=10000 tcp://localhost:22`. Funnel has to be allowed for the tailnet and the machine (Tailscale asks the first time, with a link to its admin console) |
+| The machine to add | `user@<machine>.<tailnet>.ts.net:10000`, in the web client's machines as any other. The full name is in `tailscale funnel status` on the machine |
+| `tailscale funnel` ports | Funnel serves only ports 443, 8443 and 10000. The relay refuses a `.ts.net` name on any other port, and opens TLS on these to `.ts.net` names only |
+| Turn it off | `tailscale funnel --tls-terminated-tcp=10000 off`, or `tailscale funnel reset` for everything Funnel serves on the machine |
+| What it opens | The machine's `sshd` on the internet, for anyone, behind Tailscale's TLS. Have it take keys only (`PasswordAuthentication no` in `sshd_config`), as for any machine the web client reaches |
 
 ## How it works
 
@@ -46,7 +65,7 @@ Three parts, served as one deployment from one address:
 |---|---|
 | The web bridge | The top-level document (`web/src/bridge-main.ts`, `host.ts`). It holds the browser's key (a non-extractable WebCrypto key in IndexedDB), the machines and trusted host keys, the SSH connection and the daemon's token, and makes every call to the control API. It plays the part the desktop app's main process plays (`desktop/electron/main.ts`) |
 | The page | The Pine app's page (`desktop/src`), built for the browser, in an iframe sandboxed with scripts only. It runs under an opaque origin, so nothing it draws (an answer can repeat a web page) can read the bridge's storage, key or token. It asks the bridge by message, and the bridge answers only that iframe, only a method of a fixed list (`web/src/protocol.ts`), with its arguments checked one by one. It carries the same content security policy as the desktop page: it loads nothing from the web |
-| The relay | A Cloudflare Worker at `/ssh` (`web/relay`) that carries bytes between the browser's WebSocket and a TCP connection to your server, and nothing else. SSH runs in the browser, end to end, so the relay sees neither key nor token. It carries only SSH (the browser has to open with `SSH-2.0-`, the server answer with `SSH-` within a few seconds), reaches only public addresses (no private, loopback, link-local or Cloudflare ones, checked after a name is looked up), caps connections per client address, keeps no state and logs nothing of what it carries |
+| The relay | A Cloudflare Worker at `/ssh` (`web/relay`) that carries bytes between the browser's WebSocket and a TCP connection to your server, and nothing else. SSH runs in the browser, end to end, so the relay sees neither key nor token. It carries only SSH (the browser has to open with `SSH-2.0-`, the server answer with `SSH-` within a few seconds), reaches only public addresses (no private, loopback, link-local or Cloudflare ones, checked after a name is looked up), opens TLS to a Tailscale Funnel name (`.ts.net`, connected to by that name, its certificate checked for it), caps connections per client address, keeps no state and logs nothing of what it carries |
 
 Over SSH the bridge runs `pine service` as `src/remote.ts` does (the PATH of your login shell
 there), which attaches to the daemon that runs there or starts one. The daemon's port is reached
@@ -91,7 +110,7 @@ reaches only machines with a public SSH address, like any deployment, and keeps 
 |---|---|
 | `npm test` | The web bridge as the page calls it, in Node with a stand-in for SSH: the fixed list of methods, messages from another window ignored, host-key trust and change, `local: false`, media and link rules, reconnecting. And the SSH core against a real `sshd` on a loopback port in headless Chrome for Testing |
 | `npm run check` | Type check |
-| `npm test`, `npm run check` in `web/relay/` | The relay's fetch handler with a stand-in TCP server: SSH only both ways, refused addresses, the cap per client address; and that no deployed configuration opens the loopback |
+| `npm test`, `npm run check` in `web/relay/` | The relay's fetch handler with a stand-in TCP server: SSH only both ways, refused addresses, the cap per client address, TLS to a Funnel name and to nothing else; and that no deployed configuration opens the loopback |
 | `npm run smoke` | After `npm run build`: the deployment under `wrangler dev`, headless Chrome for Testing, a `sshd` of its own on the loopback running the real `pine service` on a home of its own with the scripted model server. Named checks, each of which fails the run: the page cannot read the bridge's IndexedDB or the daemon's token; a message to the bridge from another window is ignored; the first connect asks for the fingerprint before the key is offered; a conversation answers; a picture shows; a link opens in a new tab; the client connects again after the relay restarts. Run it by hand before a release that changes `web/` |
 
 The smoke's relay has to reach `sshd` on this computer, which a relay refuses. `wrangler dev`

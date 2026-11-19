@@ -21,7 +21,8 @@ async function resolve(name: string): Promise<string[]> {
 }
 
 const handle = relay({
-	connect: (address) => connect(address),
+	// allowHalfOpen: false is connect()'s own default, which its type wants written out.
+	connect: (address, options) => (options ? connect(address, { ...options, allowHalfOpen: false }) : connect(address)),
 	resolve,
 	upgrade: () => {
 		const pair = new WebSocketPair();

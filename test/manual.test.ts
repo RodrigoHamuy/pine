@@ -303,6 +303,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["the browser shows a fingerprint SHA256 what do I do with it", /^web#/],
 		["where is the key of the browser kept and can a web page steal it", /^web#/],
 		["try the browser version of a pull request before it is merged", /^web#(previews|web-preview)/],
+		["use the web client with a machine on my tailscale network", /^web#a-machine-on-a-tailnet/],
+		["the browser cannot reach my mac that is only on tailscale", /^web#a-machine-on-a-tailnet/],
 	];
 	const missed = cases.filter(([q, want]) => !top(q).some((id) => want.test(id))).map(([q]) => `${q} → ${top(q).join(", ")}`);
 	assert.deepEqual(missed, []);

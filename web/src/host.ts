@@ -123,6 +123,12 @@ function serviceTrouble(host: string, e: ServiceTrouble): string {
 /** What the relay's closing means for the machine, in words that say what to check (codes: web/relay/src/relay.ts `CLOSE`). */
 function relayTrouble(host: string, e: RelayClosed): string {
 	const { hostname, port } = parseHost(host);
+	// A machine of a tailnet, published by Tailscale Funnel: the relay reaches it through TLS, which Funnel only gives on a port it was turned on for.
+	if (/\.ts\.net\.?$/i.test(hostname) && [0, 4504, 4525].includes(e.code)) {
+		const funnel = `tailscale funnel --bg --tls-terminated-tcp=${port} tcp://localhost:22`;
+		if (e.code === 0) return `The relay did not open a connection to ${hostname}. A machine of a tailnet is reached through Tailscale Funnel, on port 443, 8443 or 10000: check the port, and that Funnel is on there (${funnel}). Then wait a minute and try again.`;
+		return `${hostname} did not answer through Tailscale Funnel on port ${port}. Check that the machine is on and that Funnel is on there for that port: ${funnel}.`;
+	}
 	if (e.code === 0) return `The relay did not open a connection to ${hostname}. It may be down, or it refused: it reaches only machines with a public address, and allows a browser a few connections a minute. Check the address, wait a minute, and try again.`;
 	if (e.code === 4504) return `${hostname} could not be reached on port ${port}. Check that the machine is on, that SSH listens on that port, and that its firewall lets connections in from the internet.`;
 	if (e.code === 4502) return `${hostname} answers on port ${port}, but not with SSH. Check the port.`;

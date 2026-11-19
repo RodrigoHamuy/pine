@@ -57,7 +57,7 @@ const SYNONYMS: string[][] = [
 	["notarise", "notarize", "notarization", "gatekeeper", "codesign"],
 	["android", "mobile", "apk", "smartphone", "tablet", "cellphone"],
 	["iphone", "ios", "ipa", "altstore", "sideloadly", "sideload", "mobile"],
-	["vpn", "tailscale", "zerotier", "wireguard", "tunnel", "reachable"],
+	["vpn", "tailscale", "tailnet", "funnel", "zerotier", "wireguard", "tunnel", "reachable"],
 	["fingerprint", "hostkey", "known_hosts", "knownhosts"],
 	["rss", "atom", "podcast", "blog", "newsletter", "release", "changelog", "syndication"],
 	["calendar", "ical", "ics", "icalendar", "webcal", "caldav", "appointment", "meeting", "agenda"],

@@ -103,10 +103,13 @@ export function sshEcho(received: Buffer[]) {
 	};
 }
 
-/** Cloudflare's connect(), to the test server whatever address it is given; notes what it was given. */
-export function connectTo(port: number, calls: { hostname: string; port: number }[] = []) {
-	return (address: { hostname: string; port: number }): TcpSocket => {
-		calls.push(address);
+/** What connect() was given: the address, and `secureTransport` when TLS was asked for. */
+export type Call = { hostname: string; port: number; secureTransport?: "on" };
+
+/** Cloudflare's connect(), to the test server whatever address it is given; notes what it was given. TLS is noted, not spoken. */
+export function connectTo(port: number, calls: Call[] = []): Deps["connect"] {
+	return (address, options) => {
+		calls.push(options ? { ...address, ...options } : address);
 		const socket = net.connect(port, "127.0.0.1");
 		socket.on("error", () => {});
 		const web = Duplex.toWeb(socket) as unknown as { readable: ReadableStream<Uint8Array>; writable: WritableStream<Uint8Array> };

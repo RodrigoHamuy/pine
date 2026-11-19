@@ -97,8 +97,8 @@ export type Machine = {
 	forwards: { host: string; port: number }[];
 	/** Connections open now. */
 	open: number;
-	/** Whether the relay reaches the machine; false: the relay closes with "unreachable" (4504), "refused": the relay refuses before the WebSocket opens. */
-	reachable: boolean | "refused";
+	/** Whether the relay reaches the machine; false: the relay closes with "unreachable" (4504), "refused": the relay refuses before the WebSocket opens, "tls": no TLS from a Funnel name (4525). */
+	reachable: boolean | "refused" | "tls";
 	/** Cuts every open connection, as a relay that restarts or a network that drops does. */
 	drop(): void;
 	connect(options: ConnectOptions): Promise<Connection>;
@@ -124,6 +124,7 @@ export function fakeMachine(daemon: Daemon): Machine {
 		async connect(options) {
 			m.connects.push({ url: options.url, user: options.user, hostFingerprint: options.hostFingerprint });
 			if (m.reachable === "refused") throw new RelayClosed(0, "");
+			if (m.reachable === "tls") throw new RelayClosed(4525, "No TLS from the server: Tailscale Funnel may be off for this port.");
 			if (!m.reachable) throw new RelayClosed(4504, "The server could not be reached.");
 			if (options.hostFingerprint !== m.fingerprint) throw new SshRefused("host-key", "not the confirmed key", m.fingerprint);
 			if (!m.authorized) throw new SshRefused("not-authorized", "key refused");

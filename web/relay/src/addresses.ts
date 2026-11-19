@@ -159,6 +159,17 @@ export function isName(text: string) {
 	return labels.every((label) => LABEL.test(label));
 }
 
+/**
+ * A Tailscale Funnel name: a machine of a tailnet published on the internet as
+ * `<machine>.<tailnet>.ts.net`. Funnel serves only TLS, and only on these ports.
+ */
+export const FUNNEL_PORTS = [443, 8443, 10000];
+
+/** Whether the host is a Funnel name: a DNS name that ends in .ts.net, which only Tailscale gives out. */
+export function isFunnel(host: string) {
+	return isName(host) && /\.ts\.net\.?$/i.test(host);
+}
+
 /** The address written the way connect() takes it. */
 export function format(address: { bits: 32 | 128; value: bigint }) {
 	if (address.bits === 32) return [24n, 16n, 8n, 0n].map((shift) => String((address.value >> shift) & 0xffn)).join(".");
