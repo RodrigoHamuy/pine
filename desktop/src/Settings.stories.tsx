@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { AgentDetail, AgentInfo, McpServer, Overview, Setting } from "./api.ts";
 import { store } from "./model.ts";
 import { Colours as ColoursSection, Settings } from "./Settings.tsx";
-import { DEFAULT_PALETTE } from "./theme.ts";
+import { DEFAULT_FAMILIES, DEFAULT_PALETTE } from "./theme.ts";
 
 // The settings tab as the app shows it, without a daemon: the bridge's `call` is a stand-in that
 // answers each address with what is written below, as the control API would. An address it does
@@ -135,7 +135,7 @@ export const Colours: Story = {
 export const ColoursDefault: Story = {
 	args: { section: "app" },
 	render: () => {
-		store.prefs = { ...store.prefs, palette: undefined };
+		store.prefs = { ...store.prefs, palette: undefined, agentFamilies: [...DEFAULT_FAMILIES] };
 		return (
 			<div className="w-full max-w-200">
 				<ColoursSection />
@@ -149,6 +149,19 @@ export const ColoursCodePoimandres: Story = {
 	args: { section: "app" },
 	render: () => {
 		store.prefs = { ...store.prefs, palette: undefined, codeFollowsPalette: false };
+		return (
+			<div className="w-full max-w-200">
+				<ColoursSection />
+			</div>
+		);
+	},
+};
+
+/** The Colours section with the agent in front colouring its primary, its surfaces and its outlines: three families ticked, Reset on. */
+export const ColoursAgentFamilies: Story = {
+	args: { section: "app" },
+	render: () => {
+		store.prefs = { ...store.prefs, palette: undefined, agentFamilies: ["primary", "surfaces", "outlines"] };
 		return (
 			<div className="w-full max-w-200">
 				<ColoursSection />

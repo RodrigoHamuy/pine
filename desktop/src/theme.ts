@@ -125,21 +125,88 @@ export const AGENT_COLOURS = [
 /** An M3 scheme as material-theme-builder gives it: role name (camelCase) to hex, for light and for dark. */
 export type Schemes = { light: Record<string, string>; dark: Record<string, string> };
 
-const agentSchemes = new Map<string, Schemes>();
+/**
+ * The role families the window can take from the agent in front (Settings > App > Colours), with the
+ * name Settings shows for each. Error and the custom colours are never an agent's: they mean the same
+ * whoever is in front.
+ */
+export const FAMILIES = {
+	primary: "Primary",
+	secondary: "Secondary",
+	tertiary: "Tertiary",
+	surfaces: "Surfaces",
+	outlines: "Outlines",
+} as const;
+export type Family = keyof typeof FAMILIES;
+
+/** What the window follows of the agent in front when the owner said nothing: its accent. */
+export const DEFAULT_FAMILIES: Family[] = ["primary"];
+
+/**
+ * The families as they were stored or sent, made safe: the known names, each once, in Settings' order.
+ * What is not a list at all is the default. An empty list is kept: the owner unticked them all. The
+ * app's main process runs this when the families are set and read; the preview's bridge does the same.
+ */
+export function cleanFamilies(raw: unknown): Family[] {
+	if (!Array.isArray(raw)) return [...DEFAULT_FAMILIES];
+	return (Object.keys(FAMILIES) as Family[]).filter((f) => raw.includes(f));
+}
+
+/**
+ * The roles of each family (camelCase, as the scheme names them), and the tonal palette its
+ * `--md-ref-palette-<name>-<tone>` variables belong to. The surfaces are the neutral's roles, the
+ * outlines and muted text the neutral variant's.
+ */
+const ROLES: Record<Family, { palette: string; roles: string[] }> = {
+	primary: { palette: "primary", roles: ["primary", "onPrimary", "primaryContainer", "onPrimaryContainer", "inversePrimary", "surfaceTint", "primaryFixed", "primaryFixedDim", "onPrimaryFixed", "onPrimaryFixedVariant"] },
+	secondary: { palette: "secondary", roles: ["secondary", "onSecondary", "secondaryContainer", "onSecondaryContainer", "secondaryFixed", "secondaryFixedDim", "onSecondaryFixed", "onSecondaryFixedVariant"] },
+	tertiary: { palette: "tertiary", roles: ["tertiary", "onTertiary", "tertiaryContainer", "onTertiaryContainer", "tertiaryFixed", "tertiaryFixedDim", "onTertiaryFixed", "onTertiaryFixedVariant"] },
+	surfaces: {
+		palette: "neutral",
+		roles: ["background", "onBackground", "surface", "onSurface", "surfaceDim", "surfaceBright", "surfaceContainerLowest", "surfaceContainerLow", "surfaceContainer", "surfaceContainerHigh", "surfaceContainerHighest", "inverseSurface", "inverseOnSurface", "shadow", "scrim"],
+	},
+	outlines: { palette: "neutral-variant", roles: ["surfaceVariant", "onSurfaceVariant", "outline", "outlineVariant"] },
+};
+
+/** An agent's scheme, with its tonal palettes by name (primary, neutral-variant…) and tone. */
+export type AgentScheme = Schemes & { palettes: Record<string, Record<string, string>> };
+
+const agentSchemes = new Map<string, AgentScheme>();
 
 /**
  * The M3 scheme of an agent's colour: the owner's palette (its variant, contrast and custom colours)
- * with the agent's colour as the source. Kept per colour and palette: the window draws often, and
- * generating a scheme is not free.
+ * with the agent's colour as the source. With surfaces among `families` the owner's neutral is left
+ * out, and with outlines its neutral variant, so that those come from the agent's colour too. Kept per
+ * colour, palette and neutrals: the window draws often, and generating a scheme is not free.
  */
-export function agentScheme(color: string, palette: Palette = DEFAULT_PALETTE): Schemes {
-	const key = `${color}|${JSON.stringify(palette)}`;
-	let schemes = agentSchemes.get(key);
-	if (!schemes) {
-		const { source: _global, ...rest } = palette;
-		const all = builder(color, rest).toJson().schemes;
-		schemes = { light: all.light, dark: all.dark };
-		agentSchemes.set(key, schemes);
+export function agentScheme(color: string, palette: Palette = DEFAULT_PALETTE, families: readonly Family[] = []): AgentScheme {
+	const ownNeutral = families.includes("surfaces");
+	const ownVariant = families.includes("outlines");
+	const key = `${color}|${JSON.stringify(palette)}|${ownNeutral}|${ownVariant}`;
+	let scheme = agentSchemes.get(key);
+	if (!scheme) {
+		const { source: _global, neutral, neutralVariant, ...rest } = palette;
+		const all = builder(color, { ...rest, ...(ownNeutral ? {} : { neutral }), ...(ownVariant ? {} : { neutralVariant }) }).toJson();
+		scheme = { light: all.schemes.light, dark: all.schemes.dark, palettes: all.palettes };
+		agentSchemes.set(key, scheme);
 	}
-	return schemes;
+	return scheme;
+}
+
+const kebab = (role: string) => role.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
+
+/**
+ * The `--md-sys-color-*` and `--md-ref-palette-*` variables of the ticked families, from an agent's
+ * scheme in one look (light or dark): what the root element is given while that agent is in front.
+ * Only variables <Mtb> writes too, so that every shadcn token that reads them follows and none is
+ * declared again.
+ */
+export function agentVariables(scheme: AgentScheme, families: readonly Family[], look: "light" | "dark"): Record<string, string> {
+	const vars: Record<string, string> = {};
+	for (const family of families) {
+		const { palette, roles } = ROLES[family];
+		for (const role of roles) if (scheme[look][role]) vars[`--md-sys-color-${kebab(role)}`] = scheme[look][role];
+		for (const [tone, hex] of Object.entries(scheme.palettes[palette] ?? {})) vars[`--md-ref-palette-${palette}-${tone}`] = hex;
+	}
+	return vars;
 }

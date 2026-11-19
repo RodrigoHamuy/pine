@@ -7,7 +7,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
 import "./index.css";
 import { store, useModel } from "./model.ts";
-import { DEFAULT_PALETTE, followAppearance } from "./theme.ts";
+import { type AgentScheme, agentScheme, agentVariables, DEFAULT_FAMILIES, DEFAULT_PALETTE, type Family, followAppearance } from "./theme.ts";
 import { Toaster } from "@/components/ui/toast";
 
 /**
@@ -21,7 +21,42 @@ function Themed({ children }: { children: ReactNode }) {
 	useEffect(() => {
 		document.documentElement.dataset.code = code;
 	}, [code]);
-	return <Mtb {...(s.prefs.palette ?? DEFAULT_PALETTE)}>{children}</Mtb>;
+	const palette = s.prefs.palette ?? DEFAULT_PALETTE;
+	const front = s.agentInFront();
+	const color = front ? s.agent(front)?.color : undefined;
+	const families = s.prefs.agentFamilies ?? DEFAULT_FAMILIES;
+	useEffect(() => (color && families.length ? followAgent(agentScheme(color, palette, families), families) : undefined), [color, palette, families]);
+	return <Mtb {...palette}>{children}</Mtb>;
+}
+
+/**
+ * While an agent with a colour is in front, the root element carries the variables of the ticked
+ * families from that agent's scheme, as inline style: it wins over <Mtb>'s `:root` and `.dark` and
+ * over index.css's own light roles, and every shadcn token that reads them follows. Light and dark
+ * each have their values, so the root's `.dark` is watched. The returned function takes them away,
+ * which gives the owner's palette back.
+ */
+function followAgent(scheme: AgentScheme, families: readonly Family[]): () => void {
+	const root = document.documentElement;
+	let set: string[] = [];
+	const clear = () => {
+		for (const name of set) root.style.removeProperty(name);
+		set = [];
+	};
+	const apply = () => {
+		clear();
+		for (const [name, value] of Object.entries(agentVariables(scheme, families, root.classList.contains("dark") ? "dark" : "light"))) {
+			root.style.setProperty(name, value);
+			set.push(name);
+		}
+	};
+	apply();
+	const watch = new MutationObserver(apply);
+	watch.observe(root, { attributes: true, attributeFilter: ["class"] });
+	return () => {
+		watch.disconnect();
+		clear();
+	};
 }
 
 followAppearance(() => store.prefs.theme, store.subscribe);

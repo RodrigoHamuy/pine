@@ -12,7 +12,7 @@ import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts"
 import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
 import { Terminals } from "./terminal.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
-import { cleanPalette, DEFAULT_PALETTE, type Palette } from "../src/theme.ts";
+import { cleanFamilies, cleanPalette, DEFAULT_FAMILIES, DEFAULT_PALETTE, type Family, type Palette } from "../src/theme.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(HERE, "..");
@@ -62,11 +62,13 @@ interface Prefs {
 	palette?: Palette;
 	/** Code in dark draws with roles of the palette (on, the default) or keeps poimandres' own colours (off). */
 	codeFollowsPalette: boolean;
+	/** The role families the window takes from the agent in front, made safe by cleanFamilies. */
+	agentFamilies: Family[];
 	bounds?: { x?: number; y?: number; width: number; height: number };
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, hosts: [], theme: "system", notify: true, updates: true, commandTried: false, codeFollowsPalette: true };
+let prefs: Prefs = { keepRunning: false, hosts: [], theme: "system", notify: true, updates: true, commandTried: false, codeFollowsPalette: true, agentFamilies: [...DEFAULT_FAMILIES] };
 
 function loadPrefs(): void {
 	try {
@@ -82,6 +84,7 @@ function loadPrefs(): void {
 			commandTried: raw.commandTried === true,
 			palette: cleanPalette(raw.palette),
 			codeFollowsPalette: raw.codeFollowsPalette !== false,
+			agentFamilies: cleanFamilies(raw.agentFamilies),
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
 		};
 		// Only a machine that is in the list: what else might be written there is not connected to.
@@ -563,6 +566,7 @@ function wire(): void {
 		}
 		// Reset sends none: nothing is stored, and the page draws pine's default.
 		if ("palette" in change) prefs.palette = cleanPalette(change.palette);
+		if ("agentFamilies" in change) prefs.agentFamilies = cleanFamilies(change.agentFamilies);
 		// A change of theme reaches the window through nativeTheme's "updated" (see wire()).
 		if ("palette" in change) refreshBackground();
 		savePrefs();

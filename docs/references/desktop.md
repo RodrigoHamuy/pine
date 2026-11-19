@@ -176,7 +176,7 @@ pine packed into the app; the `pine` of your shell.
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
 | pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Appearance | Light, dark, or what the system is set to |
-| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, the warning, info and keyword colours (their hue is kept, their shade follows light or dark), and whether code follows the palette (on by default: code in dark draws with the scheme's roles; off, it keeps the poimandres theme's own colours). Each change redraws the window at once; Reset brings back pine's palette. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
+| Colours | The palette the window's colours are made from: the source colour (the accent), the neutral colour (the tint of the surfaces), the neutral variant colour (the tint of muted text and outlines), colour match, the scheme (while colour match is off), the contrast, the warning, info and keyword colours (their hue is kept, their shade follows light or dark), and whether code follows the palette (on by default: code in dark draws with the scheme's roles; off, it keeps the poimandres theme's own colours), and which roles a coloured agent in front takes over (primary by default; secondary, tertiary, surfaces, outlines). Each change redraws the window at once; Reset brings back pine's palette and primary only. Kept with the app's other preferences, like Appearance: not in pine's configuration, and no agent sees it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
@@ -384,7 +384,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor follows the palette too, in light and dark; turn off "Code follows the palette" to keep poimandres' own colours for code in dark |
+| A Material 3 palette | Every colour of the window is a role of one Material 3 scheme, generated from poimandres' mint (the source), night blue (the neutral) and blue grey (the neutral variant), light and dark alike, or from your own colours (Settings > App > Colours). Code in an answer, in a diff and in the editor follows the palette too, in light and dark; turn off "Code follows the palette" to keep poimandres' own colours for code in dark. An agent with a colour of its own gives the window its primary while its conversation is in front, and more roles if you tick them under "The agent in front colours" |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | A terminal | A shell of yours beside each conversation, and ▶ on an answer's shell code blocks to run them in it: see "The terminal" |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
@@ -674,7 +674,9 @@ desktop/
                    `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview; and
                    `cleanPalette`, which makes a stored or sent palette safe field by field; the
                    preset colours of an agent (`AGENT_COLOURS`) and the scheme of an agent's colour
-                   (`agentScheme`: the owner's palette with that colour as its source)
+                   (`agentScheme`: the owner's palette with that colour as its source, its own
+                   neutrals for the families that ask for them); the role families the agent in
+                   front can colour (`FAMILIES`, `cleanFamilies`) and their variables (`agentVariables`)
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
                    (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
@@ -789,6 +791,12 @@ holds only tokens and base rules.
   on-primary of `agentScheme(color, palette)`, the owner's palette (variant, contrast, custom colours)
   with the agent's colour as the source, light and dark each from its half of that scheme. The
   values are set on the avatar itself, so the window's own tokens stay the owner's palette.
+- The ticked families (`agentFamilies` in `prefs.json`, `["primary"]` by default, made safe by
+  `cleanFamilies`) follow `agentInFront()`: `Themed` in `main.tsx` sets their `--md-sys-color-*` and
+  `--md-ref-palette-*` variables as inline style on the root element, from
+  `agentScheme(color, palette, families)` (without the owner's neutral for surfaces, nor its neutral
+  variant for outlines), for the root's current `.dark`. Inline style wins over `<Mtb>` and
+  `index.css`; no shadcn token is declared again. Without such an agent they are removed.
 - Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` sets from
   the Appearance setting: Light or Dark by itself, System by `prefers-color-scheme`. The page reads
   the setting and not only the query because in the preview nothing drives the query; in the app the

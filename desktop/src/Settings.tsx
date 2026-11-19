@@ -32,7 +32,8 @@ import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { AGENT_COLOURS, DEFAULT_PALETTE, type Palette, SCHEMES } from "./theme.ts";
+import { AGENT_COLOURS, DEFAULT_FAMILIES, DEFAULT_PALETTE, FAMILIES, type Family, type Palette, SCHEMES } from "./theme.ts";
+import { Checkbox } from "@/components/ui/checkbox";
 import { AgentAvatar } from "@/components/agent-avatar";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
@@ -1822,8 +1823,15 @@ function ColourInput({ id, name, value, onChange }: { id: string; name: string; 
 export function Colours() {
 	const s = useModel(store);
 	const palette = s.prefs.palette ?? DEFAULT_PALETTE;
+	const families = s.prefs.agentFamilies ?? DEFAULT_FAMILIES;
+	const isDefault = !s.prefs.palette && families.join() === DEFAULT_FAMILIES.join();
+	// Reset brings back pine's palette and the families of the agent in front alike.
 	const set = async (change: Partial<Palette> | undefined) => {
-		s.prefs = await bridge.prefs({ palette: change ? { ...palette, ...change } : undefined });
+		s.prefs = await bridge.prefs(change ? { palette: { ...palette, ...change } } : { palette: undefined, agentFamilies: DEFAULT_FAMILIES });
+		s.touch();
+	};
+	const follow = async (family: Family, on: boolean) => {
+		s.prefs = await bridge.prefs({ agentFamilies: on ? [...families, family] : families.filter((f) => f !== family) });
 		s.touch();
 	};
 	const followCode = async (codeFollowsPalette: boolean) => {
@@ -1907,12 +1915,24 @@ export function Colours() {
 					</FieldContent>
 					<Switch id={`${field}-code`} checked={s.prefs.codeFollowsPalette !== false} onCheckedChange={(on) => void followCode(on)} />
 				</Field>
+				<FieldSet data-setting="agent-families">
+					<FieldLegend variant="label">The agent in front colours</FieldLegend>
+					<FieldDescription>While the conversation of an agent with a colour of its own is in front, these roles come from a scheme made from its colour. With surfaces or outlines, their tint is the agent's too.</FieldDescription>
+					<FieldGroup className="flex-row flex-wrap gap-4">
+						{(Object.keys(FAMILIES) as Family[]).map((family) => (
+							<Field key={family} orientation="horizontal" data-family={family} className="w-auto">
+								<Checkbox id={`${field}-family-${family}`} checked={families.includes(family)} onCheckedChange={(on) => void follow(family, on)} />
+								<FieldLabel htmlFor={`${field}-family-${family}`} className="font-normal">{FAMILIES[family]}</FieldLabel>
+							</Field>
+						))}
+					</FieldGroup>
+				</FieldSet>
 				<Field orientation="horizontal">
 					<FieldContent>
 						<FieldTitle>pine's colours</FieldTitle>
-						<FieldDescription>Poimandres' mint on its night blue, toned by M3's tonal spot scheme.</FieldDescription>
+						<FieldDescription>Poimandres' mint on its night blue, toned by M3's tonal spot scheme, and the agent in front colouring its primary only.</FieldDescription>
 					</FieldContent>
-					<Button variant="outline" size="xs" disabled={!s.prefs.palette} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
+					<Button variant="outline" size="xs" disabled={isDefault} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
 				</Field>
 			</FieldGroup>
 		</FieldSet>
