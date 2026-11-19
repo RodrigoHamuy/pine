@@ -27,6 +27,7 @@ import { Settings } from "./Settings.tsx";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
+import { PublishDialog } from "./PublishDialog.tsx";
 import { QuestionDialog } from "./QuestionDialog.tsx";
 import { ago, until } from "./text.ts";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
@@ -648,6 +649,7 @@ export function App() {
 			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.updateAsk ? <UpdateAsk /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
+			{s.publishing ? <PublishDialog /> : null}
 			{s.palette ? <Palette /> : null}
 			<Asking />
 			{help ? <Help close={() => setHelp(false)} /> : null}

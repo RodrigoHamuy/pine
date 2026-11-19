@@ -8,7 +8,7 @@ import { MessageScroller, MessageScrollerContent, MessageScrollerProvider, Messa
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Printed } from "@/components/printed";
 import { useEffect, useState } from "react";
-import { api, type PineEvent } from "./api.ts";
+import type { PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { short } from "./text.ts";
 import { EmptyView } from "@/components/empty-view";
@@ -38,21 +38,6 @@ export function Events({ tab }: { tab: Tab }) {
 	useEffect(() => {
 		tab.logFilter = filter;
 	}, [filter, tab]);
-	const emit = async () => {
-		const topic = await store.pick({ title: "Publish an event as yourself", items: [], free: true, placeholder: "topic, then optionally JSON: house/mode {\"value\":\"away\"}" });
-		if (!topic) return;
-		const at = topic.indexOf(" ");
-		let payload: unknown = null;
-		if (at > 0) {
-			try {
-				payload = JSON.parse(topic.slice(at + 1));
-			} catch {
-				return store.flash("The payload is not JSON.", "bad");
-			}
-		}
-		const done = await store.attempt(() => api.emit(at > 0 ? topic.slice(0, at) : topic, payload));
-		if (done) store.flash(`Published event #${done.id}.`);
-	};
 	return (
 		<div className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-xl border bg-background">
 			<div className="flex flex-none flex-wrap items-center gap-2 border-b border-line-soft px-4 py-2.5">
@@ -65,7 +50,7 @@ export function Events({ tab }: { tab: Tab }) {
 				<span className="whitespace-nowrap text-faint">{shown.length} shown · text deltas are left out</span>
 				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
-				<Button variant="outline" size="xs" onClick={() => void emit()}><ZapIcon data-icon="inline-start" />Publish…</Button>
+				<Button variant="outline" size="xs" onClick={() => store.setPublishing(true)}><ZapIcon data-icon="inline-start" />Publish…</Button>
 				<Tooltip>
 					<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Clear the view" onClick={() => ((tab.log = []), tab.touch())} />}><Trash2Icon /></TooltipTrigger>
 					<TooltipContent>Clear the view</TooltipContent>

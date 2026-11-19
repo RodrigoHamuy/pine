@@ -1088,6 +1088,24 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees("[data-slot=settings-page] [data-slot=item-title] >> text=morning");
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"morning"/);
 	await shot("08-settings-schedules");
+	// Events: a route, as When and Then. Only the fields of the action chosen are shown, and only they are sent.
+	await page.locator("[data-slot=settings-page]").getByRole("tab", { name: "Routes" }).click();
+	await sees("[data-slot=settings-page] [data-slot=empty] >> text=No routes");
+	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "New route" }).click();
+	const routeForm = page.locator("[data-slot=dialog-content]");
+	await routeForm.getByLabel("An event arrives on").fill("source/house/message");
+	await routeForm.getByLabel("Only if").fill('{"payload.topic": "house/mode"}');
+	await routeForm.getByRole("textbox", { name: "Telling it" }).fill("left behind under another action");
+	await routeForm.getByRole("button", { name: "Set shared state" }).click();
+	assert.equal(await routeForm.getByLabel("Agent", { exact: true }).count(), 0);
+	await routeForm.getByLabel("Shared state").fill('{"house/mode": "{{payload.value}}"}');
+	await routeForm.getByLabel("Name", { exact: true }).fill("mode");
+	await routeForm.getByRole("button", { name: "Add route" }).click();
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
+	await sees("[data-slot=settings-page] [data-slot=item-description] >> text=set house/mode to");
+	const route = JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).routes.find((r: { name: string }) => r.name === "mode");
+	assert.deepEqual(route, { name: "mode", on: "source/house/message", when: { "payload.topic": "house/mode" }, set: { "house/mode": "{{payload.value}}" } });
+	await shot("08b-settings-routes");
 	// Models: sign in to a provider with a key. It is typed into a field of its own and not shown.
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=Models");
 	await page.locator("[data-slot=settings-page] h2").getByRole("button", { name: /Show all/ }).click();
@@ -1510,6 +1528,28 @@ test("the palette finds things by name, and the event log follows", async () => 
 	await sees("[aria-label=Events] [data-slot=collapsible-trigger]");
 	assert.ok((await page.$$eval("[aria-label=Events] [data-slot=collapsible-trigger]", (els: Element[]) => els.length)) > 3);
 	await shot("11-events");
+});
+
+test("an event is published from the event log with a form: a topic, and a payload checked to be JSON before it is sent", async () => {
+	await page.getByRole("button", { name: "Publish…" }).click();
+	await sees("[data-slot=publish-form]");
+	// The topic field has the focus; a payload that is not JSON is said under its field, and nothing is sent.
+	await page.keyboard.type("house/mode");
+	await page.getByLabel("Payload").fill("{value: away}");
+	await page.getByRole("button", { name: /^Publish/ }).click();
+	await sees("[data-slot=publish-form] [data-slot=field-error] >> text=This is not JSON");
+	assert.equal(await page.getAttribute("#publish-payload", "aria-invalid"), "true");
+	await shot("11b-publish-wrong");
+	await page.getByLabel("Payload").fill('{"value": "away"}');
+	await page.getByLabel("Payload").press("Meta+Enter");
+	await page.waitForSelector("[data-slot=publish-form]", { state: "detached" });
+	await sees("[data-slot=toast] >> text=on house/mode");
+	await sees("[aria-label=Events] [data-slot=collapsible-trigger] >> text=house/mode");
+	// The daemon got what /emit sends: the topic, the payload as JSON, from the owner.
+	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(fs.readFileSync(path.join(home, "data", "pine.log"), "utf8"))![1];
+	const token = fs.readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
+	const events = (await (await fetch(`http://127.0.0.1:${port}/events?topic=house/mode`, { headers: { authorization: `Bearer ${token}` } })).json()) as Array<{ payload: unknown; trust: string }>;
+	assert.deepEqual(events.map((e) => [e.payload, e.trust]), [[{ value: "away" }, "owner"]]);
 });
 
 test("a sub-agent's work opens in a tab of its own", async () => {

@@ -281,6 +281,8 @@ export class Store extends Model {
 	}
 	palette = false;
 	picker?: Picker;
+	/** The form that publishes an event as the owner, while it is open. */
+	publishing = false;
 	/** The approval or question whose dialog is open. */
 	asking?: string;
 	asked = new Set<string>();
@@ -761,6 +763,20 @@ export class Store extends Model {
 		if (!(await this.attempt(() => api.setSetting("defaults.model", model)))) return;
 		await this.refreshAgents();
 		this.flash(`Your agents now run on ${model}. An agent with a model of its own keeps it.`, "good", 6000);
+	}
+
+	/** Open or close the form that publishes an event as the owner. What waits for an answer is asked once it is closed. */
+	setPublishing(open: boolean): void {
+		this.publishing = open;
+		this.touch();
+		if (!open) this.askNext();
+	}
+
+	/** An event published as the owner: true when the daemon took it. */
+	async publish(topic: string, payload: unknown): Promise<boolean> {
+		const done = await this.attempt(() => api.emit(topic, payload));
+		if (done) this.flash(`Published event #${done.id} on ${topic}.`);
+		return Boolean(done);
 	}
 
 	pick(p: Omit<Picker, "done">): Promise<string | undefined> {
@@ -1460,7 +1476,7 @@ export class Store extends Model {
 	 * its dialog when the one before it is gone. One that was put off is not asked again by itself.
 	 */
 	askNext(): void {
-		if (this.asking || this.picker || !this.active) return;
+		if (this.asking || this.picker || this.publishing || !this.active) return;
 		const next = [...this.active.approvals.values()].find((a) => !this.asked.has(a.req.id));
 		if (!next) return;
 		this.asking = next.req.id;
@@ -1716,7 +1732,7 @@ export class Store extends Model {
 				this.attention("Pine", p.tool === "question" ? `${tab.agent} has a question for you` : `${tab.agent} needs your approval`, tab);
 				this.dirty.add(tab).add(this);
 				this.badge();
-				if (tab === this.active && !this.asking && !this.picker) this.ask(p.id);
+				if (tab === this.active && !this.asking && !this.picker && !this.publishing) this.ask(p.id);
 			} else if (e.topic === "approval/decided") {
 				for (const tab of this.tabs) {
 					const item = tab.approvals.get(p.id);
