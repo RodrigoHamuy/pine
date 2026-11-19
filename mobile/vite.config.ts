@@ -20,17 +20,25 @@ const page = path.resolve(here, "../desktop");
 // On iOS the web view covers the whole screen (`contentInset: "never"`, `viewport-fit=cover`) and
 // the page keeps out of what lies over it: the status bar and the Dynamic Island at the top, the
 // home indicator at the bottom, and the keyboard while it is up (PineViewController adds it to the
-// safe area). The sheets at a side are fixed to the screen, outside #root, and keep out too.
+// safe area). The sheets at a side are fixed to the screen, outside #root, and keep out too: above
+// and below, and in landscape on their own side, where the sensor housing lies. The side bar on a
+// phone is such a sheet, whose data-slot the side bar names "sidebar".
 // Android needs none of it: there Capacitor pads the WebView by the system bars.
 const safeArea = `
 #root {
 	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
-[data-slot="sheet-content"][data-side="left"],
-[data-slot="sheet-content"][data-side="right"] {
+:is([data-slot="sheet-content"], [data-slot="sidebar"][data-mobile])[data-side="left"],
+:is([data-slot="sheet-content"], [data-slot="sidebar"][data-mobile])[data-side="right"] {
 	top: env(safe-area-inset-top);
 	bottom: env(safe-area-inset-bottom);
 	height: auto;
+}
+:is([data-slot="sheet-content"], [data-slot="sidebar"][data-mobile])[data-side="left"] {
+	padding-left: env(safe-area-inset-left);
+}
+:is([data-slot="sheet-content"], [data-slot="sidebar"][data-mobile])[data-side="right"] {
+	padding-right: env(safe-area-inset-right);
 }
 `;
 const sources = (platform: Platform): Plugin => ({

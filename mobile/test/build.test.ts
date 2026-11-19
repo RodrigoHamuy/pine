@@ -94,6 +94,11 @@ test("the iOS page has every style the Android page has, and its bridge", () => 
 test("the iOS page keeps itself inside the safe area, and the Android and desktop pages have no such rule", () => {
 	const css = (files: Map<string, string>) => [...files].filter(([f]) => f.endsWith(".css")).map(([, t]) => t).join("\n");
 	assert.match(css(iosBuild), /#root\{[^}]*env\(safe-area-inset-top\)/);
+	// In landscape the sensor housing lies at a side: each side sheet keeps clear of its own side.
+	// The side bar on a phone is a sheet whose data-slot is "sidebar": the rules name it too.
+	const sides = (side: string) => new RegExp(`:is\\(\\[data-slot=sheet-content\\],\\[data-slot=sidebar\\]\\[data-mobile\\]\\)\\[data-side=${side}\\]\\{padding-${side}:env\\(safe-area-inset-${side}\\)\\}`);
+	assert.match(css(iosBuild), sides("left"));
+	assert.match(css(iosBuild), sides("right"));
 	assert.doesNotMatch(css(mobileBuild), /safe-area-inset/);
 	assert.doesNotMatch(css(desktopBuild), /safe-area-inset/);
 });

@@ -100,6 +100,9 @@ final class SmokeTests: XCTestCase {
 		try await settle()
 		try await within(vc, "after the keyboard", shot: nil)
 
+		step("in landscape the side bar keeps clear of the sensor housing")
+		try await sideways(vc)
+
 		step("the page's hardening")
 		let here = "return location.href"
 		let home = try await js(here) as? String ?? "none"
@@ -339,6 +342,40 @@ final class SmokeTests: XCTestCase {
 		// Half a point for the rounding between the page's pixels and the window's points.
 		check("insets \(when): the header lies below the status bar", header.map { $0 >= top - 0.5 } ?? false, true, detail: detail)
 		check("insets \(when): the composer lies whole above the \(keyboard.top == nil ? "home indicator" : "keyboard")", composer.map { $0 <= bottom + 0.5 } ?? false, true, detail: detail)
+	}
+
+	/**
+	 * The phone turned on its side, the side bar opened: the sheet's content starts at or right of the
+	 * safe area's left edge (the sensor housing lies on one side, and the safe area is kept on both).
+	 * Then the sheet is put away and the phone turned back.
+	 */
+	private func sideways(_ vc: PineViewController) async throws {
+		let scene = try XCTUnwrap(vc.view.window?.windowScene)
+		scene.requestGeometryUpdate(.iOS(interfaceOrientations: .landscapeLeft))
+		try await waitFor("the phone on its side") { scene.interfaceOrientation.isLandscape }
+		try await settle()
+		_ = try await agentsShown()
+		try await settle()
+		let measured = try await js("""
+			const p = document.createElement('div');
+			p.style.cssText = 'position:fixed;visibility:hidden;padding-left:env(safe-area-inset-left)';
+			document.body.append(p);
+			const safe = parseFloat(getComputedStyle(p).paddingLeft);
+			p.remove();
+			const sheet = document.querySelector('[data-slot=sidebar][data-mobile][data-side=left]');
+			const lefts = sheet ? [...sheet.querySelectorAll('[data-slot=agent-label]')].map((e) => e.getBoundingClientRect().left) : [];
+			return JSON.stringify({ safe, left: lefts.length ? Math.min(...lefts) : null, width: innerWidth });
+			""") as? String ?? "{}"
+		let m = try JSONSerialization.jsonObject(with: Data(measured.utf8)) as? [String: Any] ?? [:]
+		let safe = (m["safe"] as? NSNumber)?.doubleValue ?? 0
+		let left = (m["left"] as? NSNumber)?.doubleValue
+		try await mac("shot landscape-sidebar.png")
+		check("landscape: the safe area has a left inset", safe > 0, true, detail: measured)
+		check("landscape: the side bar's content lies right of the sensor housing", left.map { $0 >= safe - 0.5 } ?? false, true, detail: measured)
+		try await until("the side bar put away", "(() => { const open = document.querySelector('[data-slot=sidebar][data-mobile]'); open && document.querySelector('[aria-label=\"Hide the sidebar\"]')?.click(); return !open; })()")
+		scene.requestGeometryUpdate(.iOS(interfaceOrientations: .portrait))
+		try await waitFor("the phone upright again") { scene.interfaceOrientation.isPortrait }
+		try await settle()
 	}
 
 	private func webViews(in view: UIView?) -> Int {

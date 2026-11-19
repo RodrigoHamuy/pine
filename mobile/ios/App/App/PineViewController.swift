@@ -53,16 +53,37 @@ class PineViewController: CAPBridgeViewController {
 	 * `env(safe-area-inset-*)`). The keyboard is made part of that safe area, so that the page ends
 	 * above it, its message box in sight and its header below the status bar. WebKit would rather
 	 * scroll the whole page up to show a field (the page itself does not scroll: `scrollEnabled` is
-	 * off), which takes the header under the status bar: the page is kept where it is.
+	 * off), which takes the header under the status bar: the page is kept where it is. The inset
+	 * moves with the keyboard, over its own time and curve.
 	 */
 	@objc private func keyboardMoved(_ note: Notification) {
 		guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
 		let hidden = note.name == UIResponder.keyboardDidHideNotification
 		let below = view.safeAreaInsets.bottom - additionalSafeAreaInsets.bottom
-		let covered = hidden ? 0 : max(0, view.bounds.maxY - view.convert(end, from: nil).minY)
-		let extra = max(0, covered - below)
-		if additionalSafeAreaInsets.bottom != extra { additionalSafeAreaInsets.bottom = extra }
+		let extra = max(0, (hidden ? 0 : covered(by: end)) - below)
+		if additionalSafeAreaInsets.bottom != extra {
+			let duration = note.userInfo?[UIResponder.keyboardAnimationDurationUserInfoKey] as? Double ?? 0
+			let curve = note.userInfo?[UIResponder.keyboardAnimationCurveUserInfoKey] as? UInt ?? UInt(UIView.AnimationCurve.easeInOut.rawValue)
+			UIView.animate(withDuration: duration, delay: 0, options: [UIView.AnimationOptions(rawValue: curve << 16), .beginFromCurrentState]) {
+				self.additionalSafeAreaInsets.bottom = extra
+				self.view.layoutIfNeeded()
+			}
+		}
 		webView?.scrollView.contentOffset = .zero
+	}
+
+	/**
+	 * How much of this view's bottom the keyboard covers, in its points. The notice gives the frame in
+	 * the screen's coordinates, which are not the window's under Stage Manager or in Slide Over. A
+	 * keyboard that does not reach the view's bottom (an iPad's floating or split keyboard, undocked)
+	 * covers nothing the page has to keep out of: it floats over it, and the page stays whole.
+	 */
+	private func covered(by end: CGRect) -> CGFloat {
+		guard let screen = view.window?.windowScene?.screen else { return 0 }
+		let frame = view.convert(end, from: screen.coordinateSpace)
+		let over = frame.intersection(view.bounds)
+		guard !over.isNull, over.height > 0, frame.maxY >= view.bounds.maxY - 1 else { return 0 }
+		return view.bounds.maxY - over.minY
 	}
 
 	/**
