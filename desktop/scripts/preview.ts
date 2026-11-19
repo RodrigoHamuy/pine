@@ -38,10 +38,10 @@ function throwawayHome(modelServer: string): string {
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: modelServer, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
 	// Port 0: the system picks one, so that a pine the developer has running is left alone.
 	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false } }, null, 2));
-	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent: it administers pine", delegates: ["scout"] }));
-	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
-	write(path.join(home, "agents", "scout", "agent.json"), JSON.stringify({ description: "Looks things up on the web" }));
-	write(path.join(home, "agents", "scout", "workspace", "AGENTS.md"), "You are scout.\n");
+	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ delegates: ["scout"] }));
+	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent: it administers pine.\n\nYou are the main agent.\n");
+	write(path.join(home, "agents", "scout", "agent.json"), JSON.stringify({}));
+	write(path.join(home, "agents", "scout", "workspace", "AGENTS.md"), "Looks things up on the web.\n\nYou are scout.\n");
 	return home;
 }
 

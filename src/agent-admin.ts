@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
-import { checkColor } from "./admin.ts";
-import { type AgentConfig, loadConfig, PINE_ROOT, type PineConfig, WORKSPACE_FILES } from "./config.ts";
+import { checkAgentId, checkColor } from "./admin.ts";
+import { type AgentConfig, loadConfig, PINE_ROOT, type PineConfig, purposeFrom, WORKSPACE_FILES } from "./config.ts";
 import { errText } from "./util.ts";
 
 /** The built-in tools an agent can be given. */
@@ -9,9 +9,10 @@ export const AGENT_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls
 
 export interface NewAgent {
 	id: string;
-	/** One line: what it is for. Other agents see it when they decide whom to hand work to. */
-	description: string;
-	/** How it works: its AGENTS.md, in its workspace, which it can change itself from then on. */
+	/**
+	 * Who it is and how it works: its AGENTS.md, in its workspace, which it can change itself from then on.
+	 * Its first paragraph says what it is for: other agents read that when they decide whom to hand work to (`purposeOf`).
+	 */
 	instructions: string;
 	model?: string;
 	tools?: string[];
@@ -26,26 +27,36 @@ export interface NewAgent {
  * taken away again. Nothing but these few lines goes into its agent.json.
  */
 /** What is wrong with a proposed agent, as an error; nothing is written. Returns the cleaned-up values. */
-export function checkNewAgent(cfg: PineConfig, spec: NewAgent): { description: string; tools: string[]; color?: string } {
-	if (!/^[a-z][a-z0-9_-]{1,30}$/.test(spec.id)) throw new Error(`"${spec.id}" is not a usable agent id: lowercase letters, digits, - and _, starting with a letter, at least two characters`);
-	if (cfg.agents[spec.id]) throw new Error(`an agent called ${spec.id} exists already`);
-	const description = spec.description.replace(/\s+/g, " ").trim();
-	if (!description) throw new Error("an agent needs a description: one line on what it is for");
+export function checkNewAgent(cfg: PineConfig, spec: NewAgent): { purpose: string; tools: string[]; color?: string } {
+	checkAgentId(cfg, spec.id);
 	if (!spec.instructions.trim()) throw new Error("an agent needs instructions: who it is and how it works");
+	const purpose = purposeFrom(spec.instructions);
+	if (!purpose) throw new Error("the instructions need a first paragraph that says what the agent is for, for example \"You are books. You keep the household's accounts.\": other agents read it when they decide whom to hand work to");
 	const tools = spec.tools ?? AGENT_TOOLS;
 	const unknown = tools.filter((t) => !AGENT_TOOLS.includes(t));
 	if (unknown.length) throw new Error(`unknown tool${unknown.length === 1 ? "" : "s"} ${unknown.join(", ")}. An agent can have: ${AGENT_TOOLS.join(", ")}`);
-	if (fs.existsSync(path.join(cfg.home, "agents", spec.id))) throw new Error(`the folder agents/${spec.id} exists already`);
 	const color = spec.color === undefined ? undefined : checkColor(spec.color);
-	return { description, tools, color };
+	return { purpose, tools, color };
+}
+
+/**
+ * The instructions of a new agent from what a command or an older client gives: what it is for
+ * (`description`, as `pine agent add --description` and `POST /agents` take it) becomes their
+ * first paragraph, which is where pine reads it from (`purposeOf`).
+ */
+export function instructionsWith(id: string, description: unknown, instructions: unknown): string {
+	const what = typeof description === "string" ? description.replace(/\s+/g, " ").trim() : "";
+	const how = typeof instructions === "string" ? instructions.trim() : "";
+	if (!what) return how;
+	return how ? `${what}\n\n${how}` : `You are ${id}. ${what.replace(/\.?$/, ".")}`;
 }
 
 export function createAgent(cfg: PineConfig, spec: NewAgent): AgentConfig {
-	const { description, tools, color } = checkNewAgent(cfg, spec);
+	const { tools, color } = checkNewAgent(cfg, spec);
 	const dir = path.join(cfg.home, "agents", spec.id);
 	fs.mkdirSync(path.join(dir, "workspace"), { recursive: true, mode: 0o700 });
 	try {
-		fs.writeFileSync(path.join(dir, "agent.json"), `${JSON.stringify({ description, ...(color ? { color } : {}), ...(spec.model ? { model: spec.model } : {}), tools }, null, 2)}\n`, { mode: 0o600 });
+		fs.writeFileSync(path.join(dir, "agent.json"), `${JSON.stringify({ ...(color ? { color } : {}), ...(spec.model ? { model: spec.model } : {}), tools }, null, 2)}\n`, { mode: 0o600 });
 		fs.writeFileSync(path.join(dir, "workspace", "AGENTS.md"), `${spec.instructions.trim()}\n`, { mode: 0o600 });
 		// The rest starts as the stubs a new home has.
 		for (const name of WORKSPACE_FILES.slice(1)) {

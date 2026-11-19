@@ -36,6 +36,7 @@ import { LISTBOX, onPick } from "./lists.tsx";
 import { Logo } from "@/components/logo";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { AgentColourPicker, AgentNameInput } from "@/components/agent-identity";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Kbd } from "@/components/ui/kbd";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarFooter, SidebarGroup, SidebarGroupAction, SidebarGroupContent, SidebarGroupLabel, SidebarHeader, SidebarMenu, SidebarMenuAction, SidebarMenuBadge, SidebarMenuButton, SidebarMenuItem, SidebarProvider, SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
@@ -224,17 +225,24 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		const dir = await s.chooseFolder(`A folder for a conversation with ${a.id}`);
 		if (dir) await s.openFolder(dir, a.id);
 	};
+	// Its name and its colour are changed where they are shown: the name turns into a field, the colour opens over the avatar.
+	const [renaming, setRenaming] = useState(false);
+	const [colouring, setColouring] = useState(false);
 	const menu = async () => {
 		const picked = await bridge.contextMenu([
 			{ id: "new", label: `New conversation with ${a.id}` },
 			{ id: "folder", label: `Open a folder with ${a.id}…` },
 			{ id: "sep", label: "", separator: true },
+			{ id: "rename", label: "Rename…" },
+			{ id: "colour", label: "Colour…" },
 			{ id: "settings", label: "Agent settings…" },
 			// The main agent administers pine and stays.
 			...(a.main ? [] : [{ id: "sep2", label: "", separator: true }, { id: "remove", label: `Remove ${a.id}…` }]),
 		]);
 		if (picked === "new") await s.newConversation(a.id);
 		if (picked === "folder") await pickFolder();
+		if (picked === "rename") setRenaming(true);
+		if (picked === "colour") setColouring(true);
 		if (picked === "settings") s.openSettings("agents", a.id);
 		if (picked === "remove") await s.removeAgent(a.id);
 	};
@@ -242,21 +250,31 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		<Collapsible open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
 			<SidebarMenu>
 				<SidebarMenuItem className="app-no-drag" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
-					{/* What folds the group is the agent's line but its buttons. Under the pointer the line makes room for all three. */}
-					<CollapsibleTrigger render={<SidebarMenuButton className="group-hover/menu-item:pr-20" />}>
-						{folded ? <ChevronRightIcon className="text-faint" /> : <ChevronDownIcon className="text-faint" />}
-						<AgentAvatar agent={a} size="sm" />
-						{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
-						    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
-						<span data-slot="agent-label" className="flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
-							<span className="min-w-0 flex-initial truncate">{a.id}</span>
-							<span className="@container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
-						</span>
-						{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : unread && folded ? <Badge className="size-2 p-0" /> : null}
-					</CollapsibleTrigger>
-					<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)} aria-label={`Settings of ${a.id}`} />}><SettingsIcon /></TooltipTrigger><TooltipContent>{`Settings of ${a.id}`}</TooltipContent></Tooltip>
-					<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()} aria-label={`Open a folder for a conversation with ${a.id}`} />}><FolderIcon /></TooltipTrigger><TooltipContent>{`Open a folder for a conversation with ${a.id}`}</TooltipContent></Tooltip>
-					<Tooltip><TooltipTrigger render={<SidebarMenuAction onClick={() => void s.newConversation(a.id)} aria-label={`New conversation with ${a.id}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation with ${a.id}`}</TooltipContent></Tooltip>
+					<AgentColourPicker agent={a} open={colouring} onOpenChange={setColouring} onChange={(c) => void s.colourAgent(a.id, c)} nativeButton={false} trigger={<span aria-hidden tabIndex={-1} className="pointer-events-none absolute top-1 left-8 size-6" />} />
+					{renaming ? (
+						<div className="flex h-8 items-center gap-2 px-2">
+							<AgentAvatar agent={a} size="sm" />
+							<AgentNameInput id={a.id} className="h-7" onDone={(to) => (setRenaming(false), to && void s.renameAgent(a.id, to))} />
+						</div>
+					) : (
+						<>
+							{/* What folds the group is the agent's line but its buttons. Under the pointer the line makes room for all three. */}
+							<CollapsibleTrigger render={<SidebarMenuButton className="group-hover/menu-item:pr-20" />}>
+								{folded ? <ChevronRightIcon className="text-faint" /> : <ChevronDownIcon className="text-faint" />}
+								<AgentAvatar agent={a} size="sm" />
+								{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
+								    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
+								<span data-slot="agent-label" className="flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
+									<span className="min-w-0 flex-initial truncate">{a.id}</span>
+									<span className="@container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
+								</span>
+								{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : unread && folded ? <Badge className="size-2 p-0" /> : null}
+							</CollapsibleTrigger>
+							<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)} aria-label={`Settings of ${a.id}`} />}><SettingsIcon /></TooltipTrigger><TooltipContent>{`Settings of ${a.id}`}</TooltipContent></Tooltip>
+							<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()} aria-label={`Open a folder for a conversation with ${a.id}`} />}><FolderIcon /></TooltipTrigger><TooltipContent>{`Open a folder for a conversation with ${a.id}`}</TooltipContent></Tooltip>
+							<Tooltip><TooltipTrigger render={<SidebarMenuAction onClick={() => void s.newConversation(a.id)} aria-label={`New conversation with ${a.id}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation with ${a.id}`}</TooltipContent></Tooltip>
+						</>
+					)}
 				</SidebarMenuItem>
 			</SidebarMenu>
 			<CollapsibleContent>

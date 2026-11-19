@@ -657,8 +657,8 @@ What no mode opens:
   every time, before any request goes there; its key is typed into pine's dialog and kept in
   `.env`; the name cannot be a provider's that exists, so no stored key is sent to a new
   address; refused in a conversation that has read outside content). The main agent is also the
-  one that changes and removes agents and changes pine's settings and routes (`update_agent`,
-  `remove_agent`, `set_setting`, `add_route`, `remove_route`): each takes a few named values and checks them, shows you the
+  one that changes, renames and removes agents and changes pine's settings and routes (`update_agent`,
+  `rename_agent`, `remove_agent`, `set_setting`, `add_route`, `remove_route`): each takes a few named values and checks them, shows you the
   change before it is made, notes where it gives an agent more (the account, the network,
   bypass mode), reads the configuration back through the loader and undoes what
   does not load, and is refused outright, without a question to you, in a conversation that
@@ -930,7 +930,10 @@ itself can be fooled by a page, but it has nothing to give away and cannot act.
   `SOUL.md` and `TOOLS.md` also in a conversation that has read outside content, unchecked. What a page
   talks it into writing there is read in every later conversation. The main agent writes
   the files for all agents the same way (`AGENTS.md`, `TOOLS.md` and `USER.md` in pine's
-  home), and what it is talked into writing there is read by every agent. Look into those
+  home), and what it is talked into writing there is read by every agent. The first paragraph
+  of an agent's own `AGENTS.md` is also what the agents that may hand it work read about it
+  (one line of at most 160 characters, read only from the plain file, never through a link),
+  so what it is talked into writing there reaches them too. Look into those
   files now and then; rules it must never change go into `agents/<id>/AGENTS.md`, which it
   cannot write.
 - **A model server reads what it is sent.** Whoever runs a server you add (`pine model add`,

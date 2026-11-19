@@ -4,7 +4,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { test } from "node:test";
 import { promisify } from "node:util";
-import { loadConfig } from "../src/config.ts";
+import { loadConfig, purposeOf } from "../src/config.ts";
 import os from "node:os";
 import { addServer, listServers, piMcp, removeServer, serverStates, splitCommand } from "../src/mcp-config.ts";
 import { sandboxAvailable } from "../src/security.ts";
@@ -285,12 +285,12 @@ test("the main agent creates an agent by tool call: the owner confirms, it exist
 	});
 	const run = (agent: string, steps: any[]) => h.pine.agents.run({ agent, prompt: mockMsg(steps), ...owner });
 	const dir = path.join(h.home, "agents", "research");
-	const make = call("create_agent", { id: "research", description: "Looks things up and reports with sources", instructions: "You are RESEARCH-PERSONA. You look things up and report what you found, with where you found it.", tools: "read, grep, find, ls" });
+	const make = call("create_agent", { id: "research", instructions: "You are RESEARCH-PERSONA. You look things up and report what you found, with where you found it.", tools: "read, grep, find, ls" });
 
 	// Not without the owner.
 	let r = await run("main", [{ tools: [make] }]);
 	assert.match(r.text, /not created \(test\)/);
-	assert.match(asked[0].summary, /^create the agent "research": Looks things up and reports with sources\nModel: .* \(the default\) · tools: read, grep, find, ls\nInstructions:\nYou are RESEARCH-PERSONA\./);
+	assert.match(asked[0].summary, /^create the agent "research": You are RESEARCH-PERSONA\. You look things up and report what you found, with where you found it\.\nModel: .* \(the default\) · tools: read, grep, find, ls\nInstructions:\nYou are RESEARCH-PERSONA\./);
 	assert.ok(!fs.existsSync(dir) && !h.pine.cfg.agents.research);
 
 	// What cannot work is said before anyone is asked, and leaves nothing behind.
@@ -305,7 +305,7 @@ test("the main agent creates an agent by tool call: the owner confirms, it exist
 	// Confirmed: the folder, its files, and an agent that answers and that main can hand work to.
 	r = await run("main", [{ tools: [make] }]);
 	assert.match(r.text, /The agent research exists now.*\/agent research.*delegate from your next message on/);
-	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "agent.json"), "utf8")), { description: "Looks things up and reports with sources", tools: ["read", "grep", "find", "ls"] });
+	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, "agent.json"), "utf8")), { tools: ["read", "grep", "find", "ls"] });
 	// Its instructions are in its workspace, where it can change them, with the stubs of the files it keeps itself.
 	assert.match(fs.readFileSync(path.join(dir, "workspace", "AGENTS.md"), "utf8"), /^You are RESEARCH-PERSONA\./);
 	assert.deepEqual(fs.readdirSync(path.join(dir, "workspace")).sort(), ["AGENTS.md", "MEMORY.md", "SOUL.md", "TOOLS.md"]);
@@ -321,7 +321,7 @@ test("the main agent creates an agent by tool call: the owner confirms, it exist
 
 	// It is there after a restart, like any agent.
 	await h.restart();
-	assert.equal((h.pine.cfg.agents as any).research.description, "Looks things up and reports with sources");
+	assert.equal(purposeOf((h.pine.cfg.agents as any).research), "You are RESEARCH-PERSONA. You look things up and report what you found, with where you found it.");
 	await h.close();
 });
 

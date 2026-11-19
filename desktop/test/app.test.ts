@@ -69,11 +69,11 @@ before(async () => {
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
 	// A port of its own (0: the system picks one), so that a pine the developer has running is left alone.
 	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false }, ...(process.env.PINE_DESKTOP_THEME ? { ui: { theme: process.env.PINE_DESKTOP_THEME } } : {}) }, null, 2));
-	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent: it administers pine", delegates: ["scout"], approve: ["bash"] }));
-	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
+	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ delegates: ["scout"], approve: ["bash"] }));
+	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent: it administers pine.\n\nYou are the main agent.\n");
 	write(path.join(home, "agents", "main", "workspace", "notes.md"), "# Notes\n\nfirst line\n");
-	write(path.join(home, "agents", "scout", "agent.json"), JSON.stringify({ description: "Looks things up on the web" }));
-	write(path.join(home, "agents", "scout", "workspace", "AGENTS.md"), "You are scout.\n");
+	write(path.join(home, "agents", "scout", "agent.json"), JSON.stringify({}));
+	write(path.join(home, "agents", "scout", "workspace", "AGENTS.md"), "Looks things up on the web.\n\nYou are scout.\n");
 	browsers = path.join(home, "browsers");
 	fs.mkdirSync(browsers, { recursive: true });
 	// A folder of the owner's, with a git history, to open for a conversation.
@@ -110,10 +110,10 @@ process.stdin.resume();
 	far = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-far-")));
 	write(path.join(far, "models.json"), fs.readFileSync(path.join(home, "models.json"), "utf8"));
 	write(path.join(far, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false } }, null, 2));
-	write(path.join(far, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent of the other machine" }));
-	write(path.join(far, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent there.\n");
-	write(path.join(far, "agents", "helper", "agent.json"), JSON.stringify({ description: "Helps on the other machine" }));
-	write(path.join(far, "agents", "helper", "workspace", "AGENTS.md"), "You are helper.\n");
+	write(path.join(far, "agents", "main", "agent.json"), JSON.stringify({}));
+	write(path.join(far, "agents", "main", "workspace", "AGENTS.md"), "The main agent of the other machine.\n\nYou are the main agent there.\n");
+	write(path.join(far, "agents", "helper", "agent.json"), JSON.stringify({}));
+	write(path.join(far, "agents", "helper", "workspace", "AGENTS.md"), "Helps on the other machine.\n\nYou are helper.\n");
 	const ssh = path.join(home, "ssh-stand-in.mjs");
 	write(ssh, `#!${process.execPath}
 import { spawn } from "node:child_process";
@@ -1071,10 +1071,13 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=Agents");
 	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "New agent" }).click();
 	await page.fill("[data-slot=dialog-content] [data-slot=field]:nth-of-type(1) input", "books");
-	await page.fill("[data-slot=dialog-content] [data-slot=field]:nth-of-type(2) input", "Keeps the books");
+	await page.fill("[data-slot=dialog-content] textarea", "You are books. You keep the books.\n\nYou answer in one line.");
 	await page.locator("[data-slot=dialog-content]").getByRole("button", { name: "Create agent" }).click();
 	await sees("[data-slot=settings-page] h1 >> text=books");
 	assert.ok(fs.existsSync(path.join(home, "agents", "books", "agent.json")));
+	// What it is for is the first paragraph of its instructions, and nothing else keeps it.
+	assert.equal("description" in JSON.parse(fs.readFileSync(path.join(home, "agents", "books", "agent.json"), "utf8")), false);
+	await sees("[data-slot=sidebar-menu-item] >> text=You are books. You keep the books.");
 	// It is in the side bar at once, with the others.
 	assert.deepEqual(await page.$$eval("[data-slot=agent-label] > :first-child", (els: Element[]) => els.map((e) => e.textContent?.trim())), ["main", "scout", "books"]);
 	await shot("07-settings-agent");
@@ -1451,7 +1454,7 @@ test("a conversation is opened from the side bar with the keyboard alone, and a 
 	await page.click("[data-slot=tab][data-active] button[aria-label='Close this tab']");
 });
 
-test("a right click on an agent offers to remove it, and never the main agent", async () => {
+test("a right click on an agent renames it in place, colours it, and offers to remove it, and never the main agent", async () => {
 	const port = /http listening on 127\.0\.0\.1:(\d+)/.exec(fs.readFileSync(path.join(home, "data", "pine.log"), "utf8"))![1];
 	const token = fs.readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
 	const made = await fetch(`http://127.0.0.1:${port}/agents`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json" }, body: JSON.stringify({ id: "spare", description: "Not needed for long", instructions: "You are spare." }) });
@@ -1478,18 +1481,34 @@ test("a right click on an agent offers to remove it, and never the main agent", 
 		throw new Error(`no menu for ${agent}`);
 	};
 	// Folding is a click on the line and no menu item; the main agent has nothing to remove it with.
-	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "Agent settings…"]);
-	assert.deepEqual(await shown("spare", "remove"), ["New conversation with spare", "Open a folder with spare…", "Agent settings…", "Remove spare…"]);
+	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "Rename…", "Colour…", "Agent settings…"]);
+	// Rename turns its name in the side bar into a field: Escape keeps the name, Enter gives it the new one, and everything follows it.
+	assert.deepEqual(await shown("spare", "rename"), ["New conversation with spare", "Open a folder with spare…", "Rename…", "Colour…", "Agent settings…", "Remove spare…"]);
+	await page.getByLabel("New name for spare").press("Escape");
+	await sees("[data-slot=agent-label] >> text=spare");
+	await shown("spare", "rename");
+	await page.getByLabel("New name for spare").fill("Spare Hands");
+	await page.getByLabel("New name for spare").press("Enter");
+	await sees("[data-slot=toast] >> text=spare is called spare-hands now.");
+	await sees("[data-slot=agent-label] >> text=spare-hands");
+	assert.ok(fs.existsSync(path.join(home, "agents", "spare-hands", "agent.json")) && !fs.existsSync(path.join(home, "agents", "spare")));
+	// Colour opens the colour over its avatar, and a pick is kept at once.
+	await shown("spare-hands", "colour");
+	await page.locator("[data-slot=agent-colour][data-open]").getByRole("button", { name: "Blue", exact: true }).click();
+	for (let i = 0; i < 100 && !JSON.parse(fs.readFileSync(path.join(home, "agents", "spare-hands", "agent.json"), "utf8")).color; i++) await new Promise((r) => setTimeout(r, 30));
+	assert.match(JSON.parse(fs.readFileSync(path.join(home, "agents", "spare-hands", "agent.json"), "utf8")).color, /^#[0-9a-f]{6}$/);
+	await page.keyboard.press("Escape");
+	assert.deepEqual(await shown("spare-hands", "remove"), ["New conversation with spare-hands", "Open a folder with spare-hands…", "Rename…", "Colour…", "Agent settings…", "Remove spare-hands…"]);
 	// It asks first, and how: nothing is removed by the menu alone.
 	// It is an alert dialog: it does not go away with a stray click beside it.
-	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the agent spare?");
+	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the agent spare-hands?");
 	await page.mouse.click(5, 5);
 	await sees("[role=alertdialog]");
-	assert.ok(fs.existsSync(path.join(home, "agents", "spare", "agent.json")));
+	assert.ok(fs.existsSync(path.join(home, "agents", "spare-hands", "agent.json")));
 	await page.click("[data-slot=command-item]:has-text('Remove it with everything it has')");
-	await sees("[data-slot=toast] >> text=Removed the agent spare.");
-	await page.waitForFunction(() => ![...document.querySelectorAll("[data-slot=agent-label] > :first-child")].some((e) => e.textContent?.trim() === "spare"));
-	assert.equal(fs.existsSync(path.join(home, "agents", "spare")), false);
+	await sees("[data-slot=toast] >> text=Removed the agent spare-hands.");
+	await page.waitForFunction(() => ![...document.querySelectorAll("[data-slot=agent-label] > :first-child")].some((e) => e.textContent?.trim() === "spare-hands"));
+	assert.equal(fs.existsSync(path.join(home, "agents", "spare-hands")), false);
 	// Asked for the main agent all the same (the palette, another road), the app says no and asks the daemon for nothing.
 	await page.evaluate(() => (window as any).pine.call("POST", "/agents/main/erase", { agent: "main", keepFiles: false })).then((r: any) => assert.equal(r.ok, false));
 	assert.ok(fs.existsSync(path.join(home, "agents", "main", "agent.json")));

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, defaultHome, effectiveMcp, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, unsandboxed } from "./config.ts";
+import { ConfigError, defaultHome, effectiveMcp, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, purposeOf, unsandboxed } from "./config.ts";
 import { audit, levelOf } from "./security.ts";
 import { pineManual, showRead, showSearch } from "./manual.ts";
 import { modelKeys } from "./models.ts";
@@ -78,16 +78,18 @@ Schedules, skills, the manual
   pine skills                     every skill: whom it is for and where it lies
   pine manual <words>             search pine's manual, as the agents do; --read <id> shows a part in full
 
-Agents (the main agent does the same when you ask it: create_agent, update_agent, remove_agent)
+Agents (the main agent does the same when you ask it: create_agent, update_agent, rename_agent, remove_agent)
   pine agent list                 the agents: what each is for, its model, its reach, what it has
-  pine agent add <id> --description "what it is for" [--instructions "who it is and how it works"]
+  pine agent add <id> [--description "what it is for"] [--instructions "who it is and how it works"]
        [--instructions-file <file>] [--model provider/model] [--tools read,bash,...]
-  pine agent update <id> [--description ...] [--instructions ... | --instructions-file <file>]
+  pine agent update <id> [--instructions ... | --instructions-file <file>] [--color #rrggbb|none]
        [--soul ... | --soul-file <file>] [--tooling ... | --tooling-file <file>]
        [--model provider/model|default] [--thinking off|low|...|max]
        [--mode auto|safe|manual|bypass|plan|default] [--tools read,bash,...] [--delegates id,id|*]
        [--network | --no-network] [--read /path,/path] [--write /path] [--forget /path]
                                   change an agent's settings; give only what changes, the rest stays
+  pine agent rename <id> <new-id>  give an agent another id; everything that names it follows:
+                                  its folder, conversations, routes, secrets, the others' lists
   pine agent remove <id> [--keep-files] [--yes]
                                   remove an agent with everything it has: conversations, sources,
                                   schedules, servers, skills, routes that wake it, its folder and
@@ -160,8 +162,8 @@ const line = (e: any) => `${when(e.ts)}  #${String(e.id).padEnd(5)} ${e.topic.pa
 
 /** pine agent list | add | remove: with a running daemon through it, without one in the files. */
 async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) => void): Promise<void> {
-	const { applyAgentChange, checkAgentChange, eraseAgent, holdingsOf } = await import("./admin.ts");
-	const { AGENT_TOOLS, checkNewAgent, createAgent } = await import("./agent-admin.ts");
+	const { applyAgentChange, checkAgentChange, eraseAgent, holdingsOf, renameAgent } = await import("./admin.ts");
+	const { AGENT_TOOLS, checkNewAgent, createAgent, instructionsWith } = await import("./agent-admin.ts");
 	const { flags, rest } = parseArgs(argv.filter((a, i, all) => !(a === "--home" || all[i - 1] === "--home")));
 	const sub = rest.shift() ?? "list";
 	const some = (list: string[]) => list.join(", ") || "none";
@@ -183,19 +185,19 @@ async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) =
 		case "list": {
 			for (const a of [cfg.agents[main], ...Object.values(cfg.agents).filter((x) => x.id !== main)]) {
 				const has = holdingsOf(cfg, a.id);
-				out(`${a.id}${a.id === main ? " (main)" : ""}: ${a.description || "no description"}\n    model ${a.model ?? `${cfg.defaults.model ?? "none"} (the default)`} · reasoning ${a.thinking} · mode ${a.mode} · reach ${unsandboxed(levelOf(a)) ? "your account + network (no sandbox)" : `its own folders (sandbox)${a.sandbox.network ? " + network" : ""}`}\n    conversations: ${some(has.conversations)} · sources: ${some(has.sources)} · MCP servers: ${some(has.servers)} · schedules: ${some(has.schedules)} · skills: ${some(has.skills)}${has.routes.length ? ` · routes: ${has.routes.join(", ")}` : ""} · ${has.files} file${has.files === 1 ? "" : "s"} in ${a.workspace}`);
+				out(`${a.id}${a.id === main ? " (main)" : ""}: ${purposeOf(a) || "no purpose given"}\n    model ${a.model ?? `${cfg.defaults.model ?? "none"} (the default)`} · reasoning ${a.thinking} · mode ${a.mode} · reach ${unsandboxed(levelOf(a)) ? "your account + network (no sandbox)" : `its own folders (sandbox)${a.sandbox.network ? " + network" : ""}`}\n    conversations: ${some(has.conversations)} · sources: ${some(has.sources)} · MCP servers: ${some(has.servers)} · schedules: ${some(has.schedules)} · skills: ${some(has.skills)}${has.routes.length ? ` · routes: ${has.routes.join(", ")}` : ""} · ${has.files} file${has.files === 1 ? "" : "s"} in ${a.workspace}`);
 			}
 			return;
 		}
 		case "add": {
 			const id = rest[0];
-			const usage = 'usage: pine agent add <id> --description "what it is for" [--instructions "..."] [--instructions-file <file>] [--model provider/model] [--tools read,bash,...]';
-			if (!id || typeof flags.description !== "string") throw new Error(usage);
+			const usage = 'usage: pine agent add <id> [--description "what it is for"] [--instructions "..." | --instructions-file <file>] [--model provider/model] [--tools read,bash,...]';
 			const fromFile = typeof flags["instructions-file"] === "string" ? fs.readFileSync(expandHome(flags["instructions-file"]), "utf8") : undefined;
-			// Without instructions it starts from what it is for; it keeps the file itself from then on.
-			const instructions = fromFile ?? (typeof flags.instructions === "string" ? flags.instructions : `You are ${id}. ${flags.description.trim().replace(/\.?$/, ".")}`);
+			// What it is for is the first paragraph of its instructions; without instructions it is all they say, and it keeps the file itself from then on.
+			const instructions = instructionsWith(id ?? "", flags.description, fromFile ?? flags.instructions);
+			if (!id || !instructions) throw new Error(usage);
 			const tools = typeof flags.tools === "string" ? flags.tools.split(",").map((t) => t.trim()).filter(Boolean) : undefined;
-			const spec = { id, description: flags.description, instructions, model: typeof flags.model === "string" ? flags.model : undefined, tools };
+			const spec = { id, instructions, model: typeof flags.model === "string" ? flags.model : undefined, tools };
 			checkNewAgent(cfg, spec);
 			const api = await daemon();
 			const workspace = api ? ((await api.post("/agents", spec)) as any).workspace : createAgent(cfg, spec).workspace;
@@ -203,15 +205,15 @@ async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) =
 		}
 		case "update": {
 			const id = rest[0];
-			const usage = 'usage: pine agent update <id> [--description "..."] [--color #rrggbb|none] [--instructions "..." | --instructions-file <file>] [--soul "..." | --soul-file <file>] [--tooling "..." | --tooling-file <file>] [--model provider/model|default] [--thinking off|minimal|low|medium|high|xhigh|max] [--mode auto|safe|manual|bypass|plan|default] [--tools read,bash,...] [--delegates id,id|*] [--network | --no-network] [--read /path,/path] [--write /path] [--forget /path]';
+			const usage = 'usage: pine agent update <id> [--color #rrggbb|none] [--instructions "..." | --instructions-file <file>] [--soul "..." | --soul-file <file>] [--tooling "..." | --tooling-file <file>] [--model provider/model|default] [--thinking off|minimal|low|medium|high|xhigh|max] [--mode auto|safe|manual|bypass|plan|default] [--tools read,bash,...] [--delegates id,id|*] [--network | --no-network] [--read /path,/path] [--write /path] [--forget /path]';
 			if (!id) throw new Error(usage);
 			const agent = cfg.agents[id];
 			if (!agent) throw new Error(`there is no agent "${id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
 			const str = (v: unknown) => (typeof v === "string" ? v : undefined);
 			const list = (v: unknown) => (typeof v === "string" ? v.split(",").map((x) => x.trim()).filter(Boolean) : undefined);
 			const fromFile = typeof flags["instructions-file"] === "string" ? fs.readFileSync(expandHome(flags["instructions-file"]), "utf8") : undefined;
+			if (flags.description !== undefined) throw new Error("what an agent is for is the first paragraph of its instructions (AGENTS.md in its workspace): change it with --instructions or --instructions-file");
 			const change = {
-				description: str(flags.description),
 				color: str(flags.color),
 				instructions: fromFile ?? str(flags.instructions),
 				soul: typeof flags["soul-file"] === "string" ? fs.readFileSync(expandHome(flags["soul-file"]), "utf8") : str(flags.soul),
@@ -245,7 +247,7 @@ async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) =
 			if (id === main) throw new Error(`${id} is the main agent: it administers pine and cannot be removed`);
 			const has = holdingsOf(cfg, id);
 			const keep = flags["keep-files"] === true;
-			out(`${id}: ${agent.description || "no description"}\nWith it go: conversations: ${some(has.conversations)}; event sources: ${some(has.sources)}; MCP servers: ${some(has.servers)}; schedules: ${some(has.schedules)}; skills: ${some(has.skills)}; routes that wake it: ${some(has.routes)}\n${keep ? `Its folder is kept: moved to ${path.join(cfg.home, "removed")} (${has.files} file${has.files === 1 ? "" : "s"} in its workspace).` : `Its folder ${agent.dir} is deleted, with ${has.files} file${has.files === 1 ? "" : "s"} in its workspace and everything said to it. This cannot be undone.`}${has.outside ? `\nIts workspace ${agent.workspace} lies outside pine's home and is left as it is.` : ""}`);
+			out(`${id}: ${purposeOf(agent) || "no purpose given"}\nWith it go: conversations: ${some(has.conversations)}; event sources: ${some(has.sources)}; MCP servers: ${some(has.servers)}; schedules: ${some(has.schedules)}; skills: ${some(has.skills)}; routes that wake it: ${some(has.routes)}\n${keep ? `Its folder is kept: moved to ${path.join(cfg.home, "removed")} (${has.files} file${has.files === 1 ? "" : "s"} in its workspace).` : `Its folder ${agent.dir} is deleted, with ${has.files} file${has.files === 1 ? "" : "s"} in its workspace and everything said to it. This cannot be undone.`}${has.outside ? `\nIts workspace ${agent.workspace} lies outside pine's home and is left as it is.` : ""}`);
 			if (flags.yes !== true) {
 				if (!process.stdin.isTTY) throw new Error("not removed: this asks before it deletes. Run it in a terminal, or add --yes");
 				const readline = await import("node:readline");
@@ -269,8 +271,27 @@ async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) =
 			if (gone.problem) throw new Error(`the agent ${id} is taken out, but what is left of the configuration does not load: ${gone.problem}\nIts folder was kept at ${gone.kept}. Run "pine check".`);
 			return out(`Removed the agent ${id}.${gone.kept ? ` Its folder is kept at ${gone.kept}.` : ""}`);
 		}
+		case "rename": {
+			const [id, to] = rest;
+			if (!id || !to) throw new Error("usage: pine agent rename <id> <new-id>");
+			if (!cfg.agents[id]) throw new Error(`there is no agent "${id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
+			const api = await daemon();
+			let done: { routes: string[]; addresses: string[]; problem?: string };
+			if (api) done = (await api.post(`/agents/${encodeURIComponent(id)}/id`, { agent: id, to })) as any;
+			else {
+				const { Kv, openDb, TaskStore } = await import("./store.ts");
+				const db = openDb(cfg.dataDir);
+				try {
+					done = renameAgent(cfg, { kv: new Kv(db), tasks: new TaskStore(db) }, id, to);
+				} finally {
+					db.close();
+				}
+			}
+			if (done.problem) throw new Error(`the agent ${id} is called ${to} now, but the configuration does not load: ${done.problem}\nRun "pine check".`);
+			return out(`Renamed the agent ${id} to ${to}.${done.routes.length ? ` Routes that name it: ${done.routes.join(", ")}.` : ""}${done.addresses.length ? ` Its webhook address${done.addresses.length === 1 ? " is" : "es are"} now ${done.addresses.join(", ")}: give ${done.addresses.length === 1 ? "it" : "them"} to whoever calls ${done.addresses.length === 1 ? "it" : "them"}.` : ""}`);
+		}
 		default:
-			throw new Error("usage: pine agent list | add <id> --description ... | update <id> --model ... | remove <id> [--keep-files] [--yes]");
+			throw new Error("usage: pine agent list | add <id> --instructions ... | update <id> --model ... | rename <id> <new-id> | remove <id> [--keep-files] [--yes]");
 	}
 }
 
@@ -632,7 +653,7 @@ async function main(): Promise<void> {
 		const { browserReady } = await import("./browser-build.ts");
 		if ((await browserReady()) === false) out("browser    not on this computer in the build this pine drives: the browser tools do not work until you run: pine browser-install");
 		for (const a of Object.values(cfg.agents)) {
-			out(`\nagent ${a.id}${a.id === mainAgentId(cfg) ? " (main)" : ""}: ${a.description || "no description"}`);
+			out(`\nagent ${a.id}${a.id === mainAgentId(cfg) ? " (main)" : ""}: ${purposeOf(a) || "no purpose given"}`);
 			out(`  workspace  ${a.workspace}`);
 			out(`  model      ${a.model ?? cfg.defaults.model}`);
 			out(`  tools      ${(a.tools ?? ["read", "bash", "edit", "write"]).join(", ")}`);

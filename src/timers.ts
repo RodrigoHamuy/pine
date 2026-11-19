@@ -321,4 +321,10 @@ export class Scheduler {
 	agentsChanged(): void {
 		this.wire();
 	}
+
+	/** An agent got another id: its schedules are keyed, published and routed under the new one, from now on. */
+	agentRenamed(): void {
+		this.wire();
+		this.arm();
+	}
 }

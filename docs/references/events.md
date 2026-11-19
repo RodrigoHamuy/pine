@@ -46,9 +46,9 @@ Events > Routes adds one with a form that says it as When (the topic, an optiona
 throttle or debounce) and Then (one of `agent`, `set`, `publish`, or `call` with `publish`).
 
 Most setups need no route. An agent that reacts to what a source reports is subscribed to it
-([sources.md](sources.md)), and work at a time is a schedule (below). A route is for the rules in
-between: noting a value in shared state, passing an event on, or a cheap model call before an
-agent is woken.
+([sources.md](sources.md)), and work at a time is a schedule (below). A route does a small job when an
+event comes in, without waking an agent: it saves a value in shared state for later, sends the
+event on under another topic, or asks a model a quick question before an agent is woken.
 
 ```json
 {

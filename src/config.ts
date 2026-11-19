@@ -713,6 +713,58 @@ export const sharedFiles = (cfg: PineConfig): string[] => SHARED_FILES.map((f) =
  * but do not write.
  */
 export const globalSkillsDir = (cfg: Pick<PineConfig, "home">) => path.join(cfg.home, "skills");
+/** The most of an agent's purpose that is shown: one line, for other agents' rosters and the owner's lists. */
+const PURPOSE_MAX = 160;
+const purposes = new Map<string, { stamp: string; text: string }>();
+
+/**
+ * What an agent is for, as other agents read it when they choose whom to hand work to, and as the
+ * owner's lists show it: the first paragraph of its own AGENTS.md that is not a heading, as many of
+ * its sentences as fit one line. The agent keeps that file itself, so the line is cleaned (no control
+ * characters, no line breaks, at most PURPOSE_MAX characters), and the file is read only as the plain
+ * file it is: a link, or a file with a second name elsewhere, could stand for a file of pine's, and
+ * gives nothing. Without such a paragraph it is `description` in agent.json, where homes before this kept it.
+ */
+export function purposeOf(agent: Pick<AgentConfig, "workspace" | "description">): string {
+	const file = path.join(agent.workspace, "AGENTS.md");
+	let fd: number | undefined;
+	try {
+		fd = fs.openSync(file, fs.constants.O_RDONLY | fs.constants.O_NOFOLLOW);
+		const st = fs.fstatSync(fd);
+		if (!st.isFile() || st.nlink !== 1) return agent.description;
+		const stamp = `${st.ino}:${st.mtimeMs}:${st.size}`;
+		const known = purposes.get(file);
+		if (known?.stamp === stamp) return known.text || agent.description;
+		const buf = Buffer.alloc(Math.min(st.size, 16_384));
+		const purpose = purposeFrom(buf.subarray(0, fs.readSync(fd, buf, 0, buf.length, 0)).toString("utf8"));
+		purposes.set(file, { stamp, text: purpose });
+		return purpose || agent.description;
+	} catch {
+		return agent.description;
+	} finally {
+		if (fd !== undefined) fs.closeSync(fd);
+	}
+}
+
+/** The purpose an instruction text states: its first paragraph that is not a heading, as one line of at most PURPOSE_MAX characters. */
+export function purposeFrom(text: string): string {
+	const paragraph = text
+		.replace(/\r/g, "")
+		.split(/\n\s*\n/)
+		.map((p) => p.trim())
+		.find((p) => p && !/^#/.test(p) && !/^<!--/.test(p));
+	const line = (paragraph ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").replace(/^[>*-]\s+/, "").replace(/\s+/g, " ").trim();
+	const sentences = line.match(/[^.!?]+[.!?]+(?=\s|$)|[^.!?]+$/g) ?? [];
+	let purpose = "";
+	for (const s of sentences) {
+		if (purpose && purpose.length + s.length > PURPOSE_MAX) break;
+		purpose += s;
+	}
+	purpose = purpose.trim();
+	if (purpose.length > PURPOSE_MAX) purpose = `${purpose.slice(0, PURPOSE_MAX - 1).replace(/\s+\S*$/, "")}…`;
+	return purpose;
+}
+
 export const agentSkillsDir = (agent: Pick<AgentConfig, "dir">) => path.join(agent.dir, "skills");
 export const conversationsDir = (agent: Pick<AgentConfig, "dir">) => path.join(agent.dir, "conversations");
 

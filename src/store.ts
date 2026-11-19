@@ -306,6 +306,23 @@ export class TaskStore {
 		return ids;
 	}
 
+	/**
+	 * An agent got another id: its tasks carry the new one, and so does every task that is to be
+	 * told about them (`meta.notify`) or that names it in its chain of delegation.
+	 */
+	renameAgent(from: string, to: string): void {
+		this.db.prepare("UPDATE tasks SET agent = ? WHERE agent = ?").run(to, from);
+		const rows = this.db.prepare("SELECT id, meta FROM tasks WHERE meta LIKE ?").all(`%"${from}"%`) as Array<{ id: number; meta: string }>;
+		const update = this.db.prepare("UPDATE tasks SET meta = ? WHERE id = ?");
+		for (const r of rows) {
+			const meta = parse(r.meta) ?? {};
+			let changed = false;
+			if (meta.notify?.agent === from) (meta.notify.agent = to), (changed = true);
+			if (Array.isArray(meta.chain) && meta.chain.includes(from)) (meta.chain = meta.chain.map((a: unknown) => (a === from ? to : a))), (changed = true);
+			if (changed) update.run(JSON.stringify(meta), r.id);
+		}
+	}
+
 	/** Give a conversation's tasks another conversation name. */
 	rename(agent: string, from: string, to: string): void {
 		this.db.prepare("UPDATE tasks SET session = ? WHERE agent = ? AND session = ?").run(to, agent, from);

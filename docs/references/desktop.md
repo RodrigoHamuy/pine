@@ -316,7 +316,7 @@ it is never a question whom it is for.
 | `+` | A new conversation with that agent |
 | The folder (when the pointer is on the line) | Opens a folder of yours for a new conversation with that agent |
 | The gear (when the pointer is on the line) | That agent's page in the settings |
-| A right click | A new conversation, a folder and the settings as a menu, and **Remove** for every agent but the main one, which administers pine and stays. Remove asks first, and how: with everything the agent has, or with its folder kept |
+| A right click | A new conversation, a folder, **Rename** (its name in the side bar turns into a field: Enter or leaving it renames the agent, Escape keeps the name), **Colour** (its colours open over its avatar, and a pick is kept at once) and the settings as a menu, and **Remove** for every agent but the main one, which administers pine and stays. Remove asks first, and how: with everything the agent has, or with its folder kept |
 | `+` beside "Agents" | A new agent |
 
 An agent that somebody else makes while the app is open (the main agent when you ask it to,
@@ -597,7 +597,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Page | What you do there | The same by command or by asking the main agent |
 |---|---|---|
 | General | pine's settings, each by a name with its key in `pine.json` beside it and a sentence on what it does: the model, reasoning and mode agents start from, how long a command and a task may run, how many agents work at once, and what pine asks you about. What only tunes pine to a model server is not there: that is written into `pine.json` by hand ([setup.md](setup.md), "pine's settings"). And the notes `pine check` would print about this setup | `set_setting`; `pine check` |
-| Agents | Every agent. On an agent's page: what it is for, its colour (None, a preset, or Other… with any colour: its avatar in the side bar, on its tabs, in its panel and on an empty conversation is drawn in it, and the window takes its primary while its conversation is in front), its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). New agent; Remove, with or without its folder | `create_agent`, `update_agent`, `remove_agent`; `pine agent …` |
+| Agents | Every agent. On an agent's page: at the top its avatar, which opens its colour (None, a preset, or Other with any colour, kept at once: its avatar in the side bar, on its tabs, in its panel and on an empty conversation is drawn in it, and the window takes its primary while its conversation is in front), and its name, which a click turns into a field that renames it (Enter or leaving the field; Escape keeps the name); then its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). What it is for, beside its name in the side bar and in the list, is the first paragraph of its `AGENTS.md`. New agent (a name and its instructions, the first paragraph saying what it is for); Remove, with or without its folder | `create_agent`, `update_agent`, `rename_agent`, `remove_agent`; `pine agent …` |
 | Models | Model servers of your own (add by name and address, with its key when it wants one; remove). Providers: sign in through the browser or with an API key, sign out; after a sign-in, the choice of the model your agents run on. That model (`defaults.model`) with Change, and each agent whose model cannot answer with the reason. The models you can use now | `add_model_server`; `pine model …`, `pine login`, `pine logout`; `set_setting` |
 | MCP servers | Every server with whom it is for and whether it connects. Add a remote one (its https address) or a program on this computer, for all agents or one. Sign in to a remote one through the browser. Remove | `add_mcp_server`; `pine mcp …` |
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
@@ -814,8 +814,12 @@ holds only tokens and base rules.
   colour. There is no light, dark or system setting: a theme is dark or light. Storybook draws the
   stories in pine's own themes (`.storybook/themes.ts`, resolved as pine resolves them), pmndre and
   GitHub Light for Chromatic's dark and light modes, and any of them from the toolbar.
-- An agent may have a colour of its own (`color` in its `agent.json`, set on its page in Settings >
-  Agents: None, nine presets apart from each other and from the mint, or Other… with any colour).
+- An agent may have a colour of its own (`color` in its `agent.json`, picked on its avatar at the top
+  of its page in Settings > Agents or with Colour in the side bar's menu: None, nine presets apart
+  from each other and from the mint, or Other with any colour, saved as it is picked). The popover
+  and the field that renames an agent in place are `src/components/agent-identity.tsx`; in the side
+  bar, where the avatar lies inside the button that folds the group, the popover is anchored to a
+  mark over the avatar that only the menu opens.
   `AgentAvatar` (`src/components/agent-avatar.tsx`) draws an agent's initial wherever the window
   shows one: without a colour it is the stock avatar; with one, its fallback is the colour itself with
   white or a near-black on it, whichever reads better (`onColour`), the same in every theme.

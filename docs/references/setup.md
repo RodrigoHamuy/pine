@@ -30,7 +30,7 @@ is about what agents can do.
 | An MCP server, remote or local | any agent (`add_mcp_server`) | any agent, when you say so | **only the main agent** |
 | A skill | any agent (`add_skill`) | any agent, when you say so | **only the main agent** |
 | A new agent | | | **only the main agent** (`create_agent`) |
-| Changing an agent, removing an agent | | | **only the main agent** (`update_agent`, `remove_agent`), you confirm every time |
+| Changing, renaming or removing an agent | | | **only the main agent** (`update_agent`, `rename_agent`, `remove_agent`), you confirm every time |
 | pine's settings | | | **only the main agent** (`set_setting`), you confirm every time |
 | A route (a rule of your own) | | | **only the main agent** (`add_route`, `remove_route`), you confirm every time |
 | Any of the first five rows, for another agent | | **only the main agent** (the same tools, with `agent`) | |
@@ -41,7 +41,7 @@ The main agent is the one `pine.json` names with `"main"`; without that entry it
 called `main`, or else the first one. It is pine's administrator: what you want changed about
 pine, you ask it for, and it does it with tools that check what they are given, instead of
 you or an agent editing files. See "The main agent administers pine" below. The other agents do not have `create_agent`,
-`update_agent`, `remove_agent`, `agents`, `settings`, `set_setting`, `routes`, `add_route`,
+`update_agent`, `rename_agent`, `remove_agent`, `agents`, `settings`, `set_setting`, `routes`, `add_route`,
 `remove_route`, `add_source_type`, `remove_source_type`, `add_model_server`, `remove_model_server`,
 `conversations`, `read_conversation`, `set_conversation` or `remove_conversation`,
 and they are refused when they ask for the global scope. Their instructions tell them who can do it, so
@@ -81,7 +81,7 @@ difference between the first two: the main conversation is the agent.
 | Add or replace a skill for the agent from another conversation, or for all agents | Yes. The dialog shows the description and the instructions. |
 | Remove a server, a source, a schedule or a skill that is the conversation's own | No. |
 | Remove a server, a source, a schedule or a skill of the agent (from another conversation than its main one) or of all agents | Yes. |
-| Create an agent | Always. The dialog shows its id, description, model, tools and instructions. |
+| Create an agent | Always. The dialog shows its id, what it is for (the first paragraph of its instructions), model, tools and instructions. |
 | Register a new type of event source | Always, in every mode. The dialog says that it is a program, how long it is, what it imports and where the file is. |
 | Take a source type out again | Yes. |
 | End a subscription for all agents | No (the main agent only). |
@@ -152,7 +152,7 @@ Which model the agent runs on is told to it with your message, so it needs no to
 | `add_skill` `name` `description` `instructions` [`files`] [`scope`] | Writes a skill; the same name in the same place replaces it. `files` is a folder in the agent's workspace whose contents go along. |
 | `remove_skill` `name` | Deletes a skill in pine's own skill folders (`skills/`, `agents/<id>/skills/`, a conversation's), also one you put there by hand. A skill in a folder named under `skills` in a configuration file is yours to remove. |
 | **Agents** | |
-| `create_agent` `id` `description` `instructions` [`model`] [`tools`] [`color`] | Main agent only. See below. Changing and removing one, and pine's settings: "The main agent administers pine". |
+| `create_agent` `id` `instructions` [`model`] [`tools`] [`color`] | Main agent only. See below. Changing and removing one, and pine's settings: "The main agent administers pine". |
 | **Model servers** | |
 | `add_model_server` `name` `url` [`context`] | Main agent only. Adds a model server of your own by its address; pine asks the server for its models. See "Adding a model server". |
 | `remove_model_server` `name` | Main agent only. Takes one out again, with the key pine keeps for it. Refused while an agent, the default or the judge of goals (`defaults.judge`) uses one of its models. You are asked. |
@@ -201,7 +201,8 @@ in [configuration.md](configuration.md), "models.json".
 ## Creating an agent
 
 Ask the main agent: "create an agent that keeps my books". It calls `create_agent` with an id,
-one line on what the agent is for, its instructions, and optionally a model, a list of
+its instructions, whose first paragraph says what the agent is for (other agents read that
+line when they choose whom to hand work to), and optionally a model, a list of
 built-in tools (`read`, `bash`, `edit`, `write`, `grep`, `find`, `ls`; all of them by default)
 and its colour in the Pine app (`color`, `#rrggbb`: "make it coral" gives it `#e0805a`;
 you see the colour in what you confirm). What cannot work (a bad id, a name that is taken, an
@@ -209,7 +210,7 @@ unknown tool or model, a colour that is not `#rrggbb`) is said before you are as
 
 ```
 agents/books/
-  agent.json     { "description": "...", "tools": [...] }  and "model" and "color" if named
+  agent.json     { "tools": [...] }  and "model" and "color" if named
   workspace/
     AGENTS.md    the instructions; the new agent can change them itself from then on
     SOUL.md      a stub
@@ -232,7 +233,7 @@ agent, not a pine that does not start.
 
 | What | Tools of the main agent |
 |---|---|
-| Agents | `agents` (list), `create_agent`, `update_agent`, `remove_agent` |
+| Agents | `agents` (list), `create_agent`, `update_agent`, `rename_agent`, `remove_agent` |
 | What an agent has: event sources, subscriptions, MCP servers, skills, schedules | The tools every agent has for itself, with `agent` for another agent, and with `scope: "global"` for all agents |
 | Types of event source, model servers | `add_source_type`, `remove_source_type`, `add_model_server`, `remove_model_server` |
 | pine's settings | `settings` (list), `set_setting` |
@@ -244,7 +245,8 @@ The ones only it has:
 | Tool | Does |
 |---|---|
 | `agents` [`id`] | Lists the agents: what each is for, its model, reasoning, mode and reach, and what it has (conversations, event sources, MCP servers, schedules, skills, files in its workspace). With `id`, one agent in full, with its workspace and its instructions. Asks nobody. |
-| `update_agent` `id` [`description`] [`color`] [`instructions`] [`model`] [`thinking`] [`mode`] [`tools`] [`delegates`] [`scope`] [`network`] [`read`] [`write`] [`forget`] | Changes an agent's settings; only what is given changes. You see the change line by line and confirm it. See "Changing and removing an agent". |
+| `update_agent` `id` [`color`] [`instructions`] [`model`] [`thinking`] [`mode`] [`tools`] [`delegates`] [`scope`] [`network`] [`read`] [`write`] [`forget`] | Changes an agent's settings; only what is given changes. You see the change line by line and confirm it. See "Changing and removing an agent". |
+| `rename_agent` `id` `to` | Gives an agent another id, and everything that names it follows. You see what follows and confirm it. Not the main agent itself. See "Renaming an agent". |
 | `remove_agent` `id` [`keep_files`] | Removes an agent for good, with everything it has. You see what goes and confirm it. See "Changing and removing an agent". |
 | `settings` | Lists the settings it can change, with what is in force and what each means. Asks nobody. |
 | `set_setting` `key` `value` | Changes one setting in `pine.json`; `"default"` takes the entry out. You see the old and the new value and confirm. See "pine's settings". |
@@ -260,7 +262,7 @@ agent has is reached with `conversation` and its name. Taking something away fro
 agent (`remove_source`, `remove_mcp_server`, `remove_skill`, `remove_schedule`, `unsubscribe`)
 asks you every time, and the question says that the main agent asks.
 
-**Not from a conversation that has read outside content.** `update_agent`, `remove_agent`,
+**Not from a conversation that has read outside content.** `update_agent`, `rename_agent`, `remove_agent`,
 `set_setting`, `add_route`, `remove_route`, `set_conversation` and `remove_conversation` are refused there without a question to you: a web page that says "remove the
 agent" must not get as far as your approval dialog. A new
 conversation, or `/reset`, does it.
@@ -272,9 +274,8 @@ Tell the main agent what to change about another agent ("give the books agent an
 
 | Value | What it is |
 |---|---|
-| `description` | One line on what the agent is for |
 | `color` | Its own colour in the Pine app, `#rrggbb` (its avatar is drawn in it); `"none"` takes it away. "Make scout blue" is a `color` change, which you confirm like any other; anything that is not `#rrggbb` is refused before you are asked |
-| `instructions` | The whole new text of its `AGENTS.md`. It replaces the file, so the main agent reads the present text first (`agents` with `id`) |
+| `instructions` | The whole new text of its `AGENTS.md`, whose first paragraph says what it is for. It replaces the file, so the main agent reads the present text first (`agents` with `id`) |
 | `soul` | The whole new text of its `SOUL.md`: who it is, its character and tone. It replaces the file the same way. This is what the main agent uses when you speak of an agent's personality or how it should sound |
 | `tooling` | The whole new text of its own `TOOLS.md`: tooling defaults and preferences for it alone. It replaces the file the same way; empty takes them back |
 | `model`, `thinking` | Its model (`"default"` for pine's default) and how much it reasons |
@@ -311,6 +312,39 @@ thing is left as it is: a workspace that you put outside pine's home, which is y
 What stays in any case is the past: the event log and pine's log name the agent where it
 acted. The main agent cannot remove itself. `pine agent remove <id>` does the same from a
 shell, with or without a running daemon ([operations.md](operations.md)).
+
+## Renaming an agent
+
+An agent's id is its name everywhere: its folder `agents/<id>`, its conversations, the routes
+that wake it, other agents' `delegates`. To give it another one, click its name at the top of
+its page in the Pine app (Settings > Agents) or choose Rename in the side bar's menu on it, ask
+the main agent ("call the books agent ledger": `rename_agent`, which you confirm), or run
+`pine agent rename <id> <new-id>`. An id is lowercase letters, digits, `-` and `_`, starting
+with a letter.
+
+Everything that carries the old id follows, and nothing is left under it:
+
+- its folder and its private home move (`agents/<new-id>`, `sandbox/<new-id>`), with its
+  workspace, skills, conversations and their history;
+- the routes in `pine.json` that wake it name the new id, and so do topics of its own sources
+  and schedules in a route (`source/papers@<new-id>/...`); other agents' `delegates`, the list
+  of agents of a server or source of all agents, and `main` when it is the main agent;
+- the secrets pine kept for its sources and servers in `.env` get names with the new id, with
+  the same values;
+- what pine stored under its name moves: its tasks, the outside-content marks, folders, goals
+  and undo steps of its conversations, pins and open tabs, what its sources kept, the recorded
+  states of its folders, and what you allowed its conversations.
+
+Its conversations end and start again with its next message, under the new name; its sources
+and schedules stop and start again. Two things change for the outside: a webhook source of its
+own is reached at `/hook/<name>@<new-id>` from then on (you are told the new address), and its
+instructions are left as they are, so if `AGENTS.md` says its old name, change that too. The
+past is not rewritten: the event log names it as it was called then.
+
+It is refused while the agent works, while another agent works on something for it, and while
+a program it started still runs in one of its conversations: stop that first. The main agent
+cannot rename itself (its conversation would end in the middle); you rename it in the app or
+from a shell, and it stays the main agent.
 
 ## Routes
 
@@ -409,7 +443,6 @@ conversation's name as `session`, which is how pine knows whose it is and when t
 ```jsonc
 // agents/main/agent.json after: a server and a schedule for the agent, a source and a subscription for the conversation "taxes"
 {
-  "description": "Your main agent",
   "mcp": { "notes": { "url": "https://mcp.example.com/mcp", "approve": "tainted" } },
   "sources": { "scans": { "type": "folder", "description": "what the scanner saves", "session": "taxes", "dir": "/Users/me/Scans" } },
   "sandbox": { "read": ["/Users/me/Scans"] },

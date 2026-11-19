@@ -84,6 +84,9 @@ const shown = (p: string) => bytes(p).toString("utf8");
 /** A path as a line of an exclude file: from the top, and nothing in it is a pattern. */
 const pattern = (p: string) => `/${p.replace(/\/$/, "").replace(/[\\*?[\]!# ]/g, "\\$&")}${p.endsWith("/") ? "/" : ""}`;
 
+/** Where the recorded states of a folder are kept, under pine's folder for them. */
+export const placeOf = (base: string, root: string) => path.join(base, crypto.createHash("sha256").update(root).digest("hex").slice(0, 24));
+
 export class Snapshots {
 	private dir: string;
 	private places = new Map<string, Place>();
@@ -123,7 +126,7 @@ export class Snapshots {
 	private async place(root: string): Promise<Place> {
 		const known = this.places.get(root);
 		if (known && Date.now() - known.at < 10_000 && fs.existsSync(path.join(known.dir, "HEAD"))) return known;
-		const dir = path.join(this.dir, crypto.createHash("sha256").update(root).digest("hex").slice(0, 24));
+		const dir = placeOf(this.dir, root);
 		if (!fs.existsSync(path.join(dir, "HEAD"))) {
 			fs.mkdirSync(this.dir, { recursive: true, mode: 0o700 });
 			// Without a template: nothing is copied into it that pine did not write.

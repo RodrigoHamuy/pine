@@ -8,10 +8,11 @@ import os from "node:os";
 import path from "node:path";
 import { AGENT_TOOLS } from "./agent-admin.ts";
 import { type AgentConfig, isColor, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
-import { unsetEnv } from "./env-file.ts";
+import { renameEnv, secretName, unsetEnv } from "./env-file.ts";
 import { DEFAULT_THEME, listThemes } from "./themes.ts";
 import { editJson } from "./mcp-config.ts";
 import { isInside, realish } from "./security.ts";
+import { placeOf } from "./snapshots.ts";
 import type { Kv, TaskStore } from "./store.ts";
 import { errText, matchesAny, parseDuration } from "./util.ts";
 
@@ -21,10 +22,9 @@ export const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "ma
 
 /** What can be changed about an agent. Everything is optional; what is left out stays. */
 export interface AgentChange {
-	description?: string;
 	/** Its colour in the Pine app, `#rrggbb`; "none" or empty takes it away. */
 	color?: string;
-	/** The whole new text of its instruction file (AGENTS.md in its workspace). */
+	/** The whole new text of its instruction file (AGENTS.md in its workspace), whose first paragraph says what it is for. */
 	instructions?: string;
 	/** The whole new text of its SOUL.md: who it is, its character and tone. */
 	soul?: string;
@@ -74,12 +74,6 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 	const warnings: string[] = [];
 	const steps: Array<(raw: any) => void> = [];
 	const main = agent.id === mainAgentId(cfg);
-	if (change.description !== undefined) {
-		const text = change.description.replace(/\s+/g, " ").trim();
-		if (!text) throw new Error("a description is one line on what the agent is for; it cannot be empty");
-		lines.push(`description: ${text}`);
-		steps.push((raw) => (raw.description = text));
-	}
 	if (change.color !== undefined) {
 		const color = checkColor(change.color);
 		lines.push(`color: ${color ?? "none"}`);
@@ -319,6 +313,182 @@ export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore },
 		if (!fs.readdirSync(path.dirname(aside)).length) fs.rmdirSync(path.dirname(aside));
 	}
 	return { routes, kept: keep ? aside : undefined, workspaceLeft: outside ? agent.workspace : undefined, problem };
+}
+
+/** Whether an id can be given to an agent, a new one or one that is renamed. Throws with what would be right. */
+export function checkAgentId(cfg: PineConfig, id: string): void {
+	if (!/^[a-z][a-z0-9_-]{1,30}$/.test(id)) throw new Error(`"${id}" is not a usable agent id: lowercase letters, digits, - and _, starting with a letter, at least two characters`);
+	if (cfg.agents[id]) throw new Error(`an agent called ${id} exists already`);
+	if (fs.existsSync(path.join(cfg.home, "agents", id))) throw new Error(`the folder agents/${id} exists already`);
+	if (fs.existsSync(path.join(cfg.home, "sandbox", id))) throw new Error(`the folder sandbox/${id} exists already`);
+}
+
+/** The prefixes of what pine stores per conversation as "<prefix>:<agent>:<conversation>". */
+const BY_CONVERSATION = ["taint", "keep", "folder", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited", "goal"];
+
+/**
+ * Give an agent another id, and with it everything that carries its name, so that nothing is
+ * left under the old one: its folder and private home, the routes that wake it and topics of its
+ * own sources and schedules in them, its name in the lists of others, `main` in pine.json, the
+ * names of the secrets pine kept for it in .env, what is stored under its name (marks, lists,
+ * turns, goals, tasks, pins, open tabs, what its sources kept), the folders under `data/` named
+ * after it and the recorded states of its folders. It is `eraseAgent` the other way round: what
+ * one takes away, the other moves. The agent must not be at work: `AgentManager.renameAgent`
+ * stops what runs under the old name first and starts it again under the new one.
+ *
+ * Its conversations keep their history: pi finds a session by the folder it was started in, so
+ * where that was inside the agent's folder, the session file's header moves with it. What was
+ * said in them is left as it was, old paths included.
+ */
+export function renameAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore }, from: string, wanted: string): { id: string; routes: string[]; addresses: string[]; problem?: string } {
+	const agent = cfg.agents[from];
+	if (!agent) throw new Error(`there is no agent "${from}"`);
+	const to = wanted.trim();
+	if (to === from) throw new Error(`the agent is called ${from} already`);
+	checkAgentId(cfg, to);
+	const main = mainAgentId(cfg);
+	const before = agent.dir;
+	const after = path.join(cfg.home, "agents", to);
+	// A path inside its folder moves with it, written as it was given or as the system resolves it (/var and /private/var on a Mac).
+	const bases = [...new Set([before, realish(before)])];
+	const moved = (s: string) => {
+		for (const b of bases) if (s === b || s.startsWith(`${b}${path.sep}`)) return path.join(path.dirname(b), to) + s.slice(b.length);
+		return s;
+	};
+	const deep = (v: unknown): any => (typeof v === "string" ? moved(v) : Array.isArray(v) ? v.map(deep) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v).map(([k, x]) => [k, deep(x)])) : v);
+	// The topics of its own sources and schedules: "source/papers@helper/..." and "timer/weekly@helper".
+	const topic = (t: string) => t.split("/").map((seg) => (seg.endsWith(`@${from}`) ? `${seg.slice(0, -from.length)}${to}` : seg)).join("/");
+
+	// Its own file: the secrets it refers to by the names pine gave them, and paths inside its folder.
+	const secrets: Array<[string, string]> = [];
+	const renamed = (value: unknown, a: string, b: string) => {
+		if (value !== `\${${a}}`) return value;
+		secrets.push([a, b]);
+		return `\${${b}}`;
+	};
+	editJson(path.join(before, "agent.json"), (raw) => {
+		for (const [name, entry] of Object.entries<any>(raw.sources ?? {})) if (entry && typeof entry === "object") for (const [k, v] of Object.entries(entry)) entry[k] = renamed(v, secretName("SOURCE", name, from, k), secretName("SOURCE", name, to, k));
+		for (const [name, entry] of Object.entries<any>(raw.mcp ?? {})) if (entry?.env && typeof entry.env === "object") for (const [k, v] of Object.entries(entry.env)) entry.env[k] = renamed(v, secretName("MCP", name, from, k), secretName("MCP", name, to, k));
+		for (const k of Object.keys(raw)) raw[k] = deep(raw[k]);
+	});
+	renameEnv(cfg.home, secrets);
+
+	// pine.json: the routes that wake it or listen to its own sources and schedules, the lists of all agents' sources and servers, and which agent is the main one.
+	const routes = cfg.routes.filter((r) => r.agent === from || r.on.some((t) => topic(t) !== t)).map((r) => r.name);
+	const keepMain = main === from ? to : main;
+	editJson(path.join(cfg.home, "pine.json"), (raw) => {
+		for (const r of Array.isArray(raw.routes) ? raw.routes : []) {
+			if (!r || typeof r !== "object") continue;
+			if (r.agent === from) r.agent = to;
+			if (typeof r.on === "string") r.on = topic(r.on);
+			else if (Array.isArray(r.on)) r.on = r.on.map((x: unknown) => (typeof x === "string" ? topic(x) : x));
+		}
+		for (const key of ["sources", "mcp"]) for (const entry of Object.values<any>(raw[key] ?? {})) if (Array.isArray(entry?.agents)) entry.agents = entry.agents.map((a: unknown) => (a === from ? to : a));
+		// Which agent is the main one does not change with a name: where it followed from the names alone, it is written down now.
+		if (main === from || (raw.main === undefined && main !== "main")) raw.main = keepMain;
+	});
+	for (const r of cfg.routes) {
+		if (r.agent === from) r.agent = to;
+		r.on = r.on.map(topic);
+	}
+	for (const entry of [...Object.values(cfg.sources), ...Object.values(cfg.mcp)]) if (entry.agents?.includes(from)) entry.agents = entry.agents.map((a) => (a === from ? to : a));
+	if (cfg.main !== undefined || main !== "main") cfg.main = keepMain;
+	// Whom the others may hand work to.
+	for (const other of namedBy(cfg, from).delegators) {
+		const a = cfg.agents[other];
+		a.delegates = a.delegates.map((d) => (d === from ? to : d));
+		editJson(path.join(a.dir, "agent.json"), (raw) => {
+			if (Array.isArray(raw.delegates)) raw.delegates = raw.delegates.map((d: unknown) => (d === from ? to : d));
+		});
+	}
+
+	// What is stored under its name.
+	const kv = store.kv;
+	const rekey = (a: string, b: string, value: unknown = kv.get(a)) => {
+		kv.set(a, null);
+		if (value !== undefined && value !== null) kv.set(b, value);
+	};
+	for (const prefix of BY_CONVERSATION) {
+		for (const key of kv.keys(`${prefix}:${from}:`)) {
+			const value = deep(kv.get(key));
+			if (prefix === "goal" && value && typeof value === "object") value.agent = to;
+			rekey(key, `${prefix}:${to}:${key.slice(prefix.length + from.length + 2)}`, value);
+		}
+	}
+	for (const key of kv.keys("timer:")) if (key.endsWith(`@${from}`)) rekey(key, `${key.slice(0, -from.length)}${to}`);
+	for (const key of kv.keys("source:")) {
+		const [name, ...rest] = key.slice("source:".length).split(":");
+		if (name.endsWith(`@${from}`)) rekey(key, ["source", `${name.slice(0, -from.length)}${to}`, ...rest].join(":"));
+	}
+	// Which slot of a model server held one of its conversations: given up, as when the conversation ends (src/slots.ts).
+	for (const book of ["slots", "slot-pages"]) {
+		const held = kv.get<Record<string, Array<{ who?: string; what?: string } | null | undefined>>>(book);
+		if (held) kv.set(book, Object.fromEntries(Object.entries(held).map(([server, list]) => [server, list.map((o) => (o && (String(o.who).startsWith(`${from}:`) || String(o.what).startsWith(`${from}:`)) ? null : o))])));
+	}
+	const pinned = kv.get<string[]>("conversations:pinned");
+	if (Array.isArray(pinned) && pinned.some((x) => x.startsWith(`${from}:`))) kv.set("conversations:pinned", pinned.map((x) => (x.startsWith(`${from}:`) ? `${to}${x.slice(from.length)}` : x)));
+	const ui = kv.get<{ tabs?: Array<{ agent: string }> }>("ui:tabs");
+	if (ui && Array.isArray(ui.tabs) && ui.tabs.some((t) => t.agent === from)) kv.set("ui:tabs", { ...ui, tabs: ui.tabs.map((t) => (t.agent === from ? { ...t, agent: to } : t)) });
+	store.tasks.renameAgent(from, to);
+
+	// The folders under data/ named after it, and the recorded states of its folders, which are found by the folder's path.
+	for (const base of [path.join(cfg.dataDir, "programs"), path.join(cfg.dataDir, "browser-local"), path.join(cfg.dataDir, "browser-view")]) {
+		for (const name of fs.existsSync(base) ? fs.readdirSync(base) : []) {
+			const plain = decodeURIComponent(name);
+			if (plain.startsWith(`${from}:`)) fs.renameSync(path.join(base, name), path.join(base, encodeURIComponent(`${to}${plain.slice(from.length)}`)));
+		}
+	}
+	const kept = path.join(cfg.dataDir, "sources");
+	for (const name of fs.existsSync(kept) ? fs.readdirSync(kept) : []) if (name.endsWith(`@${from}`)) fs.renameSync(path.join(kept, name), path.join(kept, `${name.slice(0, -from.length)}${to}`));
+	const snapshots = path.join(cfg.dataDir, "snapshots");
+	for (const name of fs.existsSync(snapshots) ? fs.readdirSync(snapshots) : []) {
+		let root = "";
+		try {
+			root = fs.readFileSync(path.join(snapshots, name, "pine-folder"), "utf8").trim();
+		} catch {
+			continue;
+		}
+		const now = moved(root);
+		if (now === root) continue;
+		const place = placeOf(snapshots, now);
+		fs.rmSync(place, { recursive: true, force: true });
+		fs.renameSync(path.join(snapshots, name), place);
+		fs.writeFileSync(path.join(place, "pine-folder"), now);
+	}
+
+	// pi's session files say where they were started, and pi resumes only a session started in the folder it is in.
+	const sessions = path.join(before, "sessions");
+	const files = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? files(path.join(dir, e.name)) : e.name.endsWith(".jsonl") ? [path.join(dir, e.name)] : [])) : []);
+	for (const file of files(sessions)) {
+		const text = fs.readFileSync(file, "utf8");
+		const end = text.indexOf("\n");
+		const first = end < 0 ? text : text.slice(0, end);
+		let header: any;
+		try {
+			header = JSON.parse(first);
+		} catch {
+			continue;
+		}
+		if (header?.type !== "session" || typeof header.cwd !== "string" || moved(header.cwd) === header.cwd) continue;
+		header.cwd = moved(header.cwd);
+		fs.writeFileSync(file, JSON.stringify(header) + (end < 0 ? "" : text.slice(end)), { mode: fs.statSync(file).mode & 0o777 });
+	}
+
+	// Its folder and its private home.
+	fs.renameSync(before, after);
+	if (fs.existsSync(path.join(cfg.home, "sandbox", from))) fs.renameSync(path.join(cfg.home, "sandbox", from), path.join(cfg.home, "sandbox", to));
+	const addresses = Object.entries(agent.sources).filter(([, s]) => s.type === "webhook").map(([name]) => `/hook/${name}@${to}`);
+	delete cfg.agents[from];
+	let problem: string | undefined;
+	try {
+		const fresh = loadConfig(cfg.home);
+		cfg.agents[to] = fresh.agents[to];
+	} catch (e) {
+		problem = errText(e);
+		// pine goes on with the agent as it was, under its new name and in its new folder, until the configuration is corrected.
+		cfg.agents[to] = { ...agent, id: to, dir: after, workspace: moved(agent.workspace) };
+	}
+	return { id: to, routes, addresses, problem };
 }
 
 // ---- routes --------------------------------------------------------------------------------------

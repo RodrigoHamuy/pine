@@ -144,7 +144,6 @@ Every key is optional; `{}` is a valid agent.
 
 ```json
 {
-  "description": "Contract law; knows the case files",
   "workspace": "~/dev/gonzo",
   "model": "local/deepseek-v4.1-flash",
   "tools": ["read", "bash", "edit", "write", "grep", "find", "ls"],
@@ -160,8 +159,8 @@ Every key is optional; `{}` is a valid agent.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `description` | empty | One line other agents see when they choose whom to delegate to. Write it for them. |
-| `color` | none | The agent's own colour in the Pine app, written `#rrggbb` (kept in lower case): its avatar is drawn in it, and while its conversation is in front the window's accent is that colour instead of the theme's (unless "The agent in front colours the window" is off in Settings > App). Display only; the terminal UI does not use it. Set it on the agent's page in the app, with `pine agent update <id> --color #e0805a` (`--color none` takes it away), or ask the main agent ("make scout blue"): `color` of `create_agent` and `update_agent`, which you confirm. Anything that is not `#rrggbb` is a configuration problem. |
+| `description` | empty | Only for a home from before: what the agent is for, where its `AGENTS.md` does not say it. What an agent is for is the first paragraph of the `AGENTS.md` in its workspace (a heading above it aside), as one line of at most 160 characters: other agents read it when they choose whom to delegate to, and the Pine app and `pine agent list` show it beside its name. Write that paragraph for them ("You are gonzo. Contract law; you know the case files"). Nothing writes `description` any more. |
+| `color` | none | The agent's own colour in the Pine app, written `#rrggbb` (kept in lower case): its avatar is drawn in it, and while its conversation is in front the window's accent is that colour instead of the theme's (unless "The agent in front colours the window" is off in Settings > App). Display only; the terminal UI does not use it. Set it on the agent's avatar in the app (at the top of its page in Settings > Agents, or Colour in the side bar's menu on it), with `pine agent update <id> --color #e0805a` (`--color none` takes it away), or ask the main agent ("make scout blue"): `color` of `create_agent` and `update_agent`, which you confirm. Anything that is not `#rrggbb` is a configuration problem. |
 | `workspace` | `agents/<id>/workspace` | The agent's working folder. `AGENTS.md`, `SOUL.md`, `TOOLS.md` and `MEMORY.md` at its top are the agent's instructions and are loaded into its prompt. Must exist when you set it. |
 | `context` | `[]` | Further instruction files to load into the system prompt. |
 | `model`, `thinking` | from `defaults` | Per-agent model and thinking level. |

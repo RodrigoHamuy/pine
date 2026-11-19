@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import os from "node:os";
 import { Value } from "typebox/value";
 import { parseEnv } from "node:util";
-import { setEnv, unsetEnv } from "./env-file.ts";
+import { secretName, setEnv, unsetEnv } from "./env-file.ts";
 import { editJson } from "./mcp-config.ts";
 import type { SourcePlan, SourceType } from "./source-types.ts";
 import type { Router } from "./router.ts";
@@ -386,7 +386,7 @@ export class SourceHost {
 	}
 
 	private envName(name: string, agentId: string | undefined, option: string): string {
-		return `PINE_SOURCE_${[name, ...(agentId ? [agentId] : []), option].join("_").replace(/[^A-Za-z0-9]+/g, "_").toUpperCase()}`;
+		return secretName("SOURCE", name, agentId, option);
 	}
 
 	/**
@@ -1010,6 +1010,33 @@ export class SourceHost {
 	/** The sources that were set up for one conversation of an agent. */
 	boundTo(agentId: string, session: string): string[] {
 		return Object.entries(this.cfg.agents[agentId]?.sources ?? {}).filter(([, s]) => s.session === session).map(([name]) => name);
+	}
+
+	/**
+	 * An agent is about to get another id: its own sources stop and its subscriptions are taken
+	 * off the router, until `attach` starts them again under the new one. What they keep is moved
+	 * meanwhile (`renameAgent` in src/admin.ts).
+	 */
+	async detach(agentId: string): Promise<void> {
+		const agent = this.cfg.agents[agentId];
+		if (!agent) return;
+		for (const sub of agent.subscribe) this.router.remove(this.routeName(agentId, sub));
+		const own = (key: string) => key.endsWith(`@${agentId}`);
+		for (const key of [...this.starting.keys()].filter(own)) await this.starting.get(key);
+		for (const key of [...this.running.keys()].filter(own)) await this.halt(key);
+		for (const map of [this.errors, this.statuses, this.seen] as Array<Map<string, unknown>>) for (const key of [...map.keys()].filter(own)) map.delete(key);
+	}
+
+	/** The agent that `detach` stopped, under its new id: its subscriptions are routed again, and what has to run runs. */
+	async attach(agentId: string): Promise<void> {
+		const agent = this.cfg.agents[agentId];
+		if (!agent) return;
+		for (const sub of agent.subscribe) {
+			const found = sourceFor(this.cfg, agentId, sub.source);
+			if (found) this.router.add(this.route(agentId, found.key, found.source, sub));
+		}
+		this.wireGlobal();
+		for (const { key, source } of this.all()) if (key.endsWith(`@${agentId}`) && source.enabled && (source.start === "always" || this.subscribersOf(key).length)) await this.ensure(key);
 	}
 
 	/** Agents were added or removed: who a subscription for everyone reaches has changed. */

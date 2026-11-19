@@ -137,11 +137,12 @@ test("conversations: closing a tab that ends a subscription, and removing a conv
 	assert.match(out[0], /not changed \(test\)/);
 	assert.match(asked[0].why, /closing its tab ends what it is subscribed to on its own: inbox/);
 	assert.deepEqual(tabs(), ["main:main", "helper:watch"]);
-	// And the last tab stays open, whoever closes it.
+	// The last tab closes too, as it does in the Pine app: the list of tabs is then empty.
 	h.pine.cfg.agents.helper.subscribe.length = 0;
 	h.pine.agents.saveUiTabs([{ agent: "helper", session: "watch" }], 0);
 	out = await main(call("set_conversation", { agent: "helper", name: "watch", tab: false }));
-	assert.match(out[0], /It is the only tab that is open, and the last tab stays open/);
+	assert.doesNotMatch(out[0], /error|refused|stays open/i);
+	assert.deepEqual(tabs(), []);
 	await h.close();
 });
 

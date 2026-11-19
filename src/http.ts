@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import http from "node:http";
-import { checkNewAgent } from "./agent-admin.ts";
+import { checkAgentId } from "./admin.ts";
+import { checkNewAgent, instructionsWith } from "./agent-admin.ts";
 import type { AgentManager } from "./agents.ts";
-import { mainAgentId, type PineConfig } from "./config.ts";
+import { mainAgentId, type PineConfig, purposeOf } from "./config.ts";
 import { type Approvals, timingSafeEqual } from "./security.ts";
 import type { Bus, State, TaskStore } from "./store.ts";
 import { addServer, listServers, removeServer } from "./mcp-config.ts";
@@ -110,7 +111,7 @@ export class HttpServer {
 				if (url.pathname === "/agents") {
 					// (`modelProblem` only where there is one: why that agent's model cannot answer.)
 					const problems = await this.manager.modelProblems();
-					return send(200, Object.values(this.cfg.agents).map((a) => ({ id: a.id, main: a.id === mainAgentId(this.cfg), description: a.description, ...(a.color ? { color: a.color } : {}), workspace: a.workspace, model: a.model ?? this.cfg.defaults.model, thinking: a.thinking, mode: a.mode, delegates: a.delegates, ...(problems[a.id] ? { modelProblem: problems[a.id] } : {}) })));
+					return send(200, Object.values(this.cfg.agents).map((a) => ({ id: a.id, main: a.id === mainAgentId(this.cfg), description: purposeOf(a), ...(a.color ? { color: a.color } : {}), workspace: a.workspace, model: a.model ?? this.cfg.defaults.model, thinking: a.thinking, mode: a.mode, delegates: a.delegates, ...(problems[a.id] ? { modelProblem: problems[a.id] } : {}) })));
 				}
 				if (url.pathname === "/tasks") return send(200, this.tasks.list({ agent: q.get("agent") ?? undefined, session: q.get("session") ?? undefined, status: (q.get("status") as any) ?? undefined, limit: num("limit") }));
 				if (url.pathname === "/models") return send(200, await this.manager.availableModels());
@@ -263,8 +264,10 @@ export class HttpServer {
 			}
 			// Agents are made and removed by the owner here (`pine agent add`, `pine agent remove`), as the main agent does it by tool.
 			if (url.pathname === "/agents") {
-				if (typeof body.id !== "string" || typeof body.description !== "string" || typeof body.instructions !== "string") throw new HttpError(400, "id, description and instructions required");
-				const spec = { id: body.id, description: body.description, instructions: body.instructions, model: typeof body.model === "string" ? body.model : undefined, tools: Array.isArray(body.tools) ? body.tools.map(String) : undefined, color: typeof body.color === "string" ? body.color : undefined };
+				// What it is for is the first paragraph of its instructions; `description`, where a client still sends it, becomes that paragraph.
+				const instructions = typeof body.id === "string" ? instructionsWith(body.id, body.description, body.instructions) : "";
+				if (typeof body.id !== "string" || !instructions) throw new HttpError(400, "id and instructions required: who the agent is and how it works, the first paragraph saying what it is for");
+				const spec = { id: body.id, instructions, model: typeof body.model === "string" ? body.model : undefined, tools: Array.isArray(body.tools) ? body.tools.map(String) : undefined, color: typeof body.color === "string" ? body.color : undefined };
 				// What is wrong with the owner's values is theirs to correct, not a failure of the daemon.
 				try {
 					checkNewAgent(this.cfg, spec);
@@ -278,6 +281,24 @@ export class HttpServer {
 			if (parts[0] === "agents" && parts[2] === "erase" && parts.length === 3) {
 				if (body.agent !== parts[1]) throw new HttpError(400, `to remove the agent ${parts[1]} with everything it has, send { "agent": "${parts[1]}" }`);
 				return send(200, await this.manager.removeAgent(parts[1], body.keepFiles === true));
+			}
+			// Another id for an agent, with everything that carries its name (`pine agent rename`), as the main agent does it by tool.
+			// (An address of its own, and the agent's name once more in the body: "/agents/<id>/rename" renames a conversation.)
+			if (parts[0] === "agents" && parts[2] === "id" && parts.length === 3) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				if (body.agent !== parts[1] || typeof body.to !== "string") throw new HttpError(400, `to give the agent ${parts[1]} another id, send { "agent": "${parts[1]}", "to": "<new id>" }`);
+				try {
+					if (body.to.trim() !== parts[1]) checkAgentId(this.cfg, body.to.trim());
+				} catch (e) {
+					throw new HttpError(400, errText(e));
+				}
+				try {
+					return send(200, await this.manager.renameAgent(parts[1], body.to));
+				} catch (e) {
+					// Busy is the owner's to wait for, not a failure of the daemon.
+					if (/is working|left programs running|working on something/.test(errText(e))) throw new HttpError(409, errText(e));
+					throw e;
+				}
 			}
 			if (parts[0] === "agents" && parts[2] === "mode" && parts.length === 3) {
 				this.manager.setMode(parts[1], body.mode, body.anyway === true && typeof body.session === "string" ? body.session : undefined);

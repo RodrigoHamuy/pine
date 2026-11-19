@@ -51,6 +51,7 @@ const SYNONYMS: string[][] = [
 	["click", "press", "tap", "button", "pressed", "clicked"],
 	// Not "theme": its stem is "them", a word of every other question.
 	["colour", "color", "palette", "accent", "tint", "hue"],
+	["rename", "renamed", "renaming", "retitle", "relabel"],
 	["preview", "beta", "prerelease", "nightly", "canary", "unreleased"],
 	["notarise", "notarize", "notarization", "gatekeeper", "codesign"],
 	["rss", "atom", "podcast", "blog", "newsletter", "release", "changelog", "syndication"],

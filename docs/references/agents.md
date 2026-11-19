@@ -30,8 +30,9 @@ By hand: make the folder with an `agent.json` (`{}` is enough) and a `workspace/
 run `pine check`, and restart.
 
 To change an agent later (its model, its tools, its reach, a folder it may use, its
-instructions) or to remove it, ask the main agent as well: `update_agent` and `remove_agent`,
-described in [setup.md](setup.md) under "Changing and removing an agent". Nobody has to edit
+instructions), to give it another name or to remove it, ask the main agent as well:
+`update_agent`, `rename_agent` and `remove_agent`, described in [setup.md](setup.md) under
+"Changing and removing an agent" and "Renaming an agent". Nobody has to edit
 `agent.json` or delete a folder by hand.
 
 ## The files an agent keeps itself
@@ -222,7 +223,7 @@ declares them in **families**, which is about 11 500:
 | `pine_schedules` | `add_schedule`, `remove_schedule` |
 | `pine_mcp` | `add_mcp_server`, `remove_mcp_server`, and the three tools for a server's resources |
 | `pine_skills` | `add_skill`, `remove_skill` |
-| `pine_agents` | The main agent's: `create_agent`, `update_agent`, `remove_agent` |
+| `pine_agents` | The main agent's: `create_agent`, `update_agent`, `rename_agent`, `remove_agent` |
 | `pine_settings` | The main agent's: `set_setting`, `add_route`, `remove_route`, `add_model_server`, `remove_model_server` |
 | `pine_other` | `request_access`, `stop_program`, `state_get`, `state_set` |
 | `pine_conversations` | The main agent's: `read_conversation`, `set_conversation`, `remove_conversation` |
@@ -356,7 +357,7 @@ instruction files take effect on the agent's next task.
 Point `workspace` at the folder the agent should work in, typically an existing repository:
 
 ```json
-{ "description": "The house: contracts, utilities, solar", "workspace": "~/dev/house" }
+{ "workspace": "~/dev/house" }
 ```
 
 The agent's shell and file tools can read and write there and nowhere else in your home. Each
@@ -536,9 +537,13 @@ delegate(agent, task, wait?, thread?, worktree?)
   the task in a worktree of its own of the conversation's folder, and its work comes back as a
   branch to merge, as for sub-agents below. Not with `thread` or `wait: false`.
 
-Write `description` for the delegating model: it is the only thing it knows about the other
-agent. "Contract law; knows the case files in its workspace" works;
-"Gonzo" does not.
+What an agent is for, as the agents that delegate to it read it, is the first paragraph of its
+`AGENTS.md` (a heading above it aside), one line of at most 160 characters. Write it for the
+delegating model: "You are gonzo. Contract law; you know the case files in your workspace"
+works; "Gonzo" does not. An agent keeps its `AGENTS.md` itself, so it can change that line too.
+pine reads the file only as the plain file it is (not through a link, nor a file with a second
+name elsewhere), and otherwise shows nothing of it. In a home from before, an agent whose file
+has no such paragraph is shown with `description` from its `agent.json`.
 
 ## Sub-agents
 

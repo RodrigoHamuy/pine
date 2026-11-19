@@ -127,10 +127,10 @@ test("cache: a request begins with the one before it, whatever changed in betwee
 	extends_(one, last(), "after two lines were added to MEMORY.md");
 	// An agent is made: nothing that is declared, and nothing in the instructions, names the agents there are.
 	const two = last();
-	await say(mockMsg([{ tools: [call("pine_agents", { action: "create_agent", id: "books", description: "Keeps the books", instructions: "You keep the books." })] }, { text: "made" }]));
+	await say(mockMsg([{ tools: [call("pine_agents", { action: "create_agent", id: "books", instructions: "You keep the books." })] }, { text: "made" }]));
 	await say("third");
 	extends_(two, last(), "after an agent was created");
-	assert.match(rawTextOf(last().wire.messages.at(-1).content), /Agents you can hand tasks to: .*books \(Keeps the books\)/);
+	assert.match(rawTextOf(last().wire.messages.at(-1).content), /Agents you can hand tasks to: .*books \(You keep the books\.\)/);
 	// The daemon starts again: the same conversation, the same beginning, and no note said twice.
 	const three = last();
 	await h.restart();

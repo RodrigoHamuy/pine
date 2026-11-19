@@ -31,8 +31,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
-import { AGENT_COLOURS, type Look, type ThemeEntry } from "./theme.ts";
+import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { AgentColourPicker, AgentNameInput } from "@/components/agent-identity";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -53,7 +54,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 // the thing (a path, an address, a list of models). A Badge's variant follows its tone: default
 // for good, outline for warn, destructive for bad, secondary for none.
 
-function Page({ title, lead, children, actions }: { title: string; lead?: ReactNode; children: ReactNode; actions?: ReactNode }) {
+function Page({ title, lead, children, actions }: { title: ReactNode; lead?: ReactNode; children: ReactNode; actions?: ReactNode }) {
 	return (
 		<div data-slot="settings-page" className="mx-auto flex max-w-3xl flex-col gap-6 px-4 pt-6 pb-16 select-text @lg/settings:px-9 @lg/settings:pt-8">
 			<div className="flex items-start gap-2">
@@ -259,48 +260,26 @@ function FileTabs<K extends string>({ files, value, onChange, children }: { file
 	);
 }
 
-/** A colour to pick, with its hex beside it. */
-function ColourInput({ id, name, value, onChange }: { id: string; name: string; value: string; onChange: (hex: string) => void }) {
-	return (
-		<div className="flex items-center gap-1.5">
-			<span className="font-mono text-xs text-muted-foreground">{value}</span>
-			<Input id={id} name={name} type="color" className="w-10 p-0.5" value={value} onChange={(e) => onChange(e.target.value)} />
-		</div>
-	);
-}
-
 /**
- * An agent's own colour: None (the theme's accent), one of the presets, or any other under "Other…".
- * Each preset is shown as the agent's avatar would be drawn in it. "none" is how a change takes it away.
+ * An agent's avatar and name at the top of its page, each the place where it is changed: the avatar
+ * opens its colour, the name turns into a field that renames it. Both are saved at once, apart from
+ * the page's other changes.
  */
-function AgentColour({ id, value, onChange }: { id: string; value?: string; onChange: (color: string) => void }) {
-	const [other, setOther] = useState(false);
-	const field = useId();
-	const color = value && value !== "none" ? value : undefined;
-	const preset = AGENT_COLOURS.some((c) => c.hex === color);
-	const choice = other ? "other" : !color ? "none" : preset ? color : "other";
-	const pick = (next: string | undefined) => {
-		if (!next) return;
-		setOther(next === "other");
-		// Other only opens the input: the colour changes when the owner sets one there.
-		if (next !== "other") onChange(next);
-	};
+function AgentHeading({ id, color }: { id: string; color?: string }) {
+	const [editing, setEditing] = useState(false);
 	return (
-		<Field className="col-span-full" data-setting="agent-colour">
-			<FieldLabel id={`${field}-label`}>Colour</FieldLabel>
-			<ToggleGroup aria-labelledby={`${field}-label`} variant="outline" size="sm" className="flex-wrap" value={[choice]} onValueChange={(v) => pick(v[0])}>
-				<ToggleGroupItem value="none">None</ToggleGroupItem>
-				{AGENT_COLOURS.map((c) => (
-					<ToggleGroupItem key={c.hex} value={c.hex} aria-label={c.name} title={c.name}>
-						<AgentAvatar agent={{ id, color: c.hex }} size="sm" />
-					</ToggleGroupItem>
-				))}
-				<ToggleGroupItem value="other">Other…</ToggleGroupItem>
-			</ToggleGroup>
-			{/* Without a colour the input shows a neutral grey, which is no change until the owner sets one. */}
-			{choice === "other" ? <ColourInput id={`${field}-other`} name="color" value={color ?? "#808080"} onChange={onChange} /> : null}
-			<FieldDescription>Its avatar is drawn in it, in the side bar, on its tabs and in its panel, and while its conversation is in front the window's accent is this colour (unless that is turned off in Settings &gt; App). None keeps the theme's own.</FieldDescription>
-		</Field>
+		<span className="flex items-center gap-2">
+			<AgentColourPicker agent={{ id, color }} onChange={(c) => void store.colourAgent(id, c)} trigger={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Colour of ${id}`} title="Change its colour" />}>
+				<AgentAvatar agent={{ id, color }} />
+			</AgentColourPicker>
+			{editing ? (
+				<AgentNameInput id={id} className="max-w-60" onDone={(to) => (setEditing(false), to && void store.renameAgent(id, to))} />
+			) : (
+				<Button variant="ghost" className="-mx-1 h-auto px-1 text-xl font-semibold tracking-tight" title="Rename it" onClick={() => setEditing(true)}>
+					{id}
+				</Button>
+			)}
+		</span>
 	);
 }
 
@@ -354,7 +333,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 	const modeAbout = MODES.find((m) => m.value === mode)?.about;
 	return (
 		<Page
-			title={d.id}
+			title={<AgentHeading id={d.id} color={(store.agent(d.id) ?? d).color} />}
 			lead={d.main ? "The main agent: it administers pine, and may hand work to every other agent." : `An agent with its own workspace at ${tilde(d.workspace)}.`}
 			actions={
 				<>
@@ -368,12 +347,6 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				Agents
 			</Button>
 			<FieldGroup className={FORM_GRID}>
-				<Field className="col-span-full">
-					<FieldLabel htmlFor={`${field}-description`}>What it is for</FieldLabel>
-					<Input id={`${field}-description`} value={now("description")} onChange={(e) => put("description", e.target.value)} />
-					<FieldDescription>One line. Other agents read it when they decide whom to hand work to.</FieldDescription>
-				</Field>
-				<AgentColour id={d.id} value={now("color")} onChange={(color) => put("color", color)} />
 				<Field>
 					<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
 					<Select items={modelItems} value={(change.model as string) ?? d.model ?? ""} onValueChange={(v) => put("model", v || "default")}>
@@ -544,13 +517,12 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 
 function NewAgent({ close, made }: { close: () => void; made: (id: string) => void }) {
 	const models = useLoad(() => api.models());
-	const [f, setF] = useState({ id: "", description: "", instructions: "", model: "" });
+	const [f, setF] = useState({ id: "", instructions: "", model: "" });
 	const name = useRef<HTMLInputElement>(null);
 	const field = useId();
 	const modelItems = [{ value: "", label: "pine's default" }, ...(models.data ?? []).map((m) => ({ value: m, label: m }))];
 	const create = async () => {
-		const instructions = f.instructions.trim() || `You are ${f.id}. ${f.description.trim().replace(/\.?$/, ".")}`;
-		const done = await store.attempt(() => api.createAgent({ id: f.id.trim(), description: f.description.trim(), instructions, model: f.model || undefined }));
+		const done = await store.attempt(() => api.createAgent({ id: f.id.trim(), instructions: f.instructions.trim(), model: f.model || undefined }));
 		if (!done) return;
 		store.agents = await store.askAgents().catch(() => store.agents);
 		void store.refreshConversations();
@@ -571,14 +543,9 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 							<FieldDescription>Lowercase letters, digits, - and _ (for example research, home, books).</FieldDescription>
 						</Field>
 						<Field>
-							<FieldLabel htmlFor={`${field}-description`}>What it is for</FieldLabel>
-							<Input id={`${field}-description`} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
-							<FieldDescription>One line. Other agents read it when they decide whom to hand work to.</FieldDescription>
-						</Field>
-						<Field>
 							<FieldLabel htmlFor={`${field}-instructions`}>Instructions</FieldLabel>
-							<Textarea id={`${field}-instructions`} className="min-h-24 max-h-64" value={f.instructions} onChange={(e) => setF({ ...f, instructions: e.target.value })} placeholder="You are …" />
-							<FieldDescription>Who it is and how it works, written to the agent itself. Left empty, it starts from what it is for and keeps the file itself from then on.</FieldDescription>
+							<Textarea id={`${field}-instructions`} className="min-h-24 max-h-64" value={f.instructions} onChange={(e) => setF({ ...f, instructions: e.target.value })} placeholder={`You are ${f.id || "books"}. You keep the household's accounts.\n\nHow you work: …`} />
+							<FieldDescription>Who it is and how it works, written to the agent itself: its AGENTS.md, which it keeps itself from then on. The first paragraph says what it is for; other agents read it when they decide whom to hand work to.</FieldDescription>
 						</Field>
 						<Field>
 							<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
@@ -599,7 +566,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 						</Field>
 					</FieldGroup>
 				</ScrollArea>
-				<DialogFooter><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={!f.id.trim() || !f.description.trim()} onClick={() => void create()}>Create agent</Button></DialogFooter>
+				<DialogFooter><Button variant="outline" onClick={close}>Cancel</Button><Button disabled={!f.id.trim() || !f.instructions.trim()} onClick={() => void create()}>Create agent</Button></DialogFooter>
 			</DialogContent>
 		</Dialog>
 	);
@@ -1910,7 +1877,7 @@ export function Routes() {
 							);
 						})
 					) : (
-						<EmptyView icon={GitBranchIcon} title="No routes">Nothing needs one to begin with. A route is for glue: noting a value in shared state, passing an event on, a quick model look before an agent is woken.</EmptyView>
+						<EmptyView icon={GitBranchIcon} title="No routes">You don’t need any to start. A route does a small job when an event comes in, without waking an agent: it saves a value for later, sends the event on under another name, or asks a model a quick question first.</EmptyView>
 					)
 				) : list.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>

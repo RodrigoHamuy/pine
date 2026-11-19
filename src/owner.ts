@@ -13,7 +13,7 @@ import { addRoute, applySetting, checkRoute, checkSetting, dropRoute, type Route
 import { AGENT_TOOLS } from "./agent-admin.ts";
 import type { AgentManager } from "./agents.ts";
 import { browserReady } from "./browser-build.ts";
-import { type AgentConfig, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, SHARED_FILES } from "./config.ts";
+import { type AgentConfig, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, purposeOf, SHARED_FILES } from "./config.ts";
 import { login, logout, type Prompter } from "./login.ts";
 import { findServer, piMcp, serverStates } from "./mcp-config.ts";
 import { addModelServer, checkServerName, listModelServers, lookAt, modelKeys, modelServerUsers, removeModelServer, serverUrl } from "./models.ts";
@@ -282,7 +282,7 @@ export class OwnerApi {
 			const file = (name: string) => textOf(path.join(a.workspace, name));
 			const files = { instructions: file("AGENTS.md"), soul: file("SOUL.md"), tooling: file("TOOLS.md"), memory: file("MEMORY.md"), rules: textOf(path.join(a.dir, "AGENTS.md")) };
 			return {
-				id: a.id, main: a.id === mainAgentId(cfg), description: a.description, ...(a.color ? { color: a.color } : {}), workspace: a.workspace, dir: a.dir,
+				id: a.id, main: a.id === mainAgentId(cfg), description: purposeOf(a), ...(a.color ? { color: a.color } : {}), workspace: a.workspace, dir: a.dir,
 				...(a.model ? { model: a.model } : {}), defaultModel: cfg.defaults.model, thinking: a.thinking, mode: a.mode,
 				tools: a.tools ?? AGENT_TOOLS, allTools: AGENT_TOOLS, delegates: a.delegates, network: a.sandbox.network === true, read: a.sandbox.read, write: a.sandbox.write,
 				holdings: { ...this.manager.holdings(a.id), routes: cfg.routes.filter((r) => r.agent === a.id).map((r) => r.name) },

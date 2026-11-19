@@ -2,9 +2,9 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { type AgentConfig, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpServerConfig, PINE_ROOT, RESERVED_TOPICS, SOURCE_TYPES, unsandboxed } from "./config.ts";
+import { type AgentConfig, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpServerConfig, PINE_ROOT, purposeOf, RESERVED_TOPICS, SOURCE_TYPES, unsandboxed } from "./config.ts";
 import { AGENT_TOOLS, checkNewAgent, createAgent } from "./agent-admin.ts";
-import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkRoute, checkSetting, dropRoute, routesText, SETTINGS, settingsText } from "./admin.ts";
+import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkAgentId, checkRoute, checkSetting, dropRoute, namedBy, routesText, SETTINGS, settingsText } from "./admin.ts";
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
 import { finish as finishWorktree, type Worktree, worktreeName } from "./worktrees.ts";
 import { SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
@@ -113,7 +113,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 	};
 
 	if (profile.delegates.length) {
-		const roster = profile.delegates.map((id) => `${id} (${cfg.agents[id].description || "no description"})`).join("; ");
+		const roster = profile.delegates.map((id) => `${id} (${purposeOf(cfg.agents[id]) || "no purpose given"})`).join("; ");
 		tools.push(
 			defineTool({
 				name: "delegate",
@@ -1031,8 +1031,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					description: `Create a new agent, when your owner asks for one: an agent with a job of its own, its own workspace and its own instructions (for example a researcher, a home agent, a bookkeeper). Only you, the main agent, can do this. Your owner sees what you propose and confirms it. The agent exists at once, without a restart: your owner can open it in the terminal UI, and you can hand it work with delegate. Existing agents: ${Object.keys(cfg.agents).join(", ")}.`,
 					parameters: Type.Object({
 						id: Type.String({ description: "Its name: lowercase letters, digits, - and _ (for example research, home, books)" }),
-						description: Type.String({ description: "One line: what it is for. Other agents read it when they decide whom to hand work to" }),
-						instructions: Type.String({ description: "Who it is and how it works, written to the agent itself (\"You are ...\"): its job, what it should and should not do, how it reports. This becomes its instruction file" }),
+						instructions: Type.String({ description: "Who it is and how it works, written to the agent itself (\"You are ...\"): its job, what it should and should not do, how it reports. This becomes its instruction file. Its first paragraph says in a sentence or two what it is for: other agents read that line when they decide whom to hand work to" }),
 						model: Type.Optional(Type.String({ description: "Model for it, as provider/model. Leave out to use pine's default" })),
 						tools: Type.Optional(Type.String({ description: `Built-in tools it gets, separated by commas. Default: all of ${AGENT_TOOLS.join(", ")}. Leave out bash, edit and write for an agent that should only read` })),
 						color: Type.Optional(Type.String({ description: "Its colour in the Pine app, as #rrggbb (for example #e0805a for coral). Only when your owner names one; leave out for none" })),
@@ -1045,9 +1044,9 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 							if (!models.includes(p.model)) throw new Error(`there is no model "${p.model}". Models: ${models.slice(0, 40).join(", ")}`);
 						}
 						// What cannot work is said now, before the owner is asked anything.
-						const spec = { id: p.id, description: p.description, instructions: p.instructions, model: p.model, tools: wanted, color: p.color };
+						const spec = { id: p.id, instructions: p.instructions, model: p.model, tools: wanted, color: p.color };
 						const checked = checkNewAgent(cfg, spec);
-						const summary = `create the agent "${p.id}": ${checked.description}\nModel: ${p.model ?? `${cfg.defaults.model} (the default)`} · tools: ${checked.tools.join(", ")}${checked.color ? ` · color: ${checked.color}` : ""}\nInstructions:\n${truncate(p.instructions.trim(), 1200)}`;
+						const summary = `create the agent "${p.id}": ${checked.purpose}\nModel: ${p.model ?? `${cfg.defaults.model} (the default)`} · tools: ${checked.tools.join(", ")}${checked.color ? ` · color: ${checked.color}` : ""}\nInstructions:\n${truncate(p.instructions.trim(), 1200)}`;
 						const decision = await confirm("create_agent", summary, `this adds an agent to pine: a folder of its own under agents/${p.id}, working inside its own sandbox like every agent${careful()}`, signal);
 						if (!decision.allow) throw new Error(`not created (${decision.by}). Do not retry; tell your owner what you proposed.`);
 						const made = createAgent(cfg, spec);
@@ -1122,7 +1121,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				const has = manager.holdings(a.id);
 				const reach = unsandboxed(levelOf(a)) ? "your owner's whole account + network, no sandbox" : `its own folders, in the sandbox${a.sandbox.network ? " + network" : ""}`;
 				const opened = [...a.sandbox.read.map((p) => `${p} (read)`), ...a.sandbox.write.map((p) => `${p} (read and change)`)];
-				return `- ${a.id}${a.id === mainId ? " (the main agent: you)" : ""}: ${a.description || "no description"}
+				return `- ${a.id}${a.id === mainId ? " (the main agent: you)" : ""}: ${purposeOf(a) || "no purpose given"}
     model ${a.model ?? `${cfg.defaults.model} (the default)`} · reasoning ${a.thinking} · mode ${a.mode} · reach ${reach} · built-in tools ${some(a.tools ?? AGENT_TOOLS)}${a.color ? ` · color ${a.color}` : ""}
     conversations: ${some(has.conversations)} · event sources: ${some(has.sources)} · MCP servers: ${some(has.servers)} · schedules: ${some(has.schedules)} · skills: ${some(has.skills)} · ${has.files} file${has.files === 1 ? "" : "s"} in its workspace${has.working ? " · working right now" : ""}${opened.length ? `\n    folders opened for it: ${opened.join(", ")}` : ""}`;
 			};
@@ -1133,7 +1132,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					description: 'List pine\'s agents: what each is for, its model, mode and reach, and what it has (conversations, event sources, MCP servers, schedules, skills). With "id": one agent in full, with its workspace and its instructions. Use it when your owner asks which agents there are, and before you change or remove one. Do not look for this in files: pine\'s files are closed to you.',
 					parameters: Type.Object({ id: Type.Optional(Type.String({ description: "One agent, in full. Leave out for all of them" })) }),
 					execute: async (_id, p) => {
-						if (!p.id) return ok(`${Object.keys(cfg.agents).length} agent${Object.keys(cfg.agents).length === 1 ? "" : "s"}.\n${[cfg.agents[mainId], ...Object.values(cfg.agents).filter((a) => a.id !== mainId)].map(about).join("\n")}\n\ncreate_agent makes one, update_agent changes one, remove_agent takes one out. For what one agent has: sources, mcp_servers, schedules, skills and their add_ and remove_ tools, each with "agent".`);
+						if (!p.id) return ok(`${Object.keys(cfg.agents).length} agent${Object.keys(cfg.agents).length === 1 ? "" : "s"}.\n${[cfg.agents[mainId], ...Object.values(cfg.agents).filter((a) => a.id !== mainId)].map(about).join("\n")}\n\ncreate_agent makes one, update_agent changes one, rename_agent gives one another id, remove_agent takes one out. For what one agent has: sources, mcp_servers, schedules, skills and their add_ and remove_ tools, each with "agent".`);
 						const a = cfg.agents[p.id];
 						if (!a) throw new Error(`there is no agent "${p.id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
 						const text = readOwn(path.join(a.workspace, "AGENTS.md"), 6000);
@@ -1145,12 +1144,11 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				defineTool({
 					name: "update_agent",
 					label: "Change agent",
-					description: `Change an agent's settings, when your owner asks for it: what it is for, its colour in the Pine app, its instructions, its model, how much it reasons, its mode, its built-in tools, whom it may hand work to, how far its shell and file tools reach, and folders outside its workspace that it may use. Give only what changes; the rest stays. Your owner sees the change and confirms it, and it holds from the agent's next message on. What an agent has (event sources, MCP servers, schedules, skills) is not changed here: use those tools with "agent".`,
+					description: `Change an agent's settings, when your owner asks for it: its colour in the Pine app, its instructions (whose first paragraph says what it is for), its model, how much it reasons, its mode, its built-in tools, whom it may hand work to, how far its shell and file tools reach, and folders outside its workspace that it may use. Give only what changes; the rest stays. Your owner sees the change and confirms it, and it holds from the agent's next message on. What an agent has (event sources, MCP servers, schedules, skills) is not changed here: use those tools with "agent".`,
 					parameters: Type.Object({
 						id: Type.String({ description: `The agent. Agents: ${Object.keys(cfg.agents).join(", ")}` }),
-						description: Type.Optional(Type.String({ description: "One line: what it is for" })),
 						color: Type.Optional(Type.String({ description: 'Its colour in the Pine app, as #rrggbb (for example #3366cc for blue). "none" takes it away' })),
-						instructions: Type.Optional(Type.String({ description: "The whole new text of its instructions, written to the agent itself. It replaces what is there: read the present text with agents (id) first and give back all of it with your change" })),
+						instructions: Type.Optional(Type.String({ description: "The whole new text of its instructions, written to the agent itself; its first paragraph says what it is for. It replaces what is there: read the present text with agents (id) first and give back all of it with your change" })),
 						soul: Type.Optional(Type.String({ description: "The whole new text of its SOUL.md: who it is, its character and tone, written to the agent itself. It replaces what is there: read the present text with agents (id) first and give back all of it with your change. Use this, not instructions, when your owner speaks of its personality or how it should sound" })),
 						tooling: Type.Optional(Type.String({ description: "The whole new text of its own TOOLS.md: defaults and preferences for tools that are for this agent alone, on top of the TOOLS.md for all agents. It replaces what is there: read the present text with agents (id) first and give back all of it with your change. What is for all agents is not set here: you write that into the TOOLS.md in pine's home" })),
 						model: Type.Optional(Type.String({ description: 'As provider/model. "default" for pine\'s default model' })),
@@ -1168,13 +1166,40 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						notHere("changing an agent");
 						const target = cfg.agents[p.id];
 						if (!target) throw new Error(`there is no agent "${p.id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
-						const change: AgentChange = { description: p.description, color: p.color, instructions: p.instructions, soul: p.soul, tooling: p.tooling, model: p.model, thinking: p.thinking, mode: p.mode, tools: listOf(p.tools), delegates: listOf(p.delegates), network: p.network, read: p.read, write: p.write, forget: p.forget };
+						const change: AgentChange = { color: p.color, instructions: p.instructions, soul: p.soul, tooling: p.tooling, model: p.model, thinking: p.thinking, mode: p.mode, tools: listOf(p.tools), delegates: listOf(p.delegates), network: p.network, read: p.read, write: p.write, forget: p.forget };
 						const checked = checkAgentChange(cfg, target, change, p.model && p.model !== "default" ? await manager.availableModels() : []);
 						const decision = await confirm("update_agent", `change the agent "${target.id}"\n${checked.lines.join("\n")}`, `this changes an agent in pine's configuration${checked.warnings.length ? `. Note: ${checked.warnings.join("; ")}` : ""}`, signal);
 						if (!decision.allow) throw new Error(`not changed (${decision.by}). Do not retry; tell your owner what you proposed.`);
 						applyAgentChange(cfg, target, checked);
 						await manager.refreshSessions(change.delegates ? undefined : [target.id]);
 						return ok(`Your owner confirmed it. Changed for ${target.id}:\n${checked.lines.join("\n")}\nIt holds from ${target.id === agent.id ? "your" : "its"} next message on.`);
+					},
+				}),
+				defineTool({
+					name: "rename_agent",
+					label: "Rename agent",
+					description: `Give an agent another id, when your owner asks for it. Everything that names it follows: its folder, its conversations with their history, its event sources, schedules and skills, the routes that wake it, the other agents' lists of whom they hand work to, and what pine keeps under its name. Not while it is working. Your owner confirms it. Its instructions are not changed: if they say its old name, change them with update_agent. This is how an agent is renamed: never rename its folder with the shell.`,
+					parameters: Type.Object({
+						id: Type.String({ description: `The agent. Agents: ${Object.keys(cfg.agents).join(", ")}` }),
+						to: Type.String({ description: "Its new id: lowercase letters, digits, - and _, starting with a letter" }),
+					}),
+					execute: async (_id, p, signal) => {
+						run();
+						notHere("renaming an agent");
+						const target = cfg.agents[p.id];
+						if (!target) throw new Error(`there is no agent "${p.id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
+						const to = String(p.to ?? "").trim();
+						if (to === target.id) return ok(`The agent is called ${to} already.`);
+						// Its conversations end with the rename, this one too: it is done from outside.
+						if (target.id === agent.id) throw new Error(`you cannot rename yourself: your conversation would end in the middle of it. Tell your owner they rename you in the Pine app (Settings, Agents: click your name) or with: pine agent rename ${agent.id} ${to}`);
+						checkAgentId(cfg, to);
+						const has = manager.holdings(target.id);
+						if (has.working) throw new Error(`${target.id} is working; rename it when it is done`);
+						const named = [...cfg.routes.filter((x) => x.agent === target.id).map((x) => `the route ${x.name}`), ...namedBy(cfg, target.id).delegators.map((a) => `${a}'s list of whom it hands work to`)];
+						const decision = await confirm("rename_agent", `rename the agent "${target.id}" to "${to}"\nIts folder, conversations, sources, schedules and skills move with it${named.length ? `, and these follow: ${named.join("; ")}` : ""}.`, "this gives an agent another id everywhere in pine", signal);
+						if (!decision.allow) throw new Error(`not renamed (${decision.by}). Do not retry; tell your owner what you proposed.`);
+						const done = await manager.renameAgent(target.id, to);
+						return ok(`Your owner confirmed it. The agent ${target.id} is called ${to} now, and everything that named it follows.${done.addresses.length ? ` Tell your owner its webhook address${done.addresses.length === 1 ? " is" : "es are"} now ${done.addresses.join(", ")}, for whoever calls ${done.addresses.length === 1 ? "it" : "them"}.` : ""}${done.problem ? ` WARNING, tell your owner: the configuration does not load now (${done.problem}).` : ""} Its instructions are as they were: if they name it by its old id, change them with update_agent.`);
 					},
 				}),
 				defineTool({
@@ -1194,7 +1219,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						const has = manager.holdings(target.id);
 						const woken = cfg.routes.filter((x) => x.agent === target.id).map((x) => x.name);
 						const files = p.keep_files ? `Its folder is KEPT: moved to removed/ in pine's home, where nothing uses it (${has.files} file${has.files === 1 ? "" : "s"} in its workspace).` : `Its folder is DELETED, with ${has.files} file${has.files === 1 ? "" : "s"} in its workspace and everything said to it. This cannot be undone.`;
-						const summary = `remove the agent "${target.id}": ${target.description || "no description"}\n${has.working ? "It is working right now and is stopped. " : ""}With it go: conversations: ${some(has.conversations)}; event sources: ${some(has.sources)}; MCP servers: ${some(has.servers)}; schedules: ${some(has.schedules)}; skills: ${some(has.skills)}${woken.length ? `; routes that wake it: ${woken.join(", ")}` : ""}\n${files}${has.outside ? `\nIts workspace ${target.workspace} lies outside pine's home and is left as it is.` : ""}`;
+						const summary = `remove the agent "${target.id}": ${purposeOf(target) || "no purpose given"}\n${has.working ? "It is working right now and is stopped. " : ""}With it go: conversations: ${some(has.conversations)}; event sources: ${some(has.sources)}; MCP servers: ${some(has.servers)}; schedules: ${some(has.schedules)}; skills: ${some(has.skills)}${woken.length ? `; routes that wake it: ${woken.join(", ")}` : ""}\n${files}${has.outside ? `\nIts workspace ${target.workspace} lies outside pine's home and is left as it is.` : ""}`;
 						const decision = await confirm("remove_agent", summary, "this takes an agent out of pine for good", signal);
 						if (!decision.allow) throw new Error(`not removed (${decision.by}). Do not retry; tell your owner.`);
 						const gone = await manager.removeAgent(target.id, p.keep_files === true);

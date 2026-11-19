@@ -84,6 +84,7 @@ export interface TranscriptEntry {
 export interface AgentInfo {
 	id: string;
 	main: boolean;
+	/** What it is for: the first paragraph of its AGENTS.md (or, in an older home, `description` in its agent.json). */
 	description: string;
 	/** Its own colour (`#rrggbb`), where it has one: the source of its avatar's scheme. */
 	color?: string;
@@ -445,8 +446,11 @@ export const api = {
 	// The themes of pine's home, as colours (theme.ts), and the one in force. A pine older than themes has none: an empty list.
 	themes: () => get<{ theme: string; chosen: string | null; themes: ThemeEntry[] }>("/themes"),
 	agentDetail: (agent: string) => get<AgentDetail>(`${a(agent)}/detail`),
-	createAgent: (body: { id: string; description: string; instructions: string; model?: string; tools?: string[] }) => post<{ id: string; workspace: string }>("/agents", body),
+	// What it is for is the first paragraph of `instructions` (the daemon's `purposeOf`).
+	createAgent: (body: { id: string; instructions: string; model?: string; tools?: string[] }) => post<{ id: string; workspace: string }>("/agents", body),
 	updateAgent: (agent: string, change: Record<string, unknown>) => post<{ lines: string[]; warnings: string[] }>(`${a(agent)}/update`, change),
+	// Another id for an agent: its own address, with the agent's name once more ("rename" is a conversation's).
+	renameAgent: (agent: string, to: string) => post<{ id: string; routes: string[]; addresses: string[]; problem?: string }>(`${a(agent)}/id`, { agent, to }),
 	eraseAgent: (agent: string, keepFiles: boolean) => post<{ kept?: string; problem?: string }>(`${a(agent)}/erase`, { agent, keepFiles }),
 	shared: () => get<Array<{ name: string; about: string; text: string }>>("/shared"),
 	setShared: (name: string, text: string) => post<{ ok: boolean }>("/shared", { name, text }),

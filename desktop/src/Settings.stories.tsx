@@ -117,7 +117,7 @@ export const General: Story = { args: { section: "general" } };
 /** The list of agents, each a row to open: main, its mode, its model and workspace. */
 export const Agents: Story = { args: { section: "agents" } };
 
-/** One agent's page: its colour (a preset, coral) beside None and Other, then its model, mode, tools and files. */
+/** One agent's page: at the top its avatar in its colour (coral), which opens the colour, and its name, which renames it; then its model, mode, tools and files. */
 export const AgentPage: Story = { args: { section: "agents", agent: "scout" } };
 
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */

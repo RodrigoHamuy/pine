@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { type McpServerConfig, mcpTaints, type PineConfig, toPiMcp } from "./config.ts";
-import { unsetEnv } from "./env-file.ts";
+import { secretName, unsetEnv } from "./env-file.ts";
 
 /** Change a JSON configuration file in place, keeping what is not touched (including ${NAME} placeholders). */
 export function editJson(file: string, change: (json: any) => void): void {
@@ -73,7 +73,7 @@ export function addServer(cfg: PineConfig, name: string, server: McpServerConfig
 
 /** The name under which a key of a server's environment is kept in .env. */
 export function mcpEnvName(server: string, agentId: string | undefined, variable: string): string {
-	return `PINE_MCP_${[server, ...(agentId ? [agentId] : []), variable].join("_").replace(/[^A-Za-z0-9]+/g, "_").toUpperCase()}`;
+	return secretName("MCP", server, agentId, variable);
 }
 
 export function removeServer(cfg: PineConfig, name: string, agentId?: string): boolean {

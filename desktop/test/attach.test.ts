@@ -40,8 +40,8 @@ before(async () => {
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-attach-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
 	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port }, defaults: { model: "mock/m", mode: "safe" } }));
-	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent" }));
-	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
+	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({}));
+	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 	// The browser of the web tools counts as there, whatever this machine has: Playwright's own
 	// variable names a folder that carries its marks. (What the app asks when it is missing is
 	// app.test.ts's to test, and its question would stand in front of what is clicked here.)
@@ -91,8 +91,8 @@ test("with \"keep pine running\" a daemon the app started goes on after it", asy
 	try {
 		fs.cpSync(path.join(home, "models.json"), path.join(kept, "models.json"));
 		write(path.join(kept, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: keptPort }, defaults: { model: "mock/m", mode: "safe" } }));
-		write(path.join(kept, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent" }));
-		write(path.join(kept, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
+		write(path.join(kept, "agents", "main", "agent.json"), JSON.stringify({}));
+		write(path.join(kept, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 		write(path.join(kept, "desktop-data", "prefs.json"), JSON.stringify({ keepRunning: true }));
 		const second = await electron.launch({ args: [root], env: { ...process.env, PINE_HOME: kept, PINE_DESKTOP_DATA: path.join(kept, "desktop-data"), PINE_DESKTOP_DEV_URL: "" } });
 		const page = await second.firstWindow();

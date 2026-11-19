@@ -114,6 +114,11 @@ export class Goals {
 		this.key = sessionKey;
 	}
 
+	/** Whether a goal of one of the agent's conversations is being judged right now. */
+	judgingFor(agent: string): boolean {
+		return [...this.judging.keys()].some((id) => id.startsWith(`goal:${agent}:`));
+	}
+
 	private id(agent: string, session: string): string {
 		return `goal:${agent}:${session}`;
 	}

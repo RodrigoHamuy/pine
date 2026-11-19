@@ -88,15 +88,17 @@ test("pine agent list, add, update and remove: in the files when no daemon runs,
 	assert.match(list, /^main \(main\): /);
 	assert.match(list, /old: Kept the old books\n    model mock\/m \(the default\) · reasoning off · mode safe · reach its own folders \(sandbox\)\n    conversations: none · sources: none · MCP servers: none · schedules: none · skills: none · routes: wake-old · 1 file in /);
 	assert.match(await pine("agent", "add", "books", "--description", "Keeps the books", "--tools", "read,grep"), /^Created the agent books \(tools: read, grep\)\. Its workspace is .*agents\/books\/workspace\. It is there when pine is started\.$/);
-	assert.deepEqual(json(file("agents", "books", "agent.json")), { description: "Keeps the books", tools: ["read", "grep"] });
+	assert.deepEqual(json(file("agents", "books", "agent.json")), { tools: ["read", "grep"] }, "what it is for is the first paragraph of its instructions, not a key of its own");
 	assert.equal(fs.readFileSync(file("agents", "books", "workspace", "AGENTS.md"), "utf8"), "You are books. Keeps the books.\n");
 	assert.match(await fails("agent", "add", "Bad Id", "--description", "x"), /is not a usable agent id/);
 	assert.match(await fails("agent", "add", "books", "--description", "again"), /an agent called books exists already/);
-	assert.match(await fails("agent", "add", "nodesc"), /usage: pine agent add <id> --description/);
+	assert.match(await fails("agent", "add", "nodesc"), /usage: pine agent add <id> \[--description/);
 
 	// Changing an agent in the files: only what is given changes, the rest stays.
-	assert.match(await pine("agent", "update", "books", "--description", "Does the books now", "--tools", "read,bash,grep"), /^Updated the agent books \(it is there when pine is started\):\n  description: Does the books now\n  built-in tools: read, grep -> read, bash, grep$/);
-	assert.deepEqual(json(file("agents", "books", "agent.json")), { description: "Does the books now", tools: ["read", "bash", "grep"] });
+	assert.match(await fails("agent", "update", "books", "--description", "Does the books now"), /the first paragraph of its instructions/);
+	assert.match(await pine("agent", "update", "books", "--tools", "read,bash,grep"), /^Updated the agent books \(it is there when pine is started\):\n  built-in tools: read, grep -> read, bash, grep$/);
+	assert.deepEqual(json(file("agents", "books", "agent.json")), { tools: ["read", "bash", "grep"] });
+	assert.match(await pine("agent", "list"), /books: You are books\. Keeps the books\.\n/);
 	assert.match(await pine("agent", "update", "books", "--color", "#E0805A"), /^Updated the agent books \(it is there when pine is started\):\n  color: #e0805a$/);
 	assert.equal(json(file("agents", "books", "agent.json")).color, "#e0805a");
 	assert.match(await fails("agent", "update", "books", "--color", "coral"), /a colour is written #rrggbb/);

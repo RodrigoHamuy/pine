@@ -412,6 +412,44 @@ export class Store extends Model {
 	}
 
 	/**
+	 * Give an agent another id (its name on its settings page, or Rename in the side bar's menu).
+	 * The daemon moves everything that carries its name; here its tabs, its folded group and what
+	 * is known about its conversations follow it. Says whether it is renamed.
+	 */
+	async renameAgent(from: string, wanted: string): Promise<boolean> {
+		const to = wanted.trim();
+		if (!to || to === from) return false;
+		const done = await this.attempt(() => api.renameAgent(from, to));
+		if (!done) return false;
+		const moved = (key: string) => (key === from ? to : key.startsWith(`${from}:`) ? `${to}${key.slice(from.length)}` : key);
+		for (const t of this.tabs) if (t.kind === "chat" && t.agent === from) ((t.agent = to), t.touch());
+		for (const map of [this.conversations, this.taints, this.sessionModes, this.busy, this.titles] as Array<Map<string, unknown>>) {
+			for (const [key, value] of [...map]) {
+				if (moved(key) === key) continue;
+				map.delete(key);
+				map.set(moved(key), value);
+			}
+		}
+		for (const set of [this.pins, this.folded]) for (const key of [...set]) if (moved(key) !== key) set.delete(key), set.add(moved(key));
+		localStorage.setItem("pine.folded", JSON.stringify([...this.folded]));
+		if (this.settingsAgent === from) this.settingsAgent = to;
+		this.saveTabs();
+		this.agents = await this.askAgents().catch(() => this.agents);
+		void this.refreshConversations(to);
+		if (done.problem) this.flash(`${from} is called ${to} now, but the configuration does not load: ${done.problem}`, "bad", 12_000);
+		else this.flash(`${from} is called ${to} now.${done.addresses.length ? ` Its webhook address${done.addresses.length === 1 ? " is" : "es are"} now ${done.addresses.join(", ")}: give ${done.addresses.length === 1 ? "it" : "them"} to whoever calls.` : ""}`, done.addresses.length ? "warn" : "good", done.addresses.length ? 12_000 : 3500);
+		this.touch();
+		return true;
+	}
+
+	/** An agent's colour, set at once: a preset, any other `#rrggbb`, or "none". */
+	async colourAgent(id: string, color: string): Promise<void> {
+		if (!(await this.attempt(() => api.updateAgent(id, { color })))) return;
+		this.agents = await this.askAgents().catch(() => this.agents);
+		this.touch();
+	}
+
+	/**
 	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > App
 	 * show it); when the owner asked (the menu, the settings), the answer is said too.
 	 */

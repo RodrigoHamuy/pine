@@ -18,13 +18,13 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { dropConversationSkills, renameConversationSkills, skillDirs } from "./skills.ts";
-import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, sharedFiles, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
+import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, purposeOf, sharedFiles, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import { Limiter, type Slot } from "./limiter.ts";
 import { modelRuntime } from "./models.ts";
 import { families, NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
 import { type Occupant, type Page, SlotBook } from "./slots.ts";
 import { type Approvals, checkPath, denialTools, globMatch, grantable, grantPath, isInside, isOpen, levelOf, matchesToolPattern, outsidePath, ownFileOf, realish, received, type Roots, bin, rootsFor, sandboxArgv, sandboxAvailable, sandboxGuard, type SandboxVariant, shellEnv, shellRefuses, shq, toolSubject } from "./security.ts";
-import { type AgentChange, applyAgentChange, checkAgentChange, countFiles, eraseAgent } from "./admin.ts";
+import { type AgentChange, applyAgentChange, checkAgentChange, checkAgentId, countFiles, eraseAgent, renameAgent } from "./admin.ts";
 import { createAgent, type NewAgent } from "./agent-admin.ts";
 import type { Router } from "./router.ts";
 import { Denials, fromOutput, gather, looksFailed, reaches, sortDenials, there, type Want, wantKey, wantText } from "./access.ts";
@@ -88,7 +88,7 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
 	const mainId = mainAgentId(cfg);
 	const role =
 		agent.id === mainId
-			? `You are the main agent, and pine's administrator: what your owner wants changed about pine, you change with your tools, and you never tell them to edit pine's files or delete its folders by hand. Only you can create, change and remove agents (create_agent, update_agent, remove_agent; agents lists them), change pine's settings (settings, set_setting) and its routes (routes, add_route, remove_route), set things up for all agents (scope "global") and bring in a new kind of event source (add_source_type). And you can do for another agent what it can do for itself: each tool for event sources, MCP servers, schedules and skills takes "agent". Your owner confirms what matters.`
+			? `You are the main agent, and pine's administrator: what your owner wants changed about pine, you change with your tools, and you never tell them to edit pine's files or delete its folders by hand. Only you can create, change, rename and remove agents (create_agent, update_agent, rename_agent, remove_agent; agents lists them), change pine's settings (settings, set_setting) and its routes (routes, add_route, remove_route), set things up for all agents (scope "global") and bring in a new kind of event source (add_source_type). And you can do for another agent what it can do for itself: each tool for event sources, MCP servers, schedules and skills takes "agent". Your owner confirms what matters.`
 			: `Creating, changing and removing agents, pine's settings, and anything that is for all agents, is the main agent's job (its id is ${mainId}): you have no tools for it. When your owner wants that, tell them to ask ${mainId}.`;
 	// What holds for all agents: the main agent is told that it keeps these files and what goes into which,
 	// every other agent that they are in its instructions and whom to tell.
@@ -1526,8 +1526,8 @@ export class AgentManager {
 			this.conversationChanged("open", agentId, session);
 			return { changed: true, unsubscribed: [] };
 		}
+		// The last tab may close too: a UI with none open says so (the Pine app), or keeps its own (the terminal UI).
 		if (at < 0) return { changed: false, unsubscribed: [] };
-		if (ui.tabs.length === 1) throw new Error("it is the only tab that is open, and the last tab stays open");
 		const unsubscribed = (await this.sources?.closeSession(agentId, session)) ?? [];
 		this.saveUiTabs(ui.tabs.filter((_, i) => i !== at), at <= ui.active ? Math.max(0, ui.active - 1) : ui.active);
 		this.conversationChanged("close", agentId, ui.tabs[at].session);
@@ -1674,6 +1674,54 @@ export class AgentManager {
 		await this.refreshSessions();
 		this.log.info(`removed the agent ${agentId}${gone.routes.length ? `, with the route${gone.routes.length === 1 ? "" : "s"} ${gone.routes.join(", ")}` : ""}${gone.kept ? `; its folder is kept at ${gone.kept}` : ", with its folder"}`);
 		return { unsubscribed: [...new Set(unsubscribed)], ...gone };
+	}
+
+	/**
+	 * Give an agent another id (the owner's hand in a UI, `pine agent rename`, the main agent's
+	 * rename_agent). Not while it works or while something waits for it, and not while it left a
+	 * program running: those carry its name in places pine cannot move. Its conversations end
+	 * here and start again with its next message, under the new name; its sources and schedules
+	 * stop and start again; what pine keeps under its name moves (`renameAgent` in src/admin.ts);
+	 * and what the owner allowed its conversations goes with them.
+	 */
+	async renameAgent(from: string, wanted: string): Promise<{ id: string; routes: string[]; addresses: string[]; problem?: string }> {
+		const agent = this.cfg.agents[from];
+		if (!agent) throw new Error(`there is no agent "${from}"`);
+		const to = wanted.trim();
+		if (to === from) return { id: to, routes: [], addresses: [] };
+		checkAgentId(this.cfg, to);
+		const ours = (key: string) => key.startsWith(`${from}:`);
+		const open = this.tasks.list({ limit: 1000 }).filter((t) => t.status === "pending" || t.status === "running");
+		if ([...this.running.values()].some((r) => r.task.agent === from) || open.some((t) => t.agent === from) || [...this.creating.keys(), ...this.lanes.keys()].some(ours) || this.goals.judgingFor(from)) throw new Error(`${from} is working; rename it when it is done`);
+		const waiting = open.filter((t) => t.meta.notify?.agent === from).map((t) => t.agent);
+		if (waiting.length) throw new Error(`${[...new Set(waiting)].join(", ")} ${waiting.length === 1 ? "is" : "are"} working on something for ${from}; rename it when that is done`);
+		const keys = [...new Set(["main", ...this.conversations(from).map((c) => this.keysOf(c.session)[0])])].flatMap((k) => [`${from}:${k}`, `${from}:${k}~u`]);
+		if (keys.some((k) => this.programs.list(k).length || this.programs.running(k).length)) throw new Error(`${from} left programs running in a conversation; stop them first (they are listed beside it), then rename it`);
+		for (const live of [...this.lives.values()]) if (live.agent.id === from) await this.dispose(live);
+		await this.sources?.detach(from);
+		this.slots.forgetAgent(from);
+		const done = renameAgent(this.cfg, { kv: this.kv, tasks: this.tasks }, from, to);
+		// What the owner allowed its conversations, and what they were refused, is theirs under the new name too.
+		const moved = (key: string) => `${to}${key.slice(from.length)}`;
+		for (const map of [this.allowed, this.grants, this.refused] as Array<Map<string, unknown>>) {
+			for (const key of [...map.keys()].filter(ours)) {
+				map.set(moved(key), map.get(key));
+				map.delete(key);
+			}
+		}
+		for (const key of [...this.bypassAnyway].filter(ours)) this.bypassAnyway.delete(key), this.bypassAnyway.add(moved(key));
+		// What it was told is told again.
+		for (const map of [this.handed, this.toldMode, this.toldHome, this.declared] as Array<Map<string, unknown>>) for (const key of [...map.keys()].filter(ours)) map.delete(key);
+		for (const name of done.routes) {
+			const route = this.cfg.routes.find((r) => r.name === name);
+			if (route) this.router?.add(route);
+		}
+		await this.sources?.attach(to);
+		this.schedules?.agentRenamed();
+		await this.refreshSessions();
+		if (done.problem) this.log.error(`after renaming the agent ${from} to ${to} the configuration does not load: ${done.problem}`);
+		this.log.info(`renamed the agent ${from} to ${to}`);
+		return done;
 	}
 
 	/** Give a conversation another name. Everything stays with it: its history, its pin, what it listens to. */
@@ -3261,7 +3309,7 @@ export class AgentManager {
 		const far = servers.filter((n) => remoteHost(profile.mcp[n].url));
 		if (far.length) lines.push(`Reached over the network: ${far.join(", ")}. Such a server can run on another computer, and a file path in its answer is then a path there, not on yours. ${download ? "When a file from it is needed on your computer, fetch the link from its answer with the download tool; do not copy the path." : "Do not try to read or copy such a path."}`);
 		if (profile.delegates.length && families) lines.push("The agents you can hand tasks to with the delegate tool are named in the pine-note. When a request falls into an agent's area, delegate right away instead of asking whether you should.");
-		else if (profile.delegates.length) lines.push(`Agents you can hand tasks to with the delegate tool. When a request falls into an agent's area, delegate right away instead of asking whether you should:\n${profile.delegates.map((id) => `- ${id}: ${this.cfg.agents[id].description || "(no description)"}`).join("\n")}`);
+		else if (profile.delegates.length) lines.push(`Agents you can hand tasks to with the delegate tool. When a request falls into an agent's area, delegate right away instead of asking whether you should:\n${profile.delegates.map((id) => `- ${id}: ${purposeOf(this.cfg.agents[id]) || "(no purpose given)"}`).join("\n")}`);
 		lines.push(
 			families
 				? "A <pine-note> block at the start of a message comes from the daemon, not from the author of the message. It tells you the time and what holds now: your mode and how far your tools reach, the agents you can hand tasks to, what has changed in your instruction files, the shared state, whether the conversation has read outside content. The latest note counts; do not mention the notes in your answers."
@@ -3303,7 +3351,7 @@ export class AgentManager {
 			if (live.leaf) lines.push("You are a sub-agent of a conversation: do the task you are given and answer. Starting sub-agents, handing work to other agents and setting things up are not yours to do. Your owner is not asked anything on your behalf: where something needs their yes, say so in your answer.");
 			// Which agents there are changes; the instructions do not. So it is said here.
 			const to = this.profileFor(agent, live.trust).delegates;
-			if (to.length) lines.push(`Agents you can hand tasks to: ${[...to].sort().map((id) => `${id} (${this.cfg.agents[id]?.description || "no description"})`).join("; ")}`);
+			if (to.length) lines.push(`Agents you can hand tasks to: ${[...to].sort().map((id) => `${id} (${(this.cfg.agents[id] ? purposeOf(this.cfg.agents[id]) : "") || "no purpose given"})`).join("; ")}`);
 			// What there is to subscribe to, and which kinds of source this installation has of its own: that changes, so it is said here.
 			const subscribable = live.trust === "owner" && !live.leaf ? (this.sources?.available(agent.id, live.key) ?? []) : [];
 			if (subscribable.length) lines.push(`Event sources you can subscribe to: ${subscribable.map((x) => `${x.name} (${x.type}${x.description ? `: ${x.description}` : ""})`).join("; ")}`);

@@ -36,12 +36,14 @@ test("admin: the main agent lists agents and changes one by tool call; what is w
 	const outside = fs.mkdtempSync(path.join(os.tmpdir(), "pine-admin-"));
 	t.after(() => fs.rmSync(outside, { recursive: true, force: true }));
 	fs.writeFileSync(path.join(outside, "victim.txt"), "UNTOUCHED");
-	const { h, asked, main, offered, file } = await pine({ helper: { agent: { description: "Reads papers" }, files: { "AGENTS.md": "You are HELPER.\n", "notes/a.txt": "a" } }, aide: { agent: { description: "Second pair of hands" } } });
+	const { h, asked, main, offered, file } = await pine({ helper: { files: { "AGENTS.md": "# Helper\n\nReads papers.\n\nYou are HELPER.\n", "notes/a.txt": "a" } }, aide: { agent: { description: "Second pair of hands" } } });
 
 	let out = await main(call("agents"), call("agents", { id: "helper" }), call("agents", { id: "nobody" }));
 	assert.match(out[0], /^3 agents\.\n- main \(the main agent: you\)/);
-	assert.match(out[0], /- helper: Reads papers\n    model mock\/m \(the default\) · reasoning off · mode safe · reach its own folders, in the sandbox · built-in tools read, bash, edit, write, grep, find, ls\n    conversations: none · event sources: none · MCP servers: none · schedules: none · skills: none · 2 files in its workspace/);
-	assert.match(out[1], /workspace: .*agents\/helper\/workspace\n    may hand work to: none\n\nIts instructions \(AGENTS\.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them\):\nYou are HELPER\./);
+	// What an agent is for is the first paragraph of its AGENTS.md (the heading aside); in an older home without one, `description` in agent.json.
+	assert.match(out[0], /- aide: Second pair of hands\n/);
+	assert.match(out[0], /- helper: Reads papers\.\n    model mock\/m \(the default\) · reasoning off · mode safe · reach its own folders, in the sandbox · built-in tools read, bash, edit, write, grep, find, ls\n    conversations: none · event sources: none · MCP servers: none · schedules: none · skills: none · 2 files in its workspace/);
+	assert.match(out[1], /workspace: .*agents\/helper\/workspace\n    may hand work to: none\n\nIts instructions \(AGENTS\.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them\):\n# Helper\n\nReads papers\.\n\nYou are HELPER\./);
 	assert.match(out[2], /there is no agent "nobody"\. Agents: aide, helper, main/);
 	assert.equal(asked.length, 0, "looking asks nobody");
 
@@ -69,14 +71,14 @@ test("admin: the main agent lists agents and changes one by tool call; what is w
 	assert.equal(fs.readFileSync(file("helper"), "utf8"), before);
 
 	// A good one: the owner sees it line by line, and it holds at once.
-	out = await main(call("update_agent", { id: "helper", description: "Reads  scanned papers", thinking: "low", tools: "read, grep", delegates: "aide", read: [outside], network: true }));
+	out = await main(call("update_agent", { id: "helper", thinking: "low", tools: "read, grep", delegates: "aide", read: [outside], network: true }));
 	assert.equal(asked.length, 1);
 	assert.equal(asked[0].tool, "update_agent");
 	assert.equal(asked[0].agent, "main");
-	assert.equal(asked[0].summary, `change the agent "helper"\ndescription: Reads scanned papers\nreasoning: off -> low\nbuilt-in tools: read, bash, edit, write, grep, find, ls -> read, grep\nmay hand work to: nobody -> aide\nnetwork from its shell: no -> yes\nmay read: ${fs.realpathSync(outside)}`);
+	assert.equal(asked[0].summary, `change the agent "helper"\nreasoning: off -> low\nbuilt-in tools: read, bash, edit, write, grep, find, ls -> read, grep\nmay hand work to: nobody -> aide\nnetwork from its shell: no -> yes\nmay read: ${fs.realpathSync(outside)}`);
 	assert.match(asked[0].why, /Note: with the network its commands can send what it reads anywhere/);
 	assert.match(out[0], /^Your owner confirmed it\. Changed for helper:/);
-	assert.deepEqual(json(file("helper")), { description: "Reads scanned papers", thinking: "low", tools: ["read", "grep"], delegates: ["aide"], sandbox: { network: true, read: [fs.realpathSync(outside)] } });
+	assert.deepEqual(json(file("helper")), { thinking: "low", tools: ["read", "grep"], delegates: ["aide"], sandbox: { network: true, read: [fs.realpathSync(outside)] } });
 	const helper = h.pine.cfg.agents.helper;
 	assert.deepEqual([helper.thinking, helper.tools, helper.delegates, helper.sandbox.network], ["low", ["read", "grep"], ["aide"], true]);
 	const has = await offered("helper");
@@ -95,12 +97,23 @@ test("admin: the main agent lists agents and changes one by tool call; what is w
 	const md = path.join(h.workspace("helper"), "AGENTS.md");
 	fs.rmSync(md);
 	fs.symlinkSync(path.join(outside, "victim.txt"), md);
-	out = await main(call("agents", { id: "helper" }), call("update_agent", { id: "helper", instructions: "You are HELPER, and you answer in English." }));
+	out = await main(call("agents", { id: "helper" }), call("agents"), call("update_agent", { id: "helper", instructions: "You are HELPER, and you answer in English." }));
+	out.push(...(await main(call("agents"))));
 	assert.match(out[0], /\(none, or not readable\)/, "a link is not read either");
+	// Nor for what it is for, which other agents and the owner's lists show: a link could stand for any file of pine's.
+	assert.match(out[1], /- helper: no purpose given\n/);
+	assert.doesNotMatch(out[1], /UNTOUCHED/);
+	assert.match(out[3], /- helper: You are HELPER, and you answer in English\.\n/, "a new first paragraph says what it is for from then on");
 	assert.equal(fs.readFileSync(path.join(outside, "victim.txt"), "utf8"), "UNTOUCHED");
 	assert.ok(!fs.lstatSync(md).isSymbolicLink());
 	assert.equal(fs.readFileSync(md, "utf8"), "You are HELPER, and you answer in English.\n");
 	assert.doesNotThrow(() => loadConfig(h.home));
+	// A second name of a file elsewhere (a hard link) is not read for it either.
+	fs.rmSync(md);
+	fs.linkSync(path.join(outside, "victim.txt"), md);
+	assert.doesNotMatch((await main(call("agents")))[0], /UNTOUCHED/);
+	fs.rmSync(md);
+	fs.writeFileSync(md, "You are HELPER, and you answer in English.\n");
 
 	// Tools that are given later reach a conversation that is already there, from its next message on, and after a restart.
 	const builtIn = async () => {
@@ -223,19 +236,116 @@ test("admin: the main agent removes an agent with everything it has, after the o
 	await stub.close();
 });
 
+test("admin: an agent renamed by the owner takes everything that named it along, keeps its conversations, and nothing is left under the old id", async () => {
+	const { h, asked, main, as, idle, file } = await pine(
+		{
+			helper: { agent: { description: "Reads papers" }, files: { "inbox/.keep": "" } },
+			aide: { agent: { description: "Second pair of hands", delegates: ["helper"] } },
+		},
+		{ http: { port: 0 }, mcp: { notes: { url: "http://127.0.0.1:9/mcp", agents: ["helper", "main"] } }, routes: [{ name: "on-paper", on: "test/paper", agent: "helper", prompt: "A paper came." }, { name: "note-hooks", on: "source/hook@helper/#", set: { "seen/hook": "yes" } }] },
+	);
+	const helper = as("helper");
+	await helper(call("add_source", { name: "papers", type: "folder", options: { dir: "inbox", settle: "50ms" }, description: "scanned papers", note: "Say which paper arrived.", throttle: "0s" }));
+	await helper(call("add_source", { name: "hook", type: "webhook", options: {}, description: "calls from the build" }));
+	await helper(call("add_schedule", { name: "weekly", task: "Sum up the week.", every: "7d" }), call("add_skill", { name: "filing", description: "File a paper. Use when one arrives.", instructions: "1. Read it." }));
+	const side = as("helper", "side");
+	await side(call("add_schedule", { name: "soon", task: "Look again.", every: "1h" }));
+	await h.pine.agents.run({ agent: "helper", session: "side", prompt: "REMEMBER-ME-42", ...owner });
+	await idle();
+	h.pine.agents.kv.set("taint:helper:main", "something from outside");
+	h.pine.agents.kv.set("conversations:pinned", ["helper:side"]);
+	const env = fs.readFileSync(path.join(h.home, ".env"), "utf8");
+	assert.match(env, /^PINE_SOURCE_HOOK_HELPER_SECRET=/m, "a secret kept under its name");
+	const secret = /^PINE_SOURCE_HOOK_HELPER_SECRET=(.*)$/m.exec(env)![1];
+
+	// What is wrong is said, and nothing moves.
+	await assert.rejects(h.pine.agents.renameAgent("helper", "Not An Id"), /not a usable agent id/);
+	await assert.rejects(h.pine.agents.renameAgent("helper", "aide"), /an agent called aide exists already/);
+	await assert.rejects(h.pine.agents.renameAgent("ghost", "spirit"), /there is no agent "ghost"/);
+	assert.ok(h.pine.cfg.agents.helper);
+
+	const done = await h.pine.agents.renameAgent("helper", "scholar");
+	assert.deepEqual(done.routes.sort(), ["note-hooks", "on-paper"]);
+	assert.deepEqual(done.addresses, ["/hook/hook@scholar"], "a webhook's address has the agent's id in it, and the owner is told the new one");
+	assert.equal(done.problem, undefined);
+
+	// Under its new id, in the files and in the daemon.
+	assert.equal(h.pine.cfg.agents.helper, undefined);
+	assert.equal(h.pine.cfg.agents.scholar.description, "Reads papers");
+	assert.ok(fs.existsSync(path.join(h.home, "agents", "scholar", "workspace", "inbox")) && !fs.existsSync(path.join(h.home, "agents", "helper")));
+	assert.deepEqual(json(file("aide")).delegates, ["scholar"]);
+	assert.deepEqual(h.pine.cfg.agents.aide.delegates, ["scholar"]);
+	const pineJson = json(path.join(h.home, "pine.json"));
+	assert.deepEqual(pineJson.mcp.notes.agents, ["scholar", "main"]);
+	assert.deepEqual(pineJson.routes.map((r: any) => [r.agent, r.on]), [["scholar", "test/paper"], [undefined, "source/hook@scholar/#"]]);
+	assert.equal(pineJson.main, "main");
+	const env2 = fs.readFileSync(path.join(h.home, ".env"), "utf8");
+	assert.equal(/^PINE_SOURCE_HOOK_SCHOLAR_SECRET=(.*)$/m.exec(env2)?.[1], secret, "the secret is the same, under the new name");
+	assert.match(fs.readFileSync(file("scholar"), "utf8"), /\$\{PINE_SOURCE_HOOK_SCHOLAR_SECRET\}/);
+	assert.equal(h.pine.agents.kv.get("taint:scholar:main"), "something from outside", "what it read from outside still marks it");
+	assert.deepEqual(h.pine.agents.kv.get("conversations:pinned"), ["scholar:side"]);
+	assert.ok(h.pine.tasks.list({ agent: "scholar" }).length > 0);
+	assert.equal(h.pine.tasks.list({ agent: "helper" }).length, 0);
+	const sources = h.pine.sources.list().filter((s: any) => s.scope === "scholar").map((s: any) => `${s.name}${s.running ? " runs" : ""}`).sort();
+	assert.deepEqual(sources, ["hook", "papers runs"], "what ran before runs again under the new id");
+	assert.deepEqual(h.pine.schedules!.list().filter((s: any) => s.scope === "scholar").map((s: any) => s.name).sort(), ["soon", "weekly"]);
+
+	// Nothing is left that carries the old id: no stored entry, no file or folder, no line of configuration.
+	for (const prefix of ["taint:", "keep:", "folder:", "todos:", "turns:", "undone:", "prefix:", "note:", "goal:", "timer:", "source:"]) assert.deepEqual(h.pine.agents.kv.keys(prefix).filter((k: string) => k.includes("helper") && h.pine.agents.kv.get(k) != null), [], prefix);
+	const left = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? [e.name, ...left(path.join(dir, e.name))] : [e.name])) : []);
+	assert.deepEqual(left(h.home).filter((n) => /helper/.test(decodeURIComponent(n))), [], "no file or folder in pine's home is named after it");
+	for (const f of [path.join(h.home, "pine.json"), path.join(h.home, ".env"), ...Object.keys(h.pine.cfg.agents).map(file)]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /helper/i, f);
+	assert.doesNotThrow(() => loadConfig(h.home));
+
+	// Its conversations go on where they were, and what woke it wakes it under the new id.
+	await h.pine.agents.run({ agent: "scholar", session: "side", prompt: "and now?", ...owner });
+	assert.match(JSON.stringify(h.mock.state.requests.at(-1).body.messages), /REMEMBER-ME-42/, "the conversation kept its history");
+	h.pine.bus.publish("test/paper", { n: 1 }, { source: "test" });
+	await until(() => h.pine.tasks.list({ agent: "scholar" }).some((t: any) => /A paper came/.test(t.prompt)), 3000, "the route to wake it");
+	await idle();
+
+	// The main agent renames another agent by tool, with the owner's yes; itself it cannot.
+	const n = asked.length;
+	let res = await main(call("rename_agent", { id: "scholar", to: "main" }), call("rename_agent", { id: "main", to: "boss" }), call("rename_agent", { id: "scholar", to: "reader" }));
+	assert.match(res[0], /an agent called main exists already/);
+	assert.match(res[1], /you cannot rename yourself/);
+	assert.match(res[2], /is called reader now/);
+	assert.equal(asked.length, n + 1);
+	assert.equal(asked[n].summary, `rename the agent "scholar" to "reader"\nIts folder, conversations, sources, schedules and skills move with it, and these follow: the route on-paper; aide's list of whom it hands work to.`);
+	assert.deepEqual(json(file("aide")).delegates, ["reader"]);
+
+	// The main agent renamed by the owner, through the control API as the app does it, stays the main agent.
+	// The address is the agent's own: "rename" is a conversation's, and a body without the agent's name once more is refused.
+	await idle();
+	const api = async (url: string, body: unknown) => {
+		const r = await fetch(`http://127.0.0.1:${h.pine.http!.port}${url}`, { method: "POST", headers: { authorization: `Bearer ${h.pine.token}`, "content-type": "application/json" }, body: JSON.stringify(body) });
+		return { status: r.status, json: (await r.json()) as any };
+	};
+	assert.equal((await api("/agents/main/id", { to: "boss" })).status, 400);
+	assert.equal((await api("/agents/main/id", { agent: "main", to: "Boss!" })).status, 400);
+	const renamed = await api("/agents/main/id", { agent: "main", to: "boss" });
+	assert.equal(renamed.status, 200, JSON.stringify(renamed.json));
+	assert.equal(renamed.json.id, "boss");
+	assert.equal(json(path.join(h.home, "pine.json")).main, "boss");
+	assert.equal(loadConfig(h.home).main, "boss");
+	res = await as("boss")(call("agents"));
+	assert.match(res[0], /^3 agents\.\n- boss \(the main agent: you\)/);
+	await h.close();
+});
+
 test("admin: the main agent gives an agent a colour, when it makes one and later, with the owner's yes; a bad colour is refused before anyone is asked", async () => {
 	const { h, asked, main, file } = await pine({ helper: { agent: { description: "Reads papers" } } });
 
 	// Made with a colour: the owner sees it, and it is written in lower case.
-	let out = await main(call("create_agent", { id: "watcher", description: "Watches the feeds", instructions: "You are WATCHER.", color: "#E0805A" }));
+	let out = await main(call("create_agent", { id: "watcher", instructions: "You are WATCHER. You watch the feeds.", color: "#E0805A" }));
 	assert.equal(asked.length, 1);
-	assert.equal(asked[0].summary, `create the agent "watcher": Watches the feeds\nModel: mock/m (the default) · tools: read, bash, edit, write, grep, find, ls · color: #e0805a\nInstructions:\nYou are WATCHER.`);
+	assert.equal(asked[0].summary, `create the agent "watcher": You are WATCHER. You watch the feeds.\nModel: mock/m (the default) · tools: read, bash, edit, write, grep, find, ls · color: #e0805a\nInstructions:\nYou are WATCHER. You watch the feeds.`);
 	assert.match(out[0], /The agent watcher exists now/);
 	assert.equal(json(file("watcher")).color, "#e0805a");
 	assert.equal(h.pine.cfg.agents.watcher.color, "#e0805a");
 
 	// A colour that is not one is refused before anything is asked or written.
-	out = await main(call("create_agent", { id: "scout", description: "Scouts", instructions: "You are SCOUT.", color: "coral" }), call("update_agent", { id: "helper", color: "blue" }));
+	out = await main(call("create_agent", { id: "scout", instructions: "You are SCOUT.", color: "coral" }), call("update_agent", { id: "helper", color: "blue" }));
 	assert.match(out[0], /a colour is written #rrggbb/);
 	assert.match(out[1], /a colour is written #rrggbb/);
 	assert.equal(asked.length, 1);

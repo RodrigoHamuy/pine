@@ -50,8 +50,8 @@ before(async () => {
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
 	// (Without a sandbox, so that the server may listen; a port of its own for the daemon.)
 	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "auto" }, security: { askAccess: false } }));
-	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent" }));
-	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
+	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({}));
+	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 	// The server ends by itself after a while, should this test not get to stop it.
 	write(path.join(home, "agents", "main", "workspace", "serve.mjs"), `import http from "node:http";\nhttp.createServer((q, s) => s.end("ok")).listen(${port}, "127.0.0.1");\nsetTimeout(() => process.exit(0), 120000);\n`);
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
