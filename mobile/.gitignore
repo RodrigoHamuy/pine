@@ -1,0 +1,11 @@
+# What the build and Capacitor make: never committed (android/.gitignore, Capacitor's, says the same for Gradle).
+node_modules/
+dist/
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/capacitor-cordova-android-plugins/
+android/app/src/main/assets/public/
+android/app/src/main/assets/capacitor.config.json
+android/app/src/main/assets/capacitor.plugins.json

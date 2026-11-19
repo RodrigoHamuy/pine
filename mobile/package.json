@@ -1,0 +1,24 @@
+{
+  "name": "pine-mobile",
+  "productName": "Pine",
+  "version": "0.1.0",
+  "description": "The mobile app for pine: the desktop app's page on a phone, for the pine of another machine",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build",
+    "sync": "vite build && cap sync android",
+    "check": "tsc --noEmit",
+    "test": "node --test 'test/*.test.ts'"
+  },
+  "devDependencies": {
+    "@capacitor/android": "^8.6.2",
+    "@capacitor/cli": "^8.6.2",
+    "@capacitor/core": "^8.6.2",
+    "@types/node": "^26.6.6",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8"
+  }
+}
