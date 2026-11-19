@@ -9,10 +9,10 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
-import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
+import { launchApp } from "./support/app.ts";
+import { freePort } from "./support/daemon.ts";
 
-const root = path.resolve(import.meta.dirname, "..");
 let app: any;
 let page: any;
 let mock: any;
@@ -37,14 +37,8 @@ const waitFor = async (what: string, ok: () => boolean) => {
 };
 
 before(async () => {
-	if (!fs.existsSync(path.join(root, "dist", "index.html")) || !fs.existsSync(path.join(root, "dist-electron", "main.js"))) throw new Error("the app is not built: node scripts/build.mjs in desktop/");
 	// A port nobody listens on, for the server the agent starts.
-	port = await new Promise<number>((r) => {
-		const s = net.createServer().listen(0, "127.0.0.1", () => {
-			const p = (s.address() as net.AddressInfo).port;
-			s.close(() => r(p));
-		});
-	});
+	port = await freePort();
 	mock = await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g });
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-running-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
@@ -71,7 +65,7 @@ before(async () => {
 	});
 	await new Promise<void>((r) => door.listen(0, "127.0.0.1", r));
 
-	app = await electron.launch({ args: [root], env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
+	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
 	page = await app.firstWindow();
 	await page.setViewportSize?.({ width: 1280, height: 820 }).catch(() => {});
 	// What would open in the owner's own browser is noted instead.

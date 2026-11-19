@@ -16,7 +16,8 @@ to change the code.
 | `npm run baseline` | The 59 pi SDK checks in `baseline/`. Run it after upgrading pi. |
 | `node src/cli.ts <command>` | The CLI without installing it. |
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
-| `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. About thirty seconds; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
+| `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. It builds the app once for the run into a temp folder of its own and every test starts that build (`desktop/scripts/test.mjs`, `desktop/test/support/app.ts`), so runs of several checkouts at once never test each other's build; two files at a time, two minutes at most a test. A few minutes; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
+| `npm run dev:preview` (in `desktop/`) | The app's page in an ordinary browser on a throwaway pine; `dev:preview:home` on `~/.pine`, whose daemon it never stops. Each checkout has ports of its own, from its path (`desktop/scripts/launch-json.mjs`), and `.claude/launch.json` is written with them by `npm install` in `desktop/` (it is not in git). After pulling, or when the preview pane lists no `desktop-preview`, run `node desktop/scripts/launch-json.mjs` (or `npm install` in `desktop/`). A preview and `npm run dev` end with whatever started them (`desktop/scripts/leash.mjs`). |
 | `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark at a phone's width (360) and the window's (1280) through its modes (`desktop/.storybook/modes.ts`), so no dark or phone twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`, and the smoke test also after a change to the page's markup that it finds the page by (`data-slot` names): no workflow runs it. |
 
@@ -131,7 +132,7 @@ desktop/            the desktop app (Electron; a package of its own, not part of
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app), src/ the
                     page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
                     patterns for the conversation and the input, Streamdown for answers, lucide icons,
-                    usehooks-ts for the side panel's breakpoint; ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what packs it.
+                    usehooks-ts for the side panel's breakpoint; ui-sdk only for what shadcn lacks), test/ the app driven through its real window, scripts/ what builds, tests, previews and packs it.
                     The stock components are src/components/ui and nothing else, all from shadcn's own registry in the
                     style components.json names, the chat components included (`npx shadcn add message`, not
                     `@ai-elements/message`). AI Elements means shadcn's pages of patterns (ui.shadcn.com/docs/ai-elements),
@@ -703,7 +704,10 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
 - The desktop app has its own tests in `desktop/test/`, run by `npm run desktop:test` and not
   by `npm test`: they start the real app (Electron, driven by Playwright through its window)
   on a temp home with the mock model server, and a daemon of its own on port 0, so a pine the
-  developer has running is left alone. `sees()` there waits for something on screen and says
+  developer has running is left alone. They start the build of the run (`launchApp` in
+  `desktop/test/support/app.ts`), never `desktop/dist`. A test that waits for a daemon, or for one
+  to be gone, asks `/overview` with the test home's token (`desktop/test/support/daemon.ts`), never
+  `/health`, which any daemon answers: runs of several checkouts start daemons side by side. `sees()` there waits for something on screen and says
   what is there instead when it does not come. What a menu item does is sent as the menu
   sends it (`menu()`): keys typed into the page do not reach the system's menus. Voice input
   is tested with a stand-in for the helper (`PINE_DESKTOP_VOICE`, for tests only); the `live:`

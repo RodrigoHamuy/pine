@@ -9,11 +9,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { _electron as electron } from "playwright-core";
 import { startMock } from "../../baseline/tests/mock.mjs";
 import { voiceTools } from "../../src/tui/voice.ts";
+import { launchApp } from "./support/app.ts";
 
-const root = path.resolve(import.meta.dirname, "..");
 const write = (file: string, content: string) => {
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	fs.writeFileSync(file, content);
@@ -36,7 +35,7 @@ test("live: the real voice helper's words arrive in the app's input", { skip: pr
 		write(listen, `#!/bin/sh\nexec "${helper}" --file "${audio}" "$@"\n`);
 		fs.chmodSync(listen, 0o755);
 
-		app = await electron.launch({ args: [root], env: { ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: listen } });
+		app = await launchApp({ ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: listen });
 		const page = await app.firstWindow();
 		await page.waitForSelector("[data-slot=empty] h1", { timeout: 60_000 });
 		await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", "voice"));

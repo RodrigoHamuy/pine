@@ -5,12 +5,12 @@ import assert from "node:assert/strict";
 import { type ChildProcess, spawn } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
-import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { build } from "vite";
 import { startMock } from "../../baseline/tests/mock.mjs";
+import { freePort, ours, stopKept } from "./support/daemon.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -160,6 +160,32 @@ test("stopping the preview removes the throwaway home and ends the daemon", asyn
 	await assert.rejects(fetch(`${daemon}/health`, { signal: AbortSignal.timeout(2000) }));
 });
 
+test("a preview whose starter is gone stops by itself, with its throwaway pine", async (t) => {
+	// The starter is a shell (as npm would be) that leaves the preview behind when it is killed.
+	const starter = spawn("/bin/sh", ["-c", `"${process.execPath}" "${path.join(root, "scripts", "preview.ts")}" & wait`], { cwd: root, env: { ...process.env, PORT: "0" }, stdio: ["ignore", "pipe", "ignore"] });
+	t.after(() => void (starter.exitCode === null && starter.kill("SIGKILL")));
+	let said = "";
+	const where = await new Promise<RegExpExecArray>((resolve, reject) => {
+		const timer = setTimeout(() => reject(new Error(`the preview did not come up. It said:\n${said}`)), 60_000);
+		starter.stdout!.on("data", (d: Buffer) => {
+			said += d.toString("utf8");
+			const pine = /pine\s+(http:\/\/\S+) on a throwaway home in (\S+)/.exec(said);
+			if (pine) (clearTimeout(timer), resolve(pine));
+		});
+	});
+	const [, base, throwaway] = where;
+	assert.ok(fs.existsSync(throwaway));
+	starter.kill("SIGKILL");
+	// It looks every second; stopping its daemon takes a moment more.
+	let gone = false;
+	for (let i = 0; i < 100 && !gone; i++) {
+		await new Promise((r) => setTimeout(r, 200));
+		gone = !fs.existsSync(throwaway);
+	}
+	assert.ok(gone, "the preview went on after its starter was gone");
+	await assert.rejects(fetch(`${base}/health`, { signal: AbortSignal.timeout(2000) }));
+});
+
 // ---- --home: a pine home of the developer's choice -----------------------------------------------
 
 const write = (file: string, content: string) => {
@@ -177,15 +203,6 @@ function ownHome(modelServer: string, port: number): string {
 	return dir;
 }
 
-/** A port nothing listens on now. */
-const freePort = () =>
-	new Promise<number>((resolve) => {
-		const s = net.createServer().listen(0, "127.0.0.1", () => {
-			const { port } = s.address() as net.AddressInfo;
-			s.close(() => resolve(port));
-		});
-	});
-
 const stateOf = async (p: Preview) => (await (await fetch(new URL("/__pine/state", p.page), { headers: { origin: p.origin } })).json()).state;
 
 const agentsOf = async (p: Preview) => {
@@ -193,37 +210,48 @@ const agentsOf = async (p: Preview) => {
 	return (await res.json()).data.map((a: { id: string }) => a.id);
 };
 
-const answers = async (url: string) => {
-	try {
-		return (await fetch(url, { signal: AbortSignal.timeout(2000) })).ok;
-	} catch {
-		return false;
-	}
-};
+/** The daemon of that home answers at that address (another run's daemon there does not count). */
+const answers = (base: string, own: string) => ours(new URL(base).port, own);
 
-test("--home starts a daemon on that home when none runs, stops it with the preview, and leaves the home", async (t) => {
+test("--home starts a daemon on that home when none runs, and leaves it and the home after the preview", async (t) => {
 	const mock = await startMock();
 	t.after(() => mock.close?.());
 	const own = ownHome(mock.baseUrl, 0);
-	t.after(() => fs.rmSync(own, { recursive: true, force: true }));
-	const preview = await startPreview(["--home", own]);
+	let preview: Preview | undefined;
+	// One hook, in this order: the kept daemon is told apart by the home's token, so it is stopped before the home goes.
+	t.after(async () => {
+		try {
+			if (preview) await stopKept(new URL(preview.daemon).port, own);
+		} finally {
+			fs.rmSync(own, { recursive: true, force: true });
+		}
+	});
+	preview = await startPreview(["--home", own]);
 	assert.equal(preview.home, own);
 	assert.deepEqual(await agentsOf(preview), ["keeper"]);
 	assert.equal((await stateOf(preview)).started, true);
+	// A home of the developer's (~/.pine) has its daemon go on: the preview never stops it.
 	await stopPreview(preview);
 	assert.ok(fs.existsSync(path.join(own, "pine.json")));
 	assert.ok(fs.existsSync(path.join(own, "agents", "keeper", "agent.json")));
-	assert.equal(await answers(`${preview.daemon}/health`), false);
+	assert.equal(await answers(preview.daemon, own), true);
 });
 
 test("--home uses the daemon that runs on that home, and leaves it running", async (t) => {
 	const mock = await startMock();
 	t.after(() => mock.close?.());
 	const own = ownHome(mock.baseUrl, await freePort());
-	t.after(() => fs.rmSync(own, { recursive: true, force: true }));
 	// The developer's own pine of that home, running before the preview and after it.
 	const running = spawn(process.execPath, [path.join(root, "..", "bin", "pine.js"), "service", "--home", own], { stdio: ["pipe", "pipe", "ignore"] });
-	t.after(() => void (running.exitCode === null && running.kill("SIGKILL")));
+	// One hook, in this order: the daemon ends before its home goes.
+	t.after(async () => {
+		if (running.exitCode === null && running.signalCode === null) {
+			const ended = new Promise((r) => running.once("close", r));
+			running.kill("SIGKILL");
+			await ended;
+		}
+		fs.rmSync(own, { recursive: true, force: true });
+	});
 	const base = await new Promise<string>((resolve, reject) => {
 		let out = "";
 		running.stdout!.on("data", (d: Buffer) => {
@@ -237,7 +265,7 @@ test("--home uses the daemon that runs on that home, and leaves it running", asy
 	assert.equal((await stateOf(preview)).started, false);
 	assert.deepEqual(await agentsOf(preview), ["keeper"]);
 	await stopPreview(preview);
-	assert.equal(await answers(`${base}/health`), true);
+	assert.equal(await answers(base, own), true);
 	assert.ok(fs.existsSync(path.join(own, "pine.json")));
 	const ended = new Promise((r) => running.once("close", r));
 	running.stdin!.end();

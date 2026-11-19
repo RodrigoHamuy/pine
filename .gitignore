@@ -31,9 +31,9 @@ Thumbs.db
 *.swp
 *~
 
-# Assistants' local settings
+# Assistants' local settings. .claude/launch.json is written for each checkout, with its own
+# ports (desktop/scripts/launch-json.mjs), so it is not kept either.
 **/.claude/*
-!.claude/launch.json
 !.claude/settings.json
 !desktop/.claude/skills/
 

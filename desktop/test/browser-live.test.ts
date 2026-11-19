@@ -11,10 +11,9 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
+import { launchApp } from "./support/app.ts";
 
-const root = path.resolve(import.meta.dirname, "..");
 const shots = process.env.PINE_DESKTOP_SHOTS;
 const write = (file: string, content: string) => {
 	fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -35,7 +34,7 @@ test("live: the agent's real browser is shown in the panel, and the owner's hand
 		write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false }, mcp: { browser: { pine: "browser" } } }));
 		write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({}));
 		write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
-		app = await electron.launch({ args: [root], env: { ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
+		app = await launchApp({ ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
 		const page = await app.firstWindow();
 		const shot = async (name: string) => shots && (fs.mkdirSync(shots, { recursive: true }), await page.screenshot({ path: path.join(shots, `${name}.png`) }));
 		const say = async (words: string, steps: unknown[], done: string) => {
