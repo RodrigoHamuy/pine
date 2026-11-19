@@ -5,7 +5,9 @@
   "description": "The Pine page in a web browser, connected to the owner's pine over SSH. Not part of what goes to npm.",
   "scripts": {
     "test": "node --test --test-force-exit \"test/*.test.ts\"",
-    "check": "tsc --noEmit"
+    "check": "tsc --noEmit",
+    "build": "node scripts/build.ts",
+    "smoke": "node scripts/smoke.ts"
   },
   "dependencies": {
     "@microsoft/dev-tunnels-ssh": "^3.12.42",
@@ -18,6 +20,7 @@
     "esbuild": "^0.28.2",
     "playwright-core": "^1.65.1",
     "typescript": "^7.0.2",
+    "vite": "^8.3.8",
     "ws": "^8.23.0"
   }
 }

@@ -1,7 +1,9 @@
 // The Worker: the relay at /ssh, with Cloudflare's own connect(), WebSocket pair and a name
-// lookup over DNS-over-HTTPS. Everything it decides is in relay.ts.
+// lookup over DNS-over-HTTPS, and the web client's built files beside it (site.ts). Everything
+// the relay decides is in relay.ts.
 import { connect } from "cloudflare:sockets";
-import { type Env, relay } from "./relay.ts";
+import { relay } from "./relay.ts";
+import { site, type SiteEnv } from "./site.ts";
 
 /** A and AAAA records of a name, from Cloudflare's resolver. */
 async function resolve(name: string): Promise<string[]> {
@@ -28,10 +30,4 @@ const handle = relay({
 	timeoutMs: 5000,
 });
 
-export default {
-	async fetch(request: Request, env: Env): Promise<Response> {
-		const url = new URL(request.url);
-		if (url.pathname === "/ssh") return handle(request, env);
-		return new Response("Not found.\n", { status: 404 });
-	},
-} satisfies ExportedHandler<Env>;
+export default { fetch: site(handle) } satisfies ExportedHandler<SiteEnv>;

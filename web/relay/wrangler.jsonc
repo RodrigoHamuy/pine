@@ -5,6 +5,9 @@
   "name": "pine-relay",
   "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
+  // The web client's build (`npm run build` in web/), served by the same Worker: every request
+  // goes through it first, which adds the headers of src/site.ts.
+  "assets": { "directory": "../dist", "binding": "ASSETS", "run_worker_first": true },
   // No logs of the bytes carried: the relay writes none, and Workers Logs stay off.
   "observability": { "enabled": false },
   "ratelimits": [

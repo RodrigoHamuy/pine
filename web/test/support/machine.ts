@@ -13,6 +13,8 @@ import { WebSocketServer } from "ws";
 export type Machine = {
 	/** The address of the WebSocket pipe to sshd, as the browser opens it. */
 	wsUrl: string;
+	/** sshd's own port on the loopback. */
+	sshPort: number;
 	user: string;
 	/** The host key's fingerprint as `ssh-keygen -l` prints it ("SHA256:..."). */
 	hostFingerprint: string;
@@ -57,7 +59,8 @@ async function waitForPort(port: number, sshd: ChildProcess, logFile: string): P
 	throw new Error(`sshd did not listen on ${port}: ${readFileSync(logFile, "utf8")}`);
 }
 
-export async function startMachine(): Promise<Machine> {
+/** `env`: variables sshd sets for every session (its `SetEnv`), over the ones it sets itself. */
+export async function startMachine(options: { env?: Record<string, string> } = {}): Promise<Machine> {
 	const dir = mkdtempSync(join(tmpdir(), "pine-web-sshd-"));
 	const hostKey = join(dir, "host_ed25519");
 	execFileSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "", "-f", hostKey]);
@@ -80,6 +83,7 @@ export async function startMachine(): Promise<Machine> {
 		"StrictModes no",
 		"AllowTcpForwarding local",
 		"LogLevel VERBOSE",
+		...(options.env && Object.keys(options.env).length ? [`SetEnv ${Object.entries(options.env).map(([k, v]) => `${k}=${v}`).join(" ")}`] : []),
 		`PidFile ${join(dir, "sshd.pid")}`,
 		"",
 	].join("\n"));
@@ -108,6 +112,7 @@ export async function startMachine(): Promise<Machine> {
 
 	return {
 		wsUrl,
+		sshPort,
 		user: userInfo().username,
 		hostFingerprint,
 		echoPort,
