@@ -10,7 +10,7 @@ import type { PluginListenerHandle } from "@capacitor/core";
 import type { CallResult } from "../../desktop/electron/daemon.ts";
 import type { PineEvent } from "../../desktop/src/api.ts";
 import type { ServiceState } from "../../desktop/src/bridge.ts";
-import type { Palette } from "../../desktop/src/theme.ts";
+import type { Look } from "../../desktop/src/theme.ts";
 
 /** The name the plugin is registered under, on both sides. */
 export const PLUGIN_NAME = "Pine";
@@ -29,12 +29,13 @@ export const MEDIA_BASE = `${APP_ORIGIN}/_pine_media`;
  * nothing in it.
  */
 export interface PagePrefs {
-	theme: "system" | "light" | "dark";
 	notify: boolean;
 	updates: boolean;
 	keepRunning: boolean;
-	codeFollowsPalette: boolean;
-	palette?: Palette;
+	/** While a coloured agent's conversation is in front, the window's accent is its colour. */
+	agentAccent: boolean;
+	/** The theme the page was last drawn in, as cleanLook made it safe; none: pmndre. */
+	look?: Look;
 }
 
 /** What the plugin has stored: the page's preferences, the machines and the one in use. */

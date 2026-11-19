@@ -4,10 +4,10 @@
 // other machines. What only the desktop app can do refuses or does nothing, as the preview's
 // stand-in does (desktop/src/preview-bridge.ts).
 import type { AppState, PageBridge, Prefs } from "../../desktop/src/bridge.ts";
-import { cleanPalette } from "../../desktop/src/theme.ts";
+import { cleanLook } from "../../desktop/src/theme.ts";
 import { MEDIA_BASE, type PagePrefs, type PinePlugin } from "./plugin.ts";
 
-const DEFAULTS: PagePrefs = { theme: "system", notify: false, updates: false, keepRunning: false, codeFollowsPalette: true };
+const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false, agentAccent: true };
 
 /** What is open over the page: a sheet, a dialog, a menu (Base UI's popups, mounted only while open; a listbox is not one: the side bar's list of agents is always there). */
 const OPEN = '[role="dialog"], [role="alertdialog"], [role="menu"]';
@@ -83,17 +83,16 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 			}),
 		// Checked as main.ts checks the owner's change; the machines are changed by their own methods only.
 		prefs: async (change: Record<string, unknown>) => {
-			const flag = (key: "notify" | "updates" | "keepRunning" | "codeFollowsPalette") => (typeof change[key] === "boolean" ? change[key] : prefs[key]);
+			const flag = (key: "notify" | "updates" | "keepRunning" | "agentAccent") => (typeof change[key] === "boolean" ? change[key] : prefs[key]);
 			const next: PagePrefs = {
-				theme: change.theme === "system" || change.theme === "light" || change.theme === "dark" ? change.theme : prefs.theme,
 				notify: flag("notify"),
 				updates: flag("updates"),
 				keepRunning: flag("keepRunning"),
-				codeFollowsPalette: flag("codeFollowsPalette"),
+				agentAccent: flag("agentAccent"),
 			};
-			// A reset sends none: nothing is stored, and the page draws pine's default.
-			const palette = "palette" in change ? cleanPalette(change.palette) : prefs.palette;
-			if (palette) next.palette = palette;
+			// The theme the page draws now, made safe as main.ts makes it; none: pmndre, nothing stored.
+			const look = "look" in change ? cleanLook(change.look) : prefs.look;
+			if (look) next.look = look;
 			await plugin.savePrefs({ prefs: next });
 			prefs = { ...next, hosts: prefs.hosts, ...(prefs.use ? { use: prefs.use } : {}) };
 			return { ...prefs };
