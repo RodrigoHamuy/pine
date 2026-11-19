@@ -127,7 +127,7 @@ jobs:
             body="$marker
           **Web client preview:** $URL
 
-          The build of ${SHA:0:7}, served by its own version of the relay. It reaches only machines with a public SSH address: add yours in Settings > Environments, with this browser's key in its \`authorized_keys\`."
+          The build of ${SHA:0:7}, served by its own version of the relay. It reaches a machine with a public SSH address, or one on a tailnet through Tailscale Funnel (\`user@machine.tailnet.ts.net:10000\`): add yours in Settings > Environments, with this browser's key in its \`authorized_keys\`."
           else
             body="$marker
           **Web client preview:** nothing deployed for ${SHA:0:7}. The secrets \`CLOUDFLARE_API_TOKEN\` and \`CLOUDFLARE_ACCOUNT_ID\` are not set in the environment \`web-preview\`; the build and its tests passed."
