@@ -1,22 +1,24 @@
-// `npm run smoke` (after `npm run build`): the built web client in a headless Chrome for Testing,
-// against a real sshd on this computer that runs the real `pine service` on a home of its own
-// with the scripted model server. Run by hand; no workflow runs it. It needs /usr/sbin/sshd and
-// Chrome for Testing (`npx playwright-core install chromium`). Nothing here touches ~/.ssh,
-// ~/.pine or the system's sshd, and no window is shown.
+// `npm run smoke` (after `npm run build`): the built web client and the relay as one deployment
+// under `wrangler dev` (`npm install` in web/relay once), in a headless Chrome for Testing, against
+// a real sshd on this computer that runs the real `pine service` on a home of its own with the
+// scripted model server. Run by hand; no workflow runs it. It needs /usr/sbin/sshd and Chrome for
+// Testing (`npx playwright-core install chromium`). Nothing here touches ~/.ssh, ~/.pine, the
+// system's sshd or Cloudflare, and no window is shown.
 //
-// The owner's first visit, as named checks: the page cannot reach the bridge's storage or
-// document; the browser's key is shown; a machine is added and used; its host key fingerprint is
-// asked about and trusted; a message is sent and the answer comes back; a picture in an answer
-// shows; a link in an answer opens in a new tab with no hold on the client.
+// The owner's first visit, as named checks, each of which fails the run: the page cannot reach
+// the bridge's storage, document or the daemon's token; a message to the bridge from another
+// window is ignored; the browser's key is shown; a machine is added and used through the relay;
+// its host key fingerprint is asked about before the key is offered, and trusted; a message is
+// sent and the answer comes back; a picture in an answer shows; a link in an answer opens in a new
+// tab with no hold on the client; after the relay restarts the bridge connects again by itself.
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
-import { createServer, type IncomingMessage } from "node:http";
-import { connect, type AddressInfo } from "node:net";
+import { spawn, type ChildProcess } from "node:child_process";
+import { createServer as createHttpServer } from "node:http";
+import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { WebSocketServer } from "ws";
 import { startMock } from "../../baseline/tests/mock.mjs";
-import { site } from "../relay/src/site.ts";
 import { headless } from "../test/support/browser.ts";
 import { startMachine } from "../test/support/machine.ts";
 
@@ -26,14 +28,29 @@ const dist = path.join(web, "dist");
 if (!existsSync(path.join(dist, "index.html")) || !existsSync(path.join(dist, "page", "index.html"))) throw new Error("the web client is not built: npm run build in web/");
 
 const checks: string[] = [];
+/** What a failed check prints besides its error: what the page showed, and what the relay and sshd said. */
+let explain: () => Promise<string> = async () => "";
 async function check(name: string, run: () => Promise<void>) {
 	const started = Date.now();
-	await run();
+	try {
+		await run();
+	} catch (e) {
+		console.log(`FAIL ${name}\n${await explain().catch(() => "")}`);
+		throw e;
+	}
 	checks.push(name);
 	console.log(`ok   ${name} (${Date.now() - started} ms)`);
 }
 
 const cleanups: (() => Promise<unknown> | unknown)[] = [];
+
+async function freePort(): Promise<number> {
+	const server = createServer();
+	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+	const { port } = server.address() as AddressInfo;
+	await new Promise((resolve) => server.close(resolve));
+	return port;
+}
 const write = (file: string, content: string, mode?: number) => {
 	mkdirSync(path.dirname(file), { recursive: true });
 	writeFileSync(file, content);
@@ -59,64 +76,76 @@ try {
 	const machine = await startMachine({ env: { PINE_HOME: home, SHELL: path.join(bin, "login-shell") } });
 	cleanups.push(() => machine.stop());
 
-	// The deployment: dist/ with the headers of the relay's site.ts, and at /ssh a stand-in for the
-	// relay that pipes to this sshd (the real relay refuses a loopback address).
-	const types: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".woff2": "font/woff2", ".svg": "image/svg+xml", ".png": "image/png", ".wasm": "application/wasm" };
-	const assets = {
-		fetch: async (request: Request) => {
-			let file = path.join(dist, decodeURIComponent(new URL(request.url).pathname));
-			if (!file.startsWith(dist)) return new Response("not found", { status: 404 });
-			if (file.endsWith("/")) file = path.join(file, "index.html");
-			if (!existsSync(file)) return new Response("not found", { status: 404 });
-			return new Response(readFileSync(file), { headers: { "content-type": types[path.extname(file)] ?? "application/octet-stream" } });
-		},
-	};
-	const handle = site(async () => new Response("the relay is a stand-in here", { status: 400 }));
-	const relayed: string[] = [];
-	const server = createServer(async (req: IncomingMessage, res) => {
-		const response = await handle(new Request(`http://${req.headers.host}${req.url}`), { ASSETS: assets, LIMITER: { limit: async () => ({ success: true }) } });
-		res.writeHead(response.status, Object.fromEntries(response.headers));
-		res.end(Buffer.from(await response.arrayBuffer()));
-	});
-	const relay = new WebSocketServer({ noServer: true });
-	// The relay can be stopped and started again, as a deploy restarts a Worker: stopped, it cuts
-	// what it carries and refuses new connections.
-	let relayUp = true;
-	const carried = new Set<{ terminate(): void }>();
-	const restartRelay = async (downMs: number) => {
-		relayUp = false;
-		for (const ws of carried) ws.terminate();
-		await new Promise((r) => setTimeout(r, downMs));
-		relayUp = true;
-	};
-	server.on("upgrade", (req, socket, head) => {
-		if (!req.url?.startsWith("/ssh?") || !relayUp) return socket.destroy();
-		relayed.push(req.url);
-		relay.handleUpgrade(req, socket, head, (ws) => {
-			carried.add(ws);
-			ws.on("close", () => carried.delete(ws));
-			const tcp = connect(machine.sshPort, "127.0.0.1");
-			tcp.on("data", (data) => ws.send(data));
-			tcp.on("close", () => ws.close());
-			tcp.on("error", () => ws.close());
-			ws.on("message", (data) => tcp.write(data as Buffer));
-			ws.on("close", () => tcp.destroy());
+	// The deployment as Cloudflare would run it: the relay Worker and dist/ under `wrangler dev`, on
+	// the loopback, with the one switch that lets the relay reach this computer's sshd
+	// (RELAY_ALLOW_LOOPBACK, which no deployed configuration sets). The relay is stopped and
+	// started again on the same port, as a deploy restarts a Worker.
+	const relayPort = await freePort();
+	const inspectorPort = await freePort();
+	const wranglerState = path.join(dir, "wrangler");
+	let wrangler: ChildProcess | null = null;
+	let wranglerLog = "";
+	const startRelay = async () => {
+		const running = spawn(path.join(web, "relay", "node_modules", ".bin", "wrangler"), ["dev", "--ip", "127.0.0.1", "--port", String(relayPort), "--inspector-port", String(inspectorPort), "--var", "RELAY_ALLOW_LOOPBACK:1", "--persist-to", path.join(wranglerState, "state"), "--show-interactive-dev-session=false", "--log-level", "warn"], {
+			cwd: path.join(web, "relay"),
+			// Wrangler's own files (its settings, its logs) go into the smoke's folder, never the owner's; no metrics are sent.
+			env: { ...process.env, XDG_CONFIG_HOME: path.join(wranglerState, "config"), WRANGLER_LOG_PATH: path.join(wranglerState, "logs"), WRANGLER_SEND_METRICS: "false", CI: "1" },
+			stdio: ["ignore", "pipe", "pipe"],
+			detached: true,
 		});
-	});
-	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	cleanups.push(() => new Promise((resolve) => (relay.close(), server.closeAllConnections(), server.close(resolve))));
-	const origin = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+		wrangler = running;
+		running.stdout!.on("data", (chunk) => (wranglerLog += chunk));
+		running.stderr!.on("data", (chunk) => (wranglerLog += chunk));
+		const deadline = Date.now() + 60_000;
+		for (;;) {
+			if (running.exitCode !== null) throw new Error(`wrangler dev exited: ${wranglerLog}`);
+			const up = await fetch(`http://127.0.0.1:${relayPort}/`).then((r) => r.ok, () => false);
+			if (up) return;
+			if (Date.now() > deadline) throw new Error(`wrangler dev did not answer on ${relayPort}: ${wranglerLog}`);
+			await new Promise((r) => setTimeout(r, 200));
+		}
+	};
+	const stopRelay = async () => {
+		const running = wrangler;
+		wrangler = null;
+		if (!running || running.exitCode !== null) return;
+		const exited = new Promise((resolve) => running.once("exit", resolve));
+		// Its whole group: wrangler runs workerd as a child of its own.
+		try {
+			process.kill(-running.pid!, "SIGTERM");
+		} catch {}
+		await Promise.race([exited, new Promise((r) => setTimeout(r, 5000))]);
+		try {
+			process.kill(-running.pid!, "SIGKILL");
+		} catch {}
+	};
+	await startRelay();
+	cleanups.push(stopRelay);
+	const origin = `http://127.0.0.1:${relayPort}`;
 
 	const browser = await headless();
 	cleanups.push(() => browser.stop());
 	const { page } = browser;
+	// Every connection the bridge opens to the relay.
+	const relayed: string[] = [];
+	page.on("websocket", (ws) => relayed.push(new URL(ws.url()).pathname + new URL(ws.url()).search));
+	// What the page in its iframe is told by message, kept to look for the token in it.
+	await browser.context.addInitScript(() => {
+		if (window === window.top) return;
+		const heard: string[] = ((window as any).__heard = []);
+		window.addEventListener("message", (e) => heard.push(JSON.stringify(e.data) ?? ""));
+	});
 	const errors: string[] = [];
 	page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
 	await page.goto(`${origin}/`);
 	const frame = page.frameLocator("iframe");
+	explain = async () => {
+		const shown = await (await inside()).evaluate(() => document.body.innerText).catch((e) => String(e));
+		return `--- the page shows:\n${shown.slice(0, 3000)}\n--- the relay (wrangler dev) said:\n${wranglerLog.slice(-3000)}\n--- sshd said:\n${machine.log().slice(-3000)}`;
+	};
 	const inside = async () => {
 		for (;;) {
-			const f = page.frames().find((x) => x !== page.mainFrame());
+			const f = page.frames().find((x) => x.parentFrame() === page.mainFrame() && x.url().includes("/page/"));
 			if (f) return f;
 			await new Promise((r) => setTimeout(r, 50));
 		}
@@ -159,7 +188,7 @@ try {
 	});
 
 	const host = `${machine.user}@127.0.0.1:${machine.sshPort}`;
-	await check("a machine is added and used, and its host key's fingerprint is asked about", async () => {
+	await check("the first connect goes through the relay and asks for the host key's fingerprint, before the browser's key is offered", async () => {
 		await frame.getByPlaceholder("you@server").fill(host);
 		await frame.getByRole("button", { name: "Add" }).click();
 		await frame.locator(`[data-environment="${host}"]`).getByRole("button", { name: "Use" }).click();
@@ -167,12 +196,85 @@ try {
 		await shown.waitFor({ timeout: 20_000 });
 		assert.equal(await shown.innerText(), machine.hostFingerprint);
 		assert.ok(relayed.some((u) => u === `/ssh?host=127.0.0.1&port=${machine.sshPort}`), relayed.join(", "));
+		// Not yet trusted: sshd was reached, but no key was offered to it and no conversation opened.
+		assert.match(machine.log(), /Connection from 127\.0\.0\.1/);
+		assert.doesNotMatch(machine.log(), /Accepted publickey|Failed publickey|Postponed publickey/);
+		assert.equal(await frame.locator("textarea").count(), 0);
 	});
 
 	await check("trusting the key connects, and the conversation is there", async () => {
 		await frame.locator(`[data-environment="${host}"] [data-slot=trust-host-key]`).first().click();
 		await frame.locator("textarea").first().waitFor({ timeout: 60_000 });
 		assert.match(machine.log(), /Accepted publickey for \S+ from 127\.0\.0\.1 port \d+ ssh2: ED25519/);
+	});
+
+	await check("the page cannot read the bridge's IndexedDB or the daemon's token", async () => {
+		const token = readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
+		assert.ok(token.length >= 16, "the daemon wrote its token");
+		// The bridge keeps what it holds in IndexedDB, under its own origin.
+		assert.ok((await page.evaluate(() => indexedDB.databases())).some((d) => d.name === "pine-web"), "the bridge has its IndexedDB");
+		const seen = await (await inside()).evaluate(async () => {
+			const tries: Record<string, string> = {};
+			for (const [name, act] of Object.entries({
+				"its own indexedDB": () => new Promise((resolve, reject) => {
+					const r = indexedDB.open("pine-web");
+					r.onsuccess = resolve;
+					r.onerror = () => reject(r.error);
+				}),
+				"the bridge's indexedDB": () => (window.parent as Window & typeof globalThis).indexedDB.databases(),
+				"the bridge's localStorage": () => (window.parent as Window & typeof globalThis).localStorage.length,
+				"the bridge's address": () => window.parent.location.href,
+			})) {
+				try {
+					await act();
+					tries[name] = "reached";
+				} catch (e) {
+					tries[name] = (e as Error).name;
+				}
+			}
+			let storage = "";
+			try {
+				storage = JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage });
+			} catch {}
+			return { tries, heard: ((window as any).__heard as string[]) ?? [], text: document.documentElement.outerHTML + storage };
+		});
+		for (const [name, result] of Object.entries(seen.tries)) assert.notEqual(result, "reached", name);
+		assert.ok(seen.heard.length > 10, "the page was told things by message");
+		assert.ok(!seen.heard.some((m) => m.includes(token)), "no message to the page carries the token");
+		assert.ok(!seen.text.includes(token), "the page's document and storage do not hold the token");
+	});
+
+	await check("a message to the bridge from another window is ignored", async () => {
+		// The same call twice, from another frame of the bridge's own document and from a window
+		// it opened; an answer would go to the page, where it is listened for.
+		const call = (id: number, method: string, args: unknown[]) => ({ pine: "call", id, method, args });
+		await page.evaluate(() => {
+			const other = document.createElement("iframe");
+			other.id = "intruder";
+			other.name = "intruder";
+			document.body.append(other);
+		});
+		let sibling = page.frame({ name: "intruder" });
+		for (let i = 0; !sibling && i < 40; i++) {
+			await new Promise((r) => setTimeout(r, 50));
+			sibling = page.frame({ name: "intruder" });
+		}
+		assert.ok(sibling, "a second frame in the bridge's document");
+		await sibling.evaluate((m) => parent.postMessage(m, "*"), call(910001, "deviceKey", []));
+		await sibling.evaluate((m) => parent.postMessage(m, "*"), call(910002, "open", ["https://example.org/from-another-frame"]));
+		const [popup] = await Promise.all([browser.context.waitForEvent("page"), page.evaluate(() => void window.open("about:blank", "intruder-window"))]);
+		await popup.evaluate((m) => window.opener.postMessage(m, "*"), call(910003, "deviceKey", []));
+		await popup.evaluate((m) => window.opener.postMessage(m, "*"), call(910004, "open", ["https://example.org/from-another-window"]));
+		// And once from the page itself, which is answered: the calls above were ones the bridge takes.
+		const f = await inside();
+		await f.evaluate((m) => parent.postMessage(m, "*"), call(910005, "deviceKey", []));
+		await f.waitForFunction(() => ((window as any).__heard as string[]).some((m) => m.includes('"id":910005')), undefined, { timeout: 5000 });
+		await new Promise((r) => setTimeout(r, 500));
+		const heard = (await f.evaluate(() => (window as any).__heard as string[])).join("\n");
+		for (const id of [910001, 910002, 910003, 910004]) assert.ok(!heard.includes(`"id":${id}`), `call ${id} was answered`);
+		assert.deepEqual(browser.context.pages().map((p) => p.url()).filter((u) => u.includes("example.org")), [], "nothing was opened");
+		await popup.close();
+		await page.evaluate(() => document.getElementById("intruder")?.remove());
 	});
 
 	await check("a message is sent and the answer comes back", async () => {
@@ -203,7 +305,11 @@ try {
 	});
 
 	await check("a link in an answer opens in a new tab that has no hold on the client, and the page stays", async () => {
-		const target = `${origin}/opened-from-an-answer`;
+		// A site of its own, as a link in an answer leads elsewhere.
+		const elsewhere = createHttpServer((_, res) => res.end("<!doctype html><title>elsewhere</title>"));
+		await new Promise<void>((resolve) => elsewhere.listen(0, "127.0.0.1", resolve));
+		cleanups.push(() => elsewhere.close());
+		const target = `http://127.0.0.1:${(elsewhere.address() as AddressInfo).port}/opened-from-an-answer`;
 		const box = frame.locator("textarea").first();
 		await box.fill(`Link it. <<MOCK {"steps":[{"text":"See [the page](${target})."}]}>>`);
 		await box.press("Enter");
@@ -220,8 +326,10 @@ try {
 	const status = frame.locator("[data-slot=service-status]");
 	await check("after the relay restarts, the bridge connects again by itself and the conversation goes on", async () => {
 		const before = relayed.length;
-		await restartRelay(1500);
+		// As a deploy does: the Worker goes, what it carried is cut, and it comes back on the same address.
+		await stopRelay();
 		await status.and(frame.locator('[aria-label*="pine does not answer"]')).waitFor({ timeout: 10_000 });
+		await startRelay();
 		await status.and(frame.locator('[aria-label*="pine 0"], [aria-label*="pine 1"]')).waitFor({ timeout: 30_000 });
 		assert.ok(relayed.length > before, "a new connection went through the relay");
 		const box = frame.locator("textarea").first();
@@ -245,12 +353,13 @@ try {
 			const make = crypto.subtle.generateKey.bind(crypto.subtle);
 			crypto.subtle.generateKey = ((algorithm: { name?: string }, ...rest: unknown[]) => (algorithm?.name === "Ed25519" ? Promise.reject(new DOMException("Unrecognized name.", "NotSupportedError")) : (make as any)(algorithm, ...rest))) as typeof crypto.subtle.generateKey;
 		});
-		const tries = relayed.length;
+		const tries: string[] = [];
+		other.on("websocket", (ws) => tries.push(ws.url()));
 		await other.goto(`${origin}/`);
 		await other.locator(".unsupported").waitFor({ timeout: 10_000 });
 		assert.match(await other.locator(".unsupported").innerText(), /Chrome 137 or later, Firefox 130 or later, or Safari 17 or later/);
 		assert.equal(await other.locator("iframe").count(), 0);
-		assert.equal(relayed.length, tries);
+		assert.deepEqual(tries, []);
 		await other.close();
 	});
 
