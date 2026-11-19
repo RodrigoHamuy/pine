@@ -15,7 +15,7 @@ function standIn(): Bridge {
 	const on = (set: Set<Listener>) => (fn: Listener) => (set.add(fn), () => void set.delete(fn));
 	const never = () => () => undefined;
 	const tell = (set: Set<Listener>, ...args: unknown[]) => set.forEach((fn) => fn(...args));
-	let prefs: Record<string, unknown> = { keepRunning: false, hosts: [], notify: false, updates: false, agentAccent: true };
+	let prefs: Record<string, unknown> = { keepRunning: false, hosts: [], notify: false, updates: false };
 
 	const service = async () => {
 		const res = await fetch("/__pine/state");

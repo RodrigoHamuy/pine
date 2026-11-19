@@ -24,8 +24,6 @@ export interface Prefs {
 	updates: boolean;
 	/** The theme the window was last drawn in (theme.ts), so that it opens in it; none: pmndre. */
 	look?: Look;
-	/** While a coloured agent's conversation is in front, the window's accent is its colour (on unless false). */
-	agentAccent: boolean;
 }
 
 export type { Update } from "../electron/updates.ts";

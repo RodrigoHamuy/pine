@@ -209,7 +209,7 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
 	connected = false;
-	prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, agentAccent: true };
+	prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true };
 	/** The themes in the themes folder of pine's home, and the one in force (`ui.theme`, pmndre when none is chosen). */
 	themes: ThemeEntry[] = [];
 	theme = "pmndre";
@@ -291,8 +291,6 @@ export class Store extends Model {
 	asking?: string;
 	/** The tabs of last time are open (there may be none): until then the window shows that pine is starting. */
 	opened = false;
-	/** Conversations with a file edited in the side panel and not saved, by key; the panel says so (CodePanel.tsx). */
-	editing = new Set<string>();
 	/** What was typed into a conversation's input and not sent when its tab closed, given back when it opens again. */
 	private drafts = new Map<string, { draft: string; attachments: Attachment[] }>();
 	asked = new Set<string>();
@@ -1024,29 +1022,19 @@ export class Store extends Model {
 	}
 
 	/**
-	 * Nothing in the tab would be missed if it closed: no question or approval waits in it for the owner,
-	 * no message is typed into its input and not sent, no file is edited in its side panel and not saved.
-	 * What the agent is doing does not count: it goes on without the tab.
-	 */
-	saved(tab: Tab): boolean {
-		return !tab.approvals.size && !tab.draft.trim() && !tab.attachments.length && !this.editing.has(tab.key);
-	}
-
-	/**
 	 * Close several tabs at once, as the tab bar's menu and the palette ask: the others than `from`, those
-	 * to its right, those with nothing unsaved (`saved`), or all of them. A tab that waits for an answer
+	 * to its right, or all of them. A tab that waits for an answer
 	 * stays open, and the owner is told why: what is asked keeps its place.
 	 */
-	closeTabs(which: "others" | "right" | "saved" | "all", from: Tab | undefined = this.active): void {
+	closeTabs(which: "others" | "right" | "all", from: Tab | undefined = this.active): void {
 		const at = from ? this.tabs.indexOf(from) : -1;
 		if ((which === "others" || which === "right") && at < 0) return;
-		const chosen = this.tabs.filter((t, i) => (which === "others" ? t !== from : which === "right" ? i > at : which === "saved" ? this.saved(t) : true));
+		const chosen = this.tabs.filter((t, i) => (which === "others" ? t !== from : which === "right" ? i > at : true));
 		const shut = chosen.filter((t) => !t.approvals.size);
 		const kept = chosen.length - shut.length;
 		// The tab the menu was opened on comes to the front when the one in front closes, as in VS Code.
 		this.shut(shut, which === "others" || which === "right" ? from : undefined);
 		if (kept) this.flash(`${plural(kept, "tab")} stayed open: ${kept === 1 ? "it waits" : "they wait"} for your answer.`, "warn", 6000);
-		else if (which === "saved" && !shut.length) this.flash("Every tab has something unsaved or waiting.");
 	}
 
 	private shut(tabs: Tab[], front?: Tab): void {
@@ -1312,8 +1300,11 @@ export class Store extends Model {
 				this.conversations.set(id, list);
 				this.groups.set(id, groups);
 				for (const c of list) this.placed.delete(`${id}:${c.session}`);
-				for (const key of [...this.pins]) if (key.startsWith(`${id}:`)) this.pins.delete(key);
-				for (const c of list) if (c.pinned) this.pins.add(`${id}:${c.session}`);
+				// A conversation with nothing said yet is not in the list: its pin, kept by the daemon, stays as it was.
+				for (const c of list) {
+					if (c.pinned) this.pins.add(`${id}:${c.session}`);
+					else this.pins.delete(`${id}:${c.session}`);
+				}
 			}),
 		);
 		this.touch();
@@ -1590,11 +1581,13 @@ export class Store extends Model {
 		if (answer) await this.setGoal(tab, answer);
 	}
 
-	async pin(tab: Tab, pinned: boolean): Promise<void> {
+	/** Pins or unpins a conversation, from its tab or its row in the side bar: a star on both, and first in its list. */
+	async pin(tab: Tab | { agent: string; session: string }, pinned: boolean): Promise<void> {
 		if (tab.session === "main") return this.flash("An agent's main conversation always stays.");
 		if (!(await this.attempt(() => api.pinSession(tab.agent, tab.session, pinned)))) return;
-		if (pinned) this.pins.add(tab.key);
-		else this.pins.delete(tab.key);
+		const key = `${tab.agent}:${tab.session}`;
+		if (pinned) this.pins.add(key);
+		else this.pins.delete(key);
 		this.touch();
 		void this.refreshConversations(tab.agent);
 	}

@@ -176,10 +176,7 @@ function ConversationRow({ agent, c, depth = 0, inset = 0 }: { agent: string; c:
 			await s.openTab(agent, c.session);
 			if (s.active?.kind === "chat") await s.worktreeMenu(s.active);
 		}
-		if (picked === "pin") {
-			await s.attempt(() => api.pinSession(agent, c.session, !c.pinned));
-			await s.refreshConversations(agent);
-		}
+		if (picked === "pin") await s.pin({ agent, session: c.session }, !c.pinned);
 		if (picked === "rename") {
 			const to = await s.pick({ title: `Another name for ${c.session}`, items: [], free: true, placeholder: "The new name" });
 			if (to?.trim()) await s.rename(agent, c.session, to.trim());
@@ -308,7 +305,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 	const grouping = s.groups.get(a.id) ?? { order: "recent" as const, groups: [] };
 	const rows: Conv[] = list.some((c) => c.session === "main") ? [...list] : [{ session: "main", tasks: 0, last: 0, pinned: false, open: false }, ...list];
 	// A conversation that is open in a tab and has not been said anything in yet is not in the daemon's list.
-	for (const t of s.tabs) if (t.kind === "chat" && t.agent === a.id && !rows.some((c) => c.session === t.session)) rows.push({ session: t.session, tasks: 0, last: Date.now(), pinned: false, open: true, group: s.placed.get(`${a.id}:${t.session}`) });
+	for (const t of s.tabs) if (t.kind === "chat" && t.agent === a.id && !rows.some((c) => c.session === t.session)) rows.push({ session: t.session, tasks: 0, last: Date.now(), pinned: s.pins.has(t.key), open: true, group: s.placed.get(`${a.id}:${t.session}`) });
 	const names = grouping.groups.map((g) => g.name);
 	const groupOf = (c: Conv) => (c.group && names.includes(c.group) ? c.group : undefined);
 	// In every list the agent's own conversation first, then what is pinned, then by the agent's order.

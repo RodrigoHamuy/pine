@@ -7,9 +7,8 @@
 // The app's main process keeps the theme it was last given (prefs.json, `look`), so that the window
 // opens in it before pine answers; it is made safe by `cleanLook` there and here.
 //
-// An agent can have a colour of its own (`color` in its agent.json). Its avatar is drawn in it, and
-// while its conversation is in front the window's accent is that colour (`agentAccent` in the app's
-// preferences, on unless it is false), laid over the theme's.
+// An agent can have a colour of its own (`color` in its agent.json). Its avatar is drawn in it and
+// nothing else: the window keeps the theme's colours whoever is in front.
 
 /** A theme as the window draws it. */
 export interface Look {
@@ -79,31 +78,22 @@ export function onColour(hex: string): string {
 	return contrast("#ffffff", hex) >= contrast("#141414", hex) ? "#ffffff" : "#141414";
 }
 
-/** The roles the agent in front sets over the theme's: the accent, its tint, what is written on it, and the cursor. */
-function accentOf(color: string): Record<string, string> {
-	const c = color.toLowerCase();
-	return { brand: c, "brand-soft": `${c}1f`, "on-accent": onColour(c), "code-cursor": c };
-}
-
 // ---- the root element -----------------------------------------------------------------------------------
 
 let look: Look | undefined;
-let agent: string | undefined;
 /** The variables the root element was given, to take away what the next drawing does not set. */
 let set: string[] = [];
 
 function draw(root: HTMLElement = document.documentElement): void {
 	for (const name of set) root.style.removeProperty(name);
 	set = [];
-	const colors = { ...(look?.colors ?? {}), ...(agent ? accentOf(agent) : {}) };
+	const colors = look?.colors ?? {};
 	for (const [k, v] of Object.entries(colors)) {
 		root.style.setProperty(`--${k}`, v);
 		set.push(`--${k}`);
 	}
 	root.classList.toggle("dark", (look?.kind ?? "dark") === "dark");
 	root.dataset.theme = look?.id ?? "pmndre";
-	if (agent) root.dataset.agentColour = agent;
-	else delete root.dataset.agentColour;
 }
 
 /** Draws the window in a theme, or in pine's default (index.css) with none. */
@@ -112,10 +102,3 @@ export function applyLook(next: Look | undefined): void {
 	draw();
 }
 
-/** The colour of the agent in front, over the theme's accent; none gives the theme's back. */
-export function applyAgentAccent(color: string | undefined): void {
-	const next = isHex(color) ? color.toLowerCase() : undefined;
-	if (next === agent) return;
-	agent = next;
-	draw();
-}

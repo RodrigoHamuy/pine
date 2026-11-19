@@ -1,6 +1,6 @@
 // An agent's own colour, as the owner picks it on the agent's avatar (its settings page, the side bar's
 // menu): the real app on a home of its own. What is checked is what the window draws (the computed colour of the agent's avatar) and
-// what the agent's file keeps, never a class.
+// what the agent's file keeps, never a class. The colour is the avatar's alone: the rest of the window keeps the theme's.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -111,6 +111,8 @@ test("a preset colour picked on the agent's avatar is kept in its agent.json at 
 	await page.waitForSelector("[data-slot=empty] [data-slot=avatar][data-agent=books]");
 	assert.ok((await avatars()).length >= 3, "the side bar, the tab and the empty conversation");
 	await avatarsAre(drawnIn("#e0805a"), "every avatar of books");
+	// The colour is the avatar's and nothing else's: with books in front the window keeps the theme's accent.
+	assert.equal(await resolved("var(--primary)"), rgb("#5de4c7"), "pmndre's mint, not books' coral");
 });
 
 test("Other takes any colour, and None takes it away again", async () => {

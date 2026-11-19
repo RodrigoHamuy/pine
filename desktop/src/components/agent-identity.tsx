@@ -10,7 +10,7 @@ import { AgentAvatar } from "./agent-avatar.tsx";
 export const AGENT_ID = /^[a-z][a-z0-9_-]{1,30}$/;
 
 /**
- * An agent's colour, picked on its avatar: a popover with None (the theme's accent), the presets drawn as
+ * An agent's colour, picked on its avatar: a popover with None (the stock avatar), the presets drawn as
  * its avatar would be in each, and any other colour. Every pick is the change, at once ("none" takes the
  * colour away). `trigger` is what opens it: the avatar as a button on the agent's settings page; in the side
  * bar, where the avatar lies inside the button that folds the group, a mark over it that only the menu opens.

@@ -1948,27 +1948,6 @@ function Instructions() {
 
 // ---- the app itself ----------------------------------------------------------------------------------------
 
-/** Whether the window's accent is the colour of the agent in front: an app preference (`agentAccent`, on unless false). */
-export function AgentAccent() {
-	const s = useModel(store);
-	const id = useId();
-	const set = async (agentAccent: boolean) => {
-		s.prefs = await bridge.prefs({ agentAccent });
-		s.touch();
-	};
-	return (
-		<Field orientation="horizontal" data-setting="agent-accent">
-			<FieldContent>
-				<FieldLabel htmlFor={id}>The agent in front colours the window</FieldLabel>
-				<FieldDescription>While the conversation of an agent with a colour of its own is in front, the window's accent is that colour instead of the theme's. An agent gets a colour on its page under Agents.</FieldDescription>
-			</FieldContent>
-			<div className="flex items-center gap-1.5">
-				<Switch id={id} checked={s.prefs.agentAccent !== false} onCheckedChange={(on) => void set(on)} />
-			</div>
-		</Field>
-	);
-}
-
 /** A theme's look in a few colours: the page, the text, the accent and three kinds of code. */
 function Swatch({ colors }: { colors: Record<string, string> }) {
 	const dots = [colors.brand, colors["code-keyword"], colors["code-string"], colors["code-function"]];
@@ -2138,7 +2117,6 @@ function AppPage() {
 				<FieldLegend>This app</FieldLegend>
 				<FieldGroup>
 					<ThemePicker />
-					<AgentAccent />
 					{s.updates ? (
 						<Field orientation="responsive" data-setting="updates">
 							<FieldContent>

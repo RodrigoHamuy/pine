@@ -61,13 +61,11 @@ interface Prefs {
 	 * opens in it, and its frame (light or dark) and background follow it. None: pmndre.
 	 */
 	look?: Look;
-	/** While a coloured agent's conversation is in front, the window's accent is its colour. */
-	agentAccent: boolean;
 	bounds?: { x?: number; y?: number; width: number; height: number };
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, commandTried: false, agentAccent: true };
+let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, commandTried: false };
 
 function loadPrefs(): void {
 	try {
@@ -81,8 +79,6 @@ function loadPrefs(): void {
 			updates: raw.updates !== false,
 			commandTried: raw.commandTried === true,
 			look: cleanLook(raw.look),
-			// Off when the owner turned it off, or unticked the primary when the window took role families from the agent.
-			agentAccent: raw.agentAccent === false ? false : raw.agentAccent === true || !(Array.isArray(raw.agentFamilies) && !raw.agentFamilies.includes("primary")),
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
 		};
 		// Only a machine that is in the list: what else might be written there is not connected to.
@@ -562,7 +558,6 @@ function wire(): void {
 			nativeTheme.themeSource = prefs.look?.kind ?? "dark";
 			refreshBackground();
 		}
-		if (typeof change.agentAccent === "boolean") prefs.agentAccent = change.agentAccent;
 		savePrefs();
 		return { ...prefs, bounds: undefined };
 	});

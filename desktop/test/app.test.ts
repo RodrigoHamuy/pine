@@ -1926,7 +1926,7 @@ test("many tabs keep their width and scroll instead of stepping on each other", 
 	while ((await page.locator("[data-slot=tab]").count()) > had) await page.click("[data-slot=tab] >> nth=-1 >> button[aria-label='Close this tab']");
 });
 
-test("a right click on a tab closes the others, those to its right, the saved ones or all of them, main's too, and pins; what is asked stays answerable", async () => {
+test("a right click on a tab closes the others, those to its right or all of them, main's too, and pins; what is asked stays answerable", async () => {
 	// The tabs of before, put back at the end for the tests after this one (the daemon keeps them).
 	const before = (await api("GET", "/ui/tabs")).data;
 	const tabs = page.locator("[data-slot=tab]");
@@ -1979,14 +1979,8 @@ test("a right click on a tab closes the others, those to its right, the saved on
 	await sees("[data-slot=toast] >> text=1 tab stayed open: it waits for your answer.");
 	assert.equal(await tabs.nth(1).getAttribute("data-active"), "true");
 	assert.equal(await page.locator("[data-slot=tab] [data-slot=tab-name]", { hasText: /^main$/ }).count(), 0);
-	// Close Saved leaves a tab with a message typed and not sent, and one that waits; with the input empty again, it closes.
-	await page.fill("[data-slot=composer] textarea", "not sent yet");
-	await choose(0, "Close Saved");
-	await sees("[data-slot=toast] >> text=Every tab has something unsaved or waiting.");
-	await count(2);
-	await tabs.nth(1).click();
-	await page.fill("[data-slot=composer] textarea", "");
-	await choose(0, "Close Saved");
+	// Close, the menu's first item, closes that tab alone.
+	await (await opened(1)).getByRole("menuitem").first().click();
 	await count(1);
 	// A tab that waits is closed by its own button: what was asked goes to the tab in front, and is answered there.
 	await menu("new");

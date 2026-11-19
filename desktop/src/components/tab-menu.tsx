@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import { ContextMenu, ContextMenuContent, ContextMenuGroup, ContextMenuItem, ContextMenuSeparator, ContextMenuShortcut, ContextMenuTrigger } from "@/components/ui/context-menu";
 
-export type TabMenuAction = "close" | "others" | "right" | "saved" | "all" | "pin" | "unpin";
+export type TabMenuAction = "close" | "others" | "right" | "all" | "pin" | "unpin";
 
 /**
  * The menu of a tab in the title bar, opened with a right click on the tab, as in VS Code: the ways to close tabs, and
@@ -20,7 +20,6 @@ export function TabMenu({ trigger, pin, others = true, right = true, open, onAct
 					</ContextMenuItem>
 					<ContextMenuItem disabled={!others} onClick={() => onAction("others")}>Close Others</ContextMenuItem>
 					<ContextMenuItem disabled={!right} onClick={() => onAction("right")}>Close to the Right</ContextMenuItem>
-					<ContextMenuItem onClick={() => onAction("saved")}>Close Saved</ContextMenuItem>
 					<ContextMenuItem onClick={() => onAction("all")}>Close All</ContextMenuItem>
 				</ContextMenuGroup>
 				{pin ? (

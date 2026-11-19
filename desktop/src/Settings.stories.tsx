@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { AgentDetail, AgentInfo, McpServer, Overview, Route, Schedule, Setting } from "./api.ts";
 import { store } from "./model.ts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { AgentAccent, NewRoute, NewSchedule, Routes, Schedules, Settings, ThemePicker } from "./Settings.tsx";
+import { NewRoute, NewSchedule, Routes, Schedules, Settings, ThemePicker } from "./Settings.tsx";
 import { THEMES } from "../.storybook/themes.ts";
 import type { ThemeEntry } from "./theme.ts";
 
@@ -218,19 +218,6 @@ export const Theme: Story = {
 		return (
 			<div className="w-full max-w-200">
 				<ThemePicker />
-			</div>
-		);
-	},
-};
-
-/** The switch for the colour of the agent in front, turned off: the theme's accent stays whoever is in front. */
-export const AgentAccentOff: Story = {
-	args: { section: "app" },
-	render: () => {
-		store.prefs = { ...store.prefs, agentAccent: false };
-		return (
-			<div className="w-full max-w-200">
-				<AgentAccent />
 			</div>
 		);
 	},

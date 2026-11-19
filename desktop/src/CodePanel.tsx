@@ -278,12 +278,6 @@ interface TreeState {
 }
 const trees = new Map<string, TreeState>();
 const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map(), failed: new Map(), edits: new Map() }), trees.get(key)!);
-/** The model is told which conversations have a file edited and not saved: the tab bar's Close Saved leaves their tabs open. */
-const noteEdits = (key: string): void => {
-	const edited = [...treeOf(key).edits.values()].some((e) => e.draft !== undefined && e.draft !== e.base);
-	if (edited) store.editing.add(key);
-	else store.editing.delete(key);
-};
 
 /** The folder's files as a tree: a folder opens and closes, a file opens in the editor. */
 function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void; tick: number }) {
@@ -348,7 +342,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	const disk = useLoad(() => api.file(tab.agent, tab.session, file), [tab.key, file, tab.codeTick]);
 	const edits = treeOf(tab.key).edits;
 	const [, redraw] = useState(0);
-	const edit = (patch: { draft?: string; base?: string }) => (edits.set(file, { ...edits.get(file), ...patch }), noteEdits(tab.key), redraw((n) => n + 1));
+	const edit = (patch: { draft?: string; base?: string }) => (edits.set(file, { ...edits.get(file), ...patch }), redraw((n) => n + 1));
 	const { draft, base } = edits.get(file) ?? {};
 	const setDraft = (draft?: string) => edit({ draft });
 	const setBase = (base?: string) => edit({ base });
@@ -362,7 +356,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [text]);
 	// Leaving the file gives up what was typed in it.
-	const leave = () => (edits.delete(file), noteEdits(tab.key), close());
+	const leave = () => (edits.delete(file), close());
 	const save = async () => {
 		if (!dirty || saving) return;
 		setSaving(true);

@@ -44,7 +44,6 @@ export const COMMANDS: Command[] = [
 	{ name: "close", title: "Close tab", about: "Close this tab; the conversation stays in the list", keys: "⌘W", run: menu("close") },
 	{ name: "close-others", title: "Close other tabs", about: "Close every tab but this one; the conversations stay in the list", run: (_a, tab) => store.closeTabs("others", tab) },
 	{ name: "close-right", title: "Close tabs to the right", about: "Close the tabs to the right of this one", run: (_a, tab) => store.closeTabs("right", tab) },
-	{ name: "close-saved", title: "Close saved tabs", about: "Close the tabs with no message typed and not sent, no file edited and not saved, and nothing that waits for your answer", run: (_a, tab) => store.closeTabs("saved", tab) },
 	{ name: "close-all", title: "Close all tabs", about: "Close every tab, the agent's main conversation's too; a tab that waits for your answer stays", run: (_a, tab) => store.closeTabs("all", tab) },
 	{ name: "rename", title: "Rename conversation", about: "Another name for this conversation and its tab", hint: "<name>", chat: true, run: (args, tab) => (chat(tab) ? (args.trim() ? store.rename(tab!.agent, tab!.session, args.trim()) : store.askRename(tab!)) : undefined) },
 	{ name: "pin", title: "Pin conversation", about: "Keep this conversation however long it is not used", chat: true, run: (_a, tab) => (chat(tab) ? store.pin(tab!, true) : undefined) },

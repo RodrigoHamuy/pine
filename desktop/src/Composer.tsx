@@ -400,14 +400,15 @@ export function Composer({ tab }: { tab: Tab }) {
 								</TooltipTrigger>
 								<TooltipContent>Reasoning: {thinking}, how much the model thinks before it answers</TooltipContent>
 							</Tooltip>
-							<DropdownMenuContent side="top" className="w-56" onClick={inMenu}>
+							<DropdownMenuContent side="top" className="w-72" onClick={inMenu}>
 								<DropdownMenuGroup>
 									<DropdownMenuLabel>Reasoning for {tab.agent}</DropdownMenuLabel>
 									<DropdownMenuRadioGroup value={thinking} onValueChange={(level: string) => void store.setReasoning(tab, level)}>
+										{/* Two columns, each row on one line: the level, and what it means beside it. */}
 										{Object.entries(REASONING_ABOUT).map(([level, about]) => (
 											<DropdownMenuRadioItem key={level} value={level} closeOnClick>
-												{level}
-												<span className="text-muted-foreground">{about}</span>
+												<span className="w-16 shrink-0">{level}</span>
+												<span className="truncate text-muted-foreground">{about}</span>
 											</DropdownMenuRadioItem>
 										))}
 									</DropdownMenuRadioGroup>
