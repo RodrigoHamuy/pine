@@ -79,10 +79,22 @@ try {
 		res.end(Buffer.from(await response.arrayBuffer()));
 	});
 	const relay = new WebSocketServer({ noServer: true });
+	// The relay can be stopped and started again, as a deploy restarts a Worker: stopped, it cuts
+	// what it carries and refuses new connections.
+	let relayUp = true;
+	const carried = new Set<{ terminate(): void }>();
+	const restartRelay = async (downMs: number) => {
+		relayUp = false;
+		for (const ws of carried) ws.terminate();
+		await new Promise((r) => setTimeout(r, downMs));
+		relayUp = true;
+	};
 	server.on("upgrade", (req, socket, head) => {
-		if (!req.url?.startsWith("/ssh?")) return socket.destroy();
+		if (!req.url?.startsWith("/ssh?") || !relayUp) return socket.destroy();
 		relayed.push(req.url);
 		relay.handleUpgrade(req, socket, head, (ws) => {
+			carried.add(ws);
+			ws.on("close", () => carried.delete(ws));
 			const tcp = connect(machine.sshPort, "127.0.0.1");
 			tcp.on("data", (data) => ws.send(data));
 			tcp.on("close", () => ws.close());
@@ -203,6 +215,43 @@ try {
 		assert.equal(await opened.evaluate(() => window.opener), null);
 		assert.equal(page.url(), `${origin}/`);
 		await opened.close();
+	});
+
+	const status = frame.locator("[data-slot=service-status]");
+	await check("after the relay restarts, the bridge connects again by itself and the conversation goes on", async () => {
+		const before = relayed.length;
+		await restartRelay(1500);
+		await status.and(frame.locator('[aria-label*="pine does not answer"]')).waitFor({ timeout: 10_000 });
+		await status.and(frame.locator('[aria-label*="pine 0"], [aria-label*="pine 1"]')).waitFor({ timeout: 30_000 });
+		assert.ok(relayed.length > before, "a new connection went through the relay");
+		const box = frame.locator("textarea").first();
+		await box.fill('Again. <<MOCK {"steps":[{"text":"Still here after the relay restarted."}]}>>');
+		await box.press("Enter");
+		await frame.getByText("Still here after the relay restarted.", { exact: true }).first().waitFor({ timeout: 60_000 });
+	});
+
+	await check("the side panel's state is kept by the bridge across a reload", async () => {
+		await (await inside()).evaluate(() => localStorage.setItem("pine.sidebar.width", "333"));
+		// The page hands its storage over after a short pause.
+		await new Promise((r) => setTimeout(r, 800));
+		await page.reload();
+		await frame.locator("textarea").first().waitFor({ timeout: 60_000 });
+		assert.equal(await (await inside()).evaluate(() => localStorage.getItem("pine.sidebar.width")), "333");
+	});
+
+	await check("a browser without Ed25519 in WebCrypto is told which browsers work, and nothing else starts", async () => {
+		const other = await browser.context.newPage();
+		await other.addInitScript(() => {
+			const make = crypto.subtle.generateKey.bind(crypto.subtle);
+			crypto.subtle.generateKey = ((algorithm: { name?: string }, ...rest: unknown[]) => (algorithm?.name === "Ed25519" ? Promise.reject(new DOMException("Unrecognized name.", "NotSupportedError")) : (make as any)(algorithm, ...rest))) as typeof crypto.subtle.generateKey;
+		});
+		const tries = relayed.length;
+		await other.goto(`${origin}/`);
+		await other.locator(".unsupported").waitFor({ timeout: 10_000 });
+		assert.match(await other.locator(".unsupported").innerText(), /Chrome 137 or later, Firefox 130 or later, or Safari 17 or later/);
+		assert.equal(await other.locator("iframe").count(), 0);
+		assert.equal(relayed.length, tries);
+		await other.close();
 	});
 
 	assert.deepEqual(errors.filter((e) => /Content Security Policy|Refused/.test(e)), [], "the page broke no policy");

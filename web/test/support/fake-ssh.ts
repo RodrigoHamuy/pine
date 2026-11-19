@@ -4,7 +4,7 @@
 // on a loopback port of this computer.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import net, { type AddressInfo } from "node:net";
-import { SshRefused, type Channel, type Connection, type ConnectOptions } from "../../src/ssh.ts";
+import { RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions } from "../../src/ssh.ts";
 
 export type Daemon = { port: number; token: string; seen: { method: string; url: string; auth?: string; host?: string; body: string }[]; stop(): Promise<void> };
 
@@ -97,6 +97,10 @@ export type Machine = {
 	forwards: { host: string; port: number }[];
 	/** Connections open now. */
 	open: number;
+	/** Whether the relay reaches the machine; false: the relay closes with "unreachable" (4504), "refused": the relay refuses before the WebSocket opens. */
+	reachable: boolean | "refused";
+	/** Cuts every open connection, as a relay that restarts or a network that drops does. */
+	drop(): void;
 	connect(options: ConnectOptions): Promise<Connection>;
 };
 
@@ -104,6 +108,7 @@ export const fp = (c: string) => `SHA256:${c.repeat(43)}`;
 
 /** A machine whose pine runs the daemon given, at its port on the loopback. */
 export function fakeMachine(daemon: Daemon): Machine {
+	const cuts = new Set<() => void>();
 	const m: Machine = {
 		fingerprint: fp("h"),
 		authorized: true,
@@ -112,27 +117,51 @@ export function fakeMachine(daemon: Daemon): Machine {
 		commands: [],
 		forwards: [],
 		open: 0,
+		reachable: true,
+		drop() {
+			for (const cut of [...cuts]) cut();
+		},
 		async connect(options) {
 			m.connects.push({ url: options.url, user: options.user, hostFingerprint: options.hostFingerprint });
+			if (m.reachable === "refused") throw new RelayClosed(0, "");
+			if (!m.reachable) throw new RelayClosed(4504, "The server could not be reached.");
 			if (options.hostFingerprint !== m.fingerprint) throw new SshRefused("host-key", "not the confirmed key", m.fingerprint);
 			if (!m.authorized) throw new SshRefused("not-authorized", "key refused");
 			m.open++;
 			let gone = false;
+			let ended!: () => void;
+			const closed = new Promise<void>((resolve) => (ended = resolve));
+			const sockets = new Set<net.Socket>();
+			const execs = new Set<Channel>();
+			const cut = () => {
+				if (!gone) m.open--;
+				gone = true;
+				cuts.delete(cut);
+				for (const s of sockets) s.destroy();
+				for (const e of execs) void e.close();
+				ended();
+			};
+			cuts.add(cut);
 			return {
 				async exec(command) {
+					if (gone) throw new Error("the connection is closed");
 					m.commands.push(command);
-					return execChannel(m.service.out, m.service.err ?? "", m.service.exit);
+					const channel = execChannel(m.service.out, m.service.err ?? "", m.service.exit);
+					execs.add(channel);
+					return channel;
 				},
 				async forward(host, port) {
+					if (gone) throw new Error("the connection is closed");
 					m.forwards.push({ host, port });
 					const socket = net.connect(daemon.port, "127.0.0.1");
+					sockets.add(socket);
 					await new Promise((resolve, reject) => socket.once("connect", resolve).once("error", reject));
 					return socketChannel(socket);
 				},
 				async close() {
-					if (!gone) m.open--;
-					gone = true;
+					cut();
 				},
+				closed,
 			};
 		},
 	};

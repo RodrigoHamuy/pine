@@ -8,7 +8,7 @@ import type { AppState, Prefs, ServiceState } from "../../desktop/src/bridge.ts"
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
 import type { BridgeEvent } from "./protocol.ts";
 import { REMOTE_COMMAND } from "./remote-command.ts";
-import { generateKey, publicKeyLine, SshRefused, type Channel, type Connection, type ConnectOptions } from "./ssh.ts";
+import { generateKey, publicKeyLine, RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions } from "./ssh.ts";
 import { callDaemon, followEvents, loopbackEnd, mediaOf, runService, ServiceTrouble, type Daemon } from "./tunnel.ts";
 
 /** Where the bridge keeps what it remembers: IndexedDB in a browser (idb-store.ts), a map in the tests. Values are structured-cloned, CryptoKeys included. */
@@ -29,11 +29,22 @@ export type WebBridgeDeps = {
 	share?(title: string, text: string): Promise<void>;
 	/** The web client's version. */
 	version: string;
+	/** Waits between attempts to connect again (the tests make them short); none: a timer. */
+	wait?(ms: number): Promise<void>;
+	/** How long `pine service` has to say where its daemon answers; none: a minute. */
+	serviceMs?: number;
 	/** Opens an address of the web in a new tab of the browser, with nothing of this document handed to it (`noopener`). */
 	open?(url: string): void;
 	/** Hands a text to the browser as a file to save (a download), under that name. */
 	save?(name: string, text: string): void;
 };
+
+/** How long to wait before the attempt after the `n`th failed one to connect again: doubling from a second, at most half a minute. */
+export const backoff = (n: number) => Math.min(1000 * 2 ** n, 30_000);
+/** Failed attempts to connect again before the page is told what is wrong; until then it stays in its conversations, shown as not connected. */
+const QUIET_TRIES = 3;
+/** Losses of the event stream in a row, with SSH still up, after which pine there is taken for gone and the connection is made again (as desktop/electron/main.ts does). */
+const STREAM_LOSSES = 5;
 
 /** A picture, video or sound of the daemon's, by its path and query: one of `MEDIA`'s paths, nothing that could be read as another request. */
 function mediaTarget(target: string): string {
@@ -59,7 +70,25 @@ function fileName(name: string): string {
 }
 
 /** The page's own preferences, as the bridge keeps them. */
-type PagePrefs = { notify: boolean; updates: boolean; keepRunning: boolean; agentAccent: boolean; look?: Look };
+type PagePrefs = { notify: boolean; updates: boolean; keepRunning: boolean; agentAccent: boolean; look?: Look; storage?: PageStorage };
+
+/**
+ * What the page keeps in its Web Storage (the side panel's widths, what is folded), which its
+ * opaque origin does not keep across a reload: the page hands all of it over with `prefs`
+ * (page-storage.ts) and is given it back with the state. Only the page's own keys, as text.
+ */
+type PageStorage = Record<string, string>;
+const STORAGE_KEY = /^pine\.[A-Za-z0-9._-]{1,80}$/;
+const STORAGE_KEYS = 64;
+const STORAGE_VALUE = 8192;
+
+/** The page's storage as it may be kept: entries that are not its keys or not text within bounds are left out; too many keys is refused. */
+function cleanStorage(value: unknown): PageStorage | undefined {
+	if (!value || typeof value !== "object" || Array.isArray(value)) return undefined;
+	const entries = Object.entries(value).filter(([k, v]) => STORAGE_KEY.test(k) && typeof v === "string" && v.length <= STORAGE_VALUE);
+	if (entries.length > STORAGE_KEYS) throw new Error(`The page asked to keep too much: at most ${STORAGE_KEYS} entries.`);
+	return Object.fromEntries(entries) as PageStorage;
+}
 type Kept = { prefs: PagePrefs; hosts: string[]; use?: string };
 
 const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false, agentAccent: true };
@@ -86,12 +115,27 @@ const NO_MACHINE: ServiceState = {
 function serviceTrouble(host: string, e: ServiceTrouble): string {
 	if (/unknown command "service"/.test(e.stderr)) return `The pine on ${host} is too old to be reached this way: it has no "service" command. Update it there with "pine update", then try again.`;
 	if (e.exitStatus === 127) return `pine is not installed on ${host}, or not on the PATH of its login shell. ${e.stderr.trim()}`;
-	if (e.message === "timeout") return `${host} did not answer within a minute.`;
+	if (e.message === "timeout") return `pine on ${host} is not answering: "pine service" there said nothing within a minute. Look at what it does there with "pine status", or restart it, then try again.`;
 	if (e.message === "ended") return e.stderr.trim() || `The command on ${host} ended (exit ${e.exitStatus ?? "unknown"}) without saying why.`;
 	return `${host} ${e.message}`;
 }
 
+/** What the relay's closing means for the machine, in words that say what to check (codes: web/relay/src/relay.ts `CLOSE`). */
+function relayTrouble(host: string, e: RelayClosed): string {
+	const { hostname, port } = parseHost(host);
+	if (e.code === 0) return `The relay did not open a connection to ${hostname}. It may be down, or it refused: it reaches only machines with a public address, and allows a browser a few connections a minute. Check the address, wait a minute, and try again.`;
+	if (e.code === 4504) return `${hostname} could not be reached on port ${port}. Check that the machine is on, that SSH listens on that port, and that its firewall lets connections in from the internet.`;
+	if (e.code === 4502) return `${hostname} answers on port ${port}, but not with SSH. Check the port.`;
+	if (e.code === 4408) return `${hostname} did not answer with SSH on port ${port} within a few seconds.`;
+	if (e.code === 4400) return "The relay carries only SSH, and refused what this browser sent.";
+	return `The connection to ${host} was closed: ${e.message}`;
+}
+
+/** How an attempt to connect ended: ready, a trouble that may pass by itself (the network, the relay, a slow pine), one only the owner can fix, or another attempt took its place. */
+type Outcome = "ready" | "passing" | "final" | "superseded";
+
 export function webBridge(deps: WebBridgeDeps) {
+	const wait = deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 	const listeners = new Map<BridgeEvent, Set<(value: unknown) => void>>();
 	const emit = (event: BridgeEvent, value: unknown) => listeners.get(event)?.forEach((fn) => fn(value));
 
@@ -145,10 +189,21 @@ export function webBridge(deps: WebBridgeDeps) {
 		await c?.connection.close().catch(() => {});
 	};
 
-	const connectTo = async (host: string) => {
+	/**
+	 * Connects to `host`, runs pine service there and follows its events. `again`: the connection in
+	 * use was lost, so the page stays where it is (state "ready", not connected) and is told a
+	 * trouble that may pass only when `say`. A trouble only the owner can fix is always told.
+	 */
+	const connectTo = async (host: string, again?: { say: boolean }): Promise<Outcome> => {
 		const mine = ++round;
 		await letGo();
-		setState({ status: "starting", host });
+		const say = !again || again.say;
+		const passing = (message: string): Outcome => {
+			if (say) setState({ status: "error", kind: "ssh", host, message });
+			return "passing";
+		};
+		const final = (next: ServiceState): Outcome => (setState(next), "final");
+		if (!again) setState({ status: "starting", host });
 		const known = hostKeys[host];
 		let connection: Connection;
 		try {
@@ -156,35 +211,70 @@ export function webBridge(deps: WebBridgeDeps) {
 			// With no key trusted yet, a fingerprint no key has: the core stops at the host key and says which it saw, before the browser's key is offered.
 			connection = await deps.connect({ url: deps.relay(hostname, port), user, key: await key(), hostFingerprint: known ?? "none" });
 		} catch (e) {
-			if (mine !== round) return;
+			if (mine !== round) return "superseded";
 			if (e instanceof SshRefused && e.reason === "host-key" && e.hostFingerprint) {
 				const seen = e.hostFingerprint;
 				if (known)
-					return setState({ status: "error", kind: "ssh", host, fingerprint: seen, changed: true, message: `The host key of ${host} changed: it was ${known}, it is now ${seen}. Someone may stand between this browser and the machine, or the machine was set up anew. If you know why, forget the machine and add it again.` });
-				return setState({ status: "error", kind: "ssh", host, fingerprint: seen, changed: false, message: `This browser does not know ${host} yet. Its host key's fingerprint is ${seen}. If that is what the machine shows (ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub), trust it and connect.` });
+					return final({ status: "error", kind: "ssh", host, fingerprint: seen, changed: true, message: `The host key of ${host} changed: it was ${known}, it is now ${seen}. Someone may stand between this browser and the machine, or the machine was set up anew. If you know why, forget the machine and add it again.` });
+				return final({ status: "error", kind: "ssh", host, fingerprint: seen, changed: false, message: `This browser does not know ${host} yet. Its host key's fingerprint is ${seen}. If that is what the machine shows (ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub), trust it and connect.` });
 			}
 			if (e instanceof SshRefused && e.reason === "not-authorized")
-				return setState({ status: "error", kind: "ssh", host, message: `${host} did not accept this browser's key. Add it as a line of ~/.ssh/authorized_keys of that user there: ${await keyLine()}` });
-			return setState({ status: "error", kind: "ssh", host, message: `Could not connect to ${host} over SSH. ${e instanceof Error ? e.message : String(e)}` });
+				return final({ status: "error", kind: "ssh", host, message: `${host} did not accept this browser's key. Add it as a line of ~/.ssh/authorized_keys of that user there: ${await keyLine()}` });
+			if (e instanceof RelayClosed) return passing(relayTrouble(host, e));
+			return passing(`Could not connect to ${host} over SSH. ${e instanceof Error ? e.message : String(e)}`);
 		}
-		if (mine !== round) return void connection.close().catch(() => {});
-		current = { connection };
+		if (mine !== round) return void connection.close().catch(() => {}), "superseded";
+		let dropped = false;
+		void connection.closed.then(() => (dropped = true));
+		const held: NonNullable<typeof current> = (current = { connection });
 		const { label } = parseHost(host);
 		try {
-			const { said, channel } = await runService(connection, REMOTE_COMMAND);
-			if (mine !== round) return void channel.close().catch(() => {});
-			current.service = channel;
+			const { said, channel } = await runService(connection, REMOTE_COMMAND, deps.serviceMs);
+			if (mine !== round) return void channel.close().catch(() => {}), "superseded";
+			held.service = channel;
 			if (said.error) throw new Error(`The pine on ${label} did not start: ${said.error}`);
 			const far = loopbackEnd(said.base);
-			current.daemon = { connection, host: far.host, port: far.port, token: String(said.token) };
+			held.daemon = { connection, host: far.host, port: far.port, token: String(said.token) };
 			setState({ status: "ready", mode: `on ${label}`, started: said.started === true, home: `${label}:${String(said.home ?? "~/.pine")}`, version: typeof said.version === "string" ? said.version : undefined, from: `ssh ${host}`, host, label });
-			const events = (current.events = new AbortController());
-			followEvents(current.daemon, events.signal, { batch: (b) => emit("events", b), connection: setConnected });
+			const events = (held.events = new AbortController());
+			// Lost: the connection ended, or pine there stopped answering with SSH still up. Either way it is made again.
+			const lost = () => {
+				if (current === held) void reconnect(host);
+			};
+			void connection.closed.then(lost);
+			followEvents(held.daemon, events.signal, { batch: (b) => emit("events", b), connection: setConnected, lost: (times) => (times >= STREAM_LOSSES ? (lost(), true) : false) });
+			return "ready";
 		} catch (e) {
-			if (mine !== round) return;
+			if (mine !== round) return "superseded";
+			const cut = dropped;
 			await letGo();
-			if (e instanceof ServiceTrouble) return setState({ status: "error", kind: "ssh", host, message: serviceTrouble(host, e) });
-			setState({ status: "error", kind: "failed", host, message: e instanceof Error ? e.message : String(e) });
+			if (e instanceof ServiceTrouble && e.message === "timeout") return passing(serviceTrouble(host, e));
+			// The connection went while pine service was asked: the network, not the machine.
+			if (cut) return passing(`The connection to ${host} was lost while pine there was asked to start.`);
+			if (e instanceof ServiceTrouble) return final({ status: "error", kind: "ssh", host, message: serviceTrouble(host, e) });
+			return final({ status: "error", kind: "failed", host, message: e instanceof Error ? e.message : String(e) });
+		}
+	};
+
+	// Connecting again after a loss: at once, then after each failure a longer wait (`backoff`),
+	// cut short by `wake()`. It ends when connected, at a trouble only the owner can fix, or when
+	// anything else connects or lets go (`round` moved on).
+	let nudge: (() => void) | undefined;
+	let reconnecting = false;
+	const reconnect = async (host: string) => {
+		if (reconnecting) return;
+		reconnecting = true;
+		try {
+			for (let n = 0; ; n++) {
+				const outcome = await connectTo(host, { say: n >= QUIET_TRIES - 1 });
+				if (outcome !== "passing") return;
+				const before = round;
+				await Promise.race([wait(backoff(n)), new Promise<void>((r) => (nudge = r))]);
+				nudge = undefined;
+				if (round !== before) return;
+			}
+		} finally {
+			reconnecting = false;
 		}
 	};
 
@@ -222,6 +312,8 @@ export function webBridge(deps: WebBridgeDeps) {
 			const next: PagePrefs = { notify: flag("notify"), updates: flag("updates"), keepRunning: flag("keepRunning"), agentAccent: flag("agentAccent") };
 			const look = "look" in change ? cleanLook(change.look) : kept.prefs.look;
 			if (look) next.look = look;
+			const storage = "storage" in change ? cleanStorage(change.storage) : kept.prefs.storage;
+			if (storage) next.storage = storage;
 			kept = { ...kept, prefs: next };
 			await save();
 			return prefsOut();
@@ -292,6 +384,10 @@ export function webBridge(deps: WebBridgeDeps) {
 		shareKey: async () => {
 			const line = await keyLine();
 			return deps.share ? deps.share("This browser's SSH key", line) : deps.clipboard(line);
+		},
+		/** The network is back or the tab is shown again: a connection being made again is tried now, not after its wait. */
+		wake() {
+			nudge?.();
 		},
 		/** Lets go of the connection (the tests; a closed tab ends it anyway). */
 		stop() {

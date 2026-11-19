@@ -27,7 +27,10 @@ function memoryStore(): Store {
 function client(machine: Machine, store = memoryStore()) {
 	const w = windows();
 	const copied: string[] = [];
-	const bridge = webBridge({ connect: machine.connect, store, relay: (host, port) => `wss://relay.test/ssh?host=${host}&port=${port}`, clipboard: async (text) => void copied.push(text), version: "9.9.9" });
+	// The waits between attempts to connect again, as asked for; each is a few milliseconds here.
+	const waits: number[] = [];
+	const wait = (ms: number) => (waits.push(ms), new Promise<void>((r) => setTimeout(r, 2)));
+	const bridge = webBridge({ connect: machine.connect, store, relay: (host, port) => `wss://relay.test/ssh?host=${host}&port=${port}`, clipboard: async (text) => void copied.push(text), version: "9.9.9", wait, serviceMs: 500 });
 	serve(bridge, w.top, () => w.frame);
 	const page = frameBridge(w.parentOfFrame, w.frame);
 	const states: ServiceState[] = [];
@@ -35,7 +38,7 @@ function client(machine: Machine, store = memoryStore()) {
 	page.onService((s: ServiceState) => (states.push(s), told.push(s)));
 	page.onEvents((e: unknown) => told.push(e));
 	page.onConnection((c: unknown) => told.push(c));
-	return { page, states, told, store, copied, stop: () => bridge.stop() };
+	return { page, states, told, store, copied, waits, wake: () => bridge.wake(), stop: () => bridge.stop() };
 }
 
 /** Waits for the state the page was last told to match. */
@@ -235,6 +238,119 @@ test("prefs: the page's own, checked; the machines change by their own methods o
 	assert.deepEqual(p.hosts, []);
 	assert.equal(p.use, undefined);
 	assert.equal(p.look, undefined);
+	c.stop();
+});
+
+/** Waits until `ok()` holds. */
+async function until(ok: () => boolean, what: string, ms = 3000) {
+	const end = Date.now() + ms;
+	while (!ok()) {
+		if (Date.now() > end) throw new Error(`never: ${what}`);
+		await new Promise((r) => setTimeout(r, 5));
+	}
+}
+
+/** Whether the page was told the daemon's hello after the `from`th thing it was told. */
+const helloAfter = (told: unknown[], from: number) => told.slice(from).some((t) => Array.isArray(t) && t.some((e: any) => e.topic === "pine/hello"));
+
+test("a dropped connection is made again by itself: the page stays in its conversations, and the event stream resumes", async () => {
+	const c = await ready();
+	await until(() => helloAfter(c.told, 0), "the first hello");
+	const states = c.states.length;
+	const mark = c.told.length;
+	c.machine.drop();
+	await until(() => c.told.slice(mark).includes(false), "told the stream is down");
+	await until(() => c.told.slice(mark).lastIndexOf(true) > c.told.slice(mark).indexOf(false), "told the stream is up again");
+	await until(() => helloAfter(c.told, mark), "the events resume");
+	// The page is not sent back to the start screen: nothing but "ready" was said meanwhile.
+	assert.ok(c.states.slice(states).every((s) => s.status === "ready"), JSON.stringify(c.states.slice(states)));
+	assert.equal(c.machine.commands.length, 2);
+	assert.equal(c.machine.open, 1);
+	assert.equal((await c.page.call("GET", "/agents")).status, 200);
+	assert.equal((await c.page.state()).connected, true);
+	c.stop();
+});
+
+test("connecting again backs off, says what is wrong while it cannot, and is back when the machine is", async () => {
+	const c = await ready();
+	const mark = c.states.length;
+	c.machine.reachable = false;
+	c.machine.drop();
+	const down = await becomes(c, (s) => s.status === "error", 5000);
+	assert.match((down as { message: string }).message, /could not be reached.*port 22/);
+	await until(() => c.waits.length >= 6, "six waits");
+	assert.deepEqual(c.waits.slice(0, 6), [1000, 2000, 4000, 8000, 16000, 30000]);
+	c.machine.reachable = true;
+	await becomes(c, (s) => s.status === "ready", 5000);
+	assert.ok(c.states.slice(mark).every((s) => s.status !== "starting"), "the page was never sent to the start screen's spinner");
+	c.stop();
+});
+
+test("waking (the network is back, the tab is shown again) tries at once instead of waiting out the backoff", async () => {
+	const c = await ready();
+	c.machine.reachable = false;
+	c.machine.drop();
+	await becomes(c, (s) => s.status === "error", 5000);
+	const tries = c.machine.connects.length;
+	c.wake();
+	await until(() => c.machine.connects.length > tries, "another attempt");
+	c.stop();
+});
+
+test("a stop for good while connecting again: a key no longer taken, or a host key that changed, is said and not tried again", async () => {
+	const c = await ready();
+	c.machine.authorized = false;
+	c.machine.drop();
+	const s = await becomes(c, (x) => x.status === "error", 5000);
+	assert.match((s as { message: string }).message, /did not accept this browser's key.*ssh-ed25519 AAAA/);
+	const tries = c.machine.connects.length;
+	await new Promise((r) => setTimeout(r, 100));
+	assert.equal(c.machine.connects.length, tries);
+	c.stop();
+});
+
+test("the relay's refusals reach the page as what to do", async () => {
+	const machine = fakeMachine(daemon);
+	machine.reachable = "refused";
+	const c = client(machine);
+	await c.page.state();
+	await c.page.addHost("me@box.example:2222");
+	await c.page.use("me@box.example:2222");
+	const s = await becomes(c, (x) => x.status === "error");
+	assert.match((s as { message: string }).message, /relay.*public address/);
+	machine.reachable = false;
+	await c.page.retry();
+	assert.match(((await becomes(c, (x) => x.status === "error" && /could not be reached/.test(x.message))) as { message: string }).message, /box\.example.*port 2222/);
+	c.stop();
+});
+
+test("the page's own storage (the side panel's widths, what is folded) is kept through prefs: only its keys, as text, within bounds", async () => {
+	const store = memoryStore();
+	const c = client(fakeMachine(daemon), store);
+	await c.page.state();
+	const p = (await c.page.prefs({ storage: { "pine.sidebar.width": "300", "pine.folded": '["main"]', "pine.aside": "shown", other: "x", "pine.number": 7, "pine.long": "x".repeat(20_000) } })) as { storage?: Record<string, string> };
+	assert.deepEqual(p.storage, { "pine.sidebar.width": "300", "pine.folded": '["main"]', "pine.aside": "shown" });
+	// A change of another preference keeps it; a new page is given it with the state.
+	await c.page.prefs({ notify: true });
+	const again = (await client(fakeMachine(daemon), store).page.state()).prefs as { storage?: Record<string, string>; notify: boolean };
+	assert.equal(again.notify, true);
+	assert.deepEqual(again.storage, { "pine.sidebar.width": "300", "pine.folded": '["main"]', "pine.aside": "shown" });
+	// Too many keys: none of the change is kept.
+	const many = Object.fromEntries(Array.from({ length: 200 }, (_, i) => [`pine.k${i}`, "1"]));
+	await assert.rejects(c.page.prefs({ storage: many }), /too much/);
+	c.stop();
+});
+
+test("a pine that says nothing is said to be not answering, and is tried again after a drop until it answers", async () => {
+	const c = await ready();
+	const answering = c.machine.service;
+	c.machine.service = { out: "" };
+	c.machine.drop();
+	const s = await becomes(c, (x) => x.status === "error", 8000);
+	assert.match((s as { message: string }).message, /pine on me@box\.example is not answering/);
+	c.machine.service = answering;
+	c.wake();
+	await becomes(c, (x) => x.status === "ready", 8000);
 	c.stop();
 });
 

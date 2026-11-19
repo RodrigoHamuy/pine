@@ -5,18 +5,10 @@ import { webBridge } from "./host.ts";
 import { idbStore } from "./idb-store.ts";
 import { serve } from "./serve.ts";
 import { connect } from "./ssh.ts";
+import { unsupported } from "./supported.ts";
 
 declare const __PINE_WEB_VERSION__: string;
 
-/** Whether this browser's WebCrypto signs with Ed25519, which the key needs. */
-async function ed25519(): Promise<boolean> {
-	try {
-		await crypto.subtle.generateKey({ name: "Ed25519" }, false, ["sign", "verify"]);
-		return true;
-	} catch {
-		return false;
-	}
-}
 
 /** The relay of this deployment, for a host and port: the same host, at /ssh. */
 function relay(host: string, port: number): string {
@@ -27,10 +19,11 @@ function relay(host: string, port: number): string {
 }
 
 async function main() {
-	if (!(await ed25519())) {
+	const said = await unsupported(crypto.subtle);
+	if (said) {
 		const p = document.createElement("p");
 		p.className = "unsupported";
-		p.textContent = "This browser cannot make the SSH key Pine needs (Ed25519 in WebCrypto). Open this page in Chrome 137 or later, Firefox 130 or later, or Safari 17 or later.";
+		p.textContent = said;
 		document.body.append(p);
 		return;
 	}
@@ -56,6 +49,9 @@ async function main() {
 	frame.setAttribute("sandbox", "allow-scripts");
 	frame.title = "Pine";
 	serve(bridge, window, () => frame.contentWindow);
+	// A connection being made again is tried at once when the network is back or the tab is looked at again.
+	window.addEventListener("online", () => bridge.wake());
+	document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && bridge.wake());
 	// The page is loaded once. A frame that loads anything again was navigated by what it drew:
 	// the whole client starts anew, so that nothing is told to another document in its place.
 	let loads = 0;

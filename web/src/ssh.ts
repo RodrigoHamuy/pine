@@ -237,7 +237,24 @@ export type Connection = {
 	/** A direct-tcpip channel to a port as the server reaches it. */
 	forward(host: string, port: number): Promise<Channel>;
 	close(): Promise<void>;
+	/** Settles when the connection ended, whoever ended it: the relay, the network, the server or `close()`. */
+	closed: Promise<void>;
 };
+
+/**
+ * The relay's WebSocket closed before SSH got going. `code` is the relay's close code
+ * (web/relay/src/relay.ts `CLOSE`), or 0 when the WebSocket never opened: the relay refused it
+ * (a private address, a name with no address, too many connections) or could not be reached, and a
+ * browser is not told which.
+ */
+export class RelayClosed extends Error {
+	readonly code: number;
+	constructor(code: number, reason: string) {
+		super(reason || (code ? `The relay closed the connection (${code}).` : "The relay did not open a connection."));
+		this.name = "RelayClosed";
+		this.code = code;
+	}
+}
 
 /** Why a connection was refused: a host key other than the one confirmed, or a key not authorised. */
 export class SshRefused extends Error {
@@ -258,7 +275,7 @@ function open(url: string): Promise<WebSocket> {
 		const socket = new WebSocket(url);
 		socket.binaryType = "arraybuffer";
 		socket.onopen = () => resolve(socket);
-		socket.onerror = () => reject(new Error(`Could not open ${url}.`));
+		socket.onerror = () => reject(new RelayClosed(0, ""));
 	});
 }
 
@@ -281,6 +298,15 @@ export async function connect(options: ConnectOptions): Promise<Connection> {
 		})();
 	});
 	const socket = await open(options.url);
+	// How the relay closed, if it did: read when the session fails, so that its reason is said.
+	let shut: { code: number; reason: string } | undefined;
+	const closed = new Promise<void>((resolve) => {
+		socket.addEventListener("close", (e) => {
+			shut = { code: e.code, reason: e.reason };
+			resolve();
+		});
+		session.onClosed(() => resolve());
+	});
 	try {
 		await session.connect(new WebSocketStream(socket));
 		if (!(await session.authenticateServer())) {
@@ -292,6 +318,7 @@ export async function connect(options: ConnectOptions): Promise<Connection> {
 	} catch (error) {
 		await session.close(SshDisconnectReason.byApplication).catch(() => {});
 		socket.close();
+		if (!(error instanceof SshRefused) && shut && shut.code >= 4000) throw new RelayClosed(shut.code, shut.reason);
 		throw error;
 	}
 	return {
@@ -320,5 +347,6 @@ export async function connect(options: ConnectOptions): Promise<Connection> {
 			await session.close(SshDisconnectReason.byApplication);
 			socket.close();
 		},
+		closed,
 	};
 }

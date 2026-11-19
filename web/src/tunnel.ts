@@ -253,9 +253,10 @@ export async function mediaOf(daemon: Daemon, target: string, max = MEDIA_MAX): 
 
 /**
  * The daemon's live events, read until `signal` aborts and handed on in small batches, as
- * desktop/electron/daemon.ts's `followEvents` does: a lost stream is opened again a second later.
+ * desktop/electron/daemon.ts's `followEvents` does: a lost stream is opened again a second later,
+ * unless `lost`, told how many losses in a row there were, says the caller does something else.
  */
-export function followEvents(daemon: Daemon, signal: AbortSignal, on: { batch(events: unknown[]): void; connection(up: boolean): void }): void {
+export function followEvents(daemon: Daemon, signal: AbortSignal, on: { batch(events: unknown[]): void; connection(up: boolean): void; lost?(times: number): boolean }): void {
 	let batch: unknown[] = [];
 	let timer: ReturnType<typeof setTimeout> | undefined;
 	const flush = () => {
@@ -264,6 +265,7 @@ export function followEvents(daemon: Daemon, signal: AbortSignal, on: { batch(ev
 		batch = [];
 	};
 	const loop = async () => {
+		let down = 0;
 		while (!signal.aborted) {
 			try {
 				const channel = await daemon.connection.forward(daemon.host, daemon.port);
@@ -275,6 +277,7 @@ export function followEvents(daemon: Daemon, signal: AbortSignal, on: { batch(ev
 					{ method: "GET", path: "/events/stream?topic=%23", host: hostHeader(daemon), headers: { Authorization: `Bearer ${daemon.token}` } },
 					(head) => {
 						if (head.status !== 200) throw new Error(`HTTP ${head.status}`);
+						down = 0;
 						if (!signal.aborted) on.connection(true);
 					},
 					(data) => {
@@ -297,6 +300,7 @@ export function followEvents(daemon: Daemon, signal: AbortSignal, on: { batch(ev
 			}
 			if (signal.aborted) return;
 			on.connection(false);
+			if (on.lost?.(++down)) return;
 			await new Promise((r) => setTimeout(r, 1000));
 		}
 	};
