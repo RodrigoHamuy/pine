@@ -70,6 +70,9 @@ export const HostKeyToConfirm: Story = {
 		const row = canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"]')!;
 		await expect(row.querySelector('[data-slot="host-key-fingerprint"]')).toHaveTextContent(fingerprint);
 		await expect(row.querySelector('[data-slot="trust-host-key"]')).not.toBeNull();
+		// Its three buttons go below the text where they would squeeze it into a column (a phone, and the Gate's narrow card at any width).
+		const text = row.querySelector<HTMLElement>('[data-slot="item-content"]')!;
+		await expect(text.getBoundingClientRect().width).toBeGreaterThan(row.getBoundingClientRect().width / 2);
 	},
 };
 

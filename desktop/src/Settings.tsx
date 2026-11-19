@@ -2048,7 +2048,7 @@ function DeviceKey() {
 	if (!key) return null;
 	return (
 		<Item variant="outline" data-slot="device-key">
-			<ItemContent className="min-w-0">
+			<ItemContent className="min-w-0 flex-[1_1_12rem]">
 				<ItemTitle>This phone's key</ItemTitle>
 				<ItemDescription className="line-clamp-none font-mono text-xs break-all select-text">{key.key}</ItemDescription>
 				<ItemDescription className="line-clamp-none">Add it as a line of ~/.ssh/authorized_keys of the user you sign in as on each machine.</ItemDescription>
@@ -2097,7 +2097,8 @@ export function MachineList() {
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
 			<ItemMedia variant="icon">{h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
-			<ItemContent className="min-w-0">
+			{/* The text asks for 12rem before it shares its line: where the buttons would leave it less (a phone, the Gate), the Item wraps them onto a line of their own. */}
+			<ItemContent className="min-w-0 flex-[1_1_12rem]">
 				<ItemTitle className="name">
 					<span className={cn(h && "font-mono")}>{h ?? here}</span>
 					{status(h)}

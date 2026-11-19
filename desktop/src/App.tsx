@@ -122,7 +122,7 @@ export function Gate() {
 						<Logo className="size-9" />
 					</EmptyMedia>
 					<EmptyTitle>{title}</EmptyTitle>
-					{about ? <EmptyDescription className="select-text">{about}</EmptyDescription> : null}
+					{about ? <EmptyDescription className="break-words select-text">{about}</EmptyDescription> : null}
 				</EmptyHeader>
 				<EmptyContent>{actions}</EmptyContent>
 			</Empty>

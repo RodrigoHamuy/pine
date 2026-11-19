@@ -257,6 +257,8 @@ export const EnvironmentsHostKeyToConfirm: Story = {
 	play: async ({ canvasElement, userEvent }) => {
 		const row = canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"]')!;
 		await expect(row.querySelector('[data-slot="host-key-fingerprint"]')).toHaveTextContent(fingerprint);
+		// At a phone's width the three buttons go below the text instead of squeezing it into a column.
+		await expect(row.querySelector('[data-slot="item-content"]')!.getBoundingClientRect().width).toBeGreaterThan(row.getBoundingClientRect().width / 2);
 		await expect(canvasElement.querySelector('[data-environment="studio"] [data-slot="trust-host-key"]')).toBeNull();
 		await userEvent.click(row.querySelector<HTMLElement>('[data-slot="trust-host-key"]')!);
 		await expect(trusted).toHaveBeenCalledTimes(1);
