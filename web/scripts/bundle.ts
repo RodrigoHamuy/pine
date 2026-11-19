@@ -39,6 +39,7 @@ export const browserOptions: BuildOptions = {
 
 /** `entry` bundled for a browser, as one script's text. */
 export async function bundle(entry: string, options: BuildOptions = {}): Promise<string> {
-	const out = await build({ ...browserOptions, ...options, entryPoints: [entry], write: false });
+	// `define` is merged, not replaced: the SSH library needs `global` whatever a caller adds.
+	const out = await build({ ...browserOptions, ...options, define: { ...browserOptions.define, ...options.define }, entryPoints: [entry], write: false });
 	return out.outputFiles![0].text;
 }

@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
-import { MachineList, Settings } from "./Settings.tsx";
+import { Breakable, MachineList, Settings } from "./Settings.tsx";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
@@ -73,11 +73,11 @@ export function Gate() {
 			<MachineList />
 		</div>
 	);
-	const [title, about, actions]: [string, React.ReactNode, React.ReactNode] =
+	const [title, about, actions]: [React.ReactNode, React.ReactNode, React.ReactNode] =
 		state.status === "starting"
 			? host
 				? [
-						`Connecting to ${host}`,
+						<>Connecting to <span className="font-mono"><Breakable host={host} /></span></>,
 						"Reaching its pine over SSH, or starting one there…",
 						<div key="s" className="flex w-full flex-col items-center gap-4">
 							<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
@@ -122,7 +122,8 @@ export function Gate() {
 					<EmptyMedia>
 						<Logo className="size-9" />
 					</EmptyMedia>
-					<EmptyTitle>{title}</EmptyTitle>
+					{/* A long host (a Tailscale Funnel name and its port) wraps instead of spilling past the card. */}
+					<EmptyTitle className="max-w-full wrap-anywhere">{title}</EmptyTitle>
 					{/* A host key's fingerprint is one long word: it breaks anywhere, or it overflows its centered line on a phone. */}
 					{about ? <EmptyDescription className="wrap-anywhere select-text">{about}</EmptyDescription> : null}
 				</EmptyHeader>
@@ -513,6 +514,8 @@ export function Machines() {
 						</DropdownMenuRadioGroup>
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
+					{/* Back to the list of machines, the one in use kept: only a bridge with no local machine offers it (the web client's). */}
+					{s.canDisconnect ? <DropdownMenuItem data-slot="disconnect" onClick={() => void s.disconnect()}><UnplugIcon />Disconnect</DropdownMenuItem> : null}
 					<DropdownMenuItem onClick={() => s.openSettings("environments")}><SettingsIcon />Environments…</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>

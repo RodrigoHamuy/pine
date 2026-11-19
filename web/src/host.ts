@@ -6,7 +6,9 @@
 import { MEDIA } from "../../desktop/electron/daemon.ts";
 import type { AppState, Prefs, ServiceState } from "../../desktop/src/bridge.ts";
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
-import type { BridgeEvent } from "./protocol.ts";
+import { FUNNEL_PORTS, isFunnel } from "../relay/src/addresses.ts";
+import { CLOSE } from "../relay/src/relay.ts";
+import { daemonPath, type BridgeEvent } from "./protocol.ts";
 import { REMOTE_COMMAND } from "./remote-command.ts";
 import { generateKey, publicKeyLine, RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions } from "./ssh.ts";
 import { callDaemon, followEvents, loopbackEnd, mediaOf, runService, ServiceTrouble, type Daemon } from "./tunnel.ts";
@@ -50,7 +52,7 @@ const STREAM_LOSSES = 5;
 function mediaTarget(target: string): string {
 	const q = target.indexOf("?");
 	const path = q < 0 ? target : target.slice(0, q);
-	if (!target.startsWith("/") || target.startsWith("//") || /[\s\0-\x1f\x7f#]/.test(target) || !MEDIA.some((m) => m.test(path))) throw new Error(`That is not a picture, a video or a sound of pine's: ${target.slice(0, 80)}`);
+	if (!daemonPath(target) || !MEDIA.some((m) => m.test(path))) throw new Error(`That is not a picture, a video or a sound of pine's: ${target.slice(0, 80)}`);
 	return target;
 }
 
@@ -116,24 +118,25 @@ function serviceTrouble(host: string, e: ServiceTrouble): string {
 	if (/unknown command "service"/.test(e.stderr)) return `The pine on ${host} is too old to be reached this way: it has no "service" command. Update it there with "pine update", then try again.`;
 	if (e.exitStatus === 127) return `pine is not installed on ${host}, or not on the PATH of its login shell. ${e.stderr.trim()}`;
 	if (e.message === "timeout") return `pine on ${host} is not answering: "pine service" there said nothing within a minute. Look at what it does there with "pine status", or restart it, then try again.`;
-	if (e.message === "ended") return e.stderr.trim() || `The command on ${host} ended (exit ${e.exitStatus ?? "unknown"}) without saying why.`;
+	if (e.message === "ended") return e.stderr.trim() || `The command on ${host} ended (exit ${e.exitStatus ?? "unknown"}) without saying why. Run "pine service" there in a terminal to see what it says, then try again.`;
 	return `${host} ${e.message}`;
 }
 
-/** What the relay's closing means for the machine, in words that say what to check (codes: web/relay/src/relay.ts `CLOSE`). */
+/** What the relay's closing means for the machine, in words that say what to check. Code 0: the WebSocket never opened. */
 function relayTrouble(host: string, e: RelayClosed): string {
 	const { hostname, port } = parseHost(host);
 	// A machine of a tailnet, published by Tailscale Funnel: the relay reaches it through TLS, which Funnel only gives on a port it was turned on for.
-	if (/\.ts\.net\.?$/i.test(hostname) && [0, 4504, 4525].includes(e.code)) {
+	if (isFunnel(hostname) && [0, CLOSE.unreachable, CLOSE.tls].includes(e.code)) {
 		const funnel = `tailscale funnel --bg --tls-terminated-tcp=${port} tcp://localhost:22`;
-		if (e.code === 0) return `The relay did not open a connection to ${hostname}. A machine of a tailnet is reached through Tailscale Funnel, on port 443, 8443 or 10000: check the port, and that Funnel is on there (${funnel}). Then wait a minute and try again.`;
+		const ports = `${FUNNEL_PORTS.slice(0, -1).join(", ")} or ${FUNNEL_PORTS.at(-1)}`;
+		if (e.code === 0) return `The relay did not open a connection to ${hostname}. A machine of a tailnet is reached through Tailscale Funnel, on port ${ports}: check the port, and that Funnel is on there (${funnel}). Then wait a minute and try again.`;
 		return `${hostname} did not answer through Tailscale Funnel on port ${port}. Check that the machine is on and that Funnel is on there for that port: ${funnel}.`;
 	}
 	if (e.code === 0) return `The relay did not open a connection to ${hostname}. It may be down, or it refused: it reaches only machines with a public address, and allows a browser a few connections a minute. Check the address, wait a minute, and try again.`;
-	if (e.code === 4504) return `${hostname} could not be reached on port ${port}. Check that the machine is on, that SSH listens on that port, and that its firewall lets connections in from the internet.`;
-	if (e.code === 4502) return `${hostname} answers on port ${port}, but not with SSH. Check the port.`;
-	if (e.code === 4408) return `${hostname} did not answer with SSH on port ${port} within a few seconds.`;
-	if (e.code === 4400) return "The relay carries only SSH, and refused what this browser sent.";
+	if (e.code === CLOSE.unreachable) return `${hostname} could not be reached on port ${port}. Check that the machine is on, that SSH listens on that port, and that its firewall lets connections in from the internet.`;
+	if (e.code === CLOSE.serverNotSsh) return `${hostname} answers on port ${port}, but not with SSH. Check the port.`;
+	if (e.code === CLOSE.timeout) return `${hostname} did not answer with SSH on port ${port} within a few seconds. Check that SSH listens on that port, then try again.`;
+	if (e.code === CLOSE.notSsh) return "The relay carries only SSH, and refused what this browser sent. Reload the page and try again.";
 	return `The connection to ${host} was closed: ${e.message}`;
 }
 
@@ -150,9 +153,9 @@ export function webBridge(deps: WebBridgeDeps) {
 	let loaded: Promise<void> | undefined;
 	const load = () =>
 		(loaded ??= (async () => {
-			const stored = (await deps.store.get("prefs")) as Partial<Kept> | undefined;
+			const [stored, keys] = (await Promise.all([deps.store.get("prefs"), deps.store.get("hostKeys")])) as [Partial<Kept> | undefined, Record<string, string> | undefined];
 			kept = { prefs: { ...DEFAULTS, ...stored?.prefs }, hosts: Array.isArray(stored?.hosts) ? stored.hosts : [], ...(stored?.use ? { use: stored.use } : {}) };
-			hostKeys = ((await deps.store.get("hostKeys")) as Record<string, string> | undefined) ?? {};
+			hostKeys = keys ?? {};
 			if (!kept.use) state = NO_MACHINE;
 		})());
 	const save = () => deps.store.set("prefs", kept);
@@ -206,9 +209,15 @@ export function webBridge(deps: WebBridgeDeps) {
 		const say = !again || again.say;
 		const passing = (message: string): Outcome => {
 			if (say) setState({ status: "error", kind: "ssh", host, message });
+			// A first attempt that fails for a reason that may pass (the relay, the network) is tried
+			// again like a lost connection, so that the network coming back (`wake`) connects.
+			if (!again) void reconnect(host, 1);
 			return "passing";
 		};
-		const final = (next: ServiceState): Outcome => (setState(next), "final");
+		const final = (next: ServiceState): Outcome => {
+			setState(next);
+			return "final";
+		};
 		if (!again) setState({ status: "starting", host });
 		const known = hostKeys[host];
 		let connection: Connection;
@@ -229,14 +238,20 @@ export function webBridge(deps: WebBridgeDeps) {
 			if (e instanceof RelayClosed) return passing(relayTrouble(host, e));
 			return passing(`Could not connect to ${host} over SSH. ${e instanceof Error ? e.message : String(e)}`);
 		}
-		if (mine !== round) return void connection.close().catch(() => {}), "superseded";
+		if (mine !== round) {
+			void connection.close().catch(() => {});
+			return "superseded";
+		}
 		let dropped = false;
 		void connection.closed.then(() => (dropped = true));
 		const held: NonNullable<typeof current> = (current = { connection });
 		const { label } = parseHost(host);
 		try {
 			const { said, channel } = await runService(connection, REMOTE_COMMAND, deps.serviceMs);
-			if (mine !== round) return void channel.close().catch(() => {}), "superseded";
+			if (mine !== round) {
+				void channel.close().catch(() => {});
+				return "superseded";
+			}
 			held.service = channel;
 			if (said.error) throw new Error(`The pine on ${label} did not start: ${said.error}`);
 			const far = loopbackEnd(said.base);
@@ -254,6 +269,7 @@ export function webBridge(deps: WebBridgeDeps) {
 			if (mine !== round) return "superseded";
 			const cut = dropped;
 			await letGo();
+			if (mine !== round) return "superseded";
 			if (e instanceof ServiceTrouble && e.message === "timeout") return passing(serviceTrouble(host, e));
 			// The connection went while pine service was asked: the network, not the machine.
 			if (cut) return passing(`The connection to ${host} was lost while pine there was asked to start.`);
@@ -262,26 +278,34 @@ export function webBridge(deps: WebBridgeDeps) {
 		}
 	};
 
-	// Connecting again after a loss: at once, then after each failure a longer wait (`backoff`),
+	// Connecting again: after a loss at once, then after each failure a longer wait (`backoff`),
 	// cut short by `wake()`. It ends when connected, at a trouble only the owner can fix, or when
-	// anything else connects or lets go (`round` moved on).
+	// anything else connects or lets go (`round` moved on). A newer loop ends the one before.
+	// `failed`: attempts that failed already and were told (a first one); then every trouble is told,
+	// since the page is not in its conversations.
 	let nudge: (() => void) | undefined;
-	let reconnecting = false;
-	const reconnect = async (host: string) => {
-		if (reconnecting) return;
-		reconnecting = true;
-		try {
-			for (let n = 0; ; n++) {
-				const outcome = await connectTo(host, { say: n >= QUIET_TRIES - 1 });
-				if (outcome !== "passing") return;
+	let loops = 0;
+	const reconnect = async (host: string, failed = 0) => {
+		const me = ++loops;
+		nudge?.();
+		for (let n = failed; ; n++) {
+			if (n > 0) {
 				const before = round;
-				await Promise.race([wait(backoff(n)), new Promise<void>((r) => (nudge = r))]);
-				nudge = undefined;
-				if (round !== before) return;
+				await Promise.race([wait(backoff(n - 1)), new Promise<void>((r) => (nudge = r))]);
+				if (me !== loops || round !== before) return;
 			}
-		} finally {
-			reconnecting = false;
+			const outcome = await connectTo(host, { say: failed > 0 || n >= QUIET_TRIES - 1 });
+			if (outcome !== "passing" || me !== loops) return;
 		}
+	};
+
+	/** Lets go of the machine in use: nothing connects to it again until the owner chooses one. Its place in the list and its host key stay. */
+	const leave = async () => {
+		const { use: _gone, ...rest } = kept;
+		kept = rest;
+		round++;
+		await letGo();
+		setState(NO_MACHINE);
 	};
 
 	let started = false;
@@ -347,15 +371,17 @@ export function webBridge(deps: WebBridgeDeps) {
 			await load();
 			kept = { ...kept, hosts: kept.hosts.filter((h) => h !== host) };
 			delete hostKeys[host];
-			if (kept.use === host) {
-				const { use: _gone, ...rest } = kept;
-				kept = rest;
-				round++;
-				await letGo();
-				setState(NO_MACHINE);
+			if (kept.use === host) await leave();
+			await Promise.all([save(), saveKeys()]);
+			return prefsOut();
+		},
+		/** Back to the machines: the one in use is let go of, and kept with its host key for the next time. */
+		async disconnect() {
+			await load();
+			if (kept.use) {
+				await leave();
+				await save();
 			}
-			await save();
-			await saveKeys();
 			return prefsOut();
 		},
 		/** The owner's yes to exactly the fingerprint the page was shown for that host; never to a key that changed. */
@@ -370,18 +396,18 @@ export function webBridge(deps: WebBridgeDeps) {
 		async media(target: string) {
 			const checked = mediaTarget(target);
 			const daemon = state.status === "ready" ? current?.daemon : undefined;
-			if (!daemon) throw new Error("not found: pine is not connected");
+			if (!daemon) throw new Error("not found: pine is not connected. Wait until it is, or choose a machine in Settings > Environments.");
 			return mediaOf(daemon, checked);
 		},
 		async open(url: string) {
 			const href = webAddress(url);
-			if (!deps.open) throw new Error("This browser cannot open another tab.");
+			if (!deps.open) throw new Error("This browser cannot open another tab: copy the address and open it yourself.");
 			deps.open(href);
 		},
 		/** What the page saves goes to the browser's downloads: the page is told the name it was given. */
 		async saveText(name: string, text: string) {
 			const named = fileName(name);
-			if (!deps.save) throw new Error("This browser cannot save a file.");
+			if (!deps.save) throw new Error("This browser cannot save a file: copy the text instead.");
 			deps.save(named, text);
 			return named;
 		},

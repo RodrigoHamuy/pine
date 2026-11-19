@@ -19,12 +19,9 @@ export function site(relay: (request: Request, env: Env) => Promise<Response>) {
 		const response = new Response(served.body, served);
 		response.headers.set("X-Content-Type-Options", "nosniff");
 		response.headers.set("Referrer-Policy", "no-referrer");
-		if (url.pathname.startsWith(PAGE)) {
-			response.headers.set("Access-Control-Allow-Origin", "*");
-			if ((response.headers.get("content-type") ?? "").startsWith("text/html")) response.headers.set("Content-Security-Policy", "frame-ancestors 'self'");
-		} else if ((response.headers.get("content-type") ?? "").startsWith("text/html")) {
-			response.headers.set("Content-Security-Policy", "frame-ancestors 'none'");
-		}
+		const page = url.pathname.startsWith(PAGE);
+		if (page) response.headers.set("Access-Control-Allow-Origin", "*");
+		if ((response.headers.get("content-type") ?? "").startsWith("text/html")) response.headers.set("Content-Security-Policy", page ? "frame-ancestors 'self'" : "frame-ancestors 'none'");
 		return response;
 	};
 }

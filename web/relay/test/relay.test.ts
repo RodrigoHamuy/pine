@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { CLOSE, relay } from "../src/relay.ts";
-import { connectTo, limiter, names, pairs, request, server, sshEcho } from "./support.ts";
+import { CLOSE, relay, type Deps, type TcpSocket } from "../src/relay.ts";
+import { connectTo, limiter, names, pairs, request, server, sshEcho, type Call } from "./support.ts";
 
 const stops: (() => Promise<unknown>)[] = [];
 after(async () => {
@@ -17,7 +17,7 @@ async function setup(options: { onConnection?: Parameters<typeof server>[0]; lim
 	const limits = limiter(options.limit);
 	const handle = relay({
 		connect: connectTo(srv.port, calls),
-		resolve: names({ "ssh.example.org": ["198.51.100.7"] }),
+		resolve: names({ "ssh.example.org": ["93.184.215.7"] }),
 		upgrade,
 		timeoutMs: options.timeoutMs ?? 2000,
 	});
@@ -35,7 +35,7 @@ test("an SSH banner exchange passes bytes both ways", async () => {
 	client.send("after the banner");
 	await client.sees("after the banner");
 	assert.equal(Buffer.concat(t.received).toString("latin1"), "SSH-2.0-pine-web\r\nafter the banner");
-	assert.deepEqual(t.calls, [{ hostname: "198.51.100.7", port: 2222 }]);
+	assert.deepEqual(t.calls, [{ hostname: "93.184.215.7", port: 2222 }]);
 	client.end.close(1000);
 });
 
@@ -70,7 +70,7 @@ test("a client that sends text instead of bytes is closed", async () => {
 });
 
 test("a server that does not speak SSH is closed, and none of its bytes reach the client", async () => {
-	const t = await setup({ onConnection: (socket) => socket.write("HTTP/1.1 400 Bad Request\r\n\r\n") });
+	const t = await setup({ onConnection: (socket) => socket.end("HTTP/1.1 400 Bad Request\r\n\r\n") });
 	await t.fetch(request("ssh.example.org", 80));
 	const [client] = t.clients;
 	client.send("SSH-2.0-pine-web\r\n");
@@ -94,4 +94,108 @@ test("a client that says nothing is closed after the time limit, without a conne
 	const [client] = t.clients;
 	assert.equal((await client.closes()).code, CLOSE.timeout);
 	assert.deepEqual(t.calls, []);
+});
+
+/** A promise and the function that resolves it. */
+function deferred() {
+	let resolve!: () => void;
+	const promise = new Promise<void>((r) => (resolve = r));
+	return { promise, resolve };
+}
+
+const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+
+test("what the client sends while the connection opens and its first bytes are written reaches the server in order", async () => {
+	const opened = deferred();
+	const release = deferred();
+	const written: Uint8Array[] = [];
+	const connect: Deps["connect"] = (): TcpSocket => ({
+		readable: new ReadableStream(),
+		writable: new WritableStream({
+			async write(chunk) {
+				written.push(chunk);
+				// The first write is slow: the client goes on sending meanwhile.
+				if (written.length === 1) await release.promise;
+			},
+		}),
+		opened: opened.promise,
+		closed: new Promise(() => {}),
+		close: async () => {},
+	});
+	const { clients, upgrade } = pairs();
+	const handle = relay({ connect, resolve: names({}), upgrade, timeoutMs: 2000 });
+	await handle(request("93.184.215.7"), { LIMITER: limiter() });
+	const [client] = clients;
+	client.send("SSH-");
+	client.send("2.0-pine-web\r\n");
+	client.send("A");
+	await tick();
+	opened.resolve();
+	await tick();
+	client.send("B");
+	client.send("C");
+	await tick();
+	release.resolve();
+	await tick();
+	assert.equal(Buffer.concat(written).toString("latin1"), "SSH-2.0-pine-web\r\nABC");
+	client.end.close(1000);
+});
+
+test("lines a server sends before its identification are dropped, and the identification and what follows reach the client", async () => {
+	const t = await setup({
+		onConnection: (socket) => {
+			socket.write("Welcome to the box\r\nNo unauthorised use\r\n");
+			socket.write("SSH-2.0-OpenSSH_9.9\r\nafter");
+		},
+	});
+	await t.fetch(request("ssh.example.org"));
+	const [client] = t.clients;
+	client.send("SSH-2.0-pine-web\r\n");
+	await client.sees("after");
+	assert.equal(client.received.toString("latin1"), "SSH-2.0-OpenSSH_9.9\r\nafter");
+	client.end.close(1000);
+});
+
+test("a server that sends too many lines, or too long a line, before its identification is closed, and none of its bytes reach the client", async () => {
+	for (const preface of ["hello\r\n".repeat(30), "x".repeat(300) + "\r\n", "x".repeat(300)]) {
+		const t = await setup({ onConnection: (socket) => socket.write(preface + "SSH-2.0-OpenSSH_9.9\r\n") });
+		await t.fetch(request("ssh.example.org"));
+		const [client] = t.clients;
+		client.send("SSH-2.0-pine-web\r\n");
+		assert.equal((await client.closes()).code, CLOSE.serverNotSsh, preface.slice(0, 10));
+		assert.equal(client.received.length, 0);
+	}
+});
+
+test("a name's addresses are tried in turn until one answers", async () => {
+	const received: Buffer[] = [];
+	const srv = await server(sshEcho(received));
+	stops.push(srv.stop);
+	const calls: Call[] = [];
+	const reaches = connectTo(srv.port, calls);
+	const connect: Deps["connect"] = (address, options) => {
+		if (address.hostname !== "93.184.215.7") return reaches(address, options);
+		calls.push(address);
+		const refused = Promise.reject(new Error("connection refused"));
+		refused.catch(() => {});
+		return { readable: new ReadableStream(), writable: new WritableStream(), opened: refused, closed: Promise.resolve(), close: async () => {} };
+	};
+	const { clients, upgrade } = pairs();
+	const handle = relay({ connect, resolve: names({ "two.example.org": ["93.184.215.7", "2606:2800:220:1::7"] }), upgrade, timeoutMs: 2000 });
+	await handle(request("two.example.org"), { LIMITER: limiter() });
+	const [client] = clients;
+	client.send("SSH-2.0-pine-web\r\n");
+	await client.sees("SSH-2.0-OpenSSH_9.9\r\n");
+	assert.deepEqual(calls, [
+		{ hostname: "93.184.215.7", port: 22 },
+		{ hostname: "2606:2800:220:1:0:0:0:7", port: 22 },
+	]);
+	client.end.close(1000);
+});
+
+test("a name without addresses is refused with what to check", async () => {
+	const t = await setup();
+	const response = await t.fetch(request("nowhere.example.org"));
+	assert.equal(response.status, 502);
+	assert.match(await response.text(), /spelling/);
 });

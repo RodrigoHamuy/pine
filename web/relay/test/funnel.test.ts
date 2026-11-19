@@ -10,9 +10,9 @@ after(async () => {
 });
 
 const TABLE = {
-	"pine.example-tailnet.ts.net": ["198.51.100.20"],
-	"ssh.example.org": ["198.51.100.7"],
-	"notts.net": ["198.51.100.8"],
+	"pine.example-tailnet.ts.net": ["93.184.215.20"],
+	"ssh.example.org": ["93.184.215.7"],
+	"notts.net": ["93.184.215.8"],
 	"tailnet-only.example-tailnet.ts.net": ["100.101.102.103"],
 	"home.example-tailnet.ts.net": ["192.168.1.20"],
 	"edge.example-tailnet.ts.net": ["104.16.1.1"],
@@ -67,7 +67,7 @@ test("a Funnel name written with capitals or a final dot is the same name for TL
 });
 
 test("any other host is connected to by its checked address, without TLS", async () => {
-	for (const [host, address] of [["ssh.example.org", "198.51.100.7"], ["notts.net", "198.51.100.8"], ["198.51.100.9", "198.51.100.9"]]) {
+	for (const [host, address] of [["ssh.example.org", "93.184.215.7"], ["notts.net", "93.184.215.8"], ["93.184.215.9", "93.184.215.9"]]) {
 		const t = await setup();
 		await t.fetch(request(host, 10000));
 		const [client] = t.clients;
@@ -100,7 +100,7 @@ test("a Funnel name that has a tailnet, private, loopback or Cloudflare address,
 });
 
 test("a server that does not speak SSH inside the TLS is closed, and none of its bytes reach the client", async () => {
-	const srv = await server((socket) => socket.write("HTTP/1.1 400 Bad Request\r\n\r\n"));
+	const srv = await server((socket) => socket.end("HTTP/1.1 400 Bad Request\r\n\r\n"));
 	stops.push(srv.stop);
 	const t = await setup(connectTo(srv.port));
 	await t.fetch(request("pine.example-tailnet.ts.net", 443));

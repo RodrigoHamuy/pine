@@ -3,10 +3,7 @@
 // daemon's token; the page holds neither. What only the desktop app can do refuses or does
 // nothing here, as the preview's stand-in does (desktop/src/preview-bridge.ts), without asking.
 import type { PageBridge } from "../../desktop/src/bridge.ts";
-import type { Ask, BridgeEvent, Method } from "./protocol.ts";
-
-type Target = { postMessage(data: unknown, targetOrigin: string): void };
-type MessageSource = { addEventListener(type: "message", fn: (event: { data: unknown; source: unknown }) => void): void };
+import type { Ask, BridgeEvent, MessageSource, Method, Target } from "./protocol.ts";
 
 /** Where the page's media addresses start: they are never loaded as they are, but handed to `media` (page-media.ts). */
 export const MEDIA_BASE = "pine-media://daemon";
@@ -67,6 +64,7 @@ export function frameBridge(parent: Target, self: MessageSource): FrameBridge {
 		addHost: (host: string) => ask("addHost", host),
 		forgetHost: (host: string) => ask("forgetHost", host),
 		trustHostKey: (host: string, fingerprint: string) => ask("trustHostKey", host, fingerprint),
+		disconnect: () => ask("disconnect"),
 		deviceKey: async () => {
 			const key = await ask<string>("deviceKey");
 			return { key, copy: () => ask("copyKey"), share: () => ask("shareKey") };
@@ -100,5 +98,5 @@ export function frameBridge(parent: Target, self: MessageSource): FrameBridge {
 		termRun: async () => ({ reports: false }),
 		termResize: async () => {},
 		termClose: async () => {},
-	} as FrameBridge;
+	} satisfies FrameBridge;
 }

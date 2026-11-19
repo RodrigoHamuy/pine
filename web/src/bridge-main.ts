@@ -9,7 +9,6 @@ import { unsupported } from "./supported.ts";
 
 declare const __PINE_WEB_VERSION__: string;
 
-
 /** The relay of this deployment, for a host and port: the same host, at /ssh. */
 function relay(host: string, port: number): string {
 	const url = new URL("ssh", location.href);

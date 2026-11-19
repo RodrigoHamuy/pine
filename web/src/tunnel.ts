@@ -2,17 +2,14 @@
 // speak HTTP/1.1 to the daemon through a direct-tcpip channel to the machine's own loopback, the
 // way desktop/electron/daemon.ts speaks to it through ssh's forward. A browser has no socket of
 // its own, so the few parts of HTTP the control API uses are written here.
-import type { Channel, Connection } from "./ssh.ts";
+import { daemonPath } from "./protocol.ts";
+import { base64, concat, type Channel, type Connection } from "./ssh.ts";
 
 const text = new TextDecoder();
-const bytes = (s: string) => new TextEncoder().encode(s);
-
-function join(a: Uint8Array, b: Uint8Array): Uint8Array {
-	const out = new Uint8Array(a.length + b.length);
-	out.set(a);
-	out.set(b, a.length);
-	return out;
-}
+const encoder = new TextEncoder();
+const bytes = (s: string) => encoder.encode(s);
+const CRLF = bytes("\r\n");
+const CRLFCRLF = bytes("\r\n\r\n");
 
 function indexOf(haystack: Uint8Array, needle: Uint8Array, from = 0): number {
 	outer: for (let i = from; i <= haystack.length - needle.length; i++) {
@@ -20,12 +17,6 @@ function indexOf(haystack: Uint8Array, needle: Uint8Array, from = 0): number {
 		return i;
 	}
 	return -1;
-}
-
-export function base64(data: Uint8Array): string {
-	let binary = "";
-	for (let i = 0; i < data.length; i += 0x8000) binary += String.fromCharCode(...data.subarray(i, i + 0x8000));
-	return btoa(binary);
 }
 
 /** Why `pine service` gave no line: the channel ended (with its status) or what it printed is not JSON. */
@@ -119,7 +110,7 @@ export async function exchange(
 		// A chunked body: size lines and chunks, until the chunk of size 0.
 		const chunks = () => {
 			for (;;) {
-				const eol = indexOf(buf, bytes("\r\n"));
+				const eol = indexOf(buf, CRLF);
 				if (eol < 0) return;
 				const size = parseInt(text.decode(buf.subarray(0, eol)), 16);
 				if (!Number.isFinite(size)) return reject(new Error("a chunk of the answer could not be read"));
@@ -131,9 +122,9 @@ export async function exchange(
 		};
 		channel.onData((data) => {
 			if (finished) return;
-			buf = join(buf, data);
+			buf = concat(buf, data);
 			if (!head) {
-				const end = indexOf(buf, bytes("\r\n\r\n"));
+				const end = indexOf(buf, CRLFCRLF);
 				if (end < 0) return;
 				const [status, ...fields] = text.decode(buf.subarray(0, end)).split("\r\n");
 				const headers: Record<string, string> = {};
@@ -167,7 +158,7 @@ export async function exchange(
 			if (!head) return reject(new Error("the daemon closed the connection without an answer"));
 			finish();
 		});
-		void channel.send(join(bytes(`${lines.join("\r\n")}\r\n\r\n`), request.body ?? new Uint8Array(0))).catch(reject);
+		void channel.send(concat(bytes(`${lines.join("\r\n")}\r\n\r\n`), request.body ?? new Uint8Array(0))).catch(reject);
 	});
 }
 
@@ -179,19 +170,18 @@ const hostHeader = (d: Daemon) => (d.host.includes(":") ? `[${d.host}]:${d.port}
 /** One call of the control API in the owner's name, answered as desktop/electron/daemon.ts's `callDaemon` answers. */
 export async function callDaemon(daemon: Daemon | undefined, method: string, url: string, body?: unknown): Promise<{ ok: boolean; status: number; data: any }> {
 	if (!daemon) return { ok: false, status: 503, data: { error: "pine is not running yet" } };
-	// The path goes into the request line as it is: a space, a control character or a fragment
-	// would add headers or a second request with the token, which the desktop's fetch would have encoded.
-	if ((method !== "GET" && method !== "POST") || typeof url !== "string" || !url.startsWith("/") || url.startsWith("//") || /[\s\0-\x1f\x7f#]/.test(url)) return { ok: false, status: 400, data: { error: "not a call of the control API" } };
+	if ((method !== "GET" && method !== "POST") || typeof url !== "string" || !daemonPath(url)) return { ok: false, status: 400, data: { error: "not a call of the control API" } };
 	try {
 		const channel = await daemon.connection.forward(daemon.host, daemon.port);
 		let head: Head | undefined;
-		let got: Uint8Array = new Uint8Array(0);
+		const parts: Uint8Array[] = [];
 		await exchange(
 			channel,
 			{ method, path: url, host: hostHeader(daemon), headers: { Authorization: `Bearer ${daemon.token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) }, body: body !== undefined ? bytes(JSON.stringify(body)) : undefined },
 			(h) => (head = h),
-			(b) => (got = join(got, b)),
+			(b) => parts.push(b),
 		);
+		const got = concat(...parts);
 		const status = head!.status;
 		const ok = status >= 200 && status < 300;
 		const type = head!.headers["content-type"] ?? "";
@@ -268,10 +258,13 @@ export function followEvents(daemon: Daemon, signal: AbortSignal, on: { batch(ev
 	};
 	const loop = async () => {
 		let down = 0;
+		// One listener for the whole loop: it closes the stream open at the time, if any.
+		let open: Channel | undefined;
+		signal.addEventListener("abort", () => void open?.close().catch(() => {}), { once: true });
 		while (!signal.aborted) {
 			try {
-				const channel = await daemon.connection.forward(daemon.host, daemon.port);
-				signal.addEventListener("abort", () => void channel.close().catch(() => {}), { once: true });
+				const channel = (open = await daemon.connection.forward(daemon.host, daemon.port));
+				if (signal.aborted) void channel.close().catch(() => {});
 				let buf = "";
 				const decoder = new TextDecoder();
 				await exchange(
@@ -300,6 +293,7 @@ export function followEvents(daemon: Daemon, signal: AbortSignal, on: { batch(ev
 			} catch {
 				// fall through to the retry
 			}
+			open = undefined;
 			if (signal.aborted) return;
 			on.connection(false);
 			if (on.lost?.(++down)) return;

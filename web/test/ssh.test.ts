@@ -3,6 +3,7 @@
 
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
+import { createServer, type AddressInfo, type Socket } from "node:net";
 import { after, before, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { openPage, type Browser } from "./support/browser.ts";
@@ -107,4 +108,28 @@ test("a key that is not in authorized_keys is refused", async () => {
 		}
 	}, target());
 	assert.equal(result, "not-authorized");
+});
+
+test("a relay that never answers is given up on, as one that did not open a connection", async () => {
+	// A server that takes the connection and says nothing: the WebSocket never opens, nor fails.
+	const held = new Set<Socket>();
+	const silent = createServer((socket) => void held.add(socket));
+	await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", resolve));
+	const url = `ws://127.0.0.1:${(silent.address() as AddressInfo).port}/ssh`;
+	try {
+		const result = await browser.page.evaluate(async (options) => {
+			const started = Date.now();
+			try {
+				await ssh.connect({ url: options.url, user: "me", key, hostFingerprint: "none", openMs: 300 });
+				return { connected: true };
+			} catch (error) {
+				return { connected: false, name: (error as Error).name, code: (error as Ssh.RelayClosed).code, ms: Date.now() - started };
+			}
+		}, { url });
+		assert.deepEqual({ ...result, ms: undefined }, { connected: false, name: "RelayClosed", code: 0, ms: undefined });
+		assert.ok((result as { ms: number }).ms < 3000, `gave up after ${(result as { ms: number }).ms} ms`);
+	} finally {
+		for (const socket of held) socket.destroy();
+		silent.close();
+	}
 });

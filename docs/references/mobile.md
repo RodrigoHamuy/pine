@@ -131,6 +131,9 @@ reach that machine's SSH port. How is your network's business, not pine's:
 Tailscale SSH (signing in without a key) is not supported yet: use Tailscale as a network and
 the phone's key for SSH.
 
+From a browser, which joins no VPN, the web client reaches a machine that is only on a tailnet
+through Tailscale Funnel: see "A machine on a tailnet" in [web.md](web.md#a-machine-on-a-tailnet).
+
 pine's control API stays closed to the network in every case: the app talks to it through the
 SSH connection, and the daemon takes requests for its own loopback only.
 

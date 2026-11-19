@@ -10,18 +10,19 @@
 // window is ignored; the browser's key is shown; a machine is added and used through the relay;
 // its host key fingerprint is asked about before the key is offered, and trusted; a message is
 // sent and the answer comes back; a picture in an answer shows; a link in an answer opens in a new
-// tab with no hold on the client; after the relay restarts the bridge connects again by itself.
+// tab with no hold on the client; after the relay restarts the bridge connects again by itself; a
+// frame that navigates itself away makes the client start anew.
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer as createHttpServer } from "node:http";
-import { createServer, type AddressInfo } from "node:net";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { startMock } from "../../baseline/tests/mock.mjs";
 import { pageCsp } from "../../desktop/electron/daemon.ts";
 import { headless } from "../test/support/browser.ts";
-import { startMachine } from "../test/support/machine.ts";
+import { freePort, startMachine } from "../test/support/machine.ts";
 
 const web = path.resolve(import.meta.dirname, "..");
 const repo = path.resolve(web, "..");
@@ -45,13 +46,6 @@ async function check(name: string, run: () => Promise<void>) {
 
 const cleanups: (() => Promise<unknown> | unknown)[] = [];
 
-async function freePort(): Promise<number> {
-	const server = createServer();
-	await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-	const { port } = server.address() as AddressInfo;
-	await new Promise((resolve) => server.close(resolve));
-	return port;
-}
 const write = (file: string, content: string, mode?: number) => {
 	mkdirSync(path.dirname(file), { recursive: true });
 	writeFileSync(file, content);
@@ -380,6 +374,30 @@ try {
 		await page.reload();
 		await frame.locator("textarea").first().waitFor({ timeout: 60_000 });
 		assert.equal(await (await inside()).evaluate(() => localStorage.getItem("pine.sidebar.width")), "333");
+	});
+
+	await check("a frame that navigates itself makes the whole client start anew, and its new document is told nothing unasked", async () => {
+		// The frame's policy (frame-src 'self') lets it go only to the client's own documents: it
+		// loads the page there again, one that says on the console every message it hears. The
+		// bridge cannot tell that document from the first before its load event, so what it asked
+		// itself is answered; nothing else reaches it before the client starts anew.
+		const heard: string[] = [];
+		const listen = (m: { text(): string }) => m.text().startsWith("HEARD ") && heard.push(m.text());
+		page.on("console", listen);
+		await browser.context.addInitScript(() => {
+			if (window !== window.top && location.search.includes("navigated")) window.addEventListener("message", (e) => console.log(`HEARD ${JSON.stringify(e.data)}`));
+		});
+		await page.evaluate(() => ((window as any).__before = true));
+		await (await inside()).evaluate((u) => void (location.href = u), `${origin}/page/?navigated`);
+		await page.waitForFunction(() => !(window as any).__before, undefined, { timeout: 10_000 });
+		await frame.locator("textarea").first().waitFor({ timeout: 60_000 });
+		assert.ok(page.frames().every((x) => !x.url().includes("navigated")), "the frame shows the page as the client loads it");
+		await new Promise((r) => setTimeout(r, 500));
+		page.off("console", listen);
+		const told = heard.map((h) => JSON.parse(h.slice("HEARD ".length)) as { pine: string });
+		assert.deepEqual(told.filter((m) => m.pine !== "reply"), [], "the document the frame went to was told nothing unasked");
+		const token = readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
+		assert.ok(!heard.some((h) => h.includes(token)), "nor the daemon's token");
 	});
 
 	await check("a browser without Ed25519 in WebCrypto is told which browsers work, and nothing else starts", async () => {

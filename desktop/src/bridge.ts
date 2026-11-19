@@ -33,6 +33,11 @@ export interface Prefs {
 	updates: boolean;
 	/** The theme the window was last drawn in (theme.ts), so that it opens in it; none: pmndre. */
 	look?: Look;
+	/**
+	 * The web client's own: the page's Web Storage, kept by the bridge, since the page's opaque origin
+	 * keeps none across a reload. The other bridges leave it out.
+	 */
+	storage?: Record<string, string>;
 }
 
 export type { Update } from "../electron/updates.ts";
@@ -83,6 +88,12 @@ export type PageBridge = Omit<Bridge, "state"> & {
 	 * which uses the owner's ssh and its known_hosts, leaves it out.
 	 */
 	trustHostKey?: (host: string, fingerprint: string) => Promise<void>;
+	/**
+	 * Lets go of the machine in use and comes back to the list of machines; the machine and its
+	 * trusted host key stay (unlike forgetHost). Set by a bridge with no local machine that offers it
+	 * (the web client's); the others leave it out and the page shows no Disconnect.
+	 */
+	disconnect?: () => Promise<Prefs>;
 };
 
 export const bridge = window.pine;

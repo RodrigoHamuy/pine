@@ -12,7 +12,7 @@ const version = JSON.parse(readFileSync(path.join(here, "..", "package.json"), "
 
 await vite({ configFile: path.join(here, "vite.config.ts"), logLevel: "warn" });
 
-const script = await bundle(path.join(here, "src", "bridge-main.ts"), { define: { global: "globalThis", __PINE_WEB_VERSION__: JSON.stringify(version) }, minify: true });
+const script = await bundle(path.join(here, "src", "bridge-main.ts"), { define: { __PINE_WEB_VERSION__: JSON.stringify(version) }, minify: true });
 writeFileSync(path.join(dist, "bridge.js"), script);
 
 // The bridge's own policy: its script, its relay on the same host, and the page's frame; nothing from elsewhere.

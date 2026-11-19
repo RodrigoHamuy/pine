@@ -16,7 +16,11 @@ function inRange(bits: number, value: bigint, r: Range) {
 	return value >> shift === r.base >> shift;
 }
 
-/** Addresses that are not on the public internet: this host, private networks, link-local, multicast, reserved. */
+/**
+ * Addresses that are not on the public internet: this host, private networks, link-local,
+ * multicast, reserved, documentation. And Teredo (2001::/32), which reaches its host through
+ * relays of third parties and carries the address it ends at in a form the checks below do not read.
+ */
 const NOT_PUBLIC = [
 	"0.0.0.0/8",
 	"10.0.0.0/8",
@@ -25,12 +29,17 @@ const NOT_PUBLIC = [
 	"169.254.0.0/16",
 	"172.16.0.0/12",
 	"192.0.0.0/24",
+	"192.0.2.0/24",
 	"192.168.0.0/16",
 	"198.18.0.0/15",
+	"198.51.100.0/24",
+	"203.0.113.0/24",
 	"224.0.0.0/4",
 	"240.0.0.0/4",
 	"::/96",
 	"100::/64",
+	"2001::/32",
+	"2001:db8::/32",
 	"fc00::/7",
 	"fe80::/10",
 	"fec0::/10",
@@ -75,8 +84,11 @@ const CARRIES_V4: [Range, number][] = [
 	[range("2002::/16"), 80],
 ];
 
+/** An IP address as a number, with the width of its family. */
+export type Address = { bits: 32 | 128; value: bigint };
+
 /** An IP address written as such, as a number; null for anything else. Brackets and an IPv6 zone are dropped. */
-export function parse(text: string): { bits: 32 | 128; value: bigint } | null {
+export function parse(text: string): Address | null {
 	let s = text.trim();
 	if (s.startsWith("[") && s.endsWith("]")) s = s.slice(1, -1);
 	const zone = s.indexOf("%");
@@ -129,7 +141,7 @@ function parse6(s: string): bigint | null {
 }
 
 /** Whether the relay may connect to this address. */
-export function allowed(address: { bits: 32 | 128; value: bigint }): boolean {
+export function allowed(address: Address): boolean {
 	const { bits, value } = address;
 	if (NOT_PUBLIC.some((r) => inRange(bits, value, r))) return false;
 	if (CLOUDFLARE.some((r) => inRange(bits, value, r))) return false;
@@ -144,7 +156,7 @@ export function allowed(address: { bits: 32 | 128; value: bigint }): boolean {
 const LOOPBACK = [range("127.0.0.0/8"), range("::1/128")];
 
 /** Whether the address is this computer's own: 127.0.0.0/8 or ::1, written as itself. */
-export function isLoopback(address: { bits: 32 | 128; value: bigint }): boolean {
+export function isLoopback(address: Address): boolean {
 	return LOOPBACK.some((r) => inRange(address.bits, address.value, r));
 }
 
@@ -171,7 +183,7 @@ export function isFunnel(host: string) {
 }
 
 /** The address written the way connect() takes it. */
-export function format(address: { bits: 32 | 128; value: bigint }) {
+export function format(address: Address) {
 	if (address.bits === 32) return [24n, 16n, 8n, 0n].map((shift) => String((address.value >> shift) & 0xffn)).join(".");
 	const groups: string[] = [];
 	for (let shift = 112n; shift >= 0n; shift -= 16n) groups.push(((address.value >> shift) & 0xffffn).toString(16));

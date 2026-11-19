@@ -21,6 +21,7 @@ pull request").
 | This device's key | On first use the browser makes an SSH key of its own (Ed25519) and keeps it. The start screen shows its public half as a line of `authorized_keys`, with Copy and Share. Add that line to `~/.ssh/authorized_keys` of the user you sign in as on your server. The key is kept in the browser's own storage for this site, where the page cannot reach it: its private half cannot be read or exported, by you or by any script, and a web page an answer shows cannot steal it; no other key can be used (no pasted key, no ssh-agent, no security key) |
 | Add a machine | Type it as `user@host`, or `user@host:port` for SSH on another port, and Add. A host is a name or an address on the internet: the relay refuses private, loopback and link-local addresses, so a server on your home network is reached from the desktop app instead, or through Tailscale Funnel (see "A machine on a tailnet") |
 | The host key | The first time, the machine's host key fingerprint (`SHA256:...`) is shown before anything of yours is sent. Compare it with `ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub` on the server, and trust it. From then on that fingerprint and no other is accepted: a changed key is refused with the old and the new fingerprint, and nothing connects until you forget the machine and add it again |
+| Disconnect | Disconnect lets go of the machine in use and goes back to the list of machines. The machine and its trusted host key stay, unlike Forget, and Use connects to it again. It is in the machines menu of the title bar, on the line of the machine in use in Settings > Environments, and on the start screen |
 | Forget a machine | Forget on its line. Its trusted host key goes with it |
 | What is remembered | In this browser only: its key, your machines, their trusted host keys, the one in use, and the page's own preferences (theme, the side panel's widths, what is folded). Clearing the site's data in the browser forgets all of it, the key included: add the new key to the server again |
 | Pictures, video and sound | Shown and played as in the desktop app |
@@ -59,7 +60,7 @@ SSH, the host key and this browser's key are end to end as for any machine.
 
 ## How it works
 
-Three parts, served as one deployment from one address:
+Three parts, served as one deployment from one address (why it is built so: [ADR 0003](../adr/0003-web-client.md)):
 
 | Part | What it is |
 |---|---|
@@ -93,16 +94,17 @@ Worker no live address on `workers.dev` (`workers_dev: false`), only preview add
 
 | What | How |
 |---|---|
-| `web-preview.yml` | The workflow `.github/workflows/web-preview.yml`, on every pull request that changes `web/`, the desktop page (`desktop/src`) or the workflow itself |
+| `web-preview.yml` | The workflow `.github/workflows/web-preview.yml`, on every pull request that changes `web/`, the desktop page or what it is built from (`desktop/src`, `desktop/vite.config.ts`, `desktop/electron/daemon.ts`, `desktop/package.json` and its lock file, `src/tui/levels.ts`), or the workflow itself |
 | The gates | `npm run check` and `npm test` in `web/` and in `web/relay/`, then `npm run build` in `web/`, as by hand. The SSH core's tests run on an `sshd` and a Chrome for Testing that the job installs |
 | The preview | `npx wrangler versions upload --preview-alias pr-<number>` in `web/relay/`: a version of the Worker with that build, not made live, at `https://pr-<number>-pine-relay.<account>.workers.dev`. Each push uploads a new version under the same alias, so the address stays the same |
 | The comment | The address is posted on the pull request as one comment, which each push updates |
-| `web-preview` | The GitHub environment that holds `CLOUDFLARE_API_TOKEN` (a token that can edit Workers scripts on that account) and `CLOUDFLARE_ACCOUNT_ID`. Only the job that uploads names it |
+| `web-preview` | The GitHub environment that holds `CLOUDFLARE_API_TOKEN` (a token that can edit Workers scripts on that account) and `CLOUDFLARE_ACCOUNT_ID`. Only the job that uploads names it, and only its upload step is given the two: its `npm ci` runs without install scripts and without them |
 | A pull request from a fork | Built and tested, never previewed: the job that uploads runs only for a branch of pine's own repository, and a fork never gets the secrets |
 | Without the secrets | The job passes and says "nothing deployed", on the pull request and in its summary |
 
 Nothing is deployed from `next` or `main`, and the Release workflow has no part in it. A preview
-reaches only machines with a public SSH address, like any deployment, and keeps nothing.
+reaches what any deployment reaches, a machine with a public SSH address or one on a tailnet
+through Tailscale Funnel (see "A machine on a tailnet"), and keeps nothing.
 
 ## Working on it
 
@@ -113,7 +115,8 @@ reaches only machines with a public SSH address, like any deployment, and keeps 
 | `npm test`, `npm run check` in `web/relay/` | The relay's fetch handler with a stand-in TCP server: SSH only both ways, refused addresses, the cap per client address, TLS to a Funnel name and to nothing else; and that no deployed configuration opens the loopback |
 | `npm run smoke` | After `npm run build`: the deployment under `wrangler dev`, headless Chrome for Testing, a `sshd` of its own on the loopback running the real `pine service` on a home of its own with the scripted model server. Named checks, each of which fails the run: the page cannot read the bridge's IndexedDB or the daemon's token; a message to the bridge from another window is ignored; the first connect asks for the fingerprint before the key is offered; a conversation answers; a picture shows; a link opens in a new tab; the client connects again after the relay restarts. Run it by hand before a release that changes `web/` |
 
-The smoke's relay has to reach `sshd` on this computer, which a relay refuses. `wrangler dev`
-is given `RELAY_ALLOW_LOOPBACK=1` on its command line: it lets a relay that is itself served on
-the loopback reach the loopback, and nothing else. No deployed configuration sets it, and a test
-in `web/relay` fails when `wrangler.jsonc`, `.dev.vars` or `.env` names it.
+The smoke's relay has to reach `sshd` on this computer, which a relay refuses:
+
+| Name | What it is |
+|---|---|
+| `RELAY_ALLOW_LOOPBACK` | The smoke's one way to the loopback. `npm run smoke` gives `wrangler dev` `RELAY_ALLOW_LOOPBACK=1` on its command line: it lets a relay that is itself served on the loopback reach the loopback, and nothing else. It is never in a deployed configuration: `web/relay/test/loopback.test.ts` fails when `wrangler.jsonc`, `.dev.vars` or `.env` names it |

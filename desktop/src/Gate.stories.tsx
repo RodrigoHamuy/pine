@@ -88,7 +88,39 @@ export const HostKeyChanged: Story = {
 	},
 };
 
-/** A machine being reached, which can take a minute: the machines stay listed, to switch to another. */
+const disconnected = fn(async () => ({ ...store.prefs, use: undefined }));
+
+/** A machine being reached, which can take a minute: the machines stay listed, to switch to another, and Disconnect lets go of this one. */
 export const Connecting: Story = {
 	args: { hosts: ["me@build-box", "studio"], state: { status: "starting", host: "me@build-box" } },
+	beforeEach: () => {
+		disconnected.mockClear();
+		window.pine.disconnect = disconnected;
+		return () => void delete (window.pine as Partial<typeof window.pine>).disconnect;
+	},
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement, userEvent } = context;
+		// Only on the row of the machine being reached.
+		await expect(canvasElement.querySelector('[data-environment="studio"] [data-slot="disconnect"]')).toBeNull();
+		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"] [data-slot="disconnect"]')!);
+		await expect(disconnected).toHaveBeenCalledTimes(1);
+	},
+};
+
+/** A long host (a Tailscale Funnel name and its port): it wraps between its parts, and the badge goes onto a line of its own, inside the row. */
+export const LongHost: Story = {
+	args: {
+		hosts: ["someone@machine.tailnet1234.ts.net:10000", "someone@other.tailnet1234.ts.net:10000"],
+		state: { status: "starting", host: "someone@machine.tailnet1234.ts.net:10000" },
+	},
+	play: async (context) => {
+		await meta.play(context);
+		const rows = [...context.canvasElement.querySelectorAll<HTMLElement>("[data-environment]")];
+		await expect(rows).toHaveLength(2);
+		for (const row of rows) await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
+		const row = rows[0]!;
+		const badge = row.querySelector<HTMLElement>('[data-slot="badge"]')!;
+		await expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right);
+	},
 };

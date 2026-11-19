@@ -264,6 +264,7 @@ machines are added and forgotten. The palette (`⌘K`) has "Use the pine on …"
 | Switch back | The pine you left goes on: switching stops nothing, so an agent at work there finishes its task. Going back to it is immediate. Approvals and notices of a pine you are not looking at wait until you switch to it |
 | One that is not reached | The first screen says why (ssh's own words, and what to do), with Try again and Use this Mac |
 | Forget a machine | Forget on its line (not the one in use). Its connection ends |
+| Disconnect | Only where the page runs without a machine of its own and its bridge offers it (`disconnect`): the web client today, not the Pine app, and not the mobile app yet. It lets go of the machine in use and goes back to the list of machines; the machine and its trusted host key stay, unlike Forget. It is in the machines menu of the title bar, on the line of the machine in use in Settings > Environments, and on the first screen |
 | Quitting | Every connection ends. A pine the app started on another machine stops with it; one that was already running there goes on. This computer's pine follows Keep pine running, as before |
 
 What is chosen is kept in the app's `prefs.json`: `hosts`, the machines you added, and `use`,
@@ -768,7 +769,9 @@ desktop/
   Settings > App and the palette's "Use the pine on this Mac", and never sends `use(undefined)`),
   `mediaBase` (where pictures, video and sound are fetched, in place of `pine-media://daemon`)
   `deviceKey` (the client's own SSH key, with Copy and Share in Settings > Environments) and
-  `trustHostKey` (the owner's yes to the host key's fingerprint the page showed). Absent, the
+  `trustHostKey` (the owner's yes to the host key's fingerprint the page showed). A fifth,
+  `disconnect` (let go of the machine in use and show the list of machines), only the web
+  client gives; without it the page shows no Disconnect. Absent, the
   page is the desktop's as before. A change of the page is checked in all three: `npm run check`
   in `desktop/`, in `mobile/` and in `web/`.
 - What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a

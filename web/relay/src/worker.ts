@@ -5,19 +5,27 @@ import { connect } from "cloudflare:sockets";
 import { relay } from "./relay.ts";
 import { site, type SiteEnv } from "./site.ts";
 
-/** A and AAAA records of a name, from Cloudflare's resolver. */
+/**
+ * A and AAAA records of a name, from Cloudflare's resolver: both asked at once, the A records
+ * first, and neither waited for longer than a few seconds, so that a stalled lookup cannot hold
+ * the upgrade. A lookup that fails or runs out of time adds nothing.
+ */
 async function resolve(name: string): Promise<string[]> {
-	const found: string[] = [];
-	for (const type of ["A", "AAAA"]) {
-		const response = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`, {
-			headers: { Accept: "application/dns-json" },
-		});
-		if (!response.ok) continue;
-		const answer = (await response.json()) as { Answer?: { type: number; data: string }[] };
-		// Type 1 is A and 28 is AAAA; a CNAME's record (5) is followed by the resolver already.
-		for (const record of answer.Answer ?? []) if (record.type === 1 || record.type === 28) found.push(record.data);
-	}
-	return found;
+	const lookups = ["A", "AAAA"].map(async (type) => {
+		try {
+			const response = await fetch(`https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(name)}&type=${type}`, {
+				headers: { Accept: "application/dns-json" },
+				signal: AbortSignal.timeout(3000),
+			});
+			if (!response.ok) return [];
+			const answer = (await response.json()) as { Answer?: { type: number; data: string }[] };
+			// Type 1 is A and 28 is AAAA; a CNAME's record (5) is followed by the resolver already.
+			return (answer.Answer ?? []).filter((record) => record.type === 1 || record.type === 28).map((record) => record.data);
+		} catch {
+			return [];
+		}
+	});
+	return (await Promise.all(lookups)).flat();
 }
 
 const handle = relay({

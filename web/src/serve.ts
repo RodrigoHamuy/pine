@@ -5,13 +5,10 @@
 // The page runs under an opaque origin (sandboxed with scripts only), so a message to it cannot
 // name its origin: it is addressed to the iframe's window by the object itself, and a message is
 // taken from it by comparing its `source` with that object.
-import { EVENTS, isMethod, METHODS, type BridgeEvent, type Method, type Reply, type Tell } from "./protocol.ts";
+import { EVENTS, isMethod, METHODS, type BridgeEvent, type MessageSource, type Method, type Reply, type Target, type Tell } from "./protocol.ts";
 
 /** The bridge as the door uses it: one function per method of the list, and its events. */
 export type Served = { [M in Method]: (...args: any[]) => unknown } & { on(event: BridgeEvent, fn: (value: unknown) => void): void };
-
-type Target = { postMessage(data: unknown, targetOrigin: string): void };
-type MessageSource = { addEventListener(type: "message", fn: (event: { data: unknown; source: unknown }) => void): void };
 
 /** What an error says to the page: its message, which the page shows as it is. */
 const said = (e: unknown) => (e instanceof Error ? e.message : String(e));

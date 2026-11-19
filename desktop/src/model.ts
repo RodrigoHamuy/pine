@@ -527,6 +527,24 @@ export class Store extends Model {
 		await this.attempt(() => bridge.trustHostKey!(key.host, key.fingerprint));
 	}
 
+	/**
+	 * Whether the owner can let go of the machine in use and come back to the list: only under a bridge
+	 * with no local machine that offers it (the web client's), and only while a machine is in use or being reached.
+	 */
+	get canDisconnect(): boolean {
+		const s = this.service;
+		return !this.local && typeof bridge.disconnect === "function" && !!s.host && s.status !== "error";
+	}
+
+	/** Let go of the machine in use, which stays on the list with its host key: the bridge says the new state, and the page shows the machines. */
+	async disconnect(): Promise<void> {
+		if (!this.canDisconnect) return;
+		const prefs = await this.attempt(() => bridge.disconnect!());
+		if (!prefs) return;
+		this.prefs = prefs;
+		this.touch();
+	}
+
 	/** Use the pine of a machine of the list, or with none this computer's: the window shows that pine's agents and its own tabs. */
 	async useMachine(host?: string): Promise<void> {
 		if (host === this.service.host && this.service.status === "ready") return;

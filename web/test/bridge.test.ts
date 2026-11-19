@@ -24,12 +24,12 @@ function memoryStore(): Store {
 }
 
 /** The page's bridge on a web bridge for `machine`, keeping what it stores in `store`. */
-function client(machine: Machine, store = memoryStore()) {
+function client(machine: Machine, store = memoryStore(), waitMs = 2) {
 	const w = windows();
 	const copied: string[] = [];
 	// The waits between attempts to connect again, as asked for; each is a few milliseconds here.
 	const waits: number[] = [];
-	const wait = (ms: number) => (waits.push(ms), new Promise<void>((r) => setTimeout(r, 2)));
+	const wait = (ms: number) => (waits.push(ms), new Promise<void>((r) => setTimeout(r, waitMs)));
 	const bridge = webBridge({ connect: machine.connect, store, relay: (host, port) => `wss://relay.test/ssh?host=${host}&port=${port}`, clipboard: async (text) => void copied.push(text), version: "9.9.9", wait, serviceMs: 500 });
 	serve(bridge, w.top, () => w.frame);
 	const page = frameBridge(w.parentOfFrame, w.frame);
@@ -371,6 +371,77 @@ test("a pine that says nothing is said to be not answering, and is tried again a
 	c.machine.service = answering;
 	c.wake();
 	await becomes(c, (x) => x.status === "ready", 8000);
+	c.stop();
+});
+
+test("a first connection that fails for a reason that may pass (the relay, the network) is tried again with a backoff, and at once on waking", async () => {
+	const c = await ready();
+	c.stop();
+	c.machine.reachable = "refused";
+	// Waits that never end by themselves: only waking moves the attempts on.
+	const again = client(c.machine, c.store, 60_000);
+	await again.page.state();
+	again.page.ready();
+	const s = await becomes(again, (x) => x.status === "error");
+	assert.match((s as { message: string }).message, /relay did not open a connection/);
+	await until(() => again.waits.length === 1, "a wait before the next attempt");
+	assert.equal(again.waits[0], 1000);
+	const tries = c.machine.connects.length;
+	c.machine.reachable = true;
+	again.wake();
+	await becomes(again, (x) => x.status === "ready");
+	assert.equal(c.machine.connects.length, tries + 1);
+	again.stop();
+});
+
+test("a first connection that fails is tried again by itself after its wait", async () => {
+	const c = await ready();
+	c.stop();
+	c.machine.reachable = false;
+	const again = client(c.machine, c.store);
+	await again.page.state();
+	again.page.ready();
+	await becomes(again, (x) => x.status === "error");
+	c.machine.reachable = true;
+	await becomes(again, (x) => x.status === "ready");
+	again.stop();
+});
+
+test("disconnecting goes back to the machines: the connection is let go of, the machine and its host key stay, and nothing connects again", async () => {
+	const machine = fakeMachine(daemon);
+	// A connection that waits while `hold` does, to disconnect while one is being made.
+	let hold: Promise<void> | undefined;
+	const real = machine.connect;
+	machine.connect = async (o) => {
+		await hold;
+		return real(o);
+	};
+	const c = await ready(machine);
+	const prefs = await c.page.disconnect!();
+	assert.equal(prefs.use, undefined);
+	assert.deepEqual(prefs.hosts, ["me@box.example"]);
+	assert.equal(machine.open, 0);
+	assert.equal(c.states.at(-1)?.status, "error");
+	assert.match((c.states.at(-1) as { message: string }).message, /Add the machine/);
+	assert.equal((await c.page.state()).connected, false);
+	// A new page on the same storage connects to nothing, and the host key is still trusted.
+	const again = client(machine, c.store);
+	assert.equal((await again.page.state()).prefs.use, undefined);
+	await again.page.use("me@box.example");
+	await becomes(again, (x) => x.status === "ready");
+	// A connection being made when the owner disconnects does not come back.
+	let release!: () => void;
+	hold = new Promise((r) => (release = r));
+	await again.page.retry();
+	await until(() => again.states.at(-1)?.status === "starting", "connecting");
+	await again.page.disconnect!();
+	const commands = machine.commands.length;
+	release();
+	await new Promise((r) => setTimeout(r, 50));
+	assert.equal(machine.open, 0);
+	assert.equal(machine.commands.length, commands);
+	assert.match((again.states.at(-1) as { message: string }).message, /Add the machine/);
+	again.stop();
 	c.stop();
 });
 

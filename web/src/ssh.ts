@@ -29,7 +29,7 @@ function sshString(bytes: Uint8Array): Bytes {
 	return out;
 }
 
-function concat(...parts: Uint8Array[]): Bytes {
+export function concat(...parts: Uint8Array[]): Bytes {
 	const out = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
 	let at = 0;
 	for (const part of parts) {
@@ -39,9 +39,10 @@ function concat(...parts: Uint8Array[]): Bytes {
 	return out;
 }
 
-function base64(bytes: Uint8Array): string {
+/** In pieces of 32 KB: `String.fromCharCode` takes its bytes as arguments, and a whole picture would be too many. */
+export function base64(bytes: Uint8Array): string {
 	let binary = "";
-	for (const byte of bytes) binary += String.fromCharCode(byte);
+	for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
 	return btoa(binary);
 }
 
@@ -229,6 +230,8 @@ export type ConnectOptions = {
 	key: CryptoKeyPair;
 	/** The host key fingerprint the owner confirmed, `SHA256:...`. Any other key is refused. */
 	hostFingerprint: string;
+	/** How long the relay has to open the WebSocket; none: 20 seconds. The tests make it short. */
+	openMs?: number;
 };
 
 export type Connection = {
@@ -270,12 +273,23 @@ export class SshRefused extends Error {
 	}
 }
 
-function open(url: string): Promise<WebSocket> {
+/** The relay's WebSocket, open. A relay that never answers counts as one that did not open it: a browser has no time limit of its own for this. */
+function open(url: string, ms: number): Promise<WebSocket> {
 	return new Promise((resolve, reject) => {
 		const socket = new WebSocket(url);
 		socket.binaryType = "arraybuffer";
-		socket.onopen = () => resolve(socket);
-		socket.onerror = () => reject(new RelayClosed(0, ""));
+		const timer = setTimeout(() => {
+			socket.close();
+			reject(new RelayClosed(0, `The relay did not open a connection within ${Math.round(ms / 1000)} seconds.`));
+		}, ms);
+		socket.onopen = () => {
+			clearTimeout(timer);
+			resolve(socket);
+		};
+		socket.onerror = () => {
+			clearTimeout(timer);
+			reject(new RelayClosed(0, ""));
+		};
 	});
 }
 
@@ -297,7 +311,7 @@ export async function connect(options: ConnectOptions): Promise<Connection> {
 			return seen === options.hostFingerprint ? {} : null;
 		})();
 	});
-	const socket = await open(options.url);
+	const socket = await open(options.url, options.openMs ?? 20_000);
 	// How the relay closed, if it did: read when the session fails, so that its reason is said.
 	let shut: { code: number; reason: string } | undefined;
 	const closed = new Promise<void>((resolve) => {
@@ -330,7 +344,7 @@ export async function connect(options: ConnectOptions): Promise<Connection> {
 			const wrapped = wrap(channel);
 			if (!(await channel.request(request))) {
 				await channel.close();
-				throw new Error(`The server refused to run ${command}.`);
+				throw new Error(`The server refused to run ${command}. Check that the account there may run commands (no forced command or "restrict" on this key in ~/.ssh/authorized_keys) and that pine is installed there.`);
 			}
 			return wrapped;
 		},
