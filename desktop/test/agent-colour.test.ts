@@ -123,3 +123,17 @@ test("Other takes any colour, and None takes it away again", async () => {
 	assert.equal("color" in JSON.parse(fs.readFileSync(agentFile(), "utf8")), false, "None leaves no colour in the file");
 	await avatarsAre(await resolved("var(--muted)"), "back to the stock avatar");
 });
+
+test("Other… alone changes nothing: saving another change leaves the agent without a colour", async () => {
+	// Settings is still open on books from the test before: back to the list and in again, for a page with no change.
+	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "Agents", exact: true }).click();
+	await page.locator("[data-slot=settings-page] [data-slot=item]", { hasText: "Keeps the books" }).click();
+	await page.waitForSelector("[data-setting=agent-colour]");
+	assert.equal("color" in JSON.parse(fs.readFileSync(agentFile(), "utf8")), false, "books starts without a colour");
+	await page.locator("[data-setting=agent-colour]").getByRole("button", { name: "Other…", exact: true }).click();
+	await page.getByLabel("What it is for").fill("Keeps the books, and the receipts");
+	await save();
+	const kept = JSON.parse(fs.readFileSync(agentFile(), "utf8"));
+	assert.equal(kept.description, "Keeps the books, and the receipts");
+	assert.equal("color" in kept, false, "Other… without a colour picked gives no colour");
+});

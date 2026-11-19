@@ -177,17 +177,23 @@ const agentSchemes = new Map<string, AgentScheme>();
  * The M3 scheme of an agent's colour: the owner's palette (its variant, contrast and custom colours)
  * with the agent's colour as the source. With surfaces among `families` the owner's neutral is left
  * out, and with outlines its neutral variant, so that those come from the agent's colour too. Kept per
- * colour, palette and neutrals: the window draws often, and generating a scheme is not free.
+ * colour and the options the scheme is generated with (a few dozen at most): the window draws often,
+ * and generating a scheme is not free.
  */
 export function agentScheme(color: string, palette: Palette = DEFAULT_PALETTE, families: readonly Family[] = []): AgentScheme {
-	const ownNeutral = families.includes("surfaces");
-	const ownVariant = families.includes("outlines");
-	const key = `${color}|${JSON.stringify(palette)}|${ownNeutral}|${ownVariant}`;
+	const { source: _global, neutral, neutralVariant, ...rest } = palette;
+	const options = {
+		...rest,
+		...(families.includes("surfaces") ? {} : { neutral }),
+		...(families.includes("outlines") ? {} : { neutralVariant }),
+	};
+	const key = `${color}|${JSON.stringify(options)}`;
 	let scheme = agentSchemes.get(key);
 	if (!scheme) {
-		const { source: _global, neutral, neutralVariant, ...rest } = palette;
-		const all = builder(color, { ...rest, ...(ownNeutral ? {} : { neutral }), ...(ownVariant ? {} : { neutralVariant }) }).toJson();
+		const all = builder(color, options).toJson();
 		scheme = { light: all.schemes.light, dark: all.schemes.dark, palettes: all.palettes };
+		// Dragging a palette control in Settings makes a new key at every step: start over rather than grow without end.
+		if (agentSchemes.size >= 64) agentSchemes.clear();
 		agentSchemes.set(key, scheme);
 	}
 	return scheme;

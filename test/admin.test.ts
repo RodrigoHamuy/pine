@@ -254,6 +254,13 @@ test("admin: the main agent gives an agent a colour, when it makes one and later
 	assert.equal(h.pine.cfg.agents.helper.color, undefined);
 	out = await main(call("agents"));
 	assert.doesNotMatch(out[0], /- helper:[^\n]*\n[^\n]*color/);
+
+	// "None" as the app labels it, in any case, takes the colour away too.
+	await main(call("update_agent", { id: "helper", color: "#3366cc" }));
+	assert.equal(json(file("helper")).color, "#3366cc");
+	await main(call("update_agent", { id: "helper", color: " None " }));
+	assert.equal(asked[4].summary, `change the agent "helper"\ncolor: none`);
+	assert.equal(json(file("helper")).color, undefined);
 	await h.close();
 });
 

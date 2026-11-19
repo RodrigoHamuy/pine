@@ -47,12 +47,12 @@ export interface AgentChange {
 }
 
 /**
- * An agent's colour as a change gives it: `#rrggbb` in any case, kept in lower case; "none" or
+ * An agent's colour as a change gives it: `#rrggbb` in any case, kept in lower case; "none" (in any case) or
  * empty is no colour (undefined). Throws on anything else, before the owner is asked.
  */
 export function checkColor(given: unknown): string | undefined {
 	const text = typeof given === "string" ? given.trim() : given;
-	if (text === "" || text === "none") return undefined;
+	if (text === "" || (typeof text === "string" && text.toLowerCase() === "none")) return undefined;
 	if (!isColor(text)) throw new Error(`a colour is written #rrggbb, for example #e0805a (got ${JSON.stringify(given)}); "none" takes it away`);
 	return text.toLowerCase();
 }

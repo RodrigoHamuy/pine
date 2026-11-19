@@ -270,12 +270,12 @@ function AgentColour({ id, value, onChange }: { id: string; value?: string; onCh
 	const field = useId();
 	const color = value && value !== "none" ? value : undefined;
 	const preset = AGENT_COLOURS.some((c) => c.hex === color);
-	const choice = !color ? "none" : preset && !other ? color : "other";
+	const choice = other ? "other" : !color ? "none" : preset ? color : "other";
 	const pick = (next: string | undefined) => {
 		if (!next) return;
 		setOther(next === "other");
-		// Other starts from the colour there is, and a grey where there is none.
-		onChange(next === "other" ? (color ?? "#808080") : next);
+		// Other only opens the input: the colour changes when the owner sets one there.
+		if (next !== "other") onChange(next);
 	};
 	return (
 		<Field className="col-span-full" data-setting="agent-colour">
@@ -289,8 +289,9 @@ function AgentColour({ id, value, onChange }: { id: string; value?: string; onCh
 				))}
 				<ToggleGroupItem value="other">Other…</ToggleGroupItem>
 			</ToggleGroup>
-			{choice === "other" && color ? <ColourInput id={`${field}-other`} name="color" value={color} onChange={onChange} /> : null}
-			<FieldDescription>Its avatar is drawn in it, in the side bar, on its tabs and in its panel. None keeps the window's own colours.</FieldDescription>
+			{/* Without a colour the input shows a neutral grey, which is no change until the owner sets one. */}
+			{choice === "other" ? <ColourInput id={`${field}-other`} name="color" value={color ?? "#808080"} onChange={onChange} /> : null}
+			<FieldDescription>Its avatar is drawn in it, in the side bar, on its tabs and in its panel, and while its conversation is in front the window takes it for the roles ticked in Settings &gt; App &gt; Colours. None keeps the window's own colours.</FieldDescription>
 		</Field>
 	);
 }

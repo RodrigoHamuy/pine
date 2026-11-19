@@ -160,7 +160,7 @@ Every key is optional; `{}` is a valid agent.
 | Key | Default | Meaning |
 |---|---|---|
 | `description` | empty | One line other agents see when they choose whom to delegate to. Write it for them. |
-| `color` | none | The agent's own colour in the Pine app, written `#rrggbb` (kept in lower case): its avatar is drawn with the primary of a Material 3 scheme made from it. Display only; the terminal UI does not use it. Set it on the agent's page in the app, with `pine agent update <id> --color #e0805a` (`--color none` takes it away), or ask the main agent ("make scout blue"): `color` of `create_agent` and `update_agent`, which you confirm. Anything that is not `#rrggbb` is a configuration problem. |
+| `color` | none | The agent's own colour in the Pine app, written `#rrggbb` (kept in lower case): its avatar is drawn with the primary of a Material 3 scheme made from it, and while its conversation is in front the window takes that primary (and the roles ticked under Settings > App > Colours). Display only; the terminal UI does not use it. Set it on the agent's page in the app, with `pine agent update <id> --color #e0805a` (`--color none` takes it away), or ask the main agent ("make scout blue"): `color` of `create_agent` and `update_agent`, which you confirm. Anything that is not `#rrggbb` is a configuration problem. |
 | `workspace` | `agents/<id>/workspace` | The agent's working folder. `AGENTS.md`, `SOUL.md`, `TOOLS.md` and `MEMORY.md` at its top are the agent's instructions and are loaded into its prompt. Must exist when you set it. |
 | `context` | `[]` | Further instruction files to load into the system prompt. |
 | `model`, `thinking` | from `defaults` | Per-agent model and thinking level. |
