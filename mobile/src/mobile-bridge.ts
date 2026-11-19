@@ -36,6 +36,8 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 	// listener, and each of its messages is unwrapped into what Electron's channel carries.
 	type Listener = (value: any) => void;
 	const heard = new Map<string, Set<Listener>>();
+	// What reaches the page's listeners of a kind: from the plugin, or from the bridge itself.
+	const emit = (event: string, value: unknown) => heard.get(event)?.forEach((fn) => fn(value));
 	// `own` takes a message for the bridge itself, which the page then never hears (the back button).
 	const on =
 		(event: "service" | "events" | "connection" | "focus" | "menu", unwrap: (data: any) => unknown, own: (value: unknown) => boolean = () => false) =>
@@ -43,10 +45,9 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 			let set = heard.get(event);
 			if (!set) {
 				heard.set(event, (set = new Set()));
-				const all = set;
 				void plugin.addListener(event as any, (data: unknown) => {
 					const value = unwrap(data);
-					if (!own(value)) all.forEach((f) => f(value));
+					if (!own(value)) emit(event, value);
 				});
 			}
 			set.add(fn);
@@ -78,17 +79,17 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 		// As Electron's `send`, nothing to wait for: a plugin that cannot start says so as a connection that failed.
 		ready: () =>
 			void plugin.ready().catch((e: unknown) => {
-				const state = { status: "error", kind: "failed", message: e instanceof Error ? e.message : String(e) };
-				heard.get("service")?.forEach((fn) => fn(state));
+				emit("service", { status: "error", kind: "failed", message: e instanceof Error ? e.message : String(e) });
 			}),
 		// Checked as main.ts checks the owner's change; the machines are changed by their own methods only.
 		prefs: async (change: Record<string, unknown>) => {
+			const flag = (key: "notify" | "updates" | "keepRunning" | "codeFollowsPalette") => (typeof change[key] === "boolean" ? change[key] : prefs[key]);
 			const next: PagePrefs = {
 				theme: change.theme === "system" || change.theme === "light" || change.theme === "dark" ? change.theme : prefs.theme,
-				notify: typeof change.notify === "boolean" ? change.notify : prefs.notify,
-				updates: typeof change.updates === "boolean" ? change.updates : prefs.updates,
-				keepRunning: typeof change.keepRunning === "boolean" ? change.keepRunning : prefs.keepRunning,
-				codeFollowsPalette: typeof change.codeFollowsPalette === "boolean" ? change.codeFollowsPalette : prefs.codeFollowsPalette,
+				notify: flag("notify"),
+				updates: flag("updates"),
+				keepRunning: flag("keepRunning"),
+				codeFollowsPalette: flag("codeFollowsPalette"),
 			};
 			// A reset sends none: nothing is stored, and the page draws pine's default.
 			const palette = "palette" in change ? cleanPalette(change.palette) : prefs.palette;
@@ -98,13 +99,10 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 			return { ...prefs };
 		},
 		call: (method: "GET" | "POST", url: string, body?: unknown) => plugin.call({ method, url, body }),
-		// After a host key the phone does not know yet, the page's Try again is the owner's yes to the
-		// fingerprint its message showed: exactly that key is trusted. A changed key is never trusted here.
-		retry: async () => {
-			const { state } = await plugin.state();
-			if (state.status === "error" && state.host && state.fingerprint && state.changed === false) await plugin.trustHostKey({ host: state.host, fingerprint: state.fingerprint });
-			else await plugin.retry();
-		},
+		retry: () => plugin.retry(),
+		// The owner's yes to the fingerprint the page drew, and to that one only: the plugin refuses
+		// any other, and a changed key is never offered (the page shows the button only when `changed` is false).
+		trustHostKey: (host: string, fingerprint: string) => plugin.trustHostKey({ host, fingerprint }),
 		use: async (host?: string) => {
 			// The page never asks for it when `local` is false; a stray call is refused here, not sent.
 			if (!host) throw new Error("This phone has no pine of its own: choose one of your machines.");

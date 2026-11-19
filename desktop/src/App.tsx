@@ -64,10 +64,25 @@ export function Gate() {
 		else s.flash("pine init did not finish. What it said is shown above.", "bad");
 	};
 	const host = state.host;
+	const key = s.keyToTrust;
+	// With no local machine the machines are the only way to a pine: added, chosen or forgotten here,
+	// also while one is being reached (that can take a minute), to switch to another.
+	const machines = s.local ? null : (
+		<div className="flex w-full flex-col gap-4 text-start" data-slot="gate-machines">
+			<MachineList />
+		</div>
+	);
 	const [title, about, actions]: [string, React.ReactNode, React.ReactNode] =
 		state.status === "starting"
 			? host
-				? [`Connecting to ${host}`, "Reaching its pine over SSH, or starting one there…", <div key="s" className="flex items-center gap-2"><Spinner />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>]
+				? [
+						`Connecting to ${host}`,
+						"Reaching its pine over SSH, or starting one there…",
+						<div key="s" className="flex w-full flex-col items-center gap-4">
+							<div className="flex items-center gap-2"><Spinner />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
+							{machines}
+						</div>,
+					]
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Spinner key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
@@ -86,17 +101,15 @@ export function Gate() {
 							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? `${host} is not reached over SSH` : "Choose a machine") : host ? `pine on ${host} did not start` : "pine did not start",
 							state.message,
 							<div key="b" className="flex w-full flex-col items-center gap-4">
+								{/* A host key met for the first time: its fingerprint, and the owner's yes to exactly that one. */}
+								{key ? <span className="font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</span> : null}
 								<div className="flex items-center gap-2">
-									{host || s.local ? <Button onClick={() => void bridge.retry()}>Try again</Button> : null}
+									{key ? <Button data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
+									{host || s.local ? <Button variant={key ? "outline" : "default"} onClick={() => void bridge.retry()}>Try again</Button> : null}
 									{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
 									{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
 								</div>
-								{/* With no local machine the machines are the only way to a pine: added, chosen or forgotten here. */}
-								{s.local ? null : (
-									<div className="flex w-full flex-col gap-4 text-start" data-slot="gate-machines">
-										<MachineList />
-									</div>
-								)}
+								{machines}
 							</div>,
 						]
 					: ["Loading your agents…", "", <Spinner key="s" />];

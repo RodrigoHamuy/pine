@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, fn, within } from "storybook/test";
 import type { AgentDetail, AgentInfo, McpServer, Overview, Route, Schedule, Setting } from "./api.ts";
 import { store } from "./model.ts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -109,7 +110,21 @@ function Tab({ section, agent, local = true }: { section: string; agent?: string
 	);
 }
 
-const meta = { component: Tab, parameters: { layout: "padded" } } satisfies Meta<typeof Tab>;
+const meta = {
+	component: Tab,
+	parameters: { layout: "padded" },
+	// What a story sets on the store is put back after it: the next story starts from the store as it was.
+	beforeEach: () => {
+		const { local, service, prefs, connected, section, settingsAgent, agents } = store;
+		return () => void Object.assign(store, { local, service, prefs, connected, section, settingsAgent, agents });
+	},
+} satisfies Meta<typeof Tab>;
+
+/** Nothing of a local machine on the page: no row for it, no "This Mac", nothing to use or set up there. */
+async function noLocalMachine(root: HTMLElement) {
+	await expect(root.querySelector('[data-environment="local"]')).toBeNull();
+	await expect(within(root).queryAllByText(/This Mac|This computer|Use this Mac|Set up pine/)).toHaveLength(0);
+}
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -215,10 +230,49 @@ window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAA
 export const EnvironmentsWithoutLocal: Story = {
 	args: { section: "environments", local: false },
 	render: Environments.render,
+	play: async ({ canvasElement, canvas }) => {
+		await canvas.findByText("This phone's key");
+		await expect(canvasElement.querySelector('[data-environment="me@build-box"]')).not.toBeNull();
+		await noLocalMachine(canvasElement);
+	},
+};
+
+const fingerprint = "SHA256:Xv2k0yq3pZ8bW9cQm1sT4uE7rN6aL5dH2fJ0gK3iO8Y";
+const trusted = fn();
+
+/** A machine met for the first time, on the phone: its row shows the host key's fingerprint and Trust this key, the owner's yes to exactly that one. */
+export const EnvironmentsHostKeyToConfirm: Story = {
+	args: { section: "environments", local: false },
+	render: (args) => {
+		store.prefs = { ...store.prefs, hosts: ["me@build-box", "studio"], use: "me@build-box" };
+		store.service = { status: "error", kind: "ssh", host: "me@build-box", fingerprint, changed: false, message: `This phone does not know me@build-box yet. Its host key's fingerprint is ${fingerprint}. If that is what the machine shows, trust it and connect.` };
+		store.connected = false;
+		return <Tab {...args} />;
+	},
+	beforeEach: () => {
+		trusted.mockClear();
+		window.pine.trustHostKey = trusted;
+		return () => void delete (window.pine as Partial<typeof window.pine>).trustHostKey;
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const row = canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"]')!;
+		await expect(row.querySelector('[data-slot="host-key-fingerprint"]')).toHaveTextContent(fingerprint);
+		await expect(canvasElement.querySelector('[data-environment="studio"] [data-slot="trust-host-key"]')).toBeNull();
+		await userEvent.click(row.querySelector<HTMLElement>('[data-slot="trust-host-key"]')!);
+		await expect(trusted).toHaveBeenCalledTimes(1);
+		await expect(trusted).toHaveBeenCalledWith("me@build-box", fingerprint);
+		await noLocalMachine(canvasElement);
+	},
 };
 
 /** The App page under a bridge with no local machine: appearance, notifications, colours and the pine in use, without what only this computer has (its home folder, Keep running, Restart, the pine command, the browser build, the Electron version). */
-export const AppWithoutLocal: Story = { args: { section: "app", local: false } };
+export const AppWithoutLocal: Story = {
+	args: { section: "app", local: false },
+	play: async ({ canvasElement, canvas }) => {
+		await canvas.findByText("Appearance");
+		await noLocalMachine(canvasElement);
+	},
+};
 
 // The app's preferences as the main process keeps them: what is set is answered back, as `pine:prefs` does.
 window.pine.prefs = async (change) => ({ ...store.prefs, ...change });

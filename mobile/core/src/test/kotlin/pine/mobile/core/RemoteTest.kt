@@ -211,8 +211,30 @@ class RemoteTest {
 		assertFailsWith<RemoteError> { remote.connect("me@127.0.0.1:$nobody") }.let {
 			assertEquals("ssh", it.kind)
 			assertContains(it.message!!, "Could not connect to me@127.0.0.1:$nobody over SSH")
+			assertContains(it.message!!, "Wi-Fi")
+			assertContains(it.message!!, "Tailscale")
+			assertContains(it.message!!, "port")
 		}
 		assertEquals("ssh", assertFailsWith<RemoteError> { remote.connect("-oProxyCommand=x") }.kind)
 		assertContains(assertFailsWith<RemoteError> { remote.connect("127.0.0.1:${machine.port}") }.message!!, "user@")
+	}
+
+	@Test
+	fun `a daemon that takes a call and never answers fails it in a bounded time`() {
+		val hold = java.util.concurrent.CountDownLatch(1)
+		daemon.routes["/silent"] = { hold.await(10, java.util.concurrent.TimeUnit.SECONDS) }
+		daemon.routes["/media/tool/silent"] = { hold.await(10, java.util.concurrent.TimeUnit.SECONDS) }
+		try {
+			known.confirm("127.0.0.1", machine.port, machine.fingerprint)
+			val s = Remote(key, known, answerMs = 1_000, readMs = 300).connect(host).also { open.add(it) }
+			val t = System.currentTimeMillis()
+			val r = s.call("GET", "/silent", null)
+			assertEquals(0, r.status)
+			assertContains((r.data as JSONObject).getString("error"), "pine does not answer")
+			assertEquals(404, mediaFromDaemon(s, "GET", "/media/tool/silent", "").status)
+			assertTrue(System.currentTimeMillis() - t < 3_000, "within the read time limit")
+		} finally {
+			hold.countDown()
+		}
 	}
 }

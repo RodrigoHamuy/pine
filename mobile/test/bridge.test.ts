@@ -71,21 +71,20 @@ test("ready and retry: forwarded", async () => {
 	);
 });
 
-test("retry: a host key that waits for the owner's yes is trusted, exactly the one shown; a changed one never is", async () => {
+test("retry: only connects again, even when a host key waits for the owner's yes", async () => {
 	const fingerprint = `SHA256:${"a".repeat(43)}`;
-	const waiting = { status: "error", kind: "ssh", message: `... ${fingerprint} ... press Try again to trust it`, host: "me@box", fingerprint, changed: false };
+	const waiting = { status: "error", kind: "ssh", message: `... ${fingerprint} ...`, host: "me@box", fingerprint, changed: false };
 	const { plugin, calls } = fakePlugin({ state: () => ({ state: waiting, connected: false, version: "1" }) });
 	await mobileBridge(plugin).retry();
-	assert.deepEqual(
-		calls.filter(([m]) => m !== "state"),
-		[["trustHostKey", { host: "me@box", fingerprint }]],
-	);
-	const changed = fakePlugin({ state: () => ({ state: { ...waiting, changed: true }, connected: false, version: "1" }) });
-	await mobileBridge(changed.plugin).retry();
-	assert.deepEqual(
-		changed.calls.filter(([m]) => m !== "state"),
-		[["retry"]],
-	);
+	assert.deepEqual(calls, [["retry"]]);
+});
+
+test("trustHostKey: exactly the host and fingerprint the page drew reach the plugin, nothing read from its state", async () => {
+	const shown = `SHA256:${"b".repeat(43)}`;
+	const other = { status: "error", kind: "ssh", message: "...", host: "me@box", fingerprint: `SHA256:${"c".repeat(43)}`, changed: false };
+	const { plugin, calls } = fakePlugin({ state: () => ({ state: other, connected: false, version: "1" }) });
+	await mobileBridge(plugin).trustHostKey!("me@box", shown);
+	assert.deepEqual(calls, [["trustHostKey", { host: "me@box", fingerprint: shown }]]);
 });
 
 test("forgetHost: the machine's stored host key goes with it", async () => {

@@ -60,9 +60,7 @@ class HeldRemote(
 			throw RemoteError("failed", "The connection to $host was closed.")
 		}
 		service = s
-		following = followEvents(s, object : EventHandlers {
-			override fun batch(events: List<Any>) = on.batch(events)
-			override fun connection(up: Boolean) = on.connection(up)
+		following = followEvents(s, object : EventHandlers by on {
 			// An SSH connection that broke does not come back by waiting: it is made again.
 			override fun lost(times: Int): Boolean {
 				if (times != 5) return on.lost(times)

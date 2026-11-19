@@ -16,6 +16,7 @@ import java.util.Base64
  * with a key of the Android Keystore, so that a backup or another app cannot read it.
  */
 interface Vault {
+	/** The value, or null when none is kept. One that is kept and cannot be opened throws (`VaultError`): it is never taken for none. */
 	fun read(name: String): ByteArray?
 	fun write(name: String, value: ByteArray)
 	fun remove(name: String)
@@ -27,11 +28,15 @@ interface Vault {
  * the machine that runs pine.
  */
 class DeviceKey(private val vault: Vault) {
-	private val seed: ByteArray = vault.read(NAME) ?: ByteArray(32).also {
-		SecureRandom().nextBytes(it)
-		vault.write(NAME, it)
+	// Read when first needed, not when made: the plugin makes it on the main thread, where the
+	// Keystore is not to be asked. A key that is kept and cannot be opened throws, and is never replaced.
+	private val seed: ByteArray by lazy {
+		vault.read(NAME) ?: ByteArray(32).also {
+			SecureRandom().nextBytes(it)
+			vault.write(NAME, it)
+		}
 	}
-	private val public = Ed25519PrivateKeyParameters(seed, 0).generatePublicKey().encoded
+	private val public: ByteArray by lazy { Ed25519PrivateKeyParameters(seed, 0).generatePublicKey().encoded }
 
 	/** The public key as a line of authorized_keys. */
 	val publicKey: String
@@ -68,7 +73,12 @@ class KnownHosts(private val vault: Vault) {
 	/** Whether `key` is the one confirmed for that machine; a `HostKeyError` that says why not. `given` is the machine as the owner wrote it. */
 	internal fun check(given: String, host: String, port: Int, key: PublicKey) {
 		val seen = fingerprint(key)
-		val stored = fingerprintOf(host, port) ?: throw HostKeyError("$given is not among the machines this phone knows yet. Its host key's fingerprint is $seen: if that is what the machine shows (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub there), confirm it.", host, port, seen, changed = false)
+		// A confirmed key that cannot be read is not an unknown one: the owner would be asked to trust whatever answers.
+		val stored = try {
+			fingerprintOf(host, port)
+		} catch (e: VaultError) {
+			throw RemoteError("ssh", "Not connecting to $given: ${e.message}")
+		} ?: throw HostKeyError("$given is not among the machines this phone knows yet. Its host key's fingerprint is $seen: if that is what the machine shows (ssh-keygen -lf /etc/ssh/ssh_host_*_key.pub there), confirm it.", host, port, seen, changed = false)
 		if (stored != seen) throw HostKeyError("The host key of $given changed: it was $stored and is now $seen. Not connecting, since another machine may stand in for it. If that machine was reinstalled, forget its key and confirm the new one.", host, port, seen, changed = true)
 	}
 

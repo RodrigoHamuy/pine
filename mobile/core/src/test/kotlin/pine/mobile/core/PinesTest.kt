@@ -2,6 +2,8 @@ package pine.mobile.core
 
 import org.json.JSONObject
 import java.util.Collections
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -44,8 +46,11 @@ class PinesTest {
 	private val page = SeenPage()
 	private val pines = Pines(rig.remote, rig.known, shelf, page, retryMs = 20)
 
+	private val hold = CountDownLatch(1)
+
 	@AfterTest
 	fun end() {
+		hold.countDown()
 		pines.close()
 		rig.close()
 	}
@@ -142,5 +147,49 @@ class PinesTest {
 		pines.check()
 		assertEquals("ready", page.status())
 		assertEquals(2, rig.machine.commands.size, "connected again")
+	}
+
+	@Test
+	fun `a check after a pause tries again a machine that could not be reached, but not one whose host key waits for the owner`() {
+		rig.machine.behaviour = Behaviour { _, out, _ -> out.write("Welcome to the server!\n".toByteArray()); 0 }
+		pines.addHost(rig.host)
+		pines.use(rig.host)
+		eventually("not reached") { page.status() == "error" }
+		rig.machine.behaviour = rig.service
+		pines.check()
+		assertEquals("ready", page.status())
+
+		val other = "you@127.0.0.1:${rig.machine.port}"
+		rig.known.forget("127.0.0.1", rig.machine.port)
+		pines.addHost(other)
+		pines.use(other)
+		eventually("the host key put to the owner") { page.status() == "error" && page.last!!.has("fingerprint") }
+		val told = page.states.size
+		val ran = rig.machine.commands.size
+		pines.check()
+		assertEquals(told, page.states.size, "it waits for the owner's yes")
+		assertEquals(ran, rig.machine.commands.size)
+	}
+
+	@Test
+	fun `switching back to a machine whose events already flow tells the page it is connected`() {
+		rig.daemon.routes["/events/stream"] = { x ->
+			x.responseHeaders.add("content-type", "text/event-stream")
+			x.sendResponseHeaders(200, 0)
+			x.responseBody.write(": connected\n\n".toByteArray())
+			x.responseBody.flush()
+			hold.await(10, TimeUnit.SECONDS)
+		}
+		val other = "you@127.0.0.1:${rig.machine.port}"
+		pines.addHost(rig.host)
+		pines.addHost(other)
+		pines.use(rig.host)
+		eventually("the first up") { pines.connected }
+		pines.use(other)
+		eventually("the second up") { page.status() == "ready" && page.last!!.optString("host") == other && pines.connected }
+		pines.use(rig.host)
+		eventually("the first shown again") { page.status() == "ready" && page.last!!.optString("host") == rig.host }
+		assertTrue(pines.connected)
+		assertEquals(true, page.ups.last())
 	}
 }

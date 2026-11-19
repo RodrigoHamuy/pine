@@ -14,6 +14,9 @@ val MEDIA: List<Regex> = listOf(Regex("^/media/tool/[^/]+$"), Regex("^/tasks/\\d
 /** An answer for the page: its status, its headers by lower-case name, and its body, read as it arrives (close it when done). */
 class MediaAnswer(val status: Int, val headers: Map<String, String>, val body: InputStream)
 
+/** What is drawn or played. */
+private val SHOWN = Regex("^(image|video|audio)/")
+
 private fun plain(status: Int, text: String) = MediaAnswer(status, mapOf("content-type" to "text/plain; charset=utf-8"), ByteArrayInputStream(text.toByteArray()))
 
 /** One of the daemon's media, by its path on the daemon and the query that goes with it (`?...`, or empty). */
@@ -31,7 +34,7 @@ fun mediaFromDaemon(daemon: Daemon?, method: String, path: String, search: Strin
 		if (head.status !in 200..299) return plain(404, "not found").also { conn.close() }
 		val type = head.headers["content-type"] ?: "application/octet-stream"
 		// Only what is drawn or played. A page of HTML or a script under this name would be content from outside.
-		if (!Regex("^(image|video|audio)/").containsMatchIn(type) || type.startsWith("image/svg")) return plain(415, "not shown").also { conn.close() }
+		if (!SHOWN.containsMatchIn(type) || type.startsWith("image/svg")) return plain(415, "not shown").also { conn.close() }
 		val headers = mutableMapOf("content-type" to type, "cache-control" to "no-store", "x-content-type-options" to "nosniff")
 		// With its size: a player is told by it how long a video or a sound runs.
 		if (!head.chunked) head.headers["content-length"]?.let { headers["content-length"] = it }

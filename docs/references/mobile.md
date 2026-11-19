@@ -57,7 +57,8 @@ is connected to when you pick it.
 The app runs `pine service` there, as the desktop app does: it attaches to the pine that runs,
 or starts one, which the connection then holds. Pick another machine at the foot of the side
 bar, as on the Mac. The app remembers the machines and the one in use, and opens on it next
-time. Forget on a machine's line removes it, with its host key.
+time. Forget on a machine's line removes it, with its host key; the machine in use too, when
+it is not reached, so that the first screen lists the others again.
 
 When a machine is not reached, the first screen says why, in the words of the desktop app:
 the machine does not answer, pine is not installed there, pine there is too old, there is no
@@ -72,8 +73,9 @@ host key (SHA256, as OpenSSH prints it). Compare it with what the machine says:
 ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-If it is the same, Try again: the app trusts exactly that key, for that host and port, and
-connects. If it is not, do not go on: something else answers in the machine's place.
+If it is the same, press **Trust this key**: the app trusts exactly that key, for that host and
+port, and connects. If it is not, do not press it: something else answers in the machine's
+place. Try again only connects again; it never trusts a key.
 
 When the host key of a known server changed, the app refuses to connect and says so: another
 machine may stand in for it. If you reinstalled that machine, or its SSH server got new keys,
@@ -130,7 +132,11 @@ default Android Studio's on a Mac).
 |---|---|
 | `npm run apk` | A debug APK, in `android/app/build/outputs/apk/debug/` |
 | `npm run apk:release` | A release APK. Signed when `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` name a key; unsigned otherwise. `PINE_VERSION` and `PINE_VERSION_CODE` set its version |
-| `npm run smoke` | Builds, installs on an emulator without a window and opens the app against a test machine of its own |
+| `npm run smoke` | Builds, installs on an emulator without a window and opens the app against a test machine of its own. It is the test of the WebView's hardening (no permission, no window, no file access, no navigation away), of Share, of the back button and of the return from the background. Run it before a release that changes `mobile/` or upgrades Capacitor |
+
+Attaching a photo through the system's file chooser is not driven by the smoke run: check it by
+hand on a phone or the emulator before such a release (attach a picture to a message, and see
+it sent).
 
 The Release workflow (`.github/workflows/release.yml`) builds the release APK for every release
 from `main` and attaches it to the GitHub release, with `versionName` the release's version and

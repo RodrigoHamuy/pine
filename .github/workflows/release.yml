@@ -240,6 +240,10 @@ jobs:
       - if: steps.signing.outputs.ready == 'true'
         run: npm ci && npm ci --prefix desktop && npm ci --prefix mobile
       - if: steps.signing.outputs.ready == 'true'
+        name: Check and test the mobile package
+        # The bridge, the configuration and both builds of the page: an APK is built only from what passes.
+        run: npm run check --prefix mobile && npm test --prefix mobile
+      - if: steps.signing.outputs.ready == 'true'
         name: Build the page and a signed release APK
         # On the runner's Android SDK (ANDROID_HOME) and the JDK above. The Gradle build signs with the
         # key the environment names, and is given the release's version and its code.

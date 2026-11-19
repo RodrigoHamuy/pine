@@ -8,11 +8,23 @@
 //   npm run smoke [-- --shot <file.png>] [-- --avd <name>] [-- --keep]
 //
 // The app is driven as a person would, through adb (uiautomator for what is on screen, input for
-// taps and keys): it reads the phone's key from the page, adds the machine, confirms its host key
-// and shows the agents. Then the page's hardening is checked through the debug build's WebView
-// inspector: Capacitor's bridge runs under the page's policy, an inline script does not, the page
-// navigates nowhere, opens no window and is given no permission, and media are answered by the
-// plugin. An emulator it started is stopped at the end, and so are its servers.
+// taps and keys): it reads the phone's key from the page and shares it (the system's chooser comes
+// up), adds the machine, trusts its host key and shows the agents.
+//
+// It is the test of the WebView's hardening in PinePlugin.kt, which no other suite reaches: through
+// the debug build's WebView inspector, each of these is a named check that fails the run.
+//   - the policy: Capacitor's bridge runs under the page's policy, an inline script does not;
+//   - permission denial (onPermissionRequest, onGeolocationPermissionsShowPrompt): no camera,
+//     microphone or location;
+//   - no window (onCreateWindow, setSupportMultipleWindows(false)): window.open, with and without
+//     a user's gesture, makes no new page and leaves the page where it is;
+//   - no file access (allowFileAccess): a file: address cannot be fetched or navigated to;
+//   - the navigation rules (shouldOverrideUrlLoading): file: and intent: lead nowhere, an address of
+//     the web opens outside the app;
+//   - media are answered by the plugin.
+// Then the app's life: the back button closes the open sheet, then leaves the app; the app comes back
+// from the background (after back, and after HOME) still connected to the machine.
+// An emulator it started is stopped at the end, and so are its servers.
 //
 // Needs ANDROID_HOME (default ~/Library/Android/sdk) with an emulator and a system image, and a
 // JDK (JAVA_HOME, default Android Studio's).
@@ -135,11 +147,24 @@ try {
 	};
 	const node = (re) => (nodes) => nodes.find((n) => n.visible && re.test(label(n)));
 	const tap = (n) => adb("shell", "input", "tap", String(n.x), String(n.y));
+	/** The activity in front ("package/class"), and its package. */
+	const frontActivity = () => adb("shell", "dumpsys", "activity", "activities").match(/topResumedActivity=\S+ \S+ (\S+)/)?.[1];
+	const front = () => frontActivity()?.split("/")[0];
+	/** The page past the Gate, on the machine's pine. */
+	const connected = (ns) => !ns.some((n) => /Choose a machine|is not reached|Connecting to/.test(label(n))) && ns.some((n) => /main/.test(label(n))) && ns;
+	const sidebarButton = node(/^(Show the sidebar|Toggle Sidebar)$/);
+	const agentsShown = (ns) => ns.some((n) => n.visible && /^main: /.test(label(n))) && ns.some((n) => n.visible && /^scout: /.test(label(n))) && ns;
 
 	step("the first start: the page asks for a machine and shows the phone's key");
 	await waitFor("the Gate's Choose a machine", node(/^Choose a machine$/));
 	const key = await waitFor("the phone's key", node(/^ssh-ed25519 \S+ pine-android$/));
 	write(keys, `${label(key)}\n`);
+
+	step("Share hands the key to the system's chooser, and back returns to the app");
+	tap(await waitFor("Share", node(/^Share$/)));
+	await waitFor("the system's chooser in front", () => /chooser|resolver/i.test(frontActivity() ?? "") || undefined, 15);
+	adb("shell", "input", "keyevent", "KEYCODE_BACK");
+	await waitFor("the app in front again", () => front() === APP || undefined, 15);
 
 	step(`adding ${host}`);
 	const field = (ns) => ns.find((n) => n.visible && n.cls === "android.widget.EditText");
@@ -159,18 +184,21 @@ try {
 	step("the host key is put to the owner, with the machine's fingerprint");
 	const asked = await waitFor("the host key's fingerprint", node(/does not know .* fingerprint is SHA256:/));
 	if (!label(asked).includes(said.fingerprint)) throw new Error(`the page shows another fingerprint than the machine's: ${label(asked)}`);
-	tap(await waitFor("Try again", node(/^Try again$/)));
+	tap(await waitFor("Trust this key", node(/^Trust this key$/)));
 
 	step("connected: the agents of that pine");
-	await waitFor("the page past the Gate", (ns) => !ns.some((n) => /Choose a machine|is not reached|Connecting to/.test(label(n))) && ns.some((n) => /main/.test(label(n))) && ns, 120);
-	const open = node(/^(Show the sidebar|Toggle Sidebar)$/)(screen());
+	await waitFor("the page past the Gate", connected, 120);
+	const open = sidebarButton(screen());
 	if (open) tap(open);
-	await waitFor("the agents in the side bar", (ns) => ns.some((n) => n.visible && /^main: /.test(label(n))) && ns.some((n) => n.visible && /^scout: /.test(label(n))) && ns);
+	await waitFor("the agents in the side bar", agentsShown);
 	await sleep(500);
 	fs.mkdirSync(path.dirname(shot), { recursive: true });
 	fs.writeFileSync(shot, execFileSync(ADB, ["exec-out", "screencap", "-p"], { env, maxBuffer: 64 * 1024 * 1024 }));
 	step(`screenshot: ${shot}`);
-	if (open) adb("shell", "input", "keyevent", "KEYCODE_BACK");
+	if (open) {
+		adb("shell", "input", "keyevent", "KEYCODE_BACK");
+		await waitFor("the side bar closed", (ns) => !agentsShown(ns) && ns, 15);
+	}
 
 	// ---- the page's hardening, through the debug build's WebView inspector ------------------------
 	step("checking the page's hardening through the WebView inspector");
@@ -185,7 +213,7 @@ try {
 	await new Promise((resolve, reject) => ((ws.onopen = resolve), (ws.onerror = reject)));
 	cleanups.push(() => ws.close());
 	let id = 0;
-	const evaluate = (expression) =>
+	const evaluate = (expression, { gesture = false } = {}) =>
 		new Promise((resolve, reject) => {
 			const mine = ++id;
 			const on = (e) => {
@@ -196,27 +224,41 @@ try {
 				else resolve(m.result?.result?.value);
 			};
 			ws.addEventListener("message", on);
-			ws.send(JSON.stringify({ id: mine, method: "Runtime.evaluate", params: { expression, awaitPromise: true, returnByValue: true } }));
+			ws.send(JSON.stringify({ id: mine, method: "Runtime.evaluate", params: { expression, awaitPromise: true, returnByValue: true, userGesture: gesture } }));
 		});
+	const here = "location.origin + location.pathname";
+	const pages = async () => (await (await fetch(`http://127.0.0.1:${port}/json`)).json()).filter((t) => t.type === "page").length;
+	const pagesBefore = await pages();
 	const checks = {
+		// The policy.
 		"Capacitor's bridge runs under the page's policy": [await evaluate("typeof window.Capacitor === 'object' && window.Capacitor.isNativePlatform()"), true],
 		"the policy is the page's own (script-src 'self')": [await evaluate("/script-src 'self'(;|$)/.test(document.querySelector('meta[http-equiv=Content-Security-Policy]')?.content ?? '')"), true],
 		"an inline script added to the page does not run": [await evaluate("new Promise((r) => { const s = document.createElement('script'); s.textContent = 'window.__inline = 1'; document.head.append(s); setTimeout(() => r(window.__inline === 1), 300); })"), false],
-		"the camera is not given": [await evaluate("navigator.mediaDevices.getUserMedia({ video: true }).then(() => 'given', (e) => e.name)"), "NotAllowedError"],
-		"the location is not given": [await evaluate("new Promise((r) => navigator.geolocation.getCurrentPosition(() => r('given'), (e) => r('refused ' + e.code)))"), "refused 1"],
+		// Permission denial.
+		"permission denial: the camera is not given": [await evaluate("navigator.mediaDevices.getUserMedia({ video: true }).then(() => 'given', (e) => e.name)"), "NotAllowedError"],
+		"permission denial: the microphone is not given": [await evaluate("navigator.mediaDevices.getUserMedia({ audio: true }).then(() => 'given', (e) => e.name)"), "NotAllowedError"],
+		"permission denial: the location is not given": [await evaluate("new Promise((r) => navigator.geolocation.getCurrentPosition(() => r('given'), (e) => r('refused ' + e.code)))"), "refused 1"],
+		// No file access.
+		"no file access: a file: address cannot be fetched": [await evaluate("fetch('file:///system/etc/hosts').then(() => 'read', () => 'refused')"), "refused"],
+		// Media.
 		"media are answered by the plugin under the daemon's rules": [await evaluate("fetch('/_pine_media/not/a/media/path').then((r) => r.status)"), 404],
 	};
-	const front = () => adb("shell", "dumpsys", "activity", "activities").match(/topResumedActivity=.*?(\S+)\//)?.[1];
-	checks["window.open opens no window"] = [await evaluate("[window.open('https://example.com/'), window.open('file:///sdcard/')].every((w) => w === null)"), true];
+	// No window: onCreateWindow and setSupportMultipleWindows(false), with and without a user's gesture.
+	checks["no window: window.open without a gesture gives nothing"] = [await evaluate("[window.open('https://example.com/'), window.open('file:///sdcard/')].every((w) => w === null)"), true];
+	await evaluate("window.open('file:///sdcard/'); 1", { gesture: true });
+	await sleep(1500);
+	checks["no window: window.open with a gesture makes no new page"] = [await pages(), pagesBefore];
+	checks["no window: window.open with a gesture leaves the page where it is"] = [await evaluate(here), "https://localhost/"];
+	// The navigation rules.
 	await evaluate("location.href = 'intent://x#Intent;scheme=market;end'; 1");
 	await sleep(1500);
 	await evaluate("location.href = 'file:///sdcard/'; 1");
 	await sleep(1500);
-	checks["the page navigates nowhere (file:, intent:)"] = [await evaluate("location.origin + location.pathname"), "https://localhost/"];
-	checks["the app stays in front"] = [front(), APP];
+	checks["navigation: the page goes nowhere (file:, intent:)"] = [await evaluate(here), "https://localhost/"];
+	checks["navigation: the app stays in front"] = [front(), APP];
 	await evaluate("location.href = 'https://example.com/'; 1");
 	await sleep(3000);
-	checks["an address of the web opens outside the app, not in it"] = [front() !== APP && (await evaluate("location.origin")) === "https://localhost", true];
+	checks["navigation: an address of the web opens outside the app, not in it"] = [front() !== APP && (await evaluate("location.origin")) === "https://localhost", true];
 	adb("shell", "am", "start", "-n", `${APP}/.MainActivity`);
 	let failed = 0;
 	for (const [what, [got, want]] of Object.entries(checks)) {
@@ -225,6 +267,30 @@ try {
 		console.log(`  ${ok ? "ok" : "NOT OK"}  ${what}${ok ? "" : ` (got ${JSON.stringify(got)}, wanted ${JSON.stringify(want)})`}`);
 	}
 	if (failed) throw new Error(`${failed} hardening check(s) failed`);
+
+	// ---- the app's life: the back button, the background ------------------------------------------
+	step("the back button closes the open sheet, then leaves the app");
+	await waitFor("the app in front again", (ns) => front() === APP && connected(ns), 30);
+	const sidebar = sidebarButton(screen());
+	if (!sidebar) throw new Error("no side bar button to open a sheet with: run the smoke test on a phone's screen, not a tablet's");
+	tap(sidebar);
+	await waitFor("the side bar open", agentsShown);
+	adb("shell", "input", "keyevent", "KEYCODE_BACK");
+	await waitFor("the side bar closed by back", (ns) => !agentsShown(ns) && ns, 15);
+	if (front() !== APP) throw new Error(`back with a sheet open left the app (in front: ${frontActivity()})`);
+	adb("shell", "input", "keyevent", "KEYCODE_BACK");
+	await waitFor("the app gone to the background by back", () => (front() !== APP && front() !== undefined) || undefined, 15);
+
+	step("back from the background, still on the machine");
+	adb("shell", "am", "start", "-n", `${APP}/.MainActivity`);
+	await waitFor("the app in front and connected after back", (ns) => front() === APP && connected(ns), 60);
+	adb("shell", "input", "keyevent", "KEYCODE_HOME");
+	await waitFor("the app paused by HOME", () => front() !== APP || undefined, 15);
+	await sleep(5000);
+	adb("shell", "am", "start", "-n", `${APP}/.MainActivity`);
+	await waitFor("the app in front and connected after HOME", (ns) => front() === APP && connected(ns), 60);
+	tap(await waitFor("the side bar button", sidebarButton));
+	await waitFor("the agents after resume", agentsShown);
 	step("done: the app reached the pine of the machine and shows its agents");
 } catch (e) {
 	console.error(`smoke run failed: ${e instanceof Error ? e.message : e}`);

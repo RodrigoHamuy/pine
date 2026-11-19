@@ -17,10 +17,10 @@ import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
+import java.net.SocketTimeoutException
 import java.security.PublicKey
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
-import java.util.concurrent.TimeoutException
 import kotlin.concurrent.thread
 
 /** What runs on the other machine: src/remote.ts's `remoteCommand()`, character for character. */
@@ -49,7 +49,8 @@ class RemoteService internal constructor(
 	override fun open(): Duplex {
 		val channel = ssh.newDirectConnection(end.host, end.port)
 		return object : Duplex {
-			override val input: InputStream = channel.inputStream
+			// Buffered once here: what reads it (heads, bodies, the event stream) reads a byte at a time.
+			override val input: InputStream = channel.inputStream.buffered()
 			override val output: OutputStream = channel.outputStream
 			override fun close() = channel.close()
 		}
@@ -72,20 +73,33 @@ class RemoteService internal constructor(
  * confirmed. `answerMs` is how long `pine service` there has to say where its daemon answers;
  * `connectMs` how long the machine has to answer at all (ssh's ConnectTimeout).
  */
-class Remote(private val key: DeviceKey, private val known: KnownHosts, private val answerMs: Long = 60_000, private val connectMs: Int = 15_000) {
+class Remote(
+	private val key: DeviceKey,
+	private val known: KnownHosts,
+	private val answerMs: Long = 60_000,
+	private val connectMs: Int = 15_000,
+	/**
+	 * How long a read on a channel waits for a byte: a daemon that takes a call and never answers
+	 * fails it then. The event stream is read under it too, which the daemon's ping every 20 seconds keeps alive.
+	 */
+	private val readMs: Int = 60_000,
+) {
 	/** The daemon of the machine `value` names (host, user@host or user@host:port), or a `RemoteError` that says what to do. */
 	fun connect(value: String): RemoteService {
 		val named = sshHost(value) ?: throw RemoteError("ssh", "Name the machine as you would after ssh: user@host, or user@host:port.")
 		val user = named.user ?: throw RemoteError("ssh", "Name the user too: user@${named.given}. A phone has no user name of its own to sign in with.")
 		val given = named.given
-		val config = DefaultConfig().apply { keepAliveProvider = KeepAliveProvider.KEEP_ALIVE }
+		val config = DefaultConfig().apply {
+			keepAliveProvider = KeepAliveProvider.KEEP_ALIVE
+			channelReadTimeoutMs = readMs
+		}
 		val ssh = SSHClient(config)
-		var refusedKey: HostKeyError? = null
+		var refusedKey: RemoteError? = null
 		ssh.addHostKeyVerifier(object : HostKeyVerifier {
 			override fun verify(hostname: String, port: Int, key: PublicKey): Boolean = try {
 				known.check(given, named.host, named.port, key)
 				true
-			} catch (e: HostKeyError) {
+			} catch (e: RemoteError) {
 				refusedKey = e
 				false
 			}
@@ -100,7 +114,7 @@ class Remote(private val key: DeviceKey, private val known: KnownHosts, private 
 				ssh.connect(named.host, named.port)
 			} catch (e: IOException) {
 				refusedKey?.let { throw it }
-				throw RemoteError("ssh", "Could not connect to $given over SSH. ${e.message ?: e.javaClass.simpleName}")
+				throw RemoteError("ssh", "Could not connect to $given over SSH (${e.message ?: e.javaClass.simpleName}). Check that this phone reaches that machine (the same Wi-Fi, or a VPN such as Tailscale on both), that SSH runs there, and that the port is right.")
 			}
 			try {
 				ssh.authPublickey(user, key.provider())
@@ -126,8 +140,6 @@ class Remote(private val key: DeviceKey, private val known: KnownHosts, private 
 			val line = firstLine(command.inputStream)
 			val said = try {
 				line.get(answerMs, TimeUnit.MILLISECONDS)
-			} catch (e: TimeoutException) {
-				null
 			} catch (e: Exception) {
 				null
 			}
@@ -184,6 +196,8 @@ private fun firstLine(input: InputStream): CompletableFuture<String?> {
 				if (line.size() < 64 * 1024) line.write(b)
 			}
 			result.complete(null)
+		} catch (e: SocketTimeoutException) {
+			// A command that says nothing for a while: `answerMs` decides when that is too long.
 		} catch (e: Exception) {
 			result.complete(null)
 		}

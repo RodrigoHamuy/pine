@@ -48,6 +48,9 @@ class Pines(
 	private var begun = false
 	private var closed = false
 
+	/** Whether each held machine's event stream is up, by machine: what the page is told when it is shown again. */
+	private val streams = mutableMapOf<String, Boolean>()
+
 	/** Whether the event stream of the machine in use is up. */
 	@Volatile
 	var connected = false
@@ -100,6 +103,7 @@ class Pines(
 			if (wasInUse) shelf.set(USE, null)
 			shelf.set(HOSTS, JSONArray(hosts.filter { it != host }).toString())
 			unknown.remove(host)
+			streams.remove(host)
 			stop = held.remove(host)
 		}
 		stop?.stop()
@@ -150,12 +154,16 @@ class Pines(
 
 	/**
 	 * The app came back to the front: the pine in use is asked whether it still answers (Android may
-	 * have cut the link meanwhile), and connected to again when it does not. Returns when that is known.
+	 * have cut the link meanwhile), and connected to again when it does not. A machine that could not
+	 * be reached is tried again, except when its host key waits for the owner's yes. Returns when that is known.
 	 */
 	fun check() {
 		val (host, mine, service) = synchronized(lock) {
-			if (state.optString("status") != "ready") return
-			Triple(shown ?: return, round, held[shown]?.service)
+			val host = shown ?: return
+			val status = state.optString("status")
+			val again = status == "error" && host == use && state.optString("kind") in listOf("ssh", "failed") && !state.has("fingerprint")
+			if (status != "ready" && !again) return
+			Triple(host, round, if (status == "ready") held[host]?.service else null)
 		}
 		if (service != null && service.isOpen && answers(service)) return
 		val again = synchronized(lock) {
@@ -185,13 +193,19 @@ class Pines(
 		}
 	}
 
-	/** The page is told `next`, when it is still what the latest connection is about. */
+	/**
+	 * The page is told `next`, when it is still what the latest connection is about, and whether the
+	 * shown machine's events flow when that changed: a held machine's stream may have been up all along.
+	 */
 	private fun show(mine: Int, next: JSONObject, host: String?) = synchronized(lock) {
 		if (mine != round || closed) return
-		if (shown != host || next.optString("status") != "ready") connected = false
+		val switched = shown != host
+		val was = connected
+		connected = next.optString("status") == "ready" && host != null && streams[host] == true
 		shown = host
 		state = next
 		page.service(JSONObject(next.toString()))
+		if (switched || connected != was) page.connection(connected)
 	}
 
 	/** A held machine's events reach the page only while it is the one shown. */
@@ -201,6 +215,8 @@ class Pines(
 		}
 		override fun connection(up: Boolean) {
 			synchronized(lock) {
+				if (closed || held[host] == null) return
+				streams[host] = up
 				if (shown != host) return
 				connected = up
 			}
@@ -222,7 +238,7 @@ class Pines(
 				out.put("kind", "ssh").put("fingerprint", e.fingerprint).put("changed", e.changed).put(
 					"message",
 					if (e.changed) "The host key of $host changed: it is now ${e.fingerprint}, not the one this phone confirmed. Not connecting, since another machine may stand in for it. If that machine was reinstalled, forget it in the list of machines, add it again and confirm its new key."
-					else "This phone does not know $host yet. Its host key's fingerprint is ${e.fingerprint}. If that is what the machine shows (ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub), press Try again to trust it and connect.",
+					else "This phone does not know $host yet. Its host key's fingerprint is ${e.fingerprint}. If that is what the machine shows (ssh-keygen -lf on its /etc/ssh/ssh_host_*_key.pub), press Trust this key to connect.",
 				)
 			}
 			is RemoteError -> out.put("kind", e.kind).put("message", e.message ?: "")

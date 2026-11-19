@@ -48,23 +48,12 @@ export interface StoredPrefs {
 }
 
 /**
- * What the plugin adds to an `error` state when it stopped at a host key: its fingerprint, and
- * whether it changed from the one the owner confirmed (never trusted then: the machine is forgotten
- * and added again) or is not known yet (trusted by `trustHostKey`, which the bridge's `retry` calls,
- * so that the page's own Try again is the owner's yes after reading the fingerprint in the message).
- */
-export interface HostKeyState {
-	fingerprint?: string;
-	changed?: boolean;
-}
-
-/**
  * The Kotlin plugin. Every method rejects with an error whose message the page can show as it is
  * (it reads like the desktop's: what happened, and what to do next).
  */
 export interface PinePlugin {
 	/** How the connection to the machine in use is (the desktop's `ServiceState`: only `starting`, `ready`, and `error` with kind `ssh` or `failed` here), whether the event stream is up, and the app's version. */
-	state(): Promise<{ state: ServiceState & HostKeyState; connected: boolean; version: string }>;
+	state(): Promise<{ state: ServiceState; connected: boolean; version: string }>;
 	/** The page has started: send `service` with the state as it is now, and follow the daemon's events (once). */
 	ready(): Promise<void>;
 	/**
@@ -100,7 +89,8 @@ export interface PinePlugin {
 	/**
 	 * Trust the host key a connection stopped at. Until then the connection is an `error` of kind `ssh`
 	 * whose message names the fingerprint (SHA256, as OpenSSH prints it), and which carries it
-	 * (`HostKeyState`). Rejects a fingerprint that is not the one the host showed. The plugin then
+	 * (`fingerprint`, with `changed` false; a changed key is never trusted: the machine is forgotten
+	 * and added again). The page's Trust this key button calls it, through the bridge's `trustHostKey`. Rejects a fingerprint that is not the one the host showed. The plugin then
 	 * connects again.
 	 */
 	trustHostKey(options: { host: string; fingerprint: string }): Promise<void>;

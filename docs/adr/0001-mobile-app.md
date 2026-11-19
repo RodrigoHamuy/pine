@@ -42,7 +42,8 @@ that `src/remote.ts` builds, reads the `pine service` line, checks the daemon's 
 `loopbackEnd` does, and words its failures as `sshTrouble` does. HTTP to the daemon goes through
 SSH channels, never through a port on the phone, which every app on the phone could reach.
 
-**Any SSH destination.** A host, `user@host` or `user@host:port`, checked as the desktop checks it.
+**Any SSH destination.** `user@host` or `user@host:port`, checked against the same rules as the
+desktop's (no option for ssh, no spaces, no `;`), but with the user required: see "As built".
 How the machine is reachable (same Wi-Fi, a VPN, a server with public SSH) is the owner's business:
 the app embeds no network of its own.
 
@@ -99,3 +100,30 @@ the Termux question. A client covers what the owner asked for.
   secrets are absent.
 - The owner makes the machine reachable and adds the phone's key; the manual says how.
 - The phone does nothing while the app is closed, until notifications are added.
+
+## As built
+
+What the first version settled that the decision above did not say, or said otherwise.
+
+- **The bridge.** The page gained three optional bridge parts, not two: `local: false` in
+  `state()` (no machine of its own), `mediaBase` (where the plugin answers media) and
+  `deviceKey` (the phone's public key, with Copy and Share). Besides them, `trustHostKey`: an
+  unknown host key is trusted only by an explicit "Trust this key" button beside its
+  fingerprint. "Try again" only retries the connection and trusts nothing.
+- **The Gate.** Under a bridge with no local machine, the first screen lists the machines and
+  the field to add one, also while a machine is being connected to. The machine in use can be
+  forgotten there when it is not reached, so that a dead machine does not lock the app.
+- **The back button.** It closes what the page has open (a dialog, a sheet, a menu), else it
+  leaves the app.
+- **Hosts.** On the phone a host is `user@host` or `user@host:port`. A bare host is refused:
+  the phone has no user name of its own to fall back on, as `ssh` on a computer does.
+- **minSdk 26** (Android 8).
+- **The page's policy is unchanged.** Capacitor injects its bridge as a script at document
+  start, which runs under `script-src 'self'` without an inline script. A WebView too old to
+  inject scripts that way is refused rather than the policy loosened for it.
+- **The manual's synonyms.** "phone" was left out of `SYNONYMS` in `src/manual.ts`: it pulled
+  questions about the `presence` source (is my phone at home) to the mobile app's part.
+- **Tests.** The WebView's hardening (permissions, windows, file access, navigation) and the
+  back button are proven by the smoke run on an emulator (`npm run smoke` in `mobile/`), which
+  is run by hand before a release that changes `mobile/` or upgrades Capacitor. The Release
+  workflow runs `npm run check` and `npm test` of `mobile/` before it builds the APK.

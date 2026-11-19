@@ -11,7 +11,16 @@ declare global {
 }
 
 /** The pine the app uses, and how it is. `host` and `label` name another machine reached over SSH; without them it is this computer's. */
-export type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | { status: "error"; kind: "no-home" | "no-node" | "no-pine" | "ssh" | "failed"; message: string; host?: string };
+export type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | {
+			status: "error";
+			kind: "no-home" | "no-node" | "no-pine" | "ssh" | "failed";
+			message: string;
+			host?: string;
+			/** The host key's fingerprint (SHA256, as OpenSSH prints it), when the connection stopped at it. Only a bridge that keeps host keys of its own sets it (the mobile app's). */
+			fingerprint?: string;
+			/** Whether that key differs from the one the owner trusted before (never trusted then: the machine is forgotten and added again), or is not known yet (`trustHostKey`). */
+			changed?: boolean;
+	  };
 
 export interface Prefs {
 	home?: string;
@@ -69,6 +78,13 @@ export type PageBridge = Omit<Bridge, "state"> & {
 	 * leaves it out.
 	 */
 	deviceKey?: () => Promise<{ key: string; copy: () => Promise<void>; share: () => Promise<void> }>;
+	/**
+	 * Trust the host key a connection stopped at, of a bridge that keeps host keys of its own (the
+	 * mobile app's): the owner's yes to exactly the fingerprint the page showed (the error state's
+	 * `fingerprint`, with `changed` false), after which the bridge connects again. The desktop app,
+	 * which uses the owner's ssh and its known_hosts, leaves it out.
+	 */
+	trustHostKey?: (host: string, fingerprint: string) => Promise<void>;
 };
 
 export const bridge = window.pine;

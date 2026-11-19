@@ -2071,6 +2071,7 @@ export function MachineList() {
 	const [error, setError] = useState<string>();
 	const field = useId();
 	const state = s.service;
+	const key = s.keyToTrust;
 	const here = s.platform === "darwin" ? "This Mac" : "This computer";
 	const add = async () => {
 		setError(undefined);
@@ -2104,8 +2105,10 @@ export function MachineList() {
 				<ItemDescription className="line-clamp-none wrap-anywhere">
 					{state.host === h && state.status === "error" ? state.message : h ? `The pine on ${h}, over SSH.` : "The pine on this computer: the one that runs, or one this app starts."}
 				</ItemDescription>
+				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
+				{key && key.host === h ? <Button size="xs" data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
 				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
@@ -2146,18 +2149,16 @@ function Environments() {
 			<Alert>
 				<InfoIcon />
 				<AlertDescription>
-					{s.local ? (
-						<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
-					) : (
-						<p>The machine needs pine with a home (pine init there), and this phone's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
-					)}
-					{/* What follows is about a port of this computer and its terminal: not said where there is no local machine. */}
+					{/* A port of this computer and its terminal are not said where there is no local machine. */}
 					{s.local ? (
 						<>
+							<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
 							<p>Its pine stays closed to the network: the app runs pine service there over ssh and forwards a port of this computer to it. Switching shows the other pine and stops none: an agent at work in one goes on. A pine the app started there stops when the app quits; one that was running already goes on.</p>
 							<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
 						</>
-					) : null}
+					) : (
+						<p>The machine needs pine with a home (pine init there), and this phone's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
+					)}
 				</AlertDescription>
 			</Alert>
 		</Page>
