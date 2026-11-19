@@ -2,7 +2,8 @@
 <html lang="en">
 	<head>
 		<meta charset="utf-8" />
-		<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+		<!-- No viewport-fit=cover: Capacitor then pads the WebView by the system bars, so on Android 15 and later, which draw every app edge to edge, the page never lies under the status bar. -->
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
 		<meta name="color-scheme" content="light dark" />
 		<title>Pine</title>
 	</head>
