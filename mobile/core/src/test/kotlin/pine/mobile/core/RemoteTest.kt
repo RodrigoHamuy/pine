@@ -2,8 +2,6 @@ package pine.mobile.core
 
 import org.apache.sshd.common.config.keys.AuthorizedKeyEntry
 import org.json.JSONObject
-import java.io.InputStream
-import java.io.OutputStream
 import java.net.ServerSocket
 import java.util.Base64
 import kotlin.test.AfterTest
@@ -16,7 +14,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // The pine of another machine over SSH, as test/remote.test.ts and desktop/test/daemon.test.ts
-// prove it for the Mac: what reaches the daemon, what the page gets back, and the words of a failure.
+// prove it for the Mac: what reaches the daemon and what the page gets back. What `pine service` says,
+// and the words of a failure, are the shared cases of ServiceTest.
 class RemoteTest {
 	private val vault = MemoryVault()
 	private val key = DeviceKey(vault)
@@ -37,12 +36,6 @@ class RemoteTest {
 	}
 
 	private fun refused(): RemoteError = assertFailsWith<RemoteError> { remote.connect(host).also { open.add(it) } }
-
-	private fun saying(err: String, code: Int, out: String = "") = Behaviour { _: InputStream, o: OutputStream, e: OutputStream ->
-		o.write(out.toByteArray())
-		e.write(err.toByteArray())
-		code
-	}
 
 	@AfterTest
 	fun end() {
@@ -124,48 +117,6 @@ class RemoteTest {
 		assertEquals(false, r.ok)
 		assertEquals(0, r.status)
 		assertContains((r.data as JSONObject).getString("error"), "pine does not answer")
-	}
-
-	@Test
-	fun `a service line that names anything but the other machine's loopback is not taken`() {
-		machine.behaviour = Service(line("http://10.0.0.5:7463"))
-		known.confirm("127.0.0.1", machine.port, machine.fingerprint)
-		val e = refused()
-		assertEquals("failed", e.kind)
-		assertContains(e.message!!, "not a port of its own loopback")
-	}
-
-	@Test
-	fun `pine missing, too old, without a home, or saying nonsense, is said in words`() {
-		known.confirm("127.0.0.1", machine.port, machine.fingerprint)
-		machine.behaviour = saying("pine is not installed there: no pine command on its PATH.\n", 127)
-		refused().let {
-			assertEquals("ssh", it.kind)
-			assertContains(it.message!!, "pine is not installed on $host")
-		}
-		machine.behaviour = saying("error: unknown command \"service\"\n", 1)
-		refused().let {
-			assertEquals("ssh", it.kind)
-			assertContains(it.message!!, "too old")
-			assertContains(it.message!!, "pine update")
-		}
-		machine.behaviour = saying("", 1, """{"error":"no pine home at /home/me/.pine: run pine init there"}""" + "\n")
-		refused().let {
-			assertEquals("failed", it.kind)
-			assertEquals("The pine on 127.0.0.1 did not start: no pine home at /home/me/.pine: run pine init there", it.message)
-		}
-		machine.behaviour = saying("", 0, "Welcome to the server!\n")
-		refused().let {
-			assertEquals("ssh", it.kind)
-			assertContains(it.message!!, "not pine's service line: Welcome")
-		}
-		machine.behaviour = Behaviour { input, _, _ -> while (input.read() >= 0) Unit; 0 }
-		refused().let {
-			assertEquals("ssh", it.kind)
-			assertContains(it.message!!, "did not answer over SSH within a minute")
-		}
-		machine.behaviour = Behaviour { input, _, err -> err.write("To authenticate, visit: https://login.tailscale.com/a/abc123\n".toByteArray()); err.flush(); while (input.read() >= 0) Unit; 0 }
-		refused().let { assertContains(it.message!!, "Open https://login.tailscale.com/a/abc123") }
 	}
 
 	@Test

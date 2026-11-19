@@ -1,0 +1,16 @@
+{
+	"about": "Which of the page's media requests are asked of the daemon at all (desktop/electron/daemon.ts mediaFromDaemon): GET only, only the listed paths, a query that begins with ?, no space or control character. method, path and search (\"?...\" or \"\") are the request. expect is true when it is asked of the daemon, false when it is answered 404 \"not found\" without leaving the phone.",
+	"cases": [
+		{ "name": "a tool's picture, with a query", "method": "GET", "path": "/media/tool/pic", "search": "?v=1", "expect": true },
+		{ "name": "a task's image", "method": "GET", "path": "/tasks/3/images/0", "search": "", "expect": true },
+		{ "name": "an agent's image, with its path", "method": "GET", "path": "/agents/main/image", "search": "?path=x.png", "expect": true },
+		{ "name": "a frame of an agent's browser", "method": "GET", "path": "/agents/main/browser/frame", "search": "", "expect": true },
+		{ "name": "POST", "method": "POST", "path": "/media/tool/pic", "search": "", "expect": false },
+		{ "name": "a path of the control API", "method": "GET", "path": "/agents", "search": "", "expect": false },
+		{ "name": "a tool's media one folder down", "method": "GET", "path": "/media/tool/a/b", "search": "", "expect": false },
+		{ "name": "a task that is no number", "method": "GET", "path": "/tasks/x/images/1", "search": "", "expect": false },
+		{ "name": "a header smuggled into the path", "method": "GET", "path": "/media/tool/pic HTTP/1.1\r\nX-A: b", "search": "", "expect": false },
+		{ "name": "a space in the query", "method": "GET", "path": "/agents/main/image", "search": "?path=a b", "expect": false },
+		{ "name": "a query without its question mark", "method": "GET", "path": "/agents/main/image", "search": "path=x.png", "expect": false }
+	]
+}

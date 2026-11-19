@@ -40,7 +40,8 @@ import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { TerminalView } from "./Terminal.tsx";
 import { Pulse } from "@/components/pulse";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
@@ -244,7 +245,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		return (
 			<>
 				<div className={SUB}>
-					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
+					<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></HoverTooltip>
 					<PathCrumbs path={file} />
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
@@ -255,7 +256,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		<>
 			<div className={SUB}>
 				{turn ? <><Undo2Icon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"}{data.worktree ? ` · ${data.worktree.ahead} ahead of ${data.worktree.base}${data.worktree.behind ? `, ${data.worktree.behind} behind` : ""}` : ""} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span>{data.worktree ? <Button variant="outline" size="xs" onClick={() => void store.worktreeMenu(tab)}>{data.worktree.ahead && !data.worktree.dirty ? "Merge…" : "Worktree…"}</Button> : null}</>}
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={list.reload} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
+				<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={list.reload} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></HoverTooltip>
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{data.note ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">{data.note}</p> : null}
@@ -379,7 +380,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	return (
 		<>
 			<div className={SUB}>
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : leave())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></Tooltip>
+				<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : leave())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></HoverTooltip>
 				<AlertDialog open={leaving} onOpenChange={setLeaving}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
@@ -393,7 +394,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				</AlertDialog>
 				<PathCrumbs path={file}>{dirty ? <span className="text-warn"> ●</span> : null}</PathCrumbs>
 				{disk.data?.truncated ? <Badge variant="outline">too large to edit</Badge> : null}
-				{root && !store.remote ? <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)} aria-label="Show in the Finder"><ExternalLinkIcon /></Button>} /><TooltipContent>Show in the Finder</TooltipContent></Tooltip> : null}
+				{root && !store.remote ? <HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)} aria-label="Show in the Finder"><ExternalLinkIcon /></Button>} /><TooltipContent>Show in the Finder</TooltipContent></HoverTooltip> : null}
 				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
 			</div>
 			{changedOnDisk ? (
@@ -442,7 +443,7 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 					</InputGroupAddon>
 					<InputGroupInput aria-label="Find a file" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
 				</InputGroup>
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
+				<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></HoverTooltip>
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{query.trim() ? (
@@ -474,7 +475,7 @@ function Output({ tab }: { tab: Tab }) {
 		return (
 			<>
 				<div className={SUB}>
-					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
+					<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></HoverTooltip>
 					<span className="font-mono">{shown.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
@@ -520,10 +521,10 @@ function Running({ tab }: { tab: Tab }) {
 						</ItemContent>
 						<ItemActions>
 							{p.ports.map((port) => (
-								<Tooltip key={port}>
+								<HoverTooltip key={port}>
 									<TooltipTrigger render={<Button variant="link" size="xs" onClick={() => void store.showInBrowser(tab, `http://localhost:${port}`)} />}>localhost:{port}</TooltipTrigger>
 									<TooltipContent>Opens in the browser beside this conversation</TooltipContent>
-								</Tooltip>
+								</HoverTooltip>
 							))}
 							<AlertDialog>
 								<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Stop</AlertDialogTrigger>
@@ -593,7 +594,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 					</div>
 					</ScrollArea>
 					<span className="min-w-0 flex-1" />
-					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></Tooltip>
+					<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></HoverTooltip>
 				</>
 			}
 		>

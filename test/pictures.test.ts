@@ -687,3 +687,49 @@ test("tui: on a terminal with the Kitty graphics protocol a video plays as real 
 		setCapabilities(before);
 	}
 });
+
+test("pictures: the daemon answers a range of a sound or a video with that part alone", async () => {
+	const h = await harness({ pine: { main: "main", http: { port: 0 } }, agents: { main: {} } });
+	const sound = wav(1);
+	fs.writeFileSync(path.join(h.workspace("main"), "hello.wav"), sound);
+	const at = `http://127.0.0.1:${h.pine.http!.port}/agents/main/image?path=hello.wav`;
+	const get = (range?: string) => fetch(at, { headers: { authorization: `Bearer ${h.pine.token}`, ...(range ? { range } : {}) } });
+
+	// Without a range: the whole file, and word that a part can be asked for.
+	const whole = await get();
+	assert.equal(whole.status, 200);
+	assert.equal(whole.headers.get("accept-ranges"), "bytes");
+	assert.ok(Buffer.from(await whole.arrayBuffer()).equals(sound));
+
+	// A part from the middle, from an offset to the end, the last bytes, and a part that runs past the end.
+	const total = sound.length;
+	const parts: [string, number, number][] = [["bytes=100-199", 100, 199], [`bytes=${total - 10}-`, total - 10, total - 1], ["bytes=-16", total - 16, total - 1], [`bytes=50-${total + 500}`, 50, total - 1]];
+	for (const [range, from, to] of parts) {
+		const part = await get(range);
+		assert.equal(part.status, 206, range);
+		assert.equal(part.headers.get("content-range"), `bytes ${from}-${to}/${total}`, range);
+		assert.equal(part.headers.get("content-length"), String(to - from + 1), range);
+		assert.equal(part.headers.get("content-type"), "audio/wav", range);
+		assert.equal(part.headers.get("cache-control"), "no-store", range);
+		assert.equal(part.headers.get("x-content-type-options"), "nosniff", range);
+		assert.ok(Buffer.from(await part.arrayBuffer()).equals(sound.subarray(from, to + 1)), range);
+	}
+
+	// A range past the end cannot be had.
+	const beyond = await get(`bytes=${total}-`);
+	assert.equal(beyond.status, 416);
+	assert.equal(beyond.headers.get("content-range"), `bytes */${total}`);
+	await beyond.arrayBuffer();
+
+	// What is not one plain range of bytes is answered with the whole file, as HTTP allows.
+	for (const range of ["bytes=0-1,5-9", "items=0-9", "bytes=9-3", "bytes=x-"]) {
+		const got = await get(range);
+		assert.equal(got.status, 200, range);
+		assert.ok(Buffer.from(await got.arrayBuffer()).equals(sound), range);
+	}
+
+	// Still only for the owner, and still only real media.
+	assert.equal((await fetch(at, { headers: { range: "bytes=0-9" } })).status, 401);
+	fs.writeFileSync(path.join(h.workspace("main"), "fake.wav"), "this is only named like a sound");
+	assert.equal((await fetch(at.replace("hello.wav", "fake.wav"), { headers: { authorization: `Bearer ${h.pine.token}`, range: "bytes=0-9" } })).status, 404);
+});

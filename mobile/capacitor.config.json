@@ -11,5 +11,10 @@
     "allowMixedContent": false,
     "captureInput": false,
     "webContentsDebuggingEnabled": false
+  },
+  "ios": {
+    "contentInset": "never",
+    "scrollEnabled": false,
+    "allowsLinkPreview": false
   }
 }

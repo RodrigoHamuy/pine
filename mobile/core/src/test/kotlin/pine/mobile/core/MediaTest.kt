@@ -1,5 +1,9 @@
 package pine.mobile.core
 
+import org.junit.jupiter.api.TestFactory
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.io.IOException
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -7,7 +11,8 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 // Pictures, video and sound straight from the daemon, as desktop/test/daemon.test.ts proves
-// `mediaFromDaemon` for the Mac: only the listed paths, only what is drawn or played.
+// `mediaFromDaemon` for the Mac: only the listed paths, only what is drawn or played. The cases are
+// mobile/cases/media-paths.json and media-types.json.
 class MediaTest {
 	private val rig = Rig()
 
@@ -69,23 +74,50 @@ class MediaTest {
 	}
 
 	@Test
-	fun `what is not one of the daemon's media never leaves the phone`() {
-		val s = rig.connected()
-		for ((method, path, search) in listOf(
-			Triple("POST", "/media/tool/pic", ""),
-			Triple("GET", "/agents", ""),
-			Triple("GET", "/media/tool/a/b", ""),
-			Triple("GET", "/tasks/x/images/1", ""),
-			Triple("GET", "/media/tool/pic HTTP/1.1\r\nX-A: b", ""),
-			Triple("GET", "/agents/main/image", "?path=a b"),
-		)) {
-			val r = mediaFromDaemon(s, method, path, search)
-			assertEquals(404, r.status, "$method $path$search")
+	fun `before a daemon there are no media`() {
+		assertEquals(404, mediaFromDaemon(null, "GET", "/media/tool/pic", "").status)
+	}
+
+	@TestFactory
+	fun `what is not one of the daemon's media never leaves the phone`() = replay("media-paths") { case ->
+		val asked = Asked()
+		val r = mediaFromDaemon(asked, case.getString("method"), case.getString("path"), case.getString("search"))
+		assertEquals(android(case.get("expect")), asked.opened)
+		if (!asked.opened) {
+			assertEquals(404, r.status)
 			assertEquals("not found", r.text())
 		}
-		assertEquals(404, mediaFromDaemon(null, "GET", "/media/tool/pic", "").status)
-		assertTrue(rig.daemon.seen.isEmpty())
-		// The other listed paths pass.
-		for (path in listOf("/tasks/3/images/0", "/agents/main/image", "/agents/main/browser/frame")) assertTrue(MEDIA.any { it.matches(path) }, path)
+	}
+
+	@TestFactory
+	fun `only what is drawn or played reaches the page`() = replay("media-types") { case ->
+		val answer = Answering(case.getInt("status"), case.text("contentType"))
+		val r = mediaFromDaemon(answer, "GET", "/media/tool/pic", "")
+		assertEquals(android(case.get("expect")), r.status)
+		assertEquals("GET /media/tool/pic HTTP/1.1", answer.request.toString(Charsets.ISO_8859_1).substringBefore("\r\n"))
+	}
+
+	/** A daemon that notes whether it was asked anything, and answers nothing. */
+	private class Asked : Daemon {
+		var opened = false
+		override val token = "secret-token"
+		override val end = Loopback("127.0.0.1", 7463)
+		override fun open(): Duplex {
+			opened = true
+			throw IOException("nobody")
+		}
+	}
+
+	/** A daemon that answers every request with a status and a content type, and an empty body. */
+	private class Answering(status: Int, type: String?) : Daemon {
+		val request = ByteArrayOutputStream()
+		private val answer = "HTTP/1.1 $status X\r\n${type?.let { "Content-Type: $it\r\n" } ?: ""}Content-Length: 0\r\n\r\n".toByteArray(Charsets.ISO_8859_1)
+		override val token = "secret-token"
+		override val end = Loopback("127.0.0.1", 7463)
+		override fun open(): Duplex = object : Duplex {
+			override val input = ByteArrayInputStream(answer)
+			override val output = request
+			override fun close() {}
+		}
 	}
 }

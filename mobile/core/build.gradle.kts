@@ -38,8 +38,17 @@ tasks.register("smokeClasspath") {
 	doLast { println(classpath.asPath) }
 }
 
+// The command run on the other machine is one file for both cores (mobile/cases/README.md): it is
+// put where Remote.kt has always read it, beside its class.
+tasks.processResources {
+	from("../cases/remote-command.txt") { into("pine/mobile/core") }
+}
+
 tasks.test {
 	useJUnitPlatform()
+	// The cases both cores replay (mobile/cases): read where they lie, so a changed case is a changed test.
+	systemProperty("pine.cases", file("../cases").absolutePath)
+	inputs.dir("../cases")
 	testLogging {
 		events("failed")
 		exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL

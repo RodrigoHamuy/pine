@@ -1,0 +1,26 @@
+{
+	"about": "What may name the other machine: host, user@host or user@host:port, never an option for ssh (src/remote.ts sshHost). input is what the owner wrote, or null. expect is null (nothing written), {\"error\": kind} (refused), or the parts: given (trimmed), user (or null), host, port, label (the host without the user and the domain; an address is its own label).",
+	"cases": [
+		{ "name": "nothing written", "input": "", "expect": null },
+		{ "name": "only spaces", "input": "  ", "expect": null },
+		{ "name": "no value", "input": null, "expect": null },
+		{ "name": "user and host, trimmed", "input": " user@server ", "expect": { "given": "user@server", "user": "user", "host": "server", "port": 22, "label": "server" } },
+		{ "name": "a host with a domain and no user", "input": "server.example.com", "expect": { "given": "server.example.com", "user": null, "host": "server.example.com", "port": 22, "label": "server" } },
+		{ "name": "user, host and port", "input": "me@box.lan:2222", "expect": { "given": "me@box.lan:2222", "user": "me", "host": "box.lan", "port": 2222, "label": "box" } },
+		{ "name": "an address is its own label", "input": "me@192.168.1.20", "expect": { "given": "me@192.168.1.20", "user": "me", "host": "192.168.1.20", "port": 22, "label": "192.168.1.20" } },
+		{ "name": "the highest port", "input": "me@server:65535", "expect": { "given": "me@server:65535", "user": "me", "host": "server", "port": 65535, "label": "server" } },
+		{ "name": "an option for ssh", "input": "-oProxyCommand=x", "expect": { "error": "ssh" } },
+		{ "name": "a command after the host", "input": "server; rm -rf ~", "expect": { "error": "ssh" } },
+		{ "name": "a space", "input": "a b", "expect": { "error": "ssh" } },
+		{ "name": "a command substitution", "input": "$(x)", "expect": { "error": "ssh" } },
+		{ "name": "a bare jump option", "input": "-J", "expect": { "error": "ssh" } },
+		{ "name": "a user with no name", "input": "@server", "expect": { "error": "ssh" } },
+		{ "name": "a colon without a port", "input": "server:", "expect": { "error": "ssh" } },
+		{ "name": "port zero", "input": "server:0", "expect": { "error": "ssh" } },
+		{ "name": "a port above 65535", "input": "server:65536", "expect": { "error": "ssh" } },
+		{ "name": "two ports", "input": "server:22:22", "expect": { "error": "ssh" } },
+		{ "name": "a port that is no number", "input": "server:x", "expect": { "error": "ssh" } },
+		{ "name": "two users", "input": "a@b@c", "expect": { "error": "ssh" } },
+		{ "name": "a user and no host", "input": "me@", "expect": { "error": "ssh" } }
+	]
+}

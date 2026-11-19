@@ -74,7 +74,7 @@ between `src/remote.ts` and the plugin. End to end on an emulator is a manual sc
 `npm test` at the root stays as it is.
 
 **Order.** The Android client first, then iOS, then the Termux daemon. The details of iOS are
-settled when that step starts.
+settled when that step starts: they are in [0002](0002-ios-app.md).
 
 ## Alternatives considered
 

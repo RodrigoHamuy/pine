@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { MessageScroller, MessageScrollerContent, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Printed } from "@/components/printed";
 import { useEffect, useState } from "react";
 import type { PineEvent } from "./api.ts";
@@ -51,10 +52,10 @@ export function Events({ tab }: { tab: Tab }) {
 				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
 				<Button variant="outline" size="xs" onClick={() => store.setPublishing(true)}><ZapIcon data-icon="inline-start" />Publish…</Button>
-				<Tooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Clear the view" onClick={() => ((tab.log = []), tab.touch())} />}><Trash2Icon /></TooltipTrigger>
 					<TooltipContent>Clear the view</TooltipContent>
-				</Tooltip>
+				</HoverTooltip>
 			</div>
 			{/* The log follows its end while it is scrolled to there, and holds still while a line is open. */}
 			<MessageScrollerProvider autoScroll={open === undefined} defaultScrollPosition="end">

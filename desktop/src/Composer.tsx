@@ -10,8 +10,10 @@ import { Combobox, ComboboxContent, ComboboxItem, ComboboxList } from "@/compone
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEffect, useRef, useState } from "react";
+import { useMediaQuery } from "usehooks-ts";
 import { api } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
@@ -83,9 +85,12 @@ export function Composer({ tab }: { tab: Tab }) {
 		setKind(undefined);
 	};
 
+	// On a touch screen a focus nobody asked for raises the on-screen keyboard, which covers half the
+	// page and pushes it under the status bar: there the owner taps into the input when they write.
+	const touch = useMediaQuery("(pointer: coarse)");
 	useEffect(() => {
-		area.current?.focus();
-	}, [tab.id]);
+		if (!touch) area.current?.focus();
+	}, [tab.id, touch]);
 
 	const heard = (said: string) => `${typed.current}${typed.current && !/\s$/.test(typed.current) && said ? " " : ""}${said}`;
 	/** `cancel`: nothing more is put into the input. Otherwise "that was all": the last words still arrive. */
@@ -315,10 +320,10 @@ export function Composer({ tab }: { tab: Tab }) {
 										<AttachmentDescription>{size(f.size)}</AttachmentDescription>
 									</AttachmentContent>
 									<AttachmentActions>
-										<Tooltip>
+										<HoverTooltip>
 											<TooltipTrigger render={<AttachmentAction onClick={() => (tab.attachments.splice(i, 1), tab.touch())} aria-label={`Remove ${f.name}`} />}><XIcon /></TooltipTrigger>
 											<TooltipContent>Remove {f.name}</TooltipContent>
-										</Tooltip>
+										</HoverTooltip>
 									</AttachmentActions>
 								</Chip>
 							))}
@@ -380,26 +385,26 @@ export function Composer({ tab }: { tab: Tab }) {
 					{/* A narrow input keeps every button on one line and whole: only the model's and the folder's
 					    names are cut, and what has no room for its words stands as its sign alone, with the words in its tooltip. */}
 					<InputGroupAddon align="block-end" className="@container/bar">
-						<Tooltip>
+						<HoverTooltip>
 							<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="outline" className="rounded-full" onClick={() => picker.current?.click()} aria-label="Attach files (or drop them here)" />}><PlusIcon /></TooltipTrigger>
 							<TooltipContent>Attach files (or drop them here)</TooltipContent>
-						</Tooltip>
-						<Tooltip>
+						</HoverTooltip>
+						<HoverTooltip>
 							<TooltipTrigger render={<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickModel(tab)} aria-label={`Model: ${model}`} />}>
 								<CpuIcon />
 								<span className="truncate @max-md/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
 							</TooltipTrigger>
 							<TooltipContent>Model: {model}</TooltipContent>
-						</Tooltip>
+						</HoverTooltip>
 						<DropdownMenu>
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<DropdownMenuTrigger render={<InputGroupButton size="sm" aria-label={`Reasoning: ${thinking}, how much the model thinks before it answers`} />} />}>
 									<SparkleIcon />
 									<span className="@max-md/bar:hidden">{thinking}</span>
 									<ChevronDownIcon className="@max-md/bar:hidden" />
 								</TooltipTrigger>
 								<TooltipContent>Reasoning: {thinking}, how much the model thinks before it answers</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 							<DropdownMenuContent side="top" className="w-72" onClick={inMenu}>
 								<DropdownMenuGroup>
 									<DropdownMenuLabel>Reasoning for {tab.agent}</DropdownMenuLabel>
@@ -416,14 +421,14 @@ export function Composer({ tab }: { tab: Tab }) {
 							</DropdownMenuContent>
 						</DropdownMenu>
 						<DropdownMenu>
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<DropdownMenuTrigger render={<InputGroupButton size="sm" variant={mode === "bypass" && !paused ? "destructive" : "ghost"} aria-label={`Mode: ${mode}${paused ? " (paused)" : ""}, how much this agent does without asking`} />} />}>
 									<ShieldIcon />
 									<span className="@max-xl/bar:hidden">{mode}{paused ? " (paused)" : ""}</span>
 									<ChevronDownIcon className="@max-md/bar:hidden" />
 								</TooltipTrigger>
 								<TooltipContent>Mode: {mode}{paused ? " (paused)" : ""}, how much this agent does without asking</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 							<DropdownMenuContent side="top" className="w-80" onClick={inMenu}>
 								<DropdownMenuGroup>
 									<DropdownMenuLabel>Mode for {tab.agent}</DropdownMenuLabel>
@@ -440,42 +445,42 @@ export function Composer({ tab }: { tab: Tab }) {
 								</DropdownMenuGroup>
 							</DropdownMenuContent>
 						</DropdownMenu>
-						<Tooltip>
+						<HoverTooltip>
 							<TooltipTrigger render={<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)} aria-label={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} />}>
 								<FolderIcon />
 								<span className="truncate @max-sm/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
 							</TooltipTrigger>
 							<TooltipContent>{tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"}</TooltipContent>
-						</Tooltip>
+						</HoverTooltip>
 						{tainted ? (
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<Badge variant="outline" className="min-w-0 shrink" tabIndex={0} />}>
 									<EyeIcon data-icon="inline-start" />
 									<span className="truncate @max-xl/bar:hidden">outside content</span>
 								</TooltipTrigger>
 								<TooltipContent>This conversation has read outside content ({tainted}): the agent asks before it sends something out.</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						) : null}
 						<span className="ml-auto" />
 						{store.platform === "darwin" ? (
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant={voice !== "off" ? "destructive" : "ghost"} onClick={() => void dictate()} aria-label={voice === "off" ? "Dictate the message" : "End the listening"} />}><MicIcon /></TooltipTrigger>
 								<TooltipContent>
 									{voice === "off" ? "Dictate the message" : "End the listening"}
 									{voice === "off" ? <Kbd>⌃R</Kbd> : null}
 								</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						) : null}
 						{tab.busy && !text.trim() ? (
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="default" className="rounded-full" onClick={() => void store.stop(tab)} aria-label="Stop" />}><SquareIcon /></TooltipTrigger>
 								<TooltipContent>
 									Stop
 									<Kbd>esc</Kbd>
 								</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						) : (
-							<Tooltip>
+							<HoverTooltip>
 								{/* Said as disabled, not disabled: a disabled button inside an InputGroup dims the whole
 								    composer (`has-disabled:`). With nothing to send, `send` does nothing. */}
 								<TooltipTrigger render={<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
@@ -483,7 +488,7 @@ export function Composer({ tab }: { tab: Tab }) {
 									{tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"}
 									<Kbd>↩</Kbd>
 								</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						)}
 					</InputGroupAddon>
 				</InputGroup>

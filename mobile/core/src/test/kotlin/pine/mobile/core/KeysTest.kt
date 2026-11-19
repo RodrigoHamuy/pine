@@ -2,6 +2,9 @@ package pine.mobile.core
 
 import org.apache.sshd.common.config.keys.AuthorizedKeyEntry
 import org.apache.sshd.common.config.keys.KeyUtils
+import net.schmizz.sshj.common.Buffer
+import org.junit.jupiter.api.TestFactory
+import java.util.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
@@ -33,5 +36,12 @@ class KeysTest {
 		assertEquals(1, vault.entries.size)
 		// Another phone, another key.
 		assertNotEquals(key, DeviceKey(MemoryVault()).publicKey)
+	}
+
+	// mobile/cases/fingerprints.json: what ssh-keygen -lf prints for each key.
+	@TestFactory
+	fun `a host key's fingerprint is the one OpenSSH prints`() = replay("fingerprints") { case ->
+		val key = Buffer.PlainBuffer(Base64.getDecoder().decode(case.getString("blob"))).readPublicKey()
+		assertEquals(android(case.get("expect")), fingerprint(key))
 	}
 }

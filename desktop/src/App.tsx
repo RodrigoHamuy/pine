@@ -34,7 +34,8 @@ import { ago, until } from "./text.ts";
 import { Listbox, ListboxItem } from "@ui-sdk/react/listbox";
 import { LISTBOX, onPick } from "./lists.tsx";
 import { Logo } from "@/components/logo";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
@@ -122,7 +123,8 @@ export function Gate() {
 						<Logo className="size-9" />
 					</EmptyMedia>
 					<EmptyTitle>{title}</EmptyTitle>
-					{about ? <EmptyDescription className="break-words select-text">{about}</EmptyDescription> : null}
+					{/* A host key's fingerprint is one long word: it breaks anywhere, or it overflows its centered line on a phone. */}
+					{about ? <EmptyDescription className="wrap-anywhere select-text">{about}</EmptyDescription> : null}
 				</EmptyHeader>
 				<EmptyContent>{actions}</EmptyContent>
 			</Empty>
@@ -235,10 +237,10 @@ function ConversationRow({ agent, c, depth = 0, inset = 0 }: { agent: string; c:
 			{main ? null : (
 				// Shown under the pointer only, so that it is no tab stop of its own; its keys are not the list's.
 				<AlertDialog>
-					<Tooltip>
+					<HoverTooltip>
 						<TooltipTrigger render={<AlertDialogTrigger render={<SidebarMenuAction className="hidden group-hover/menu-item:flex" onKeyDown={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()} />} aria-label="Remove this conversation for good"><Trash2Icon /></AlertDialogTrigger>} />
 						<TooltipContent>Remove this conversation for good</TooltipContent>
-					</Tooltip>
+					</HoverTooltip>
 					<AlertDialogContent>
 						<AlertDialogHeader>
 							<AlertDialogTitle>Remove the conversation {s.titleOf(agent, c.session)} for good?</AlertDialogTitle>
@@ -308,7 +310,7 @@ function ConversationGroup({ agent, name, rows }: { agent: string; name: string;
 							<span data-slot="group-label" className="min-w-0 flex-1 truncate">{name}</span>
 						</CollapsibleTrigger>
 						<SidebarMenuBadge className="group-hover/menu-item:hidden">{count}</SidebarMenuBadge>
-						<Tooltip><TooltipTrigger render={<SidebarMenuAction className="hidden group-hover/menu-item:flex" onClick={() => void s.newConversationIn(agent, name)} aria-label={`New conversation in ${name}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation in ${name}`}</TooltipContent></Tooltip>
+						<HoverTooltip><TooltipTrigger render={<SidebarMenuAction className="hidden group-hover/menu-item:flex" onClick={() => void s.newConversationIn(agent, name)} aria-label={`New conversation in ${name}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation in ${name}`}</TooltipContent></HoverTooltip>
 					</SidebarMenuItem>
 				</SidebarMenu>
 				<CollapsibleContent>
@@ -400,9 +402,9 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 								</span>
 								{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Pulse /> : unread && folded ? <Badge className="size-2 p-0" /> : null}
 							</CollapsibleTrigger>
-							<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)} aria-label={`Settings of ${a.id}`} />}><SettingsIcon /></TooltipTrigger><TooltipContent>{`Settings of ${a.id}`}</TooltipContent></Tooltip>
-							<Tooltip><TooltipTrigger render={<SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()} aria-label={`Open a folder for a conversation with ${a.id}`} />}><FolderIcon /></TooltipTrigger><TooltipContent>{`Open a folder for a conversation with ${a.id}`}</TooltipContent></Tooltip>
-							<Tooltip><TooltipTrigger render={<SidebarMenuAction onClick={() => void s.newConversation(a.id)} aria-label={`New conversation with ${a.id}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation with ${a.id}`}</TooltipContent></Tooltip>
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)} aria-label={`Settings of ${a.id}`} />}><SettingsIcon /></TooltipTrigger><TooltipContent>{`Settings of ${a.id}`}</TooltipContent></HoverTooltip>
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()} aria-label={`Open a folder for a conversation with ${a.id}`} />}><FolderIcon /></TooltipTrigger><TooltipContent>{`Open a folder for a conversation with ${a.id}`}</TooltipContent></HoverTooltip>
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuAction onClick={() => void s.newConversation(a.id)} aria-label={`New conversation with ${a.id}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation with ${a.id}`}</TooltipContent></HoverTooltip>
 						</>
 					)}
 				</SidebarMenuItem>
@@ -431,20 +433,20 @@ function Sidebar() {
 	return (
 		<SidebarRoot collapsible={isMobile ? "offcanvas" : "none"} className="w-full min-w-0 bg-transparent app-drag">
 			<SidebarHeader className="h-11 flex-none flex-row items-center justify-end gap-0.5 py-0 pr-2 pl-window-buttons app-drag">
-				<Tooltip><TooltipTrigger render={<SidebarTrigger size="icon" className="app-no-drag" aria-label="Hide the sidebar" />} /><TooltipContent>Hide the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>
+				<HoverTooltip><TooltipTrigger render={<SidebarTrigger size="icon" className="app-no-drag" aria-label="Hide the sidebar" />} /><TooltipContent>Hide the sidebar<Kbd>⌘B</Kbd></TooltipContent></HoverTooltip>
 			</SidebarHeader>
 			<SidebarContent>
 				<ScrollArea className="flex min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade flex-1">
 					<SidebarGroup className="pt-1 pb-0">
 						<SidebarMenu>
 							<SidebarMenuItem className="app-no-drag">
-								<Tooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => void s.command("palette")} />}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></TooltipTrigger><TooltipContent>Find a conversation by its name or by what was said in it, or a command, an agent, a settings page</TooltipContent></Tooltip>
+								<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => void s.command("palette")} />}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></TooltipTrigger><TooltipContent>Find a conversation by its name or by what was said in it, or a command, an agent, a settings page</TooltipContent></HoverTooltip>
 							</SidebarMenuItem>
 						</SidebarMenu>
 					</SidebarGroup>
 					<SidebarGroup>
 						<SidebarGroupLabel>Agents</SidebarGroupLabel>
-						<Tooltip><TooltipTrigger render={<SidebarGroupAction className="app-no-drag" onClick={() => s.openSettings("agents", "+")} aria-label="New agent" />}><PlusIcon /></TooltipTrigger><TooltipContent>New agent</TooltipContent></Tooltip>
+						<HoverTooltip><TooltipTrigger render={<SidebarGroupAction className="app-no-drag" onClick={() => s.openSettings("agents", "+")} aria-label="New agent" />}><PlusIcon /></TooltipTrigger><TooltipContent>New agent</TooltipContent></HoverTooltip>
 						<SidebarGroupContent className="flex flex-col gap-1">{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}</SidebarGroupContent>
 					</SidebarGroup>
 				</ScrollArea>
@@ -453,7 +455,7 @@ function Sidebar() {
 				<SidebarMenu>
 					{newer ? (
 						<SidebarMenuItem className="app-no-drag">
-							<Tooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></Tooltip>
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></HoverTooltip>
 						</SidebarMenuItem>
 					) : null}
 					<SidebarMenuItem className="app-no-drag">
@@ -582,10 +584,10 @@ function BesideToggle({ which, label, keys, icon }: { which: Beside; label: stri
 	const s = store;
 	const behind = s.behind(which);
 	return (
-		<Tooltip>
+		<HoverTooltip>
 			<TooltipTrigger render={<Toggle size="sm" data-toggle={which === "aside" ? "browser" : "code"} data-behind={behind || undefined} className="app-no-drag aria-pressed:bg-background aria-pressed:ring-1 aria-pressed:ring-border data-behind:bg-transparent data-behind:text-muted-foreground" disabled={s.active?.kind !== "chat"} pressed={which === "code" ? s.code : s.aside} onPressedChange={() => s.toggle(which)} aria-label={label} />}>{icon}</TooltipTrigger>
 			<TooltipContent>{label}<Kbd>{keys}</Kbd></TooltipContent>
-		</Tooltip>
+		</HoverTooltip>
 	);
 }
 
@@ -615,7 +617,7 @@ function TitleBar() {
 	useEffect(() => setOpenMobile(false), [s.active?.id, isMobile, setOpenMobile]);
 	return (
 		<header className={cn("flex h-11 flex-none items-center gap-1 pr-2 app-drag", column ? "pl-0.5" : "pl-window-buttons")}>
-			{column ? null : <Tooltip><TooltipTrigger render={<SidebarTrigger size="icon" className="app-no-drag" aria-label="Show the sidebar" />} /><TooltipContent>Show the sidebar<Kbd>⌘B</Kbd></TooltipContent></Tooltip>}
+			{column ? null : <HoverTooltip><TooltipTrigger render={<SidebarTrigger size="icon" className="app-no-drag" aria-label="Show the sidebar" />} /><TooltipContent>Show the sidebar<Kbd>⌘B</Kbd></TooltipContent></HoverTooltip>}
 			{/* A row that scrolls cuts off what a tab draws outside itself (the line around the tab in front, the mark where a dragged tab
 			    would land): the padding is the room for both, and the margin keeps the tabs where they were. It scrolls without a bar;
 			    the fade at a cut end says there is more. */}
@@ -624,7 +626,7 @@ function TitleBar() {
 					{s.tabs.map((t, i) => <TabButton key={t.id} tab={t} index={i} />)}
 				</div>
 			</ScrollArea>
-			<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.newConversation()} aria-label={with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"} />}><PlusIcon /></TooltipTrigger><TooltipContent>{with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"}<Kbd>⌘T</Kbd></TooltipContent></Tooltip>
+			<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.newConversation()} aria-label={with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"} />}><PlusIcon /></TooltipTrigger><TooltipContent>{with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"}<Kbd>⌘T</Kbd></TooltipContent></HoverTooltip>
 			<span className="min-w-0 flex-1" />
 			<BesideToggle which="code" label="Side panel: the agent, its files, changes, output and what is running" keys="⌥⌘B" icon={<PanelRightIcon />} />
 			<BesideToggle which="aside" label="Browser: the page the agent works in" keys="⇧⌘B" icon={<GlobeIcon />} />
@@ -800,8 +802,9 @@ export function App() {
 				<Gate />
 			) : (
 				// The stock provider follows the model: its own ⌘B, where the page gets the key before the menu, toggles the same
-				// setting in a wide window, and its sheet in a narrow one.
-				<SidebarProvider open={s.sidebar} onOpenChange={(open) => s.showSidebar(open)}>
+				// setting in a wide window, and its sheet in a narrow one. Its height is the window's (h-full), not the stock
+				// min-h-svh: on a phone the page ends above the home indicator and the keyboard, short of the screen.
+				<SidebarProvider className="min-h-0" open={s.sidebar} onOpenChange={(open) => s.showSidebar(open)}>
 					{narrow ? <Sidebar /> : null}
 					<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "sidebar-panel", SIDE_KEY)}>
 						{column ? (

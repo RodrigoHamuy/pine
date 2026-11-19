@@ -25,6 +25,28 @@ class HttpError extends Error {
 }
 
 /**
+ * The one range of bytes a `Range` header asks for, within a file of `size` bytes: the first and
+ * last byte, both included. `undefined` when there is no header or it is not one plain range of
+ * bytes (several ranges, another unit, nonsense): the whole file is the answer then, as HTTP
+ * allows. "unsatisfiable" when the range starts past the end.
+ */
+export function byteRange(header: string | undefined, size: number): { start: number; end: number } | "unsatisfiable" | undefined {
+	const m = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
+	if (!m || (m[1] === "" && m[2] === "")) return undefined;
+	if (m[1] === "") {
+		// The last n bytes.
+		const n = Number(m[2]);
+		if (n === 0 || size === 0) return "unsatisfiable";
+		return { start: Math.max(0, size - n), end: size - 1 };
+	}
+	const start = Number(m[1]);
+	if (m[2] !== "" && Number(m[2]) < start) return undefined;
+	if (start >= size) return "unsatisfiable";
+	const end = m[2] === "" ? size - 1 : Number(m[2]);
+	return { start, end: Math.min(end, size - 1) };
+}
+
+/**
  * Control API and webhooks. Every request except /health and /hook/* needs the bearer token.
  * Requests that come from a web page (an Origin header, a foreign Host) are refused, so a site
  * open in a browser on this machine cannot drive the daemon.
@@ -89,7 +111,21 @@ export class HttpServer {
 		};
 		const sendPicture = (p: { mime: string; bytes: Buffer } | undefined) => {
 			if (!p) return send(404, { error: "no such picture" });
-			res.writeHead(200, { "content-type": p.mime, "content-length": p.bytes.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+			const headers = { "content-type": p.mime, "accept-ranges": "bytes", "cache-control": "no-store", "x-content-type-options": "nosniff" };
+			// A player that seeks in a sound or a video asks for a part of it. Over a slow road (the
+			// phone's SSH channel) sending the whole file again for each seek is what makes it stall.
+			const range = byteRange(req.headers.range, p.bytes.length);
+			if (range === "unsatisfiable") {
+				res.writeHead(416, { ...headers, "content-range": `bytes */${p.bytes.length}`, "content-length": 0 });
+				res.end();
+				return;
+			}
+			if (range) {
+				res.writeHead(206, { ...headers, "content-range": `bytes ${range.start}-${range.end}/${p.bytes.length}`, "content-length": range.end - range.start + 1 });
+				res.end(p.bytes.subarray(range.start, range.end + 1));
+				return;
+			}
+			res.writeHead(200, { ...headers, "content-length": p.bytes.length });
 			res.end(p.bytes);
 		};
 		try {

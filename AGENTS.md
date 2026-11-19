@@ -20,8 +20,10 @@ to change the code.
 | `npm run dev:preview` (in `desktop/`) | The app's page in an ordinary browser on a throwaway pine; `dev:preview:home` on `~/.pine`, whose daemon it never stops. Each checkout has ports of its own, from its path (`desktop/scripts/launch-json.mjs`), and `.claude/launch.json` is written with them by `npm install` in `desktop/` (it is not in git). After pulling, or when the preview pane lists no `desktop-preview`, run `node desktop/scripts/launch-json.mjs` (or `npm install` in `desktop/`). A preview and `npm run dev` end with whatever started them (`desktop/scripts/leash.mjs`). |
 | `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark at a phone's width (360) and the window's (1280) through its modes (`desktop/.storybook/modes.ts`), so no dark or phone twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`, and the smoke test also after a change to the page's markup that it finds the page by (`data-slot` names): no workflow runs it. |
-| `npm test`, `npm run check` (in `mobile/`) | The Android app's bridge and build under `node:test`, and its type check against the desktop page's `Bridge`. `npm install` in `mobile/` once. Run both when you change `mobile/src`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. The `android` job of the Release workflow runs both before it builds the APK. |
-| `npm run test:core` (in `mobile/`) | The native plugin's Kotlin core on the JVM: an SSH server in the test (Apache MINA sshd) and a stand-in daemon. Run it when you change `mobile/core/` or `src/remote.ts`. |
+| `npm test`, `npm run check` (in `mobile/`) | The mobile app's bridge and both builds of its page (Android, iOS) under `node:test`, and its type check against the desktop page's `Bridge`. `npm install` in `mobile/` once. Run both when you change `mobile/src`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. The `android` and `ios` jobs of the Release workflow run both before they build the APK and the IPA. |
+| `npm run test:core` (in `mobile/`) | The native plugin's Kotlin core on the JVM: an SSH server in the test (Apache MINA sshd) and a stand-in daemon. Run it when you change `mobile/core/`, `mobile/cases/` or `src/remote.ts`. |
+| `swift test` (in `mobile/ios-core/`) | The iOS plugin's Swift core on the Mac: a real OpenSSH `sshd` started by the test on a loopback port and a stand-in daemon, and the same cases as the Kotlin core (`mobile/cases/`). Run it when you change `mobile/ios-core/`, `mobile/cases/` or `src/remote.ts`. The `ios` job of the Release workflow runs it. |
+| `npm run ipa`, `npm run smoke:ios`, `npm run ios:run` (in `mobile/`) | The IPA of a release, not signed (`scripts/ipa.ts`: `npm run ipa -- <version>`, written to `ios/App/output/`, checked unsigned and arm64); the iOS app from end to end on a simulator of its own without a window, against the Android smoke run's test SSH server; and the app opened in the Simulator app, by hand. The smoke test is the test of the web view's hardening in `PineViewController.swift` and `PinePlugin.swift`, of the return from the background and of the key kept in the Keychain: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. They need Xcode 27 with an iOS simulator runtime, and the smoke run a JDK as `npm run smoke` does. |
 | `npm run apk`, `npm run apk:release`, `npm run smoke` (in `mobile/`) | A debug APK; a release APK (signed when `ANDROID_KEYSTORE_FILE` and the three other variables of the release job name a key, versioned by `PINE_VERSION` and `PINE_VERSION_CODE`); and the app from end to end on an emulator without a window, against a test SSH server of its own running the real `pine service`. The smoke test is the test of the WebView's hardening in `PinePlugin.kt` and of the back button and the app's return from the background: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. The Gradle commands need the Android SDK (`ANDROID_HOME`, default `~/Library/Android/sdk`) and a JDK of 21 or later: `JAVA_HOME`, default Android Studio's (`/Applications/Android Studio.app/Contents/jbr/Contents/Home`), since a Mac has no `java` on its PATH by default. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
@@ -148,7 +150,7 @@ desktop/            the desktop app (Electron; a package of its own, not part of
                     docs/references/desktop.md describes it and its layout.
                     shadcn's agent skill lies in desktop/.agents/skills (desktop/.claude/skills links to it, skills-lock.json pins it):
                     read it before you change the page; `npx skills update` in desktop/ brings it up to date
-mobile/             the Android app (Capacitor; a package of its own, not part of what goes to npm): the desktop
+mobile/             the Android and iOS app (Capacitor; a package of its own, not part of what goes to npm): the desktop
                     page on a phone, for the pine of another machine over SSH, no daemon on the phone. src/ is the
                     mobile bridge (`mobile-bridge.ts`: returns the `Bridge` type, forwards to the native plugin),
                     the plugin's contract (`plugin.ts`) and the entry that installs the bridge before the desktop
@@ -157,9 +159,16 @@ mobile/             the Android app (Capacitor; a package of its own, not part o
                     SSH with sshj, `pine service` run as `remoteCommand()` of src/remote.ts runs it, calls to the
                     control API and media under the desktop's rules, the event stream, the phone's key and host keys.
                     android/ is the Capacitor app: `PinePlugin.kt` joins the core to the page (the Android
-                    Keystore, the WebView's media, links, the back button). scripts/ runs Gradle (`gradle.mjs`),
-                    derives the release's versionCode (`version-code.ts`) and drives the emulator (`smoke.mjs`).
-                    docs/references/mobile.md describes it; docs/adr/0001-mobile-app.md says why it is so
+                    Keystore, the WebView's media, links, the back button). ios-core/ is the same core in Swift
+                    (a Swift package on Apple's swift-nio-ssh, no UIKit, tested by `swift test` on the Mac), with
+                    its secrets behind `SecretStore` (the Keychain in the app). ios/ is the Capacitor iOS app:
+                    `PinePlugin.swift` joins that core to the page, `PineViewController.swift` hardens the web view
+                    and registers the `pine-media:` scheme (`MediaScheme.swift`), AppTests/ is the smoke run's
+                    hosted test. cases/ holds the table cases both cores replay, and the remote command they run.
+                    `vite build` makes Android's page, `vite build --mode ios` the iOS one (WebKit, its own policy).
+                    scripts/ runs Gradle (`gradle.mjs`), derives the release's versionCode (`version-code.ts`),
+                    drives the emulator (`smoke.mjs`) and the simulator (`smoke-ios.mjs`), and makes the IPA (`ipa.ts`).
+                    docs/references/mobile.md describes it; docs/adr/0001-mobile-app.md and 0002-ios-app.md say why it is so
 ```
 
 ## What agents know about pine
@@ -531,8 +540,9 @@ These are invariants. A change that breaks one needs a test that shows why it is
    and sends the same policy. The page's stand-in for the bridge (`desktop/src/preview-bridge.ts`)
    exists only in that dev mode and in no build; `desktop/test/preview.test.ts` fails without
    the check of the origin and the content type, and when the stand-in reaches a build.
-   The Android app (`mobile/`) is the other holder of the token, and is held to the same: its
-   native plugin (`mobile/android/.../PinePlugin.kt` on `mobile/core`) plays `main.ts`'s part.
+   The mobile app (`mobile/`) is the other holder of the token, and is held to the same: its
+   native plugin (`mobile/android/.../PinePlugin.kt` on `mobile/core` on Android,
+   `mobile/ios/App/App/PinePlugin.swift` on `mobile/ios-core` on iOS) plays `main.ts`'s part.
    It makes every call for the page through a channel of its SSH connection (no port on the
    phone, where any app could reach it), serves the page only pictures, video and sound under
    `MEDIA`'s rules (`mobile/core/.../Media.kt`), opens only `http(s)` addresses outside, lets
@@ -545,6 +555,13 @@ These are invariants. A change that breaks one needs a test that shows why it is
    stand-in. What the WebView is kept from (permissions, `onCreateWindow`, a second window, file
    access, navigation) no suite of `npm test` reaches: `npm run smoke` in `mobile/` proves each
    as a named check, and is run before a release that changes `mobile/` or upgrades Capacitor.
+   On iOS the same holds with WebKit's names: `PineViewController.swift` wraps Capacitor's UI
+   delegate (camera, microphone and motion refused, `createWebViewWith` gives nothing and hands
+   only `http(s)` to Safari) and turns link previews and, in a release build, the inspector off;
+   `PinePlugin.swift`'s `shouldOverrideLoad` cancels every navigation off `capacitor://localhost`;
+   media come only through the `pine-media:` scheme under the same rules (`MediaScheme.swift`
+   on the core's `mediaRequest`), the one media origin of the iOS page's policy. The phone's key
+   is kept in the Keychain on this device only. `npm run smoke:ios` proves each as a named check.
 11. **Only the owner opens a folder for a conversation, and looking at one runs nothing.**
    `setFolder` in `src/agents.ts` is reached from the control API only; there is no tool for it.
    It refuses pine's home, pine's code and other agents' workspaces in either direction, and a
@@ -695,6 +712,20 @@ ever committed. Keep that key: Android installs an update only over an app signe
 same one. Before the APK is built the job runs `npm run check` and `npm test` in `mobile/`. The
 smoke test is not run there (`npm run smoke`, on a computer of your own, with an emulator).
 
+A release from `main` gets the iOS app as well (the job `ios` in `release.yml`, on GitHub's
+`xcode-27` image, a preview, since the images up to `macos-26` stop at Xcode 26): an IPA that
+is not signed, `Pine-<version>.ipa`, which whoever installs it signs with their own Apple ID
+(AltStore, Sideloadly; docs/adr/0002-ios-app.md). It takes no secret and no environment, and
+nothing about Apple signing is ever stored in the repository or its secrets. The job runs
+`npm run check` and `npm test` in `mobile/` and `swift test` in `mobile/ios-core/`, then
+`node mobile/scripts/ipa.ts <version>`: the page built for iOS, `xcodebuild archive` for devices
+with code signing off and the packages at their committed versions
+(`-onlyUsePackageVersionsFromResolvedFile`: swift-collections is held where it compiles on
+Xcode 27), `CFBundleShortVersionString` the release's version and `CFBundleVersion` Android's
+versionCode, and a failure unless the app inside the IPA is unsigned and arm64. Uploaded with
+`--clobber`, and rebuilt from the tag by `workflow_dispatch` like the other apps. The smoke
+test is not run there (`npm run smoke:ios`, on a Mac of your own).
+
 Publishing needs no stored secret: on npmjs.com the package names this repository and
 `release.yml` as a trusted publisher. A repository secret `NPM_TOKEN` is used instead if one exists.
 
@@ -795,6 +826,18 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   and of the back button (closes the open sheet, then leaves) and the return from the
   background (still connected after back and after HOME). Run it before a release that changes
   `mobile/` or upgrades Capacitor.
+- The iOS app's suites are in `mobile/` too. `npm test` there covers the iOS bridge and the iOS
+  page's policy. `swift test` in `mobile/ios-core/` (run by the `ios` job) drives the Swift core
+  as the Kotlin tests drive theirs, against a real OpenSSH `sshd` the test starts on a loopback
+  port with a forced command that checks the remote command, and a stand-in daemon; it replays
+  the same JSON cases in `mobile/cases/` as `npm run test:core`, so a case added for one core is
+  run by both. `npm run smoke:ios` is by hand: a simulator of its own booted with `simctl` (never
+  the Simulator app), the app built signed to run locally (the Keychain needs it), and a hosted
+  XCTest (`ios/App/AppTests/SmokeTests.swift`) that evaluates JavaScript in the real page against
+  the same `SmokeMachine.kt` at `127.0.0.1`. It is the one test of the web view's hardening on
+  iOS (the policy, the UI delegate's refusals, no file access, the media scheme and its ranges,
+  no window, the navigation rules), each a named check that fails the run, of the return from
+  the background, of the status bar, and of the Keychain key across a relaunch.
 - A new security property needs a test that fails without the code that provides it.
 
 ## Style

@@ -116,9 +116,10 @@ be installed, and it gives your shell the `pine` command. From a checkout:
 npm run desktop
 ```
 
-On an Android phone, the Pine app shows the pine of a machine you reach over SSH (your Mac, a
-server): the same page, with its own SSH key and no pine on the phone. Each release has it as
-an APK ([mobile.md](docs/references/mobile.md)).
+On an Android phone or an iPhone, the Pine app shows the pine of a machine you reach over SSH
+(your Mac, a server): the same page, with its own SSH key and no pine on the phone. Each release
+has it as an APK and as an IPA to sideload with your own Apple ID
+([mobile.md](docs/references/mobile.md)).
 
 To get a newer version later, with whatever it needs:
 
@@ -179,7 +180,7 @@ Start at [docs/SKILL.md](docs/SKILL.md); it indexes everything.
 | Understand how the pieces fit                                                           | [overview.md](docs/references/overview.md)                   |
 | Use the terminal UI                                                                     | [tui.md](docs/references/tui.md)                             |
 | Use the desktop app (macOS): conversations, an editor, and a settings panel in one window | [desktop.md](docs/references/desktop.md)                     |
-| Use pine from an Android phone, over SSH                                                | [mobile.md](docs/references/mobile.md)                       |
+| Use pine from an Android phone or an iPhone, over SSH                                   | [mobile.md](docs/references/mobile.md)                       |
 | Work on a project: `pine .`, the code pane with git changes, files and tool output, `/undo` | [coding.md](docs/references/coding.md)                       |
 | Let an agent make a web page you click in, as its user interface, and be woken by what you press | [interfaces.md](docs/references/interfaces.md)               |
 | Install, run, use the CLI, run it as a service                                          | [operations.md](docs/references/operations.md)               |

@@ -1,0 +1,21 @@
+{
+	"about": "Where the other machine's daemon may answer: a port of its own loopback, never anything else (src/remote.ts loopbackEnd). input is the base of a service line. expect is {\"error\": kind} (refused), or host, port and hostHeader (what the daemon expects in Host).",
+	"cases": [
+		{ "name": "127.0.0.1", "input": "http://127.0.0.1:7463", "expect": { "host": "127.0.0.1", "port": 7463, "hostHeader": "127.0.0.1:7463" } },
+		{ "name": "another address of 127/8", "input": "http://127.0.0.2:8080", "expect": { "host": "127.0.0.2", "port": 8080, "hostHeader": "127.0.0.2:8080" } },
+		{ "name": "the IPv6 loopback, in brackets in Host", "input": "http://[::1]:7463", "expect": { "host": "::1", "port": 7463, "hostHeader": "[::1]:7463" } },
+		{ "name": "with a path", "input": "http://127.0.0.1:7463/", "expect": { "host": "127.0.0.1", "port": 7463, "hostHeader": "127.0.0.1:7463" } },
+		{ "name": "an address of the local network", "input": "http://10.0.0.5:7463", "expect": { "error": "failed" } },
+		{ "name": "a name, even localhost", "input": "http://localhost:7463", "expect": { "error": "failed" } },
+		{ "name": "a host elsewhere", "input": "http://evil.example:7463", "expect": { "error": "failed" } },
+		{ "name": "every address", "input": "http://0.0.0.0:7463", "expect": { "error": "failed" } },
+		{ "name": "no port", "input": "http://127.0.0.1", "expect": { "error": "failed" } },
+		{ "name": "https", "input": "https://127.0.0.1:7463", "expect": { "error": "failed" } },
+		{ "name": "a loopback that is a user name", "input": "http://127.0.0.1:7463@evil:1", "expect": { "error": "failed" } },
+		{ "name": "a user and password", "input": "http://user:pw@127.0.0.1:7463", "expect": { "error": "failed" } },
+		{ "name": "an octet above 255", "input": "http://127.0.0.256:7463", "expect": { "error": "failed" } },
+		{ "name": "port zero", "input": "http://127.0.0.1:0", "expect": { "error": "failed" } },
+		{ "name": "a port above 65535", "input": "http://127.0.0.1:65536", "expect": { "error": "failed" } },
+		{ "name": "no address at all", "input": "nonsense", "expect": { "error": "failed" } }
+	]
+}

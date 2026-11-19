@@ -26,7 +26,8 @@ import { MessageScroller, MessageScrollerButton, MessageScrollerContent, Message
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Toggle } from "@/components/ui/toggle";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Trace, TraceCollapsible, TraceCollapsibleContent, TraceCollapsibleTrigger, TraceDescription, TraceIcon, TraceLine, TraceTitle } from "@/components/ui/trace";
 import { cn } from "@/lib/utils";
 import { type AgentDetail, api, media, type TranscriptEntry } from "./api.ts";
@@ -358,10 +359,10 @@ function ApprovalCard({ item }: { item: Extract<Item, { t: "approval" }> }) {
 						{choices.map((c, i) => {
 							const answer = <Button key={i} size="sm" variant={i === 0 ? "default" : "outline"} onClick={() => void store.decide(req.id, true, false, { answer: c })}>{c}</Button>;
 							return i === 0 ? (
-								<Tooltip key={i}>
+								<HoverTooltip key={i}>
 									<TooltipTrigger render={answer} />
 									<TooltipContent>recommended</TooltipContent>
-								</Tooltip>
+								</HoverTooltip>
 							) : answer;
 						})}
 					</ItemFooter>
@@ -503,13 +504,13 @@ function Checkpoint({ tab }: { tab: Tab }) {
 		<Marker variant="separator">
 			<MarkerContent className="inline-flex items-center gap-2">
 				before your last message
-				<Tooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<Button size="xs" variant="outline" onClick={() => void store.undo(tab, false)} />}>Take back</TooltipTrigger>
 					<TooltipContent>
 						Its files are restored, the conversation forgets it, its text returns to the input
 						<Kbd>⇧⌘Z</Kbd>
 					</TooltipContent>
-				</Tooltip>
+				</HoverTooltip>
 			</MarkerContent>
 		</Marker>
 	);
@@ -550,10 +551,10 @@ function Welcome({ tab }: { tab: Tab }) {
 			</EmptyHeader>
 			<EmptyContent>
 				<div className="flex flex-wrap justify-center gap-1.5">
-					<Tooltip><TooltipTrigger render={<Badge variant="outline" />}><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></TooltipTrigger><TooltipContent>The model it runs on</TooltipContent></Tooltip>
-					<Tooltip><TooltipTrigger render={<Badge variant="outline" />}><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</TooltipTrigger><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></Tooltip>
-					{info?.main ? <Tooltip><TooltipTrigger render={<Badge variant="outline" />}>administers pine</TooltipTrigger><TooltipContent>It creates and changes the other agents and pine's settings when you ask it to</TooltipContent></Tooltip> : null}
-					{info?.delegates.length ? <Tooltip><TooltipTrigger render={<Badge variant="outline" />}>hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></TooltipTrigger><TooltipContent>Agents it can hand work to</TooltipContent></Tooltip> : null}
+					<HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></TooltipTrigger><TooltipContent>The model it runs on</TooltipContent></HoverTooltip>
+					<HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</TooltipTrigger><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></HoverTooltip>
+					{info?.main ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>administers pine</TooltipTrigger><TooltipContent>It creates and changes the other agents and pine's settings when you ask it to</TooltipContent></HoverTooltip> : null}
+					{info?.delegates.length ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></TooltipTrigger><TooltipContent>Agents it can hand work to</TooltipContent></HoverTooltip> : null}
 					{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 				</div>
 				{info?.modelProblem ? (
@@ -642,18 +643,18 @@ function FindBar({ root, close, initial }: { root: () => HTMLElement | null; clo
 			/>
 			<InputGroupAddon align="inline-end">
 				{query ? <InputGroupText>{count ? `${at + 1} of ${count}` : "nothing"}</InputGroupText> : null}
-				<Tooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<InputGroupButton size="icon-xs" onClick={() => step(-1)} aria-label="Earlier" />}><ArrowUpIcon /></TooltipTrigger>
 					<TooltipContent>Earlier<Kbd>↩</Kbd></TooltipContent>
-				</Tooltip>
-				<Tooltip>
+				</HoverTooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<InputGroupButton size="icon-xs" onClick={() => step(1)} aria-label="Later" />}><ChevronDownIcon /></TooltipTrigger>
 					<TooltipContent>Later<Kbd>⇧↩</Kbd></TooltipContent>
-				</Tooltip>
-				<Tooltip>
+				</HoverTooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<InputGroupButton size="icon-xs" onClick={close} aria-label="Close" />}><XIcon /></TooltipTrigger>
 					<TooltipContent>Close<Kbd>esc</Kbd></TooltipContent>
-				</Tooltip>
+				</HoverTooltip>
 			</InputGroupAddon>
 		</InputGroup>
 	);
@@ -765,15 +766,15 @@ function ConvHead({ tab }: { tab: Tab }) {
 	useModel(store);
 	const chat = tab.kind === "chat";
 	const where = chat && tab.worktree ? (
-		<Tooltip>
+		<HoverTooltip>
 			<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-worktree={tab.worktree.branch} onClick={() => void store.worktreeMenu(tab)} />}><GitBranchIcon data-icon="inline-start" /><span className="truncate">{tab.worktree.branch}</span></TooltipTrigger>
 			<TooltipContent>Works in the worktree {tab.worktree.branch} of {tab.worktree.base}{tab.folder ? `, at ${tab.folder}` : ""}: merge it, update it or discard it</TooltipContent>
-		</Tooltip>
+		</HoverTooltip>
 	) : chat && tab.folder ? (
-		<Tooltip>
+		<HoverTooltip>
 			<TooltipTrigger render={<Button variant="ghost" size="xs" className="min-w-0 shrink" data-folder={tab.folder} onClick={() => void store.pickFolder(tab)} />}><FolderIcon data-icon="inline-start" /><span className="truncate">{tilde(tab.folder)}</span></TooltipTrigger>
 			<TooltipContent>Works in {tab.folder}</TooltipContent>
-		</Tooltip>
+		</HoverTooltip>
 	) : null;
 	return (
 		<div data-slot="conversation-head" className="flex h-10 min-w-0 shrink-0 items-center gap-2 pr-2 pl-4 text-xs">
