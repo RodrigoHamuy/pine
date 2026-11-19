@@ -11,6 +11,8 @@ class End implements RelayWebSocket {
 	other!: End;
 	listeners: Record<string, Listener[]> = {};
 	closed: { code?: number; reason?: string } | null = null;
+	/** As in workerd, where the standard default holds: a binary message arrives as a Blob unless "arraybuffer" was asked for. */
+	binaryType: "blob" | "arraybuffer" = "blob";
 	accept() {}
 	addEventListener(type: string, listener: Listener) {
 		(this.listeners[type] ??= []).push(listener);
@@ -18,7 +20,7 @@ class End implements RelayWebSocket {
 	send(data: ArrayBuffer | ArrayBufferView | string) {
 		if (this.closed || this.other.closed) return;
 		const copy = typeof data === "string" ? data : new Uint8Array(ArrayBuffer.isView(data) ? data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) : data).buffer;
-		queueMicrotask(() => this.other.emit("message", { data: copy }));
+		queueMicrotask(() => this.other.emit("message", { data: typeof copy === "string" || this.other.binaryType === "arraybuffer" ? copy : new Blob([copy as ArrayBuffer]) }));
 	}
 	close(code?: number, reason?: string) {
 		if (this.closed) return;
@@ -40,6 +42,8 @@ export class Client {
 	closedWith: Promise<{ code?: number; reason?: string }>;
 	constructor(end: End) {
 		this.end = end;
+		// As the bridge does with its WebSocket (web/src/ssh.ts).
+		end.binaryType = "arraybuffer";
 		end.addEventListener("message", (event) => {
 			this.received = Buffer.concat([this.received, Buffer.from(typeof event.data === "string" ? event.data : new Uint8Array(event.data))]);
 		});

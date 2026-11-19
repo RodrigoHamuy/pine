@@ -141,6 +141,13 @@ export function allowed(address: { bits: 32 | 128; value: bigint }): boolean {
 	return true;
 }
 
+const LOOPBACK = [range("127.0.0.0/8"), range("::1/128")];
+
+/** Whether the address is this computer's own: 127.0.0.0/8 or ::1, written as itself. */
+export function isLoopback(address: { bits: 32 | 128; value: bigint }): boolean {
+	return LOOPBACK.some((r) => inRange(address.bits, address.value, r));
+}
+
 /** A host name as DNS has it: letters, digits, hyphens and dots. */
 export function isName(text: string) {
 	return text.length <= 253 && /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,62}\.?)*$/.test(text) && /[a-zA-Z]/.test(text);

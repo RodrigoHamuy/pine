@@ -17,6 +17,8 @@ export type TcpSocket = {
 
 /** The Worker's end of a WebSocket pair. */
 export type RelayWebSocket = {
+	/** How a binary message arrives: workerd's default is the standard's, a Blob. */
+	binaryType: "blob" | "arraybuffer";
 	accept(): void;
 	addEventListener(type: "message" | "close" | "error", listener: (event: any) => void): void;
 	send(data: ArrayBuffer | ArrayBufferView | string): void;
@@ -38,9 +40,16 @@ export type Deps = {
 export type Env = {
 	/** The Workers rate-limiting binding, keyed by the client's IP. */
 	LIMITER: { limit(options: { key: string }): Promise<{ success: boolean }> };
+	/**
+	 * "1" lets a relay that is itself served on the loopback reach the loopback, and nothing else
+	 * besides. For the web client's smoke alone, which passes it to `wrangler dev` on its command
+	 * line; no configuration that is deployed sets it (test/loopback.test.ts), and a deployed
+	 * Worker is never served on the loopback.
+	 */
+	RELAY_ALLOW_LOOPBACK?: string;
 };
 
-import { allowed, format, isName, parse } from "./addresses.ts";
+import { allowed, format, isLoopback, isName, parse } from "./addresses.ts";
 
 const CLIENT_HELLO ="SSH-2.0-";
 const SERVER_HELLO = "SSH-";
@@ -77,14 +86,24 @@ export function relay(deps: Deps) {
 		else return refuse(400, "The host is a name or an IP address.");
 		if (found.length === 0) return refuse(502, `${host} has no address.`);
 		const addresses = found.map(parse);
-		if (addresses.some((a) => a === null || !allowed(a))) return refuse(403, `${host} is not a public address. The relay reaches only servers on the internet.`);
+		const loopback = env.RELAY_ALLOW_LOOPBACK === "1" && servedOnLoopback(url.hostname);
+		if (addresses.some((a) => a === null || !(allowed(a) || (loopback && isLoopback(a))))) return refuse(403, `${host} is not a public address. The relay reaches only servers on the internet.`);
 		const address = format(addresses[0]!);
 
 		const { socket, response } = deps.upgrade();
 		socket.accept();
+		// Bytes as they come, in order: a Blob would have to be read, and could be read out of order.
+		socket.binaryType = "arraybuffer";
 		carry(socket, address, port, deps);
 		return response;
 	};
+}
+
+/** Whether the relay's own address is this computer's: a deployment never is. */
+function servedOnLoopback(hostname: string) {
+	if (hostname === "localhost") return true;
+	const address = parse(hostname);
+	return address !== null && isLoopback(address);
 }
 
 function refuse(status: number, message: string) {
