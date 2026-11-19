@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { isName } from "../src/addresses.ts";
 import { relay } from "../src/relay.ts";
 import { limiter, names, pairs, request } from "./support.ts";
 
@@ -76,5 +77,23 @@ test("a public address is let through, written as it is or behind a name", async
 		await handle(request(host), { LIMITER: limiter() });
 		assert.equal(clients.length, 1, host);
 		clients[0].end.close(1000);
+	}
+});
+
+// Any ?host= reaches isName, so a pattern that backtracks would let one request use up the Worker's CPU.
+test("a long host that is not a name is refused at once", { timeout: 2000 }, () => {
+	for (const text of ["a".repeat(60) + "!", "a".repeat(252) + "!", "a-".repeat(100) + "!", "a.".repeat(120) + "!"]) {
+		const start = performance.now();
+		assert.equal(isName(text), false, text);
+		assert.ok(performance.now() - start < 50, text);
+	}
+});
+
+test("names are labels of letters, digits and inner hyphens, with one trailing dot allowed", () => {
+	for (const text of ["example.org", "ssh.example.org", "example.org.", "a-b.example", "x1", "a".repeat(63) + ".org"]) {
+		assert.equal(isName(text), true, text);
+	}
+	for (const text of ["", ".", "1.2.3.4", "-a.org", "a-.org", "a..org", ".a.org", "a".repeat(64) + ".org", "a_b.org", "a".repeat(254)]) {
+		assert.equal(isName(text), false, text);
 	}
 });

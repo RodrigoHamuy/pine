@@ -148,9 +148,15 @@ export function isLoopback(address: { bits: 32 | 128; value: bigint }): boolean 
 	return LOOPBACK.some((r) => inRange(address.bits, address.value, r));
 }
 
-/** A host name as DNS has it: letters, digits, hyphens and dots. */
+// One label, tested on its own: a pattern over the whole name with a repeated group backtracks
+// exponentially on a long name that fails at its end, and any ?host= reaches this.
+const LABEL = /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?$/;
+
+/** A host name as DNS has it: labels of letters, digits and inner hyphens, joined by dots, one trailing dot allowed. */
 export function isName(text: string) {
-	return text.length <= 253 && /^[a-zA-Z0-9]([a-zA-Z0-9-]{0,62}\.?)*$/.test(text) && /[a-zA-Z]/.test(text);
+	if (text.length > 253 || !/[a-zA-Z]/.test(text)) return false;
+	const labels = (text.endsWith(".") ? text.slice(0, -1) : text).split(".");
+	return labels.every((label) => LABEL.test(label));
 }
 
 /** The address written the way connect() takes it. */
