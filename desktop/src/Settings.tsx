@@ -1499,124 +1499,12 @@ function Sources() {
 	);
 }
 
-const WHEN: Record<"cron" | "every" | "at" | "in", { label: string; name: string; hint: string }> = {
-	cron: { label: "At set times", name: "Times", hint: "minute hour day month weekday, for example 0 7 * * 1-5 (weekdays at seven)" },
-	every: { label: "Every", name: "Interval", hint: "an interval, for example 30m or 6h" },
-	at: { label: "Once, at", name: "Moment", hint: "a moment, for example 2026-12-24T17:00" },
-	in: { label: "Once, in", name: "From now", hint: "from now, for example 20m" },
+const WHEN: Record<"cron" | "every" | "at" | "in", { label: string; name: string; hint: string; example: string }> = {
+	cron: { label: "At set times", name: "Times", example: "0 7 * * 1-5", hint: "minute hour day month weekday: 0 7 * * 1-5 is weekdays at seven, 30 18 * * * every evening at half past six" },
+	every: { label: "Every", name: "Interval", example: "6h", hint: "An interval of at least a minute: 30m, 6h, 1d" },
+	at: { label: "Once, at", name: "Moment", example: "2026-12-24 17:00", hint: "A local time, once" },
+	in: { label: "Once, in", name: "From now", example: "20m", hint: "Once, after this long: 20m, 2h" },
 };
-
-function Schedules() {
-	const list = useLoad(() => api.schedules());
-	const [f, setF] = useState({ name: "", kind: "cron" as keyof typeof WHEN, when: "", task: "", agent: "" });
-	const s = useModel(store);
-	const field = useId();
-	const forItems = whom(s.agents);
-	const add = async () => {
-		const done = await store.attempt(() => api.addSchedule({ name: f.name.trim(), task: f.task.trim(), [f.kind]: f.when.trim(), agent: f.agent || undefined } as any));
-		if (!done) return;
-		store.flash(`Scheduled ${done.name}: ${done.when}.`, "good");
-		setF({ ...f, name: "", when: "", task: "" });
-		list.reload();
-	};
-	return (
-		<>
-			<p className="text-muted-foreground">What happens because of the time. A schedule wakes an agent with a task, in your name.</p>
-			<ItemGroup>
-				{list.data ? (
-					list.data.length ? (
-						list.data.map((x) => (
-							<Item key={`${x.scope}:${x.name}`} variant="outline">
-								<ItemMedia variant="icon"><ClockIcon /></ItemMedia>
-								<ItemContent className="min-w-0">
-									<ItemTitle>
-										{x.name}
-										<Badge variant="secondary">{scopeText(x.scope, x.session)}</Badge>
-										<Badge variant="secondary">{x.when}</Badge>
-										{x.next ? <Badge>next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</Badge> : null}
-									</ItemTitle>
-									<ItemDescription className="line-clamp-none wrap-anywhere">{x.task ?? `publishes ${x.topic}`}</ItemDescription>
-								</ItemContent>
-								<ItemActions>
-									<AlertDialog>
-										<Tooltip>
-											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this schedule"><Trash2Icon /></AlertDialogTrigger>} />
-											<TooltipContent>Remove this schedule</TooltipContent>
-										</Tooltip>
-										<AlertDialogContent>
-											<AlertDialogHeader>
-												<AlertDialogTitle>Remove the schedule {x.name}?</AlertDialogTitle>
-											</AlertDialogHeader>
-											<AlertDialogFooter>
-												<AlertDialogCancel>Cancel</AlertDialogCancel>
-												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())}>Remove</AlertDialogCancel>
-											</AlertDialogFooter>
-										</AlertDialogContent>
-									</AlertDialog>
-								</ItemActions>
-							</Item>
-						))
-					) : (
-						<EmptyView icon={ClockIcon} title="Nothing is scheduled">An agent schedules something when you ask it to (“every morning at seven …”, “remind me at five”).</EmptyView>
-					)
-				) : list.error ? (
-					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
-				) : (
-					<Spinner className="m-auto" />
-				)}
-			</ItemGroup>
-			<FieldSet>
-				<FieldLegend>Add a schedule</FieldLegend>
-				<FieldGroup className={FORM_GRID}>
-					<Field>
-						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="font-mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-for`}>For</FieldLabel>
-						<Select items={forItems} value={f.agent} onValueChange={(agent) => setF({ ...f, agent: agent ?? "" })}>
-							<SelectTrigger id={`${field}-for`}>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectGroup>
-									{forItems.map((o) => (
-										<SelectItem key={o.value} value={o.value}>
-											{o.label}
-										</SelectItem>
-									))}
-								</SelectGroup>
-							</SelectContent>
-						</Select>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-kind`}>When</FieldLabel>
-						<ToggleGroup id={`${field}-kind`} aria-label="When" variant="outline" className="flex-wrap" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as keyof typeof WHEN, when: "" }))}>
-							{Object.entries(WHEN).map(([value, w]) => (
-								<ToggleGroupItem key={value} value={value}>
-									{w.label}
-								</ToggleGroupItem>
-							))}
-						</ToggleGroup>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-when`}>{WHEN[f.kind].name}</FieldLabel>
-						<Input id={`${field}-when`} className="font-mono" value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
-						<FieldDescription>{WHEN[f.kind].hint}</FieldDescription>
-					</Field>
-					<Field className="col-span-full">
-						<FieldLabel htmlFor={`${field}-task`}>Task</FieldLabel>
-						<Textarea id={`${field}-task`} className="min-h-14 max-h-44" value={f.task} onChange={(e) => setF({ ...f, task: e.target.value })} />
-						<FieldDescription>What the agent is to do when it is time, written so that it is enough on its own.</FieldDescription>
-					</Field>
-				</FieldGroup>
-				<Field orientation="horizontal" className="justify-end">
-					<Button disabled={!f.name.trim() || !f.when.trim() || !f.task.trim()} onClick={() => void add()}>Add schedule</Button>
-				</Field>
-			</FieldSet>
-		</>
-	);
-}
 
 // A time in milliseconds as pine.json writes it: 5m, 30s, 2h.
 const span = (ms: number) => (ms % 3_600_000 === 0 ? `${ms / 3_600_000}h` : ms % 60_000 === 0 ? `${ms / 60_000}m` : ms % 1000 === 0 ? `${ms / 1000}s` : `${ms}ms`);
@@ -1655,6 +1543,150 @@ const ROUTE_PACE = {
 	throttle: { label: "At most one per", time: "At most one per", about: "After one event, the next ones are ignored for this long. For an alarm that repeats." },
 	debounce: { label: "The last of a burst", time: "Once quiet for", about: "Waits until no event has come for this long, then handles the last one. For a camera that uploads five pictures." },
 } as const;
+
+/** The form for a new schedule, in a dialog: When (set times, an interval, or once), Then (whom it wakes, with what task), a name. */
+export function NewSchedule({ made }: { made: () => void }) {
+	const s = useModel(store);
+	const [f, setF] = useState({ name: "", kind: "cron" as keyof typeof WHEN, when: "", task: "", agent: "" });
+	const [busy, setBusy] = useState(false);
+	const field = useId();
+	const forItems = [{ value: "", label: "Every agent, each in its main conversation" }, ...s.agents.map((a) => ({ value: a.id, label: `${a.id}, in its main conversation` }))];
+	const add = async () => {
+		setBusy(true);
+		const done = await store.attempt(() => api.addSchedule({ name: f.name.trim(), task: f.task.trim(), [f.kind]: f.when.trim(), agent: f.agent || undefined } as any));
+		setBusy(false);
+		if (!done) return;
+		store.flash(`Scheduled ${done.name}: ${done.when}.`, "good");
+		made();
+	};
+	return (
+		<>
+			<DialogHeader>
+				<DialogTitle>A new schedule</DialogTitle>
+				<DialogDescription>When it is time, then an agent is woken with a task, in your name.</DialogDescription>
+			</DialogHeader>
+			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-w-0 wrap-break-word min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<FieldGroup className="px-4">
+					<FieldSet>
+						<FieldLegend>When</FieldLegend>
+						<FieldGroup>
+							<Field>
+								<FieldLabel htmlFor={`${field}-kind`}>It is time</FieldLabel>
+								<ToggleGroup id={`${field}-kind`} aria-label="It is time" variant="outline" className="flex-wrap" value={[f.kind]} onValueChange={one((kind) => setF({ ...f, kind: kind as keyof typeof WHEN, when: "" }))}>
+									{Object.entries(WHEN).map(([value, w]) => (
+										<ToggleGroupItem key={value} value={value}>{w.label}</ToggleGroupItem>
+									))}
+								</ToggleGroup>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor={`${field}-when`}>{WHEN[f.kind].name}</FieldLabel>
+								<Input id={`${field}-when`} className="font-mono" placeholder={WHEN[f.kind].example} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
+								<FieldDescription>{WHEN[f.kind].hint}</FieldDescription>
+							</Field>
+						</FieldGroup>
+					</FieldSet>
+					<FieldSeparator />
+					<FieldSet>
+						<FieldLegend>Then</FieldLegend>
+						<FieldGroup>
+							<Field>
+								<FieldLabel htmlFor={`${field}-for`}>Wake</FieldLabel>
+								<Select items={forItems} value={f.agent} onValueChange={(agent) => setF({ ...f, agent: agent ?? "" })}>
+									<SelectTrigger id={`${field}-for`}>
+										<SelectValue />
+									</SelectTrigger>
+									<SelectContent>
+										<SelectGroup>
+											{forItems.map((o) => (
+												<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+											))}
+										</SelectGroup>
+									</SelectContent>
+								</Select>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor={`${field}-task`}>With the task</FieldLabel>
+								<Textarea id={`${field}-task`} className="min-h-14 max-h-44" placeholder="Look at my calendar for today and tell me what is coming." value={f.task} onChange={(e) => setF({ ...f, task: e.target.value })} />
+								<FieldDescription>Written so that it is enough on its own: the agent reads it with nothing else.</FieldDescription>
+							</Field>
+						</FieldGroup>
+					</FieldSet>
+					<FieldSeparator />
+					<Field>
+						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
+						<Input id={`${field}-name`} className="font-mono" placeholder="morning" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+						<FieldDescription>For the list and the log: lowercase letters, digits, - and _.</FieldDescription>
+					</Field>
+				</FieldGroup>
+			</ScrollArea>
+			<DialogFooter>
+				<DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+				<Button disabled={busy || !f.name.trim() || !f.when.trim() || !f.task.trim()} onClick={() => void add()}>Add schedule</Button>
+			</DialogFooter>
+		</>
+	);
+}
+
+// Whom a schedule wakes, in the words of the form that makes one.
+const wakes = (scope: string, session?: string) => (scope === "global" ? "every agent, each in its main conversation" : `${scope} ${conversationOf(session)}`);
+
+/** Settings › Events › Schedules: what a schedule is, each one as When and Then, and New schedule. */
+export function Schedules() {
+	const list = useLoad(() => api.schedules());
+	const adding = useRef<DialogRootActions>(null);
+	return (
+		<>
+			<div className="flex items-center gap-2">
+				<p className="grow text-muted-foreground">What happens because of the time: at set times, every so often, or once. A schedule wakes an agent with a task, in your name. You can also just ask an agent (“every morning at seven …”, “remind me at five”).</p>
+				<Dialog actionsRef={adding}>
+					<DialogTrigger render={<Button />}><PlusIcon data-icon="inline-start" />New schedule</DialogTrigger>
+					<DialogContent showCloseButton={false} className="sm:max-w-2xl"><NewSchedule made={() => (adding.current?.close(), list.reload())} /></DialogContent>
+				</Dialog>
+			</div>
+			<ItemGroup>
+				{list.data ? (
+					list.data.length ? (
+						list.data.map((x) => (
+							<Item key={`${x.scope}:${x.name}`} variant="outline">
+								<ItemContent className="min-w-0">
+									<ItemTitle>
+										{x.name}
+										{x.next ? <Badge variant="secondary">next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</Badge> : null}
+									</ItemTitle>
+									<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">When</span> {x.when}</ItemDescription>
+									<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">Then</span> {x.task ? `wake ${wakes(x.scope, x.session)}: “${short(x.task, 160)}”` : `publish ${x.topic}`}</ItemDescription>
+								</ItemContent>
+								<ItemActions>
+									<AlertDialog>
+										<Tooltip>
+											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this schedule"><Trash2Icon /></AlertDialogTrigger>} />
+											<TooltipContent>Remove this schedule</TooltipContent>
+										</Tooltip>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle>Remove the schedule {x.name}?</AlertDialogTitle>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel>Cancel</AlertDialogCancel>
+												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeSchedule(x.name, x.scope === "global" ? undefined : x.scope)).then((r) => r && list.reload())}>Remove</AlertDialogCancel>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog>
+								</ItemActions>
+							</Item>
+						))
+					) : (
+						<EmptyView icon={ClockIcon} title="Nothing is scheduled">An agent schedules something when you ask it to, or add one here.</EmptyView>
+					)
+				) : list.error ? (
+					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
+				) : (
+					<Spinner className="m-auto" />
+				)}
+			</ItemGroup>
+		</>
+	);
+}
 
 /** The form for a new route, in a dialog: When (topic, condition, pace), Then (one of four actions), a name. */
 export function NewRoute({ made, does: first = "wake" }: { made: () => void; does?: keyof typeof ROUTE_DOES }) {

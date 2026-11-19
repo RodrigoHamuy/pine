@@ -1081,11 +1081,15 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// Events: a schedule.
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=Events");
 	await page.locator("[data-slot=settings-page]").getByRole("tab", { name: "Schedules" }).click();
-	await page.fill("input[placeholder='morning']", "morning");
-	await page.fill("[data-slot=settings-page] [data-slot=field-group] [data-slot=field]:nth-of-type(4) input", "0 7 * * *");
-	await page.fill("[data-slot=settings-page] textarea", "Say good morning.");
-	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "Add schedule" }).click();
+	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "New schedule" }).click();
+	const scheduleForm = page.locator("[data-slot=dialog-content]");
+	await scheduleForm.getByLabel("Times").fill("0 7 * * *");
+	await scheduleForm.getByLabel("With the task").fill("Say good morning.");
+	await scheduleForm.getByLabel("Name", { exact: true }).fill("morning");
+	await scheduleForm.getByRole("button", { name: "Add schedule" }).click();
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	await sees("[data-slot=settings-page] [data-slot=item-title] >> text=morning");
+	await sees("[data-slot=settings-page] [data-slot=item-description] >> text=wake every agent, each in its main conversation");
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"morning"/);
 	await shot("08-settings-schedules");
 	// Events: a route, as When and Then. Only the fields of the action chosen are shown, and only they are sent.

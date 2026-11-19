@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { AgentDetail, AgentInfo, McpServer, Overview, Route, Setting } from "./api.ts";
+import type { AgentDetail, AgentInfo, McpServer, Overview, Route, Schedule, Setting } from "./api.ts";
 import { store } from "./model.ts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
-import { AgentAccent, NewRoute, Routes, Settings, ThemePicker } from "./Settings.tsx";
+import { AgentAccent, NewRoute, NewSchedule, Routes, Schedules, Settings, ThemePicker } from "./Settings.tsx";
 import { THEMES } from "../.storybook/themes.ts";
 import type { ThemeEntry } from "./theme.ts";
 
@@ -76,6 +76,13 @@ const routes: Route[] = [
 	{ name: "smoke", on: ["source/house/message", "hook/smoke"], throttleMs: 300_000, agent: "scout", trust: "owner" },
 ];
 
+/** A schedule of each kind: set times for one agent, an interval in a side conversation, once for all agents. */
+const schedules: Schedule[] = [
+	{ name: "morning", scope: "main", session: "main", when: 'at the times "0 7 * * 1-5" (minute hour day month weekday)', task: "Look at my calendar for today and tell me what is coming.", next: Date.UTC(2026, 10, 20, 6, 0), topic: "timer/morning@main" },
+	{ name: "prices", scope: "scout", session: "shopping", when: "every 6h", task: "Look whether the price of the bike on my list has dropped below 900 euros.", next: Date.UTC(2026, 10, 19, 18, 0), topic: "timer/prices@scout" },
+	{ name: "dentist", scope: "global", when: "once, at 2026-11-20 17:00", task: "Remind me to call the dentist.", next: Date.UTC(2026, 10, 20, 16, 0), topic: "timer/dentist" },
+];
+
 const answers: Record<string, unknown> = {
 	"/overview": overview,
 	"/agents/scout/detail": scout,
@@ -84,6 +91,7 @@ const answers: Record<string, unknown> = {
 	"/mcp": mcp,
 	"/mcp/states": { linear: "needs sign-in", notes: "connected" },
 	"/routes": routes,
+	"/schedules": schedules,
 };
 
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
@@ -123,6 +131,32 @@ export const Environments: Story = {
 		store.service = { status: "ready", mode: "on build-box", started: false, home: "build-box:~/.pine", version: "0.23.0", from: "ssh me@build-box", host: "me@build-box", label: "build-box" };
 		store.connected = true;
 		return <Tab {...args} />;
+	},
+};
+
+/** Events › Schedules: what a schedule is, then each schedule said as When and Then, with New schedule. */
+export const ScheduleList: Story = {
+	args: { section: "events" },
+	render: () => {
+		store.agents = agents;
+		return (
+			<div className="flex w-full max-w-250 flex-col gap-6">
+				<Schedules />
+			</div>
+		);
+	},
+};
+
+/** The form for a new schedule as it opens: When (set times, an interval, once), Then whom it wakes with what task, a name. */
+export const NewScheduleForm: Story = {
+	args: { section: "events" },
+	render: () => {
+		store.agents = agents;
+		return (
+			<Dialog open>
+				<DialogContent showCloseButton={false} className="sm:max-w-2xl"><NewSchedule made={() => {}} /></DialogContent>
+			</Dialog>
+		);
 	},
 };
 
