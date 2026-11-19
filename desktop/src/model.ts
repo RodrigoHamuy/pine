@@ -208,6 +208,8 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 /** The app as a whole. */
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
+	/** Why the agents of the pine that answered could not be loaded, until they are asked again: the gate says it and offers to try again. */
+	loadError?: string;
 	connected = false;
 	prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true };
 	/** The themes in the themes folder of pine's home, and the one in force (`ui.theme`, pmndre when none is chosen). */
@@ -479,8 +481,17 @@ export class Store extends Model {
 		// Another pine than before (another machine was picked): nothing of the last one is kept, not even what an agent of the same name was doing.
 		if (s.host !== this.service.host) this.forgetPine();
 		this.service = s;
+		this.loadError = undefined;
 		this.touch();
 		if (s.status === "ready" && (was !== "ready" || !this.agents.length)) await this.load();
+	}
+
+	/** Ask the pine that answered for its agents again, after loading them failed. */
+	async reload(): Promise<void> {
+		if (this.service.status !== "ready") return;
+		this.loadError = undefined;
+		this.touch();
+		await this.load();
 	}
 
 	/** What the page knew of the pine it used, let go of when it uses another. */
@@ -569,7 +580,9 @@ export class Store extends Model {
 		try {
 			this.agents = await this.askAgents();
 		} catch (e) {
-			return this.flash(errText(e), "bad");
+			// Said in the gate, which would otherwise wait for agents that are not coming.
+			this.loadError = errText(e);
+			return this.touch();
 		}
 		for (const a of this.agents) learnHome(a.workspace);
 		// The browser build is fetched onto this computer: another machine's pine is not asked about it here.
@@ -580,7 +593,10 @@ export class Store extends Model {
 		embedded();
 		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000), window.setInterval(() => void this.refreshAgents(), 8000), window.setInterval(embedded, 30_000)];
 		const first = this.agents.find((a) => a.main) ?? this.agents[0];
-		if (!first) return this.flash("this pine has no agents", "bad");
+		if (!first) {
+			this.loadError = "This pine has no agents.";
+			return this.touch();
+		}
 		const saved = await api.tabs().catch(() => ({ tabs: [] as Array<{ agent: string; session: string }>, active: 0, code: false }));
 		// A daemon that was started again: what the tabs showed is asked for anew.
 		this.tabs = [];

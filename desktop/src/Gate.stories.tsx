@@ -10,10 +10,11 @@ import { store } from "./model.ts";
 
 window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq3lYcVb0mXkJ2yq8rV6tZsP4dW1nE9fKcH7uR2aB3m pine-android", copy: async () => {}, share: async () => {} });
 
-function Before({ state, hosts }: { state: ServiceState; hosts: string[] }) {
+function Before({ state, hosts, loadError }: { state: ServiceState; hosts: string[]; loadError?: string }) {
 	store.local = false;
 	store.prefs = { ...store.prefs, hosts, use: state.host };
 	store.service = state;
+	store.loadError = loadError;
 	return (
 		<div className="flex h-200 w-full">
 			<Gate />
@@ -26,8 +27,8 @@ const meta = {
 	parameters: { layout: "fullscreen" },
 	// What a story sets on the store is put back after it: the next story starts from the store as it was.
 	beforeEach: () => {
-		const { local, service, prefs } = store;
-		return () => void Object.assign(store, { local, service, prefs });
+		const { local, service, prefs, loadError } = store;
+		return () => void Object.assign(store, { local, service, prefs, loadError });
 	},
 	// Nothing of a local machine, and the machines listed: they are the only way to a pine.
 	play: async ({ canvasElement }) => {
@@ -120,7 +121,56 @@ export const LongHost: Story = {
 		await expect(rows).toHaveLength(2);
 		for (const row of rows) await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
 		const row = rows[0]!;
+		// From sm up the gate is wide enough for the host on one line: one line of the mono font, not two.
+		if (window.innerWidth >= 1024) {
+			const name = row.querySelector<HTMLElement>('[data-slot="item-title"] > span')!;
+			await expect(name.getBoundingClientRect().height).toBeLessThan(parseFloat(getComputedStyle(name).lineHeight) * 1.5);
+		}
 		const badge = row.querySelector<HTMLElement>('[data-slot="badge"]')!;
 		await expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right);
+	},
+};
+
+const ready: ServiceState = { status: "ready", mode: "on build-box", started: false, home: "build-box:~/.pine", version: "0.40.0", from: "ssh me@build-box", host: "me@build-box", label: "build-box" };
+
+/** The machine's pine answered and its agents are being asked for over SSH: the same screen as while it was reached, so connecting reads as one wait. */
+export const LoadingAgents: Story = {
+	args: { hosts: ["me@build-box", "studio"], state: ready },
+	beforeEach: () => {
+		disconnected.mockClear();
+		window.pine.disconnect = disconnected;
+		return () => void delete (window.pine as Partial<typeof window.pine>).disconnect;
+	},
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement, userEvent } = context;
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText(/Connecting to/)).toHaveTextContent("Connecting to me@build-box");
+		await expect(canvas.getByText("Loading its agents…")).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="badge"]')).toHaveTextContent("connecting");
+		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"] [data-slot="disconnect"]')!);
+		await expect(disconnected).toHaveBeenCalledTimes(1);
+	},
+};
+
+const reloaded = fn(async () => {});
+
+/** The machine's pine answered and its agents could not be loaded: what went wrong, Try again, and the machines to switch or disconnect. */
+export const LoadFailed: Story = {
+	args: { hosts: ["me@build-box", "studio"], state: ready, loadError: "The channel to the daemon was closed." },
+	beforeEach: () => {
+		reloaded.mockClear();
+		store.reload = reloaded;
+		return () => void delete (store as Partial<typeof store>).reload;
+	},
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement, userEvent } = context;
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText(/Could not load the agents of/)).toHaveTextContent("me@build-box");
+		await expect(canvas.getByText("The channel to the daemon was closed.")).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="disconnect"]')).not.toBeNull();
+		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-slot="gate-reload"]')!);
+		await expect(reloaded).toHaveBeenCalledTimes(1);
 	},
 };

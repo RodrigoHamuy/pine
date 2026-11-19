@@ -2080,7 +2080,8 @@ export function MachineList() {
 	/** How the pine of a row is, when it is the one the app uses; nothing is asked of the others. */
 	const status = (h?: string) => {
 		if (state.host !== h) return null;
-		if (state.status === "starting") return <Badge variant="outline"><Pulse label="Loading" data-icon="inline-start" />connecting</Badge>;
+		// Ready, with its agents still being loaded: the event stream may not be up yet, which is no loss.
+		if (state.status === "starting" || (state.status === "ready" && !s.opened)) return <Badge variant="outline"><Pulse label="Loading" data-icon="inline-start" />connecting</Badge>;
 		if (state.status === "error") return <Badge variant="destructive">not reached</Badge>;
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};

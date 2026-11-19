@@ -113,12 +113,37 @@ export function Gate() {
 								{machines}
 							</div>,
 						]
-					: ["Loading your agents…", "", <Pulse label="Loading" key="s" />];
+					: s.loadError
+						? // The pine answered and its agents could not be loaded: said, with a way to ask again, never a wait that does not end.
+							[
+								host ? <>Could not load the agents of <span className="font-mono"><Breakable host={host} /></span></> : "Could not load your agents",
+								s.loadError,
+								<div key="l" className="flex w-full flex-col items-center gap-4">
+									<div className="flex items-center gap-2">
+										<Button data-slot="gate-reload" onClick={() => void s.reload()}>Try again</Button>
+										{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
+									</div>
+									{machines}
+								</div>,
+							]
+						: host
+							? // Another machine's pine answered and its agents are being asked for over SSH: the same screen as while it was reached, so connecting reads as one wait.
+								[
+									<>Connecting to <span className="font-mono"><Breakable host={host} /></span></>,
+									"Loading its agents…",
+									<div key="s" className="flex w-full flex-col items-center gap-4">
+										<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
+										{machines}
+									</div>,
+								]
+							: ["Loading your agents…", "", <Pulse label="Loading" key="s" />];
 	// Before pine answers there is nothing to show yet: stock Empty, in a frame that moves the window.
+	// Stock caps its header and content at max-w-sm, made for a line or two of text: from sm up they get
+	// room for a machine's row, so that a tailnet host and its buttons share one line. A phone keeps the full width.
 	return (
 		<div className="m-1.5 flex flex-1 overflow-y-auto rounded-xl border bg-background app-drag">
 			<Empty className="app-no-drag">
-				<EmptyHeader>
+				<EmptyHeader className="sm:max-w-xl">
 					<EmptyMedia>
 						<Logo className="size-9" />
 					</EmptyMedia>
@@ -127,7 +152,7 @@ export function Gate() {
 					{/* A host key's fingerprint is one long word: it breaks anywhere, or it overflows its centered line on a phone. */}
 					{about ? <EmptyDescription className="wrap-anywhere select-text">{about}</EmptyDescription> : null}
 				</EmptyHeader>
-				<EmptyContent>{actions}</EmptyContent>
+				<EmptyContent className="sm:max-w-2xl">{actions}</EmptyContent>
 			</Empty>
 		</div>
 	);
