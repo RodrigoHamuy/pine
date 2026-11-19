@@ -1,5 +1,5 @@
 // The web bridge: the top-level document's part of the web client, the counterpart of the desktop
-// app's main process (desktop/electron/main.ts) and of the Android plugin. It holds the browser's
+// app's main process (desktop/electron/main.ts) and of the mobile app's native plugin. It holds the browser's
 // SSH key, the machines and their trusted host keys, the SSH connection and the daemon's token, and
 // makes every call to the control API for the page, which asks through serve.ts and never sees
 // the token. The browser has no pine of its own (`local: false`).
