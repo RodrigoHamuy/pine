@@ -27,7 +27,8 @@ import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
@@ -129,10 +130,10 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 		const hint = typeof k === "object" ? `A whole number from ${k.from} to ${k.to}` : "A time such as 90s or 5m";
 		control = (
 			<>
-				<Tooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<Input id={id} className="w-28 font-mono" value={draft ?? s.now} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === "Enter" && draft !== undefined && void set(draft)} />} />
 					<TooltipContent>{hint}</TooltipContent>
-				</Tooltip>
+				</HoverTooltip>
 				{draft !== undefined && draft !== s.now ? <Button size="xs" onClick={() => void set(draft)}>Save</Button> : null}
 			</>
 		);
@@ -143,10 +144,10 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 				<FieldLabel htmlFor={id}>
 					<span>{s.title ?? s.key}</span>
 					{s.title ? (
-						<Tooltip>
+						<HoverTooltip>
 							<TooltipTrigger render={<span className="font-mono font-normal text-muted-foreground">{s.key}</span>} />
 							<TooltipContent>Its name in pine.json, and for the main agent</TooltipContent>
-						</Tooltip>
+						</HoverTooltip>
 					) : null}
 					{s.live ? null : <Badge variant="secondary">from the next start</Badge>}
 					{saved ? <Badge variant="outline">saved: {saved}</Badge> : null}
@@ -424,10 +425,10 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 									</ItemContent>
 									<ItemActions>
 										<Badge variant="secondary">{kind}</Badge>
-										<Tooltip>
+										<HoverTooltip>
 											<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label={dropped ? "Keep it" : "Take it away"} onClick={() => put("forget", dropped ? forget.filter((x) => x !== p) : [...forget, p])}>{dropped ? <Undo2Icon /> : <XIcon />}</Button>} />
 											<TooltipContent>{dropped ? "Keep it" : "Take it away"}</TooltipContent>
-										</Tooltip>
+										</HoverTooltip>
 									</ItemActions>
 								</Item>
 							);
@@ -441,10 +442,10 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 									</ItemContent>
 									<ItemActions>
 										<Badge>{kind === "write" ? "read and change" : "read"} · new</Badge>
-										<Tooltip>
+										<HoverTooltip>
 											<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Leave it out" onClick={() => put(kind, ((change[kind] as string[]) ?? []).filter((x) => x !== p))}><XIcon /></Button>} />
 											<TooltipContent>Leave it out</TooltipContent>
-										</Tooltip>
+										</HoverTooltip>
 									</ItemActions>
 								</Item>
 							)),
@@ -1130,10 +1131,10 @@ function Skills() {
 									<ItemActions>
 										<Button variant="outline" size="xs" onClick={() => setEdit({ name: x.name, description: x.description, instructions: x.instructions ?? "", agent: x.agent ?? "", isNew: false, managed })}>{managed ? "Edit" : "Read"}</Button>
 										{x.managed ? <AlertDialog>
-											<Tooltip>
+											<HoverTooltip>
 												<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this skill"><Trash2Icon /></AlertDialogTrigger>} />
 												<TooltipContent>Remove this skill</TooltipContent>
-											</Tooltip>
+											</HoverTooltip>
 											<AlertDialogContent>
 												<AlertDialogHeader>
 													<AlertDialogTitle>Remove the skill {x.name}?</AlertDialogTitle>
@@ -1426,20 +1427,20 @@ function Sources() {
 									</ItemDescription>
 									<div className="flex flex-wrap items-center gap-1">
 										{x.subscribers.map((who) => (
-											<Tooltip key={who}>
+											<HoverTooltip key={who}>
 												<TooltipTrigger render={<Button variant="outline" size="xs" aria-label={`End the subscription of ${who}`} onClick={() => void unsubscribe(x.name, who)}>{who}<XIcon data-icon="inline-end" /></Button>} />
 												<TooltipContent>End the subscription of {who}</TooltipContent>
-											</Tooltip>
+											</HoverTooltip>
 										))}
 										<Button variant="ghost" size="xs" onClick={() => void subscribe(x.name)}><PlusIcon data-icon="inline-start" />Subscribe</Button>
 									</div>
 								</ItemContent>
 								<ItemActions>
 									<AlertDialog>
-										<Tooltip>
+										<HoverTooltip>
 											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this source"><Trash2Icon /></AlertDialogTrigger>} />
 											<TooltipContent>Remove this source</TooltipContent>
-										</Tooltip>
+										</HoverTooltip>
 										<AlertDialogContent>
 											<AlertDialogHeader>
 												<AlertDialogTitle>Remove the event source {x.name}?</AlertDialogTitle>
@@ -1625,10 +1626,10 @@ export function Schedules() {
 								</ItemContent>
 								<ItemActions>
 									<AlertDialog>
-										<Tooltip>
+										<HoverTooltip>
 											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this schedule"><Trash2Icon /></AlertDialogTrigger>} />
 											<TooltipContent>Remove this schedule</TooltipContent>
-										</Tooltip>
+										</HoverTooltip>
 										<AlertDialogContent>
 											<AlertDialogHeader>
 												<AlertDialogTitle>Remove the schedule {x.name}?</AlertDialogTitle>
@@ -1858,10 +1859,10 @@ export function Routes() {
 									</ItemContent>
 									<ItemActions>
 										<AlertDialog>
-											<Tooltip>
+											<HoverTooltip>
 												<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this route"><Trash2Icon /></AlertDialogTrigger>} />
 												<TooltipContent>Remove this route</TooltipContent>
-											</Tooltip>
+											</HoverTooltip>
 											<AlertDialogContent>
 												<AlertDialogHeader>
 													<AlertDialogTitle>Remove the route {r.name}?</AlertDialogTitle>

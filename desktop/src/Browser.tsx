@@ -16,7 +16,8 @@ import { api, type BrowserState, media } from "./api.ts";
 import { ROOM, store, type Tab, useModel } from "./model.ts";
 import { errText } from "./text.ts";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Pulse } from "@/components/pulse";
 import { cn } from "@/lib/utils";
@@ -192,26 +193,26 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						</Tabs>
 						</div>
 					</ScrollArea>
-					<Tooltip>
+					<HoverTooltip>
 						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="A new tab" onClick={() => (act({ do: "newtab" }), line.current?.focus())} />}><PlusIcon /></TooltipTrigger>
 						<TooltipContent>A new tab</TooltipContent>
-					</Tooltip>
+					</HoverTooltip>
 				</div>
 			) : null}
 			<div className="flex flex-none items-center gap-0.5 border-b border-line-soft px-2 py-1.5">
 				<ButtonGroup>
-					<Tooltip>
+					<HoverTooltip>
 						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Back" disabled={!open} onClick={() => act({ do: "back" })} />}><ChevronLeftIcon /></TooltipTrigger>
 						<TooltipContent>Back</TooltipContent>
-					</Tooltip>
-					<Tooltip>
+					</HoverTooltip>
+					<HoverTooltip>
 						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Forward" disabled={!open} onClick={() => act({ do: "forward" })} />}><ChevronRightIcon /></TooltipTrigger>
 						<TooltipContent>Forward</TooltipContent>
-					</Tooltip>
-					<Tooltip>
+					</HoverTooltip>
+					<HoverTooltip>
 						<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Load the page again" disabled={!open} onClick={() => act({ do: "reload" })} />}><RotateCwIcon /></TooltipTrigger>
 						<TooltipContent>Load the page again</TooltipContent>
-					</Tooltip>
+					</HoverTooltip>
 				</ButtonGroup>
 				<InputGroup className="ml-1 min-w-0 flex-1">
 					<InputGroupInput
@@ -286,10 +287,10 @@ export function BrowserView({ tab }: { tab: Tab }) {
 						<EmptyContent data-offer="running">
 							<EmptyDescription>Running in this conversation</EmptyDescription>
 							{running.map((r) => (
-								<Tooltip key={r.port}>
+								<HoverTooltip key={r.port}>
 									<TooltipTrigger render={<Button variant="link" size="xs" className="max-w-full font-mono" disabled={busy} onClick={() => void go(`http://localhost:${r.port}`)} />}><span className="truncate">localhost:{r.port}</span></TooltipTrigger>
 									<TooltipContent>{r.command}</TooltipContent>
-								</Tooltip>
+								</HoverTooltip>
 							))}
 						</EmptyContent>
 					) : null}
@@ -298,10 +299,10 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							<EmptyDescription>Opened by the agent before</EmptyDescription>
 							{/* (An address is text an agent chose: drawn as text, whole in the tooltip, and opened only by this click.) */}
 							{visited.map((url) => (
-								<Tooltip key={url}>
+								<HoverTooltip key={url}>
 									<TooltipTrigger render={<Button variant="link" size="xs" className="max-w-full font-mono" disabled={busy} onClick={() => void go(url)} />}><span className="truncate">{url.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span></TooltipTrigger>
 									<TooltipContent>{url}</TooltipContent>
-								</Tooltip>
+								</HoverTooltip>
 							))}
 						</EmptyContent>
 					) : null}
@@ -335,7 +336,7 @@ export function BrowserAside({ tab }: { tab: Tab }) {
 				<>
 					<GlobeIcon className="size-3.5 text-muted-foreground" />
 					<span className="min-w-0 flex-1 truncate">Browser</span>
-					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("browser")} aria-label="Close the browser"><XIcon /></Button>} /><TooltipContent>Close the browser<Kbd>⇧⌘B</Kbd></TooltipContent></Tooltip>
+					<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("browser")} aria-label="Close the browser"><XIcon /></Button>} /><TooltipContent>Close the browser<Kbd>⇧⌘B</Kbd></TooltipContent></HoverTooltip>
 				</>
 			}
 		>

@@ -10,7 +10,8 @@ import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
 import { RotateCwIcon, SquareTerminalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { bridge } from "./bridge.ts";
 import { SUB } from "./CodePanel.tsx";
@@ -128,10 +129,10 @@ export function TerminalView({ tab }: { tab: Tab }) {
 					{state.cwd ? tilde(state.cwd) : "Starting…"}
 					{state.ended !== undefined ? ` · ended${state.ended ? ` (${state.ended})` : ""}` : ""}
 				</span>
-				<Tooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Start the shell again" onClick={() => void restart()}><RotateCwIcon /></Button>} />
 					<TooltipContent>Start the shell again</TooltipContent>
-				</Tooltip>
+				</HoverTooltip>
 			</div>
 			{state.error ? (
 				<EmptyView icon={SquareTerminalIcon} title="The terminal did not start">{state.error}</EmptyView>
