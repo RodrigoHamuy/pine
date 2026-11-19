@@ -37,8 +37,8 @@ test("the key is generated non-extractable, its public half reads as an OpenSSH 
 	assert.equal(result.extractable, false);
 	assert.equal(result.exported, "InvalidAccessError");
 	assert.match(result.line, /^ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI[A-Za-z0-9+/]+=* pine web$/);
-	// ssh-keygen reads it as an Ed25519 key: the format is OpenSSH's, not just shaped like it.
-	const listed = execFileSync("ssh-keygen", ["-l", "-f", "/dev/stdin"], { input: result.line, encoding: "utf8" });
+	// ssh-keygen reads it as an Ed25519 key: the format is OpenSSH's, not just shaped like it. (From standard input as `-`: on Linux /dev/stdin cannot be opened when it is a pipe.)
+	const listed = execFileSync("ssh-keygen", ["-l", "-f", "-"], { input: result.line, encoding: "utf8" });
 	assert.match(listed, /^256 SHA256:\S+ pine web \(ED25519\)/);
 	machine.authorize(result.line);
 });
