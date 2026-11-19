@@ -5,7 +5,7 @@
 // stand-in does (desktop/src/preview-bridge.ts).
 import type { AppState, PageBridge, Prefs } from "../../desktop/src/bridge.ts";
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
-import { MEDIA_BASE, type PagePrefs, type PinePlugin } from "./plugin.ts";
+import { ORIGINS, type PagePrefs, type PinePlugin, type Platform } from "./plugin.ts";
 
 const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false };
 
@@ -16,7 +16,7 @@ const PMNDRE_BG = "#1b1e28";
 const OPEN = '[role="dialog"], [role="alertdialog"], [role="menu"]';
 
 /**
- * Android's back button: what is open over the page is closed as Escape closes it on the desktop,
+ * Android's back button (iOS has none): what is open over the page is closed as Escape closes it on the desktop,
  * and with nothing open the app is left, as Android's own apps do.
  */
 function back(leave: () => void): void {
@@ -25,8 +25,8 @@ function back(leave: () => void): void {
 	(doc.activeElement ?? doc.body)?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
 }
 
-/** The page's bridge, on the plugin it is given (Capacitor's in the app, a fake in the tests). */
-export function mobileBridge(plugin: PinePlugin): PageBridge {
+/** The page's bridge, on the plugin it is given (Capacitor's in the app, a fake in the tests), for the phone's system. */
+export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge {
 	// The page's preferences and the machines, as the plugin last gave them.
 	let prefs: Prefs = { ...DEFAULTS, hosts: [] };
 
@@ -64,7 +64,7 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 	const never = () => () => undefined;
 
 	return {
-		mediaBase: MEDIA_BASE,
+		mediaBase: ORIGINS[platform].media,
 		onService: on("service", (d) => d.state),
 		onEvents: on("events", (d) => d.events),
 		onConnection: on("connection", (d) => d.connected),
@@ -83,7 +83,7 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 		state: async (): Promise<AppState> => {
 			const [s] = await Promise.all([plugin.state(), load()]);
 			bars(prefs.look);
-			return { state: s.state, connected: s.connected, home: s.state.status === "ready" ? s.state.home : undefined, prefs: { ...prefs }, platform: "android", focused: true, updates: false, versions: { app: s.version, electron: "none" }, local: false };
+			return { state: s.state, connected: s.connected, home: s.state.status === "ready" ? s.state.home : undefined, prefs: { ...prefs }, platform, focused: true, updates: false, versions: { app: s.version, electron: "none" }, local: false };
 		},
 		// As Electron's `send`, nothing to wait for: a plugin that cannot start says so as a connection that failed.
 		ready: () =>

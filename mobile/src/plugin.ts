@@ -1,4 +1,4 @@
-// The native plugin's interface: what the mobile bridge (mobile-bridge.ts) asks of the Android
+// The native plugin's interface: what the mobile bridge (mobile-bridge.ts) asks of the native
 // side, registered with Capacitor under the name `Pine`. It is the contract the Kotlin plugin
 // implements (ticket 06): the counterpart of what Electron's main process does for the desktop page
 // (desktop/electron/main.ts, service.ts, daemon.ts and src/remote.ts). The plugin holds the SSH
@@ -15,13 +15,24 @@ import type { Look } from "../../desktop/src/theme.ts";
 /** The name the plugin is registered under, on both sides. */
 export const PLUGIN_NAME = "Pine";
 
+/** The phone's system, as Capacitor names it: the page and its bridge are the same on both. */
+export type Platform = "android" | "ios";
+
 /**
- * The app's own origin (Capacitor's local server on Android), and where on it the page fetches the
- * daemon's pictures, video and sound: the plugin intercepts the requests under this path and answers
- * them from the daemon with the rules of `mediaFromDaemon` (daemon.ts).
+ * The app's own origin (Capacitor's local server), and where the page fetches the daemon's pictures,
+ * video and sound, which the plugin answers from the daemon with the rules of `mediaFromDaemon`
+ * (daemon.ts). On Android, a path of the app's own origin that the plugin intercepts. On iOS the app
+ * cannot serve `https` (WKWebView handles that scheme itself, and Capacitor falls back to its own),
+ * so the origin is `capacitor://localhost` and media come on a scheme of their own, which is the
+ * desktop's default base too.
  */
-export const APP_ORIGIN = "https://localhost";
-export const MEDIA_BASE = `${APP_ORIGIN}/_pine_media`;
+export const ORIGINS = {
+	android: { app: "https://localhost", media: "https://localhost/_pine_media" },
+	ios: { app: "capacitor://localhost", media: "pine-media://daemon" },
+} as const satisfies Record<Platform, { app: string; media: string }>;
+
+/** The origin a page's policy lets media come from: the app's own on Android, the media scheme on iOS. */
+export const MEDIA_SOURCE = { android: ORIGINS.android.app, ios: "pine-media:" } as const satisfies Record<Platform, string>;
 
 /**
  * The page's own preferences, which the plugin stores as they are given and gives back. The bridge

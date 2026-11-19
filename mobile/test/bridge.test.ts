@@ -38,7 +38,7 @@ const ready = { status: "ready", mode: "attached", started: false, home: "box:~/
 
 test("state: the plugin's connection and stored machines, with no local machine and the phone's platform", async () => {
 	const { plugin } = fakePlugin({ state: () => ({ state: ready, connected: true, version: "1.2.3" }) }, { hosts: ["me@box"], use: "me@box", prefs: { notify: true } });
-	const s = await mobileBridge(plugin).state();
+	const s = await mobileBridge(plugin, "android").state();
 	assert.equal(s.local, false);
 	assert.equal(s.platform, "android");
 	assert.deepEqual(s.state, ready);
@@ -50,19 +50,32 @@ test("state: the plugin's connection and stored machines, with no local machine 
 });
 
 test("mediaBase: the address on the app's origin that the plugin answers", () => {
-	assert.equal(mobileBridge(fakePlugin().plugin).mediaBase, "https://localhost/_pine_media");
+	assert.equal(mobileBridge(fakePlugin().plugin, "android").mediaBase, "https://localhost/_pine_media");
+});
+
+test("state on iOS: the same, with the platform Capacitor says", async () => {
+	const { plugin } = fakePlugin({ state: () => ({ state: ready, connected: true, version: "1.2.3" }) }, { hosts: ["me@box"], use: "me@box" });
+	const s = await mobileBridge(plugin, "ios").state();
+	assert.equal(s.platform, "ios");
+	assert.equal(s.local, false);
+	assert.deepEqual(s.state, ready);
+	assert.deepEqual(s.prefs.hosts, ["me@box"]);
+});
+
+test("mediaBase on iOS: the scheme of its own the plugin answers, the desktop's default", () => {
+	assert.equal(mobileBridge(fakePlugin().plugin, "ios").mediaBase, "pine-media://daemon");
 });
 
 test("call: forwarded as one object, and the plugin's answer handed back as it is", async () => {
 	const answer = { ok: true, status: 200, data: { mime: "image/png", base64: "iVBO" } };
 	const { plugin, calls } = fakePlugin({ call: () => answer });
-	assert.deepEqual(await mobileBridge(plugin).call("POST", "/agents/main/message", { text: "hi" }), answer);
+	assert.deepEqual(await mobileBridge(plugin, "android").call("POST", "/agents/main/message", { text: "hi" }), answer);
 	assert.deepEqual(calls, [["call", { method: "POST", url: "/agents/main/message", body: { text: "hi" } }]]);
 });
 
 test("ready and retry: forwarded", async () => {
 	const { plugin, calls } = fakePlugin();
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	b.ready();
 	await b.retry();
 	assert.deepEqual(
@@ -75,7 +88,7 @@ test("retry: only connects again, even when a host key waits for the owner's yes
 	const fingerprint = `SHA256:${"a".repeat(43)}`;
 	const waiting = { status: "error", kind: "ssh", message: `... ${fingerprint} ...`, host: "me@box", fingerprint, changed: false };
 	const { plugin, calls } = fakePlugin({ state: () => ({ state: waiting, connected: false, version: "1" }) });
-	await mobileBridge(plugin).retry();
+	await mobileBridge(plugin, "android").retry();
 	assert.deepEqual(calls, [["retry"]]);
 });
 
@@ -83,13 +96,13 @@ test("trustHostKey: exactly the host and fingerprint the page drew reach the plu
 	const shown = `SHA256:${"b".repeat(43)}`;
 	const other = { status: "error", kind: "ssh", message: "...", host: "me@box", fingerprint: `SHA256:${"c".repeat(43)}`, changed: false };
 	const { plugin, calls } = fakePlugin({ state: () => ({ state: other, connected: false, version: "1" }) });
-	await mobileBridge(plugin).trustHostKey!("me@box", shown);
+	await mobileBridge(plugin, "android").trustHostKey!("me@box", shown);
 	assert.deepEqual(calls, [["trustHostKey", { host: "me@box", fingerprint: shown }]]);
 });
 
 test("forgetHost: the machine's stored host key goes with it", async () => {
 	const { plugin, calls } = fakePlugin({ forgetHost: () => ({ hosts: [] }) });
-	await mobileBridge(plugin).forgetHost("me@box");
+	await mobileBridge(plugin, "android").forgetHost("me@box");
 	assert.deepEqual(calls, [
 		["forgetHost", { host: "me@box" }],
 		["forgetHostKey", { host: "me@box" }],
@@ -99,7 +112,7 @@ test("forgetHost: the machine's stored host key goes with it", async () => {
 test("deviceKey: the phone's public key, copied or handed to the share sheet by the plugin", async () => {
 	const key = "ssh-ed25519 AAAAC3Nza pine-android";
 	const { plugin, calls } = fakePlugin({ publicKey: () => ({ key }) });
-	const k = await mobileBridge(plugin).deviceKey!();
+	const k = await mobileBridge(plugin, "android").deviceKey!();
 	assert.equal(k.key, key);
 	await k.copy();
 	await k.share();
@@ -123,7 +136,7 @@ test("back: closes what the page has open with Escape, else leaves the app; the 
 	};
 	try {
 		const { plugin, calls, emit } = fakePlugin();
-		const b = mobileBridge(plugin);
+		const b = mobileBridge(plugin, "android");
 		const heard: unknown[] = [];
 		b.onMenu((m: unknown) => heard.push(m));
 		await new Promise((r) => setImmediate(r));
@@ -142,7 +155,7 @@ test("back: closes what the page has open with Escape, else leaves the app; the 
 
 test("machines: use, add and forget go to the plugin, and the prefs come back with its list", async () => {
 	const { plugin, calls } = fakePlugin({ addHost: ({ host }) => ({ hosts: ["me@box", host] }), forgetHost: () => ({ hosts: ["pi"] }) }, { hosts: ["me@box"], prefs: { notify: true } });
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	await b.state();
 	const added = await b.addHost("pi");
 	assert.deepEqual(added.hosts, ["me@box", "pi"]);
@@ -163,7 +176,7 @@ test("machines: use, add and forget go to the plugin, and the prefs come back wi
 
 test("use: the phone has no pine of its own, so a call without a machine is refused and reaches nothing", async () => {
 	const { plugin, calls } = fakePlugin();
-	await assert.rejects(mobileBridge(plugin).use(undefined), /no pine of its own/);
+	await assert.rejects(mobileBridge(plugin, "android").use(undefined), /no pine of its own/);
 	assert.deepEqual(calls, []);
 });
 
@@ -173,12 +186,12 @@ test("a refusal of the plugin reaches the page with its words", async () => {
 			throw new Error("Not a host for ssh: -oProxyCommand=x.");
 		},
 	});
-	await assert.rejects(mobileBridge(plugin).addHost("-oProxyCommand=x"), /Not a host for ssh/);
+	await assert.rejects(mobileBridge(plugin, "android").addHost("-oProxyCommand=x"), /Not a host for ssh/);
 });
 
 test("open: http(s) addresses go to the phone's browser, nothing else reaches the plugin", async () => {
 	const { plugin, calls } = fakePlugin();
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	await b.open("https://example.com/a");
 	await b.open("HTTP://example.com/b");
 	await b.open("file:///etc/passwd");
@@ -192,7 +205,7 @@ test("open: http(s) addresses go to the phone's browser, nothing else reaches th
 
 test("listeners: what the plugin tells reaches each page listener in the desktop's shape, until it unsubscribes", async () => {
 	const { plugin, emit } = fakePlugin();
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	const got: unknown[] = [];
 	const offs = [
 		b.onService((s: unknown) => got.push(["service", s])),
@@ -231,7 +244,7 @@ test("listeners: what the plugin tells reaches each page listener in the desktop
 
 test("listeners: the plugin is listened to once per kind, however many page listeners there are", async () => {
 	const { plugin, calls } = fakePlugin();
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	b.onEvents(() => {})();
 	b.onEvents(() => {});
 	b.onEvents(() => {});
@@ -245,7 +258,7 @@ test("ready: a plugin that cannot start tells the page as a failed connection", 
 			throw new Error("The keystore is locked.");
 		},
 	});
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	const states: unknown[] = [];
 	b.onService((s: unknown) => states.push(s));
 	b.ready();
@@ -255,7 +268,7 @@ test("ready: a plugin that cannot start tells the page as a failed connection", 
 
 test("what only the desktop app has refuses or does nothing, as the preview's stand-in, and never reaches the plugin", async () => {
 	const { plugin, calls } = fakePlugin();
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	assert.equal(await b.update(true), undefined);
 	await assert.rejects(b.restart(), /machine/);
 	assert.equal(await b.init(), 1);
@@ -280,7 +293,7 @@ test("what only the desktop app has refuses or does nothing, as the preview's st
 
 test("prefs: each value checked as the desktop's main process checks it, then stored whole", async () => {
 	const { plugin, calls } = fakePlugin({}, { hosts: ["me@box"], use: "me@box" });
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	await b.state();
 	const after = await b.prefs({ notify: true, updates: true, look: { id: "night", name: "Night", kind: "dark", colors: { bg: "#000000", text: "#ffffff", accent: "red; background: url(x)" } } });
 	assert.equal(after.notify, true);
@@ -301,7 +314,7 @@ test("prefs: each value checked as the desktop's main process checks it, then st
 test("systemBars: the bars take the color and kind of the theme the page draws, pmndre's with none, and a plugin that cannot paint them changes nothing", async () => {
 	const light = { id: "paper", name: "Paper", kind: "light", colors: { bg: "#FAFAFAcc", text: "#111111" } } as const;
 	const { plugin, calls } = fakePlugin({ systemBars: () => Promise.reject(new Error("no window")) }, { hosts: [], prefs: { look: light } });
-	const b = mobileBridge(plugin);
+	const b = mobileBridge(plugin, "android");
 	const bars = () => calls.filter(([m]) => m === "systemBars").map(([, o]) => o);
 	await b.state();
 	assert.deepEqual(bars(), [{ color: "#fafafa", dark: false }], "the stored theme at the start, as #rrggbb");
@@ -316,6 +329,6 @@ test("systemBars: the bars take the color and kind of the theme the page draws, 
 
 test("saveText: the text goes to the share sheet under its name", async () => {
 	const { plugin, calls } = fakePlugin();
-	assert.equal(await mobileBridge(plugin).saveText("conversation.md", "# hi"), "conversation.md");
+	assert.equal(await mobileBridge(plugin, "android").saveText("conversation.md", "# hi"), "conversation.md");
 	assert.deepEqual(calls, [["share", { title: "conversation.md", text: "# hi" }]]);
 });

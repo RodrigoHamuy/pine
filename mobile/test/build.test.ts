@@ -24,13 +24,17 @@ function classes(css: string) {
 }
 
 let mobileBuild: Map<string, string>;
+let iosBuild: Map<string, string>;
 let desktopBuild: Map<string, string>;
 
 before(async () => {
 	out = fs.mkdtempSync(path.join(os.tmpdir(), "pine-mobile-build-"));
+	// What `npm run sync` ships to Android (no mode named) and what `npm run sync:ios` ships to iOS.
 	await build({ configFile: path.join(mobile, "vite.config.ts"), root: mobile, logLevel: "silent", build: { outDir: path.join(out, "mobile"), emptyOutDir: true } });
+	await build({ configFile: path.join(mobile, "vite.config.ts"), root: mobile, mode: "ios", logLevel: "silent", build: { outDir: path.join(out, "ios"), emptyOutDir: true } });
 	await build({ configFile: path.join(desktop, "vite.config.ts"), root: desktop, logLevel: "silent", build: { outDir: path.join(out, "desktop"), emptyOutDir: true } });
 	mobileBuild = read(path.join(out, "mobile"));
+	iosBuild = read(path.join(out, "ios"));
 	desktopBuild = read(path.join(out, "desktop"));
 });
 
@@ -52,6 +56,33 @@ test("the mobile page carries the desktop's content security policy, with the or
 	assert.equal(metas[0][1], pageCsp({ media: ["https://localhost"] }));
 	// Before any script of the page, so that it holds for all of them.
 	assert.ok(html.indexOf("Content-Security-Policy") < html.indexOf("<script"));
+});
+
+/** The one policy a built page carries, before any of its scripts. */
+function policy(files: Map<string, string>) {
+	const html = files.get("index.html")!;
+	const metas = [...html.matchAll(/<meta http-equiv="Content-Security-Policy" content="([^"]*)"/g)];
+	assert.equal(metas.length, 1);
+	assert.ok(html.indexOf("Content-Security-Policy") < html.indexOf("<script"));
+	return metas[0][1];
+}
+
+test("the iOS page carries the same policy, with its media from the media scheme and nothing from the app's origin", () => {
+	assert.equal(policy(iosBuild), "default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: pine-media:; media-src 'self' blob: pine-media:; font-src 'self' data:; connect-src 'self'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'");
+	assert.doesNotMatch(policy(iosBuild), /https:\/\/localhost/);
+});
+
+test("the Android page's policy lets nothing come from the iOS media scheme", () => {
+	assert.doesNotMatch(policy(mobileBuild), /pine-media:/);
+});
+
+test("the iOS page has every style the Android page has, and its bridge", () => {
+	const css = (files: Map<string, string>) => [...files].filter(([f]) => f.endsWith(".css")).map(([, t]) => t).join("\n");
+	const missing = [...classes(css(mobileBuild))].filter((c) => !classes(css(iosBuild)).has(c));
+	assert.deepEqual(missing, []);
+	const all = [...iosBuild.values()].join("\n");
+	assert.match(all, /pine-media:\/\/daemon/);
+	for (const [f, text] of iosBuild) assert.doesNotMatch(text, /__pine/, f);
 });
 
 test("the mobile page installs its bridge and has nothing of the preview's stand-in", () => {
