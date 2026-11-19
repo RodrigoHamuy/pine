@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { AgentDetail, AgentInfo, McpServer, Overview, Setting } from "./api.ts";
 import { store } from "./model.ts";
-import { Settings, ThemePicker } from "./Settings.tsx";
+import { AgentAccent, Settings, ThemePicker } from "./Settings.tsx";
 import { THEMES } from "../.storybook/themes.ts";
 import type { ThemeEntry } from "./theme.ts";
 
@@ -133,13 +133,15 @@ export const Theme: Story = {
 	},
 };
 
-/** The App page with the agent in front not colouring the window: "The agent in front colours the window" off. */
+/** The switch for the colour of the agent in front, turned off: the theme's accent stays whoever is in front. */
 export const AgentAccentOff: Story = {
 	args: { section: "app" },
-	render: (args) => {
-		store.themes = THEMES;
-		store.theme = "pmndre";
+	render: () => {
 		store.prefs = { ...store.prefs, agentAccent: false };
-		return <Tab {...args} />;
+		return (
+			<div className="w-full max-w-200">
+				<AgentAccent />
+			</div>
+		);
 	},
 };
