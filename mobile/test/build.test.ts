@@ -72,6 +72,12 @@ test("the iOS page carries the same policy, with its media from the media scheme
 	assert.doesNotMatch(policy(iosBuild), /https:\/\/localhost/);
 });
 
+test("the iOS page is not zoomed into a field it focuses, and Android's viewport is unchanged", () => {
+	const viewport = (files: Map<string, string>) => files.get("index.html")?.match(/<meta name="viewport" content="([^"]*)"/)?.[1];
+	assert.equal(viewport(iosBuild), "width=device-width, initial-scale=1, maximum-scale=1");
+	assert.equal(viewport(mobileBuild), "width=device-width, initial-scale=1");
+});
+
 test("the Android page's policy lets nothing come from the iOS media scheme", () => {
 	assert.doesNotMatch(policy(mobileBuild), /pine-media:/);
 });

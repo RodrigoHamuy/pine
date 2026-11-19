@@ -37,6 +37,21 @@ const csp = (platform: Platform): Plugin => ({
 	},
 });
 
+// WebKit on iOS zooms into a field the page focuses when its text is smaller than 16px (the
+// message box, the host field), and leaves the page zoomed and shifted under the status bar. A
+// page of the app is laid out for the phone's width: it is never zoomed.
+const viewport = '<meta name="viewport" content="width=device-width, initial-scale=1" />';
+const unzoomed: Plugin = {
+	name: "pine-mobile-ios-viewport",
+	transformIndexHtml: {
+		order: "post",
+		handler: (html) => {
+			if (!html.includes(viewport)) throw new Error(`mobile/index.html has no ${viewport}: the iOS page's viewport is made from it.`);
+			return html.replace(viewport, viewport.replace("initial-scale=1", "initial-scale=1, maximum-scale=1"));
+		},
+	},
+};
+
 export default defineConfig(({ mode }) => {
 	const platform: Platform = mode === "ios" ? "ios" : "android";
 	const config = mergeConfig(desktop, {
@@ -48,5 +63,5 @@ export default defineConfig(({ mode }) => {
 		build: { outDir: path.join(here, "dist"), ...(platform === "ios" ? { target: "safari17" } : {}) },
 	});
 	// Ahead of desktop's plugins, so that Tailwind reads the style sheet with its added source.
-	return { ...config, plugins: [sources, ...(desktop.plugins ?? []), csp(platform)] };
+	return { ...config, plugins: [sources, ...(desktop.plugins ?? []), csp(platform), ...(platform === "ios" ? [unzoomed] : [])] };
 });

@@ -41,3 +41,9 @@ test("the iOS app: iOS 17 and later, and a sentence for the local network prompt
 	assert.match(plist, /<key>NSLocalNetworkUsageDescription<\/key>\s*<string>[^<]{20,}<\/string>/);
 	assert.match(project, /PRODUCT_BUNDLE_IDENTIFIER = dev\.pmndre\.pine;/);
 });
+
+test("on iOS the page lies below the status bar, does not scroll under it, and shows no link previews", () => {
+	assert.equal(config.ios?.contentInset, "always");
+	assert.equal(config.ios?.scrollEnabled, false);
+	assert.equal(config.ios?.allowsLinkPreview, false);
+});
