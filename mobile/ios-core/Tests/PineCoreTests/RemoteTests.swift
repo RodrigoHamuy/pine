@@ -153,6 +153,21 @@ struct RemoteTests {
 		}
 	}
 
+	@Test("why a machine cannot be reached is said in plain words, never as the error's type")
+	func unreachableWords() async throws {
+		let remote = Remote(key: DeviceKey(SharedStore()), known: KnownHosts(SharedStore()), connect: .seconds(5))
+		let port = try freePort()
+		let refused = try await #require(throws: RemoteError.self) { try await remote.connect("me@127.0.0.1:\(port)") }
+		#expect(refused.message.hasPrefix("Could not connect to me@127.0.0.1:\(port) over SSH: nothing answers at port \(port) there."))
+		let unknown = try await #require(throws: RemoteError.self) { try await remote.connect("me@no-such-machine.invalid") }
+		#expect(unknown.message.hasPrefix("Could not connect to me@no-such-machine.invalid over SSH: no machine is known by the name no-such-machine.invalid."))
+		for e in [refused, unknown] {
+			#expect(!e.message.contains("NIO"))
+			#expect(!e.message.contains("Error("))
+			#expect(e.message.contains("Wi-Fi"))
+		}
+	}
+
 	@Test("a machine that takes the connection and never speaks SSH is given up on")
 	func silentMachine() async throws {
 		let server = try StandInDaemon()

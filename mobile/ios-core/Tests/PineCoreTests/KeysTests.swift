@@ -84,6 +84,14 @@ struct KeysTests {
 		#expect(store.reads > 0)
 	}
 
+	@Test("a Keychain that cannot be read is met with what helps, and no promise of a new key from a reinstall")
+	func keychainWords() {
+		// iOS keeps an app's Keychain items across an uninstall, so a reinstall would meet the same item.
+		let e = SecretStoreError(name: "ssh-key-ed25519", status: -25308)
+		#expect(e.message == "The phone's Keychain cannot give what the app kept (ssh-key-ed25519, status -25308). Unlock the phone and try again; if it stays so, restart the phone.")
+		#expect(!e.message.contains("reinstall"))
+	}
+
 	@Test("a kept key that cannot be read is never replaced")
 	func keptKey() throws {
 		let store = MemoryStore()

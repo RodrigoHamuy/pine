@@ -116,7 +116,7 @@ public final class Remote: Sendable {
 				}
 			}
 		let unreachable = { (error: Error) in
-			RemoteError("ssh", "Could not connect to \(given) over SSH (\(error)). Check that this phone reaches that machine (the same Wi-Fi, or a VPN such as Tailscale on both), that SSH runs there, and that the port is right.")
+			RemoteError("ssh", "Could not connect to \(given) over SSH: \(unreachableWhy(error, host: named.host, port: named.port)). Check that this phone reaches that machine (the same Wi-Fi, or a VPN such as Tailscale on both), that SSH runs there, and that the port is right.")
 		}
 		let session: Channel
 		do {
@@ -277,5 +277,36 @@ private final class Quiet: ChannelInboundHandler {
 	typealias InboundIn = Any
 	func errorCaught(context: ChannelHandlerContext, error: Error) {
 		context.close(promise: nil)
+	}
+}
+
+/**
+ * Why a connection could not be made, in words the owner reads: never the error's own text, which
+ * is a dump of NIO's types.
+ */
+func unreachableWhy(_ error: Error, host: String, port: Int) -> String {
+	knownCause(error, host: host, port: port) ?? "the connection failed"
+}
+
+private func knownCause(_ error: Error, host: String, port: Int) -> String? {
+	switch error {
+	case let e as NIOConnectionError:
+		// Each address of the name was tried; the first failure with a known cause speaks for them.
+		if let why = e.connectionErrors.lazy.compactMap({ knownCause($0.error, host: host, port: port) }).first { return why }
+		if e.connectionErrors.isEmpty && (e.dnsAError != nil || e.dnsAAAAError != nil) { return "no machine is known by the name \(host)" }
+		return nil
+	case let e as IOError:
+		switch e.errnoCode {
+		case ECONNREFUSED: return "nothing answers at port \(port) there"
+		case ETIMEDOUT: return "it did not answer in time"
+		case ENETUNREACH, EHOSTUNREACH: return "this phone has no way to that network"
+		default: return nil
+		}
+	case is SocketAddressError:
+		return "no machine is known by the name \(host)"
+	case ChannelError.connectTimeout:
+		return "it did not answer in time"
+	default:
+		return nil
 	}
 }

@@ -30,7 +30,7 @@ public struct SecretStoreError: Error, Equatable, CustomStringConvertible {
 	}
 
 	public var message: String {
-		"The phone's Keychain cannot give what the app kept (\(name), status \(status)). Unlock the phone and try again; if it stays so, restart the phone. Only if that fails too, reinstall the app, then add this phone's new key on your machines and confirm their host keys again."
+		"The phone's Keychain cannot give what the app kept (\(name), status \(status)). Unlock the phone and try again; if it stays so, restart the phone."
 	}
 
 	public var description: String { message }
