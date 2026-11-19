@@ -77,9 +77,11 @@ test("media: a listed path comes to the page as its bytes and kind, fetched with
 test("media: a path outside the rules is refused before anything is asked of the daemon", async () => {
 	const c = await ready();
 	const before = daemon.seen.length;
-	for (const bad of ["/agents", "/events/stream?topic=%23", "/media/tool/a/b", "/tasks/x/images/1", "/agents/main/message", "//evil.example/x", "https://evil.example/media/tool/t1", "/media/tool/t1\r\nX-Evil: 1", "/media/tool/t1#x"])
-		await assert.rejects(c.page.media(bad), /not|cannot/, bad);
-	assert.equal(daemon.seen.length, before);
+	const bad = ["/agents", "/events/stream?topic=%23", "/media/tool/a/b", "/tasks/x/images/1", "/agents/main/message", "//evil.example/x", "https://evil.example/media/tool/t1", "/media/tool/t1\r\nX-Evil: 1", "/media/tool/t1#x"];
+	for (const target of bad) await assert.rejects(c.page.media(target), /not|cannot/, target);
+	// The stand-in daemon is shared with the other tests of this file, whose event streams may ask it meanwhile: only these paths must not have reached it.
+	const asked = daemon.seen.slice(before).map((x) => x.url);
+	assert.deepEqual(asked.filter((url) => bad.includes(url)), []);
 	c.stop();
 });
 

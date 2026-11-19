@@ -8,6 +8,10 @@ import { serve, type Served } from "../src/serve.ts";
 import { windows, type FakeWindow } from "./support/windows.ts";
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+/** Waits until `done()` holds, or a second has gone by (the assertions after it then say what is missing). */
+async function until(done: () => boolean): Promise<void> {
+	for (let waited = 0; !done() && waited < 1000; waited += 10) await tick();
+}
 
 /** A bridge that records each call and answers with its name. */
 function recorder() {
@@ -96,7 +100,7 @@ test("arguments that are not what a method takes are refused before the bridge s
 	];
 	bad.forEach(([method, args], id) => parentOfFrame.postMessage({ pine: "call", id, method, args }, "*"));
 	parentOfFrame.postMessage({ pine: "call", id: 99, method: "call" }, "*");
-	await tick();
+	await until(() => said.length >= bad.length + 1);
 	assert.deepEqual(calls, []);
 	assert.equal(said.length, bad.length + 1);
 	for (const reply of said) assert.match(reply.error, /arguments/);
