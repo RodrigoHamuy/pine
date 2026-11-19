@@ -10,7 +10,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import { build } from "vite";
 import { startMock } from "../../baseline/tests/mock.mjs";
-import { daemonGone, freePort, ours } from "./support/daemon.ts";
+import { freePort, ours, stopKept } from "./support/daemon.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 
@@ -213,24 +213,20 @@ const agentsOf = async (p: Preview) => {
 /** The daemon of that home answers at that address (another run's daemon there does not count). */
 const answers = (base: string, own: string) => ours(new URL(base).port, own);
 
-/** End the daemon `pine service --keep` left running on that home, found by its home as the Pine app's tests do. */
-async function stopKept(own: string, base: string): Promise<void> {
-	const { execFileSync } = await import("node:child_process");
-	try {
-		execFileSync("/usr/bin/pkill", ["-TERM", "-f", `service --home ${own}`]);
-	} catch {
-		// nothing left to stop
-	}
-	await daemonGone(new URL(base).port, own);
-}
-
 test("--home starts a daemon on that home when none runs, and leaves it and the home after the preview", async (t) => {
 	const mock = await startMock();
 	t.after(() => mock.close?.());
 	const own = ownHome(mock.baseUrl, 0);
-	t.after(() => fs.rmSync(own, { recursive: true, force: true }));
-	const preview = await startPreview(["--home", own]);
-	t.after(() => stopKept(own, preview.daemon));
+	let preview: Preview | undefined;
+	// One hook, in this order: the kept daemon is told apart by the home's token, so it is stopped before the home goes.
+	t.after(async () => {
+		try {
+			if (preview) await stopKept(new URL(preview.daemon).port, own);
+		} finally {
+			fs.rmSync(own, { recursive: true, force: true });
+		}
+	});
+	preview = await startPreview(["--home", own]);
 	assert.equal(preview.home, own);
 	assert.deepEqual(await agentsOf(preview), ["keeper"]);
 	assert.equal((await stateOf(preview)).started, true);
@@ -245,10 +241,17 @@ test("--home uses the daemon that runs on that home, and leaves it running", asy
 	const mock = await startMock();
 	t.after(() => mock.close?.());
 	const own = ownHome(mock.baseUrl, await freePort());
-	t.after(() => fs.rmSync(own, { recursive: true, force: true }));
 	// The developer's own pine of that home, running before the preview and after it.
 	const running = spawn(process.execPath, [path.join(root, "..", "bin", "pine.js"), "service", "--home", own], { stdio: ["pipe", "pipe", "ignore"] });
-	t.after(() => void (running.exitCode === null && running.kill("SIGKILL")));
+	// One hook, in this order: the daemon ends before its home goes.
+	t.after(async () => {
+		if (running.exitCode === null && running.signalCode === null) {
+			const ended = new Promise((r) => running.once("close", r));
+			running.kill("SIGKILL");
+			await ended;
+		}
+		fs.rmSync(own, { recursive: true, force: true });
+	});
 	const base = await new Promise<string>((resolve, reject) => {
 		let out = "";
 		running.stdout!.on("data", (d: Buffer) => {

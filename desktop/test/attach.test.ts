@@ -9,7 +9,7 @@ import { after, before, test } from "node:test";
 import { startMock } from "../../baseline/tests/mock.mjs";
 import { browserPlaces } from "../../src/browser-build.ts";
 import { launchApp } from "./support/app.ts";
-import { daemonGone, freePort, ours, waitForDaemon } from "./support/daemon.ts";
+import { daemonGone, freePort, ours, stopKept, waitForDaemon } from "./support/daemon.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 let app: any;
@@ -48,6 +48,8 @@ before(async () => {
 after(async () => {
 	await app?.close().catch(() => {});
 	daemon?.kill("SIGTERM");
+	// Gone before its home is: without the token it could no longer be told apart.
+	if (home && port) await daemonGone(port, home);
 	await mock?.close?.().catch(() => {});
 	if (home) fs.rmSync(home, { recursive: true, force: true });
 });
@@ -99,14 +101,11 @@ test("with \"keep pine running\" a daemon the app started goes on after it", asy
 		assert.match((await again.textContent("[data-slot=service-status]")) ?? "", /attached/);
 		await third.close();
 	} finally {
-		// It is this test's to stop: found by the home it was started for.
-		const { execFileSync } = await import("node:child_process");
+		// It is this test's to stop: found by the home it was started for, while its token is there.
 		try {
-			execFileSync("/usr/bin/pkill", ["-TERM", "-f", `service --home ${kept}`]);
-		} catch {
-			// nothing left to stop
+			await stopKept(keptPort, kept, 9000);
+		} finally {
+			fs.rmSync(kept, { recursive: true, force: true });
 		}
-		await daemonGone(keptPort, kept, 9000);
-		fs.rmSync(kept, { recursive: true, force: true });
 	}
 });

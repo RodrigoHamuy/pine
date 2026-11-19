@@ -8,8 +8,10 @@
 //   npm run dev:preview:home                (the same, at the next port: beside the throwaway one)
 //
 // The ports are this checkout's (scripts/launch-json.mjs), so that the previews of two checkouts
-// on one Mac never meet; .claude/launch.json is written with them when it is missing. The preview
-// ends, with its throwaway pine, when whatever started it is gone (scripts/leash.mjs).
+// on one Mac rarely meet: when two get the same port, the second refuses to start (the port is
+// strict) and says so, and $PORT picks another. .claude/launch.json is written with them when it
+// is missing. The preview ends, with its throwaway pine, when whatever started it is gone
+// (scripts/leash.mjs).
 //
 // Vite's server stands where the app's main process stands: it holds the daemon's token and makes
 // every call for the page (electron/daemon.ts, the same module as the app), and the page holds no
@@ -175,6 +177,7 @@ const home = chosen ?? throwawayHome(mock!.baseUrl);
 let service: Service | undefined;
 let server: Awaited<ReturnType<typeof createServer>> | undefined;
 let stopping = false;
+let port: number | undefined;
 
 async function stop(code = 0): Promise<never> {
 	if (!stopping) {
@@ -212,9 +215,10 @@ try {
 	// app's "keep pine running", and nothing in the preview's end can stop it.
 	service = await connect({ argv: [process.execPath, path.join(root, "..", "bin", "pine.js")], env: { ...process.env }, from: "this checkout" }, { home, keep: Boolean(chosen) });
 	const nonce = randomBytes(16).toString("base64");
+	port = Number(process.env.PORT ?? (chosen ? ports().home : ports().preview));
 	server = await createServer({
 		root,
-		server: { host: "localhost", port: Number(process.env.PORT ?? (chosen ? ports().home : ports().preview)), strictPort: true },
+		server: { host: "localhost", port, strictPort: true },
 		// The page's stand-in for the bridge exists only where this is true (vite.config.ts sets it false).
 		define: { __PINE_PREVIEW__: "true" },
 		html: { cspNonce: nonce },
@@ -225,6 +229,10 @@ try {
 	if (!chosen) console.log(`pine     ${service.base} on a throwaway home in ${home} (removed when the preview stops)`);
 	else console.log(`pine     ${service.base} on ${home} (${service.started ? "started for the preview, left running after it" : "the daemon that runs there, left running"})`);
 } catch (e) {
-	console.error(`The preview could not start: ${e instanceof Error ? e.message : e}`);
+	const message = e instanceof Error ? e.message : String(e);
+	// The port is strict, so that the pane finds the preview where launch.json says: a clash is said, never moved past.
+	if ((e as NodeJS.ErrnoException)?.code === "EADDRINUSE" || /already in use/i.test(message)) {
+		console.error(`The preview could not start: port ${port} is in use, by another checkout's preview or another program. Start it on a free port: PORT=<free port> npm run ${process.env.npm_lifecycle_event ?? "dev:preview"}`);
+	} else console.error(`The preview could not start: ${message}`);
 	await stop(1);
 }

@@ -18,9 +18,10 @@ export async function buildMain(app = root) {
 }
 
 /** The page, into `<app>/dist`. */
-function buildPage(app = root, quiet = false) {
-	const out = app === root ? [] : ["--outDir", path.join(app, "dist"), "--emptyOutDir"];
-	execFileSync(process.execPath, [path.join(root, "node_modules", "vite", "bin", "vite.js"), "build", ...out, ...(quiet ? ["--logLevel", "warn"] : [])], { cwd: root, stdio: "inherit" });
+function buildPage(app = root) {
+	// Built elsewhere (for the tests), quietly.
+	const elsewhere = app === root ? [] : ["--outDir", path.join(app, "dist"), "--emptyOutDir", "--logLevel", "warn"];
+	execFileSync(process.execPath, [path.join(root, "node_modules", "vite", "bin", "vite.js"), "build", ...elsewhere], { cwd: root, stdio: "inherit" });
 }
 
 /**
@@ -34,7 +35,7 @@ export async function buildApp(into) {
 	const app = path.join(into, "desktop");
 	fs.mkdirSync(app, { recursive: true });
 	await buildMain(app);
-	buildPage(app, true);
+	buildPage(app);
 	fs.copyFileSync(path.join(root, "package.json"), path.join(app, "package.json"));
 	for (const name of ["node_modules", "assets"]) fs.symlinkSync(path.join(root, name), path.join(app, name));
 	for (const name of ["bin", "src"]) fs.symlinkSync(path.join(root, "..", name), path.join(into, name));

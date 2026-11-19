@@ -7,15 +7,21 @@ import { execFileSync } from "node:child_process";
 
 /** The processes above this one, nearest first, up to (not including) launchd. */
 function ancestors() {
+	// One look at the whole process table, not one `ps` per level.
+	const parentOf = new Map();
+	try {
+		for (const line of execFileSync("/bin/ps", ["-A", "-o", "pid=,ppid="], { encoding: "utf8" }).split("\n")) {
+			const [pid, ppid] = line.trim().split(/\s+/).map(Number);
+			if (pid) parentOf.set(pid, ppid);
+		}
+	} catch {
+		// no ps: only the parent is watched
+	}
 	const found = [];
 	let pid = process.ppid;
 	while (pid > 1 && found.length < 32) {
 		found.push(pid);
-		try {
-			pid = Number(execFileSync("/bin/ps", ["-o", "ppid=", "-p", String(pid)], { encoding: "utf8" }).trim());
-		} catch {
-			break;
-		}
+		pid = parentOf.get(pid) ?? 0;
 	}
 	return found;
 }
@@ -40,6 +46,11 @@ export function whenParentGone(gone) {
 		gone();
 	};
 	const parent = process.ppid;
+	// Already handed to launchd: whoever started this is gone, and nothing above is left to watch.
+	if (parent <= 1) {
+		setImmediate(once);
+		return;
+	}
 	const above = process.platform === "win32" ? [parent] : ancestors();
 	const timer = setInterval(() => {
 		if (process.ppid !== parent || above.some((pid) => !alive(pid))) once();

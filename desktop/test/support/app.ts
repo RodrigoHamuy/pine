@@ -3,6 +3,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import type { ElectronApplication } from "playwright-core";
 import { _electron as electron } from "playwright-core";
 import { buildApp } from "../../scripts/build.mjs";
 
@@ -24,6 +25,9 @@ export function builtApp(): Promise<string> {
 }
 
 /** The app of this run, started with this environment. */
-export async function launchApp(env: Record<string, string | undefined>): Promise<any> {
-	return electron.launch({ args: [await builtApp()], env: env as Record<string, string> });
+export async function launchApp(env: Record<string, string | undefined>): Promise<ElectronApplication> {
+	// Electron takes only set variables; a spread of process.env may hold unset ones.
+	const set: Record<string, string> = {};
+	for (const [name, value] of Object.entries(env)) if (value !== undefined) set[name] = value;
+	return electron.launch({ args: [await builtApp()], env: set });
 }

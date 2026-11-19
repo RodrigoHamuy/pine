@@ -111,7 +111,7 @@ it was built on. See "Packing and signing" for what it carries and how it is sig
 | Command (in `desktop/`) | What it does |
 |---|---|
 | `npm start` | Builds the app and opens it |
-| `npm run dev` | Opens it with the page served by Vite, reloading on every change. It ends, with the app and the daemon the app started, when whatever started it is gone |
+| `npm run dev` | Opens it with the page served by Vite, reloading on every change. It ends, with the app and the daemon the app started, when whatever started it is gone. Its page is served at this checkout's own port (`scripts/launch-json.mjs`); `$PORT` overrides it, and the next free one is taken when it is in use |
 | `npm run dev:preview` | The app's page in an ordinary browser, reloading on every change, on a throwaway pine. `-- --home <dir>` puts it on that pine home instead. See below |
 | `npm run dev:preview:home` | The same on your own pine home, `~/.pine`, at the port after the throwaway one's, so that it runs beside it. Its agents are your real ones. See below |
 | `npm run check` | Type check |
@@ -131,8 +131,9 @@ that is not its own, and falls back to its own Node where the Mac has none.
 `npm run dev:preview` serves the app's page at `http://localhost:<port>`, for an editor's preview
 pane or any browser, without the app's window. It is a tool for working on the app, not a way to
 use pine. The port is the checkout's own, made from its path (`scripts/launch-json.mjs`: between
-5200 and 5903), so that the previews of two checkouts on one Mac (git worktrees) never meet;
-`$PORT` wins. The preview says where it answers. It ends, with its throwaway pine, when whatever
+5200 and 5902), so that two checkouts on one Mac (git worktrees) rarely share one: there are 176
+blocks of ports, picked by a hash of the path. `$PORT` wins. When the port is taken, the preview
+refuses to start, and `PORT=<another port>` starts it. The preview says where it answers. It ends, with its throwaway pine, when whatever
 started it is gone, also when that was not a signal (an editor or an agent session that ended).
 
 | How it is started | What it runs on |
@@ -144,7 +145,10 @@ started it is gone, also when that was not a signal (an editor or an agent sessi
 `.claude/launch.json` has one entry for each, so that the preview pane of Claude Code starts the
 one you name, and both can run side by side. It is not kept in git: `npm install` in `desktop/`
 writes it with the checkout's ports (`node scripts/launch-json.mjs` does it by hand, and the
-preview writes it when it is missing), keeping any entry of another name.
+preview writes it when it is missing), keeping any entry of another name. The preview pane needs
+the file before it can start the preview: after pulling this change (git removes the file it
+tracked before), or when the pane lists no `desktop-preview`, run `node desktop/scripts/launch-json.mjs`
+from the root, or `npm install` in `desktop/`.
 
 | Entry | Command | Port |
 |---|---|---|

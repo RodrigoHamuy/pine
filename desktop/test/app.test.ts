@@ -542,6 +542,13 @@ const inDialog = () =>
 		{ timeout: 20_000 },
 	);
 
+/** Answers the dialog with that title with Enter, once it has the keyboard. */
+const confirm = async (title: string) => {
+	await sees(title);
+	await inDialog();
+	await page.keyboard.press("Enter");
+};
+
 /** Tab stays inside the dialog: past its last stop, the dialog's focus guard hands focus back to its first (in the next frame). */
 const stillInside = () => page.waitForFunction(() => Boolean(document.activeElement?.closest("[role=dialog]")) && !document.activeElement?.hasAttribute("data-base-ui-focus-guard"), undefined, { timeout: 2000 });
 
@@ -559,7 +566,7 @@ test("a model is chosen from its picker with the keyboard alone, and focus goes 
 	// It is announced by its title.
 	assert.match(await announced("[data-slot=dialog-content]"), /^Model for main/);
 	// Its models are options in a list, the one in use marked active, and Tab stays inside.
-	let at = await activeOption();
+	const at = await activeOption();
 	assert.deepEqual([at.inDialog, at.role, at.option, at.selected, at.list], [true, "combobox", "option", "true", true], JSON.stringify(at));
 	assert.match(at.text, /mock\/m/);
 	await page.keyboard.press("Tab");
@@ -889,9 +896,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	// As the system does it when a folder is dropped on the app's icon.
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
 	// With several agents the app asks whose folder it is; the one in front is offered first.
-	await sees("[data-slot=dialog-title] >> text=Which agent works in");
-	await inDialog();
-	await page.keyboard.press("Enter");
+	await confirm("[data-slot=dialog-title] >> text=Which agent works in");
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
 	await page.click(CODE_TOGGLE);
 	// The panel begins with the agent: who it is and what it runs on.
@@ -1807,14 +1812,10 @@ test("a message is branched from: a new conversation with what was said up to it
 
 test("a conversation moves into a worktree of its folder: the chip names the branch, and its work is merged from the panel", async () => {
 	await app.evaluate(({ BrowserWindow }: any, dir: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", `folder:${dir}`), folder);
-	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
-	await inDialog();
-	await page.keyboard.press("Enter");
+	await confirm(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
 	await menu("worktree");
-	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Work in a worktree?");
-	await inDialog();
-	await page.keyboard.press("Enter");
+	await confirm(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Work in a worktree?");
 	await sees("[data-slot=conversation-head] [data-worktree] >> text=pine/");
 	const branch = (await page.textContent("[data-slot=conversation-head] [data-worktree]"))!.trim();
 	const tree = path.join(folder, ".pine", "worktrees", branch.slice(5));
@@ -1836,18 +1837,14 @@ test("a conversation moves into a worktree of its folder: the chip names the bra
 	await sees("[data-slot=code-panel] >> text=1 ahead of");
 	await shot("16-worktree");
 	await page.locator("[data-slot=code-panel]").getByRole("button", { name: "Merge…" }).click();
-	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=1 commit ahead of");
-	await inDialog();
-	await page.keyboard.press("Enter");
+	await confirm(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=1 commit ahead of");
 	await sees("[data-slot=toast] >> text=merged into");
 	assert.equal(fs.readFileSync(path.join(folder, "WORKTREE.md"), "utf8"), "made apart\n");
 	assert.equal(fs.readFileSync(path.join(folder, "src", "index.ts"), "utf8"), "export const answer = 43;\n", "what was not committed in the folder stayed");
 
 	// Discarded once merged: the folder's chip is back.
 	await menu("worktree");
-	await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=ahead of");
-	await inDialog();
-	await page.keyboard.press("Enter");
+	await confirm(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=ahead of");
 	await sees("[data-slot=conversation-head] [data-folder] >> text=pine-desktop-folder");
 	assert.ok(!fs.existsSync(tree));
 
@@ -2182,9 +2179,7 @@ test("what was typed in a file and not saved stays when the panel becomes a shee
 	try {
 		// The folder's conversation from before is in a worktree by now: a new one in the folder itself.
 		await menu(`folder:${folder}`);
-		await sees(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
-		await inDialog();
-		await page.keyboard.press("Enter");
+		await confirm(":is([data-slot=dialog-title], [data-slot=alert-dialog-title]) >> text=Which agent works in");
 		await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
 		await menu("code-files");
 		await sees("[data-slot=code-panel]");
