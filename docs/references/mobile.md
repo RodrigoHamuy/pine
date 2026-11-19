@@ -132,7 +132,7 @@ default Android Studio's on a Mac).
 |---|---|
 | `npm run apk` | A debug APK, in `android/app/build/outputs/apk/debug/` |
 | `npm run apk:release` | A release APK. Signed when `ANDROID_KEYSTORE_FILE`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` name a key; unsigned otherwise. `PINE_VERSION` and `PINE_VERSION_CODE` set its version |
-| `npm run smoke` | Builds, installs on an emulator without a window and opens the app against a test machine of its own. It is the test of the WebView's hardening (no permission, no window, no file access, no navigation away), of Share, of the back button and of the return from the background. Run it before a release that changes `mobile/` or upgrades Capacitor |
+| `npm run smoke` | Builds, installs on an emulator without a window and opens the app against a test machine of its own. It is the test of the WebView's hardening (no permission, no window, no file access, no navigation away), of Share, of the back button and of the return from the background. An emulator that starts cold on a busy computer says that its own apps (System UI, the keyboard) are not responding: the run waits for the system to settle, answers such a dialog with Wait, and fails only when the app itself is not responding. Run it before a release that changes `mobile/` or upgrades Capacitor |
 
 Attaching a photo through the system's file chooser is not driven by the smoke run: check it by
 hand on a phone or the emulator before such a release (attach a picture to a message, and see

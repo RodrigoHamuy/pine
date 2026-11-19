@@ -118,16 +118,17 @@ try {
 		await sleep(1000);
 	}
 
-	step("installing and opening the app, on fresh data");
-	adb("install", "-r", apk);
-	adb("shell", "pm", "clear", APP);
-	adb("shell", "am", "start", "-W", "-n", `${APP}/.MainActivity`);
-
 	// ---- what is on screen ------------------------------------------------------------------------
 	/** The nodes on screen: text, description, class and the middle of their bounds. */
+	// (A system starved of time answers no dump now and then: that is an empty screen, asked again.)
 	const screen = () => {
-		adb("shell", "uiautomator", "dump", "/sdcard/pine-ui.xml");
-		const xml = adb("exec-out", "cat", "/sdcard/pine-ui.xml");
+		let xml;
+		try {
+			execFileSync(ADB, ["shell", "uiautomator", "dump", "/sdcard/pine-ui.xml"], { env, stdio: ["ignore", "pipe", "ignore"] });
+			xml = adb("exec-out", "cat", "/sdcard/pine-ui.xml");
+		} catch {
+			return [];
+		}
 		const decode = (s) => s.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&#10;/g, "\n").replace(/&amp;/g, "&");
 		return [...xml.matchAll(/<node ([^>]*?)\/?>/g)].map(([, attrs]) => {
 			const a = Object.fromEntries([...attrs.matchAll(/([\w-]+)="([^"]*)"/g)].map(([, k, v]) => [k, decode(v)]));
@@ -136,10 +137,29 @@ try {
 		});
 	};
 	const label = (n) => `${n.text} ${n.desc}`.trim();
+	/**
+	 * An emulator that starts cold on a busy computer puts up "<app> isn't responding" for its own
+	 * apps (System UI, the keyboard, Play services). Such a dialog of another app is answered with
+	 * Wait and the run goes on; one of this app's fails the run.
+	 */
+	const dismissed = new Set();
+	const answerAnr = (nodes) => {
+		const dialog = nodes.find((n) => / isn't responding$/.test(n.text));
+		if (!dialog) return false;
+		const who = dialog.text.replace(/ isn't responding$/, "");
+		if (who === "Pine") throw new Error(`the app is not responding (ANR): ${nodes.map(label).filter(Boolean).join(" | ")}`);
+		const wait = nodes.find((n) => n.visible && n.text === "Wait");
+		if (!wait) return false;
+		if (!dismissed.has(who)) console.log(`  (the system says "${dialog.text}": Wait)`);
+		dismissed.add(who);
+		tap(wait);
+		return true;
+	};
 	const waitFor = async (what, pick, seconds = 90) => {
 		let last = [];
 		for (const until = Date.now() + seconds * 1000; Date.now() < until; await sleep(1000)) {
 			last = screen();
+			if (answerAnr(last)) continue;
 			const found = pick(last);
 			if (found) return found;
 		}
@@ -154,6 +174,22 @@ try {
 	const connected = (ns) => !ns.some((n) => /Choose a machine|is not reached|Connecting to/.test(label(n))) && ns.some((n) => /main/.test(label(n))) && ns;
 	const sidebarButton = node(/^(Show the sidebar|Toggle Sidebar)$/);
 	const agentsShown = (ns) => ns.some((n) => n.visible && /^main: /.test(label(n))) && ns.some((n) => n.visible && /^scout: /.test(label(n))) && ns;
+
+	// sys.boot_completed comes well before a cold system is done starting its own apps: the launcher
+	// in front and three answered dumps in a row without a dialog say it is.
+	step("waiting for the system to settle");
+	adb("shell", "input", "keyevent", "KEYCODE_HOME");
+	for (let calm = 0, until = Date.now() + 240_000; calm < 3; await sleep(2000)) {
+		if (Date.now() > until) throw new Error(`the emulator did not settle in four minutes. On screen: ${screen().map(label).filter(Boolean).join(" | ")}`);
+		const ns = screen();
+		calm = ns.length && !answerAnr(ns) && /launcher/i.test(frontActivity() ?? "") ? calm + 1 : 0;
+	}
+
+	step("installing and opening the app, on fresh data");
+	adb("install", "-r", apk);
+	adb("shell", "pm", "clear", APP);
+	adb("logcat", "-c");
+	adb("shell", "am", "start", "-W", "-n", `${APP}/.MainActivity`);
 
 	step("the first start: the page asks for a machine and shows the phone's key");
 	await waitFor("the Gate's Choose a machine", node(/^Choose a machine$/));
@@ -291,6 +327,9 @@ try {
 	await waitFor("the app in front and connected after HOME", (ns) => front() === APP && connected(ns), 60);
 	tap(await waitFor("the side bar button", sidebarButton));
 	await waitFor("the agents after resume", agentsShown);
+	// A dialog of this app's that came and went between two looks is still in the system's log.
+	const anr = adb("logcat", "-d", "-b", "main,system").split("\n").find((l) => l.includes(`ANR in ${APP}`));
+	if (anr) throw new Error(`the app was not responding (ANR) during the run: ${anr.trim()}`);
 	step("done: the app reached the pine of the machine and shows its agents");
 } catch (e) {
 	console.error(`smoke run failed: ${e instanceof Error ? e.message : e}`);
