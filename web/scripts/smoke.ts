@@ -12,13 +12,14 @@
 // sent and the answer comes back; a picture in an answer shows; a link in an answer opens in a new
 // tab with no hold on the client; after the relay restarts the bridge connects again by itself.
 import assert from "node:assert/strict";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
 import { createServer as createHttpServer } from "node:http";
 import { createServer, type AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { startMock } from "../../baseline/tests/mock.mjs";
+import { pageCsp } from "../../desktop/electron/daemon.ts";
 import { headless } from "../test/support/browser.ts";
 import { startMachine } from "../test/support/machine.ts";
 
@@ -57,7 +58,41 @@ const write = (file: string, content: string, mode?: number) => {
 	if (mode) chmodSync(file, mode);
 };
 
+/** Every file under a folder, as paths relative to it. */
+const filesIn = (dir: string) => readdirSync(dir, { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => path.relative(dir, path.join(e.parentPath, e.name)));
+/** The content of the one meta Content-Security-Policy of a document, which has to have exactly one. */
+const metaCsp = (html: string) => {
+	const found = [...html.matchAll(/<meta\s+http-equiv="Content-Security-Policy"\s+content="([^"]*)"/gi)].map((m) => m[1]);
+	assert.equal(found.length, 1, `one meta Content-Security-Policy, found ${found.length}`);
+	return found[0];
+};
+
 try {
+	// What the build wrote, before anything runs: a static deployment sends no header of pine's, so
+	// the policies are the metas in the documents, and the preview's stand-in has no place in it.
+	await check("the built page carries the desktop page's policy, with pictures only from blob: and data:", async () => {
+		assert.equal(metaCsp(readFileSync(path.join(dist, "page", "index.html"), "utf8")), pageCsp({ media: [] }));
+	});
+
+	await check("the bridge's document carries its own policy, which allows nothing by default", async () => {
+		const policy = metaCsp(readFileSync(path.join(dist, "index.html"), "utf8")).split(";").map((d) => d.trim());
+		assert.equal(policy[0], "default-src 'none'");
+		for (const directive of ["object-src 'none'", "base-uri 'none'", "form-action 'none'"]) assert.ok(policy.includes(directive), directive);
+	});
+
+	await check("nothing of the desktop preview's stand-in for the bridge is in the build", async () => {
+		// Two things only desktop/src/preview-bridge.ts has: the preview server's routes and one of its refusals.
+		const markers = [/\/__pine\//, /The preview's pine stops and starts with the preview/];
+		const source = readFileSync(path.join(repo, "desktop", "src", "preview-bridge.ts"), "utf8");
+		for (const marker of markers) assert.match(source, marker, "the marker is still in the stand-in's source: pick another");
+		const files = filesIn(dist).filter((f) => /\.(js|mjs|html)$/.test(f));
+		assert.ok(files.some((f) => f.startsWith(`page${path.sep}`) && f.endsWith(".js")), "the page's scripts were built");
+		for (const f of files) {
+			const text = readFileSync(path.join(dist, f), "utf8");
+			for (const marker of markers) assert.doesNotMatch(text, marker, f);
+		}
+	});
+
 	// A pine home of its own with the scripted model server, and `pine` on the PATH of the sessions sshd starts.
 	const mock = await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g });
 	cleanups.push(() => mock.close?.());
