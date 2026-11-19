@@ -761,7 +761,7 @@ desktop/
   getting more of the system. A handler checks that the call comes from the app's own page.
   `src/preview-bridge.ts` implements it too: it returns the `Bridge` type, so a missing method
   fails `npm run check`. If it needs the daemon, `scripts/preview.ts` routes it under `/__pine/`.
-- The page is also the Android app's ([mobile.md](mobile.md)): `mobile/src/mobile-bridge.ts`
+- The page is also the Android and iOS app's ([mobile.md](mobile.md)): `mobile/src/mobile-bridge.ts`
   returns the same `Bridge` type. Three parts of the bridge are optional and only the mobile one
   gives them: `local: false` in `state()` (no machine of its own: the page hides This Mac, Use
   this Mac, Set up pine, the local row of Settings > Environments, the local-only parts of
