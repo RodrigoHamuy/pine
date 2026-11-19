@@ -1,0 +1,40 @@
+plugins {
+	kotlin("jvm") version "2.4.21"
+}
+
+group = "pine.mobile"
+
+// Android runs Java 17 byte code; any newer JDK at hand (Android Studio's is 25) compiles it.
+java {
+	sourceCompatibility = JavaVersion.VERSION_17
+	targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+	compilerOptions {
+		jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+	}
+}
+
+dependencies {
+	implementation("com.hierynomus:sshj:0.41.2")
+	// sshj's own Ed25519 comes from it; the phone's key is made with it too.
+	implementation("org.bouncycastle:bcprov-jdk18on:1.84")
+	// Android has org.json built in; on the JVM it comes from Maven, with the same API.
+	compileOnly("org.json:json:20250517")
+	testImplementation("org.json:json:20250517")
+
+	testImplementation(kotlin("test"))
+	testImplementation("org.junit.jupiter:junit-jupiter:6.1.3")
+	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+	testImplementation("org.apache.sshd:sshd-core:2.20.0")
+	testImplementation("org.slf4j:slf4j-nop:2.0.17")
+}
+
+tasks.test {
+	useJUnitPlatform()
+	testLogging {
+		events("failed")
+		exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
+	}
+}
