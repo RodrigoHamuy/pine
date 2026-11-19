@@ -48,6 +48,8 @@ const SYNONYMS: string[][] = [
 	["worktree", "worktrees", "checkout", "isolated", "collide", "clash", "interfere", "overwrite", "simultaneously"],
 	["interface", "ui", "gui", "frontend", "dashboard", "widget", "panel"],
 	["click", "press", "tap", "button", "pressed", "clicked"],
+	// Not "theme": its stem is "them", a word of every other question.
+	["colour", "color", "palette", "accent", "tint", "hue"],
 	["preview", "beta", "prerelease", "nightly", "canary", "unreleased"],
 	["notarise", "notarize", "notarization", "gatekeeper", "codesign"],
 	["rss", "atom", "podcast", "blog", "newsletter", "release", "changelog", "syndication"],

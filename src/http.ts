@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import http from "node:http";
+import { checkNewAgent } from "./agent-admin.ts";
 import type { AgentManager } from "./agents.ts";
 import { mainAgentId, type PineConfig } from "./config.ts";
 import { type Approvals, timingSafeEqual } from "./security.ts";
@@ -263,7 +264,14 @@ export class HttpServer {
 			// Agents are made and removed by the owner here (`pine agent add`, `pine agent remove`), as the main agent does it by tool.
 			if (url.pathname === "/agents") {
 				if (typeof body.id !== "string" || typeof body.description !== "string" || typeof body.instructions !== "string") throw new HttpError(400, "id, description and instructions required");
-				const made = await this.manager.addAgent({ id: body.id, description: body.description, instructions: body.instructions, model: typeof body.model === "string" ? body.model : undefined, tools: Array.isArray(body.tools) ? body.tools.map(String) : undefined });
+				const spec = { id: body.id, description: body.description, instructions: body.instructions, model: typeof body.model === "string" ? body.model : undefined, tools: Array.isArray(body.tools) ? body.tools.map(String) : undefined, color: typeof body.color === "string" ? body.color : undefined };
+				// What is wrong with the owner's values is theirs to correct, not a failure of the daemon.
+				try {
+					checkNewAgent(this.cfg, spec);
+				} catch (e) {
+					throw new HttpError(400, errText(e));
+				}
+				const made = await this.manager.addAgent(spec);
 				return send(200, { id: made.id, workspace: made.workspace });
 			}
 			// (An address of its own, and the agent's name once more in the body: "/agents/<id>/remove" removes a conversation.)

@@ -564,6 +564,13 @@ test("the owner gives an agent a colour of its own: kept in its agent.json, read
 		assert.ok(!("color" in (await listed("books"))));
 	}
 	assert.match((await a.post("/agents/books/update", {})).body.error, /nothing to change: give at least one of .*color/);
+
+	// A new agent can be made with one; a bad one makes nothing.
+	assert.equal((await a.post("/agents", { id: "scout", description: "Scouts", instructions: "You are SCOUT.", color: "#3366CC" })).status, 200);
+	assert.equal(json(path.join(h.home, "agents", "scout", "agent.json")).color, "#3366cc");
+	assert.equal((await listed("scout")).color, "#3366cc");
+	assert.match((await a.post("/agents", { id: "ghost", description: "Ghost", instructions: "You are GHOST.", color: "coral" })).body.error, /a colour is written #rrggbb/);
+	assert.ok(!fs.existsSync(path.join(h.home, "agents", "ghost")));
 	await h.close();
 
 	// A colour written by hand that is not one is a problem of that agent's file.
