@@ -1,5 +1,6 @@
 package pine.mobile.core
 
+import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import org.apache.sshd.common.config.keys.KeyUtils
 import org.apache.sshd.common.keyprovider.KeyPairProvider
@@ -13,7 +14,9 @@ import java.net.InetSocketAddress
 import java.security.KeyPair
 import java.security.KeyPairGenerator
 import java.security.PublicKey
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.Executors
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.concurrent.thread
@@ -100,13 +103,27 @@ data class Seen(val method: String, val url: String, val headers: Map<String, Li
 	fun header(name: String): String? = headers.entries.firstOrNull { it.key.equals(name, ignoreCase = true) }?.value?.firstOrNull()
 }
 
-/** The daemon on the other machine's loopback: notes each request, and answers by its path. */
+/** The daemon on the other machine's loopback: notes each request, and answers by its path (or as a test's `routes` say). */
 class StandInDaemon : AutoCloseable {
 	val seen = ConcurrentLinkedQueue<Seen>()
+	/** Answers of a test's own, by path. */
+	val routes = ConcurrentHashMap<String, (HttpExchange) -> Unit>()
 	private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0).apply {
+		// An event stream holds its request: the others are answered meanwhile.
+		executor = Executors.newCachedThreadPool()
 		createContext("/") { x ->
 			val body = x.requestBody.readBytes().toString(Charsets.UTF_8)
 			seen.add(Seen(x.requestMethod, x.requestURI.toString(), x.requestHeaders.toMap(), body))
+			routes[x.requestURI.path]?.let { route ->
+				try {
+					route(x)
+				} catch (e: Exception) {
+					// The test ended the answer by closing it.
+				} finally {
+					x.close()
+				}
+				return@createContext
+			}
 			val (status, type, bytes, chunked) = when (x.requestURI.path) {
 				"/picture" -> Answer(200, "image/png", PNG, false)
 				"/streamed" -> Answer(200, "application/json; charset=utf-8", """{"streamed":true}""".toByteArray(), true)
