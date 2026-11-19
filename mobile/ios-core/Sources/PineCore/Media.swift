@@ -120,12 +120,20 @@ func byteRange(_ header: String, total: Int) -> Asked {
 	}
 }
 
+/** A `Range` header that is one plain range of bytes, as it is passed on to the daemon; nil for anything else, which is never written into a request. */
+private func plainRange(_ header: String?) -> String? {
+	guard let header else { return nil }
+	let trimmed = header.trimmingCharacters(in: .whitespaces)
+	return wholeMatch(#"bytes=[0-9]{0,15}-[0-9]{0,15}"#, trimmed) != nil && trimmed != "bytes=-" ? trimmed : nil
+}
+
 /**
  * One of the daemon's media, by its path on the daemon and the query that goes with it (`?...`, or
  * empty): `mediaFromDaemon` of desktop/electron/daemon.ts. `range` is the page's `Range` header:
  * a video or a sound is answered 206 with the part asked for, so that the player can seek. The
- * daemon sends the whole every time (`sendPicture` in src/http.ts knows no ranges), so the part is
- * cut here, and the header is not passed on.
+ * header goes on to the daemon, which sends that part alone (`sendPicture` in src/http.ts), and its
+ * 206 or 416 reaches the page as it is. An older daemon answers 200 with the whole: the part is cut
+ * here then.
  */
 public func mediaFromDaemon(_ daemon: Daemon?, method: String, path: String, search: String, range: String? = nil) async -> MediaAnswer {
 	guard let daemon, mediaAsked(method: method, path: path, search: search) else { return plain(404, "not found") }
@@ -137,10 +145,18 @@ public func mediaFromDaemon(_ daemon: Daemon?, method: String, path: String, sea
 	}
 	let close: @Sendable () -> Void = { conn.close() }
 	do {
-		try await send(daemon, conn, method: "GET", url: path + search)
+		// `send` of Daemon.swift, with the range: only a plain one, so nothing else enters the request.
+		var request = "GET \(path + search) HTTP/1.1\r\nHost: \(daemon.end.hostHeader)\r\nAuthorization: Bearer \(daemon.token)\r\nConnection: close\r\n"
+		if let asked = plainRange(range) { request += "Range: \(asked)\r\n" }
+		try await conn.write(Array((request + "\r\n").utf8))
 		let reader = Reader(conn)
 		let head = try await readHead(reader)
 		let type = head.headers["content-type"] ?? "application/octet-stream"
+		if head.status == 416 {
+			close()
+			let said = head.headers["content-range"].flatMap { wholeMatch(#"bytes \*/[0-9]{1,15}"#, $0) != nil ? $0 : nil }
+			return plain(416, "not there", said.map { ["content-range": $0] } ?? [:])
+		}
 		let status = mediaShown(status: head.status, contentType: head.headers["content-type"])
 		if status != 200 {
 			close()
@@ -148,6 +164,17 @@ public func mediaFromDaemon(_ daemon: Daemon?, method: String, path: String, sea
 		}
 		let body = Body(head, reader)
 		let length = head.chunked ? nil : head.headers["content-length"]
+		if head.status == 206 {
+			// The daemon sent the part asked for, and nothing more: it goes on as it came.
+			guard let part = head.headers["content-range"], wholeMatch(#"bytes [0-9]{1,15}-[0-9]{1,15}/[0-9]{1,15}"#, part) != nil else {
+				close()
+				return plain(404, "not found")
+			}
+			var headers = mediaHeaders(contentType: type, contentLength: length)
+			headers["accept-ranges"] = "bytes"
+			headers["content-range"] = part
+			return MediaAnswer(status: 206, headers: headers, body: MediaBody(source: body.next, close: close))
+		}
 		guard type.hasPrefix("video/") || type.hasPrefix("audio/") else {
 			return MediaAnswer(status: 200, headers: mediaHeaders(contentType: type, contentLength: length), body: MediaBody(source: body.next, close: close))
 		}

@@ -132,8 +132,8 @@ struct MediaDaemonTests {
 			#expect(part.headers["cache-control"] == "no-store")
 			#expect(part.headers["x-content-type-options"] == "nosniff")
 			#expect(try await part.body.all() == Data(2...5))
-			// The daemon is not asked for a part: it always sends the whole.
-			#expect(rig.daemon.seen.allSatisfy { $0.header("range") == nil })
+			// The daemon was asked for the part; this one (an older pine) sent the whole, and the phone cut it.
+			#expect(rig.daemon.seen.last?.header("range") == "bytes=2-5")
 
 			let first = await get("bytes=0-1")
 			#expect(first.headers["content-range"] == "bytes 0-1/10")
@@ -174,6 +174,53 @@ struct MediaDaemonTests {
 			#expect(picture.status == 200)
 			#expect(picture.headers["content-range"] == nil)
 			#expect(try await picture.body.all() == Data(StandInDaemon.PNG))
+		}
+	}
+
+	@Test("a daemon that answers a part sends only that part, and the page gets its answer as it is")
+	func rangesFromDaemon() async throws {
+		try await withRig { rig in
+			// A daemon of this version: one range of bytes, 206 with that part alone, 416 past the end.
+			let clip = Array(UInt8(0)..<UInt8(100))
+			rig.daemon[route: "/media/tool/clip"] = { x in
+				let asked = x.request.header("range").flatMap { wholeMatch(#"bytes=(\d+)-(\d+)"#, $0) }
+				guard let asked, let from = Int(asked[1]), let to = Int(asked[2]) else {
+					x.head(200, ["content-type": "video/mp4", "accept-ranges": "bytes"], length: clip.count)
+					x.write(clip)
+					return
+				}
+				if from >= clip.count {
+					x.head(416, ["content-type": "video/mp4", "content-range": "bytes */\(clip.count)"], length: -1)
+					return
+				}
+				let part = Array(clip[from...min(to, clip.count - 1)])
+				x.head(206, ["content-type": "video/mp4", "accept-ranges": "bytes", "content-range": "bytes \(from)-\(from + part.count - 1)/\(clip.count)"], length: part.count)
+				x.write(part)
+			}
+			let s = try await rig.connected()
+			let part = await mediaFromDaemon(s, method: "GET", path: "/media/tool/clip", search: "", range: "bytes=90-94")
+			#expect(part.status == 206)
+			#expect(part.headers == ["content-type": "video/mp4", "cache-control": "no-store", "x-content-type-options": "nosniff", "accept-ranges": "bytes", "content-range": "bytes 90-94/100", "content-length": "5"])
+			#expect(try await part.body.all() == Data(90...94))
+			#expect(rig.daemon.seen.last?.header("range") == "bytes=90-94")
+
+			let none = await mediaFromDaemon(s, method: "GET", path: "/media/tool/clip", search: "", range: "bytes=100-120")
+			#expect(none.status == 416)
+			#expect(none.headers["content-range"] == "bytes */100")
+		}
+	}
+
+	@Test("only a plain range of bytes is passed on to the daemon")
+	func rangeHeaderKept() async throws {
+		try await withRig { rig in
+			video(rig, chunked: false)
+			let s = try await rig.connected()
+			let odd = await mediaFromDaemon(s, method: "GET", path: "/media/tool/clip", search: "", range: "bytes=0-1\r\nX-Evil: 1")
+			#expect(odd.status == 200)
+			#expect(rig.daemon.seen.last?.header("range") == nil)
+			#expect(rig.daemon.seen.last?.header("x-evil") == nil)
+			_ = await mediaFromDaemon(s, method: "GET", path: "/media/tool/clip", search: "", range: "bytes=0-1,4-5")
+			#expect(rig.daemon.seen.last?.header("range") == nil)
 		}
 	}
 
