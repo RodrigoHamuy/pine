@@ -13,6 +13,7 @@
     "test": "node --test 'test/*.test.ts'",
     "test:core": "node scripts/gradle.mjs core test",
     "apk": "npm run sync && node scripts/gradle.mjs android assembleDebug",
+    "apk:release": "npm run sync && node scripts/gradle.mjs android assembleRelease",
     "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {

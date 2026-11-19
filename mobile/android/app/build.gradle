@@ -8,8 +8,9 @@ android {
         applicationId "dev.pmndre.pine"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 1
-        versionName "1.0"
+        // The release job passes the release's version and its code (scripts/version-code.ts).
+        versionCode Integer.parseInt(System.getenv("PINE_VERSION_CODE") ?: "1")
+        versionName System.getenv("PINE_VERSION") ?: "0.0.0-dev"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -17,8 +18,22 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // The release key, only when the release job (or a developer) names it in the environment:
+    // without it a release build is left unsigned. The keystore never lies in the repository.
+    def keystore = System.getenv("ANDROID_KEYSTORE_FILE")
+    if (keystore) {
+        signingConfigs {
+            release {
+                storeFile file(keystore)
+                storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias System.getenv("ANDROID_KEY_ALIAS")
+                keyPassword System.getenv("ANDROID_KEY_PASSWORD")
+            }
+        }
+    }
     buildTypes {
         release {
+            if (keystore) signingConfig signingConfigs.release
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
