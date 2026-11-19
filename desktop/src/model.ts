@@ -11,7 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, m
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
-import { DEFAULT_FAMILIES } from "./theme.ts";
+import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
 export const REASONING_ABOUT: Record<string, string> = { off: "answers at once", minimal: "a moment of thought", low: "thinks briefly", medium: "thinks it through", high: "thinks long", xhigh: "thinks very long", max: "as long as the model can" };
@@ -209,7 +209,10 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
 	connected = false;
-	prefs: Prefs = { keepRunning: false, hosts: [], theme: "system", notify: true, updates: true, codeFollowsPalette: true, agentFamilies: [...DEFAULT_FAMILIES] };
+	prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, agentAccent: true };
+	/** The themes in the themes folder of pine's home, and the one in force (`ui.theme`, pmndre when none is chosen). */
+	themes: ThemeEntry[] = [];
+	theme = "pmndre";
 	platform = "darwin";
 	focused = true;
 	versions = { app: "", electron: "" };
@@ -332,6 +335,8 @@ export class Store extends Model {
 		// Whether the event stream is up: a page loaded anew is not told it by an event.
 		this.connected = first.connected === true;
 		this.prefs = first.prefs;
+		// The theme the window had last, until pine says which one is in force.
+		applyLook(cleanLook(first.prefs.look));
 		this.platform = first.platform;
 		this.focused = first.focused;
 		this.versions = first.versions;
@@ -510,7 +515,29 @@ export class Store extends Model {
 		void this.refreshConversations();
 		void this.refreshSaid(true);
 		void this.pending();
+		void this.refreshThemes();
 		this.touch();
+	}
+
+	/**
+	 * Asks pine for its themes and draws the window in the one in force. The main process is handed
+	 * it too, so that the window opens in it next time (and its frame and background follow it).
+	 */
+	async refreshThemes(): Promise<void> {
+		const got = await api.themes().catch(() => undefined);
+		if (!got) return;
+		this.themes = got.themes;
+		this.theme = got.theme;
+		const look = cleanLook(got.themes.find((t) => t.id === got.theme));
+		applyLook(look);
+		if (look && JSON.stringify(look) !== JSON.stringify(this.prefs.look)) this.prefs = await bridge.prefs({ look }).catch(() => this.prefs);
+		this.touch();
+	}
+
+	/** The owner picks a theme: `ui.theme` in pine.json, set through pine as any of its settings. */
+	async setTheme(id: string): Promise<void> {
+		const done = await this.attempt(() => api.setSetting("ui.theme", id));
+		if (done) await this.refreshThemes();
 	}
 
 	/** The agents, the main one first: it is the one that administers the others. */
@@ -1709,6 +1736,8 @@ export class Store extends Model {
 			return;
 		}
 		if (e.topic === "pine/conversation") return void this.followed(p);
+		// A theme chosen in another UI, or by the main agent: the window follows.
+		if (e.topic === "pine/settings") return void (p.key === "ui.theme" && this.refreshThemes());
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
 

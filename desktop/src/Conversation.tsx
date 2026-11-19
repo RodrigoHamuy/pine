@@ -565,7 +565,7 @@ function Welcome({ tab }: { tab: Tab }) {
 						</AlertAction>
 					</Alert>
 				) : null}
-				<p className="text-outline wrap-anywhere">
+				<p className="text-faint wrap-anywhere">
 					{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
 				</p>
 				<div className="flex flex-wrap justify-center gap-1.5">
@@ -798,7 +798,7 @@ function ConvHead({ tab }: { tab: Tab }) {
 					) : null}
 				</BreadcrumbList>
 			</Breadcrumb>
-			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-outline" /> : null}
+			{chat && store.pins.has(tab.key) ? <StarIcon size={12} className="text-faint" /> : null}
 			<span className="min-w-0 flex-1" />
 			{tab.context !== undefined ? <ContextUsage tab={tab} percent={tab.context} /> : null}
 		</div>

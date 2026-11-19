@@ -9,6 +9,7 @@ import path from "node:path";
 import { AGENT_TOOLS } from "./agent-admin.ts";
 import { type AgentConfig, isColor, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
 import { unsetEnv } from "./env-file.ts";
+import { DEFAULT_THEME, listThemes } from "./themes.ts";
 import { editJson } from "./mcp-config.ts";
 import { isInside, realish } from "./security.ts";
 import type { Kv, TaskStore } from "./store.ts";
@@ -511,7 +512,7 @@ interface Setting {
 	/** What it does, in a sentence or two that need no other page to be understood. One that takes one of a few words says each on a line of its own. */
 	about: string;
 	/** What a value has to be. */
-	kind: "model" | "boolean" | "duration" | { one: string[] } | { from: number; to: number };
+	kind: "model" | "theme" | "boolean" | "duration" | { one: string[] } | { from: number; to: number };
 	/** What is in force now, in the words the setting is written in. */
 	now(cfg: PineConfig): string;
 	/** Whether a new value holds at once. Otherwise it is saved and holds from the next start of pine. */
@@ -568,9 +569,16 @@ export const SETTINGS: Record<string, Setting> = {
 		live: true,
 		wider: (v) => (v === true ? "an agent in bypass mode then acts without any question on whatever a web page or a message told it" : undefined),
 	},
+	"ui.theme": {
+		title: "Theme",
+		about: "The colours of the Pine app: a VS Code colour theme, by the name of its file in the themes folder of pine's home (one-dark-pro for one-dark-pro.json). Any VS Code theme file put there can be chosen.",
+		kind: "theme",
+		now: (c) => c.ui.theme ?? DEFAULT_THEME,
+		live: true,
+	},
 };
 
-const kindText = (k: Setting["kind"]) => (k === "model" ? "a model, as provider/model" : k === "boolean" ? "true or false" : k === "duration" ? "a time such as 90s or 5m" : "one" in k ? k.one.join(", ") : `a number from ${k.from} to ${k.to}`);
+const kindText = (k: Setting["kind"]) => (k === "model" ? "a model, as provider/model" : k === "theme" ? "the name of a theme in the themes folder" : k === "boolean" ? "true or false" : k === "duration" ? "a time such as 90s or 5m" : "one" in k ? k.one.join(", ") : `a number from ${k.from} to ${k.to}`);
 
 /** The settings as a list for the agent: name, what is in force, what it is. */
 export function settingsText(cfg: PineConfig): string {
@@ -590,6 +598,12 @@ export function checkSetting(cfg: PineConfig, key: string, given: unknown, model
 	if (k === "model") {
 		if (!models.includes(String(raw))) throw new Error(`there is no model "${raw}". Models: ${models.slice(0, 40).join(", ")}`);
 		value = String(raw);
+	} else if (k === "theme") {
+		const themes = listThemes(cfg.home);
+		const t = themes.find((x) => x.id === String(raw));
+		if (!t) throw new Error(`there is no theme "${raw}". Themes: ${themes.filter((x) => !("problem" in x)).map((x) => x.id).join(", ")}`);
+		if ("problem" in t) throw new Error(`the theme "${raw}" cannot be drawn: ${t.problem}`);
+		value = t.id;
 	} else if (k === "boolean") {
 		if (raw !== true && raw !== false && raw !== "true" && raw !== "false") throw new Error(`${key} is true or false`);
 		value = raw === true || raw === "true";
@@ -636,6 +650,7 @@ export function applySetting(cfg: PineConfig, checked: { key: string; setting: S
 	if (!checked.setting.live) return;
 	Object.assign(cfg.defaults, fresh.defaults);
 	Object.assign(cfg.limits, fresh.limits);
+	Object.assign(cfg.ui, fresh.ui);
 	// What a question to the owner waits is read once at the start: it keeps its value until then.
 	Object.assign(cfg.security, { ...fresh.security, approvalTimeoutMs: cfg.security.approvalTimeoutMs });
 	// What an agent takes from the defaults when it does not say.

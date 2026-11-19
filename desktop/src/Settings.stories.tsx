@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { AgentDetail, AgentInfo, McpServer, Overview, Setting } from "./api.ts";
 import { store } from "./model.ts";
-import { Colours as ColoursSection, Settings } from "./Settings.tsx";
-import { DEFAULT_FAMILIES, DEFAULT_PALETTE } from "./theme.ts";
+import { Settings, ThemePicker } from "./Settings.tsx";
+import { THEMES } from "../.storybook/themes.ts";
+import type { ThemeEntry } from "./theme.ts";
 
 // The settings tab as the app shows it, without a daemon: the bridge's `call` is a stand-in that
 // answers each address with what is written below, as the control API would. An address it does
@@ -118,54 +119,27 @@ export const Environments: Story = {
 // The app's preferences as the main process keeps them: what is set is answered back, as `pine:prefs` does.
 window.pine.prefs = async (change) => ({ ...store.prefs, ...change });
 
-/** The Colours section of the App page with a palette of the owner's: colour match off, so the scheme can be chosen, and Reset on. */
-export const Colours: Story = {
+/** The theme of the App page: pine's themes, pmndre in force, and a file in the folder that is not a theme. */
+export const Theme: Story = {
 	args: { section: "app" },
 	render: () => {
-		store.prefs = { ...store.prefs, palette: { ...DEFAULT_PALETTE, source: "#3366cc", colorMatch: false, scheme: "vibrant", contrast: 0.5 } };
+		store.themes = [...THEMES, { id: "half-done", name: "half-done", problem: 'it names no colour for the page: a theme needs "editor.background" and "editor.foreground" in "colors"' } satisfies ThemeEntry];
+		store.theme = "pmndre";
 		return (
 			<div className="w-full max-w-200">
-				<ColoursSection />
+				<ThemePicker />
 			</div>
 		);
 	},
 };
 
-/** The Colours section on pine's own palette: colour match off, the tonal spot scheme, nothing to reset. */
-export const ColoursDefault: Story = {
+/** The App page with the agent in front not colouring the window: "The agent in front colours the window" off. */
+export const AgentAccentOff: Story = {
 	args: { section: "app" },
-	render: () => {
-		store.prefs = { ...store.prefs, palette: undefined, agentFamilies: [...DEFAULT_FAMILIES] };
-		return (
-			<div className="w-full max-w-200">
-				<ColoursSection />
-			</div>
-		);
-	},
-};
-
-/** The Colours section with code in dark kept on poimandres: "Code follows the palette" off. */
-export const ColoursCodePoimandres: Story = {
-	args: { section: "app" },
-	render: () => {
-		store.prefs = { ...store.prefs, palette: undefined, codeFollowsPalette: false };
-		return (
-			<div className="w-full max-w-200">
-				<ColoursSection />
-			</div>
-		);
-	},
-};
-
-/** The Colours section with the agent in front colouring its primary, its surfaces and its outlines: three families ticked, Reset on. */
-export const ColoursAgentFamilies: Story = {
-	args: { section: "app" },
-	render: () => {
-		store.prefs = { ...store.prefs, palette: undefined, agentFamilies: ["primary", "surfaces", "outlines"] };
-		return (
-			<div className="w-full max-w-200">
-				<ColoursSection />
-			</div>
-		);
+	render: (args) => {
+		store.themes = THEMES;
+		store.theme = "pmndre";
+		store.prefs = { ...store.prefs, agentAccent: false };
+		return <Tab {...args} />;
 	},
 };

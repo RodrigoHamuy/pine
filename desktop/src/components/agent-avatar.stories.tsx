@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { AGENT_COLOURS } from "../theme.ts";
 import { AgentAvatar as Avatar } from "./agent-avatar.tsx";
 
-// An agent's initial: the stock avatar without a colour of its own, the primary of the agent's scheme with one.
+// An agent's initial: the stock avatar without a colour of its own, drawn in its colour with one.
 const meta = { title: "Components/AgentAvatar", component: Avatar } satisfies Meta<typeof Avatar>;
 export default meta;
 type Story = StoryObj<typeof meta>;

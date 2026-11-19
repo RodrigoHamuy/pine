@@ -1229,6 +1229,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						if (!decision.allow) throw new Error(`not changed (${decision.by}). Do not retry; tell your owner what you proposed.`);
 						applySetting(cfg, checked);
 						if (checked.setting.live) await manager.refreshSessions();
+						manager.settingChanged(checked.key);
 						return ok(`Your owner confirmed it. ${checked.key} is now ${checked.setting.live ? checked.setting.now(cfg) : checked.text}.${checked.setting.live ? "" : " It is saved, and holds from the next start of pine: tell your owner that pine has to be restarted for it."}`);
 					},
 				}),

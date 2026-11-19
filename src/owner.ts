@@ -23,6 +23,7 @@ import { allSkills, checkSkill, deleteSkill, skillDir, skillsBeside, writeSkill 
 import type { SourceHost } from "./sources.ts";
 import { localTime, type Scheduler } from "./timers.ts";
 import { errText, type Logger, parseDuration } from "./util.ts";
+import { listThemes, themeInForce } from "./themes.ts";
 import { MAX_EDIT, writeText } from "./workspace-view.ts";
 
 /** A request that is refused, with the status it is answered with and what a client needs besides the sentence. */
@@ -288,6 +289,11 @@ export class OwnerApi {
 				files: Object.fromEntries(Object.entries(files).filter(([, text]) => text !== undefined)),
 			};
 		}
+		// The themes of the owner's UIs, each as the colours it gives (src/theme-colors.ts), and the one in force.
+		if (at === "themes") {
+			const themes = listThemes(cfg.home);
+			return { theme: themeInForce(cfg.home, cfg.ui.theme, themes).id, chosen: cfg.ui.theme ?? null, themes };
+		}
 		if (at === "shared") return SHARED_FILES.map((name) => ({ name, about: SHARED_ABOUT[name] ?? "", text: textOf(path.join(cfg.home, name)) ?? "" }));
 		if (at === "skills") return allSkills(cfg).map((s) => ({ ...s, instructions: skillBody(s.dir) }));
 		if (at === "schedules") return this.need(this.schedules, "a scheduler").list();
@@ -333,6 +339,7 @@ export class OwnerApi {
 			const checked = checkSetting(cfg, key, body.value, SETTINGS[key]?.kind === "model" ? await manager.availableModels() : []);
 			applySetting(cfg, checked);
 			if (checked.setting.live) await manager.refreshSessions();
+			manager.settingChanged(checked.key);
 			this.log.info(`setting ${checked.key} set to ${checked.text} through the control API`);
 			return { key: checked.key, now: checked.setting.live ? checked.setting.now(cfg) : checked.text, live: checked.setting.live };
 		}

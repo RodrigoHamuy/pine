@@ -25,15 +25,13 @@ import type { DialogRootActions } from "@base-ui/react/dialog";
 import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
-import { Slider } from "@/components/ui/slider";
-import { AGENT_COLOURS, DEFAULT_FAMILIES, DEFAULT_PALETTE, FAMILIES, type Family, type Palette, SCHEMES } from "./theme.ts";
-import { Checkbox } from "@/components/ui/checkbox";
+import { AGENT_COLOURS, type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
@@ -261,8 +259,18 @@ function FileTabs<K extends string>({ files, value, onChange, children }: { file
 	);
 }
 
+/** A colour to pick, with its hex beside it. */
+function ColourInput({ id, name, value, onChange }: { id: string; name: string; value: string; onChange: (hex: string) => void }) {
+	return (
+		<div className="flex items-center gap-1.5">
+			<span className="font-mono text-xs text-muted-foreground">{value}</span>
+			<Input id={id} name={name} type="color" className="w-10 p-0.5" value={value} onChange={(e) => onChange(e.target.value)} />
+		</div>
+	);
+}
+
 /**
- * An agent's own colour: None (the owner's palette), one of the presets, or any other under "Other…".
+ * An agent's own colour: None (the theme's accent), one of the presets, or any other under "Other…".
  * Each preset is shown as the agent's avatar would be drawn in it. "none" is how a change takes it away.
  */
 function AgentColour({ id, value, onChange }: { id: string; value?: string; onChange: (color: string) => void }) {
@@ -291,7 +299,7 @@ function AgentColour({ id, value, onChange }: { id: string; value?: string; onCh
 			</ToggleGroup>
 			{/* Without a colour the input shows a neutral grey, which is no change until the owner sets one. */}
 			{choice === "other" ? <ColourInput id={`${field}-other`} name="color" value={color ?? "#808080"} onChange={onChange} /> : null}
-			<FieldDescription>Its avatar is drawn in it, in the side bar, on its tabs and in its panel, and while its conversation is in front the window takes it for the roles ticked in Settings &gt; App &gt; Colours. None keeps the window's own colours.</FieldDescription>
+			<FieldDescription>Its avatar is drawn in it, in the side bar, on its tabs and in its panel, and while its conversation is in front the window's accent is this colour (unless that is turned off in Settings &gt; App). None keeps the theme's own.</FieldDescription>
 		</Field>
 	);
 }
@@ -1798,145 +1806,69 @@ function Instructions() {
 
 // ---- the app itself ----------------------------------------------------------------------------------------
 
-/** The custom colours' names: every palette has exactly those of pine's (cleanPalette). */
-type CustomName = (typeof DEFAULT_PALETTE.customColors)[number]["name"];
-const CUSTOM_LABELS: Record<CustomName, { title: string; about: string }> = {
-	warn: { title: "Warning colour", about: "Warnings and approvals, modified or unsaved files, literals in code." },
-	info: { title: "Info colour", about: "Renamed files, and function and type names in code." },
-	plan: { title: "Keyword colour", about: "Keywords in code (if, const, class)." },
-};
-const schemeItems = Object.entries(SCHEMES).map(([value, label]) => ({ value, label }));
-
-/** A colour to pick, with its hex beside it. */
-function ColourInput({ id, name, value, onChange }: { id: string; name: string; value: string; onChange: (hex: string) => void }) {
+/** A theme's look in a few colours: the page, the text, the accent and three kinds of code. */
+function Swatch({ colors }: { colors: Record<string, string> }) {
+	const dots = [colors.brand, colors["code-keyword"], colors["code-string"], colors["code-function"]];
 	return (
-		<div className="flex items-center gap-1.5">
-			<span className="font-mono text-xs text-muted-foreground">{value}</span>
-			<Input id={id} name={name} type="color" className="w-10 p-0.5" value={value} onChange={(e) => onChange(e.target.value)} />
-		</div>
+		<span aria-hidden className="inline-flex flex-none items-center gap-0.5 rounded-sm border px-1 py-0.5" style={{ backgroundColor: colors.bg }}>
+			<span className="text-[0.625rem] font-semibold leading-none" style={{ color: colors.text }}>Aa</span>
+			{dots.map((c, i) => <span key={i} className="size-1.5 rounded-full" style={{ backgroundColor: c }} />)}
+		</span>
 	);
 }
 
 /**
- * The palette the window's colours are generated from (theme.ts): an app preference like Appearance,
- * kept by the app's main process. Every change redraws the window at once; Reset stores none.
+ * The theme of the window: a VS Code colour theme from the themes folder of pine's home, chosen as
+ * pine's setting `ui.theme`. The colours are pine's (theme.ts): the page draws nothing a file says
+ * but colours. A file pine cannot read is named with what is wrong with it.
  */
-export function Colours() {
+export function ThemePicker() {
 	const s = useModel(store);
-	const palette = s.prefs.palette ?? DEFAULT_PALETTE;
-	const families = s.prefs.agentFamilies ?? DEFAULT_FAMILIES;
-	const isDefault = !s.prefs.palette && families.join() === DEFAULT_FAMILIES.join();
-	// Reset brings back pine's palette and the families of the agent in front alike.
-	const set = async (change: Partial<Palette> | undefined) => {
-		s.prefs = await bridge.prefs(change ? { palette: { ...palette, ...change } } : { palette: undefined, agentFamilies: DEFAULT_FAMILIES });
-		s.touch();
-	};
-	const follow = async (family: Family, on: boolean) => {
-		s.prefs = await bridge.prefs({ agentFamilies: on ? [...families, family] : families.filter((f) => f !== family) });
-		s.touch();
-	};
-	const followCode = async (codeFollowsPalette: boolean) => {
-		s.prefs = await bridge.prefs({ codeFollowsPalette });
-		s.touch();
-	};
-	const field = useId();
+	const id = useId();
+	const usable = s.themes.filter((t): t is Look => !("problem" in t));
+	const broken = s.themes.filter((t): t is Extract<ThemeEntry, { problem: string }> => "problem" in t);
+	const items = usable.map((t) => ({ value: t.id, label: t.name }));
+	const folder = s.service.status === "ready" ? `${tilde(s.service.home)}/themes` : "the themes folder of pine's home";
 	return (
-		<FieldSet data-setting="colours">
-			<FieldLegend>Colours</FieldLegend>
-			<FieldDescription>Every colour of the window is a role of one Material 3 scheme, made from these.</FieldDescription>
-			<FieldGroup>
-				<Field orientation="horizontal">
-					<FieldContent>
-						<FieldLabel htmlFor={`${field}-source`}>Source colour</FieldLabel>
-						<FieldDescription>The accent, and the colour the whole scheme is made from.</FieldDescription>
-					</FieldContent>
-					<ColourInput id={`${field}-source`} name="source" value={palette.source} onChange={(source) => void set({ source })} />
-				</Field>
-				<Field orientation="horizontal">
-					<FieldContent>
-						<FieldLabel htmlFor={`${field}-neutral`}>Neutral colour</FieldLabel>
-						<FieldDescription>The tint of the surfaces and the lines.</FieldDescription>
-					</FieldContent>
-					<ColourInput id={`${field}-neutral`} name="neutral" value={palette.neutral} onChange={(neutral) => void set({ neutral })} />
-				</Field>
-				<Field orientation="horizontal">
-					<FieldContent>
-						<FieldLabel htmlFor={`${field}-neutral-variant`}>Neutral variant colour</FieldLabel>
-						<FieldDescription>The tint of muted text and outlines.</FieldDescription>
-					</FieldContent>
-					<ColourInput id={`${field}-neutral-variant`} name="neutralVariant" value={palette.neutralVariant} onChange={(neutralVariant) => void set({ neutralVariant })} />
-				</Field>
-				<Field orientation="horizontal">
-					<FieldContent>
-						<FieldLabel htmlFor={`${field}-match`}>Colour match</FieldLabel>
-						<FieldDescription>Stay true to the source colour, at the cost of the neutrals' tint, which turns grey. Off, the scheme below tones the source as it does.</FieldDescription>
-					</FieldContent>
-					<Switch id={`${field}-match`} checked={palette.colorMatch} onCheckedChange={(colorMatch) => void set({ colorMatch })} />
-				</Field>
-				<Field orientation="responsive" data-disabled={palette.colorMatch || undefined}>
-					<FieldContent>
-						<FieldLabel htmlFor={`${field}-scheme`}>Scheme</FieldLabel>
-						<FieldDescription>How the source colour is spread over the roles, while colour match is off.</FieldDescription>
-					</FieldContent>
-					<Select items={schemeItems} value={palette.scheme} disabled={palette.colorMatch} onValueChange={(scheme) => scheme && void set({ scheme: scheme as Palette["scheme"] })}>
-						<SelectTrigger id={`${field}-scheme`} className="w-40">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectGroup>
-								{schemeItems.map((item) => (
-									<SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
-								))}
-							</SelectGroup>
-						</SelectContent>
-					</Select>
-				</Field>
-				<Field orientation="horizontal">
-					<FieldContent>
-						<FieldLabel htmlFor={`${field}-contrast`}>Contrast</FieldLabel>
-						<FieldDescription>Less to the left, more to the right, standard in the middle. Now {palette.contrast.toFixed(1)}.</FieldDescription>
-					</FieldContent>
-					<div className="flex w-40 shrink-0">
-						<Slider id={`${field}-contrast`} aria-label="Contrast" min={-1} max={1} step={0.1} value={[palette.contrast]} onValueChange={(v) => void set({ contrast: Math.round((Array.isArray(v) ? v[0] : v) * 10) / 10 })} />
-					</div>
-				</Field>
-				{palette.customColors.map(({ name, hex }) => (
-					<Field key={name} orientation="horizontal">
-						<FieldContent>
-							<FieldLabel htmlFor={`${field}-${name}`}>{CUSTOM_LABELS[name as CustomName].title}</FieldLabel>
-							<FieldDescription>{CUSTOM_LABELS[name as CustomName].about} Not an M3 role: its hue is kept, darker in light and lighter in dark.</FieldDescription>
-						</FieldContent>
-						<ColourInput id={`${field}-${name}`} name={name} value={hex} onChange={(hex) => void set({ customColors: palette.customColors.map((c) => (c.name === name ? { ...c, hex } : c)) })} />
-					</Field>
-				))}
-				<Field orientation="horizontal" data-setting="code-follows-palette">
-					<FieldContent>
-						<FieldLabel htmlFor={`${field}-code`}>Code follows the palette</FieldLabel>
-						<FieldDescription>Code in dark draws with the scheme's roles, like the rest of the window. Off, it keeps the poimandres theme's own colours. Code in light always follows the palette.</FieldDescription>
-					</FieldContent>
-					<Switch id={`${field}-code`} checked={s.prefs.codeFollowsPalette !== false} onCheckedChange={(on) => void followCode(on)} />
-				</Field>
-				<FieldSet data-setting="agent-families">
-					<FieldLegend variant="label">The agent in front colours</FieldLegend>
-					<FieldDescription>While the conversation of an agent with a colour of its own is in front, these roles come from a scheme made from its colour. With surfaces or outlines, their tint is the agent's too.</FieldDescription>
-					<FieldGroup className="flex-row flex-wrap gap-4">
-						{(Object.keys(FAMILIES) as Family[]).map((family) => (
-							<Field key={family} orientation="horizontal" data-family={family} className="w-auto">
-								<Checkbox id={`${field}-family-${family}`} checked={families.includes(family)} onCheckedChange={(on) => void follow(family, on)} />
-								<FieldLabel htmlFor={`${field}-family-${family}`} className="font-normal">{FAMILIES[family]}</FieldLabel>
-							</Field>
-						))}
-					</FieldGroup>
-				</FieldSet>
-				<Field orientation="horizontal">
-					<FieldContent>
-						<FieldTitle>pine's colours</FieldTitle>
-						<FieldDescription>Poimandres' mint on its night blue, toned by M3's tonal spot scheme, and the agent in front colouring its primary only.</FieldDescription>
-					</FieldContent>
-					<Button variant="outline" size="xs" disabled={isDefault} aria-label="Reset colours" onClick={() => void set(undefined)}><Undo2Icon data-icon="inline-start" />Reset</Button>
-				</Field>
-			</FieldGroup>
-		</FieldSet>
+		<>
+			<Field orientation="responsive" data-setting="theme">
+				<FieldContent>
+					<FieldLabel htmlFor={id}>Theme</FieldLabel>
+					<FieldDescription>Any VS Code colour theme: put its .json file into {folder}, and it is offered here. The choice is pine's (ui.theme in pine.json), so every Pine app that uses this pine shows it.</FieldDescription>
+				</FieldContent>
+				<Select items={items} value={s.theme} onValueChange={(v) => v && v !== s.theme && void s.setTheme(v)} disabled={!usable.length}>
+					<SelectTrigger id={id} className="w-56">
+						<SelectValue />
+					</SelectTrigger>
+					{/* Below the trigger, not over it: a long list next to the window's edge stays on screen. */}
+					<SelectContent alignItemWithTrigger={false} align="end" className="min-w-60">
+						{(["dark", "light"] as const).map((kind, i) => {
+							const of = usable.filter((t) => t.kind === kind);
+							return of.length ? (
+								<SelectGroup key={kind}>
+									{i && usable.some((t) => t.kind === "dark") ? <SelectSeparator /> : null}
+									<SelectLabel>{kind === "dark" ? "Dark" : "Light"}</SelectLabel>
+									{of.map((t) => (
+										<SelectItem key={t.id} value={t.id}>
+											<Swatch colors={t.colors} />
+											{t.name}
+										</SelectItem>
+									))}
+								</SelectGroup>
+							) : null;
+						})}
+					</SelectContent>
+				</Select>
+			</Field>
+			{broken.length ? (
+				<Alert variant="destructive">
+					<TriangleAlertIcon />
+					<AlertDescription>
+						{broken.map((t) => <p key={t.id}>{t.id}.json: {t.problem}</p>)}
+					</AlertDescription>
+				</Alert>
+			) : null}
+		</>
 	);
 }
 
@@ -2034,23 +1966,22 @@ function AppPage() {
 	useEffect(() => void bridge.command().then(setCommand), []);
 	// (Looked at again whenever this page is opened: the browser may have been fetched in a terminal.)
 	useEffect(() => void store.checkBrowser(), []);
+	// (And the themes: a file may have been put into the folder by hand.)
+	useEffect(() => void store.refreshThemes(), []);
 	const field = useId();
 	return (
 		<Page title="App" lead="How this window behaves, and the pine it talks to.">
 			<FieldSet>
 				<FieldLegend>This app</FieldLegend>
 				<FieldGroup>
-					<Field orientation="responsive">
+					<ThemePicker />
+					<Field orientation="horizontal" data-setting="agent-accent">
 						<FieldContent>
-							<FieldTitle>Appearance</FieldTitle>
-							<FieldDescription>Light, dark, or what the system is set to.</FieldDescription>
+							<FieldLabel htmlFor={`${field}-agent-accent`}>The agent in front colours the window</FieldLabel>
+							<FieldDescription>While the conversation of an agent with a colour of its own is in front, the window's accent is that colour instead of the theme's. An agent gets a colour on its page under Agents.</FieldDescription>
 						</FieldContent>
 						<div className="flex items-center gap-1.5">
-							<ToggleGroup aria-label="Appearance" variant="outline" value={[s.prefs.theme]} onValueChange={one((theme) => void set({ theme }))}>
-								<ToggleGroupItem value="system">System</ToggleGroupItem>
-								<ToggleGroupItem value="light">Light</ToggleGroupItem>
-								<ToggleGroupItem value="dark">Dark</ToggleGroupItem>
-							</ToggleGroup>
+							<Switch id={`${field}-agent-accent`} checked={s.prefs.agentAccent !== false} onCheckedChange={(agentAccent) => void set({ agentAccent })} />
 						</div>
 					</Field>
 					{s.updates ? (
@@ -2090,7 +2021,6 @@ function AppPage() {
 					</Field>
 				</FieldGroup>
 			</FieldSet>
-			<Colours />
 			<FieldSet>
 				<FieldLegend>pine</FieldLegend>
 				<FieldGroup>
@@ -2181,7 +2111,7 @@ export function Settings() {
 				{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
 				    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
 				<SidebarProvider open className="min-h-0 w-full flex-none @3xl/settings:w-auto">
-					<SidebarRoot collapsible="none" className="w-full border-b border-surface-container-high bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
+					<SidebarRoot collapsible="none" className="w-full border-b border-line-soft bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
 						<SidebarContent>
 							<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x @3xl/settings:*:data-[slot=scroll-area-viewport]:scroll-fade">
 								<SidebarGroup role="navigation" className="py-2 @3xl/settings:py-4">

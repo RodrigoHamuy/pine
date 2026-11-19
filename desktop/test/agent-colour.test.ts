@@ -6,10 +6,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
-import { builder } from "material-theme-builder";
 import { _electron as electron } from "playwright-core";
 import { startMock } from "../../baseline/tests/mock.mjs";
-import { DEFAULT_PALETTE } from "../src/theme.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 let app: any;
@@ -23,9 +21,8 @@ const write = (file: string, content: string) => {
 	fs.writeFileSync(file, content);
 };
 const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-/** What the avatar of an agent with that colour should be: the primary of the owner's palette with the colour as its source. */
-const { source: _mint, ...owners } = DEFAULT_PALETTE;
-const primaryOf = (color: string, look: "light" | "dark") => rgb(builder(color, owners).toJson().schemes[look].primary);
+/** What the avatar of an agent with that colour should be: the colour itself, in every theme. */
+const drawnIn = (color: string) => rgb(color);
 /** The colour a CSS colour value resolves to in the page. */
 const resolved = (value: string): Promise<string> =>
 	page.evaluate((v: string) => {
@@ -73,7 +70,7 @@ before(async () => {
 	write(path.join(home, "agents", "books", "workspace", "AGENTS.md"), "You keep the books.\n");
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ updates: false }));
-	app = await electron.launch({ colorScheme: "light", args: [root], env: { ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
+	app = await electron.launch({ args: [root], env: { ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
 	page = await app.firstWindow();
 	await page.setViewportSize?.({ width: 1280, height: 820 }).catch(() => {});
 	await page.waitForSelector("[data-slot=empty] h1", { timeout: 30_000 });
@@ -91,22 +88,25 @@ test("an agent without a colour has the avatar every agent had: muted", async ()
 	await avatarsAre(await resolved("var(--muted)"), "no colour, the stock avatar");
 });
 
-test("a preset colour picked on the agent's page is kept in its agent.json and draws its avatar, in light and in dark", async () => {
+test("a preset colour picked on the agent's page is kept in its agent.json and draws its avatar, in a dark theme and a light one", async () => {
 	await booksPage();
 	await page.locator("[data-setting=agent-colour]").getByRole("button", { name: "Coral", exact: true }).click();
 	await save();
 	const coral = JSON.parse(fs.readFileSync(agentFile(), "utf8")).color;
 	assert.match(coral, /^#[0-9a-f]{6}$/);
-	await avatarsAre(primaryOf(coral, "light"), "the side bar's avatar, light");
-	await page.emulateMedia({ colorScheme: "dark" });
-	await avatarsAre(primaryOf(coral, "dark"), "the side bar's avatar, dark");
-	await page.emulateMedia({ colorScheme: "light" });
+	await avatarsAre(drawnIn(coral), "the side bar's avatar, in pmndre");
+	// The same in a light theme: an agent is known by its colour whatever the theme.
+	await page.evaluate(() => (window as any).pine.call("POST", "/settings", { key: "ui.theme", value: "github-light" }));
+	await page.waitForFunction(() => document.documentElement.dataset.theme === "github-light");
+	await avatarsAre(drawnIn(coral), "the side bar's avatar, in GitHub Light");
+	await page.evaluate(() => (window as any).pine.call("POST", "/settings", { key: "ui.theme", value: "default" }));
+	await page.waitForFunction(() => document.documentElement.dataset.theme === "pmndre");
 
 	// Its conversation: the tab and the empty conversation carry it too.
 	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "Open" }).click();
 	await page.waitForSelector("[data-slot=empty] [data-slot=avatar][data-agent=books]");
 	assert.ok((await avatars()).length >= 3, "the side bar, the tab and the empty conversation");
-	await avatarsAre(primaryOf(coral, "light"), "every avatar of books");
+	await avatarsAre(drawnIn(coral), "every avatar of books");
 });
 
 test("Other takes any colour, and None takes it away again", async () => {
@@ -116,7 +116,7 @@ test("Other takes any colour, and None takes it away again", async () => {
 	await page.fill("[data-setting=agent-colour] input[type=color]", "#3366cc");
 	await save();
 	assert.equal(JSON.parse(fs.readFileSync(agentFile(), "utf8")).color, "#3366cc");
-	await avatarsAre(primaryOf("#3366cc", "light"), "the colour typed under Other");
+	await avatarsAre(drawnIn("#3366cc"), "the colour typed under Other");
 
 	await group.getByRole("button", { name: "None", exact: true }).click();
 	await save();

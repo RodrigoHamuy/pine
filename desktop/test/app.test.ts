@@ -4,7 +4,7 @@
 //
 //   npm test                         in desktop/
 //   PINE_DESKTOP_SHOTS=<folder>      also saves a picture of each screen there
-//   PINE_DESKTOP_THEME=dark|light    in that appearance
+//   PINE_DESKTOP_THEME=<theme>       in that theme of pine's (github-light, dracula ...)
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import fs from "node:fs";
@@ -13,11 +13,9 @@ import os from "node:os";
 import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, before, test } from "node:test";
-import { builder } from "material-theme-builder";
 import { _electron as electron } from "playwright-core";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { httpMcp } from "../../test/support/http-mcp.ts";
-import { DEFAULT_PALETTE } from "../src/theme.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const shots = process.env.PINE_DESKTOP_SHOTS;
@@ -70,7 +68,7 @@ before(async () => {
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
 	// A port of its own (0: the system picks one), so that a pine the developer has running is left alone.
-	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false } }, null, 2));
+	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false }, ...(process.env.PINE_DESKTOP_THEME ? { ui: { theme: process.env.PINE_DESKTOP_THEME } } : {}) }, null, 2));
 	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent: it administers pine", delegates: ["scout"], approve: ["bash"] }));
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
 	write(path.join(home, "agents", "main", "workspace", "notes.md"), "# Notes\n\nfirst line\n");
@@ -150,12 +148,7 @@ if (args.includes("-O")) {
 `);
 	fs.chmodSync(ssh, 0o755);
 
-	// PINE_DESKTOP_THEME=dark|light: the pictures in that appearance, whatever the system is set to.
-	if (process.env.PINE_DESKTOP_THEME) write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ theme: process.env.PINE_DESKTOP_THEME }));
-
 	app = await electron.launch({
-		// (The driver shows every page in light unless it is told otherwise, whatever the app says.)
-		colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light",
 		args: [root],
 		env: { ...process.env, PLAYWRIGHT_BROWSERS_PATH: browsers, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_VOICE: voice, PINE_DESKTOP_SHELL: "/bin/bash", PINE_DESKTOP_RELEASES: `http://127.0.0.1:${(github.address() as any).port}/repos/pmndre/pine/releases/latest`, PINE_DESKTOP_SSH: ssh },
 	});
@@ -1218,8 +1211,6 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await menu("settings");
 });
 
-/** The M3 scheme of pine's palette, as material-theme-builder generates it: what the window should draw. */
-const SCHEMES = builder(DEFAULT_PALETTE.source, DEFAULT_PALETTE).toJson().schemes;
 const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
 /** The colour a CSS colour value resolves to in the page, read from an element of the test's own. */
 const resolved = (value: string) =>
@@ -1232,92 +1223,74 @@ const resolved = (value: string) =>
 	}, value);
 /** The alpha of a computed colour: rgba(..., a), color(srgb ... / a), or 1. */
 const alphaOf = (colour: string) => Number(/rgba\([^)]*,\s*([\d.]+)\)/.exec(colour)?.[1] ?? /\/\s*([\d.]+)\)/.exec(colour)?.[1] ?? 1);
+/** The theme the window is drawn in, by its name (theme.ts sets it on the root element). */
+const themeIs = (id: string) => page.waitForFunction((t: string) => document.documentElement.dataset.theme === t, id, { timeout: 10_000 });
+/** The tab in front: drawn in the page colour of the theme. */
+const tabColour = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-slot=tab][data-active]")!).backgroundColor);
 
-test("every colour is a role of the M3 scheme of pine's palette, in light and in dark", async () => {
-	try {
-		for (const look of ["light", "dark"] as const) {
-			await page.emulateMedia({ colorScheme: look });
-			await page.waitForFunction((d: boolean) => document.documentElement.classList.contains("dark") === d, look === "dark");
-			const scheme = SCHEMES[look];
-			// <Mtb> wrote the scheme into the page...
-			assert.equal(await resolved("var(--md-sys-color-surface)"), rgb(scheme.surface), `${look}: the M3 surface is in the page`);
-			// ...and shadcn's tokens point at its roles.
-			assert.equal(await resolved("var(--background)"), rgb(scheme.surface), `${look}: shadcn's background is the surface`);
-			assert.equal(await resolved("var(--primary)"), rgb(scheme.primary), `${look}: shadcn's primary is the primary`);
-			assert.equal(await resolved("var(--destructive)"), rgb(scheme.error), `${look}: shadcn's destructive is the error`);
-			// pine's own mapping on top of the package's: the line is the highest container, a popover sits just above the page.
-			assert.equal(await resolved("var(--border)"), rgb(scheme.surfaceContainerHighest), `${look}: the border is surface container highest`);
-			assert.equal(await resolved("var(--popover)"), rgb(scheme.surfaceContainerLow), `${look}: a popover is surface container low`);
-			// Hover and press are state layers over what is below, not an opaque colour.
-			for (const [token, alpha] of [["--accent", 0.08], ["--sidebar-accent", 0.12]] as const) {
-				const colour = await resolved(`var(${token})`);
-				assert.ok(Math.abs(alphaOf(colour) - alpha) < 0.01, `${look}: ${token} is the text colour at ${alpha * 100}%, not ${colour}`);
-			}
-			// What has the keyboard is grey, never the primary.
-			assert.equal(await resolved("var(--ring)"), rgb(scheme.outline), `${look}: the focus ring is the outline`);
-			assert.notEqual(await resolved("var(--ring)"), rgb(scheme.primary));
-			// The side bar lets the Mac's window material show through.
-			const side = await resolved("var(--sidebar)");
-			assert.ok(alphaOf(side) > 0 && alphaOf(side) < 1, `${look}: the side bar is translucent, not ${side}`);
-		}
-	} finally {
-		await page.emulateMedia({ colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light" });
-	}
+test("the window is drawn in pmndre, the theme pine names when pine.json names none, with pine's own colours", { skip: Boolean(process.env.PINE_DESKTOP_THEME) }, async () => {
+	await themeIs("pmndre");
+	assert.equal(await page.evaluate(() => document.documentElement.classList.contains("dark")), true);
+	assert.equal(await tabColour(), rgb("#1b1e28"));
+	assert.equal(await resolved("var(--primary)"), rgb("#5de4c7"), "the accent is pmndre's mint");
+	assert.equal(await resolved("var(--foreground)"), rgb("#e4f0fb"));
+	assert.equal(await resolved("var(--border)"), rgb("#2b2e3c"));
+	// What has the keyboard is grey, never the accent; the side bar lets the Mac's window material show through.
+	assert.equal(await resolved("var(--ring)"), rgb("#767c9d"));
+	const side = await resolved("var(--sidebar)");
+	assert.ok(alphaOf(side) > 0 && alphaOf(side) < 1, `the side bar is translucent, not ${side}`);
+	// pine put its set of themes into the home that had none.
+	assert.ok(fs.existsSync(path.join(home, "themes", "pmndre.json")) && fs.existsSync(path.join(home, "themes", "github-light.json")));
 });
 
-test("the appearance setting puts the page in dark or light, and System follows the system", async () => {
-	// The driver forces light on every page; here the app's own setting has to decide, as it does
-	// for the owner (Electron's native theme drives the page's prefers-color-scheme).
-	await page.emulateMedia({ colorScheme: null });
-	const dark = () => page.evaluate(() => document.documentElement.classList.contains("dark"));
-	const appearance = (label: string) => page.click(`[role=group][aria-label=Appearance] [data-slot=toggle-group-item]:text-is("${label}")`);
-	const waitDark = (want: boolean) => page.waitForFunction((w) => document.documentElement.classList.contains("dark") === w, want);
+test("a theme picked in Settings draws the window and is pine's setting; a VS Code theme dropped into the folder is offered; another hand's choice is followed", async () => {
+	const pick = async (name: string) => {
+		await page.click("[data-setting=theme] [data-slot=select-trigger]");
+		await page.click(`[role=option]:has-text("${name}")`);
+	};
+	// A theme of the owner's own, as VS Code writes them (comments, a trailing comma), and a file that is no theme.
+	write(path.join(home, "themes", "mine.json"), `// my theme
+{
+	"name": "Mine",
+	"type": "dark",
+	"colors": { "editor.background": "#102030", "editor.foreground": "#e0e0e0", "button.background": "#ff8800", },
+	"tokenColors": [{ "scope": "keyword", "settings": { "foreground": "#ff00aa" } }],
+}`);
+	write(path.join(home, "themes", "broken.json"), `{ "name": "Broken", "colors": {} }`);
 	try {
 		await menu("settings");
 		await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
-		await appearance("Dark");
-		await waitDark(true);
-		// What the stylesheet draws follows the class: the tab in front is the dark M3 surface, then the light one.
-		const tab = () => page.evaluate(() => getComputedStyle(document.querySelector("[data-slot=tab][data-active]")!).backgroundColor);
-		assert.equal(await tab(), rgb(SCHEMES.dark.surface));
-		await appearance("Light");
-		await waitDark(false);
-		assert.equal(await dark(), false);
-		assert.equal(await tab(), rgb(SCHEMES.light.surface));
-		// System: whatever the system says, the class says the same.
-		await appearance("System");
-		await page.emulateMedia({ colorScheme: "dark" });
-		await waitDark(true);
-		await page.emulateMedia({ colorScheme: "light" });
-		await waitDark(false);
-		await menu("settings");
-	} finally {
-		await page.emulateMedia({ colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light" });
-	}
-});
+		await sees("[data-setting=theme]");
+		await sees("text=broken.json: it names no colour for the page");
 
-test("Light or Dark wins over what the page's prefers-color-scheme says, as in the preview where nothing drives that query", async () => {
-	// The page itself decides from the setting: in the preview (an ordinary browser) and under the
-	// driver's emulation, prefers-color-scheme is not Electron's native theme, and the choice must hold all the same.
-	const appearance = (label: string) => page.click(`[role=group][aria-label=Appearance] [data-slot=toggle-group-item]:text-is("${label}")`);
-	const waitDark = (want: boolean) => page.waitForFunction((w) => document.documentElement.classList.contains("dark") === w, want);
-	try {
-		await menu("settings");
-		await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
-		await page.emulateMedia({ colorScheme: "dark" });
-		await appearance("Light");
-		await waitDark(false);
-		await page.emulateMedia({ colorScheme: "light" });
-		await appearance("Dark");
-		await waitDark(true);
-		// Back to System: the query decides again, and a change of it is followed.
-		await appearance("System");
-		await waitDark(false);
-		await page.emulateMedia({ colorScheme: "dark" });
-		await waitDark(true);
+		await pick("GitHub Light Default");
+		await themeIs("github-light");
+		assert.equal(await page.evaluate(() => document.documentElement.classList.contains("dark")), false);
+		assert.equal(await tabColour(), rgb("#ffffff"));
+		assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).ui.theme, "github-light");
+		// The app keeps it, to open in it next time.
+		const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
+		assert.equal(prefs().look?.id, "github-light");
+
+		await pick("Mine");
+		await themeIs("mine");
+		assert.equal(await tabColour(), rgb("#102030"));
+		assert.equal(await resolved("var(--primary)"), rgb("#ff8800"));
+		assert.equal(await resolved("var(--code-keyword)"), rgb("#ff00aa"));
+
+		// Another hand (the main agent's set_setting, another UI) changes it through pine: the window follows.
+		await api("POST", "/settings", { key: "ui.theme", value: "dracula" });
+		await themeIs("dracula");
+		assert.equal(await tabColour(), rgb("#282a36"));
+		// A theme pine cannot draw is not taken.
+		const refused = await api("POST", "/settings", { key: "ui.theme", value: "broken" });
+		assert.equal(refused.ok, false);
 		await menu("settings");
 	} finally {
-		await page.emulateMedia({ colorScheme: process.env.PINE_DESKTOP_THEME === "dark" ? "dark" : "light" });
+		await api("POST", "/settings", { key: "ui.theme", value: process.env.PINE_DESKTOP_THEME ?? "default" });
+		await themeIs(process.env.PINE_DESKTOP_THEME ?? "pmndre");
+		fs.rmSync(path.join(home, "themes", "mine.json"), { force: true });
+		fs.rmSync(path.join(home, "themes", "broken.json"), { force: true });
 	}
 });
 

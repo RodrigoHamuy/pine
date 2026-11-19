@@ -1,16 +1,15 @@
-// The window takes the colour of the agent in front, for the role families the owner ticked in
-// Settings > App > Colours: the real app on a home of its own, started twice on the same data. What is
-// checked is the colour a role resolves to in the window, never a class. The global values are read
-// from the window itself, so that nothing here depends on how the owner's palette is drawn.
+// The window takes the colour of the agent in front as its accent, over the theme's, unless the owner
+// turned that off in Settings > App: the real app on a home of its own, started twice on the same
+// data. What is checked is the colour a token resolves to in the window, never a class. The theme's
+// own values are read from the window itself, so that nothing here depends on how a theme is drawn.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
-import { builder } from "material-theme-builder";
 import { _electron as electron } from "playwright-core";
 import { startMock } from "../../baseline/tests/mock.mjs";
-import { DEFAULT_PALETTE } from "../src/theme.ts";
+import { onColour } from "../src/theme.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 let app: any;
@@ -25,41 +24,36 @@ const write = (file: string, content: string) => {
 	fs.writeFileSync(file, content);
 };
 const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
-const { source: _mint, ...owners } = DEFAULT_PALETTE;
-/** The agent's scheme with the owner's neutrals: what the primary, secondary and tertiary come from. */
-const booksScheme = () => builder(BOOKS, owners).toJson().schemes;
-/** The agent's scheme with its own neutral (surfaces ticked): the owner's neutral left out. */
-const { neutral: _night, ...withoutNeutral } = owners;
-const booksSurfaces = () => builder(BOOKS, withoutNeutral).toJson().schemes;
 
-/** The colour a role resolves to in the window. */
-const role = (name: string): Promise<string> =>
+/** The colour a shadcn token resolves to in the window. */
+const token = (name: string): Promise<string> =>
 	page.evaluate((v: string) => {
 		const probe = document.body.appendChild(document.createElement("div"));
-		probe.style.backgroundColor = `var(--md-sys-color-${v})`;
+		probe.style.backgroundColor = `var(--${v})`;
 		const colour = getComputedStyle(probe).backgroundColor;
 		probe.remove();
 		return colour;
 	}, name);
-/** Waits until a role is that colour, and says what it is instead when it does not come. */
-async function roleIs(name: string, want: string, why: string): Promise<void> {
+/** Waits until a token is that colour, and says what it is instead when it does not come. */
+async function tokenIs(name: string, want: string, why: string): Promise<void> {
 	for (let i = 0; i < 100; i++) {
-		if ((await role(name)) === want) return;
+		if ((await token(name)) === want) return;
 		await new Promise((r) => setTimeout(r, 50));
 	}
-	assert.equal(await role(name), want, why);
+	assert.equal(await token(name), want, why);
 }
 
 const menu = (name: string) => app.evaluate(({ BrowserWindow }: any, n: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", n), name);
 const tab = (agent: string) => page.locator(`[data-slot=tab][title^="${agent} ·"]`).first();
 
 async function start(): Promise<void> {
-	app = await electron.launch({ colorScheme: "light", args: [root], env: { ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
+	app = await electron.launch({ args: [root], env: { ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" } });
 	page = await app.firstWindow();
 	await page.setViewportSize?.({ width: 1280, height: 820 }).catch(() => {});
 	await page.waitForSelector("[data-slot=empty] h1", { timeout: 30_000 });
 	const dialog = await page.waitForSelector("[data-slot=dialog-footer] button >> text=Not now", { timeout: 3000 }).catch(() => undefined);
 	if (dialog) await dialog.click();
+	await page.waitForFunction(() => document.documentElement.dataset.theme === "pmndre");
 }
 
 /** books' conversation in front, opened from its page in Settings the first time. */
@@ -72,22 +66,20 @@ async function booksInFront(): Promise<void> {
 	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "Open" }).click();
 	await page.waitForSelector("[data-slot=empty] [data-slot=avatar][data-agent=books]");
 }
-async function colours(): Promise<void> {
+/** Turns "The agent in front colours the window" on or off in Settings > App, and waits until the switch says so. */
+async function follow(on: boolean): Promise<void> {
 	await menu("settings");
 	await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
-	await page.waitForSelector("[data-setting=agent-families]");
-}
-const family = (name: string) => page.locator(`[data-setting=agent-families] [data-family=${name}] [role=checkbox]`);
-/** Ticks or unticks a family in Settings, and waits until the box says so. */
-async function tick(name: string, on: boolean): Promise<void> {
-	const box = family(name);
+	const box = page.locator("[data-setting=agent-accent] [role=switch]");
+	await box.waitFor();
 	if ((await box.getAttribute("aria-checked")) !== String(on)) await box.click();
-	await page.waitForFunction(([n, v]: [string, string]) => document.querySelector(`[data-setting=agent-families] [data-family=${n}] [role=checkbox]`)?.getAttribute("aria-checked") === v, [name, String(on)]);
+	await page.waitForFunction((v: string) => document.querySelector("[data-setting=agent-accent] [role=switch]")?.getAttribute("aria-checked") === v, String(on));
+	await menu("settings");
 }
 
-/** The window's own values, with no agent's colour in front: read once main's conversation is in front. */
-const global = { light: {} as Record<string, string>, dark: {} as Record<string, string> };
-const ROLES = ["primary", "on-primary", "secondary", "tertiary", "surface", "surface-container-low", "on-surface", "outline"];
+/** The theme's own values, with no agent's colour in front: read once main's conversation is in front. */
+const theme: Record<string, string> = {};
+const TOKENS = ["primary", "primary-foreground", "background", "foreground", "border", "muted-foreground"];
 
 before(async () => {
 	if (!fs.existsSync(path.join(root, "dist", "index.html")) || !fs.existsSync(path.join(root, "dist-electron", "main.js"))) throw new Error("the app is not built: node scripts/build.mjs in desktop/");
@@ -100,14 +92,10 @@ before(async () => {
 	write(path.join(home, "agents", "books", "agent.json"), JSON.stringify({ description: "Keeps the books", color: BOOKS }));
 	write(path.join(home, "agents", "books", "workspace", "AGENTS.md"), "You keep the books.\n");
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
-	// A damaged value: the default (primary only) is what the window follows.
+	// A damaged value of the app before themes: the default (on) is what the window does.
 	write(prefsFile(), JSON.stringify({ updates: false, agentFamilies: "rainbow" }));
 	await start();
-	for (const look of ["dark", "light"] as const) {
-		await page.emulateMedia({ colorScheme: look });
-		await page.waitForFunction((d: boolean) => document.documentElement.classList.contains("dark") === d, look === "dark");
-		for (const r of ROLES) global[look][r] = await role(r);
-	}
+	for (const t of TOKENS) theme[t] = await token(t);
 });
 
 after(async () => {
@@ -116,65 +104,56 @@ after(async () => {
 	if (home) fs.rmSync(home, { recursive: true, force: true });
 });
 
-test("a coloured agent in front gives the window its primary, in light and dark, and leaves the surfaces global (a damaged preference is the default)", async () => {
-	assert.notEqual(rgb(booksScheme().light.primary), global.light.primary, "books' primary differs from the window's");
+test("a coloured agent in front gives the window its accent, with what reads on it, and leaves the rest the theme's", async () => {
+	assert.equal(theme.primary, rgb("#5de4c7"), "pmndre's mint while main is in front");
 	await booksInFront();
-	await roleIs("primary", rgb(booksScheme().light.primary), "light: books' primary");
-	await roleIs("on-primary", rgb(booksScheme().light.onPrimary), "light: books' on-primary");
-	for (const r of ["secondary", "tertiary", "surface", "surface-container-low", "on-surface", "outline"]) assert.equal(await role(r), global.light[r], `light: ${r} stays the window's`);
-	await page.emulateMedia({ colorScheme: "dark" });
-	await roleIs("primary", rgb(booksScheme().dark.primary), "dark: books' primary");
-	assert.equal(await role("surface"), global.dark.surface, "dark: the surface stays the window's");
-	await page.emulateMedia({ colorScheme: "light" });
-	await roleIs("primary", rgb(booksScheme().light.primary), "light again: books' primary");
+	await tokenIs("primary", rgb(BOOKS), "books' colour is the accent");
+	await tokenIs("primary-foreground", rgb(onColour(BOOKS)), "and what is written on it reads");
+	for (const t of ["background", "foreground", "border", "muted-foreground"]) assert.equal(await token(t), theme[t], `${t} stays the theme's`);
 });
 
-test("another tab, Settings, or an agent without a colour gives the global palette back at once", async () => {
+test("another tab, Settings, or an agent without a colour gives the theme's accent back at once", async () => {
 	await booksInFront();
-	await roleIs("primary", rgb(booksScheme().light.primary), "books in front");
+	await tokenIs("primary", rgb(BOOKS), "books in front");
 	await tab("main").click();
-	await roleIs("primary", global.light.primary, "main has no colour");
+	await tokenIs("primary", theme.primary, "main has no colour");
 	await booksInFront();
-	await roleIs("primary", rgb(booksScheme().light.primary), "books in front again");
+	await tokenIs("primary", rgb(BOOKS), "books in front again");
 	await menu("settings");
-	await roleIs("primary", global.light.primary, "Settings in front");
+	await tokenIs("primary", theme.primary, "Settings in front");
 	await menu("settings");
 });
 
-test("ticking surfaces gives the window the agent's own surfaces; unticking every family changes nothing", async () => {
-	await colours();
-	await tick("surfaces", true);
+test("a theme chosen while the agent is in front keeps the agent's accent over the new theme", async () => {
 	await booksInFront();
-	await roleIs("surface", rgb(booksSurfaces().light.surface), "light: books' surface, from its own neutral");
-	await roleIs("surface-container-low", rgb(booksSurfaces().light.surfaceContainerLow), "light: books' shell");
-	await roleIs("primary", rgb(booksScheme().light.primary), "the primary is still followed");
-	assert.equal(await role("outline"), global.light.outline, "outlines not ticked: the window's");
-	await page.emulateMedia({ colorScheme: "dark" });
-	await roleIs("surface", rgb(booksSurfaces().dark.surface), "dark: books' surface");
-	await page.emulateMedia({ colorScheme: "light" });
-
-	await colours();
-	await tick("primary", false);
-	await tick("surfaces", false);
-	await booksInFront();
-	for (const r of ROLES) await roleIs(r, global.light[r], `nothing ticked: ${r} is the window's`);
-	assert.deepEqual(JSON.parse(fs.readFileSync(prefsFile(), "utf8")).agentFamilies, []);
+	await page.evaluate(() => (window as any).pine.call("POST", "/settings", { key: "ui.theme", value: "github-light" }));
+	await page.waitForFunction(() => document.documentElement.dataset.theme === "github-light");
+	await tokenIs("background", rgb("#ffffff"), "GitHub Light's page");
+	await tokenIs("primary", rgb(BOOKS), "still books' accent");
+	await page.evaluate(() => (window as any).pine.call("POST", "/settings", { key: "ui.theme", value: "default" }));
+	await page.waitForFunction(() => document.documentElement.dataset.theme === "pmndre");
 });
 
-test("the families are kept after a restart, and Reset colours brings back primary only", async () => {
-	await colours();
-	await tick("tertiary", true);
+test("turned off in Settings > App the theme's accent stays; that is kept after a restart, and an old preference that left out the primary is off too", async () => {
+	await follow(false);
+	await booksInFront();
+	await tokenIs("primary", theme.primary, "off: the theme's accent with books in front");
+	assert.equal(JSON.parse(fs.readFileSync(prefsFile(), "utf8")).agentAccent, false);
 	await app.close();
 	await start();
 	await booksInFront();
-	await roleIs("tertiary", rgb(booksScheme().light.tertiary), "after a restart: books' tertiary");
-	await roleIs("primary", global.light.primary, "after a restart: primary still unticked");
+	await tokenIs("primary", theme.primary, "after a restart: still off");
 
-	await colours();
-	await page.getByRole("button", { name: "Reset colours" }).click();
-	await page.waitForFunction(() => document.querySelector("[data-setting=agent-families] [data-family=primary] [role=checkbox]")?.getAttribute("aria-checked") === "true");
-	assert.equal(await family("tertiary").getAttribute("aria-checked"), "false");
+	await follow(true);
 	await booksInFront();
-	await roleIs("primary", rgb(booksScheme().light.primary), "reset: primary followed");
-	await roleIs("tertiary", global.light.tertiary, "reset: tertiary the window's");
+	await tokenIs("primary", rgb(BOOKS), "on again: books' accent");
+
+	// The app before themes kept role families: one without the primary followed no accent.
+	await app.close();
+	const prefs = JSON.parse(fs.readFileSync(prefsFile(), "utf8"));
+	delete prefs.agentAccent;
+	write(prefsFile(), JSON.stringify({ ...prefs, agentFamilies: ["surfaces"] }));
+	await start();
+	await booksInFront();
+	await tokenIs("primary", theme.primary, "families without the primary: off");
 });
