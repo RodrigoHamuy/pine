@@ -8,7 +8,9 @@ and theme, as in the desktop app ([desktop.md](desktop.md)). It is for a pine th
 server, a Mac mini at home or a VPS, which you reach with `ssh` from the internet.
 
 It is a package of its own in pine's repository (`web/`), not part of what goes to npm. Whoever
-runs a deployment of it builds it and deploys it by hand; the address is theirs to choose.
+runs a deployment of it builds it and deploys it by hand; the address is theirs to choose. A pull
+request to pine that changes the web client gets a preview address of its own (see "Previews of a
+pull request").
 
 ## Using it
 
@@ -64,8 +66,24 @@ that has no hold on the client (`noopener`).
 | Deploy the Worker with `web/dist` as its static files | `npx wrangler deploy` in `web/relay/` (with your Cloudflare account; `wrangler.jsonc` names the Worker, its rate limit and its files) |
 | Try it on this computer | `npm run dev` in `web/relay/` serves the same deployment on the loopback; its relay still refuses this computer's addresses |
 
-No workflow deploys it. The configuration that is deployed turns Workers Logs off, so that
-nothing of the bytes carried is kept.
+No workflow deploys it: the Worker's live version changes only by hand. The configuration that
+is deployed turns Workers Logs off, so that nothing of the bytes carried is kept, and gives the
+Worker no live address on `workers.dev` (`workers_dev: false`), only preview addresses.
+
+## Previews of a pull request
+
+| What | How |
+|---|---|
+| `web-preview.yml` | The workflow `.github/workflows/web-preview.yml`, on every pull request that changes `web/`, the desktop page (`desktop/src`) or the workflow itself |
+| The gates | `npm run check` and `npm test` in `web/` and in `web/relay/`, then `npm run build` in `web/`, as by hand. The SSH core's tests run on an `sshd` and a Chrome for Testing that the job installs |
+| The preview | `npx wrangler versions upload --preview-alias pr-<number>` in `web/relay/`: a version of the Worker with that build, not made live, at `https://pr-<number>-pine-relay.<account>.workers.dev`. Each push uploads a new version under the same alias, so the address stays the same |
+| The comment | The address is posted on the pull request as one comment, which each push updates |
+| `web-preview` | The GitHub environment that holds `CLOUDFLARE_API_TOKEN` (a token that can edit Workers scripts on that account) and `CLOUDFLARE_ACCOUNT_ID`. Only the job that uploads names it |
+| A pull request from a fork | Built and tested, never previewed: the job that uploads runs only for a branch of pine's own repository, and a fork never gets the secrets |
+| Without the secrets | The job passes and says "nothing deployed", on the pull request and in its summary |
+
+Nothing is deployed from `next` or `main`, and the Release workflow has no part in it. A preview
+reaches only machines with a public SSH address, like any deployment, and keeps nothing.
 
 ## Working on it
 

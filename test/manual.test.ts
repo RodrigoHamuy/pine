@@ -302,6 +302,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["reach my pine from a work laptop where I cannot install anything", /^web/],
 		["the browser shows a fingerprint SHA256 what do I do with it", /^web#/],
 		["where is the key of the browser kept and can a web page steal it", /^web#/],
+		["try the browser version of a pull request before it is merged", /^web#(previews|web-preview)/],
 	];
 	const missed = cases.filter(([q, want]) => !top(q).some((id) => want.test(id))).map(([q]) => `${q} → ${top(q).join(", ")}`);
 	assert.deepEqual(missed, []);
