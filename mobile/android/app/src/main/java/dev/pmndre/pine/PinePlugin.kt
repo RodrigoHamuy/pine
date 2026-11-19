@@ -56,8 +56,8 @@ class PinePlugin : Plugin() {
 	private lateinit var device: DeviceKey
 	// Calls wait for the network: never on Capacitor's own thread, which every other call waits behind.
 	private val work = Executors.newCachedThreadPool()
-	// The system bars' colour and whether the page's theme is dark: pmndre's (index.css) until the page says.
-	private var barColour = Color.parseColor("#1b1e28")
+	// The system bars' color and whether the page's theme is dark: pmndre's (index.css) until the page says.
+	private var barColor = Color.parseColor("#1b1e28")
 	private var barsDark = true
 
 	override fun load() {
@@ -226,14 +226,14 @@ class PinePlugin : Plugin() {
 		call.resolve()
 	}
 
-	// The page's theme, reported by the bridge: a #rrggbb colour and a boolean, and nothing else is taken.
+	// The page's theme, reported by the bridge: a #rrggbb color and a boolean, and nothing else is taken.
 	@PluginMethod
 	fun systemBars(call: PluginCall) {
-		val colour = call.getString("color") ?: ""
+		val color = call.getString("color") ?: ""
 		val dark = call.data.opt("dark")
-		if (!BAR_COLOUR.matches(colour) || dark !is Boolean) return call.reject("The system bars take a colour as #rrggbb and whether the theme is dark.")
+		if (!BAR_COLOR.matches(color) || dark !is Boolean) return call.reject("The system bars take a color as #rrggbb and whether the theme is dark.")
 		activity.runOnUiThread {
-			barColour = Color.parseColor(colour)
+			barColor = Color.parseColor(color)
 			barsDark = dark
 			paintBars()
 			call.resolve()
@@ -242,18 +242,18 @@ class PinePlugin : Plugin() {
 
 	/**
 	 * With the WebView padded by the system bars (index.html has no viewport-fit=cover), what shows
-	 * under them is the window's own background: it takes the page's colour, and the icons are light
-	 * on a dark theme. Before Android 15 the bars have colours of their own, which take it too.
+	 * under them is the window's own background: it takes the page's color, and the icons are light
+	 * on a dark theme. Before Android 15 the bars have colors of their own, which take it too.
 	 */
 	@Suppress("DEPRECATION")
 	private fun paintBars() {
 		val window = activity.window
-		window.decorView.setBackgroundColor(barColour)
+		window.decorView.setBackgroundColor(barColor)
 		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-			window.statusBarColor = barColour
-			window.navigationBarColor = barColour
+			window.statusBarColor = barColor
+			window.navigationBarColor = barColor
 		}
-		// No grey veil over the navigation bar with its three buttons: the page's colour, as it is.
+		// No grey veil over the navigation bar with its three buttons: the page's color, as it is.
 		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
 		WindowCompat.getInsetsController(window, window.decorView).apply {
 			isAppearanceLightStatusBars = !barsDark
@@ -308,6 +308,6 @@ class PinePlugin : Plugin() {
 
 	private companion object {
 		const val KEY_ALIAS = "pine-vault"
-		val BAR_COLOUR = Regex("^#[0-9a-fA-F]{6}$")
+		val BAR_COLOR = Regex("^#[0-9a-fA-F]{6}$")
 	}
 }

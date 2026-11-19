@@ -24,7 +24,7 @@
 //   - media are answered by the plugin.
 // Then the app's life: the back button closes the open sheet, then leaves the app; the app comes back
 // from the background (after back, and after HOME) still connected to the machine. Last, the system
-// bars: the theme's colour under them, in pine's dark theme and in a light one (bars-dark.png and
+// bars: the theme's color under them, in pine's dark theme and in a light one (bars-dark.png and
 // bars-light.png beside the screenshot).
 // An emulator it started is stopped at the end, and so are its servers.
 //
@@ -329,16 +329,16 @@ try {
 	await waitFor("the app in front and connected after HOME", (ns) => front() === APP && connected(ns), 60);
 	tap(await waitFor("the side bar button", sidebarButton));
 	await waitFor("the agents after resume", agentsShown);
-	// ---- the system bars: the theme's colour, light icons on a dark theme -----------------------------
-	step("the status and navigation bars take the theme's colour, in a dark theme and in a light one");
-	/** The colour at a point of the screen, as #rrggbb: screencap's raw RGBA follows a header of its own. */
-	const screenColours = () => {
+	// ---- the system bars: the theme's color, light icons on a dark theme -----------------------------
+	step("the status and navigation bars take the theme's color, in a dark theme and in a light one");
+	/** The color at a point of the screen, as #rrggbb: screencap's raw RGBA follows a header of its own. */
+	const screenColors = () => {
 		const raw = execFileSync(ADB, ["exec-out", "screencap"], { env, maxBuffer: 64 * 1024 * 1024 });
 		const w = raw.readUInt32LE(0);
 		const h = raw.readUInt32LE(4);
 		const head = raw.length - w * h * 4;
 		const at = (x, y) => `#${[0, 1, 2].map((i) => raw[head + (y * w + x) * 4 + i].toString(16).padStart(2, "0")).join("")}`;
-		// Near the left edge, clear of the clock and the icons: the bar's own colour.
+		// Near the left edge, clear of the clock and the icons: the bar's own color.
 		return { status: at(4, 4), navigation: at(4, h - 4) };
 	};
 	const themeBg = async (id) => {
@@ -350,7 +350,7 @@ try {
 	const barsIn = async (id, file) => {
 		const want = await themeBg(id);
 		let got;
-		await waitFor(`the bars in ${want} (${id})`, () => ((got = screenColours()), got.status === want && got.navigation === want) || undefined, 30);
+		await waitFor(`the bars in ${want} (${id})`, () => ((got = screenColors()), got.status === want && got.navigation === want) || undefined, 30);
 		await sleep(500);
 		fs.writeFileSync(path.join(path.dirname(shot), file), execFileSync(ADB, ["exec-out", "screencap", "-p"], { env, maxBuffer: 64 * 1024 * 1024 }));
 		step(`screenshot: ${path.join(path.dirname(shot), file)}`);

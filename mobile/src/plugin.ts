@@ -32,8 +32,6 @@ export interface PagePrefs {
 	notify: boolean;
 	updates: boolean;
 	keepRunning: boolean;
-	/** While a coloured agent's conversation is in front, the window's accent is its colour. */
-	agentAccent: boolean;
 	/** The theme the page was last drawn in, as cleanLook made it safe; none: pmndre. */
 	look?: Look;
 }
@@ -83,9 +81,9 @@ export interface PinePlugin {
 	/** Put a text on the phone's clipboard (the phone's key). */
 	copy(options: { text: string }): Promise<void>;
 	/**
-	 * Paint the status and navigation bars in the page's background colour, with light icons on a
+	 * Paint the status and navigation bars in the page's background color, with light icons on a
 	 * dark theme and dark ones on a light theme (Electron's `nativeTheme` and window background in
-	 * main.ts). The plugin takes a #rrggbb colour and a boolean, nothing else, and keeps them across
+	 * main.ts). The plugin takes a #rrggbb color and a boolean, nothing else, and keeps them across
 	 * a rotation or a change of the system's own theme.
 	 */
 	systemBars(options: { color: string; dark: boolean }): Promise<void>;

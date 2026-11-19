@@ -7,9 +7,9 @@ import type { AppState, PageBridge, Prefs } from "../../desktop/src/bridge.ts";
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
 import { MEDIA_BASE, type PagePrefs, type PinePlugin } from "./plugin.ts";
 
-const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false, agentAccent: true };
+const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false };
 
-/** pmndre's page colour (index.css), which the page draws with no theme: the system bars' until one is known. */
+/** pmndre's page color (index.css), which the page draws with no theme: the system bars' until one is known. */
 const PMNDRE_BG = "#1b1e28";
 
 /** What is open over the page: a sheet, a dialog, a menu (Base UI's popups, mounted only while open; a listbox is not one: the side bar's list of agents is always there). */
@@ -30,7 +30,7 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 	// The page's preferences and the machines, as the plugin last gave them.
 	let prefs: Prefs = { ...DEFAULTS, hosts: [] };
 
-	// The system bars take the colour and the kind of the theme the page draws, as Electron's window
+	// The system bars take the color and the kind of the theme the page draws, as Electron's window
 	// does (main.ts): no white bands around a dark page. A plugin that cannot paint them changes nothing else.
 	const bars = (look: Look | undefined) =>
 		void plugin.systemBars({ color: (look?.colors.bg ?? PMNDRE_BG).slice(0, 7).toLowerCase(), dark: (look?.kind ?? "dark") === "dark" }).catch(() => {});
@@ -92,12 +92,11 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 			}),
 		// Checked as main.ts checks the owner's change; the machines are changed by their own methods only.
 		prefs: async (change: Record<string, unknown>) => {
-			const flag = (key: "notify" | "updates" | "keepRunning" | "agentAccent") => (typeof change[key] === "boolean" ? change[key] : prefs[key]);
+			const flag = (key: "notify" | "updates" | "keepRunning") => (typeof change[key] === "boolean" ? change[key] : prefs[key]);
 			const next: PagePrefs = {
 				notify: flag("notify"),
 				updates: flag("updates"),
 				keepRunning: flag("keepRunning"),
-				agentAccent: flag("agentAccent"),
 			};
 			// The theme the page draws now, made safe as main.ts makes it; none: pmndre, nothing stored.
 			const look = "look" in change ? cleanLook(change.look) : prefs.look;

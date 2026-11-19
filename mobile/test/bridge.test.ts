@@ -37,7 +37,7 @@ function fakePlugin(answers: Partial<Record<keyof PinePlugin, (options?: any) =>
 const ready = { status: "ready", mode: "attached", started: false, home: "box:~/.pine", version: "0.40.0", from: "ssh", host: "me@box", label: "box" } as const;
 
 test("state: the plugin's connection and stored machines, with no local machine and the phone's platform", async () => {
-	const { plugin } = fakePlugin({ state: () => ({ state: ready, connected: true, version: "1.2.3" }) }, { hosts: ["me@box"], use: "me@box", prefs: { agentAccent: false } });
+	const { plugin } = fakePlugin({ state: () => ({ state: ready, connected: true, version: "1.2.3" }) }, { hosts: ["me@box"], use: "me@box", prefs: { notify: true } });
 	const s = await mobileBridge(plugin).state();
 	assert.equal(s.local, false);
 	assert.equal(s.platform, "android");
@@ -46,7 +46,7 @@ test("state: the plugin's connection and stored machines, with no local machine 
 	assert.equal(s.home, "box:~/.pine");
 	assert.equal(s.updates, false);
 	assert.deepEqual(s.versions, { app: "1.2.3", electron: "none" });
-	assert.deepEqual(s.prefs, { keepRunning: false, hosts: ["me@box"], use: "me@box", agentAccent: false, notify: false, updates: false });
+	assert.deepEqual(s.prefs, { keepRunning: false, hosts: ["me@box"], use: "me@box", notify: true, updates: false });
 });
 
 test("mediaBase: the address on the app's origin that the plugin answers", () => {
@@ -141,15 +141,15 @@ test("back: closes what the page has open with Escape, else leaves the app; the 
 });
 
 test("machines: use, add and forget go to the plugin, and the prefs come back with its list", async () => {
-	const { plugin, calls } = fakePlugin({ addHost: ({ host }) => ({ hosts: ["me@box", host] }), forgetHost: () => ({ hosts: ["pi"] }) }, { hosts: ["me@box"], prefs: { agentAccent: false } });
+	const { plugin, calls } = fakePlugin({ addHost: ({ host }) => ({ hosts: ["me@box", host] }), forgetHost: () => ({ hosts: ["pi"] }) }, { hosts: ["me@box"], prefs: { notify: true } });
 	const b = mobileBridge(plugin);
 	await b.state();
 	const added = await b.addHost("pi");
 	assert.deepEqual(added.hosts, ["me@box", "pi"]);
-	assert.equal(added.agentAccent, false);
+	assert.equal(added.notify, true);
 	await b.use("pi");
 	const forgotten = await b.forgetHost("me@box");
-	assert.deepEqual(forgotten, { keepRunning: false, hosts: ["pi"], use: "pi", agentAccent: false, notify: false, updates: false });
+	assert.deepEqual(forgotten, { keepRunning: false, hosts: ["pi"], use: "pi", notify: true, updates: false });
 	assert.deepEqual(
 		calls.filter(([m]) => m !== "state" && m !== "loadPrefs" && m !== "systemBars"),
 		[
@@ -282,25 +282,25 @@ test("prefs: each value checked as the desktop's main process checks it, then st
 	const { plugin, calls } = fakePlugin({}, { hosts: ["me@box"], use: "me@box" });
 	const b = mobileBridge(plugin);
 	await b.state();
-	const after = await b.prefs({ notify: true, agentAccent: false, look: { id: "night", name: "Night", kind: "dark", colors: { bg: "#000000", text: "#ffffff", accent: "red; background: url(x)" } } });
+	const after = await b.prefs({ notify: true, updates: true, look: { id: "night", name: "Night", kind: "dark", colors: { bg: "#000000", text: "#ffffff", accent: "red; background: url(x)" } } });
 	assert.equal(after.notify, true);
-	assert.equal(after.agentAccent, false);
+	assert.equal(after.updates, true);
 	assert.deepEqual(after.look, { id: "night", name: "Night", kind: "dark", colors: { bg: "#000000", text: "#ffffff" } }, "the theme is made safe by cleanLook");
 	assert.deepEqual(after.hosts, ["me@box"]);
 	assert.equal(after.use, "me@box");
 	const saved = calls.find(([m]) => m === "savePrefs")?.[1] as { prefs: Record<string, unknown> };
-	assert.deepEqual(Object.keys(saved.prefs).sort(), ["agentAccent", "keepRunning", "look", "notify", "updates"], "machines are the plugin's own, not saved with the page's prefs");
+	assert.deepEqual(Object.keys(saved.prefs).sort(), ["keepRunning", "look", "notify", "updates"], "machines are the plugin's own, not saved with the page's prefs");
 
-	const refused = await b.prefs({ notify: "yes", updates: 1, keepRunning: null, agentAccent: "no", home: "/etc", hosts: ["evil"], use: "evil", extra: 1 });
+	const refused = await b.prefs({ notify: "yes", updates: 1, keepRunning: null, home: "/etc", hosts: ["evil"], use: "evil", extra: 1 });
 	assert.deepEqual(refused, after, "nothing that is not a value the desktop accepts changes, and no machine is set this way");
 
 	const reset = await b.prefs({ look: undefined });
 	assert.equal(reset.look, undefined, "no theme is pine's default: none stored");
 });
 
-test("systemBars: the bars take the colour and kind of the theme the page draws, pmndre's with none, and a plugin that cannot paint them changes nothing", async () => {
+test("systemBars: the bars take the color and kind of the theme the page draws, pmndre's with none, and a plugin that cannot paint them changes nothing", async () => {
 	const light = { id: "paper", name: "Paper", kind: "light", colors: { bg: "#FAFAFAcc", text: "#111111" } } as const;
-	const { plugin, calls } = fakePlugin({ systemBars: () => Promise.reject(new Error("no window")) }, { hosts: [], prefs: { agentAccent: true, look: light } });
+	const { plugin, calls } = fakePlugin({ systemBars: () => Promise.reject(new Error("no window")) }, { hosts: [], prefs: { look: light } });
 	const b = mobileBridge(plugin);
 	const bars = () => calls.filter(([m]) => m === "systemBars").map(([, o]) => o);
 	await b.state();
