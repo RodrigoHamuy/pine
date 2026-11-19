@@ -54,7 +54,7 @@ keeps your machines and your key.
 On its first start the app makes an SSH key for this phone (Ed25519). The private key never
 leaves the app and is not in the phone's backups: on Android it is stored encrypted with a key
 of the Android Keystore, on an iPhone it is kept in the iOS Keychain, on this device only and
-readable after the phone's first unlock. Settings > Environments shows the public key, under "This phone's key", with
+readable after the phone's first unlock. Settings > Environments shows the public key, under "This device's key", with
 Copy and Share.
 
 Where the key goes: into `~/.ssh/authorized_keys` of the user you sign in as, on each server or
@@ -130,6 +130,9 @@ reach that machine's SSH port. How is your network's business, not pine's:
 
 Tailscale SSH (signing in without a key) is not supported yet: use Tailscale as a network and
 the phone's key for SSH.
+
+From a browser, which joins no VPN, the web client reaches a machine that is only on a tailnet
+through Tailscale Funnel: see "A machine on a tailnet" in [web.md](web.md#a-machine-on-a-tailnet).
 
 pine's control API stays closed to the network in every case: the app talks to it through the
 SSH connection, and the daemon takes requests for its own loopback only.

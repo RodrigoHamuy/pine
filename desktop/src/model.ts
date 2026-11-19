@@ -198,6 +198,8 @@ export class Tab extends Model {
 }
 
 const STOP_GRACE = 3000;
+/** What the gate says of a pine that answered with no agent at all, until one is made there. */
+const NO_AGENTS = "This pine has no agents.";
 const sessionName = () => `s${Date.now().toString(36)}`;
 /** What a conversation is told when it moves into a worktree. */
 const worktreeNote = (made: WorktreeMade) =>
@@ -208,6 +210,8 @@ export type Picker = { title: string; items: Array<{ value: string; label: strin
 /** The app as a whole. */
 export class Store extends Model {
 	service: ServiceState = { status: "starting" };
+	/** Why the agents of the pine that answered could not be loaded, until they are asked again: the gate says it and offers to try again. */
+	loadError?: string;
 	connected = false;
 	prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true };
 	/** The themes in the themes folder of pine's home, and the one in force (`ui.theme`, pmndre when none is chosen). */
@@ -477,10 +481,22 @@ export class Store extends Model {
 	private async onService(s: ServiceState): Promise<void> {
 		const was = this.service.status;
 		// Another pine than before (another machine was picked): nothing of the last one is kept, not even what an agent of the same name was doing.
+		const moved = s.host !== this.service.host || s.status !== was;
 		if (s.host !== this.service.host) this.forgetPine();
 		this.service = s;
+		const again = s.status === "ready" && (was !== "ready" || !this.agents.length);
+		// A reason the agents did not load is wiped only by a new attempt or another pine: never left in place of one, never wiped without one.
+		if (again || moved) this.loadError = undefined;
 		this.touch();
-		if (s.status === "ready" && (was !== "ready" || !this.agents.length)) await this.load();
+		if (again) await this.load();
+	}
+
+	/** Ask the pine that answered for its agents again, after loading them failed. */
+	async reload(): Promise<void> {
+		if (this.service.status !== "ready") return;
+		this.loadError = undefined;
+		this.touch();
+		await this.load();
 	}
 
 	/** What the page knew of the pine it used, let go of when it uses another. */
@@ -527,6 +543,25 @@ export class Store extends Model {
 		await this.attempt(() => bridge.trustHostKey!(key.host, key.fingerprint));
 	}
 
+	/**
+	 * Whether the owner can let go of the machine in use and come back to the list: only under a bridge
+	 * with no local machine that offers it (the web client's), and only while a machine is in use, being reached or
+	 * not reached: the web bridge keeps trying one in error, and Forget would drop its host key.
+	 */
+	get canDisconnect(): boolean {
+		const s = this.service;
+		return !this.local && typeof bridge.disconnect === "function" && !!s.host;
+	}
+
+	/** Let go of the machine in use, which stays on the list with its host key: the bridge says the new state, and the page shows the machines. */
+	async disconnect(): Promise<void> {
+		if (!this.canDisconnect) return;
+		const prefs = await this.attempt(() => bridge.disconnect!());
+		if (!prefs) return;
+		this.prefs = prefs;
+		this.touch();
+	}
+
 	/** Use the pine of a machine of the list, or with none this computer's: the window shows that pine's agents and its own tabs. */
 	async useMachine(host?: string): Promise<void> {
 		if (host === this.service.host && this.service.status === "ready") return;
@@ -551,7 +586,11 @@ export class Store extends Model {
 		try {
 			this.agents = await this.askAgents();
 		} catch (e) {
-			return this.flash(errText(e), "bad");
+			// Said in the gate, which would otherwise wait for agents that are not coming. Once the page is open
+			// (the same pine started again) the gate is not shown, so it is said where the owner is too.
+			this.loadError = errText(e);
+			if (this.opened) this.flash(this.loadError, "bad");
+			return this.touch();
 		}
 		for (const a of this.agents) learnHome(a.workspace);
 		// The browser build is fetched onto this computer: another machine's pine is not asked about it here.
@@ -562,7 +601,11 @@ export class Store extends Model {
 		embedded();
 		this.timers = [window.setInterval(() => void this.pollPrograms(), 3000), window.setInterval(() => void this.refreshTaints(), 20_000), window.setInterval(() => void this.refreshAgents(), 8000), window.setInterval(embedded, 30_000)];
 		const first = this.agents.find((a) => a.main) ?? this.agents[0];
-		if (!first) return this.flash("this pine has no agents", "bad");
+		if (!first) {
+			// The timers run on: refreshAgents loads the page once an agent is made there.
+			this.loadError = NO_AGENTS;
+			return this.touch();
+		}
 		const saved = await api.tabs().catch(() => ({ tabs: [] as Array<{ agent: string; session: string }>, active: 0, code: false }));
 		// A daemon that was started again: what the tabs showed is asked for anew.
 		this.tabs = [];
@@ -633,6 +676,11 @@ export class Store extends Model {
 		const gone = this.agents.filter((a) => !list.some((x) => x.id === a.id)).map((a) => a.id);
 		this.agents = list;
 		for (const a of list) learnHome(a.workspace);
+		// The pine had no agents when the page was loaded and has one now: the page is loaded, not left on that screen.
+		if (!this.opened && this.loadError === NO_AGENTS && list.length) {
+			this.loadError = undefined;
+			return this.load();
+		}
 		// An agent that is gone has no conversations to show.
 		for (const id of gone) {
 			this.conversations.delete(id);

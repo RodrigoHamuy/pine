@@ -181,6 +181,7 @@ Start at [docs/SKILL.md](docs/SKILL.md); it indexes everything.
 | Use the terminal UI                                                                     | [tui.md](docs/references/tui.md)                             |
 | Use the desktop app (macOS): conversations, an editor, and a settings panel in one window | [desktop.md](docs/references/desktop.md)                     |
 | Use pine from an Android phone or an iPhone, over SSH                                   | [mobile.md](docs/references/mobile.md)                       |
+| Use your pine from a web browser on any computer, over SSH, with nothing installed       | [web.md](docs/references/web.md)                             |
 | Work on a project: `pine .`, the code pane with git changes, files and tool output, `/undo` | [coding.md](docs/references/coding.md)                       |
 | Let an agent make a web page you click in, as its user interface, and be woken by what you press | [interfaces.md](docs/references/interfaces.md)               |
 | Install, run, use the CLI, run it as a service                                          | [operations.md](docs/references/operations.md)               |

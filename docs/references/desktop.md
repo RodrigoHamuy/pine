@@ -262,8 +262,11 @@ machines are added and forgotten. The palette (`⌘K`) has "Use the pine on …"
 | Add a machine | Settings > Environments: type the host as you would after `ssh` (`server`, `user@server`, a name from `~/.ssh/config`) and Add. Anything else (an option for ssh, spaces, `;`) is refused before ssh ever runs. It is connected to when you pick it |
 | Use another pine | Pick it at the foot of the side bar, or Use on its line in Settings > Environments. The window shows that pine's agents, conversations and settings, and the tabs that pine keeps. The app remembers which one it used, and uses it again at its next start |
 | Switch back | The pine you left goes on: switching stops nothing, so an agent at work there finishes its task. Going back to it is immediate. Approvals and notices of a pine you are not looking at wait until you switch to it |
-| One that is not reached | The first screen says why (ssh's own words, and what to do), with Try again and Use this Mac |
+| Connecting | Connecting to another machine's pine is one wait: the first screen says "Connecting to <host>", with the list of machines, and stays until that pine's agents are loaded ("Loading its agents…"), so the window never shows an empty pine in between |
+| One that is not reached | The first screen says why (ssh's own words, and what to do), with Try again and Use this Mac, or Disconnect where it is offered |
+| Agents that do not load | When the pine was reached but its agents could not be loaded, the first screen says "Could not load the agents of <host>" ("Could not load your agents" for this computer's) with the reason, Try again, and the list of machines with Disconnect where it is offered |
 | Forget a machine | Forget on its line (not the one in use). Its connection ends |
+| Disconnect | Only where the page runs without a machine of its own and its bridge offers it (`disconnect`): the web client today, not the Pine app, and not the mobile app yet. It lets go of the machine in use and goes back to the list of machines; the machine and its trusted host key stay, unlike Forget. It is in the machines menu of the title bar, on the line of the machine in use in Settings > Environments, and on the first screen, also while the machine is not reached or its agents did not load |
 | Quitting | Every connection ends. A pine the app started on another machine stops with it; one that was already running there goes on. This computer's pine follows Keep pine running, as before |
 
 What is chosen is kept in the app's `prefs.json`: `hosts`, the machines you added, and `use`,
@@ -762,14 +765,17 @@ desktop/
   `src/preview-bridge.ts` implements it too: it returns the `Bridge` type, so a missing method
   fails `npm run check`. If it needs the daemon, `scripts/preview.ts` routes it under `/__pine/`.
 - The page is also the Android and iOS app's ([mobile.md](mobile.md)): `mobile/src/mobile-bridge.ts`
-  returns the same `Bridge` type. Three parts of the bridge are optional and only the mobile one
-  gives them: `local: false` in `state()` (no machine of its own: the page hides This Mac, Use
+  returns the same `Bridge` type, and so does the web client's (`web/src/frame-bridge.ts`,
+  [web.md](web.md)). Four parts of the bridge are optional and only those two give them: `local: false` in `state()` (no machine of its own: the page hides This Mac, Use
   this Mac, Set up pine, the local row of Settings > Environments, the local-only parts of
   Settings > App and the palette's "Use the pine on this Mac", and never sends `use(undefined)`),
   `mediaBase` (where pictures, video and sound are fetched, in place of `pine-media://daemon`)
-  and `deviceKey` (the phone's SSH key, with Copy and Share in Settings > Environments). Absent,
-  the page is the desktop's as before. A change of the page is checked in both: `npm run check`
-  in `desktop/` and in `mobile/`.
+  `deviceKey` (the client's own SSH key, with Copy and Share in Settings > Environments) and
+  `trustHostKey` (the owner's yes to the host key's fingerprint the page showed). A fifth,
+  `disconnect` (let go of the machine in use and show the list of machines), only the web
+  client gives; without it the page shows no Disconnect. Absent, the
+  page is the desktop's as before. A change of the page is checked in all three: `npm run check`
+  in `desktop/`, in `mobile/` and in `web/`.
 - What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a
   test there, then to `api.ts`. The app never does a daemon's work itself.
 - Text an answer or a tool produced is drawn through `markdown.tsx` or as plain text, never

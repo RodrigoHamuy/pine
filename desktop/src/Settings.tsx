@@ -15,7 +15,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "cn";
-import { type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
 import { type AgentDetail, api, type LoginState, type Route, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
@@ -2028,9 +2028,10 @@ function DeviceKey() {
 	if (!key) return null;
 	return (
 		<Item variant="outline" data-slot="device-key">
-			<ItemContent className="min-w-0 flex-[1_1_12rem]">
-				<ItemTitle>This phone's key</ItemTitle>
-				<ItemDescription className="line-clamp-none font-mono text-xs break-all select-text">{key.key}</ItemDescription>
+			{/* The key takes the whole line, and the buttons go under it: beside it they would squeeze it into a column. */}
+			<ItemContent className="min-w-0 basis-full">
+				<ItemTitle>This device's key</ItemTitle>
+				<ItemDescription className="line-clamp-none font-mono text-xs wrap-anywhere select-text">{key.key}</ItemDescription>
 				<ItemDescription className="line-clamp-none">Add it as a line of ~/.ssh/authorized_keys of the user you sign in as on each machine.</ItemDescription>
 			</ItemContent>
 			<ItemActions>
@@ -2039,6 +2040,15 @@ function DeviceKey() {
 			</ItemActions>
 		</Item>
 	);
+}
+
+/**
+ * A host as text that may break after its `@` and before each `.` and `:` (user@machine.tailnet.ts.net:10000),
+ * so that a long one wraps between its parts rather than inside a word; `wrap-anywhere` around it is the fallback.
+ */
+export function Breakable({ host }: { host: string }) {
+	const parts = host.split(/(?<=@)|(?=[.:])/);
+	return <>{parts.map((part, i) => <Fragment key={i}>{i ? <wbr /> : null}{part}</Fragment>)}</>;
 }
 
 /**
@@ -2070,21 +2080,25 @@ export function MachineList() {
 	/** How the pine of a row is, when it is the one the app uses; nothing is asked of the others. */
 	const status = (h?: string) => {
 		if (state.host !== h) return null;
-		if (state.status === "starting") return <Badge variant="outline"><Pulse label="Loading" data-icon="inline-start" />connecting</Badge>;
+		// Ready, with its agents still being loaded: the event stream may not be up yet, which is no loss.
+		if (state.status === "starting" || (state.status === "ready" && !s.opened && !s.loadError)) return <Badge variant="outline"><Pulse label="Loading" data-icon="inline-start" />connecting</Badge>;
+		// It answered and its agents did not load: no wait to show, the Gate says why and offers Try again.
+		if (state.status === "ready" && s.loadError) return <Badge variant="destructive">not loaded</Badge>;
 		if (state.status === "error") return <Badge variant="destructive">not reached</Badge>;
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
 			<ItemMedia variant="icon">{h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
-			{/* The text asks for 12rem before it shares its line: where the buttons would leave it less (a phone, the Gate), the Item wraps them onto a line of their own. */}
-			<ItemContent className="min-w-0 flex-[1_1_12rem]">
-				<ItemTitle className="name">
-					<span className={cn(h && "font-mono")}>{h ?? here}</span>
+			{/* The text asks for 20rem before it shares its line: where the buttons would leave it less (a phone, the Gate, the four of a machine in error), the Item wraps them onto a line of their own. */}
+			<ItemContent className="min-w-0 flex-[1_1_20rem]">
+				{/* A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`. */}
+				<ItemTitle className="name line-clamp-none flex w-full min-w-0 flex-wrap">
+					<span className={cn("min-w-0 wrap-anywhere", h && "font-mono")}>{h ? <Breakable host={h} /> : here}</span>
 					{status(h)}
 				</ItemTitle>
 				<ItemDescription className="line-clamp-none wrap-anywhere">
-					{state.host === h && state.status === "error" ? state.message : h ? `The pine on ${h}, over SSH.` : "The pine on this computer: the one that runs, or one this app starts."}
+					{state.host === h && state.status === "error" ? state.message : h ? <>The pine on <Breakable host={h} />, over SSH.</> : "The pine on this computer: the one that runs, or one this app starts."}
 				</ItemDescription>
 				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
 			</ItemContent>
@@ -2092,6 +2106,7 @@ export function MachineList() {
 				{key && key.host === h ? <Button size="xs" data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
+				{state.host === h && s.canDisconnect ? <Button variant="outline" size="xs" data-slot="disconnect" onClick={() => void s.disconnect()}>Disconnect</Button> : null}
 				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
 				{h && (state.host !== h || (!s.local && state.status === "error")) ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
 			</ItemActions>
@@ -2138,7 +2153,7 @@ function Environments() {
 							<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
 						</>
 					) : (
-						<p>The machine needs pine with a home (pine init there), and this phone's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
+						<p>The machine needs pine with a home (pine init there), and this device's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
 					)}
 				</AlertDescription>
 			</Alert>

@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
@@ -24,7 +24,7 @@ import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
-import { MachineList, Settings } from "./Settings.tsx";
+import { Breakable, MachineList, Settings } from "./Settings.tsx";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
@@ -73,17 +73,21 @@ export function Gate() {
 			<MachineList />
 		</div>
 	);
-	const [title, about, actions]: [string, React.ReactNode, React.ReactNode] =
+	type Screen = [React.ReactNode, React.ReactNode, React.ReactNode];
+	const named = host ? <span className="font-mono"><Breakable host={host} /></span> : null;
+	// Reaching another machine's pine and loading its agents are one wait: one screen, only what it says changes.
+	const connecting = (about: string): Screen => [
+		<>Connecting to {named}</>,
+		about,
+		<div key="s" className="flex w-full flex-col items-center gap-4">
+			<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
+			{machines}
+		</div>,
+	];
+	const [title, about, actions]: Screen =
 		state.status === "starting"
 			? host
-				? [
-						`Connecting to ${host}`,
-						"Reaching its pine over SSH, or starting one there…",
-						<div key="s" className="flex w-full flex-col items-center gap-4">
-							<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
-							{machines}
-						</div>,
-					]
+				? connecting("Reaching its pine over SSH, or starting one there…")
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Pulse label="Loading" key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
@@ -99,7 +103,7 @@ export function Gate() {
 					]
 				: state.status === "error"
 					? [
-							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? `${host} is not reached over SSH` : "Choose a machine") : host ? `pine on ${host} did not start` : "pine did not start",
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? <>{named} is not reached over SSH</> : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
 							state.message,
 							<div key="b" className="flex w-full flex-col items-center gap-4">
 								{/* A host key met for the first time: its fingerprint, and the owner's yes to exactly that one. */}
@@ -113,7 +117,23 @@ export function Gate() {
 								{machines}
 							</div>,
 						]
-					: ["Loading your agents…", "", <Pulse label="Loading" key="s" />];
+					: s.loadError
+						? // The pine answered and its agents could not be loaded: said, with a way to ask again, never a wait that does not end.
+							[
+								host ? <>Could not load the agents of {named}</> : "Could not load your agents",
+								s.loadError,
+								<div key="l" className="flex w-full flex-col items-center gap-4">
+									<div className="flex items-center gap-2">
+										<Button data-slot="gate-reload" onClick={() => void s.reload()}>Try again</Button>
+										{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
+									</div>
+									{machines}
+								</div>,
+							]
+						: host
+							? // Another machine's pine answered and its agents are being asked for over SSH.
+								connecting("Loading its agents…")
+							: ["Loading your agents…", "", <Pulse label="Loading" key="s" />];
 	// Before pine answers there is nothing to show yet: stock Empty, in a frame that moves the window.
 	return (
 		<div className="m-1.5 flex flex-1 overflow-y-auto rounded-xl border bg-background app-drag">
@@ -122,7 +142,8 @@ export function Gate() {
 					<EmptyMedia>
 						<Logo className="size-9" />
 					</EmptyMedia>
-					<EmptyTitle>{title}</EmptyTitle>
+					{/* A long host (a Tailscale Funnel name and its port) wraps instead of spilling past the card. */}
+					<EmptyTitle className="max-w-full wrap-anywhere">{title}</EmptyTitle>
 					{/* A host key's fingerprint is one long word: it breaks anywhere, or it overflows its centered line on a phone. */}
 					{about ? <EmptyDescription className="wrap-anywhere select-text">{about}</EmptyDescription> : null}
 				</EmptyHeader>
@@ -513,6 +534,8 @@ export function Machines() {
 						</DropdownMenuRadioGroup>
 					</DropdownMenuGroup>
 					<DropdownMenuSeparator />
+					{/* Back to the list of machines, the one in use kept: only a bridge with no local machine offers it (the web client's). */}
+					{s.canDisconnect ? <DropdownMenuItem data-slot="disconnect" onClick={() => void s.disconnect()}><UnplugIcon />Disconnect</DropdownMenuItem> : null}
 					<DropdownMenuItem onClick={() => s.openSettings("environments")}><SettingsIcon />Environments…</DropdownMenuItem>
 				</DropdownMenuContent>
 			</DropdownMenu>

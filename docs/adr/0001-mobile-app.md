@@ -84,7 +84,9 @@ does not bring the daemon to the phone.
 
 **A PWA.** Kept in reserve. A page served to a browser cannot keep the token from the page, cannot
 hold an SSH connection, and would need the control API on a network. It stays an option if the
-native app turns out to cost too much.
+native app turns out to cost too much. For the browser, [0003](0003-web-client.md) supersedes this
+paragraph: the top-level document holds the key and the token, the page runs in a sandboxed iframe,
+and SSH runs in the browser.
 
 **A daemon on the phone first.** Rejected for now: impossible on iOS, and on Android it waits for
 the Termux question. A client covers what the owner asked for.
