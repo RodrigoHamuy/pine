@@ -59,6 +59,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["is there an app with a window instead of the terminal", /^desktop/],
 		["how do I search my old sessions for something that was said", /^desktop#finding-a-conversation/],
 		["where did the list of conversations go when I made the pine window narrow, to put it beside another app", /^desktop#the-window/],
+		["close the other tabs in the app; does a conversation go away with its tab", /^desktop#the-window/],
 		["is there a settings panel where I can change pine's configuration by clicking", /^desktop#settings/],
 		["an editor to change a file myself beside the conversation", /^desktop#the-code-panel-and-the-editor/],
 		["can I run the commands the agent gives me with a play button", /^desktop#the-terminal/],

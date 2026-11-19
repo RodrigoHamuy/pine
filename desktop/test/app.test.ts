@@ -1753,6 +1753,96 @@ test("many tabs keep their width and scroll instead of stepping on each other", 
 	while ((await page.locator("[data-slot=tab]").count()) > had) await page.click("[data-slot=tab] >> nth=-1 >> button[aria-label='Close this tab']");
 });
 
+test("a right click on a tab closes the others, those to its right, the saved ones or all of them, main's too, and pins; what is asked stays answerable", async () => {
+	// The tabs of before, put back at the end for the tests after this one (the daemon keeps them).
+	const before = (await api("GET", "/ui/tabs")).data;
+	const tabs = page.locator("[data-slot=tab]");
+	const count = (n: number) => page.waitForFunction((n: number) => document.querySelectorAll("[data-slot=tab]").length === n, n);
+	const opened = async (at: number) => {
+		await tabs.nth(at).click({ button: "right" });
+		await sees("[data-slot=context-menu-content]");
+		return page.locator("[data-slot=context-menu-content]");
+	};
+	const choose = async (at: number, item: string) => {
+		await (await opened(at)).getByRole("menuitem", { name: item, exact: true }).click();
+		await page.waitForSelector("[data-slot=context-menu-content]", { state: "detached" });
+	};
+	const main = await page.evaluate(() => [...document.querySelectorAll("[data-slot=tab] [data-slot=tab-name]")].findIndex((e) => e.textContent === "main"));
+	assert.ok(main >= 0, "the main agent's tab is open");
+	// main's own tab offers Pin, and it cannot be chosen: an agent's main conversation always stays.
+	const menuOfMain = await opened(main);
+	assert.equal(await menuOfMain.getByRole("menuitem", { name: "Pin", exact: true }).getAttribute("aria-disabled"), "true");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[data-slot=context-menu-content]", { state: "detached" });
+	await tabs.nth(main).click();
+	const had = await tabs.count();
+	for (let i = 1; i <= 3; i++) {
+		await menu("new");
+		await count(had + i);
+	}
+	// Close to the Right of the second new one: the third goes.
+	await choose(had + 1, "Close to the Right");
+	await count(had + 2);
+	// Pin and Unpin are one entry that says which; a conversation is kept once something was said in it.
+	await tabs.nth(had + 1).click();
+	await page.fill("[data-slot=composer] textarea", "keep this one");
+	await page.keyboard.press("Enter");
+	await sees("[data-slot=markdown] >> text=ECHO[keep this one]");
+	await choose(had + 1, "Pin");
+	await tabs.nth(had + 1).locator("svg.lucide-star").waitFor();
+	await choose(had + 1, "Unpin");
+	await tabs.nth(had + 1).locator("svg.lucide-star").waitFor({ state: "detached" });
+	// The first new one waits for an approval, put off for later.
+	await tabs.nth(had).click();
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "bash", args: { command: "echo tabs" } }] }, { text: "done with tabs" }], "ask and close "));
+	await page.keyboard.press("Enter");
+	await sees("[data-slot=dialog-content][data-tone=warn]");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
+	await tabs.nth(had).locator("[data-slot=badge]", { hasText: "!" }).waitFor();
+	// Close Others from the second: every other tab goes, main's too, but the one that waits for an answer stays, and says why.
+	await choose(had + 1, "Close Others");
+	await count(2);
+	await sees("[data-slot=toast] >> text=1 tab stayed open: it waits for your answer.");
+	assert.equal(await tabs.nth(1).getAttribute("data-active"), "true");
+	assert.equal(await page.locator("[data-slot=tab] [data-slot=tab-name]", { hasText: /^main$/ }).count(), 0);
+	// Close Saved leaves a tab with a message typed and not sent, and one that waits; with the input empty again, it closes.
+	await page.fill("[data-slot=composer] textarea", "not sent yet");
+	await choose(0, "Close Saved");
+	await sees("[data-slot=toast] >> text=Every tab has something unsaved or waiting.");
+	await count(2);
+	await tabs.nth(1).click();
+	await page.fill("[data-slot=composer] textarea", "");
+	await choose(0, "Close Saved");
+	await count(1);
+	// A tab that waits is closed by its own button: what was asked goes to the tab in front, and is answered there.
+	await menu("new");
+	await count(2);
+	await tabs.nth(0).hover();
+	await tabs.nth(0).locator("button[aria-label='Close this tab']").click();
+	await count(1);
+	await tabs.nth(0).locator("[data-slot=badge]", { hasText: "!" }).waitFor();
+	const asked = '[data-item="approval"][data-state="open"] [data-slot="item"]';
+	assert.match(await page.textContent(asked), /echo tabs/);
+	await page.click(`${asked} button:has-text("Allow once")`);
+	await sees('[data-item="approval"][data-state="allowed"] >> text=Allowed');
+	// Close All closes the last tab too: the window says that none is open, and opens one again from there.
+	await choose(0, "Close All");
+	await count(0);
+	await sees("[data-slot=no-tab]");
+	await shot("no-tab");
+	await page.locator("[data-slot=no-tab]").getByRole("button", { name: "Open main" }).click();
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=main");
+	await api("POST", "/ui/tabs", before);
+	await page.reload();
+	await sees("[data-slot=tab][data-active]");
+	// The reload drew the side panel before the tests after this one change what it shows: it is put away, and they open it afresh.
+	if (await page.$("[data-slot=code-panel]")) {
+		await menu("code");
+		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
+	}
+});
+
 test("the panel's Agent view scrolls up and down only, however narrow the panel and however long a line it shows", async () => {
 	// A memory with a line no space breaks, and a description as long: the view wraps them, it is never pushed sideways.
 	write(path.join(home, "agents", "main", "workspace", "MEMORY.md"), `# Memory\n\n${"x".repeat(240)}\n${"https://example.com/".repeat(12)}\n${"- a line to remember\n".repeat(60)}`);

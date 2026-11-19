@@ -285,6 +285,12 @@ export class Store extends Model {
 	publishing = false;
 	/** The approval or question whose dialog is open. */
 	asking?: string;
+	/** The tabs of last time are open (there may be none): until then the window shows that pine is starting. */
+	opened = false;
+	/** Conversations with a file edited in the side panel and not saved, by key; the panel says so (CodePanel.tsx). */
+	editing = new Set<string>();
+	/** What was typed into a conversation's input and not sent when its tab closed, given back when it opens again. */
+	private drafts = new Map<string, { draft: string; attachments: Attachment[] }>();
 	asked = new Set<string>();
 	initLines: string[] = [];
 	initRunning = false;
@@ -501,6 +507,7 @@ export class Store extends Model {
 		// A daemon that was started again: what the tabs showed is asked for anew.
 		this.tabs = [];
 		this.active = undefined;
+		this.opened = false;
 		const again = saved.tabs.filter((t) => this.agents.some((a) => a.id === t.agent));
 		this.restoring = true;
 		try {
@@ -510,6 +517,7 @@ export class Store extends Model {
 			this.activate(chats[again.length ? Math.min(saved.active, chats.length - 1) : 0] ?? this.tabs[0]);
 		} finally {
 			this.restoring = false;
+			this.opened = true;
 		}
 		this.code = saved.code === true;
 		this.saveTabs();
@@ -568,7 +576,7 @@ export class Store extends Model {
 		// An agent that is gone has no conversations to show.
 		for (const id of gone) {
 			this.conversations.delete(id);
-			for (const t of this.tabs.filter((x) => x.agent === id && (x.kind === "chat" || x.kind === "task"))) if (this.tabs.length > 1) this.closeTab(t);
+			this.shut(this.tabs.filter((x) => x.agent === id && (x.kind === "chat" || x.kind === "task")));
 		}
 		this.touch();
 		for (const id of fresh) void this.refreshConversations(id);
@@ -672,7 +680,7 @@ export class Store extends Model {
 	private async pending(): Promise<void> {
 		const list = await api.approvals().catch(() => [] as Approval[]);
 		for (const req of list) {
-			const tab = this.tabFor(req) ?? this.tabs.find((t) => t.kind === "chat" && t.agent === req.agent) ?? this.active;
+			const tab = await this.holderFor(req);
 			if (!tab || tab.approvals.has(req.id)) continue;
 			tab.approvals.set(req.id, tab.add({ t: "approval", req, state: "open" }));
 			tab.touch();
@@ -857,6 +865,8 @@ export class Store extends Model {
 		if (!this.agent(agent)) this.agents = await this.askAgents().catch(() => this.agents);
 		if (!this.agent(agent)) return this.flash(`There is no agent called ${agent}.`, "bad");
 		const tab = new Tab("chat", agent, session);
+		const kept = this.drafts.get(tab.key);
+		if (kept) ((tab.draft = kept.draft), (tab.attachments = kept.attachments), this.drafts.delete(tab.key));
 		this.tabs.push(tab);
 		if (front) this.activate(tab);
 		else {
@@ -955,26 +965,104 @@ export class Store extends Model {
 		this.activate(tab);
 	}
 
+	/**
+	 * Close a tab. It only closes the view: the conversation goes on and stays in the side bar, and the
+	 * daemon keeps the list of tabs. Any tab may close, an agent's main conversation's and the last one
+	 * too; the window then shows that no tab is open. What was typed and not sent comes back when the
+	 * conversation opens again. A question or approval it waits for moves to another tab, where its
+	 * dialog and its "!" are; the last tab keeps one, since there would be nowhere to answer it.
+	 */
 	closeTab(tab: Tab): void {
-		const i = this.tabs.indexOf(tab);
-		if (i < 0) return;
-		if (this.tabs.length === 1) return this.flash("The last tab stays open.");
-		this.tabs.splice(i, 1);
-		// The conversation's terminal ends with its last tab.
-		if (tab.kind === "chat" && !this.tabs.some((t) => t.kind === "chat" && t.key === tab.key)) void bridge.termClose(tab.key).catch(() => {});
-		// What a conversation was subscribed to on its own ends when its tab closes (not for an agent's main one).
-		if (tab.kind === "chat" && tab.session !== "main") {
-			void api
-				.closeSession(tab.agent, tab.session)
-				.then((r) => r.unsubscribed.length && this.flash(`Closed ${tab.agent} · ${tab.session}: its ${plural(r.unsubscribed.length, "subscription")} to ${r.unsubscribed.join(", ")} ended with it.`, "muted", 6000))
-				.catch(() => {});
+		if (!this.tabs.includes(tab)) return;
+		if (tab.approvals.size && this.tabs.length === 1) return this.flash(`${tab.kind === "chat" ? tab.agent : "This tab"} waits for your answer here: answer it first, then close the tab.`, "warn", 6000);
+		this.shut([tab]);
+	}
+
+	/**
+	 * Nothing in the tab would be missed if it closed: no question or approval waits in it for the owner,
+	 * no message is typed into its input and not sent, no file is edited in its side panel and not saved.
+	 * What the agent is doing does not count: it goes on without the tab.
+	 */
+	saved(tab: Tab): boolean {
+		return !tab.approvals.size && !tab.draft.trim() && !tab.attachments.length && !this.editing.has(tab.key);
+	}
+
+	/**
+	 * Close several tabs at once, as the tab bar's menu and the palette ask: the others than `from`, those
+	 * to its right, those with nothing unsaved (`saved`), or all of them. A tab that waits for an answer
+	 * stays open, and the owner is told why: what is asked keeps its place.
+	 */
+	closeTabs(which: "others" | "right" | "saved" | "all", from: Tab | undefined = this.active): void {
+		const at = from ? this.tabs.indexOf(from) : -1;
+		if ((which === "others" || which === "right") && at < 0) return;
+		const chosen = this.tabs.filter((t, i) => (which === "others" ? t !== from : which === "right" ? i > at : which === "saved" ? this.saved(t) : true));
+		const shut = chosen.filter((t) => !t.approvals.size);
+		const kept = chosen.length - shut.length;
+		// The tab the menu was opened on comes to the front when the one in front closes, as in VS Code.
+		this.shut(shut, which === "others" || which === "right" ? from : undefined);
+		if (kept) this.flash(`${plural(kept, "tab")} stayed open: ${kept === 1 ? "it waits" : "they wait"} for your answer.`, "warn", 6000);
+		else if (which === "saved" && !shut.length) this.flash("Every tab has something unsaved or waiting.");
+	}
+
+	private shut(tabs: Tab[], front?: Tab): void {
+		if (!tabs.length) return;
+		const before = this.tabs;
+		this.tabs = before.filter((t) => !tabs.includes(t));
+		for (const tab of tabs) {
+			if (tab.kind !== "chat") continue;
+			if (tab.draft.trim() || tab.attachments.length) this.drafts.set(tab.key, { draft: tab.draft, attachments: tab.attachments });
+			// The conversation's terminal ends with its last tab.
+			if (!this.tabs.some((t) => t.kind === "chat" && t.key === tab.key)) void bridge.termClose(tab.key).catch(() => {});
+			// What a conversation was subscribed to on its own ends when its tab closes (not for an agent's main one).
+			if (tab.session !== "main") {
+				void api
+					.closeSession(tab.agent, tab.session)
+					.then((r) => r.unsubscribed.length && this.flash(`Closed ${tab.agent} · ${tab.session}: its ${plural(r.unsubscribed.length, "subscription")} to ${r.unsubscribed.join(", ")} ended with it.`, "muted", 6000))
+					.catch(() => {});
+			}
 		}
-		if (this.active === tab) this.activate(this.tabs[Math.max(0, i - 1)]);
-		else {
+		if (front && this.tabs.includes(front) && this.active !== front) this.activate(front);
+		else if (this.active && tabs.includes(this.active)) {
+			// The nearest tab to the left of the one that was in front, else the first.
+			const was = before.indexOf(this.active);
+			const next = before.slice(0, was).reverse().find((t) => this.tabs.includes(t)) ?? this.tabs[0];
+			if (next) this.activate(next);
+			else ((this.active = undefined), this.saveTabs(), this.touch(), this.badge());
+		} else {
 			this.saveTabs();
 			this.touch();
 		}
-		void this.refreshConversations(tab.agent);
+		// What a closed tab was asked stays open in the daemon: it goes to the tab it would have gone to had this one not been there.
+		for (const tab of tabs) {
+			for (const item of tab.approvals.values()) if (this.agent(item.req.agent)) void this.holderFor(item.req).then((to) => to && this.takeAsk(to, item.req, false));
+			tab.approvals.clear();
+		}
+		for (const agent of new Set(tabs.map((t) => t.agent))) void this.refreshConversations(agent);
+	}
+
+	/**
+	 * The tab an approval or a question is shown in: the one of its conversation, else another of its agent's, else the one
+	 * in front. With no tab open at all, the agent's main conversation is opened for it, so that it can be answered.
+	 */
+	private async holderFor(req: Approval): Promise<Tab | undefined> {
+		const tab = this.tabFor(req) ?? this.tabs.find((t) => t.kind === "chat" && t.agent === req.agent) ?? this.active;
+		if (tab || !this.agent(req.agent)) return tab;
+		await this.openTab(req.agent, "main");
+		return this.tabs.find((t) => t.kind === "chat" && t.agent === req.agent && t.session === "main");
+	}
+
+	/** Show an open approval or question in a tab: its card, the tab's "!", and its dialog when the tab is in front. */
+	private takeAsk(tab: Tab, req: Approval, fresh: boolean): void {
+		if (tab.approvals.has(req.id)) return;
+		if (fresh) this.endWork(tab);
+		tab.approvals.set(req.id, tab.add({ t: "approval", req, state: "open" }));
+		if (tab !== this.active) tab.unread = true;
+		if (fresh) this.attention("Pine", req.tool === "question" ? `${tab.agent} has a question for you` : `${tab.agent} needs your approval`, tab);
+		tab.touch();
+		this.touch();
+		this.badge();
+		if (fresh ? tab === this.active && !this.asking && !this.picker && !this.publishing : false) this.ask(req.id);
+		else if (tab === this.active) this.askNext();
 	}
 
 	moveTab(from: number, to: number): void {
@@ -1414,8 +1502,11 @@ export class Store extends Model {
 		const showing = this.tabs.filter((t) => t.kind === "chat" && t.agent === agent && t.session === session);
 		if (!showing.length) return;
 		this.tabs = this.tabs.filter((t) => !showing.includes(t));
-		if (!this.tabs.length) void this.openTab(agent, "main");
-		else if (this.active && showing.includes(this.active)) this.activate(this.tabs[0]);
+		this.drafts.delete(`${agent}:${session}`);
+		if (this.active && showing.includes(this.active)) {
+			if (this.tabs[0]) this.activate(this.tabs[0]);
+			else this.active = undefined;
+		}
 		this.saveTabs();
 		this.touch();
 	}
@@ -1725,14 +1816,9 @@ export class Store extends Model {
 		if (ns === "approval") {
 			if (e.topic === "approval/requested") {
 				const tab = this.tabFor(p) ?? this.tabs.find((t) => t.kind === "chat" && t.agent === p.agent) ?? this.active;
-				if (!tab || tab.approvals.has(p.id)) return;
-				this.endWork(tab);
-				tab.approvals.set(p.id, tab.add({ t: "approval", req: p, state: "open" }));
-				if (tab !== this.active) tab.unread = true;
-				this.attention("Pine", p.tool === "question" ? `${tab.agent} has a question for you` : `${tab.agent} needs your approval`, tab);
-				this.dirty.add(tab).add(this);
-				this.badge();
-				if (tab === this.active && !this.asking && !this.picker && !this.publishing) this.ask(p.id);
+				// With no tab open, one is opened for it: what is asked is never left without a place to be answered.
+				if (!tab) return void this.holderFor(p).then((to) => to && this.takeAsk(to, p, true));
+				this.takeAsk(tab, p, true);
 			} else if (e.topic === "approval/decided") {
 				for (const tab of this.tabs) {
 					const item = tab.approvals.get(p.id);
@@ -1853,7 +1939,7 @@ export class Store extends Model {
 		if (p.change === "open") {
 			if (!showing.length) await this.openTab(agent, session || "main", false);
 		} else if (p.change === "close") {
-			for (const t of showing) if (this.tabs.length > 1) this.closeTab(t);
+			for (const t of showing) this.closeTab(t);
 		} else if (p.change === "rename" && typeof p.to === "string") {
 			for (const t of showing) ((t.session = p.to), t.touch());
 			if (showing.length) this.saveTabs();

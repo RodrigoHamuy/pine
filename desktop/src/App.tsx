@@ -19,6 +19,7 @@ import { type AgentInfo, api, type Conversation as Conv } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { CODE_KEY, CodePanel } from "./CodePanel.tsx";
 import { COMMANDS } from "./commands.ts";
+import { TabMenu, type TabMenuAction } from "@/components/tab-menu";
 import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
@@ -378,32 +379,45 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 	useEffect(() => {
 		if (on) ref.current?.scrollIntoView({ block: "nearest", inline: "nearest" });
 	}, [on]);
+	const act = (action: TabMenuAction) => {
+		if (action === "close") return s.closeTab(tab);
+		if (action === "pin" || action === "unpin") return void s.pin(tab, action === "pin");
+		s.closeTabs(action, tab);
+	};
 	// The least width is what the tab holds besides its name (the avatar, the gaps, the close button) and a few letters of the
 	// name: narrower, what does not shrink spills over the next tab. Past that, the row scrolls.
 	return (
-		<div
-			ref={ref}
-			data-slot="tab"
-			data-active={on || undefined}
-			className={cn("group/tab relative flex h-8 max-w-55 min-w-28 flex-initial items-center gap-2 rounded-md pr-1.5 pl-2.5 app-no-drag", on ? "bg-background text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-accent hover:text-foreground", drop && "before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-primary")}
-			draggable
-			onDragStart={(e) => (e.dataTransfer.setData("application/x-pine-tab", String(index)), (e.dataTransfer.effectAllowed = "move"))}
-			onDragOver={(e) => e.dataTransfer.types.includes("application/x-pine-tab") && (e.preventDefault(), setDrop(true))}
-			onDragLeave={() => setDrop(false)}
-			onDrop={(e) => (setDrop(false), s.moveTab(Number(e.dataTransfer.getData("application/x-pine-tab")), index))}
-			onClick={() => s.activate(tab)}
-			onAuxClick={(e) => e.button === 1 && s.closeTab(tab)}
-			title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
-		>
-			<span className="grid min-w-3.5 flex-none place-items-center">
-				{tab.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : tab.busy ? <Spinner aria-label="Working" className="size-3" /> : tab.unread ? <Badge className="size-2 p-0" /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <AgentAvatar agent={{ id: tab.agent, color: s.agent(tab.agent)?.color }} size="sm" />}
-			</span>
-			<span data-slot="tab-name" className="truncate">
-				{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b className="font-medium">{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b className="font-medium">{tab.agent}</b> : <><b className="font-medium">{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
-			</span>
-			{kept && tab.session !== "main" ? <StarIcon size={10} className="flex-none text-warn" /> : null}
-			<Button variant="ghost" size="icon-xs" aria-label="Close this tab" className={cn(!on && "opacity-0 group-hover/tab:opacity-100")} onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><XIcon /></Button>
-		</div>
+		<TabMenu
+			pin={tab.kind !== "chat" ? undefined : tab.session === "main" ? "main" : kept ? "unpin" : "pin"}
+			others={s.tabs.length > 1}
+			right={index < s.tabs.length - 1}
+			onAction={act}
+			trigger={
+				<div
+					ref={ref}
+					data-slot="tab"
+					data-active={on || undefined}
+					className={cn("group/tab relative flex h-8 max-w-55 min-w-28 flex-initial items-center gap-2 rounded-md pr-1.5 pl-2.5 app-no-drag", on ? "bg-background text-foreground ring-1 ring-border" : "text-muted-foreground hover:bg-accent hover:text-foreground", drop && "before:absolute before:inset-y-1 before:-left-0.5 before:w-0.5 before:rounded-full before:bg-primary")}
+					draggable
+					onDragStart={(e) => (e.dataTransfer.setData("application/x-pine-tab", String(index)), (e.dataTransfer.effectAllowed = "move"))}
+					onDragOver={(e) => e.dataTransfer.types.includes("application/x-pine-tab") && (e.preventDefault(), setDrop(true))}
+					onDragLeave={() => setDrop(false)}
+					onDrop={(e) => (setDrop(false), s.moveTab(Number(e.dataTransfer.getData("application/x-pine-tab")), index))}
+					onClick={() => s.activate(tab)}
+					onAuxClick={(e) => e.button === 1 && s.closeTab(tab)}
+					title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
+				>
+					<span className="grid min-w-3.5 flex-none place-items-center">
+						{tab.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : tab.busy ? <Spinner aria-label="Working" className="size-3" /> : tab.unread ? <Badge className="size-2 p-0" /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <AgentAvatar agent={{ id: tab.agent, color: s.agent(tab.agent)?.color }} size="sm" />}
+					</span>
+					<span data-slot="tab-name" className="truncate">
+						{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b className="font-medium">{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b className="font-medium">{tab.agent}</b> : <><b className="font-medium">{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
+					</span>
+					{kept && tab.session !== "main" ? <StarIcon size={10} className="flex-none text-warn" /> : null}
+					<Button variant="ghost" size="icon-xs" aria-label="Close this tab" className={cn(!on && "opacity-0 group-hover/tab:opacity-100")} onClick={(e) => (e.stopPropagation(), s.closeTab(tab))}><XIcon /></Button>
+				</div>
+			}
+		/>
 	);
 }
 
@@ -463,6 +477,25 @@ function TitleBar() {
 			<BesideToggle which="code" label="Side panel: the agent, its files, changes, output and what is running" keys="⌥⌘B" icon={<PanelRightIcon />} />
 			<BesideToggle which="aside" label="Browser: the page the agent works in" keys="⇧⌘B" icon={<GlobeIcon />} />
 		</header>
+	);
+}
+
+/** What the window shows when every tab is closed: the conversations are all still in the side bar. */
+function NoTab() {
+	const s = store;
+	const main = s.agents.find((a) => a.main) ?? s.agents[0];
+	return (
+		<Empty data-slot="no-tab">
+			<EmptyHeader>
+				<EmptyMedia variant="icon"><MessageSquareIcon /></EmptyMedia>
+				<EmptyTitle>No tab is open</EmptyTitle>
+				<EmptyDescription>Every conversation is still in the side bar. Open one there, or start a new one.</EmptyDescription>
+			</EmptyHeader>
+			<EmptyContent className="flex-row justify-center">
+				<Button onClick={() => void s.newConversation()}>New conversation<Kbd>⌘T</Kbd></Button>
+				{main ? <Button variant="outline" onClick={() => void s.openTab(main.id, "main")}>Open {main.id}</Button> : null}
+			</EmptyContent>
+		</Empty>
 	);
 }
 
@@ -598,7 +631,7 @@ export function App() {
 		window.addEventListener("drop", stop);
 		return () => (window.removeEventListener("dragover", stop), window.removeEventListener("drop", stop));
 	}, []);
-	const ready = s.service.status === "ready" && s.agents.length > 0 && s.active;
+	const ready = s.service.status === "ready" && s.agents.length > 0 && s.opened;
 	const tab = s.active;
 	const side = usePanelRef();
 	// Narrower than stock's breakpoint (Tailwind's `md`), the side bar lies over the page instead of beside it, as stock's
@@ -635,7 +668,7 @@ export function App() {
 									    its own: dragging the edge between the two changes both, and both are kept. */}
 									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && (keepWidth(layout, "code-panel", CODE_KEY), keepWidth(layout, "browser-panel", ASIDE_KEY))}>
 										<ResizablePanel id="view" className="flex" minSize={320}>
-											{tab!.kind === "settings" ? <Settings /> : tab!.kind === "events" ? <Events tab={tab!} /> : <Conversation key={tab!.id} tab={tab!} />}
+											{!tab ? <NoTab /> : tab.kind === "settings" ? <Settings /> : tab.kind === "events" ? <Events tab={tab} /> : <Conversation key={tab.id} tab={tab} />}
 										</ResizablePanel>
 										{chat && s.shown("code") ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
 										{chat && s.shown("aside") ? <BrowserAside key={`aside:${tab!.id}`} tab={tab!} /> : null}
