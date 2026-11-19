@@ -753,7 +753,13 @@ holds only tokens and base rules.
   container highest, the charts the primary, info, plan, warn and error. The focus ring is the
   outline (grey, never the primary), the side bar is surface container low made translucent, hover
   and press (`--accent`, `--sidebar-accent`) are state layers of the text colour over the surface,
-  and the side bar's text is muted. The only literal colours left are the shadows and the
+  and the side bar's text is muted. Light has one refinement of its own on top of the generated
+  scheme (`:root:not(.dark)` in `index.css`, which wins over the package's `:root` and never touches
+  dark): tonalSpot at contrast 0 gives light a near-white, cool-violet, nearly flat band where the
+  shell, the cards and the inputs read as one grey and hairlines vanish, so pine sets light's surface
+  ramp, on-surface, outline and primary itself — a cleaner, faintly teal-cool neutral with room between
+  its steps, so a card lifts off the shell and a border is seen, and a primary a shade fresher than the
+  generated deep teal while it stays AA on white. The other literal colours are the shadows and the
   poimandres `--p-*` values, which colour code in dark only while the owner keeps them for it.
 - The code colours (`--code-*` in `index.css`) are read by the editor's theme and highlight style
   (`CodePanel.tsx`) and by the highlighter's theme for code in answers (`CODE_THEME` in

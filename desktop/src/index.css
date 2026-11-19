@@ -291,6 +291,44 @@
 	--sidebar: color-mix(in srgb, var(--md-sys-color-surface-container-low) 88%, transparent);
 }
 
+/* Light's own surface ramp, on top of the scheme material-theme-builder generates (dark is left as it is).
+   tonalSpot at contrast 0 gives light a near-white band the width of a few RGB points, cool-violet and flat:
+   the shell, the cards and the inputs read as one grey, hairlines vanish, and the mint shows nowhere. These
+   roles are pine's own for light only (`:root:not(.dark)` wins over the package's `:root`, never matches `.dark`):
+   a clean, faintly teal-cool neutral with room between its steps, so a card lifts off the shell and a border is
+   seen; a muted text that keeps its hierarchy; and a primary a shade fresher than the generated deep teal while
+   it stays AA on white. Everything the chrome paints with (the surface ramp, on-surface, outline, primary) is
+   here as a set, so nothing is half the new look and half the old. The on-colours still pair: the surfaces stay
+   light and the text stays dark. warn, info, plan, error and the rest are the package's, and read fine on these. */
+:root:not(.dark) {
+	--md-sys-color-surface-container-lowest: #ffffff;
+	--md-sys-color-surface-bright: #ffffff;
+	/* The cards: the conversation, the input, a dialog. Bright and clean, a breath of cool. */
+	--md-sys-color-surface: #f7fafb;
+	/* The shell the cards lie on (the outer window, the side bar): a clear step deeper, so the cards lift. */
+	--md-sys-color-surface-container-low: #eceff2;
+	/* What is muted: a code block, a skeleton, the middle container. */
+	--md-sys-color-surface-container: #e4e9ed;
+	/* Secondary buttons, and the soft section line (`border-surface-container-high`). */
+	--md-sys-color-surface-container-high: #d8e0e5;
+	/* The hairline: inputs and the standard border. Soft but no longer invisible. */
+	--md-sys-color-surface-container-highest: #ccd6dc;
+	--md-sys-color-surface-dim: #d6dce1;
+	/* Text: a strong near-black with a trace of cool, a muted slate below it, and a faint grey that still reads. */
+	--md-sys-color-on-surface: #10171a;
+	--md-sys-color-on-surface-variant: #44545a;
+	--md-sys-color-outline: #647077;
+	--md-sys-color-outline-variant: #b2bfc5;
+	/* The accent: a fresher mint-teal than the generated deep one, and still AA on white where it is text. */
+	--md-sys-color-primary: #0b7d68;
+	--md-sys-color-on-primary: #ffffff;
+	--md-sys-color-primary-container: #a6f0dc;
+	--md-sys-color-on-primary-container: #00261f;
+	/* Overlays feel a touch more lifted off this brighter ground than the generated near-flat shadow. */
+	--shadow: 0 1px 2px rgba(16, 24, 28, 0.06), 0 8px 28px rgba(16, 24, 28, 0.14);
+	--shadow-l: 0 2px 6px rgba(16, 24, 28, 0.1), 0 24px 64px rgba(16, 24, 28, 0.26);
+}
+
 @layer base {
 	* {
 		@apply border-border outline-ring/50;
