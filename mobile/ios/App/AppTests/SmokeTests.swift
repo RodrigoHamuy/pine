@@ -101,11 +101,11 @@ final class SmokeTests: XCTestCase {
 		for (what, type) in [("camera", WKMediaCaptureType.camera), ("microphone", .microphone), ("camera and microphone", .cameraAndMicrophone)] {
 			var decision: WKPermissionDecision?
 			ui.webView(web, requestMediaCapturePermissionFor: origin, initiatedByFrame: frame, type: type) { decision = $0 }
-			check("permission denial: the UI delegate refuses the \(what)", decision, .deny)
+			check("permission denial: the UI delegate refuses the \(what)", decision == .deny, true, detail: decision.map { $0 == .grant ? "granted" : "prompt" } ?? "no answer")
 		}
 		var motionDecision: WKPermissionDecision?
 		ui.webView(web, requestDeviceOrientationAndMotionPermissionFor: origin, initiatedByFrame: frame) { motionDecision = $0 }
-		check("permission denial: the UI delegate refuses the motion sensors", motionDecision, .deny)
+		check("permission denial: the UI delegate refuses the motion sensors", motionDecision == .deny, true, detail: motionDecision.map { $0 == .grant ? "granted" : "prompt" } ?? "no answer")
 		let motion = try await js("return typeof DeviceOrientationEvent.requestPermission !== 'function' ? 'no way to ask' : await DeviceOrientationEvent.requestPermission().then((r) => r, (e) => e.name)") as? String
 		check("permission denial: the page cannot have the motion sensors", motion != nil && motion != "granted", true, detail: motion ?? "nil")
 		seen("no file access: a file: address cannot be fetched", try await js("return await fetch('file:///etc/hosts').then(() => 'read', () => 'refused')"), "refused")
