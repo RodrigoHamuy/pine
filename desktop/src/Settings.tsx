@@ -32,7 +32,8 @@ import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { Slider } from "@/components/ui/slider";
-import { DEFAULT_PALETTE, type Palette, SCHEMES } from "./theme.ts";
+import { AGENT_COLOURS, DEFAULT_PALETTE, type Palette, SCHEMES } from "./theme.ts";
+import { AgentAvatar } from "@/components/agent-avatar";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -259,6 +260,40 @@ function FileTabs<K extends string>({ files, value, onChange, children }: { file
 	);
 }
 
+/**
+ * An agent's own colour: None (the owner's palette), one of the presets, or any other under "Other…".
+ * Each preset is shown as the agent's avatar would be drawn in it. "none" is how a change takes it away.
+ */
+function AgentColour({ id, value, onChange }: { id: string; value?: string; onChange: (color: string) => void }) {
+	const [other, setOther] = useState(false);
+	const field = useId();
+	const color = value && value !== "none" ? value : undefined;
+	const preset = AGENT_COLOURS.some((c) => c.hex === color);
+	const choice = !color ? "none" : preset && !other ? color : "other";
+	const pick = (next: string | undefined) => {
+		if (!next) return;
+		setOther(next === "other");
+		// Other starts from the colour there is, and a grey where there is none.
+		onChange(next === "other" ? (color ?? "#808080") : next);
+	};
+	return (
+		<Field className="col-span-full" data-setting="agent-colour">
+			<FieldLabel id={`${field}-label`}>Colour</FieldLabel>
+			<ToggleGroup aria-labelledby={`${field}-label`} variant="outline" size="sm" className="flex-wrap" value={[choice]} onValueChange={(v) => pick(v[0])}>
+				<ToggleGroupItem value="none">None</ToggleGroupItem>
+				{AGENT_COLOURS.map((c) => (
+					<ToggleGroupItem key={c.hex} value={c.hex} aria-label={c.name} title={c.name}>
+						<AgentAvatar agent={{ id, color: c.hex }} size="sm" />
+					</ToggleGroupItem>
+				))}
+				<ToggleGroupItem value="other">Other…</ToggleGroupItem>
+			</ToggleGroup>
+			{choice === "other" && color ? <ColourInput id={`${field}-other`} name="color" value={color} onChange={onChange} /> : null}
+			<FieldDescription>Its avatar is drawn in it, in the side bar, on its tabs and in its panel. None keeps the window's own colours.</FieldDescription>
+		</Field>
+	);
+}
+
 function AgentPage({ id, back }: { id: string; back: () => void }) {
 	const detail = useLoad(() => api.agentDetail(id), [id]);
 	const models = useLoad(() => api.models());
@@ -328,6 +363,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 					<Input id={`${field}-description`} value={now("description")} onChange={(e) => put("description", e.target.value)} />
 					<FieldDescription>One line. Other agents read it when they decide whom to hand work to.</FieldDescription>
 				</Field>
+				<AgentColour id={d.id} value={now("color")} onChange={(color) => put("color", color)} />
 				<Field>
 					<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
 					<Select items={modelItems} value={(change.model as string) ?? d.model ?? ""} onValueChange={(v) => put("model", v || "default")}>

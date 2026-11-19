@@ -84,6 +84,8 @@ export interface AgentInfo {
 	id: string;
 	main: boolean;
 	description: string;
+	/** Its own colour (`#rrggbb`), where it has one: the source of its avatar's scheme. */
+	color?: string;
 	workspace: string;
 	model: string;
 	mode: Mode;
@@ -232,6 +234,7 @@ export interface AgentDetail {
 	id: string;
 	main: boolean;
 	description: string;
+	color?: string;
 	workspace: string;
 	dir: string;
 	model?: string;

@@ -1,4 +1,4 @@
-import type { MtbConfig } from "material-theme-builder";
+import { builder, type MtbConfig } from "material-theme-builder";
 import type { Prefs } from "./bridge.ts";
 
 // Dark mode is a `.dark` class on the root element, the way shadcn's tokens expect it. What decides
@@ -77,7 +77,7 @@ export const SCHEMES: Record<SchemeName, string> = {
 	monochrome: "Monochrome",
 };
 
-const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
+export const isHex = (v: unknown): v is string => typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v);
 
 /**
  * A palette as it was stored or sent, made safe to draw: each field that is not what it has to be
@@ -103,4 +103,43 @@ export function cleanPalette(raw: unknown): Palette | undefined {
 			return { name: c.name, hex: isHex(hex) ? hex.toLowerCase() : c.hex, blend: false };
 		}),
 	};
+}
+
+/**
+ * The colours an agent can be given in one click on its settings page (the owner can also type any
+ * other). Hues apart from each other and from pine's mint (#5de4c7), so that two agents are told apart
+ * at a glance after the scheme has toned them.
+ */
+export const AGENT_COLOURS = [
+	{ name: "Red", hex: "#d9534f" },
+	{ name: "Coral", hex: "#e0805a" },
+	{ name: "Amber", hex: "#d4a017" },
+	{ name: "Olive", hex: "#8cb33a" },
+	{ name: "Green", hex: "#4caf50" },
+	{ name: "Blue", hex: "#4a7fd9" },
+	{ name: "Indigo", hex: "#6a5acd" },
+	{ name: "Violet", hex: "#a05ad0" },
+	{ name: "Pink", hex: "#d65c9e" },
+] as const;
+
+/** An M3 scheme as material-theme-builder gives it: role name (camelCase) to hex, for light and for dark. */
+export type Schemes = { light: Record<string, string>; dark: Record<string, string> };
+
+const agentSchemes = new Map<string, Schemes>();
+
+/**
+ * The M3 scheme of an agent's colour: the owner's palette (its variant, contrast and custom colours)
+ * with the agent's colour as the source. Kept per colour and palette: the window draws often, and
+ * generating a scheme is not free.
+ */
+export function agentScheme(color: string, palette: Palette = DEFAULT_PALETTE): Schemes {
+	const key = `${color}|${JSON.stringify(palette)}`;
+	let schemes = agentSchemes.get(key);
+	if (!schemes) {
+		const { source: _global, ...rest } = palette;
+		const all = builder(color, rest).toJson().schemes;
+		schemes = { light: all.light, dark: all.dark };
+		agentSchemes.set(key, schemes);
+	}
+	return schemes;
 }

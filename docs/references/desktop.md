@@ -541,7 +541,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Page | What you do there | The same by command or by asking the main agent |
 |---|---|---|
 | General | pine's settings, each by a name with its key in `pine.json` beside it and a sentence on what it does: the model, reasoning and mode agents start from, how long a command and a task may run, how many agents work at once, and what pine asks you about. What only tunes pine to a model server is not there: that is written into `pine.json` by hand ([setup.md](setup.md), "pine's settings"). And the notes `pine check` would print about this setup | `set_setting`; `pine check` |
-| Agents | Every agent. On an agent's page: what it is for, its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). New agent; Remove, with or without its folder | `create_agent`, `update_agent`, `remove_agent`; `pine agent …` |
+| Agents | Every agent. On an agent's page: what it is for, its colour (None, a preset, or Other… with any colour: its avatar in the side bar, on its tabs, in its panel and on an empty conversation is drawn in it), its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). New agent; Remove, with or without its folder | `create_agent`, `update_agent`, `remove_agent`; `pine agent …` |
 | Models | Model servers of your own (add by name and address, with its key when it wants one; remove). Providers: sign in through the browser or with an API key, sign out; after a sign-in, the choice of the model your agents run on. That model (`defaults.model`) with Change, and each agent whose model cannot answer with the reason. The models you can use now | `add_model_server`; `pine model …`, `pine login`, `pine logout`; `set_setting` |
 | MCP servers | Every server with whom it is for and whether it connects. Add a remote one (its https address) or a program on this computer, for all agents or one. Sign in to a remote one through the browser. Remove | `add_mcp_server`; `pine mcp …` |
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
@@ -658,7 +658,8 @@ desktop/
     components/    only what stock components cannot express when composed in place (printed.tsx:
                    what a tool or a program printed, a Code Block that follows its end; sound.tsx:
                    a sound's line, its player and its bars, measured with src/tui/levels.ts), and pine's
-                   own small parts (logo.tsx: the logo; empty-view.tsx: a view with nothing in it);
+                   own small parts (logo.tsx: the logo; empty-view.tsx: a view with nothing in it;
+                   agent-avatar.tsx: an agent's initial on the stock avatar, in its own colour);
                    no part there only renames or bundles a stock one
     use-load.ts    loading what a view shows
     lists.tsx      the look of a row of the tree of files and of the lists to open a row from,
@@ -671,7 +672,9 @@ desktop/
     theme.ts       the `.dark` class on the root element, from the Appearance setting: Light or Dark
                    by itself, System by the system's appearance; pine's palette (`DEFAULT_PALETTE`), which
                    `<Mtb>` turns into the M3 scheme in main.tsx and in Storybook's preview; and
-                   `cleanPalette`, which makes a stored or sent palette safe field by field
+                   `cleanPalette`, which makes a stored or sent palette safe field by field; the
+                   preset colours of an agent (`AGENT_COLOURS`) and the scheme of an agent's colour
+                   (`agentScheme`: the owner's palette with that colour as its source)
     preview-bridge.ts  the page's stand-in for the preload's bridge, in the preview only
                    (`npm run dev:preview`): it calls the preview's server under `/__pine/`
   .agents/skills/  shadcn's agent skill, as `npx skills add shadcn/ui` installed it (locked in
@@ -779,6 +782,13 @@ holds only tokens and base rules.
   surface for the appearance, computed with material-theme-builder's `builder` (on a Mac the window
   is transparent behind its vibrancy). The preview keeps the palette in its stand-in for the bridge,
   in memory.
+- An agent may have a colour of its own (`color` in its `agent.json`, set on its page in Settings >
+  Agents: None, nine presets apart from each other and from the mint, or Other… with any colour).
+  `AgentAvatar` (`src/components/agent-avatar.tsx`) draws an agent's initial wherever the window
+  shows one: without a colour it is the stock avatar; with one, its fallback takes the primary and
+  on-primary of `agentScheme(color, palette)`, the owner's palette (variant, contrast, custom colours)
+  with the agent's colour as the source, light and dark each from its half of that scheme. The
+  values are set on the avatar itself, so the window's own tokens stay the owner's palette.
 - Dark mode is the `.dark` class on the root element (`dark:` utilities), which `theme.ts` sets from
   the Appearance setting: Light or Dark by itself, System by `prefers-color-scheme`. The page reads
   the setting and not only the query because in the preview nothing drives the query; in the app the

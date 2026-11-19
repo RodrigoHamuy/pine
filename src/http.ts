@@ -109,7 +109,7 @@ export class HttpServer {
 				if (url.pathname === "/agents") {
 					// (`modelProblem` only where there is one: why that agent's model cannot answer.)
 					const problems = await this.manager.modelProblems();
-					return send(200, Object.values(this.cfg.agents).map((a) => ({ id: a.id, main: a.id === mainAgentId(this.cfg), description: a.description, workspace: a.workspace, model: a.model ?? this.cfg.defaults.model, thinking: a.thinking, mode: a.mode, delegates: a.delegates, ...(problems[a.id] ? { modelProblem: problems[a.id] } : {}) })));
+					return send(200, Object.values(this.cfg.agents).map((a) => ({ id: a.id, main: a.id === mainAgentId(this.cfg), description: a.description, ...(a.color ? { color: a.color } : {}), workspace: a.workspace, model: a.model ?? this.cfg.defaults.model, thinking: a.thinking, mode: a.mode, delegates: a.delegates, ...(problems[a.id] ? { modelProblem: problems[a.id] } : {}) })));
 				}
 				if (url.pathname === "/tasks") return send(200, this.tasks.list({ agent: q.get("agent") ?? undefined, session: q.get("session") ?? undefined, status: (q.get("status") as any) ?? undefined, limit: num("limit") }));
 				if (url.pathname === "/models") return send(200, await this.manager.availableModels());

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AGENT_TOOLS } from "./agent-admin.ts";
-import { type AgentConfig, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
+import { type AgentConfig, isColor, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
 import { unsetEnv } from "./env-file.ts";
 import { editJson } from "./mcp-config.ts";
 import { isInside, realish } from "./security.ts";
@@ -21,6 +21,8 @@ export const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "ma
 /** What can be changed about an agent. Everything is optional; what is left out stays. */
 export interface AgentChange {
 	description?: string;
+	/** Its colour in the Pine app, `#rrggbb`; "none" or empty takes it away. */
+	color?: string;
 	/** The whole new text of its instruction file (AGENTS.md in its workspace). */
 	instructions?: string;
 	/** The whole new text of its SOUL.md: who it is, its character and tone. */
@@ -44,6 +46,17 @@ export interface AgentChange {
 	forget?: string[];
 }
 
+/**
+ * An agent's colour as a change gives it: `#rrggbb` in any case, kept in lower case; "none" or
+ * empty is no colour (undefined). Throws on anything else, before the owner is asked.
+ */
+export function checkColor(given: unknown): string | undefined {
+	const text = typeof given === "string" ? given.trim() : given;
+	if (text === "" || text === "none") return undefined;
+	if (!isColor(text)) throw new Error(`a colour is written #rrggbb, for example #e0805a (got ${JSON.stringify(given)}); "none" takes it away`);
+	return text.toLowerCase();
+}
+
 const folder = (given: string) => {
 	const text = given.trim();
 	const full = text === "~" ? os.homedir() : text.startsWith("~/") ? path.join(os.homedir(), text.slice(2)) : text;
@@ -65,6 +78,11 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 		if (!text) throw new Error("a description is one line on what the agent is for; it cannot be empty");
 		lines.push(`description: ${text}`);
 		steps.push((raw) => (raw.description = text));
+	}
+	if (change.color !== undefined) {
+		const color = checkColor(change.color);
+		lines.push(`color: ${color ?? "none"}`);
+		steps.push((raw) => (color ? (raw.color = color) : delete raw.color));
 	}
 	if (change.model !== undefined) {
 		const none = change.model === "default" || change.model === "";
@@ -158,7 +176,7 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 	// Its own tooling can be empty: then only what holds for all agents holds for it.
 	const tooling = change.tooling?.trim();
 	if (tooling !== undefined) lines.push(tooling ? `its own defaults and preferences for tools (its TOOLS.md) replaced by:\n${tooling.length > 1200 ? `${tooling.slice(0, 1200)}...` : tooling}` : "its own defaults and preferences for tools (its TOOLS.md) taken back: the file is emptied");
-	if (!lines.length) throw new Error("nothing to change: give at least one of description, instructions, soul, tooling, model, thinking, mode, tools, delegates, network, read, write, forget");
+	if (!lines.length) throw new Error("nothing to change: give at least one of description, color, instructions, soul, tooling, model, thinking, mode, tools, delegates, network, read, write, forget");
 	return { lines, warnings, json: (raw) => steps.forEach((s) => s(raw)), instructions, soul, tooling };
 }
 

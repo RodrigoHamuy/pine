@@ -14,7 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printed } from "@/components/printed";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AgentAvatar } from "@/components/agent-avatar";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
 
 const NONE = "px-3.5 py-0.5 text-outline wrap-anywhere";
@@ -48,9 +48,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 		<div className="flex flex-col gap-3 pb-2">
 			<Item className="px-3.5 pt-4 pb-0.5">
 				<ItemMedia>
-					<Avatar size="lg">
-						<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
-					</Avatar>
+					<AgentAvatar agent={{ id: tab.agent, color: store.agent(tab.agent)?.color }} size="lg" />
 				</ItemMedia>
 				<ItemContent>
 					<ItemTitle>{tab.agent}{info.main ? <Badge>main</Badge> : null}</ItemTitle>

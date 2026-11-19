@@ -8,7 +8,7 @@ import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, use
 import { Sound } from "@/components/sound";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AgentAvatar } from "@/components/agent-avatar";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
@@ -540,9 +540,7 @@ function Welcome({ tab }: { tab: Tab }) {
 		<Empty>
 			<EmptyHeader>
 				<EmptyMedia>
-					<Avatar size="lg">
-						<AvatarFallback>{tab.agent.slice(0, 1).toUpperCase()}</AvatarFallback>
-					</Avatar>
+					<AgentAvatar agent={{ id: tab.agent, color: store.agent(tab.agent)?.color }} size="lg" />
 				</EmptyMedia>
 				<EmptyTitle>
 					<h1>{tab.agent}</h1>
