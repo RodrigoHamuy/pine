@@ -36,6 +36,7 @@ final class SmokeTests: XCTestCase {
 	// ---- the first start, the machine, the hardening, the app's life, the status bar ----------------
 
 	func testFromFirstStartToTheAgents() async throws {
+		keyboard.watch()
 		let vc = try await bridge()
 		let web = try XCTUnwrap(vc.webView)
 		let plugin = try XCTUnwrap(vc.plugin)
@@ -69,6 +70,11 @@ final class SmokeTests: XCTestCase {
 		step("the host key is put to the owner, with the machine's fingerprint")
 		let shown = try await until("the host key's fingerprint", "document.querySelector('[data-slot=host-key-fingerprint]')?.textContent ?? ''") as! String
 		check("the fingerprint shown is the machine's", shown, machine["fingerprint"]!)
+		// The text's own lines, not the element's box: a word too long for its line overflows the box.
+		let text = "[...document.querySelectorAll('[data-slot=empty-description], [data-slot=host-key-fingerprint]')].flatMap((e) => { const r = document.createRange(); r.selectNodeContents(e); return [...r.getClientRects()]; })"
+		let lines = try await js("return JSON.stringify(\(text).map((r) => [Math.round(r.left), Math.round(r.right)]).concat([[0, innerWidth]]))") as? String ?? ""
+		check("the host key's message and fingerprint fit the screen's width", try await js("return \(text).every((r) => r.left >= 0 && r.right <= innerWidth)") as? Bool, true, detail: "lines (left, right; last the page's width): \(lines)")
+		try await mac("shot host-key.png")
 		try await js("document.querySelector('[data-slot=trust-host-key]').click(); return true")
 
 		step("connected: the agents of that pine")
@@ -79,6 +85,20 @@ final class SmokeTests: XCTestCase {
 		check("the page fits the screen's width, not zoomed into a field", try await js("return document.documentElement.scrollWidth <= innerWidth && innerWidth === screen.width && visualViewport.scale === 1") as? Bool, true, detail: layout)
 		// The sheet is put away by its own button, as the owner would.
 		try await until("the side bar put away", "(() => { const open = document.querySelector('[data-slot=sidebar][data-mobile]'); open && document.querySelector('[aria-label=\"Hide the sidebar\"]')?.click(); return !open; })()")
+
+		step("the page within the screen: below the status bar, above the home indicator and the keyboard")
+		try await js("document.activeElement?.blur(); return true")
+		try await waitFor("the keyboard down") { keyboard.top == nil }
+		try await settle()
+		try await within(vc, "without the keyboard", shot: "insets.png")
+		try await js("document.querySelector('[data-slot=composer] textarea').focus(); return true")
+		try await waitFor("the keyboard up") { keyboard.top != nil }
+		try await settle()
+		try await within(vc, "with the keyboard", shot: "insets-keyboard.png")
+		try await js("document.activeElement?.blur(); return true")
+		try await waitFor("the keyboard down again") { keyboard.top == nil }
+		try await settle()
+		try await within(vc, "after the keyboard", shot: nil)
 
 		step("the page's hardening")
 		let here = "return location.href"
@@ -110,7 +130,7 @@ final class SmokeTests: XCTestCase {
 		check("permission denial: the page cannot have the motion sensors", motion != nil && motion != "granted", true, detail: motion ?? "nil")
 		seen("no file access: a file: address cannot be fetched", try await js("return await fetch('file:///etc/hosts').then(() => 'read', () => 'refused')"), "refused")
 		check("link previews are off", web.allowsLinkPreview, false)
-		check("the page lies below the status bar, and does not scroll under it", web.scrollView.adjustedContentInset.top >= vc.view.safeAreaInsets.top && vc.view.safeAreaInsets.top > 0 && !web.scrollView.isScrollEnabled, true, detail: "inset \(web.scrollView.adjustedContentInset.top), safe area \(vc.view.safeAreaInsets.top), scrolls \(web.scrollView.isScrollEnabled)")
+		check("the page does not scroll (the insets checks say where it lies)", !web.scrollView.isScrollEnabled, true)
 
 		let tone = "pine-media://daemon/agents/scout/image?path=tone.wav"
 		// What the scheme answers, asked as WebKit asks it (a fetch from the page would need a CORS answer the desktop does not give either).
@@ -283,6 +303,44 @@ final class SmokeTests: XCTestCase {
 			""")
 	}
 
+	/** Where the on-screen keyboard's top lies in the window, while it is up. */
+	private let keyboard = Keyboard()
+
+	/**
+	 * The page's header and composer on the screen, in the window's points: the header's top at or below
+	 * the safe area's top (the status bar, the Dynamic Island), the composer's bottom at or above what
+	 * covers the page's bottom (the home indicator, or the keyboard while it is up). The page's own
+	 * coordinates are taken to the window through the web view and its scroll view's offset.
+	 */
+	private func within(_ vc: PineViewController, _ when: String, shot: String?) async throws {
+		let web = try XCTUnwrap(vc.webView)
+		let window = try XCTUnwrap(vc.view.window)
+		let page = try await js("""
+			const h = document.querySelector('header')?.getBoundingClientRect();
+			const c = document.querySelector('[data-slot=composer]')?.getBoundingClientRect();
+			const p = document.createElement('div');
+			p.style.cssText = 'position:fixed;visibility:hidden;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)';
+			document.body.append(p);
+			const s = getComputedStyle(p);
+			const env = [s.paddingTop, s.paddingRight, s.paddingBottom, s.paddingLeft].map(parseFloat);
+			p.remove();
+			const v = visualViewport;
+			return JSON.stringify({ header: h ? h.top : null, composer: c ? c.bottom : null, innerHeight, client: document.documentElement.clientHeight, vv: [v.offsetTop, v.height], scrollY, env });
+			""") as? String ?? "{}"
+		let m = try JSONSerialization.jsonObject(with: Data(page.utf8)) as? [String: Any] ?? [:]
+		let origin = web.convert(CGPoint.zero, to: window).y - web.scrollView.contentOffset.y
+		let header = (m["header"] as? NSNumber).map { origin + CGFloat($0.doubleValue) }
+		let composer = (m["composer"] as? NSNumber).map { origin + CGFloat($0.doubleValue) }
+		let top = window.safeAreaInsets.top
+		let bottom = keyboard.top ?? (window.bounds.height - window.safeAreaInsets.bottom)
+		let detail = "header top \(header.map { "\($0)" } ?? "none") vs safe top \(top); composer bottom \(composer.map { "\($0)" } ?? "none") vs visible bottom \(bottom) (window \(window.bounds.height), keyboard \(keyboard.top.map { "\($0)" } ?? "none")); web view at \(web.frame.minY), offset \(web.scrollView.contentOffset.y), inset \(web.scrollView.adjustedContentInset.top)/\(web.scrollView.adjustedContentInset.bottom); page \(page)"
+		step("layout \(when): \(detail)")
+		if let shot { try await mac("shot \(shot)") }
+		// Half a point for the rounding between the page's pixels and the window's points.
+		check("insets \(when): the header lies below the status bar", header.map { $0 >= top - 0.5 } ?? false, true, detail: detail)
+		check("insets \(when): the composer lies whole above the \(keyboard.top == nil ? "home indicator" : "keyboard")", composer.map { $0 <= bottom + 0.5 } ?? false, true, detail: detail)
+	}
+
 	private func webViews(in view: UIView?) -> Int {
 		guard let view else { return 0 }
 		return (view is WKWebView ? 1 : 0) + view.subviews.reduce(0) { $0 + webViews(in: $1) }
@@ -344,6 +402,25 @@ final class SmokeTests: XCTestCase {
 
 	private func quoted(_ s: String) -> String {
 		String(decoding: try! JSONSerialization.data(withJSONObject: [s]), as: UTF8.self).dropFirst().dropLast().description
+	}
+}
+
+/** The on-screen keyboard's top in the window's points while it is up, nil while it is down, from the system's notices. */
+@MainActor
+private final class Keyboard {
+	private(set) var top: CGFloat?
+	private var watching: [NSObjectProtocol] = []
+
+	func watch() {
+		guard watching.isEmpty else { return }
+		let center = NotificationCenter.default
+		watching.append(center.addObserver(forName: UIResponder.keyboardDidShowNotification, object: nil, queue: .main) { [weak self] note in
+			let frame = (note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? NSValue)?.cgRectValue
+			MainActor.assumeIsolated { self?.top = frame?.minY }
+		})
+		watching.append(center.addObserver(forName: UIResponder.keyboardDidHideNotification, object: nil, queue: .main) { [weak self] _ in
+			MainActor.assumeIsolated { self?.top = nil }
+		})
 	}
 }
 

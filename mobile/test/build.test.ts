@@ -72,9 +72,9 @@ test("the iOS page carries the same policy, with its media from the media scheme
 	assert.doesNotMatch(policy(iosBuild), /https:\/\/localhost/);
 });
 
-test("the iOS page is not zoomed into a field it focuses, and Android's viewport is unchanged", () => {
+test("the iOS page is not zoomed into a field it focuses and covers the screen, and Android's viewport is unchanged", () => {
 	const viewport = (files: Map<string, string>) => files.get("index.html")?.match(/<meta name="viewport" content="([^"]*)"/)?.[1];
-	assert.equal(viewport(iosBuild), "width=device-width, initial-scale=1, maximum-scale=1");
+	assert.equal(viewport(iosBuild), "width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover");
 	assert.equal(viewport(mobileBuild), "width=device-width, initial-scale=1");
 });
 
@@ -89,6 +89,13 @@ test("the iOS page has every style the Android page has, and its bridge", () => 
 	const all = [...iosBuild.values()].join("\n");
 	assert.match(all, /pine-media:\/\/daemon/);
 	for (const [f, text] of iosBuild) assert.doesNotMatch(text, /__pine/, f);
+});
+
+test("the iOS page keeps itself inside the safe area, and the Android and desktop pages have no such rule", () => {
+	const css = (files: Map<string, string>) => [...files].filter(([f]) => f.endsWith(".css")).map(([, t]) => t).join("\n");
+	assert.match(css(iosBuild), /#root\{[^}]*env\(safe-area-inset-top\)/);
+	assert.doesNotMatch(css(mobileBuild), /safe-area-inset/);
+	assert.doesNotMatch(css(desktopBuild), /safe-area-inset/);
 });
 
 test("the mobile page installs its bridge and has nothing of the preview's stand-in", () => {

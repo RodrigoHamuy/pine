@@ -43,17 +43,26 @@ class PineViewController: CAPBridgeViewController {
 		webView.isInspectable = false
 		#endif
 		paint(UIColor(red: 0x1b / 255, green: 0x1e / 255, blue: 0x28 / 255, alpha: 1), dark: true)
-		NotificationCenter.default.addObserver(self, selector: #selector(keyboardGone), name: UIResponder.keyboardDidHideNotification, object: nil)
+		NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
+		NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved), name: UIResponder.keyboardDidShowNotification, object: nil)
+		NotificationCenter.default.addObserver(self, selector: #selector(keyboardMoved), name: UIResponder.keyboardDidHideNotification, object: nil)
 	}
 
 	/**
-	 * WebKit scrolls the page up to show a field above the keyboard (the page itself does not scroll:
-	 * `scrollEnabled` is off), and leaves it there when the keyboard goes: the page is put back below
-	 * the status bar, where the owner could not scroll it back.
+	 * The web view covers the screen and the page keeps inside the safe area (the iOS build pads it by
+	 * `env(safe-area-inset-*)`). The keyboard is made part of that safe area, so that the page ends
+	 * above it, its message box in sight and its header below the status bar. WebKit would rather
+	 * scroll the whole page up to show a field (the page itself does not scroll: `scrollEnabled` is
+	 * off), which takes the header under the status bar: the page is kept where it is.
 	 */
-	@objc private func keyboardGone() {
-		guard let scroll = webView?.scrollView else { return }
-		scroll.setContentOffset(CGPoint(x: 0, y: -scroll.adjustedContentInset.top), animated: true)
+	@objc private func keyboardMoved(_ note: Notification) {
+		guard let end = note.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
+		let hidden = note.name == UIResponder.keyboardDidHideNotification
+		let below = view.safeAreaInsets.bottom - additionalSafeAreaInsets.bottom
+		let covered = hidden ? 0 : max(0, view.bounds.maxY - view.convert(end, from: nil).minY)
+		let extra = max(0, covered - below)
+		if additionalSafeAreaInsets.bottom != extra { additionalSafeAreaInsets.bottom = extra }
+		webView?.scrollView.contentOffset = .zero
 	}
 
 	/**

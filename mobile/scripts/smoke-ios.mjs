@@ -13,7 +13,9 @@
 // PinePlugin.swift, each a named check listed here and failing the run: the page's policy; the
 // camera, microphone and motion sensors refused; no file access; the media scheme's rules and
 // ranges; no window; no navigation away, an address of the web handed to Safari (noted, not
-// opened); the app back from the background still connected; the status bar in a dark and a light
+// opened); the page inside the safe area (its header below the status bar, its message box above
+// the home indicator and above the keyboard), and a host key's fingerprint within the screen's width;
+// the app back from the background still connected; the status bar in a dark and a light
 // theme. A second run of the app then checks that the Keychain kept the phone's key. Last, a
 // release build of the app, made with Capacitor's own inspector switch on (CAPACITOR_DEBUG=true, as
 // a debug build has it), checks that PineViewController turns the web inspector off there.

@@ -17,11 +17,27 @@ const page = path.resolve(here, "../desktop");
 
 // Tailwind finds the classes in use by reading the files under Vite's root, which is mobile/ here:
 // the page's style sheet is told to read desktop/ too, as it does when desktop/ is the root.
-const sources: Plugin = {
+// On iOS the web view covers the whole screen (`contentInset: "never"`, `viewport-fit=cover`) and
+// the page keeps out of what lies over it: the status bar and the Dynamic Island at the top, the
+// home indicator at the bottom, and the keyboard while it is up (PineViewController adds it to the
+// safe area). The sheets at a side are fixed to the screen, outside #root, and keep out too.
+// Android needs none of it: there Capacitor pads the WebView by the system bars.
+const safeArea = `
+#root {
+	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+[data-slot="sheet-content"][data-side="left"],
+[data-slot="sheet-content"][data-side="right"] {
+	top: env(safe-area-inset-top);
+	bottom: env(safe-area-inset-bottom);
+	height: auto;
+}
+`;
+const sources = (platform: Platform): Plugin => ({
 	name: "pine-mobile-sources",
 	enforce: "pre",
-	transform: (code, id) => (id === path.join(page, "src/index.css") ? `${code}\n@source "${page}";\n` : undefined),
-};
+	transform: (code, id) => (id === path.join(page, "src/index.css") ? `${code}\n@source "${page}";\n${platform === "ios" ? safeArea : ""}` : undefined),
+});
 
 // Capacitor's local server serves the page and sends no header of pine's, so the policy the app's
 // main process sends is written into the page, right after its charset, before any of its scripts.
@@ -39,7 +55,8 @@ const csp = (platform: Platform): Plugin => ({
 
 // WebKit on iOS zooms into a field the page focuses when its text is smaller than 16px (the
 // message box, the host field), and leaves the page zoomed and shifted under the status bar. A
-// page of the app is laid out for the phone's width: it is never zoomed.
+// page of the app is laid out for the phone's width: it is never zoomed. It covers the screen, and
+// keeps itself inside the safe area (`safeArea`).
 const viewport = '<meta name="viewport" content="width=device-width, initial-scale=1" />';
 const unzoomed: Plugin = {
 	name: "pine-mobile-ios-viewport",
@@ -47,7 +64,7 @@ const unzoomed: Plugin = {
 		order: "post",
 		handler: (html) => {
 			if (!html.includes(viewport)) throw new Error(`mobile/index.html has no ${viewport}: the iOS page's viewport is made from it.`);
-			return html.replace(viewport, viewport.replace("initial-scale=1", "initial-scale=1, maximum-scale=1"));
+			return html.replace(viewport, viewport.replace("initial-scale=1", "initial-scale=1, maximum-scale=1, viewport-fit=cover"));
 		},
 	},
 };
@@ -63,5 +80,5 @@ export default defineConfig(({ mode }) => {
 		build: { outDir: path.join(here, "dist"), ...(platform === "ios" ? { target: "safari17" } : {}) },
 	});
 	// Ahead of desktop's plugins, so that Tailwind reads the style sheet with its added source.
-	return { ...config, plugins: [sources, ...(desktop.plugins ?? []), csp(platform), ...(platform === "ios" ? [unzoomed] : [])] };
+	return { ...config, plugins: [sources(platform), ...(desktop.plugins ?? []), csp(platform), ...(platform === "ios" ? [unzoomed] : [])] };
 });

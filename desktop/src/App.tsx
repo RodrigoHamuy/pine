@@ -123,7 +123,8 @@ export function Gate() {
 						<Logo className="size-9" />
 					</EmptyMedia>
 					<EmptyTitle>{title}</EmptyTitle>
-					{about ? <EmptyDescription className="break-words select-text">{about}</EmptyDescription> : null}
+					{/* A host key's fingerprint is one long word: it breaks anywhere, or it overflows its centered line on a phone. */}
+					{about ? <EmptyDescription className="wrap-anywhere select-text">{about}</EmptyDescription> : null}
 				</EmptyHeader>
 				<EmptyContent>{actions}</EmptyContent>
 			</Empty>
@@ -801,8 +802,9 @@ export function App() {
 				<Gate />
 			) : (
 				// The stock provider follows the model: its own ⌘B, where the page gets the key before the menu, toggles the same
-				// setting in a wide window, and its sheet in a narrow one.
-				<SidebarProvider open={s.sidebar} onOpenChange={(open) => s.showSidebar(open)}>
+				// setting in a wide window, and its sheet in a narrow one. Its height is the window's (h-full), not the stock
+				// min-h-svh: on a phone the page ends above the home indicator and the keyboard, short of the screen.
+				<SidebarProvider className="min-h-0" open={s.sidebar} onOpenChange={(open) => s.showSidebar(open)}>
 					{narrow ? <Sidebar /> : null}
 					<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && keepWidth(layout, "sidebar-panel", SIDE_KEY)}>
 						{column ? (
