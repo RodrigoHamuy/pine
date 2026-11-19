@@ -174,6 +174,23 @@ final class SmokeTests: XCTestCase {
 		check("the Keychain key survives a relaunch of the app", now, before)
 	}
 
+	// ---- a release build: no web inspector ------------------------------------------------------------
+
+	/**
+	 * Run on a release build made with Capacitor's own switch on (CAPACITOR_DEBUG=true, as a debug
+	 * build has it), so that Capacitor makes the web view inspectable and only PineViewController's
+	 * `#if !DEBUG` line turns it off again: without that line this check fails.
+	 */
+	func testInspectorOffInARelease() async throws {
+		#if DEBUG
+		throw XCTSkip("A check of a release build: npm run smoke:ios builds one for it.")
+		#else
+		let vc = try await bridge()
+		let web = try XCTUnwrap(vc.webView)
+		check("inspector off in a release build", web.isInspectable, false)
+		#endif
+	}
+
 	// ---- helpers --------------------------------------------------------------------------------------
 
 	private func step(_ text: String) { print("- \(text)") }

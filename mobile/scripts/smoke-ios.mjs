@@ -14,7 +14,9 @@
 // camera, microphone and motion sensors refused; no file access; the media scheme's rules and
 // ranges; no window; no navigation away, an address of the web handed to Safari (noted, not
 // opened); the app back from the background still connected; the status bar in a dark and a light
-// theme. A second run of the app then checks that the Keychain kept the phone's key.
+// theme. A second run of the app then checks that the Keychain kept the phone's key. Last, a
+// release build of the app, made with Capacitor's own inspector switch on (CAPACITOR_DEBUG=true, as
+// a debug build has it), checks that PineViewController turns the web inspector off there.
 //
 // What only the Mac can do (a screenshot, sending the app to the background) the test asks for
 // through files in the run's folder, which this script answers. Screenshots (agents.png,
@@ -40,6 +42,8 @@ const DEVICE = opts.device ?? "Pine smoke";
 const work = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-ios-smoke-")));
 const shots = path.resolve(opts.shots ?? work);
 const derived = path.join(mobile, "ios", "DerivedData");
+// The release build's own, so that its products and its .xctestrun stay apart from the debug build's.
+const derivedRelease = path.join(derived, "release");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const step = (text) => console.log(`- ${text}`);
 const write = (file, content) => (fs.mkdirSync(path.dirname(file), { recursive: true }), fs.writeFileSync(file, content));
@@ -126,8 +130,21 @@ function answer(udid) {
 	};
 }
 
-/** Runs one test of SmokeTests in the app on the simulator, and lists its checks. */
-async function test(udid, name) {
+/** The build for testing of a configuration, signed to run locally (no account): the Keychain is refused to an app with no signature. */
+function build(udid, configuration, dir, ...settings) {
+	run("xcrun", ["xcodebuild", "build-for-testing", "-quiet", "-project", "ios/App/App.xcodeproj", "-scheme", "App", "-configuration", configuration, "-destination", `id=${udid}`, "-derivedDataPath", dir, "CODE_SIGN_IDENTITY=-", "CODE_SIGN_STYLE=Manual", "DEVELOPMENT_TEAM=", ...settings]);
+}
+
+/** The .xctestrun file the last build for testing in `dir` wrote (an older SDK's may lie beside it): what test-without-building runs. */
+function xctestrun(dir) {
+	const products = path.join(dir, "Build", "Products");
+	const found = fs.readdirSync(products).filter((f) => f.endsWith(".xctestrun")).map((f) => path.join(products, f));
+	if (!found.length) throw new Error(`no .xctestrun in ${products}: the build for testing made none`);
+	return found.sort((x, y) => fs.statSync(y).mtimeMs - fs.statSync(x).mtimeMs)[0];
+}
+
+/** Runs one test of SmokeTests in the app on the simulator, from the build of `dir`, and lists its checks. */
+async function test(udid, name, dir = derived) {
 	const checks = path.join(work, "checks.txt");
 	fs.rmSync(checks, { force: true });
 	const log = path.join(work, `${name}.log`);
@@ -135,7 +152,7 @@ async function test(udid, name) {
 	const code = await new Promise((resolve) => {
 		const child = spawn(
 			"xcrun",
-			["xcodebuild", "test-without-building", "-project", "ios/App/App.xcodeproj", "-scheme", "App", "-destination", `id=${udid}`, "-derivedDataPath", derived, `-only-testing:AppTests/SmokeTests/${name}`, "-collect-test-diagnostics", "never"],
+			["xcodebuild", "test-without-building", "-xctestrun", xctestrun(dir), "-destination", `id=${udid}`, `-only-testing:AppTests/SmokeTests/${name}`, "-collect-test-diagnostics", "never"],
 			{ cwd: mobile, env: { ...env, TEST_RUNNER_PINE_SMOKE_DIR: work }, stdio: ["ignore", out, out] },
 		);
 		child.on("exit", resolve);
@@ -169,10 +186,12 @@ try {
 	}
 	simctl("bootstatus", udid, "-b");
 
-	step("building the page, the app and its test for the simulator");
+	step("building the page, the app and its test for the simulator, in debug and in release");
 	run("npm", ["run", "sync:ios"]);
-	// Signed to run locally (no account): the Keychain is refused to an app with no signature.
-	run("xcrun", ["xcodebuild", "build-for-testing", "-quiet", "-project", "ios/App/App.xcodeproj", "-scheme", "App", "-configuration", "Debug", "-destination", `id=${udid}`, "-derivedDataPath", derived, "CODE_SIGN_IDENTITY=-", "CODE_SIGN_STYLE=Manual", "DEVELOPMENT_TEAM="]);
+	build(udid, "Debug", derived);
+	// Capacitor's switch on, as in a debug build, so that only pine's own line can turn the inspector
+	// off; testable, so that the test reaches PineViewController.
+	build(udid, "Release", derivedRelease, "CAPACITOR_DEBUG=true", "ENABLE_TESTABILITY=YES");
 
 	// ---- the machine ------------------------------------------------------------------------------
 	step("starting the machine: the mock model, a pine home, and an SSH server on this Mac's loopback");
@@ -221,6 +240,8 @@ try {
 	await test(udid, "testFromFirstStartToTheAgents");
 	step("the app started again: the Keychain kept the phone's key");
 	await test(udid, "testTheKeySurvivesARelaunch");
+	step("the release build: no web inspector, even with Capacitor's switch on");
+	await test(udid, "testInspectorOffInARelease", derivedRelease);
 	step("done: the app reached the pine of the machine and shows its agents");
 } catch (e) {
 	console.error(`smoke run failed: ${e instanceof Error ? e.message : e}`);
