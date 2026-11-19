@@ -8,8 +8,14 @@ import type { Ask, BridgeEvent, Method } from "./protocol.ts";
 type Target = { postMessage(data: unknown, targetOrigin: string): void };
 type MessageSource = { addEventListener(type: "message", fn: (event: { data: unknown; source: unknown }) => void): void };
 
+/** Where the page's media addresses start: they are never loaded as they are, but handed to `media` (page-media.ts). */
+export const MEDIA_BASE = "pine-media://daemon";
+
+/** The page's bridge, and what the web client's page has besides: the daemon's media as bytes. */
+export type FrameBridge = PageBridge & { media(target: string): Promise<{ type: string; bytes: Uint8Array }> };
+
 /** The page's bridge, talking to `parent` (the top's window) and hearing it on `self`. */
-export function frameBridge(parent: Target, self: MessageSource): PageBridge {
+export function frameBridge(parent: Target, self: MessageSource): FrameBridge {
 	let next = 1;
 	const waiting = new Map<number, { resolve: (v: any) => void; reject: (e: Error) => void }>();
 	const heard = new Map<BridgeEvent, Set<(value: any) => void>>();
@@ -65,11 +71,11 @@ export function frameBridge(parent: Target, self: MessageSource): PageBridge {
 			const key = await ask<string>("deviceKey");
 			return { key, copy: () => ask("copyKey"), share: () => ask("shareKey") };
 		},
+		mediaBase: MEDIA_BASE,
+		media: (target: string) => ask("media", target),
+		open: (url: string) => ask("open", url),
+		saveText: (name: string, text: string) => ask("saveText", name, text),
 		// What only the desktop app has, refused or done nothing.
-		open: async () => {},
-		saveText: async () => {
-			throw new Error("Saving a file is not in the web client yet.");
-		},
 		contextMenu: async () => undefined,
 		reveal: async () => {},
 		notify: async () => {},
@@ -94,5 +100,5 @@ export function frameBridge(parent: Target, self: MessageSource): PageBridge {
 		termRun: async () => ({ reports: false }),
 		termResize: async () => {},
 		termClose: async () => {},
-	} as PageBridge;
+	} as FrameBridge;
 }

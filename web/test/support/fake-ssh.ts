@@ -21,6 +21,11 @@ export async function startDaemon(token = "t0ken-of-the-daemon"): Promise<Daemon
 			if (req.url === "/agents") return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify([{ id: "main", main: true }]));
 			if (req.url === "/agents/main/message") return void res.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ echoed: JSON.parse(body) }));
 			if (req.url === "/agents/main/image") return void res.writeHead(200, { "content-type": "image/png" }).end(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+			// Media the page may ask for, and some it may not be shown (media.test.ts).
+			if (req.url === "/media/tool/t1") return void res.writeHead(200, { "content-type": "image/png" }).end(Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]));
+			if (req.url === "/agents/main/image?path=clip.mp4&session=s1") return void res.writeHead(200, { "content-type": "video/mp4" }).end(Buffer.from("not really a video"));
+			if (req.url === "/media/tool/page") return void res.writeHead(200, { "content-type": "text/html" }).end("<script>alert(1)</script>");
+			if (req.url === "/media/tool/drawing") return void res.writeHead(200, { "content-type": "image/svg+xml" }).end("<svg/>");
 			if (req.url?.startsWith("/events/stream")) {
 				res.writeHead(200, { "content-type": "text/event-stream" });
 				res.write(`data: ${JSON.stringify({ topic: "pine/hello", payload: { n: 1 } })}\n\n`);

@@ -41,6 +41,15 @@ async function main() {
 		clipboard: (text) => navigator.clipboard.writeText(text),
 		share: typeof navigator.share === "function" ? (title, text) => navigator.share({ title, text }) : undefined,
 		version: __PINE_WEB_VERSION__,
+		// A new tab that gets no handle on this document, and is not told where it was opened from.
+		open: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+		save: (name, text) => {
+			const a = document.createElement("a");
+			a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));
+			a.download = name;
+			a.click();
+			setTimeout(() => URL.revokeObjectURL(a.href), 60_000);
+		},
 	});
 	const frame = document.createElement("iframe");
 	// Scripts and nothing else: no same origin (so no storage of the bridge's), no popups, no top navigation, no forms.

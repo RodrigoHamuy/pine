@@ -26,6 +26,12 @@ export const METHODS = {
 	/** The public key onto the clipboard, or into the system's share sheet: the top does it, since the frame may not. */
 	copyKey: none,
 	shareKey: none,
+	/** One of the daemon's pictures, videos or sounds by its path and query; the bridge checks it against the desktop's `MEDIA`. */
+	media: (args: unknown[]) => args.length === 1 && typeof args[0] === "string" && args[0].length <= 4096,
+	/** An address to open in a new tab; the bridge opens only http(s). */
+	open: (args: unknown[]) => args.length === 1 && typeof args[0] === "string" && args[0].length <= 8192,
+	/** A file's name and its text, saved by the browser as a download. */
+	saveText: (args: unknown[]) => args.length === 2 && typeof args[0] === "string" && args[0].length <= 1000 && typeof args[1] === "string" && args[1].length <= 64 * 1024 * 1024,
 } satisfies Record<string, (args: unknown[]) => boolean>;
 
 export type Method = keyof typeof METHODS;

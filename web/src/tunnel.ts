@@ -206,6 +206,51 @@ export async function callDaemon(daemon: Daemon | undefined, method: string, url
 	}
 }
 
+/** The most of one picture, video or sound the bridge holds for the page: it is handed over whole, not streamed. */
+export const MEDIA_MAX = 256 * 1024 * 1024;
+
+/** Why a media request is not answered with bytes, in the words of the desktop's statuses (404, 415). */
+export class MediaRefused extends Error {}
+
+/**
+ * One of the daemon's pictures, videos or sounds, by its path and query (checked against `MEDIA`
+ * by the caller), as desktop/electron/daemon.ts's `mediaFromDaemon` answers: only what is drawn or
+ * played, never a drawing, which can carry scripts.
+ */
+export async function mediaOf(daemon: Daemon, target: string, max = MEDIA_MAX): Promise<{ type: string; bytes: Uint8Array }> {
+	let type = "";
+	const parts: Uint8Array[] = [];
+	let size = 0;
+	let tooLarge = false;
+	const channel = await daemon.connection.forward(daemon.host, daemon.port);
+	await exchange(
+		channel,
+		{ method: "GET", path: target, host: hostHeader(daemon), headers: { Authorization: `Bearer ${daemon.token}` } },
+		(head) => {
+			type = head.headers["content-type"] ?? "";
+			if (head.status < 200 || head.status > 299) throw new MediaRefused("not found");
+			if (!/^(image|video|audio)\//.test(type) || type.startsWith("image/svg")) throw new MediaRefused("not shown: it is not a picture, a video or a sound");
+		},
+		(data) => {
+			size += data.length;
+			if (size > max) {
+				tooLarge = true;
+				void channel.close().catch(() => {});
+				return;
+			}
+			parts.push(data);
+		},
+	);
+	if (tooLarge) throw new MediaRefused(`not shown: it is larger than ${Math.round(max / 1024 / 1024)} MB`);
+	const bytes = new Uint8Array(size);
+	let at = 0;
+	for (const part of parts) {
+		bytes.set(part, at);
+		at += part.length;
+	}
+	return { type, bytes };
+}
+
 /**
  * The daemon's live events, read until `signal` aborts and handed on in small batches, as
  * desktop/electron/daemon.ts's `followEvents` does: a lost stream is opened again a second later.

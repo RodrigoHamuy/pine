@@ -6,7 +6,8 @@
 //
 // The owner's first visit, as named checks: the page cannot reach the bridge's storage or
 // document; the browser's key is shown; a machine is added and used; its host key fingerprint is
-// asked about and trusted; a message is sent and the answer comes back.
+// asked about and trusted; a message is sent and the answer comes back; a picture in an answer
+// shows; a link in an answer opens in a new tab with no hold on the client.
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type IncomingMessage } from "node:http";
@@ -169,6 +170,39 @@ try {
 		// The answer alone in its paragraph: the message sent holds the same words inside its directive.
 		await frame.getByText("The answer came back over SSH.", { exact: true }).first().waitFor({ timeout: 60_000 });
 		assert.ok(mock.state.requests.length > 0, "the model was asked");
+	});
+
+	await check("a picture in an answer shows: its bytes come through the tunnel, and the page draws its own object URL of them", async () => {
+		// A picture of 3 by 2 pixels in the agent's workspace, which the answer names.
+		writeFileSync(path.join(home, "agents", "main", "workspace", "dot.png"), Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAMAAAACCAIAAAASFvFNAAAAEElEQVR4nGP4z8AAQQxwFgBB0gX7h/C5SAAAAABJRU5ErkJggg==", "base64"));
+		const box = frame.locator("textarea").first();
+		await box.fill('Show it. <<MOCK {"steps":[{"text":"Here: ![A small dot](dot.png)"}]}>>');
+		await box.press("Enter");
+		const picture = frame.locator('img[alt="A small dot"]').first();
+		await picture.waitFor({ timeout: 60_000 });
+		const f = await inside();
+		const drawn = await f.waitForFunction(() => {
+			const img = document.querySelector<HTMLImageElement>('img[alt="A small dot"]');
+			return img?.complete && img.naturalWidth > 0 ? { src: img.src, w: img.naturalWidth, h: img.naturalHeight } : false;
+		}, undefined, { timeout: 30_000 });
+		const shown = (await drawn.jsonValue()) as { src: string; w: number; h: number };
+		assert.match(shown.src, /^blob:/);
+		assert.deepEqual([shown.w, shown.h], [3, 2]);
+	});
+
+	await check("a link in an answer opens in a new tab that has no hold on the client, and the page stays", async () => {
+		const target = `${origin}/opened-from-an-answer`;
+		const box = frame.locator("textarea").first();
+		await box.fill(`Link it. <<MOCK {"steps":[{"text":"See [the page](${target})."}]}>>`);
+		await box.press("Enter");
+		const link = frame.getByText("the page", { exact: true }).first();
+		await link.waitFor({ timeout: 60_000 });
+		const [opened] = await Promise.all([browser.context.waitForEvent("page", { timeout: 10_000 }), link.click()]);
+		await opened.waitForLoadState("domcontentloaded").catch(() => {});
+		assert.equal(opened.url(), target);
+		assert.equal(await opened.evaluate(() => window.opener), null);
+		assert.equal(page.url(), `${origin}/`);
+		await opened.close();
 	});
 
 	assert.deepEqual(errors.filter((e) => /Content Security Policy|Refused/.test(e)), [], "the page broke no policy");

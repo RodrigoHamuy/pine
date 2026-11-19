@@ -3,12 +3,13 @@
 // SSH key, the machines and their trusted host keys, the SSH connection and the daemon's token, and
 // makes every call to the control API for the page, which asks through serve.ts and never sees
 // the token. The browser has no pine of its own (`local: false`).
+import { MEDIA } from "../../desktop/electron/daemon.ts";
 import type { AppState, Prefs, ServiceState } from "../../desktop/src/bridge.ts";
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
 import type { BridgeEvent } from "./protocol.ts";
 import { REMOTE_COMMAND } from "./remote-command.ts";
 import { generateKey, publicKeyLine, SshRefused, type Channel, type Connection, type ConnectOptions } from "./ssh.ts";
-import { callDaemon, followEvents, loopbackEnd, runService, ServiceTrouble, type Daemon } from "./tunnel.ts";
+import { callDaemon, followEvents, loopbackEnd, mediaOf, runService, ServiceTrouble, type Daemon } from "./tunnel.ts";
 
 /** Where the bridge keeps what it remembers: IndexedDB in a browser (idb-store.ts), a map in the tests. Values are structured-cloned, CryptoKeys included. */
 export type Store = {
@@ -28,7 +29,34 @@ export type WebBridgeDeps = {
 	share?(title: string, text: string): Promise<void>;
 	/** The web client's version. */
 	version: string;
+	/** Opens an address of the web in a new tab of the browser, with nothing of this document handed to it (`noopener`). */
+	open?(url: string): void;
+	/** Hands a text to the browser as a file to save (a download), under that name. */
+	save?(name: string, text: string): void;
 };
+
+/** A picture, video or sound of the daemon's, by its path and query: one of `MEDIA`'s paths, nothing that could be read as another request. */
+function mediaTarget(target: string): string {
+	const q = target.indexOf("?");
+	const path = q < 0 ? target : target.slice(0, q);
+	if (!target.startsWith("/") || target.startsWith("//") || /[\s\0-\x1f\x7f#]/.test(target) || !MEDIA.some((m) => m.test(path))) throw new Error(`That is not a picture, a video or a sound of pine's: ${target.slice(0, 80)}`);
+	return target;
+}
+
+/** Only pages on the web open, as desktop/electron/main.ts's `openOutside`: a link never starts a program, opens a file or runs a script. */
+function webAddress(url: string): string {
+	let u: URL | undefined;
+	try {
+		u = new URL(url);
+	} catch {}
+	if (!u || (u.protocol !== "http:" && u.protocol !== "https:")) throw new Error(`Only an address of the web (http or https) opens: ${url.slice(0, 80)}`);
+	return u.href;
+}
+
+/** The last part of a file's name, so that a name never says where the file goes. */
+function fileName(name: string): string {
+	return (name.split(/[\\/]/).pop() ?? "").replace(/[\0-\x1f\x7f]/g, "").slice(0, 200) || "pine.txt";
+}
 
 /** The page's own preferences, as the bridge keeps them. */
 type PagePrefs = { notify: boolean; updates: boolean; keepRunning: boolean; agentAccent: boolean; look?: Look };
@@ -239,6 +267,25 @@ export function webBridge(deps: WebBridgeDeps) {
 			hostKeys[host] = fingerprint;
 			await saveKeys();
 			void connectTo(host);
+		},
+		/** One of the daemon's pictures, videos or sounds, as bytes the page makes its own object URL of. */
+		async media(target: string) {
+			const checked = mediaTarget(target);
+			const daemon = state.status === "ready" ? current?.daemon : undefined;
+			if (!daemon) throw new Error("not found: pine is not connected");
+			return mediaOf(daemon, checked);
+		},
+		async open(url: string) {
+			const href = webAddress(url);
+			if (!deps.open) throw new Error("This browser cannot open another tab.");
+			deps.open(href);
+		},
+		/** What the page saves goes to the browser's downloads: the page is told the name it was given. */
+		async saveText(name: string, text: string) {
+			const named = fileName(name);
+			if (!deps.save) throw new Error("This browser cannot save a file.");
+			deps.save(named, text);
+			return named;
 		},
 		deviceKey: () => keyLine(),
 		copyKey: async () => deps.clipboard(await keyLine()),
