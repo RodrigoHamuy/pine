@@ -267,11 +267,11 @@ export const EnvironmentsHostKeyToConfirm: Story = {
 	},
 };
 
-/** The App page under a bridge with no local machine: appearance, notifications, colours and the pine in use, without what only this computer has (its home folder, Keep running, Restart, the pine command, the browser build, the Electron version). */
+/** The App page under a bridge with no local machine: the theme, the agent accent, notifications and the pine in use, without what only this computer has (its home folder, Keep running, Restart, the pine command, the browser build, the Electron version). */
 export const AppWithoutLocal: Story = {
 	args: { section: "app", local: false },
 	play: async ({ canvasElement, canvas }) => {
-		await canvas.findByText("Appearance");
+		await canvas.findByText("Theme");
 		await noLocalMachine(canvasElement);
 	},
 };
