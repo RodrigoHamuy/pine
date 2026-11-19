@@ -1,4 +1,8 @@
 include ':app'
+
+// The native plugin's core (pine.mobile.core: SSH, calls, events, media), built from its own project
+// and tested there on the JVM (cd ../core && ./gradlew test): the app uses it as it is, not a copy.
+includeBuild('../core')
 include ':capacitor-cordova-android-plugins'
 project(':capacitor-cordova-android-plugins').projectDir = new File('./capacitor-cordova-android-plugins/')
 

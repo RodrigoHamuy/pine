@@ -65,7 +65,80 @@ test("ready and retry: forwarded", async () => {
 	const b = mobileBridge(plugin);
 	b.ready();
 	await b.retry();
-	assert.deepEqual(calls, [["ready"], ["retry"]]);
+	assert.deepEqual(
+		calls.filter(([m]) => m !== "state"),
+		[["ready"], ["retry"]],
+	);
+});
+
+test("retry: a host key that waits for the owner's yes is trusted, exactly the one shown; a changed one never is", async () => {
+	const fingerprint = `SHA256:${"a".repeat(43)}`;
+	const waiting = { status: "error", kind: "ssh", message: `... ${fingerprint} ... press Try again to trust it`, host: "me@box", fingerprint, changed: false };
+	const { plugin, calls } = fakePlugin({ state: () => ({ state: waiting, connected: false, version: "1" }) });
+	await mobileBridge(plugin).retry();
+	assert.deepEqual(
+		calls.filter(([m]) => m !== "state"),
+		[["trustHostKey", { host: "me@box", fingerprint }]],
+	);
+	const changed = fakePlugin({ state: () => ({ state: { ...waiting, changed: true }, connected: false, version: "1" }) });
+	await mobileBridge(changed.plugin).retry();
+	assert.deepEqual(
+		changed.calls.filter(([m]) => m !== "state"),
+		[["retry"]],
+	);
+});
+
+test("forgetHost: the machine's stored host key goes with it", async () => {
+	const { plugin, calls } = fakePlugin({ forgetHost: () => ({ hosts: [] }) });
+	await mobileBridge(plugin).forgetHost("me@box");
+	assert.deepEqual(calls, [
+		["forgetHost", { host: "me@box" }],
+		["forgetHostKey", { host: "me@box" }],
+	]);
+});
+
+test("deviceKey: the phone's public key, copied or handed to the share sheet by the plugin", async () => {
+	const key = "ssh-ed25519 AAAAC3Nza pine-android";
+	const { plugin, calls } = fakePlugin({ publicKey: () => ({ key }) });
+	const k = await mobileBridge(plugin).deviceKey!();
+	assert.equal(k.key, key);
+	await k.copy();
+	await k.share();
+	assert.deepEqual(calls, [["publicKey"], ["copy", { text: key }], ["share", { title: "This phone's SSH key", text: key }]]);
+});
+
+test("back: closes what the page has open with Escape, else leaves the app; the page never hears it", async () => {
+	const pressed: string[] = [];
+	let open = true;
+	const doc = {
+		querySelector: (q: string) => (open && q.includes('[role="dialog"]') ? {} : null),
+		activeElement: { dispatchEvent: (e: { key: string }) => pressed.push(e.key) },
+		body: null,
+	};
+	(globalThis as any).document = doc;
+	(globalThis as any).KeyboardEvent ??= class {
+		key: string;
+		constructor(_type: string, init: { key: string }) {
+			this.key = init.key;
+		}
+	};
+	try {
+		const { plugin, calls, emit } = fakePlugin();
+		const b = mobileBridge(plugin);
+		const heard: unknown[] = [];
+		b.onMenu((m: unknown) => heard.push(m));
+		await new Promise((r) => setImmediate(r));
+		emit("menu", { command: "back" });
+		assert.deepEqual(pressed, ["Escape"]);
+		open = false;
+		emit("menu", { command: "back" });
+		await new Promise((r) => setImmediate(r));
+		assert.deepEqual(calls.filter(([m]) => m === "leave"), [["leave"]]);
+		emit("menu", { command: "settings" });
+		assert.deepEqual(heard, ["settings"]);
+	} finally {
+		delete (globalThis as any).document;
+	}
 });
 
 test("machines: use, add and forget go to the plugin, and the prefs come back with its list", async () => {
@@ -84,6 +157,7 @@ test("machines: use, add and forget go to the plugin, and the prefs come back wi
 			["addHost", { host: "pi" }],
 			["use", { host: "pi" }],
 			["forgetHost", { host: "me@box" }],
+			["forgetHostKey", { host: "me@box" }],
 		],
 	);
 });

@@ -208,7 +208,10 @@ export const NewRouteAsk: Story = {
 	},
 };
 
-/** A bridge with no local machine: only the machines added, no row for this computer, and nothing about a port of it or its terminal. */
+// The phone's own SSH key, as the mobile bridge gives it (the desktop's bridge has none, and shows no row for it).
+window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq3lYcVb0mXkJ2yq8rV6tZsP4dW1nE9fKcH7uR2aB3m pine-android", copy: async () => {}, share: async () => {} });
+
+/** A bridge with no local machine (the phone): only the machines added, no row for this computer, nothing about a port of it or its terminal, and the phone's key to copy or share. */
 export const EnvironmentsWithoutLocal: Story = {
 	args: { section: "environments", local: false },
 	render: Environments.render,

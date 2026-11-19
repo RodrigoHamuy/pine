@@ -9,6 +9,19 @@ import { MEDIA_BASE, type PagePrefs, type PinePlugin } from "./plugin.ts";
 
 const DEFAULTS: PagePrefs = { theme: "system", notify: false, updates: false, keepRunning: false, codeFollowsPalette: true };
 
+/** What is open over the page: a sheet, a dialog, a menu (Base UI's popups, mounted only while open; a listbox is not one: the side bar's list of agents is always there). */
+const OPEN = '[role="dialog"], [role="alertdialog"], [role="menu"]';
+
+/**
+ * Android's back button: what is open over the page is closed as Escape closes it on the desktop,
+ * and with nothing open the app is left, as Android's own apps do.
+ */
+function back(leave: () => void): void {
+	const doc = typeof document === "undefined" ? undefined : document;
+	if (!doc?.querySelector(OPEN)) return leave();
+	(doc.activeElement ?? doc.body)?.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", code: "Escape", bubbles: true, cancelable: true }));
+}
+
 /** The page's bridge, on the plugin it is given (Capacitor's in the app, a fake in the tests). */
 export function mobileBridge(plugin: PinePlugin): PageBridge {
 	// The page's preferences and the machines, as the plugin last gave them.
@@ -23,14 +36,18 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 	// listener, and each of its messages is unwrapped into what Electron's channel carries.
 	type Listener = (value: any) => void;
 	const heard = new Map<string, Set<Listener>>();
+	// `own` takes a message for the bridge itself, which the page then never hears (the back button).
 	const on =
-		(event: "service" | "events" | "connection" | "focus" | "menu", unwrap: (data: any) => unknown) =>
+		(event: "service" | "events" | "connection" | "focus" | "menu", unwrap: (data: any) => unknown, own: (value: unknown) => boolean = () => false) =>
 		(fn: Listener) => {
 			let set = heard.get(event);
 			if (!set) {
 				heard.set(event, (set = new Set()));
 				const all = set;
-				void plugin.addListener(event as any, (data: unknown) => all.forEach((f) => f(unwrap(data))));
+				void plugin.addListener(event as any, (data: unknown) => {
+					const value = unwrap(data);
+					if (!own(value)) all.forEach((f) => f(value));
+				});
 			}
 			set.add(fn);
 			return () => void set.delete(fn);
@@ -43,7 +60,11 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 		onEvents: on("events", (d) => d.events),
 		onConnection: on("connection", (d) => d.connected),
 		onFocus: on("focus", (d) => d.focused),
-		onMenu: on("menu", (d) => d.command),
+		onMenu: on(
+			"menu",
+			(d) => d.command,
+			(command) => command === "back" && (back(() => void plugin.leave()), true),
+		),
 		// Only the desktop app starts pine, has a terminal or listens to the microphone.
 		onInitLine: never,
 		onVoice: never,
@@ -77,7 +98,13 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 			return { ...prefs };
 		},
 		call: (method: "GET" | "POST", url: string, body?: unknown) => plugin.call({ method, url, body }),
-		retry: () => plugin.retry(),
+		// After a host key the phone does not know yet, the page's Try again is the owner's yes to the
+		// fingerprint its message showed: exactly that key is trusted. A changed key is never trusted here.
+		retry: async () => {
+			const { state } = await plugin.state();
+			if (state.status === "error" && state.host && state.fingerprint && state.changed === false) await plugin.trustHostKey({ host: state.host, fingerprint: state.fingerprint });
+			else await plugin.retry();
+		},
 		use: async (host?: string) => {
 			// The page never asks for it when `local` is false; a stray call is refused here, not sent.
 			if (!host) throw new Error("This phone has no pine of its own: choose one of your machines.");
@@ -88,9 +115,16 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 			prefs = { ...prefs, hosts: (await plugin.addHost({ host })).hosts };
 			return { ...prefs };
 		},
+		// A machine forgotten takes its host key along: added again, it is asked about as a new one.
 		forgetHost: async (host: string) => {
 			prefs = { ...prefs, hosts: (await plugin.forgetHost({ host })).hosts };
+			if (prefs.use === host) delete prefs.use;
+			await plugin.forgetHostKey({ host });
 			return { ...prefs };
+		},
+		deviceKey: async () => {
+			const { key } = await plugin.publicKey();
+			return { key, copy: () => plugin.copy({ text: key }), share: () => plugin.share({ title: "This phone's SSH key", text: key }) };
 		},
 		// Only an address of the web, as main.ts's openOutside: the plugin checks it again.
 		open: async (url: string) => {

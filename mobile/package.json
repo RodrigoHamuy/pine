@@ -10,7 +10,10 @@
     "build": "vite build",
     "sync": "vite build && cap sync android",
     "check": "tsc --noEmit",
-    "test": "node --test 'test/*.test.ts'"
+    "test": "node --test 'test/*.test.ts'",
+    "test:core": "node scripts/gradle.mjs core test",
+    "apk": "npm run sync && node scripts/gradle.mjs android assembleDebug",
+    "smoke": "node scripts/smoke.mjs"
   },
   "devDependencies": {
     "@capacitor/android": "^8.6.2",

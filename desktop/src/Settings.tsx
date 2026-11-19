@@ -2037,7 +2037,35 @@ export function ThemePicker() {
 
 // ---- environments: the pine of this computer, or of another machine ------------------------------------
 
-function Environments() {
+/**
+ * The bridge's own SSH key (the phone's), with Copy and Share: what goes into ~/.ssh/authorized_keys
+ * on a machine. Nothing under a bridge that has none (the desktop app uses the owner's ssh).
+ */
+function DeviceKey() {
+	const [key, setKey] = useState<{ key: string; copy: () => Promise<void>; share: () => Promise<void> }>();
+	// (Asked by its answer: Storybook's stand-in answers every name with a function that gives no key.)
+	useEffect(() => void (typeof bridge.deviceKey === "function" && Promise.resolve(bridge.deviceKey()).then((k) => typeof k?.key === "string" && setKey(k), () => undefined)), []);
+	if (!key) return null;
+	return (
+		<Item variant="outline" data-slot="device-key">
+			<ItemContent className="min-w-0">
+				<ItemTitle>This phone's key</ItemTitle>
+				<ItemDescription className="line-clamp-none font-mono text-xs break-all select-text">{key.key}</ItemDescription>
+				<ItemDescription className="line-clamp-none">Add it as a line of ~/.ssh/authorized_keys of the user you sign in as on each machine.</ItemDescription>
+			</ItemContent>
+			<ItemActions>
+				<Button variant="outline" size="xs" onClick={() => void key.copy().then(() => store.flash("The key is on the clipboard.", "good", 3000), (e: unknown) => store.flash(errText(e), "bad"))}>Copy</Button>
+				<Button variant="outline" size="xs" onClick={() => void store.attempt(() => key.share())}>Share</Button>
+			</ItemActions>
+		</Item>
+	);
+}
+
+/**
+ * The machines whose pine the app can use, their state, and a field to add one: Settings >
+ * Environments, and the Gate under a bridge with no local machine, where it is the only way to a pine.
+ */
+export function MachineList() {
 	const s = useModel(store);
 	const [host, setHost] = useState("");
 	const [error, setError] = useState<string>();
@@ -2080,16 +2108,18 @@ function Environments() {
 			<ItemActions>
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
-				{h && state.host !== h ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
+				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
+				{h && (state.host !== h || (!s.local && state.status === "error")) ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
 			</ItemActions>
 		</Item>
 	);
 	return (
-		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+		<>
 			<ItemGroup>
 				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
+			{s.local ? null : <DeviceKey />}
 			<FieldSet>
 				<FieldLegend>Add a machine</FieldLegend>
 				<FieldGroup>
@@ -2099,15 +2129,28 @@ function Environments() {
 							<Input id={`${field}-host`} className="font-mono" placeholder="you@server" value={host} onChange={(e) => setHost(e.target.value)} onKeyDown={(e) => e.key === "Enter" && host.trim() && void add()} />
 							<Button variant="outline" disabled={!host.trim()} onClick={() => void add()}><PlusIcon data-icon="inline-start" />Add</Button>
 						</div>
-						<FieldDescription>As you would write it after ssh: host, user@host, or a name from ~/.ssh/config. It is connected to when you pick it.</FieldDescription>
+						<FieldDescription>{s.local ? "As you would write it after ssh: host, user@host, or a name from ~/.ssh/config. It is connected to when you pick it." : "As you would write it after ssh: user@host, or user@host:port. It is connected to when you pick it."}</FieldDescription>
 					</Field>
 					{error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{error}</AlertDescription></Alert> : null}
 				</FieldGroup>
 			</FieldSet>
+		</>
+	);
+}
+
+function Environments() {
+	const s = useModel(store);
+	return (
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+			<MachineList />
 			<Alert>
 				<InfoIcon />
 				<AlertDescription>
-					<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
+					{s.local ? (
+						<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
+					) : (
+						<p>The machine needs pine with a home (pine init there), and this phone's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
+					)}
 					{/* What follows is about a port of this computer and its terminal: not said where there is no local machine. */}
 					{s.local ? (
 						<>

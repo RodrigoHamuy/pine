@@ -62,7 +62,7 @@ class Machine(private val authorized: PublicKey, var behaviour: Behaviour) : Aut
 	}
 }
 
-private class Exec(private val behaviour: Behaviour) : Command {
+internal class Exec(private val behaviour: Behaviour) : Command {
 	private lateinit var input: InputStream
 	private lateinit var out: OutputStream
 	private lateinit var err: OutputStream

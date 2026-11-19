@@ -48,12 +48,23 @@ export interface StoredPrefs {
 }
 
 /**
+ * What the plugin adds to an `error` state when it stopped at a host key: its fingerprint, and
+ * whether it changed from the one the owner confirmed (never trusted then: the machine is forgotten
+ * and added again) or is not known yet (trusted by `trustHostKey`, which the bridge's `retry` calls,
+ * so that the page's own Try again is the owner's yes after reading the fingerprint in the message).
+ */
+export interface HostKeyState {
+	fingerprint?: string;
+	changed?: boolean;
+}
+
+/**
  * The Kotlin plugin. Every method rejects with an error whose message the page can show as it is
  * (it reads like the desktop's: what happened, and what to do next).
  */
 export interface PinePlugin {
 	/** How the connection to the machine in use is (the desktop's `ServiceState`: only `starting`, `ready`, and `error` with kind `ssh` or `failed` here), whether the event stream is up, and the app's version. */
-	state(): Promise<{ state: ServiceState; connected: boolean; version: string }>;
+	state(): Promise<{ state: ServiceState & HostKeyState; connected: boolean; version: string }>;
 	/** The page has started: send `service` with the state as it is now, and follow the daemon's events (once). */
 	ready(): Promise<void>;
 	/**
@@ -77,16 +88,20 @@ export interface PinePlugin {
 	savePrefs(options: { prefs: PagePrefs }): Promise<void>;
 	/** Open an address in the phone's browser. The bridge sends only http(s); the plugin checks it again. */
 	openExternal(options: { url: string }): Promise<void>;
-	/** Hand a text to the system's share sheet (a conversation exported). Resolves when the sheet has closed. */
+	/** Hand a text to the system's share sheet (a conversation exported, the phone's key). Resolves once the sheet is shown. */
 	share(options: { title: string; text: string }): Promise<void>;
-	// The phone's key and the machines' host keys. The bridge has no method for them yet: the page's
-	// way to show the key and confirm a host key is ticket 06's, and these are what it will call.
-	/** This phone's public key, in OpenSSH's format (`ssh-ed25519 AAAA... pine@android`), made on first use. */
+	/** Put a text on the phone's clipboard (the phone's key). */
+	copy(options: { text: string }): Promise<void>;
+	/** Leave the app (the back button with nothing open in the page): it goes to the back, as Android's own apps do. */
+	leave(): Promise<void>;
+	// The phone's key and the machines' host keys.
+	/** This phone's public key, in OpenSSH's format (`ssh-ed25519 AAAA... pine-android`), made on first use. */
 	publicKey(): Promise<{ key: string }>;
 	/**
 	 * Trust the host key a connection stopped at. Until then the connection is an `error` of kind `ssh`
-	 * whose message names the fingerprint (SHA256, as OpenSSH prints it). Rejects a fingerprint that is
-	 * not the one the host shows now. The plugin then connects again.
+	 * whose message names the fingerprint (SHA256, as OpenSSH prints it), and which carries it
+	 * (`HostKeyState`). Rejects a fingerprint that is not the one the host showed. The plugin then
+	 * connects again.
 	 */
 	trustHostKey(options: { host: string; fingerprint: string }): Promise<void>;
 	/** Forget the stored host key of a machine (after it changed for a reason the owner knows). */
@@ -100,6 +115,6 @@ export interface PinePlugin {
 	addListener(event: "connection", fn: (data: { connected: boolean }) => void): Promise<PluginListenerHandle>;
 	/** The app came to the front (true, after the plugin checked the connection) or went to the back (false). */
 	addListener(event: "focus", fn: (data: { focused: boolean }) => void): Promise<PluginListenerHandle>;
-	/** A command for the page, as the desktop's menu sends it (`pine:menu`): the back button sends one. */
+	/** A command for the page, as the desktop's menu sends it (`pine:menu`): the back button sends "back", which the bridge handles itself. */
 	addListener(event: "menu", fn: (data: { command: string }) => void): Promise<PluginListenerHandle>;
 }

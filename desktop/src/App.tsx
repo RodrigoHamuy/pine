@@ -24,7 +24,7 @@ import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
-import { Settings } from "./Settings.tsx";
+import { MachineList, Settings } from "./Settings.tsx";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
@@ -50,7 +50,7 @@ const DOT = "size-2 flex-none rounded-full";
 
 // ---- before pine answers -----------------------------------------------------------------------------
 
-function Gate() {
+export function Gate() {
 	const s = useModel(store);
 	const state = s.service;
 	const init = async () => {
@@ -83,18 +83,26 @@ function Gate() {
 					]
 				: state.status === "error"
 					? [
-							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? `${host} is not reached over SSH` : host ? `pine on ${host} did not start` : "pine did not start",
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? `${host} is not reached over SSH` : "Choose a machine") : host ? `pine on ${host} did not start` : "pine did not start",
 							state.message,
-							<div key="b" className="flex items-center gap-2">
-								<Button onClick={() => void bridge.retry()}>Try again</Button>
-								{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
-								{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
+							<div key="b" className="flex w-full flex-col items-center gap-4">
+								<div className="flex items-center gap-2">
+									{host || s.local ? <Button onClick={() => void bridge.retry()}>Try again</Button> : null}
+									{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
+									{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
+								</div>
+								{/* With no local machine the machines are the only way to a pine: added, chosen or forgotten here. */}
+								{s.local ? null : (
+									<div className="flex w-full flex-col gap-4 text-start" data-slot="gate-machines">
+										<MachineList />
+									</div>
+								)}
 							</div>,
 						]
 					: ["Loading your agents…", "", <Spinner key="s" />];
 	// Before pine answers there is nothing to show yet: stock Empty, in a frame that moves the window.
 	return (
-		<div className="m-1.5 flex flex-1 rounded-xl border bg-background app-drag">
+		<div className="m-1.5 flex flex-1 overflow-y-auto rounded-xl border bg-background app-drag">
 			<Empty className="app-no-drag">
 				<EmptyHeader>
 					<EmptyMedia>

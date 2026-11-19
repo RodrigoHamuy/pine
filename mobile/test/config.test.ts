@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { APP_ORIGIN } from "../src/plugin.ts";
+import { APP_ORIGIN, MEDIA_BASE } from "../src/plugin.ts";
 
 const config = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "../capacitor.config.json"), "utf8"));
 
@@ -19,4 +19,11 @@ test("no navigation away from the page", () => {
 
 test("the page's origin is the one its media base and policy name", () => {
 	assert.equal(`${config.server.androidScheme}://${config.server.hostname}`, APP_ORIGIN);
+});
+
+test("the plugin intercepts the media base the bridge gives, on the origin it keeps the page to", () => {
+	const links = fs.readFileSync(path.join(import.meta.dirname, "../core/src/main/kotlin/pine/mobile/core/Links.kt"), "utf8");
+	const constant = (name: string) => links.match(new RegExp(`const val ${name} = "([^"]*)"`))?.[1];
+	assert.equal(constant("APP_ORIGIN"), APP_ORIGIN);
+	assert.equal(`${constant("APP_ORIGIN")}${constant("MEDIA_PATH")}`, MEDIA_BASE);
 });

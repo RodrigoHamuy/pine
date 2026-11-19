@@ -31,6 +31,13 @@ dependencies {
 	testImplementation("org.slf4j:slf4j-nop:2.0.17")
 }
 
+// The classpath of the smoke run's machine (src/test/.../SmokeMachine.kt, run by mobile/scripts/smoke.mjs).
+tasks.register("smokeClasspath") {
+	dependsOn("testClasses")
+	val classpath = sourceSets["test"].runtimeClasspath
+	doLast { println(classpath.asPath) }
+}
+
 tasks.test {
 	useJUnitPlatform()
 	testLogging {

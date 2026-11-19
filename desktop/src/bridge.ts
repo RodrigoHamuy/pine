@@ -62,6 +62,13 @@ export type PageBridge = Omit<Bridge, "state"> & {
 	 * The desktop app and the preview leave it out.
 	 */
 	mediaBase?: string;
+	/**
+	 * The SSH key of a bridge that signs in to other machines with a key of its own (the mobile app's,
+	 * made on the phone): its public key, to put into ~/.ssh/authorized_keys there, and the ways to
+	 * hand it over. Settings > Environments shows it. The desktop app, which uses the owner's ssh,
+	 * leaves it out.
+	 */
+	deviceKey?: () => Promise<{ key: string; copy: () => Promise<void>; share: () => Promise<void> }>;
 };
 
 export const bridge = window.pine;
