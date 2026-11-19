@@ -368,18 +368,20 @@ a conversation that has read outside content.
 ## Conversations and tabs
 
 "Which conversations are there?", "what did the books agent say about the invoice?", "pin
-that one", "open it in a tab", "close the tab", "remove the old ones": the main agent does
-these with four tools. They work on your own conversations with it and on those of every other
+that one", "open it in a tab", "close the tab", "remove the old ones", "put the okapi
+conversations into a group Okapi": the main agent does these with the tools below. They work on your own conversations with it and on those of every other
 agent, and they do what the list of conversations in the terminal UI does for your own hand
 ([tui.md](tui.md)): the same pin, the same rename, the same removal. To open a tab for your
 owner on a conversation, or to close one, the tool is `set_conversation` with `tab`.
 
 | Tool | Does |
 |---|---|
-| `conversations` [`agent`] | Lists the conversations of every agent, or of one: for each whether it is pinned, open in a tab, working, how many messages it has, when it was last used, when it is removed by itself, and whether it has read outside content. Asks nobody. |
+| `conversations` [`agent`] | Lists the conversations of every agent, or of one, and each agent's groups with how many conversations each holds: for each conversation whether it is pinned, in a group, open in a tab, working, how many messages it has, when it was last used, when it is removed by itself, and whether it has read outside content. Asks nobody. |
 | `read_conversation` `name` [`agent`] [`last`] [`before`] | What was said in a conversation: the messages it was given and the answers, numbered, the newest last. `last` is how many (10, at most 30), `before` a number to read further back from. Of the tools an answer used it shows which and on what, never what they returned. Asks nobody. |
-| `set_conversation` `name` [`agent`] [`pinned`] [`tab`] [`rename`] | Changes only what is given. `pinned`: keep it however long it is unused, or take the pin off. `tab`: open a tab on it, or close its tab. `rename`: its new name; history, pin, tab and subscriptions go with it. A name that is new with `tab: true` opens a new, empty conversation. |
+| `set_conversation` `name` [`agent`] [`pinned`] [`tab`] [`rename`] [`group`] | Changes only what is given. `pinned`: keep it however long it is unused, or take the pin off. `tab`: open a tab on it, or close its tab. `rename`: its new name; history, pin, tab, group and subscriptions go with it. `group`: put it into that group of the agent's conversations, made if there is none, with its branches; `""` takes it out. A branch alone is not moved. A name that is new with `tab: true` opens a new, empty conversation. |
 | `remove_conversation` `name` [`agent`] | Removes a conversation for good: what was said in it, its tab, its pin, and what was set up for it alone (subscriptions, event sources, MCP servers, schedules, skills). You see what goes and confirm it, every time. |
+| `rename_group` `name` `to` [`agent`] | Gives a group of conversations another name; they stay in it. Asks only in manual mode. |
+| `remove_group` `name` [`agent`] | Removes a group and every conversation in it for good, each as `remove_conversation` does. An agent's main conversation in it stays, in no group. You see the conversations that go, and confirm it, every time. See [agents.md](agents.md#groups-of-conversations). |
 
 What holds for them:
 

@@ -7,7 +7,7 @@
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "@/components/ui/toast";
-import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, media, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
+import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type GroupList, media, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
@@ -230,6 +230,10 @@ export class Store extends Model {
 	tabs: Tab[] = [];
 	active?: Tab;
 	conversations = new Map<string, Conversation[]>();
+	/** Each agent's groups of conversations and how its list is sorted, as the daemon keeps them. */
+	groups = new Map<string, GroupList>();
+	/** The group a new conversation was started in, until the daemon lists it (after its first message). */
+	placed = new Map<string, string>();
 	taints = new Map<string, string>();
 	sessionModes = new Map<string, string>();
 	bypassWhenTainted = false;
@@ -423,7 +427,7 @@ export class Store extends Model {
 		if (!done) return false;
 		const moved = (key: string) => (key === from ? to : key.startsWith(`${from}:`) ? `${to}${key.slice(from.length)}` : key);
 		for (const t of this.tabs) if (t.kind === "chat" && t.agent === from) ((t.agent = to), t.touch());
-		for (const map of [this.conversations, this.taints, this.sessionModes, this.busy, this.titles] as Array<Map<string, unknown>>) {
+		for (const map of [this.conversations, this.groups, this.placed, this.taints, this.sessionModes, this.busy, this.titles] as Array<Map<string, unknown>>) {
 			for (const [key, value] of [...map]) {
 				if (moved(key) === key) continue;
 				map.delete(key);
@@ -891,10 +895,13 @@ export class Store extends Model {
 		this.askNext();
 	}
 
+	/** The last save of the tabs, so that what needs the daemon to know a tab (a group for a new conversation) can wait for it. */
+	private tabsSaved: Promise<unknown> = Promise.resolve();
+
 	private saveTabs(): void {
 		if (this.restoring) return;
 		const chats = this.tabs.filter((t) => t.kind === "chat");
-		void api.saveTabs(chats.map((t) => ({ agent: t.agent, session: t.session })), Math.max(0, chats.indexOf(this.active!)), this.code).catch(() => {});
+		this.tabsSaved = api.saveTabs(chats.map((t) => ({ agent: t.agent, session: t.session })), Math.max(0, chats.indexOf(this.active!)), this.code).catch(() => {});
 	}
 
 	async openTab(agent: string, session: string, front = true): Promise<void> {
@@ -1135,6 +1142,86 @@ export class Store extends Model {
 		if (id) await this.openTab(id, sessionName());
 	}
 
+	// ---- groups of conversations -----------------------------------------------------------------
+	// The daemon keeps them (an agent's groups, which group each conversation is in, how the list is
+	// sorted); the side bar draws them and changes them through the control API. A conversation moves
+	// with its branches, and a branch is never moved by itself.
+
+	/** A new conversation with an agent, put into a group from the start. */
+	async newConversationIn(agent: string, group: string): Promise<void> {
+		const session = sessionName();
+		await this.openTab(agent, session);
+		await this.tabsSaved;
+		if (!(await this.attempt(() => api.setGroup(agent, session, group)))) return;
+		this.placed.set(`${agent}:${session}`, group);
+		await this.refreshConversations(agent);
+	}
+
+	/** Put a conversation into a group (made if there is none of that name), or with null take it out. */
+	async moveToGroup(agent: string, session: string, group: string | null): Promise<void> {
+		const done = await this.attempt(() => api.setGroup(agent, session, group));
+		if (!done) return;
+		if (group) this.placed.set(`${agent}:${session}`, done.group ?? group);
+		else this.placed.delete(`${agent}:${session}`);
+		await this.refreshConversations(agent);
+	}
+
+	/** Where a conversation goes: one of the agent's groups, a new one, or out of the one it is in. */
+	async askMoveToGroup(agent: string, session: string, now?: string): Promise<void> {
+		const names = (this.groups.get(agent)?.groups ?? []).map((g) => g.name).filter((n) => n !== now);
+		const items = [...names.map((n) => ({ value: `in:${n}`, label: n })), { value: "new", label: "New group…" }, ...(now ? [{ value: "out", label: `Out of ${now}`, about: `Back under ${agent}` }] : [])];
+		const picked = await this.pick({ title: `Move ${this.titleOf(agent, session)} to`, items, placeholder: "A group" });
+		if (!picked) return;
+		if (picked === "out") return this.moveToGroup(agent, session, null);
+		const name = picked === "new" ? await this.pick({ title: "A new group", items: [], free: true, placeholder: "Its name" }) : picked.slice(3);
+		if (name?.trim()) await this.moveToGroup(agent, session, name.trim());
+	}
+
+	/** Make an empty group under an agent, for conversations to be dragged into. */
+	async newGroup(agent: string): Promise<void> {
+		const name = await this.pick({ title: `A new group for ${agent}'s conversations`, items: [], free: true, placeholder: "Its name" });
+		if (!name?.trim()) return;
+		if (await this.attempt(() => api.addGroup(agent, name.trim()))) await this.refreshConversations(agent);
+	}
+
+	async renameGroup(agent: string, name: string): Promise<void> {
+		const to = await this.pick({ title: `Another name for the group ${name}`, items: [], free: true, placeholder: "The new name" });
+		if (!to?.trim() || to.trim() === name) return;
+		const done = await this.attempt(() => api.renameGroup(agent, name, to.trim()));
+		if (!done) return;
+		const folded = `${agent}:group:${name}`;
+		if (this.folded.delete(folded)) this.folded.add(`${agent}:group:${done.group}`), localStorage.setItem("pine.folded", JSON.stringify([...this.folded]));
+		for (const [key, value] of this.placed) if (key.startsWith(`${agent}:`) && value === name) this.placed.set(key, done.group);
+		await this.refreshConversations(agent);
+	}
+
+	/** Remove a group and every conversation in it, after the owner's yes; the main conversation stays. */
+	async removeGroup(agent: string, name: string): Promise<void> {
+		const inIt = (this.conversations.get(agent) ?? []).filter((c) => c.group === name && !c.session.endsWith("~u"));
+		const goes = inIt.filter((c) => c.session !== "main").map((c) => this.titleOf(agent, c.session));
+		const stays = inIt.some((c) => c.session === "main");
+		const about = goes.length ? `${goes.join(", ")}: what was said in ${goes.length === 1 ? "it" : "them"}, and what was set up for ${goes.length === 1 ? "it" : "them"} alone, is deleted. This cannot be undone.${stays ? ` The main conversation stays, under ${agent}.` : ""}` : stays ? `There is no conversation in it to remove: the main conversation stays, under ${agent}.` : "There is no conversation in it.";
+		const sure = await this.pick({ title: goes.length ? `Remove the group ${name} and its ${plural(goes.length, "conversation")} for good?` : `Remove the group ${name}?`, items: [{ value: "yes", label: goes.length ? "Remove them for good" : "Remove the group", about, tone: goes.length ? "bad" : undefined }, { value: "no", label: "Cancel" }] });
+		if (sure !== "yes") return;
+		const gone = await this.attempt(() => api.removeGroup(agent, name));
+		if (!gone) return;
+		for (const session of gone.removed) this.dropTabs(agent, session);
+		this.folded.delete(`${agent}:group:${name}`);
+		localStorage.setItem("pine.folded", JSON.stringify([...this.folded]));
+		this.flash(`Removed the group ${name}${gone.removed.length ? ` with ${plural(gone.removed.length, "conversation")}` : ""}.`, "muted", 4000);
+		await this.refreshConversations(agent);
+	}
+
+	/** How an agent's list is sorted: by when a conversation was last used, or by name. */
+	async sortConversations(agent: string, order: "recent" | "name"): Promise<void> {
+		if (await this.attempt(() => api.sortConversations(agent, order))) await this.refreshConversations(agent);
+	}
+
+	/** Fold or unfold a group in the side bar; kept like a folded agent, in this window's storage. */
+	toggleGroupFold(agent: string, name: string): void {
+		this.toggleFold(`${agent}:group:${name}`);
+	}
+
 	/** A conversation that works in a folder of the owner's: the one that already does, or a new one named after it. */
 	async openFolder(dir: string, named?: string, worktree = false): Promise<void> {
 		const agent = await this.whichAgent(`Which agent works in ${worktree ? "a worktree of " : ""}${baseName(dir)}?`, named);
@@ -1220,9 +1307,11 @@ export class Store extends Model {
 		const ids = agent ? [agent] : this.agents.map((a) => a.id);
 		await Promise.all(
 			ids.map(async (id) => {
-				const list = await api.sessions(id).catch(() => undefined);
+				const [list, groups] = await Promise.all([api.sessions(id).catch(() => undefined), api.groups(id)]);
 				if (!list) return;
 				this.conversations.set(id, list);
+				this.groups.set(id, groups);
+				for (const c of list) this.placed.delete(`${id}:${c.session}`);
 				for (const key of [...this.pins]) if (key.startsWith(`${id}:`)) this.pins.delete(key);
 				for (const c of list) if (c.pinned) this.pins.add(`${id}:${c.session}`);
 			}),

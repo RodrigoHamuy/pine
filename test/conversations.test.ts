@@ -7,7 +7,7 @@ import { after, test } from "node:test";
 import { PineTui } from "../src/tui/app.ts";
 import { Client } from "../src/tui/client.ts";
 import { harness, mockMsg, until } from "./support/harness.ts";
-import { FakeTerminal } from "./support/terminal.ts";
+import { FakeTerminal, KEY } from "./support/terminal.ts";
 
 const owner = { trust: "owner" as const };
 const call = (name: string, args: any = {}) => ({ name, args });
@@ -187,8 +187,8 @@ test("conversations: through the family and the list tool the same calls are car
 	await h.pine.agents.run({ agent: "main", session: "tools", prompt: "hello", ...owner });
 	const declared = h.mock.state.requests.at(-1).body.tools.map((x: any) => x.function);
 	const family = declared.find((f: any) => f.name === "pine_conversations");
-	assert.deepEqual(family.parameters.properties.action.enum, ["read_conversation", "set_conversation", "remove_conversation"]);
-	assert.deepEqual(Object.keys(family.parameters.properties).sort(), ["action", "agent", "before", "last", "name", "pinned", "rename", "tab"]);
+	assert.deepEqual(family.parameters.properties.action.enum, ["read_conversation", "set_conversation", "remove_conversation", "rename_group", "remove_group"]);
+	assert.deepEqual(Object.keys(family.parameters.properties).sort(), ["action", "agent", "before", "group", "last", "name", "pinned", "rename", "tab", "to"]);
 	assert.equal(declared.at(-1).name, "pine_conversations", "what only the main agent has is declared last, so that every other request begins the same");
 	assert.ok(declared.find((f: any) => f.name === "pine_list").parameters.properties.what.items.enum.includes("conversations"));
 
@@ -197,6 +197,106 @@ test("conversations: through the family and the list tool the same calls are car
 	assert.match(out[1], /The conversation "notes" of helper: it is pinned/);
 	assert.match(out[2], /number 2 of 2\./);
 	assert.equal(conv("helper", "notes").pinned, true);
+	await h.close();
+});
+
+test("groups: a conversation goes into a group with its branches and is kept there; a group is renamed, sorted and removed with what is in it, and every UI is told", async () => {
+	const { h, told, conv } = await pine(() => true, { http: { port: 0 } });
+	const m = h.pine.agents;
+	const api = new Client(`http://127.0.0.1:${h.pine.http!.port}`, h.pine.token);
+	const say = (session: string) => h.pine.agents.run({ agent: "helper", session, prompt: `work on ${session}`, ...owner });
+	for (const s of ["okapi-api", "okapi-web", "llama"]) await say(s);
+	const branch = (await m.branchSession("helper", "okapi-api")).session;
+
+	// Into a group that is made on the way, with its branch; a branch alone stays where its conversation is.
+	assert.deepEqual(await api.setGroup("helper", "okapi-api", "Okapi"), { session: "okapi-api", group: "Okapi", moved: ["okapi-api", branch] });
+	assert.equal(conv("helper", branch).group, "Okapi");
+	await assert.rejects(api.setGroup("helper", branch, "Other"), /"okapi-api-branch" is a branch of "okapi-api" and is where that one is; move "okapi-api"/);
+	await assert.rejects(api.setGroup("helper", "nothing", "Okapi"), /helper has no conversation called "nothing"/);
+	// The same group whatever the letters; the main conversation may be in one too.
+	assert.equal((await api.setGroup("helper", "okapi-web", "okapi")).group, "Okapi");
+	assert.equal((await api.setGroup("helper", "main", "Okapi")).group, "Okapi");
+	// A branch made later is in its original's group.
+	const later = (await m.branchSession("helper", "okapi-web", undefined, "web-try")).session;
+	assert.equal(conv("helper", later).group, "Okapi");
+
+	// A group keeps what is in it; the others still go by themselves.
+	assert.deepEqual([conv("helper", "okapi-web").expires, typeof conv("helper", "llama").expires], [undefined, "number"]);
+	(h.pine.tasks as any).db.prepare("UPDATE tasks SET created = ?").run(Date.now() - 30 * 86_400_000);
+	assert.equal(await m.pruneConversations(), 1);
+	assert.deepEqual(m.conversations("helper").map((c: any) => c.session).sort(), ["okapi-api", "okapi-api-branch", "okapi-web", "web-try"]);
+
+	// Names are checked; an empty group stays; the list is sorted as the owner chose.
+	await assert.rejects(api.post("/agents/helper/groups", { action: "add", name: "OKAPI" }), /helper already has a group called Okapi/);
+	await assert.rejects(api.post("/agents/helper/groups", { action: "add", name: "x".repeat(41) }), /at most 40 characters/);
+	await assert.rejects(api.post("/agents/helper/groups", { action: "add", name: "a\u0007b" }), /one line/);
+	await assert.rejects(api.post("/agents/helper/groups", { action: "order", to: "size" }), /"recent" .* or "name"/);
+	await api.post("/agents/helper/groups", { action: "add", name: "  Later   on " });
+	await api.post("/agents/helper/groups", { action: "order", to: "name" });
+	assert.deepEqual(await api.groups("helper"), { order: "name", groups: [{ name: "Okapi", conversations: 5 }, { name: "Later on", conversations: 0 }] });
+
+	// A rename keeps its conversations in it, and a renamed conversation keeps its group.
+	await api.post("/agents/helper/groups", { action: "rename", name: "okapi", to: "Okapi 2026" });
+	await m.renameSession("helper", "okapi-web", "okapi-site");
+	assert.deepEqual([conv("helper", "okapi-site").group, m.groupOf("helper", "main")], ["Okapi 2026", "Okapi 2026"]);
+	assert.equal(m.kv.get("group:helper:okapi-web"), null);
+
+	// Out of the group: with its branches, and it goes by itself again some day.
+	assert.deepEqual(await api.setGroup("helper", "okapi-site", null), { session: "okapi-site", moved: ["okapi-site", "web-try"] });
+	assert.deepEqual([conv("helper", "okapi-site").group, conv("helper", "web-try").group, typeof conv("helper", "okapi-site").expires], [undefined, undefined, "number"]);
+	await api.setGroup("helper", "okapi-site", "Okapi 2026");
+
+	// Removing the group removes what is in it, but the agent's own conversation, which stays in no group.
+	told.length = 0;
+	const gone = await api.post<any>("/agents/helper/groups", { action: "remove", name: "Okapi 2026" });
+	assert.deepEqual([gone.removed.sort(), gone.kept], [["okapi-api", "okapi-api-branch", "okapi-site", "web-try"], ["main"]]);
+	assert.deepEqual([m.conversations("helper"), m.groupOf("helper", "main")], [[], undefined]);
+	assert.ok(!fs.existsSync(path.join(h.home, "agents", "helper", "sessions", "okapi-api")));
+	assert.deepEqual(await api.groups("helper"), { order: "name", groups: [{ name: "Later on", conversations: 0 }] });
+	assert.deepEqual(told.map((x) => x.change).sort(), ["group", "remove", "remove", "remove", "remove"]);
+	assert.deepEqual(h.pine.agents.kv.keys("group:helper:").filter((k: string) => h.pine.agents.kv.get(k) != null), []);
+	await assert.rejects(api.post("/agents/helper/groups", { action: "remove", name: "Okapi 2026" }), /helper has no group called "Okapi 2026"\. Its groups: Later on/);
+	await h.close();
+});
+
+test("groups: the main agent lists them, puts a conversation into one, renames one and removes one with its conversations only after the owner's yes; from a marked conversation it does none of it", async () => {
+	let yes = false;
+	const { h, asked, main, talk, conv } = await pine(() => yes);
+	await talk("okapi", "Read.");
+	await talk("zebra", "Read.");
+
+	let out = await main(call("set_conversation", { agent: "helper", name: "okapi", group: "Animals" }), call("set_conversation", { agent: "helper", name: "zebra", group: "animals" }), call("conversations", { agent: "helper" }));
+	assert.match(out[0], /^The conversation "okapi" of helper: it is in the group Animals\.$/);
+	assert.match(out[1], /it is in the group Animals\.$/);
+	assert.match(out[2], /- okapi: in the group Animals · 1 message · last used just now\n/);
+	assert.match(out[2], /\n  groups: Animals \(2\)$/);
+	assert.equal(asked.length, 0, "a move takes nothing away: nobody is asked");
+
+	out = await main(call("rename_group", { agent: "helper", name: "ANIMALS", to: "Zoo" }), call("rename_group", { agent: "helper", name: "Plants", to: "Garden" }));
+	assert.match(out[0], /^The group "Animals" of helper is now called "Zoo"; its conversations are in it as before\.$/);
+	assert.match(out[1], /helper has no group called "Plants"\. Groups: Zoo\./);
+	assert.equal(conv("helper", "okapi").group, "Zoo");
+
+	// Removing it is put to the owner with what goes. A no leaves everything.
+	out = await main(call("remove_group", { agent: "helper", name: "zoo" }));
+	assert.match(out[0], /not removed \(test\)\. Do not retry/);
+	assert.equal(asked.at(-1).summary, 'remove the group "Zoo" of helper and the 2 conversations in it for good:\n- okapi\n- zebra\nWhat was said in them is deleted and cannot be brought back.');
+	assert.ok(conv("helper", "okapi") && conv("helper", "zebra"));
+	yes = true;
+	out = await main(call("remove_group", { agent: "helper", name: "zoo" }));
+	assert.match(out[0], /^Your owner confirmed it\. The group "Zoo" of helper is removed, with the conversations okapi, zebra\.$/);
+	assert.deepEqual([conv("helper", "okapi"), conv("helper", "zebra"), h.pine.agents.groups("helper").names], [undefined, undefined, []]);
+
+	// From a conversation that has read outside content, nothing of it is done, and nobody is asked.
+	await talk("kept", "Read.");
+	h.pine.agents.setGroup("helper", "kept", "Box");
+	h.pine.agents.kv.set("taint:helper:kept", "a web page");
+	asked.length = 0;
+	out = await main(call("read_conversation", { agent: "helper", name: "kept" }), call("set_conversation", { agent: "helper", name: "kept", group: "" }), call("rename_group", { agent: "helper", name: "Box", to: "Bin" }), call("remove_group", { agent: "helper", name: "Box" }));
+	assert.match(out[1], /Not done: .* changing a conversation is not done/);
+	assert.match(out[2], /Not done: .* renaming a group is not done/);
+	assert.match(out[3], /Not done: .* removing a group is not done/);
+	assert.deepEqual([asked.length, conv("helper", "kept").group], [0, "Box"]);
 	await h.close();
 });
 
@@ -235,6 +335,34 @@ test("tui: a tab the main agent opens appears behind the one the owner is in, an
 	await main(call("remove_conversation", { agent: "helper", name: "papers" }));
 	await until(() => !/helper·papers/.test(text()), 5000, `the tab of a removed conversation to go\n${text()}`);
 	assert.match(text(), /main · main · no folder/);
+	await app.stop();
+	await h.close();
+});
+
+test("tui: /group puts the conversation into a group and takes it out, and the list of conversations says which group each is in", async () => {
+	const h = await harness({ pine: { main: "main", http: { port: 0 } }, agents: { main: {} } } as any);
+	await h.pine.agents.run({ agent: "main", session: "okapi", prompt: "remember the okapi", ...owner });
+	await h.pine.agents.run({ agent: "main", session: "llama", prompt: "remember the llama", ...owner });
+	h.pine.agents.saveUiTabs([{ agent: "main", session: "okapi" }], 0);
+	const term = new FakeTerminal(130, 30);
+	const app = new PineTui({ client: new Client(`http://127.0.0.1:${h.pine.http!.port}`, h.pine.token), terminal: term, mode: "test" });
+	apps.push(app);
+	await app.start();
+	const text = () => app.screen().join("\n");
+	const sees = (what: RegExp) => until(() => what.test(text()), 5000, `the screen to show ${what}\n--- screen ---\n${text()}`);
+	await sees(/main·okapi/);
+	term.type("/group Zoo");
+	term.type([KEY.enter]);
+	await sees(/this conversation is in the group Zoo: it is kept however long it is not used/);
+	assert.equal(h.pine.agents.groupOf("main", "okapi"), "Zoo");
+	term.type("/sessions");
+	term.type([KEY.enter]);
+	await sees(/okapi\s+▸ Zoo .* kept in its group/);
+	term.type([KEY.esc]);
+	term.type("/group -");
+	term.type([KEY.enter]);
+	await sees(/this conversation is in no group now/);
+	assert.equal(h.pine.agents.groupOf("main", "okapi"), undefined);
 	await app.stop();
 	await h.close();
 });

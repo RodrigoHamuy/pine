@@ -173,6 +173,7 @@ test("admin: the main agent removes an agent with everything it has, after the o
 	await as("helper", "side")(call("add_schedule", { name: "soon", task: "Look again.", every: "1h" }));
 	await idle();
 	h.pine.agents.kv.set("taint:helper:main", "something from outside");
+	h.pine.agents.setGroup("helper", "main", "Papers");
 	const dir = path.join(h.home, "agents", "helper");
 	assert.ok(fs.existsSync(path.join(h.home, "sandbox", "helper")));
 	const n = asked.length;
@@ -204,7 +205,7 @@ test("admin: the main agent removes an agent with everything it has, after the o
 	// Nothing is left that carries its name: no route, no stored entry, no file.
 	assert.deepEqual(json(path.join(h.home, "pine.json")).routes, [{ name: "route1", on: "test/other", set: { "seen/other": "yes" } }], "the route that woke it is gone, and the one that stays keeps its name");
 	assert.deepEqual(h.pine.cfg.routes.map((r: any) => r.name), ["route1"]);
-	for (const prefix of ["taint:", "keep:", "folder:", "todos:", "turns:", "undone:", "timer:", "source:"]) assert.deepEqual(h.pine.agents.kv.keys(prefix).filter((k: string) => k.includes("helper") && h.pine.agents.kv.get(k) != null), [], prefix);
+	for (const prefix of ["taint:", "keep:", "folder:", "group:", "groups:", "todos:", "turns:", "undone:", "timer:", "source:"]) assert.deepEqual(h.pine.agents.kv.keys(prefix).filter((k: string) => k.includes("helper") && h.pine.agents.kv.get(k) != null), [], prefix);
 	const left = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? [e.name, ...left(path.join(dir, e.name))] : [e.name])) : []);
 	assert.deepEqual(left(h.home).filter((n) => /helper/.test(decodeURIComponent(n))), [], "no file or folder in pine's home is named after it");
 	h.pine.bus.publish("test/paper", { n: 1 }, { source: "test" });
@@ -254,6 +255,9 @@ test("admin: an agent renamed by the owner takes everything that named it along,
 	await idle();
 	h.pine.agents.kv.set("taint:helper:main", "something from outside");
 	h.pine.agents.kv.set("conversations:pinned", ["helper:side"]);
+	h.pine.agents.setGroup("helper", "side", "Papers");
+	await h.pine.agents.addGroup("helper", "Empty");
+	h.pine.agents.setGroupOrder("helper", "name");
 	const env = fs.readFileSync(path.join(h.home, ".env"), "utf8");
 	assert.match(env, /^PINE_SOURCE_HOOK_HELPER_SECRET=/m, "a secret kept under its name");
 	const secret = /^PINE_SOURCE_HOOK_HELPER_SECRET=(.*)$/m.exec(env)![1];
@@ -284,6 +288,8 @@ test("admin: an agent renamed by the owner takes everything that named it along,
 	assert.match(fs.readFileSync(file("scholar"), "utf8"), /\$\{PINE_SOURCE_HOOK_SCHOLAR_SECRET\}/);
 	assert.equal(h.pine.agents.kv.get("taint:scholar:main"), "something from outside", "what it read from outside still marks it");
 	assert.deepEqual(h.pine.agents.kv.get("conversations:pinned"), ["scholar:side"]);
+	assert.deepEqual([h.pine.agents.groupOf("scholar", "side"), h.pine.agents.groups("scholar")], ["Papers", { names: ["Papers", "Empty"], order: "name" }], "its groups and how its list is sorted go along");
+	assert.deepEqual(h.pine.agents.kv.keys("group").filter((k: string) => k.includes("helper") && h.pine.agents.kv.get(k) != null), []);
 	assert.ok(h.pine.tasks.list({ agent: "scholar" }).length > 0);
 	assert.equal(h.pine.tasks.list({ agent: "helper" }).length, 0);
 	const sources = h.pine.sources.list().filter((s: any) => s.scope === "scholar").map((s: any) => `${s.name}${s.running ? " runs" : ""}`).sort();

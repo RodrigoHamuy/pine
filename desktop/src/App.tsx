@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
@@ -117,8 +117,44 @@ function Gate() {
 /** How far a conversation's row stands in: a branch under the one it was made from, four steps at most. */
 const INDENT = ["pl-10", "pl-14", "pl-18", "pl-22", "pl-26"];
 
-function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; depth?: number }) {
+/** The conversation being dragged in the side bar. One window, one drag: nothing of it rides on the event, which other pages could read. */
+let dragging: { agent: string; session: string; group?: string } | undefined;
+
+/**
+ * A place in the side bar that a conversation of the agent's is dropped on: a group, or with null the
+ * agent's own line and the conversations in no group. Shown as a target while one is held over it.
+ */
+function useDrop(agent: string, group: string | null) {
+	const [over, setOver] = useState(false);
+	const fits = () => dragging?.agent === agent && (dragging.group ?? null) !== group;
+	return {
+		"data-drop": over ? "" : undefined,
+		onDragOver: (e: React.DragEvent) => {
+			if (!fits()) return;
+			e.preventDefault();
+			e.stopPropagation();
+			e.dataTransfer.dropEffect = "move";
+			setOver(true);
+		},
+		onDragLeave: (e: React.DragEvent) => {
+			if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+		},
+		onDrop: (e: React.DragEvent) => {
+			setOver(false);
+			if (!fits()) return;
+			e.preventDefault();
+			e.stopPropagation();
+			const held = dragging!;
+			dragging = undefined;
+			void store.moveToGroup(agent, held.session, group);
+		},
+	};
+}
+
+function ConversationRow({ agent, c, depth = 0, inset = 0 }: { agent: string; c: Conv; depth?: number; inset?: number }) {
 	const s = store;
+	// A conversation is moved with its branches: a branch shown under its original is not moved by itself.
+	const movable = depth === 0 && !c.session.endsWith("~u");
 	const tab = s.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === c.session);
 	const main = c.session === "main";
 	const { setOpenMobile } = useSidebar();
@@ -129,10 +165,12 @@ function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; dept
 			...(c.tasks && c.folder ? [{ id: "branch-worktree", label: "Branch into a Worktree" }] : []),
 			...(c.worktree ? [{ id: "worktree", label: "Worktree…" }] : []),
 			...(main ? [] : [{ id: "pin", label: c.pinned ? "Unpin" : "Pin" }, { id: "rename", label: "Rename…" }]),
+			...(movable ? [{ id: "move", label: "Move to Group…" }] : []),
 			{ id: "sep", label: "", separator: true },
 			main ? { id: "reset", label: "Start over…" } : { id: "remove", label: "Remove…" },
 		]);
 		if (picked === "open") await s.openTab(agent, c.session);
+		if (picked === "move") await s.askMoveToGroup(agent, c.session, c.group);
 		if (picked === "branch" || picked === "branch-worktree") await s.branch(agent, c.session, undefined, picked === "branch-worktree");
 		if (picked === "worktree") {
 			await s.openTab(agent, c.session);
@@ -155,13 +193,20 @@ function ConversationRow({ agent, c, depth = 0 }: { agent: string; c: Conv; dept
 			if (s.active) await s.reset(s.active);
 		}
 	};
-	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
+	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.group ? `kept in the group ${c.group}` : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	const on = Boolean(tab && tab === s.active);
 	return (
 		// The row is the stock menu button drawn as the list's option, so the list keeps its one tab stop and its arrows.
-		<SidebarMenuItem role="none" className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
-			<SidebarMenuButton isActive={on} onClick={() => setOpenMobile(false)} className={cn(INDENT[Math.min(depth, INDENT.length - 1)], c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`} />}>
+		<SidebarMenuItem
+			role="none"
+			className="app-no-drag"
+			onContextMenu={(e) => (e.preventDefault(), void menu())}
+			draggable={movable}
+			onDragStart={movable ? (e) => ((dragging = { agent, session: c.session, group: c.group }), (e.dataTransfer.effectAllowed = "move"), e.dataTransfer.setData("text/plain", s.titleOf(agent, c.session))) : undefined}
+			onDragEnd={() => (dragging = undefined)}
+		>
+			<SidebarMenuButton isActive={on} onClick={() => setOpenMobile(false)} className={cn(INDENT[Math.min(depth + inset, INDENT.length - 1)], c.tasks && "pr-16 group-has-data-[sidebar=menu-action]/menu-item:pr-16")} render={<ListboxItem value={c.session} label={s.titleOf(agent, c.session)} title={`${agent} · ${c.session} · ${kept}${c.branch ? ` · a branch of ${c.branch.from}` : ""}${c.worktree ? ` · in the worktree ${c.worktree.branch} of ${c.worktree.repo}` : c.folder ? ` · works in ${c.folder}` : ""}`} />}>
 				<span className="grid size-4 flex-none place-items-center">{tab?.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Spinner aria-label="Working" className="size-3" /> : tab?.unread ? <Badge className="size-2 p-0" /> : main || c.pinned ? <StarIcon className="text-faint" /> : depth || c.worktree ? <GitBranchIcon className="text-faint" /> : c.folder ? <FolderIcon className="text-faint" /> : <MessageSquareIcon className="text-faint" />}</span>
 				<span className="min-w-0 flex-1">{s.titleOf(agent, c.session)}</span>
 			</SidebarMenuButton>
@@ -208,15 +253,73 @@ function threaded(rows: Conv[]): Array<{ c: Conv; depth: number }> {
 	return out;
 }
 
+/**
+ * A group of an agent's conversations: its line folds it (Enter or Space where the keyboard is on it)
+ * and is where conversations are dropped, and under it its conversations, each with its branches.
+ * The same as an agent's group one step in: its own line, then its own list with its one tab stop.
+ */
+function ConversationGroup({ agent, name, rows }: { agent: string; name: string; rows: Conv[] }) {
+	const s = store;
+	const folded = s.folded.has(`${agent}:group:${name}`);
+	const drop = useDrop(agent, name);
+	const tabs = s.tabs.filter((t) => t.kind === "chat" && t.agent === agent && rows.some((c) => c.session === t.session));
+	const waits = tabs.some((t) => t.approvals.size > 0);
+	const working = rows.some((c) => s.isBusy(agent, c.session)) || tabs.some((t) => t.busy);
+	const unread = tabs.some((t) => t.unread);
+	const count = rows.filter((c) => c.session !== "main" || c.tasks).length;
+	const menu = async () => {
+		const picked = await bridge.contextMenu([
+			{ id: "new", label: `New Conversation in ${name}` },
+			{ id: "sep", label: "", separator: true },
+			{ id: "rename", label: "Rename…" },
+			{ id: "remove", label: "Remove Group…" },
+		]);
+		if (picked === "new") await s.newConversationIn(agent, name);
+		if (picked === "rename") await s.renameGroup(agent, name);
+		if (picked === "remove") await s.removeGroup(agent, name);
+	};
+	return (
+		<div data-slot="conversation-group" {...drop} className="rounded-md data-[drop]:bg-accent">
+			<Collapsible open={!folded} onOpenChange={() => s.toggleGroupFold(agent, name)}>
+				<SidebarMenu>
+					<SidebarMenuItem className="app-no-drag" onContextMenu={(e) => (e.preventDefault(), void menu())}>
+						<CollapsibleTrigger render={<SidebarMenuButton className="pl-10 group-hover/menu-item:pr-8" title={`${name}: ${count === 1 ? "1 conversation" : `${count} conversations`}, kept however long they are not used`} />}>
+							<span className="grid size-4 flex-none place-items-center">{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working && folded ? <Spinner aria-label="Working" className="size-3" /> : unread && folded ? <Badge className="size-2 p-0" /> : folded ? <FolderClosedIcon className="text-faint" /> : <FolderOpenIcon className="text-faint" />}</span>
+							<span data-slot="group-label" className="min-w-0 flex-1 truncate">{name}</span>
+						</CollapsibleTrigger>
+						<SidebarMenuBadge className="group-hover/menu-item:hidden">{count}</SidebarMenuBadge>
+						<Tooltip><TooltipTrigger render={<SidebarMenuAction className="hidden group-hover/menu-item:flex" onClick={() => void s.newConversationIn(agent, name)} aria-label={`New conversation in ${name}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation in ${name}`}</TooltipContent></Tooltip>
+					</SidebarMenuItem>
+				</SidebarMenu>
+				<CollapsibleContent>
+					<Listbox aria-label={`Conversations in ${name}`} className="outline-none" {...LISTBOX} value={s.active?.kind === "chat" && s.active.agent === agent ? s.active.session : null} onValueChange={onPick((session) => void s.openTab(agent, session))} render={<SidebarMenu />}>
+						{threaded(rows).map(({ c, depth }) => <ConversationRow key={c.session} agent={agent} c={c} depth={depth} inset={1} />)}
+					</Listbox>
+				</CollapsibleContent>
+			</Collapsible>
+		</div>
+	);
+}
+
 function AgentGroup({ a }: { a: AgentInfo }) {
 	const s = store;
 	const folded = s.folded.has(a.id);
 	const list = s.conversations.get(a.id) ?? [];
-	// The agent's own conversation first, then what is pinned, then by when it was last used.
-	const sorted = [...list].sort((x, y) => Number(y.session === "main") - Number(x.session === "main") || Number(y.pinned) - Number(x.pinned) || y.last - x.last);
-	const rows = sorted.some((c) => c.session === "main") ? sorted : [{ session: "main", tasks: 0, last: 0, pinned: false, open: false }, ...sorted];
+	const grouping = s.groups.get(a.id) ?? { order: "recent" as const, groups: [] };
+	const rows: Conv[] = list.some((c) => c.session === "main") ? [...list] : [{ session: "main", tasks: 0, last: 0, pinned: false, open: false }, ...list];
 	// A conversation that is open in a tab and has not been said anything in yet is not in the daemon's list.
-	for (const t of s.tabs) if (t.kind === "chat" && t.agent === a.id && !rows.some((c) => c.session === t.session)) rows.push({ session: t.session, tasks: 0, last: Date.now(), pinned: false, open: true });
+	for (const t of s.tabs) if (t.kind === "chat" && t.agent === a.id && !rows.some((c) => c.session === t.session)) rows.push({ session: t.session, tasks: 0, last: Date.now(), pinned: false, open: true, group: s.placed.get(`${a.id}:${t.session}`) });
+	const names = grouping.groups.map((g) => g.name);
+	const groupOf = (c: Conv) => (c.group && names.includes(c.group) ? c.group : undefined);
+	// In every list the agent's own conversation first, then what is pinned, then by the agent's order.
+	const byName = grouping.order === "name";
+	const sort = (cs: Conv[]) => [...cs].sort((x, y) => Number(y.session === "main") - Number(x.session === "main") || Number(y.pinned) - Number(x.pinned) || (byName ? s.titleOf(a.id, x.session).localeCompare(s.titleOf(a.id, y.session)) : y.last - x.last));
+	const members = (n: string) => sort(rows.filter((c) => groupOf(c) === n));
+	const newest = (n: string) => Math.max(-1, ...rows.filter((c) => groupOf(c) === n).map((c) => c.last));
+	const groups = byName ? [...names].sort((x, y) => x.localeCompare(y)) : [...names].sort((x, y) => newest(y) - newest(x));
+	const loose = sort(rows.filter((c) => !groupOf(c)));
+	const lineDrop = useDrop(a.id, null);
+	const looseDrop = useDrop(a.id, null);
 	const tabs = s.tabs.filter((t) => t.agent === a.id && t.kind === "chat");
 	const waits = tabs.some((t) => t.approvals.size > 0);
 	const working = s.isBusy(a.id) || tabs.some((t) => t.busy);
@@ -232,6 +335,10 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		const picked = await bridge.contextMenu([
 			{ id: "new", label: `New conversation with ${a.id}` },
 			{ id: "folder", label: `Open a folder with ${a.id}…` },
+			{ id: "group", label: "New Group…" },
+			{ id: "sep0", label: "", separator: true },
+			{ id: "recent", label: "Sort by Last Used", checked: !byName },
+			{ id: "name", label: "Sort by Name", checked: byName },
 			{ id: "sep", label: "", separator: true },
 			{ id: "rename", label: "Rename…" },
 			{ id: "colour", label: "Colour…" },
@@ -241,6 +348,8 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		]);
 		if (picked === "new") await s.newConversation(a.id);
 		if (picked === "folder") await pickFolder();
+		if (picked === "group") await s.newGroup(a.id);
+		if ((picked === "recent" && byName) || (picked === "name" && !byName)) await s.sortConversations(a.id, picked);
 		if (picked === "rename") setRenaming(true);
 		if (picked === "colour") setColouring(true);
 		if (picked === "settings") s.openSettings("agents", a.id);
@@ -249,7 +358,8 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 	return (
 		<Collapsible open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
 			<SidebarMenu>
-				<SidebarMenuItem className="app-no-drag" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
+				{/* Dropped on the agent's line, a conversation leaves its group. */}
+				<SidebarMenuItem {...lineDrop} className="app-no-drag rounded-md data-[drop]:bg-accent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
 					<AgentColourPicker agent={a} open={colouring} onOpenChange={setColouring} onChange={(c) => void s.colourAgent(a.id, c)} nativeButton={false} trigger={<span aria-hidden tabIndex={-1} className="pointer-events-none absolute top-1 left-8 size-6" />} />
 					{renaming ? (
 						<div className="flex h-8 items-center gap-2 px-2">
@@ -278,9 +388,12 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 				</SidebarMenuItem>
 			</SidebarMenu>
 			<CollapsibleContent>
-				<Listbox aria-label={`Conversations with ${a.id}`} className="outline-none" {...LISTBOX} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onValueChange={onPick((session) => void s.openTab(a.id, session))} render={<SidebarMenu />}>
-					{threaded(rows).map(({ c, depth }) => <ConversationRow key={c.session} agent={a.id} c={c} depth={depth} />)}
-				</Listbox>
+				{groups.map((n) => <ConversationGroup key={n} agent={a.id} name={n} rows={members(n)} />)}
+				<div {...looseDrop} className="rounded-md data-[drop]:bg-accent">
+					<Listbox aria-label={`Conversations with ${a.id}`} className="outline-none" {...LISTBOX} value={s.active?.kind === "chat" && s.active.agent === a.id ? s.active.session : null} onValueChange={onPick((session) => void s.openTab(a.id, session))} render={<SidebarMenu />}>
+						{threaded(loose).map(({ c, depth }) => <ConversationRow key={c.session} agent={a.id} c={c} depth={depth} />)}
+					</Listbox>
+				</div>
 			</CollapsibleContent>
 		</Collapsible>
 	);

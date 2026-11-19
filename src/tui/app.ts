@@ -37,7 +37,7 @@ import type { TranscriptEntry } from "../types.ts";
 import type { PineEvent, Task } from "../types.ts";
 import { errText, expandHome, openInSystem, safeName, type Speed, speedOf, speedText, unfolded } from "../util.ts";
 import { Listening, type VoiceTools, voiceTools } from "./voice.ts";
-import type { AgentInfo, Client, Conversation, GoalInfo } from "./client.ts";
+import type { AgentInfo, Client, Conversation, GoalInfo, GroupList } from "./client.ts";
 import { CodePane, PANE_VIEWS, type PaneView } from "./code-pane.ts";
 import { redoText, undoText } from "./undo.ts";
 import { isAudioFile, isImageFile, isVideoFile, mimeOf, Picture, picturesAsText, picturesIn, prepare, prepareSound, prepareVideo, Slot, Sound, type SoundPlayer, soundPlayer, stopSounds, stopVideos, Video } from "./picture.ts";
@@ -817,7 +817,7 @@ class ConversationList implements Component {
 
 	private shown(): Conversation[] {
 		const f = this.filter.toLowerCase();
-		return f ? this.items.filter((x) => x.session.toLowerCase().includes(f)) : this.items;
+		return f ? this.items.filter((x) => x.session.toLowerCase().includes(f) || (x.group ?? "").toLowerCase().includes(f)) : this.items;
 	}
 
 	private get conv(): Conversation | undefined {
@@ -899,12 +899,13 @@ class ConversationList implements Component {
 			}
 			const conv = shown[i - 1];
 			const main = conv.session === "main";
-			const state = main ? "the agent's own, always kept" : conv.pinned ? "pinned" : conv.open ? "open in a tab" : conv.expires ? until(conv.expires) : "kept";
+			const state = main ? "the agent's own, always kept" : conv.pinned ? "pinned" : conv.group ? "kept in its group" : conv.open ? "open in a tab" : conv.expires ? until(conv.expires) : "kept";
 			// The agent's own conversation is kept without a pin: it has the mark of one.
 			const mark = conv.pinned || main ? c.accent("★") : " ";
 			const label = short(conv.session, name - 1).padEnd(name);
 			const tree = conv.worktree ? ` · ⎇ ${conv.worktree.branch}` : "";
-			const left = `${mark} ${on ? c.accent(label) : label} ${c.gray(`${conv.tasks} message${conv.tasks === 1 ? "" : "s"} · ${since(conv.last)} · ${state}${tree}`)}`;
+			const group = conv.group ? `${c.accent(`▸ ${conv.group}`)} ` : "";
+			const left = `${mark} ${on ? c.accent(label) : label} ${group}${c.gray(`${conv.tasks} message${conv.tasks === 1 ? "" : "s"} · ${since(conv.last)} · ${state}${tree}`)}`;
 			// At the end of the row, the two things that can be done to it, as words to click.
 			const pin = main ? "" : conv.pinned ? "unpin" : "pin";
 			const x = main ? (this.asked === conv.session ? "reset? ×" : "reset") : this.asked === conv.session ? "remove? ×" : "×";
@@ -950,6 +951,19 @@ const MODE_ITEMS: SelectItem[] = [
 ];
 
 const short = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s);
+
+/**
+ * An agent's conversations in the order of the side bar: those in no group first, then each group's,
+ * the groups by name or in the order they were made; in each, the main conversation, then pinned
+ * ones, then by the agent's order (the last used first, or by name).
+ */
+export function grouped(list: Conversation[], groups: GroupList): Conversation[] {
+	const byName = groups.order === "name";
+	const names = groups.groups.map((g) => g.name);
+	if (byName) names.sort((a, b) => a.localeCompare(b));
+	const rank = (x: Conversation) => (x.group && names.includes(x.group) ? names.indexOf(x.group) + 1 : 0);
+	return [...list].sort((x, y) => rank(x) - rank(y) || Number(y.session === "main") - Number(x.session === "main") || Number(y.pinned) - Number(x.pinned) || (byName ? x.session.localeCompare(y.session) : y.last - x.last));
+}
 const oneLine = (s: string) => s.replace(/\s+/g, " ").trim();
 
 type ApprovalAnswer = "allow" | "always" | "deny" | "later";
@@ -2307,7 +2321,8 @@ export class PineTui {
 		if (this.dialog) return;
 		const agent = t.agent;
 		const isOpen = (session: string) => this.tabs.some((x) => x.kind === "chat" && x.agent === agent && x.session === session);
-		const list = (await this.client.sessions(agent).catch(() => [] as Conversation[])).map((s) => ({ ...s, open: isOpen(s.session) }));
+		const [found, groups] = await Promise.all([this.client.sessions(agent).catch(() => [] as Conversation[]), this.client.groups(agent).catch((): GroupList => ({ order: "recent", groups: [] }))]);
+		const list = grouped(found.map((s) => ({ ...s, open: isOpen(s.session) })), groups);
 		const close = () => this.closeDialog();
 		const view = new ConversationList(`Conversations of ${agent}`, list, t.session, {
 			open: (session) => (close(), void this.openTab(agent, session)),
@@ -2605,6 +2620,26 @@ export class PineTui {
 					await this.client.pinSession(t.agent, t.session, false);
 					this.pins.delete(`${t.agent}:${t.session}`);
 					this.say(t, c.gray("not pinned any more: it is removed by itself once it is neither open nor used for some days"));
+				},
+			},
+			{
+				name: "group", description: "Put this conversation into a group of the agent's conversations (made if new); /group - takes it out, /group alone says which", argumentHint: "[name | -]",
+				getArgumentCompletions: async (prefix) => {
+					const t = this.active;
+					if (t.kind !== "chat") return null;
+					return (await this.client.groups(t.agent).catch((): GroupList => ({ order: "recent", groups: [] }))).groups.filter((g) => g.name.toLowerCase().startsWith(prefix.toLowerCase())).map((g) => ({ value: g.name, label: g.name, description: `${g.conversations} conversation${g.conversations === 1 ? "" : "s"}` }));
+				},
+				run: async (args) => {
+					const t = chat();
+					if (!t) return;
+					const name = args.trim();
+					if (!name) {
+						const now = (await this.client.sessions(t.agent)).find((s) => s.session === t.session)?.group;
+						return void this.say(t, c.gray(now ? `this conversation is in the group ${c.bold(now)} · /group - takes it out` : "this conversation is in no group · /group <name> puts it into one"));
+					}
+					const r = await this.client.setGroup(t.agent, t.session, name === "-" ? null : name);
+					const along = r.moved.length > 1 ? `, with its branch${r.moved.length === 2 ? "" : "es"} ${r.moved.slice(1).join(", ")}` : "";
+					this.say(t, c.gray(r.group ? `this conversation is in the group ${c.bold(r.group)}${along}: it is kept however long it is not used` : `this conversation is in no group now${along}`));
 				},
 			},
 			{

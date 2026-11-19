@@ -36,6 +36,9 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 	// [what is asked, a part that must be among the first three]
 	const cases: Array<[string, RegExp]> = [
 		["telegram pairing code", /^source-types#telegram$/],
+		["put my coding chats into folders so the list stays tidy", /^agents#groups-of-conversations/],
+		["group the okapi conversations together", /^(agents#groups-of-conversations|setup#conversations-and-tabs)/],
+		["delete a whole group with its conversations", /^(agents#groups-of-conversations|setup#conversations-and-tabs)/],
 		["start the daemon from a desktop app and get its token", /^operations#(a-ui-of-its-own|commands\/pine-service)/],
 		["change a setting over the control api from a script", /^operations#(setting-pine-up-through-the-control-api|the-control-api)/],
 		["save a file from an editor through the daemon", /^(operations#setting-pine-up-through-the-control-api\/post-agents-id-view-write|security#3-the-sandbox|coding#from-a-script)/],

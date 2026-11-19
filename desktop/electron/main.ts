@@ -630,10 +630,11 @@ function wire(): void {
 	handle("pine:term-run", (id: string, code: string) => terminals.run(String(id), code));
 	handle("pine:term-resize", (id: string, cols: number, rows: number) => terminals.resize(String(id), cols, rows));
 	handle("pine:term-close", (id: string) => terminals.close(String(id)));
-	handle("pine:context-menu", (items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean }>) => {
+	// An item with `checked` is one of a set of choices (the side bar's "Sort by"), drawn with the system's mark.
+	handle("pine:context-menu", (items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean; checked?: boolean }>) => {
 		return new Promise<string | undefined>((resolve) => {
 			let picked: string | undefined;
-			const menu = Menu.buildFromTemplate(items.slice(0, 30).map((i) => (i.separator ? { type: "separator" as const } : { label: String(i.label).slice(0, 80), enabled: i.enabled !== false, click: () => (picked = String(i.id)) })));
+			const menu = Menu.buildFromTemplate(items.slice(0, 30).map((i) => (i.separator ? { type: "separator" as const } : { label: String(i.label).slice(0, 80), enabled: i.enabled !== false, ...(typeof i.checked === "boolean" ? { type: "radio" as const, checked: i.checked } : {}), click: () => (picked = String(i.id)) })));
 			menu.popup({ window: win, callback: () => resolve(picked) });
 		});
 	});

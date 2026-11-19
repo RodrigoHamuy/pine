@@ -172,6 +172,7 @@ spinner that the agent is working, `!` that it waits for your approval.
 | Give a conversation, and its tab, another name | `/rename <name>` |
 | Go on in a copy of the conversation from one of your messages, leaving it as it is | `/branch` (pick the message), `/branch <name>` (all of it) |
 | Keep a conversation for good | `/pin`, or `pin` in the list |
+| Put a conversation into a group of the agent's conversations | `/group <name>` (made if there is none; its branches go with it), `/group -` takes it out, `/group` says which. See [agents.md](agents.md#groups-of-conversations) |
 | Watch everything that happens | `/events` |
 
 **Tabs and conversations.** A tab shows one conversation. When you quit and start again, the
@@ -188,13 +189,14 @@ never takes your place; a rename, a closed tab and a removed conversation show a
 The list does not grow without end. A conversation is removed by itself, with everything said
 in it, once nothing has been said in it for 7 days (`limits.conversationDays`; `0` keeps
 everything). These stay however old they are: each agent's main conversation, a pinned one,
-one that is open in a tab, and one that is subscribed to an event source or has a schedule of
+one in a group, one that is open in a tab, and one that is subscribed to an event source or has a schedule of
 its own. The list says for each which it is: `the agent's own, always kept`, `pinned`, `open in
-a tab`, `kept`, or when it goes (`goes in 5 days`, `goes in 20 h`, `goes soon`).
+a tab`, `kept in its group`, `kept`, or when it goes (`goes in 5 days`, `goes in 20 h`, `goes soon`).
 
 | In the list | Does |
 |---|---|
 | `enter`, or a click on a name | Opens the conversation in a tab |
+| `▸ name` after a conversation's name | The group it is in. The list is in the order of the agent's groups: those in no group first, then each group's; typing a group's name finds its conversations |
 | `pin` / `unpin` at the end of a row, or `ctrl+p` | Pins it, or takes the pin off. A pinned one has a `★` in front and comes first, and its tab has the `★` too |
 | `×` at the end, or `ctrl+x` | Removes it for good. It asks once more (`remove? ×`); the second click or key does it. A conversation that is working is not removed |
 | `reset` at the end of the agent's `main` conversation, or `ctrl+x` on it | Starts that conversation over, as `/reset` does. It asks once more (`reset? ×`). The agent's own conversation cannot be removed and never goes by itself, so it has a `★`, here and on its tab, and no `pin`: `/pin` in it only says that it always stays |

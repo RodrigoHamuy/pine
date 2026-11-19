@@ -262,7 +262,9 @@ export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore },
 	unname(cfg, id);
 	// A worktree of one of its conversations stays in the owner's repository, which is not pine's to
 	// empty; `pine worktrees` (GET /worktrees) lists it as no conversation's.
-	for (const prefix of ["taint", "keep", "folder", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited"]) store.kv.forget(`${prefix}:${id}:`);
+	for (const prefix of ["taint", "keep", "folder", "group", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited"]) store.kv.forget(`${prefix}:${id}:`);
+	// Its groups of conversations, and how its list was sorted.
+	store.kv.set(`groups:${id}`, null);
 	// Which slot of a model server held one of its conversations (src/slots.ts).
 	const slots = store.kv.get<Record<string, Array<{ who?: string } | null | undefined>>>("slots");
 	if (slots) store.kv.set("slots", Object.fromEntries(Object.entries(slots).map(([server, held]) => [server, held.map((o) => (o && String(o.who).startsWith(`${id}:`) ? null : o))])));
@@ -324,7 +326,7 @@ export function checkAgentId(cfg: PineConfig, id: string): void {
 }
 
 /** The prefixes of what pine stores per conversation as "<prefix>:<agent>:<conversation>". */
-const BY_CONVERSATION = ["taint", "keep", "folder", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited", "goal"];
+const BY_CONVERSATION = ["taint", "keep", "folder", "group", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited", "goal"];
 
 /**
  * Give an agent another id, and with it everything that carries its name, so that nothing is
@@ -415,6 +417,7 @@ export function renameAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore }
 			rekey(key, `${prefix}:${to}:${key.slice(prefix.length + from.length + 2)}`, value);
 		}
 	}
+	rekey(`groups:${from}`, `groups:${to}`);
 	for (const key of kv.keys("timer:")) if (key.endsWith(`@${from}`)) rekey(key, `${key.slice(0, -from.length)}${to}`);
 	for (const key of kv.keys("source:")) {
 		const [name, ...rest] = key.slice("source:".length).split(":");

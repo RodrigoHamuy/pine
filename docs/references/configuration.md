@@ -107,7 +107,7 @@ asked you for it (`pine model add`, `add_model_server`); `models.json` names it 
 | `limits.modelHeadersTimeoutMs` | `10m` | How long the model server may take to start answering. |
 | `limits.modelStreamIdleMs` | `5m` | How long a started answer may go silent before the request is dropped. |
 | `limits.eventRetentionDays` | `30` | Older events are deleted, and so are the copies kept of conversations that were reset. |
-| `limits.conversationDays` | `7` | A conversation in which nothing was said for this long is removed with its history, unless it is an agent's main conversation, pinned, open in a tab, subscribed to an event source, or has a schedule of its own. `0`: never. |
+| `limits.conversationDays` | `7` | A conversation in which nothing was said for this long is removed with its history, unless it is an agent's main conversation, pinned, in a group, open in a tab, subscribed to an event source, or has a schedule of its own. `0`: never. |
 | `limits.goalRounds` | `20` | Goal mode (`/goal`): how many rounds a goal gets before it stops and waits for `/goal resume`, which gives it as many again. A round is a whole turn of the agent with all its tool calls, so twenty are hours on a local model. See "Goal mode" in [agents.md](agents.md). |
 | `limits.goalIdleRounds` | `3` | Goal mode: after this many rounds in a row that the judge called "not met" and in which the agent made no tool call, the goal is paused: the agent is going in circles. `0`: never. |
 | `limits.goalJudgeTimeout` | `90s` | Goal mode: how long the judge may take to answer. When it takes longer, that counts as no verdict, and the goal is paused. |

@@ -1344,11 +1344,19 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				return sec < 90 ? "just now" : sec < 5400 ? `${Math.round(sec / 60)} min ago` : sec < 172_800 ? `${Math.round(sec / 3600)} h ago` : `${Math.round(sec / 86_400)} days ago`;
 			};
 			const messages = (n: number) => `${n} message${n === 1 ? "" : "s"}`;
+			/** A group of an agent's, as it is written, whatever the letters it was asked for in. */
+			const groupCalled = (a: AgentConfig, v: unknown): string => {
+				const want = typeof v === "string" ? v.trim().toLowerCase() : "";
+				const { names } = manager.groups(a.id);
+				const found = names.find((n) => n.toLowerCase() === want);
+				if (!found) throw new Error(`${a.id === agent.id ? "you have" : `${a.id} has`} no group called "${typeof v === "string" ? v.trim() : ""}". ${names.length ? `Groups: ${names.join(", ")}` : "There are no groups"}.`);
+				return found;
+			};
 			tools.push(
 				defineTool({
 					name: "conversations",
 					label: "Conversations",
-					description: 'List the conversations there are, yours and those of the other agents: for each whether it is pinned, open in a tab on your owner\'s screen or working, how much was said in it, when it was last used and when it is removed by itself. With "agent": only that agent\'s. Use it when your owner asks which conversations, chats, sessions or tabs there are, and before you read, change or remove one.',
+					description: 'List the conversations there are, yours and those of the other agents: for each whether it is pinned, in a group, open in a tab on your owner\'s screen or working, how much was said in it, when it was last used and when it is removed by itself; and each agent\'s groups. With "agent": only that agent\'s. Use it when your owner asks which conversations, chats, sessions, tabs or groups there are, and before you read, change or remove one.',
 					parameters: Type.Object({ agent: Type.Optional(Type.String({ description: "Only this agent's conversations. Leave out for all agents" })) }),
 					execute: async (_id, p) => {
 						const mine = here();
@@ -1361,6 +1369,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 								const bits = [
 									main ? "the agent's own, always kept" : c.session.endsWith("~u") ? `what outside content started in "${c.session.slice(0, -2)}"` : "",
 									c.pinned ? "pinned" : "",
+									c.group ? `in the group ${c.group}` : "",
 									c.open ? "open in a tab" : "",
 									c.working ? "working now" : "",
 									messages(c.tasks),
@@ -1373,7 +1382,9 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 							// A tab that was opened and nothing said in it yet.
 							for (const t of manager.uiTabs().tabs) if (t.agent === a.id && !list.some((c) => c.session === manager.conversationKey(t.session))) rows.push(`- ${manager.conversationKey(t.session)}: open in a tab · nothing said in it yet`);
 							count += rows.length;
-							return `${a.id}${a.id === agent.id ? " (you)" : ""}:\n${rows.join("\n") || "- none"}`;
+							const groups = manager.groupList(a.id).groups;
+							const grouped = groups.length ? `\n  groups: ${groups.map((g) => `${g.name} (${g.conversations})`).join(", ")}` : "";
+							return `${a.id}${a.id === agent.id ? " (you)" : ""}:\n${rows.join("\n") || "- none"}${grouped}`;
 						});
 						return ok(`${count} conversation${count === 1 ? "" : "s"}.\n${blocks.join("\n")}`);
 					},
@@ -1405,13 +1416,14 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				defineTool({
 					name: "set_conversation",
 					label: "Change conversation",
-					description: 'Change a conversation, yours or another agent\'s, when your owner asks for it. "pinned": true keeps it however long it is not used, false takes the pin off. "tab": true opens a tab on it on your owner\'s screen, behind the one they are in; false closes its tab, which also ends what that conversation was subscribed to on its own, and the conversation stays in the list. "rename": its new name. Give only what changes. With a name that is new and "tab": true, a new, empty conversation is opened as a tab: what is to be done in it your owner says there. The folder a conversation works in and its goal are your owner\'s to set, not yours.',
+					description: 'Change a conversation, yours or another agent\'s, when your owner asks for it. "pinned": true keeps it however long it is not used, false takes the pin off. "tab": true opens a tab on it on your owner\'s screen, behind the one they are in; false closes its tab, which also ends what that conversation was subscribed to on its own, and the conversation stays in the list. "rename": its new name. "group": the name of a group of that agent\'s conversations to put it into (made if there is none), "" to take it out of its group; its branches go with it. Give only what changes. With a name that is new and "tab": true, a new, empty conversation is opened as a tab: what is to be done in it your owner says there. The folder a conversation works in and its goal are your owner\'s to set, not yours.',
 					parameters: Type.Object({
 						name: Type.String({ description: "The conversation's name, as the conversations list has it" }),
 						agent: Type.Optional(Type.String({ description: "The agent whose conversation it is. Leave out for your own" })),
 						pinned: Type.Optional(Type.Boolean({ description: "true: keep it however long it is not used. false: take the pin off" })),
 						tab: Type.Optional(Type.Boolean({ description: "true: open a tab on it on your owner's screen. false: close its tab" })),
 						rename: Type.Optional(Type.String({ description: "Its new name" })),
+						group: Type.Optional(Type.String({ description: 'The group to put it into, made if there is none. "" takes it out of its group' })),
 					}),
 					execute: async (_id, p, signal) => {
 						run();
@@ -1419,17 +1431,19 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						const a = whose(p.agent);
 						let key = named(p.name);
 						const rename = typeof p.rename === "string" && p.rename.trim() ? p.rename.trim() : undefined;
-						if (typeof p.pinned !== "boolean" && typeof p.tab !== "boolean" && !rename) throw new Error('nothing to change: give "pinned" (true or false), "tab" (true or false) or "rename" (the new name)');
+						const group = typeof p.group === "string" ? p.group.trim() : undefined;
+						if (typeof p.pinned !== "boolean" && typeof p.tab !== "boolean" && !rename && group === undefined) throw new Error('nothing to change: give "pinned" (true or false), "tab" (true or false), "rename" (the new name) or "group" (a group\'s name, "" for none)');
 						const inIt = a.id === agent.id && key === here();
 						// Everything that stands in the way is said before anything is changed.
 						if (p.tab !== true) lookUp(a, key);
 						if (p.tab === true && key.endsWith("~u")) throw new Error(`"${key}" holds what outside content started. It is read, not opened as a tab: read_conversation shows what is in it.`);
 						if (p.tab === false && inIt) throw new Error("This is the conversation you are in, and its tab is your owner's to close (/close).");
-						if (p.tab === false && tabOn(a, key) && manager.uiTabs().tabs.length === 1) throw new Error("It is the only tab that is open, and the last tab stays open.");
+						const from = group !== undefined ? manager.conversations(a.id).find((c) => c.session === key)?.branch?.from : undefined;
+						if (from) throw new Error(`"${key}" is a branch of "${from}" and is in the group that one is in: put "${from}" into the group instead, and its branches go with it.`);
 						if (rename && inIt) throw new Error("This is the conversation you are in, and it cannot get another name while you work in it. Your owner renames it with /rename.");
 						const ends = p.tab === false && key !== "main" && tabOn(a, key) ? [...new Set(a.subscribe.filter((x) => x.session === key).map((x) => x.source))] : [];
 						if (ends.length || live.mode() === "manual") {
-							const lines = [...(rename ? [`new name: ${rename}`] : []), ...(typeof p.pinned === "boolean" ? [p.pinned ? "pin it" : "take its pin off"] : []), ...(typeof p.tab === "boolean" ? [p.tab ? "open a tab on it" : "close its tab"] : [])];
+							const lines = [...(rename ? [`new name: ${rename}`] : []), ...(group !== undefined ? [group ? `into the group ${group}` : "out of its group"] : []), ...(typeof p.pinned === "boolean" ? [p.pinned ? "pin it" : "take its pin off"] : []), ...(typeof p.tab === "boolean" ? [p.tab ? "open a tab on it" : "close its tab"] : [])];
 							const decision = await confirm("set_conversation", `change the conversation "${key}" of ${a.id}\n${lines.join("\n")}`, ends.length ? `closing its tab ends what it is subscribed to on its own: ${ends.join(", ")}` : "manual mode: actions wait for your go-ahead", signal);
 							if (!decision.allow) throw new Error(`not changed (${decision.by}). Do not retry; tell your owner what you proposed.`);
 						}
@@ -1452,6 +1466,11 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 							const r = await manager.showTab(a.id, key, p.tab);
 							if (p.tab) done.push(r.changed ? "a tab is open on it on your owner's screen, behind the one they are in" : "a tab is open on it already");
 							else done.push(r.changed ? `its tab is closed${r.unsubscribed.length ? `, and its subscription${r.unsubscribed.length === 1 ? "" : "s"} to ${r.unsubscribed.join(", ")} ended with it` : ""}; the conversation stays in the list` : "it has no tab open");
+						}
+						if (group !== undefined) {
+							const r = manager.setGroup(a.id, key, group);
+							const along = r.moved.length > 1 ? `, with its branch${r.moved.length === 2 ? "" : "es"} ${r.moved.slice(1).join(", ")}` : "";
+							done.push(r.group ? `it is in the group ${r.group}${along}` : `it is in no group${along}`);
 						}
 						return ok(`The conversation "${key}" ${of(a)}: ${done.join("; ")}.`);
 					},
@@ -1488,6 +1507,64 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						manager.conversationChanged("remove", a.id, key);
 						const went = [...(gone.sources.length ? [`its event source${gone.sources.length === 1 ? "" : "s"} ${gone.sources.join(", ")}`] : gone.unsubscribed.length ? [`its subscription${gone.unsubscribed.length === 1 ? "" : "s"} to ${gone.unsubscribed.join(", ")}`] : []), ...(gone.servers.length ? [`its MCP server${gone.servers.length === 1 ? "" : "s"} ${gone.servers.join(", ")}`] : [])];
 						return ok(`Your owner confirmed it. The conversation "${key}" ${of(a)} is removed${went.length ? `, with ${went.join(" and ")}` : ""}.`);
+					},
+				}),
+				// Groups of an agent's conversations, as the owner keeps them in a UI's list (src/agents.ts).
+				// A conversation is put into one with set_conversation; renamed and removed through the
+				// functions the control API has for the owner's own hand.
+				defineTool({
+					name: "rename_group",
+					label: "Rename group",
+					description: 'Give a group of conversations another name, yours or another agent\'s, when your owner asks for it. The conversations in it stay in it. To put a conversation into a group or take it out, use set_conversation with "group".',
+					parameters: Type.Object({
+						name: Type.String({ description: "The group's name, as the conversations list has it" }),
+						to: Type.String({ description: "Its new name" }),
+						agent: Type.Optional(Type.String({ description: "The agent whose group it is. Leave out for your own" })),
+					}),
+					execute: async (_id, p, signal) => {
+						run();
+						notHere("renaming a group");
+						const a = whose(p.agent);
+						const was = groupCalled(a, p.name);
+						if (live.mode() === "manual") {
+							const decision = await confirm("rename_group", `rename the group "${was}" of ${a.id} to "${String(p.to ?? "").trim()}"`, "manual mode: actions wait for your go-ahead", signal);
+							if (!decision.allow) throw new Error(`not renamed (${decision.by}). Do not retry; tell your owner what you proposed.`);
+						}
+						const r = manager.renameGroup(a.id, was, String(p.to ?? ""));
+						return ok(r.group === was ? `The group is called "${was}" already.` : `The group "${was}" ${of(a)} is now called "${r.group}"; its conversations are in it as before.`);
+					},
+				}),
+				defineTool({
+					name: "remove_group",
+					label: "Remove group",
+					description: 'Remove a group of conversations, yours or another agent\'s, when your owner asks for it: every conversation in it is removed for good, as remove_conversation removes one, and then the group. An agent\'s main conversation in it stays, in no group. Your owner sees what goes and confirms it. To keep a conversation, take it out of the group first (set_conversation with "group": "").',
+					parameters: Type.Object({
+						name: Type.String({ description: "The group's name, as the conversations list has it" }),
+						agent: Type.Optional(Type.String({ description: "The agent whose group it is. Leave out for your own" })),
+					}),
+					execute: async (_id, p, signal) => {
+						run();
+						notHere("removing a group");
+						const a = whose(p.agent);
+						const name = groupCalled(a, p.name);
+						const members = manager.groupMembers(a.id, name);
+						if (a.id === agent.id && members.includes(here())) throw new Error(`The group "${name}" holds the conversation you are in, which cannot be removed while you work in it. Your owner removes the group in the side bar, or takes this conversation out of it first.`);
+						const goes = members.filter((m) => m !== "main");
+						const lines = goes.map((m) => {
+							const with_ = [
+								...[...new Set(a.subscribe.filter((x) => x.session === m).map((x) => x.source))].map((x) => `its subscription to ${x}`),
+								...(manager.sources?.boundTo(a.id, m) ?? []).map((x) => `its event source ${x}`),
+								...Object.entries(a.mcp).filter(([, sv]) => sv.session === m).map(([x]) => `its MCP server ${x}`),
+								...a.schedules.filter((x) => x.session === m).map((x) => `its schedule ${x.name}`),
+							];
+							return `- ${m}${with_.length ? `, with ${with_.join(", ")}` : ""}`;
+						});
+						const what = goes.length ? ` and ${goes.length === 1 ? "the conversation" : `the ${goes.length} conversations`} in it for good:\n${lines.join("\n")}\nWhat was said in ${goes.length === 1 ? "it" : "them"} is deleted and cannot be brought back.` : ": there is no conversation in it to remove";
+						const summary = `remove the group "${name}" of ${a.id}${what}${members.includes("main") ? `\nThe main conversation of ${a.id} is in it and stays, in no group.` : ""}`;
+						const decision = await confirm("remove_group", summary, goes.length ? "this deletes conversations" : "this removes a group", signal);
+						if (!decision.allow) throw new Error(`not removed (${decision.by}). Do not retry; tell your owner.`);
+						const gone = await manager.removeGroup(a.id, name);
+						return ok(`Your owner confirmed it. The group "${name}" ${of(a)} is removed${gone.removed.length ? `, with the conversation${gone.removed.length === 1 ? "" : "s"} ${gone.removed.join(", ")}` : ""}${gone.kept.length ? "; the main conversation stays, in no group" : ""}.`);
 					},
 				}),
 			);

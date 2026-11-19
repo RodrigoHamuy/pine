@@ -126,6 +126,11 @@ export class HttpServer {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, this.manager.conversations(parts[1]));
 				}
+				// An agent's groups of conversations, empty ones too, and how its list is sorted.
+				if (parts[0] === "agents" && parts[2] === "groups" && parts.length === 3) {
+					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+					return send(200, this.manager.groupList(parts[1]));
+				}
 				if (url.pathname === "/ui/tabs") return send(200, this.manager.uiTabs());
 				if (parts[0] === "tasks" && parts[2] === "transcript" && parts.length === 3) {
 					const t = this.manager.transcript(Number(parts[1]), q.get("full") === "1");
@@ -364,6 +369,27 @@ export class HttpServer {
 				} catch (e) {
 					throw new HttpError(409, errText(e));
 				}
+			}
+			// Groups of conversations: a conversation put into one or out of it, and a group made, renamed,
+			// removed (with the conversations in it) or the list sorted. The owner's hand, like a pin.
+			if (parts[0] === "agents" && (parts[2] === "group" || parts[2] === "groups") && parts.length === 3) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				const m = this.manager;
+				const id = parts[1];
+				const text = (v: unknown, what: string) => {
+					if (typeof v !== "string" || !v.trim()) throw new HttpError(400, what);
+					return v;
+				};
+				try {
+					if (parts[2] === "group") return send(200, m.setGroup(id, text(body.session, "session: the conversation's name"), typeof body.group === "string" ? body.group : null));
+					if (body.action === "add") return send(200, m.addGroup(id, text(body.name, "name: the group's name")));
+					if (body.action === "rename") return send(200, m.renameGroup(id, text(body.name, "name: the group's name"), text(body.to, "to: its new name")));
+					if (body.action === "remove") return send(200, await m.removeGroup(id, text(body.name, "name: the group's name")));
+					if (body.action === "order") return send(200, m.setGroupOrder(id, body.to));
+				} catch (e) {
+					throw e instanceof HttpError ? e : new HttpError(409, errText(e));
+				}
+				throw new HttpError(400, 'action: "add", "rename", "remove" or "order"');
 			}
 			if (parts[0] === "agents" && ["remove", "rename", "pin"].includes(parts[2]) && parts.length === 3) {
 				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");

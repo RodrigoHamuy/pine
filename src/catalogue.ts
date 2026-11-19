@@ -65,8 +65,8 @@ const GROUPS: Array<[id: string, name: string, about: string, tools: string[]]> 
 	[
 		"conversations",
 		"pine_conversations",
-		"Conversations, yours and the other agents': your owner's tabs and each agent's list. Which there are, pine_list says (conversations).",
-		["read_conversation", "set_conversation", "remove_conversation"],
+		"Conversations, yours and the other agents': your owner's tabs, each agent's list and its groups. Which there are, pine_list says (conversations).",
+		["read_conversation", "set_conversation", "remove_conversation", "rename_group", "remove_group"],
 	],
 ];
 
@@ -120,9 +120,11 @@ const BRIEF: Record<string, string> = {
 	stop_program: "stop a program one of your commands left running",
 	state_get: "read shared state (facts agents and devices keep)",
 	state_set: "store a fact in shared state",
-	conversations: "the conversations of every agent: which are pinned, open in a tab or working, and when each was last used",
+	conversations: "the conversations of every agent: which are pinned, in a group, open in a tab or working, and when each was last used; and each agent's groups",
 	read_conversation: "what was said in a conversation, the newest last; of tools only which were used, not what they returned. One that has read outside content marks yours too",
-	set_conversation: "pin a conversation or take the pin off, open or close its tab on your owner's screen, rename it; give only what changes. A new name with tab: true opens a new, empty one",
+	set_conversation: "pin a conversation or take the pin off, open or close its tab on your owner's screen, rename it, put it into a group or take it out; give only what changes. A new name with tab: true opens a new, empty one",
+	rename_group: "give a group of conversations another name; its conversations stay in it",
+	remove_group: "remove a group and every conversation in it for good; your owner confirms. A main conversation in it stays",
 	remove_conversation: "remove a conversation for good, with what was set up for it alone; your owner confirms. Not a main conversation, and not the one you are in",
 };
 
@@ -204,6 +206,11 @@ const ARG_HINT: Record<string, string> = {
 	"read_conversation.last": "how many, from the end; default 10",
 	"read_conversation.before": "a number: what stands before it",
 	"set_conversation.tab": "true opens it, false closes it",
+	"set_conversation.group": "a group's name, made if new; \"\" takes it out",
+	"rename_group.name": "the group's name",
+	"rename_group.agent": "whose it is; leave out for your own",
+	"remove_group.name": "the group's name",
+	"remove_group.agent": "whose it is; leave out for your own",
 	"request_access.path": "absolute path of the file or folder",
 	"request_access.write": "true to also change files there",
 	"request_access.network": "true for network in your shell instead of a path",

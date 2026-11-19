@@ -111,6 +111,25 @@ export interface Conversation {
 	branch?: { from: string; at?: number };
 	/** The worktree it works in: a checkout of its own of its folder's repository, on a branch pine/<name>. */
 	worktree?: { branch: string; base: string; path: string; repo: string };
+	/** The group of the agent's conversations it is in. A branch is in its original's. */
+	group?: string;
+}
+
+/** An agent's groups of conversations, empty ones too, and how its list is sorted. */
+export interface GroupList {
+	order: "recent" | "name";
+	groups: Array<{ name: string; conversations: number }>;
+}
+
+/** What removing a group took with it: its conversations (the main one stays) and what was set up for them. */
+export interface GroupRemoved {
+	group: string;
+	removed: string[];
+	kept: string[];
+	unsubscribed: string[];
+	sources: string[];
+	servers: string[];
+	worktrees: string[];
 }
 
 /** A conversation's worktree and where it stands against what it was made from. */
@@ -359,6 +378,13 @@ export const api = {
 	removeSession: (agent: string, session: string) => post<{ removed: boolean; unsubscribed: string[]; sources: string[]; servers: string[] }>(`${a(agent)}/remove`, { session }),
 	renameSession: (agent: string, session: string, to: string) => post<{ session: string }>(`${a(agent)}/rename`, { session, to }),
 	pinSession: (agent: string, session: string, pinned: boolean) => post<{ pinned: boolean }>(`${a(agent)}/pin`, { session, pinned }),
+	// Groups of an agent's conversations. A pine older than groups has none: an empty list.
+	groups: (agent: string) => get<GroupList>(`${a(agent)}/groups`).catch((): GroupList => ({ order: "recent", groups: [] })),
+	setGroup: (agent: string, session: string, group: string | null) => post<{ session: string; group?: string; moved: string[] }>(`${a(agent)}/group`, { session, group }),
+	addGroup: (agent: string, name: string) => post<{ group: string }>(`${a(agent)}/groups`, { action: "add", name }),
+	renameGroup: (agent: string, name: string, to: string) => post<{ group: string }>(`${a(agent)}/groups`, { action: "rename", name, to }),
+	removeGroup: (agent: string, name: string) => post<GroupRemoved>(`${a(agent)}/groups`, { action: "remove", name }),
+	sortConversations: (agent: string, order: "recent" | "name") => post<{ order: string }>(`${a(agent)}/groups`, { action: "order", to: order }),
 	closeSession: (agent: string, session: string) => post<{ unsubscribed: string[] }>(`${a(agent)}/close`, { session }),
 	folder: (agent: string, session: string) => get<{ folder?: string; workspace: string }>(`${a(agent)}/folder${s(session)}`),
 	folders: (agent: string) => get<Array<{ session: string; folder: string }>>(`${a(agent)}/folders`),

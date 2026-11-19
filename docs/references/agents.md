@@ -402,12 +402,40 @@ another agent did in a thread it keeps stays that agent's. What the conversation
 subscribed to on its own ends with the reset.
 
 A named conversation does not stay for ever. One that is not an agent's `main`, not pinned, not
-open in a tab of the terminal UI, not subscribed to an event source and without a schedule of
-its own is removed with its history after `limits.conversationDays` (7) without a message. That holds for every named
+in a group, not open in a tab of the terminal UI, not subscribed to an event source and without
+a schedule of its own is removed with its history after `limits.conversationDays` (7) without a message. That holds for every named
 conversation: one you opened in the terminal UI, a delegation thread's, one a route names. Pin the ones to keep (`/pin`, or the list of
 conversations in the terminal UI; see [tui.md](tui.md)), or set `limits.conversationDays` to
 `0` to keep them all. Everything that was set up for one conversation alone goes with it: its
 event sources and subscriptions, schedules, MCP servers and skills ([setup.md](setup.md)).
+
+## Groups of conversations
+
+With many conversations, an agent's list is kept in order with groups: named groups directly
+under the agent, one level deep, with no group inside a group. A coding agent may have one per
+customer or per kind of work, each holding a conversation per project. Groups belong to one
+agent; another agent's list has groups of its own.
+
+- **A conversation and its branches are in the same group.** A branch is shown under the one it
+  was made from, wherever that one is, and moves with it: the conversation is moved, never a
+  branch alone. A new branch is in its original's group. What a conversation runs as sub-agents
+  is part of it and goes nowhere by itself.
+- **A conversation in a group is kept** however long it is not used, as a pinned one is.
+- **The main conversation** can be in a group too.
+- **Renaming a group** keeps its conversations in it. **Removing a group removes every
+  conversation in it for good**, the way removing one does, with what was set up for each alone.
+  The main conversation is not removed: it stays, in no group. Nothing is removed while one of
+  them is working. To keep a conversation, take it out of the group first.
+- **Order.** The list is sorted by when a conversation was last used, or by name; that is a
+  choice per agent, and the groups are sorted the same way. The main conversation and pinned
+  ones come first in every group.
+
+| Where | Groups |
+|---|---|
+| Pine app | Drag a conversation onto a group in the side bar, or Move to Group… in its right click; New Group…, Sort by Last Used and Sort by Name in the agent's; Rename… and Remove Group… in the group's ([desktop.md](desktop.md)) |
+| Terminal UI | `/group <name>` puts the conversation into a group (made if there is none), `/group -` takes it out; `/sessions` shows each one's group ([tui.md](tui.md)) |
+| Main agent | `set_conversation` with `group`, `rename_group`, `remove_group`; `conversations` lists them ([setup.md](setup.md#conversations-and-tabs)) |
+| Control API | `GET /agents/<id>/groups`, `POST /agents/<id>/group`, `POST /agents/<id>/groups` ([operations.md](operations.md)) |
 
 ## Branching a conversation
 

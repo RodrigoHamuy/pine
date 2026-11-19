@@ -13,6 +13,14 @@ export interface Conversation {
 	folder?: string;
 	/** The worktree it works in, if it has one: a checkout of its own on a branch pine/<name>. */
 	worktree?: { branch: string; base: string; path: string; repo: string };
+	/** The group of the agent's conversations it is in, if any. */
+	group?: string;
+}
+
+/** An agent's groups of conversations and how its list is sorted. */
+export interface GroupList {
+	order: "recent" | "name";
+	groups: Array<{ name: string; conversations: number }>;
 }
 
 /** A conversation's worktree and where it stands against what it was made from (src/worktrees.ts). */
@@ -107,6 +115,9 @@ export class Client {
 	removeSession = (agent: string, session: string) => this.post<{ removed: boolean; unsubscribed: string[]; sources: string[]; servers: string[] }>(`/agents/${agent}/remove`, { session });
 	renameSession = (agent: string, session: string, to: string) => this.post<{ session: string }>(`/agents/${agent}/rename`, { session, to });
 	pinSession = (agent: string, session: string, pinned: boolean) => this.post<{ pinned: boolean }>(`/agents/${agent}/pin`, { session, pinned });
+	groups = (agent: string) => this.get<GroupList>(`/agents/${agent}/groups`);
+	/** Put a conversation into a group (made if new), or with null take it out. */
+	setGroup = (agent: string, session: string, group: string | null) => this.post<{ session: string; group?: string; moved: string[] }>(`/agents/${agent}/group`, { session, group });
 	folder = (agent: string, session: string) => this.get<{ folder?: string; workspace: string }>(`/agents/${agent}/folder?session=${encodeURIComponent(session)}`);
 	programs = (agent: string, session: string) => this.get<Array<{ id: number; command: string; processes: number; ports: number[]; seconds: number; background?: boolean; output?: string }>>(`/agents/${agent}/programs?session=${encodeURIComponent(session)}`);
 	goal = (agent: string, session: string) => this.get<{ goal?: GoalInfo }>(`/agents/${agent}/goal?session=${encodeURIComponent(session)}`);

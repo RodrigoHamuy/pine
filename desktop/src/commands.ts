@@ -48,6 +48,17 @@ export const COMMANDS: Command[] = [
 	{ name: "close-all", title: "Close all tabs", about: "Close every tab, the agent's main conversation's too; a tab that waits for your answer stays", run: (_a, tab) => store.closeTabs("all", tab) },
 	{ name: "rename", title: "Rename conversation", about: "Another name for this conversation and its tab", hint: "<name>", chat: true, run: (args, tab) => (chat(tab) ? (args.trim() ? store.rename(tab!.agent, tab!.session, args.trim()) : store.askRename(tab!)) : undefined) },
 	{ name: "pin", title: "Pin conversation", about: "Keep this conversation however long it is not used", chat: true, run: (_a, tab) => (chat(tab) ? store.pin(tab!, true) : undefined) },
+	{
+		name: "group", title: "Move conversation to group", about: "Put this conversation, with its branches, into a group of the agent's conversations, or take it out of one", hint: "[name | -]", chat: true,
+		run: (args, tab) => {
+			const t = chat(tab);
+			if (!t) return;
+			const name = args.trim();
+			const now = store.conversations.get(t.agent)?.find((c) => c.session === t.session)?.group;
+			if (!name) return store.askMoveToGroup(t.agent, t.session, now);
+			return store.moveToGroup(t.agent, t.session, name === "-" ? null : name);
+		},
+	},
 	{ name: "unpin", title: "Unpin conversation", about: "Let this conversation go when it has not been used for a while", chat: true, run: (_a, tab) => (chat(tab) ? store.pin(tab!, false) : undefined) },
 	{ name: "reset", title: "Start over", about: "Forget this conversation and start fresh", chat: true, run: menu("reset") },
 	{ name: "undo", title: "Take back last message", about: "Its files are restored, the conversation forgets it, its text returns to the input", keys: "⇧⌘Z", chat: true, run: menu("undo") },

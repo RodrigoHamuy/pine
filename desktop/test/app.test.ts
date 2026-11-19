@@ -1481,9 +1481,9 @@ test("a right click on an agent renames it in place, colours it, and offers to r
 		throw new Error(`no menu for ${agent}`);
 	};
 	// Folding is a click on the line and no menu item; the main agent has nothing to remove it with.
-	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "Rename…", "Colour…", "Agent settings…"]);
+	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Colour…", "Agent settings…"]);
 	// Rename turns its name in the side bar into a field: Escape keeps the name, Enter gives it the new one, and everything follows it.
-	assert.deepEqual(await shown("spare", "rename"), ["New conversation with spare", "Open a folder with spare…", "Rename…", "Colour…", "Agent settings…", "Remove spare…"]);
+	assert.deepEqual(await shown("spare", "rename"), ["New conversation with spare", "Open a folder with spare…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Colour…", "Agent settings…", "Remove spare…"]);
 	await page.getByLabel("New name for spare").press("Escape");
 	await sees("[data-slot=agent-label] >> text=spare");
 	await shown("spare", "rename");
@@ -1498,7 +1498,7 @@ test("a right click on an agent renames it in place, colours it, and offers to r
 	for (let i = 0; i < 100 && !JSON.parse(fs.readFileSync(path.join(home, "agents", "spare-hands", "agent.json"), "utf8")).color; i++) await new Promise((r) => setTimeout(r, 30));
 	assert.match(JSON.parse(fs.readFileSync(path.join(home, "agents", "spare-hands", "agent.json"), "utf8")).color, /^#[0-9a-f]{6}$/);
 	await page.keyboard.press("Escape");
-	assert.deepEqual(await shown("spare-hands", "remove"), ["New conversation with spare-hands", "Open a folder with spare-hands…", "Rename…", "Colour…", "Agent settings…", "Remove spare-hands…"]);
+	assert.deepEqual(await shown("spare-hands", "remove"), ["New conversation with spare-hands", "Open a folder with spare-hands…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Colour…", "Agent settings…", "Remove spare-hands…"]);
 	// It asks first, and how: nothing is removed by the menu alone.
 	// It is an alert dialog: it does not go away with a stray click beside it.
 	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the agent spare-hands?");
@@ -1512,6 +1512,101 @@ test("a right click on an agent renames it in place, colours it, and offers to r
 	// Asked for the main agent all the same (the palette, another road), the app says no and asks the daemon for nothing.
 	await page.evaluate(() => (window as any).pine.call("POST", "/agents/main/erase", { agent: "main", keepFiles: false })).then((r: any) => assert.equal(r.ok, false));
 	assert.ok(fs.existsSync(path.join(home, "agents", "main", "agent.json")));
+});
+
+test("conversations are kept in groups: one made from the agent's menu is filled by dragging and from the palette, sorted, renamed, and removed with what is in it", async () => {
+	for (const session of ["okapi-api", "okapi-web", "llama"]) assert.ok((await api("POST", "/agents/scout/prompt", { prompt: `work on ${session}`, session })).ok);
+	assert.ok((await api("POST", "/agents/scout/branch", { session: "okapi-api", to: "okapi-try" })).ok);
+	const scout = page.locator("[data-slot=collapsible]:has([data-slot=agent-label])", { has: page.locator("[data-slot=agent-label] > :first-child", { hasText: /^scout$/ }) });
+	const row = (name: string) => scout.locator("[role=option]", { hasText: new RegExp(`${name}$`) });
+	const group = (name: string) => scout.locator("[data-slot=conversation-group]", { has: page.locator("[data-slot=group-label]", { hasText: new RegExp(`^${name}$`) }) });
+	const groupOf = async (session: string) => ((await api("GET", "/agents/scout/sessions")).data as any[]).find((c) => c.session === session)?.group;
+	// The menu is the system's: what it shows is noted, and the test says what is picked.
+	await app.evaluate(({ ipcMain }: any) => {
+		const g = globalThis as any;
+		g.menus = [];
+		ipcMain.removeHandler("pine:context-menu");
+		ipcMain.handle("pine:context-menu", (_e: unknown, items: Array<{ id: string; label: string; separator?: boolean; checked?: boolean }>) => {
+			g.menus.push(items.filter((i) => !i.separator).map((i) => `${i.label}${i.checked ? " ✓" : ""}`));
+			return g.pick;
+		});
+	});
+	const choose = async (target: any, pick: string): Promise<string[]> => {
+		const before = await app.evaluate((_e: unknown, p: string) => (((globalThis as any).pick = p), (globalThis as any).menus.length), pick);
+		await target.click({ button: "right" });
+		for (let i = 0; i < 100; i++) {
+			const menus = await app.evaluate(() => (globalThis as any).menus);
+			if (menus.length > before) return menus.at(-1);
+			await new Promise((r) => setTimeout(r, 30));
+		}
+		throw new Error(`no menu for ${pick}`);
+	};
+	const agentLine = page.locator("[data-slot=sidebar-menu-item]:has([data-slot=agent-label])", { has: page.locator("[data-slot=agent-label] > :first-child", { hasText: /^scout$/ }) });
+
+	// A group is made from the agent's menu, empty, with a name the owner types.
+	assert.ok((await choose(agentLine, "group")).includes("Sort by Last Used ✓"), "the list is sorted by when a conversation was last used, as it was");
+	await page.fill("[data-slot=dialog-content] input[placeholder='Its name']", "Okapi");
+	await page.keyboard.press("Enter");
+	await group("Okapi").waitFor();
+	// (A branch made through the control API is in the list the side bar asked for after that.)
+	await sees("[role=option] >> text=okapi-try");
+	assert.equal(await group("Okapi").locator("[role=option]").count(), 0);
+
+	// A conversation dragged onto the group goes into it, with its branch; a branch is not dragged by itself.
+	assert.equal(await row("okapi-try").locator("xpath=ancestor::li[1]").getAttribute("draggable"), "false");
+	await row("okapi-api").dragTo(group("Okapi").locator("[data-slot=group-label]"));
+	await group("Okapi").locator("[role=option]", { hasText: /okapi-try$/ }).waitFor();
+	assert.deepEqual([await groupOf("okapi-api"), await groupOf("okapi-try")], ["Okapi", "Okapi"]);
+	// In the group, a conversation's name stands one step further in than outside it.
+	const left = (l: any) => l.locator(":scope > :last-child").evaluate((e: Element) => e.getBoundingClientRect().left);
+	assert.ok((await left(group("Okapi").locator("[role=option]", { hasText: /okapi-api$/ }))) > (await left(row("llama"))));
+
+	// With the keyboard: the palette's command moves the conversation in front into a group it picks.
+	await row("okapi-web").click();
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=okapi-web");
+	await menu("palette");
+	await page.keyboard.type("Move conversation to group");
+	await page.keyboard.press("Enter");
+	await sees("[data-slot=dialog-content] [role=option] >> text=Okapi");
+	await page.keyboard.type("Okapi");
+	await page.keyboard.press("Enter");
+	await group("Okapi").locator("[role=option]", { hasText: /okapi-web$/ }).waitFor();
+	assert.equal(await groupOf("okapi-web"), "Okapi");
+
+	// Dragged onto the agent's line, a conversation leaves its group; a move made by another hand (here the control API) is followed.
+	await group("Okapi").locator("[role=option]", { hasText: /okapi-web$/ }).dragTo(agentLine);
+	await page.waitForFunction(() => ![...document.querySelectorAll("[data-slot=conversation-group] [role=option]")].some((e) => /okapi-web$/.test(e.textContent ?? "")));
+	assert.equal(await groupOf("okapi-web"), undefined);
+	assert.ok((await api("POST", "/agents/scout/group", { session: "llama", group: "Okapi" })).ok);
+	await group("Okapi").locator("[role=option]", { hasText: /llama$/ }).waitFor();
+
+	// Sorted by name, from the agent's menu; renamed from the group's.
+	await choose(agentLine, "name");
+	for (let i = 0; i < 100 && (await api("GET", "/agents/scout/groups")).data.order !== "name"; i++) await new Promise((r) => setTimeout(r, 30));
+	assert.equal((await api("GET", "/agents/scout/groups")).data.order, "name");
+	await page.waitForFunction(() => {
+		const names = [...document.querySelectorAll("[data-slot=conversation-group] [role=option] > :last-child")].map((e) => e.textContent ?? "");
+		return names.join(",") === "llama,okapi-api,okapi-try";
+	});
+	assert.deepEqual(await choose(group("Okapi").locator("[data-slot=group-label]"), "rename"), ["New Conversation in Okapi", "Rename…", "Remove Group…"]);
+	await page.fill("[data-slot=dialog-content] input[placeholder='The new name']", "Okapi 2026");
+	await page.keyboard.press("Enter");
+	await group("Okapi 2026").locator("[role=option]", { hasText: /okapi-try$/ }).waitFor();
+	await shot("16-groups");
+
+	// Removing the group asks first, and takes its conversations with it.
+	await choose(group("Okapi 2026").locator("[data-slot=group-label]"), "remove");
+	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the group Okapi 2026 and its 3 conversations for good?");
+	await page.click("[data-slot=command-item]:has-text('Remove them for good')");
+	await sees("[data-slot=toast] >> text=Removed the group Okapi 2026 with 3 conversations.");
+	await group("Okapi 2026").waitFor({ state: "detached" });
+	assert.deepEqual([await row("okapi-api").count(), await row("llama").count(), await row("okapi-web").count()], [0, 0, 1], "what was in it is gone, and what was taken out before stays");
+	await choose(agentLine, "recent");
+	for (let i = 0; i < 100 && (await api("GET", "/agents/scout/groups")).data.order !== "recent"; i++) await new Promise((r) => setTimeout(r, 30));
+	// As it was before: the tab this test opened closed, its conversation gone.
+	await page.click("[data-slot=tab]:has([data-slot=tab-name]:has-text('okapi-web')) button[aria-label='Close this tab']");
+	await page.waitForSelector("[data-slot=tab]:has([data-slot=tab-name]:has-text('okapi-web'))", { state: "detached" });
+	assert.ok((await api("POST", "/agents/scout/remove", { session: "okapi-web" })).ok);
 });
 
 test("a conversation is opened from the palette with the keyboard alone", async () => {
