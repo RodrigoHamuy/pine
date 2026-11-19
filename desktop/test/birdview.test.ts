@@ -58,6 +58,15 @@ test("an agent works on started, its conversation appears, and fades after done"
 	assert.equal(satellite(view(bv, T0 + 5000 + 10 * 60_000), "conv:kevin/main"), undefined, "and is gone in the end");
 });
 
+test("an agent counts its conversations that are not drawn, for a folded \"+N idle\"", () => {
+	const bv = birdview();
+	applySnapshot(bv, { ...calm, conversations: { kevin: ["main", "notes", "mail~u"].map((session) => ({ session, tasks: 1, last: T0 - 60_000, pinned: false, open: true })) } }, T0);
+	applyEvents(bv, [started("kevin", "notes", 1, T0 + 100)]);
+	const m = view(bv, T0 + 200);
+	assert.equal(agentOf(m, "kevin").idle, 2);
+	assert.equal(agentOf(m, "ana").idle, 0);
+});
+
 test("a failed task is told apart from a finished one", () => {
 	const bv = birdview();
 	applySnapshot(bv, calm, T0);

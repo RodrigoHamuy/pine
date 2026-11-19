@@ -37,6 +37,8 @@ export interface AgentNode {
 	tool?: string;
 	/** One of its conversations has read outside content. */
 	outside: boolean;
+	/** How many of its conversations are not drawn, for a folded "+N idle". */
+	idle: number;
 }
 
 /** A conversation, a sub-agent or a delegated task, drawn beside its agent while it works or waits, and fading after. */
@@ -445,13 +447,17 @@ export function view(bv: Birdview, now: number): BirdviewModel {
 	}
 	const satellites: Satellite[] = [];
 	const outsideAgents = new Set<string>();
+	const idle = new Map<string, number>();
 	for (const [key, c] of bv.convs) {
 		let state = convState.get(key) ?? "idle";
 		if (state === "idle" && c.busy) state = "working";
 		if (state !== "idle") agentState.set(c.agent, stronger(agentState.get(c.agent) ?? "idle", state));
 		if (c.outside) outsideAgents.add(c.agent);
 		const opacity = state === "idle" ? fading(c.endedAt) : 1;
-		if (opacity <= 0) continue;
+		if (opacity <= 0) {
+			idle.set(c.agent, (idle.get(c.agent) ?? 0) + 1);
+			continue;
+		}
 		satellites.push({ id: convId(c.agent, c.session), kind: "conversation", agent: c.agent, session: c.session, state, tool: convTool.get(key), ended: state === "idle" ? c.ended : undefined, untrusted: isUntrustedSession(c.session), outside: c.outside, opacity });
 	}
 	const links: Link[] = [];
@@ -465,7 +471,7 @@ export function view(bv: Birdview, now: number): BirdviewModel {
 		const parent = t.parent === undefined ? undefined : bv.tasks.get(t.parent);
 		if (parent) links.push({ id: `${t.kind === "delegate" ? "delegation" : "subagent"}:${t.id}`, kind: t.kind === "delegate" ? "delegation" : "subagent", from: nodeOfTask(parent), to: `task:${t.id}`, opacity });
 	}
-	const agents: AgentNode[] = bv.agents.map((a) => ({ id: a.id, main: a.main, state: agentState.get(a.id) ?? "idle", tool: agentTool.get(a.id)?.name, outside: outsideAgents.has(a.id) }));
+	const agents: AgentNode[] = bv.agents.map((a) => ({ id: a.id, main: a.main, state: agentState.get(a.id) ?? "idle", tool: agentTool.get(a.id)?.name, outside: outsideAgents.has(a.id), idle: idle.get(a.id) ?? 0 }));
 	const sources: SourceNode[] = bv.sources.map((s) => ({ id: `source:${sourceKey(s)}`, name: s.name, scope: s.scope, type: s.type, running: s.running, trust: s.trust }));
 	const schedules: ScheduleNode[] = bv.schedules.map((s) => ({ id: `schedule:${sourceKey(s)}`, name: s.name, scope: s.scope, when: s.when, next: s.next }));
 	const lasting: Link[] = [];
