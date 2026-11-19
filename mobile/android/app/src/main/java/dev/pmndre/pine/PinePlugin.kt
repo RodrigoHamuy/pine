@@ -9,7 +9,10 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
+import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.webkit.GeolocationPermissions
@@ -18,6 +21,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import androidx.activity.OnBackPressedCallback
+import androidx.core.view.WindowCompat
 import com.getcapacitor.Bridge
 import com.getcapacitor.BridgeWebChromeClient
 import com.getcapacitor.BridgeWebViewClient
@@ -52,6 +56,9 @@ class PinePlugin : Plugin() {
 	private lateinit var device: DeviceKey
 	// Calls wait for the network: never on Capacitor's own thread, which every other call waits behind.
 	private val work = Executors.newCachedThreadPool()
+	// The system bars' colour and whether the page's theme is dark: pmndre's (index.css) until the page says.
+	private var barColour = Color.parseColor("#1b1e28")
+	private var barsDark = true
 
 	override fun load() {
 		// Android carries a cut-down BouncyCastle under the name sshj asks for; the full one takes its place.
@@ -67,6 +74,8 @@ class PinePlugin : Plugin() {
 			override fun connection(up: Boolean) = notifyListeners("connection", JSObject().put("connected", up))
 		})
 		harden(bridge)
+		// Posted: Capacitor's SystemBars paints the window's own background when it loads, before this runs.
+		activity.window.decorView.post { paintBars() }
 		// The back button closes what the page has open, else leaves: the page decides (the bridge's "back").
 		activity.onBackPressedDispatcher.addCallback(activity, object : OnBackPressedCallback(true) {
 			override fun handleOnBackPressed() {
@@ -217,6 +226,48 @@ class PinePlugin : Plugin() {
 		call.resolve()
 	}
 
+	// The page's theme, reported by the bridge: a #rrggbb colour and a boolean, and nothing else is taken.
+	@PluginMethod
+	fun systemBars(call: PluginCall) {
+		val colour = call.getString("color") ?: ""
+		val dark = call.data.opt("dark")
+		if (!BAR_COLOUR.matches(colour) || dark !is Boolean) return call.reject("The system bars take a colour as #rrggbb and whether the theme is dark.")
+		activity.runOnUiThread {
+			barColour = Color.parseColor(colour)
+			barsDark = dark
+			paintBars()
+			call.resolve()
+		}
+	}
+
+	/**
+	 * With the WebView padded by the system bars (index.html has no viewport-fit=cover), what shows
+	 * under them is the window's own background: it takes the page's colour, and the icons are light
+	 * on a dark theme. Before Android 15 the bars have colours of their own, which take it too.
+	 */
+	@Suppress("DEPRECATION")
+	private fun paintBars() {
+		val window = activity.window
+		window.decorView.setBackgroundColor(barColour)
+		if (Build.VERSION.SDK_INT < Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+			window.statusBarColor = barColour
+			window.navigationBarColor = barColour
+		}
+		// No grey veil over the navigation bar with its three buttons: the page's colour, as it is.
+		if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) window.isNavigationBarContrastEnforced = false
+		WindowCompat.getInsetsController(window, window.decorView).apply {
+			isAppearanceLightStatusBars = !barsDark
+			isAppearanceLightNavigationBars = !barsDark
+		}
+	}
+
+	// SystemBars paints the window's background and icons for the system's theme again on a rotation
+	// or a change of the system's theme: the page's are put back after it.
+	override fun handleOnConfigurationChanged(newConfig: Configuration) {
+		super.handleOnConfigurationChanged(newConfig)
+		activity.window.decorView.post { paintBars() }
+	}
+
 	@PluginMethod
 	fun leave(call: PluginCall) {
 		activity.moveTaskToBack(true)
@@ -257,5 +308,6 @@ class PinePlugin : Plugin() {
 
 	private companion object {
 		const val KEY_ALIAS = "pine-vault"
+		val BAR_COLOUR = Regex("^#[0-9a-fA-F]{6}$")
 	}
 }

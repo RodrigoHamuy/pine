@@ -151,7 +151,7 @@ test("machines: use, add and forget go to the plugin, and the prefs come back wi
 	const forgotten = await b.forgetHost("me@box");
 	assert.deepEqual(forgotten, { keepRunning: false, hosts: ["pi"], use: "pi", agentAccent: false, notify: false, updates: false });
 	assert.deepEqual(
-		calls.filter(([m]) => m !== "state" && m !== "loadPrefs"),
+		calls.filter(([m]) => m !== "state" && m !== "loadPrefs" && m !== "systemBars"),
 		[
 			["addHost", { host: "pi" }],
 			["use", { host: "pi" }],
@@ -296,6 +296,22 @@ test("prefs: each value checked as the desktop's main process checks it, then st
 
 	const reset = await b.prefs({ look: undefined });
 	assert.equal(reset.look, undefined, "no theme is pine's default: none stored");
+});
+
+test("systemBars: the bars take the colour and kind of the theme the page draws, pmndre's with none, and a plugin that cannot paint them changes nothing", async () => {
+	const light = { id: "paper", name: "Paper", kind: "light", colors: { bg: "#FAFAFAcc", text: "#111111" } } as const;
+	const { plugin, calls } = fakePlugin({ systemBars: () => Promise.reject(new Error("no window")) }, { hosts: [], prefs: { agentAccent: true, look: light } });
+	const b = mobileBridge(plugin);
+	const bars = () => calls.filter(([m]) => m === "systemBars").map(([, o]) => o);
+	await b.state();
+	assert.deepEqual(bars(), [{ color: "#fafafa", dark: false }], "the stored theme at the start, as #rrggbb");
+	await b.prefs({ look: { id: "night", name: "Night", kind: "dark", colors: { bg: "#000000", text: "#ffffff" } } });
+	await b.prefs({ look: "not a theme" });
+	await b.prefs({ notify: true });
+	assert.deepEqual(bars().slice(1), [
+		{ color: "#000000", dark: true },
+		{ color: "#1b1e28", dark: true },
+	], "a new theme, then pmndre's for one that is not a theme; a change without a theme leaves the bars");
 });
 
 test("saveText: the text goes to the share sheet under its name", async () => {

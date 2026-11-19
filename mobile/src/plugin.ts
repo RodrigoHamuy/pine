@@ -82,6 +82,13 @@ export interface PinePlugin {
 	share(options: { title: string; text: string }): Promise<void>;
 	/** Put a text on the phone's clipboard (the phone's key). */
 	copy(options: { text: string }): Promise<void>;
+	/**
+	 * Paint the status and navigation bars in the page's background colour, with light icons on a
+	 * dark theme and dark ones on a light theme (Electron's `nativeTheme` and window background in
+	 * main.ts). The plugin takes a #rrggbb colour and a boolean, nothing else, and keeps them across
+	 * a rotation or a change of the system's own theme.
+	 */
+	systemBars(options: { color: string; dark: boolean }): Promise<void>;
 	/** Leave the app (the back button with nothing open in the page): it goes to the back, as Android's own apps do. */
 	leave(): Promise<void>;
 	// The phone's key and the machines' host keys.

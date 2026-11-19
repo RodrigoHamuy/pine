@@ -4,10 +4,13 @@
 // other machines. What only the desktop app can do refuses or does nothing, as the preview's
 // stand-in does (desktop/src/preview-bridge.ts).
 import type { AppState, PageBridge, Prefs } from "../../desktop/src/bridge.ts";
-import { cleanLook } from "../../desktop/src/theme.ts";
+import { cleanLook, type Look } from "../../desktop/src/theme.ts";
 import { MEDIA_BASE, type PagePrefs, type PinePlugin } from "./plugin.ts";
 
 const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false, agentAccent: true };
+
+/** pmndre's page colour (index.css), which the page draws with no theme: the system bars' until one is known. */
+const PMNDRE_BG = "#1b1e28";
 
 /** What is open over the page: a sheet, a dialog, a menu (Base UI's popups, mounted only while open; a listbox is not one: the side bar's list of agents is always there). */
 const OPEN = '[role="dialog"], [role="alertdialog"], [role="menu"]';
@@ -26,6 +29,11 @@ function back(leave: () => void): void {
 export function mobileBridge(plugin: PinePlugin): PageBridge {
 	// The page's preferences and the machines, as the plugin last gave them.
 	let prefs: Prefs = { ...DEFAULTS, hosts: [] };
+
+	// The system bars take the colour and the kind of the theme the page draws, as Electron's window
+	// does (main.ts): no white bands around a dark page. A plugin that cannot paint them changes nothing else.
+	const bars = (look: Look | undefined) =>
+		void plugin.systemBars({ color: (look?.colors.bg ?? PMNDRE_BG).slice(0, 7).toLowerCase(), dark: (look?.kind ?? "dark") === "dark" }).catch(() => {});
 
 	const load = async () => {
 		const stored = await plugin.loadPrefs();
@@ -74,6 +82,7 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 		onTermRun: never,
 		state: async (): Promise<AppState> => {
 			const [s] = await Promise.all([plugin.state(), load()]);
+			bars(prefs.look);
 			return { state: s.state, connected: s.connected, home: s.state.status === "ready" ? s.state.home : undefined, prefs: { ...prefs }, platform: "android", focused: true, updates: false, versions: { app: s.version, electron: "none" }, local: false };
 		},
 		// As Electron's `send`, nothing to wait for: a plugin that cannot start says so as a connection that failed.
@@ -95,6 +104,7 @@ export function mobileBridge(plugin: PinePlugin): PageBridge {
 			if (look) next.look = look;
 			await plugin.savePrefs({ prefs: next });
 			prefs = { ...next, hosts: prefs.hosts, ...(prefs.use ? { use: prefs.use } : {}) };
+			if ("look" in change) bars(look);
 			return { ...prefs };
 		},
 		call: (method: "GET" | "POST", url: string, body?: unknown) => plugin.call({ method, url, body }),

@@ -23,7 +23,9 @@
 //     the web opens outside the app;
 //   - media are answered by the plugin.
 // Then the app's life: the back button closes the open sheet, then leaves the app; the app comes back
-// from the background (after back, and after HOME) still connected to the machine.
+// from the background (after back, and after HOME) still connected to the machine. Last, the system
+// bars: the theme's colour under them, in pine's dark theme and in a light one (bars-dark.png and
+// bars-light.png beside the screenshot).
 // An emulator it started is stopped at the end, and so are its servers.
 //
 // Needs ANDROID_HOME (default ~/Library/Android/sdk) with an emulator and a system image, and a
@@ -327,6 +329,41 @@ try {
 	await waitFor("the app in front and connected after HOME", (ns) => front() === APP && connected(ns), 60);
 	tap(await waitFor("the side bar button", sidebarButton));
 	await waitFor("the agents after resume", agentsShown);
+	// ---- the system bars: the theme's colour, light icons on a dark theme -----------------------------
+	step("the status and navigation bars take the theme's colour, in a dark theme and in a light one");
+	/** The colour at a point of the screen, as #rrggbb: screencap's raw RGBA follows a header of its own. */
+	const screenColours = () => {
+		const raw = execFileSync(ADB, ["exec-out", "screencap"], { env, maxBuffer: 64 * 1024 * 1024 });
+		const w = raw.readUInt32LE(0);
+		const h = raw.readUInt32LE(4);
+		const head = raw.length - w * h * 4;
+		const at = (x, y) => `#${[0, 1, 2].map((i) => raw[head + (y * w + x) * 4 + i].toString(16).padStart(2, "0")).join("")}`;
+		// Near the left edge, clear of the clock and the icons: the bar's own colour.
+		return { status: at(4, 4), navigation: at(4, h - 4) };
+	};
+	const themeBg = async (id) => {
+		const r = await evaluate("window.pine.call('GET', '/themes')");
+		const bg = r?.data?.themes?.find((t) => t.id === id)?.colors?.bg;
+		if (!bg) throw new Error(`the machine's pine has no theme ${id}: ${JSON.stringify(r?.data?.themes?.map((t) => t.id))}`);
+		return bg.slice(0, 7).toLowerCase();
+	};
+	const barsIn = async (id, file) => {
+		const want = await themeBg(id);
+		let got;
+		await waitFor(`the bars in ${want} (${id})`, () => ((got = screenColours()), got.status === want && got.navigation === want) || undefined, 30);
+		await sleep(500);
+		fs.writeFileSync(path.join(path.dirname(shot), file), execFileSync(ADB, ["exec-out", "screencap", "-p"], { env, maxBuffer: 64 * 1024 * 1024 }));
+		step(`screenshot: ${path.join(path.dirname(shot), file)}`);
+	};
+	await barsIn((await evaluate("window.pine.call('GET', '/themes')")).data.theme, "bars-dark.png");
+	const light = "github-light";
+	const set = await evaluate(`window.pine.call('POST', '/settings', { key: 'ui.theme', value: '${light}' })`);
+	if (!set?.ok) throw new Error(`the theme could not be set: ${JSON.stringify(set)}`);
+	// The page draws a theme it is told at its start: started again, it asks pine.
+	await evaluate("location.reload(); 1");
+	await waitFor("the page connected again", (ns) => front() === APP && connected(ns), 60);
+	await barsIn(light, "bars-light.png");
+
 	// A dialog of this app's that came and went between two looks is still in the system's log.
 	const anr = adb("logcat", "-d", "-b", "main,system").split("\n").find((l) => l.includes(`ANR in ${APP}`));
 	if (anr) throw new Error(`the app was not responding (ANR) during the run: ${anr.trim()}`);
