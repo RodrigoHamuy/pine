@@ -20,6 +20,9 @@ to change the code.
 | `npm run dev:preview` (in `desktop/`) | The app's page in an ordinary browser on a throwaway pine; `dev:preview:home` on `~/.pine`, whose daemon it never stops. Each checkout has ports of its own, from its path (`desktop/scripts/launch-json.mjs`), and `.claude/launch.json` is written with them by `npm install` in `desktop/` (it is not in git). After pulling, or when the preview pane lists no `desktop-preview`, run `node desktop/scripts/launch-json.mjs` (or `npm install` in `desktop/`). A preview and `npm run dev` end with whatever started them (`desktop/scripts/leash.mjs`). |
 | `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark at a phone's width (360) and the window's (1280) through its modes (`desktop/.storybook/modes.ts`), so no dark or phone twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts` or `desktop/electron/service.ts`, and the smoke test also after a change to the page's markup that it finds the page by (`data-slot` names): no workflow runs it. |
+| `npm test`, `npm run check` (in `mobile/`) | The Android app's bridge and build under `node:test`, and its type check against the desktop page's `Bridge`. `npm install` in `mobile/` once. Run both when you change `mobile/src`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. The `android` job of the Release workflow runs both before it builds the APK. |
+| `npm run test:core` (in `mobile/`) | The native plugin's Kotlin core on the JVM: an SSH server in the test (Apache MINA sshd) and a stand-in daemon. Run it when you change `mobile/core/` or `src/remote.ts`. |
+| `npm run apk`, `npm run apk:release`, `npm run smoke` (in `mobile/`) | A debug APK; a release APK (signed when `ANDROID_KEYSTORE_FILE` and the three other variables of the release job name a key, versioned by `PINE_VERSION` and `PINE_VERSION_CODE`); and the app from end to end on an emulator without a window, against a test SSH server of its own running the real `pine service`. The smoke test is the test of the WebView's hardening in `PinePlugin.kt` and of the back button and the app's return from the background: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. The Gradle commands need the Android SDK (`ANDROID_HOME`, default `~/Library/Android/sdk`) and a JDK of 21 or later: `JAVA_HOME`, default Android Studio's (`/Applications/Android Studio.app/Contents/jbr/Contents/Home`), since a Mac has no `java` on its PATH by default. |
 
 There is no build step. Node runs the TypeScript directly (the compiled parts, pine's Swift
 helpers such as `mcp/computer.swift`, are built by pine on the Mac it runs on, on first use;
@@ -145,6 +148,18 @@ desktop/            the desktop app (Electron; a package of its own, not part of
                     docs/references/desktop.md describes it and its layout.
                     shadcn's agent skill lies in desktop/.agents/skills (desktop/.claude/skills links to it, skills-lock.json pins it):
                     read it before you change the page; `npx skills update` in desktop/ brings it up to date
+mobile/             the Android app (Capacitor; a package of its own, not part of what goes to npm): the desktop
+                    page on a phone, for the pine of another machine over SSH, no daemon on the phone. src/ is the
+                    mobile bridge (`mobile-bridge.ts`: returns the `Bridge` type, forwards to the native plugin),
+                    the plugin's contract (`plugin.ts`) and the entry that installs the bridge before the desktop
+                    page (`install.ts`, `main.ts`); vite.config.ts builds desktop/src for it. core/ is the native
+                    plugin's Kotlin core, with no Android in it (a Gradle build of its own, tested on the JVM):
+                    SSH with sshj, `pine service` run as `remoteCommand()` of src/remote.ts runs it, calls to the
+                    control API and media under the desktop's rules, the event stream, the phone's key and host keys.
+                    android/ is the Capacitor app: `PinePlugin.kt` joins the core to the page (the Android
+                    Keystore, the WebView's media, links, the back button). scripts/ runs Gradle (`gradle.mjs`),
+                    derives the release's versionCode (`version-code.ts`) and drives the emulator (`smoke.mjs`).
+                    docs/references/mobile.md describes it; docs/adr/0001-mobile-app.md says why it is so
 ```
 
 ## What agents know about pine
@@ -516,6 +531,20 @@ These are invariants. A change that breaks one needs a test that shows why it is
    and sends the same policy. The page's stand-in for the bridge (`desktop/src/preview-bridge.ts`)
    exists only in that dev mode and in no build; `desktop/test/preview.test.ts` fails without
    the check of the origin and the content type, and when the stand-in reaches a build.
+   The Android app (`mobile/`) is the other holder of the token, and is held to the same: its
+   native plugin (`mobile/android/.../PinePlugin.kt` on `mobile/core`) plays `main.ts`'s part.
+   It makes every call for the page through a channel of its SSH connection (no port on the
+   phone, where any app could reach it), serves the page only pictures, video and sound under
+   `MEDIA`'s rules (`mobile/core/.../Media.kt`), opens only `http(s)` addresses outside, lets
+   the page navigate nowhere, open no window and have no permission, and the page there carries
+   the same policy. The mobile bridge gives the page three things the preload does not, and
+   only these: `local: false` in `state()` (no machine of its own), `mediaBase` (the address
+   the plugin answers media at) and `deviceKey` (the phone's public SSH key). A host key is
+   trusted only as the owner confirmed it in the page, exactly the fingerprint shown, and a
+   changed one is refused. `mobile/test/build.test.ts` fails when a build carries the other's
+   stand-in. What the WebView is kept from (permissions, `onCreateWindow`, a second window, file
+   access, navigation) no suite of `npm test` reaches: `npm run smoke` in `mobile/` proves each
+   as a named check, and is run before a release that changes `mobile/` or upgrades Capacitor.
 11. **Only the owner opens a folder for a conversation, and looking at one runs nothing.**
    `setFolder` in `src/agents.ts` is reached from the control API only; there is no tool for it.
    It refuses pine's home, pine's code and other agents' workspaces in either direction, and a
@@ -654,6 +683,18 @@ takes. The app of a release can be built again by hand, without publishing anyth
 the workflow as it is on `main` now, which is the way to repair a release whose `app` job
 failed. The helpers need the macOS 26 SDK, so the job selects the newest Xcode on the runner.
 
+A release from `main` gets the Android app too (the job `android` in `release.yml`, on the
+same skeleton as `app`, on Linux): `npm run apk:release` in `mobile/`, signed with the release
+key, `versionName` the release's version and `versionCode` major·1 000 000 + minor·1 000 +
+patch (`mobile/scripts/version-code.ts`, tested in `mobile/test/version.test.ts`), checked with
+`apksigner verify`, uploaded as `Pine-<version>.apk`. The key takes four secrets in the
+environment `release`: `ANDROID_KEYSTORE` (the keystore file, as base64), `ANDROID_KEYSTORE_PASSWORD`,
+`ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD`. Without any of them the job builds nothing and
+says so; with only some it fails. The keystore file is removed whatever happens, and none is
+ever committed. Keep that key: Android installs an update only over an app signed with the
+same one. Before the APK is built the job runs `npm run check` and `npm test` in `mobile/`. The
+smoke test is not run there (`npm run smoke`, on a computer of your own, with an emulator).
+
 Publishing needs no stored secret: on npmjs.com the package names this repository and
 `release.yml` as a trusted publisher. A repository secret `NPM_TOKEN` is used instead if one exists.
 
@@ -737,6 +778,23 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
 - `pine` for a terminal (`desktop/electron/command.ts`) is tested without a window
   (`desktop/test/command.test.ts`), on folders of the test's own as the PATH and the home:
   no test writes into a folder of the real PATH, and none runs what asks for a password.
+- The Android app has its own suites in `mobile/`, not run by `npm test` at the root. `npm run
+  check` and `npm test` there are run by the `android` job of the Release workflow before it
+  builds the APK; `npm run test:core` and `npm run smoke` by no workflow. `npm test` there: the mobile bridge with a fake native plugin in place of
+  Capacitor's (`test/bridge.test.ts`), Capacitor's configuration (`test/config.test.ts`), both
+  builds of the page, each without the other's stand-in (`test/build.test.ts`), and the
+  release's versionCode (`test/version.test.ts`). `npm run test:core`: the Kotlin core on the
+  JVM (JUnit), against an SSH server in the test (Apache MINA sshd) whose exec handler checks the
+  command and a stand-in daemon (a local HTTP server); its cases mirror `test/remote.test.ts`
+  and `desktop/test/daemon.test.ts`. One root test, `test/mobile-remote.test.ts`, fails when the
+  command the core runs over SSH differs from `remoteCommand()`. `npm run smoke` is by hand:
+  an emulator without a window, a test SSH server on this computer (`SmokeMachine.kt`) running
+  the real `pine service` on a home of its own with the scripted model server. It is the one
+  test of the WebView's hardening in `PinePlugin.kt` (permission denial, `onCreateWindow`, no
+  second window, no file access, the navigation rules), each a named check that fails the run,
+  and of the back button (closes the open sheet, then leaves) and the return from the
+  background (still connected after back and after HOME). Run it before a release that changes
+  `mobile/` or upgrades Capacitor.
 - A new security property needs a test that fails without the code that provides it.
 
 ## Style

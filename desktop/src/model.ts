@@ -214,6 +214,8 @@ export class Store extends Model {
 	themes: ThemeEntry[] = [];
 	theme = "pmndre";
 	platform = "darwin";
+	/** Whether there is a "this computer" whose pine the app can use: not under a bridge that only reaches other machines (`AppState.local`). */
+	local = true;
 	focused = true;
 	versions = { app: "", electron: "" };
 	/** Whether this app asks for a newer one at all: an app from a checkout is no release and does not. */
@@ -348,6 +350,7 @@ export class Store extends Model {
 		// The theme the window had last, until pine says which one is in force.
 		applyLook(cleanLook(first.prefs.look));
 		this.platform = first.platform;
+		this.local = first.local !== false;
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;
@@ -509,9 +512,26 @@ export class Store extends Model {
 		return s.status === "ready" ? s.label : s.host;
 	}
 
+	/**
+	 * The host key the connection stopped at and nobody has trusted yet (never one that changed), when
+	 * the bridge keeps host keys of its own (the mobile app's): the fingerprint the page shows and offers to trust.
+	 */
+	get keyToTrust(): { host: string; fingerprint: string } | undefined {
+		const s = this.service;
+		if (s.status !== "error" || !s.host || !s.fingerprint || s.changed !== false || typeof bridge.trustHostKey !== "function") return undefined;
+		return { host: s.host, fingerprint: s.fingerprint };
+	}
+
+	/** The owner's yes to the host key the page showed: exactly that fingerprint, which the bridge then connects with. */
+	async trustHostKey(key: { host: string; fingerprint: string }): Promise<void> {
+		await this.attempt(() => bridge.trustHostKey!(key.host, key.fingerprint));
+	}
+
 	/** Use the pine of a machine of the list, or with none this computer's: the window shows that pine's agents and its own tabs. */
 	async useMachine(host?: string): Promise<void> {
 		if (host === this.service.host && this.service.status === "ready") return;
+		// No "this computer" to use: the bridge is never asked for it.
+		if (!host && !this.local) return;
 		await this.attempt(() => bridge.use(host));
 	}
 

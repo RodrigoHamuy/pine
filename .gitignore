@@ -19,6 +19,8 @@ baseline/results/*.log
 
 # Build and tool output
 dist/
+.gradle/
+.kotlin/
 coverage/
 *.tgz
 *.tsbuildinfo

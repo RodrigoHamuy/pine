@@ -2016,12 +2016,41 @@ export function ThemePicker() {
 
 // ---- environments: the pine of this computer, or of another machine ------------------------------------
 
-function Environments() {
+/**
+ * The bridge's own SSH key (the phone's), with Copy and Share: what goes into ~/.ssh/authorized_keys
+ * on a machine. Nothing under a bridge that has none (the desktop app uses the owner's ssh).
+ */
+function DeviceKey() {
+	const [key, setKey] = useState<{ key: string; copy: () => Promise<void>; share: () => Promise<void> }>();
+	// (Asked by its answer: Storybook's stand-in answers every name with a function that gives no key.)
+	useEffect(() => void (typeof bridge.deviceKey === "function" && Promise.resolve(bridge.deviceKey()).then((k) => typeof k?.key === "string" && setKey(k), () => undefined)), []);
+	if (!key) return null;
+	return (
+		<Item variant="outline" data-slot="device-key">
+			<ItemContent className="min-w-0 flex-[1_1_12rem]">
+				<ItemTitle>This phone's key</ItemTitle>
+				<ItemDescription className="line-clamp-none font-mono text-xs break-all select-text">{key.key}</ItemDescription>
+				<ItemDescription className="line-clamp-none">Add it as a line of ~/.ssh/authorized_keys of the user you sign in as on each machine.</ItemDescription>
+			</ItemContent>
+			<ItemActions>
+				<Button variant="outline" size="xs" onClick={() => void key.copy().then(() => store.flash("The key is on the clipboard.", "good", 3000), (e: unknown) => store.flash(errText(e), "bad"))}>Copy</Button>
+				<Button variant="outline" size="xs" onClick={() => void store.attempt(() => key.share())}>Share</Button>
+			</ItemActions>
+		</Item>
+	);
+}
+
+/**
+ * The machines whose pine the app can use, their state, and a field to add one: Settings >
+ * Environments, and the Gate under a bridge with no local machine, where it is the only way to a pine.
+ */
+export function MachineList() {
 	const s = useModel(store);
 	const [host, setHost] = useState("");
 	const [error, setError] = useState<string>();
 	const field = useId();
 	const state = s.service;
+	const key = s.keyToTrust;
 	const here = s.platform === "darwin" ? "This Mac" : "This computer";
 	const add = async () => {
 		setError(undefined);
@@ -2047,7 +2076,8 @@ function Environments() {
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
 			<ItemMedia variant="icon">{h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
-			<ItemContent className="min-w-0">
+			{/* The text asks for 12rem before it shares its line: where the buttons would leave it less (a phone, the Gate), the Item wraps them onto a line of their own. */}
+			<ItemContent className="min-w-0 flex-[1_1_12rem]">
 				<ItemTitle className="name">
 					<span className={cn(h && "font-mono")}>{h ?? here}</span>
 					{status(h)}
@@ -2055,20 +2085,24 @@ function Environments() {
 				<ItemDescription className="line-clamp-none wrap-anywhere">
 					{state.host === h && state.status === "error" ? state.message : h ? `The pine on ${h}, over SSH.` : "The pine on this computer: the one that runs, or one this app starts."}
 				</ItemDescription>
+				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
+				{key && key.host === h ? <Button size="xs" data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
-				{h && state.host !== h ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
+				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
+				{h && (state.host !== h || (!s.local && state.status === "error")) ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
 			</ItemActions>
 		</Item>
 	);
 	return (
-		<Page title="Environments" lead="The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them.">
+		<>
 			<ItemGroup>
-				{row(undefined)}
+				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
+			{s.local ? null : <DeviceKey />}
 			<FieldSet>
 				<FieldLegend>Add a machine</FieldLegend>
 				<FieldGroup>
@@ -2078,17 +2112,33 @@ function Environments() {
 							<Input id={`${field}-host`} className="font-mono" placeholder="you@server" value={host} onChange={(e) => setHost(e.target.value)} onKeyDown={(e) => e.key === "Enter" && host.trim() && void add()} />
 							<Button variant="outline" disabled={!host.trim()} onClick={() => void add()}><PlusIcon data-icon="inline-start" />Add</Button>
 						</div>
-						<FieldDescription>As you would write it after ssh: host, user@host, or a name from ~/.ssh/config. It is connected to when you pick it.</FieldDescription>
+						<FieldDescription>{s.local ? "As you would write it after ssh: host, user@host, or a name from ~/.ssh/config. It is connected to when you pick it." : "As you would write it after ssh: user@host, or user@host:port. It is connected to when you pick it."}</FieldDescription>
 					</Field>
 					{error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{error}</AlertDescription></Alert> : null}
 				</FieldGroup>
 			</FieldSet>
+		</>
+	);
+}
+
+function Environments() {
+	const s = useModel(store);
+	return (
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+			<MachineList />
 			<Alert>
 				<InfoIcon />
 				<AlertDescription>
-					<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
-					<p>Its pine stays closed to the network: the app runs pine service there over ssh and forwards a port of this computer to it. Switching shows the other pine and stops none: an agent at work in one goes on. A pine the app started there stops when the app quits; one that was running already goes on.</p>
-					<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
+					{/* A port of this computer and its terminal are not said where there is no local machine. */}
+					{s.local ? (
+						<>
+							<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
+							<p>Its pine stays closed to the network: the app runs pine service there over ssh and forwards a port of this computer to it. Switching shows the other pine and stops none: an agent at work in one goes on. A pine the app started there stops when the app quits; one that was running already goes on.</p>
+							<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
+						</>
+					) : (
+						<p>The machine needs pine with a home (pine init there), and this phone's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
+					)}
 				</AlertDescription>
 			</Alert>
 		</Page>
@@ -2105,9 +2155,12 @@ function AppPage() {
 	const newer = s.update?.status === "newer" ? s.update : undefined;
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
 	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
-	useEffect(() => void bridge.command().then(setCommand), []);
+	// Under a bridge with no local machine (`s.local`), what only this computer has is neither asked nor shown:
+	// its home folder, Keep running, Restart, the pine command, the browser build, the Electron version.
+	const local = s.local;
+	useEffect(() => void (local && bridge.command().then(setCommand)), [local]);
 	// (Looked at again whenever this page is opened: the browser may have been fetched in a terminal.)
-	useEffect(() => void store.checkBrowser(), []);
+	useEffect(() => void (local && store.checkBrowser()), [local]);
 	// (And the themes: a file may have been put into the folder by hand.)
 	useEffect(() => void store.refreshThemes(), []);
 	const field = useId();
@@ -2165,22 +2218,24 @@ function AppPage() {
 							</FieldTitle>
 							<FieldDescription>{service?.host ? `The pine on ${service.host}, over SSH (Settings › Environments). ${service.started ? "This app started it there; it stops when the app quits." : "It was already running there, and goes on when this app quits."}` : service ? (service.started ? `Started by this app (${service.mode}), from ${service.from}. It stops when the app quits unless the switch below is on.` : "Attached to a pine that was already running. It goes on when this app quits.") : "Not running."}</FieldDescription>
 						</FieldContent>
-						{service?.started ? (
+						{service?.started && local ? (
 							<div className="flex items-center gap-1.5">
 								<Button variant="outline" size="xs" onClick={() => void s.attempt(() => bridge.restart())}><RotateCwIcon data-icon="inline-start" />Restart</Button>
 							</div>
 						) : null}
 					</Field>
-					<Field orientation="horizontal">
-						<FieldContent>
-							<FieldLabel htmlFor={`${field}-keep-running`}>Keep pine running after the app quits</FieldLabel>
-							<FieldDescription>A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</FieldDescription>
-						</FieldContent>
-						<div className="flex items-center gap-1.5">
-							<Switch id={`${field}-keep-running`} checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} />
-						</div>
-					</Field>
-					{command && (command.state !== "unavailable" || command.why) ? (
+					{local ? (
+						<Field orientation="horizontal">
+							<FieldContent>
+								<FieldLabel htmlFor={`${field}-keep-running`}>Keep pine running after the app quits</FieldLabel>
+								<FieldDescription>A pine this app starts then goes on in the background: schedules fire, sources report and Telegram answers while the window is closed. Holds from the next time the app starts pine.</FieldDescription>
+							</FieldContent>
+							<div className="flex items-center gap-1.5">
+								<Switch id={`${field}-keep-running`} checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} />
+							</div>
+						</Field>
+					) : null}
+					{local && command && (command.state !== "unavailable" || command.why) ? (
 						<Field orientation="responsive">
 							<FieldContent>
 								<FieldTitle>
@@ -2196,7 +2251,7 @@ function AppPage() {
 							) : null}
 						</Field>
 					) : null}
-					{s.browser !== undefined || s.browserFetching ? (
+					{local && (s.browser !== undefined || s.browserFetching) ? (
 						<Field orientation="responsive" data-setting="browser">
 							<FieldContent>
 								<FieldTitle>
@@ -2213,22 +2268,24 @@ function AppPage() {
 							{s.browser ? null : <Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner data-icon="inline-start" />Fetching…</> : "Fetch it"}</Button>}
 						</Field>
 					) : null}
-					<Field orientation="responsive">
-						<FieldContent>
-							<FieldTitle>Home folder</FieldTitle>
-							<FieldDescription>
-								<span className="block font-mono">{tilde((service?.host ? undefined : service?.home) ?? s.prefs.home ?? "~/.pine")}</span>
-								Where this computer's pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.
-							</FieldDescription>
-						</FieldContent>
-						<div className="flex items-center gap-1.5">
-							{s.prefs.home ? <Button variant="outline" size="xs" onClick={() => void set({ home: "" }).then(() => !s.remote && bridge.retry())}>Use ~/.pine</Button> : null}
-							<Button variant="outline" size="xs" onClick={() => void bridge.pickFolder("A pine home folder").then((dir: string | undefined) => dir && set({ home: dir }).then(() => (s.remote ? undefined : service?.started ? bridge.restart() : bridge.retry())))}><FolderIcon data-icon="inline-start" />Choose…</Button>
-						</div>
-					</Field>
+					{local ? (
+						<Field orientation="responsive">
+							<FieldContent>
+								<FieldTitle>Home folder</FieldTitle>
+								<FieldDescription>
+									<span className="block font-mono">{tilde((service?.host ? undefined : service?.home) ?? s.prefs.home ?? "~/.pine")}</span>
+									Where this computer's pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.
+								</FieldDescription>
+							</FieldContent>
+							<div className="flex items-center gap-1.5">
+								{s.prefs.home ? <Button variant="outline" size="xs" onClick={() => void set({ home: "" }).then(() => !s.remote && bridge.retry())}>Use ~/.pine</Button> : null}
+								<Button variant="outline" size="xs" onClick={() => void bridge.pickFolder("A pine home folder").then((dir: string | undefined) => dir && set({ home: dir }).then(() => (s.remote ? undefined : service?.started ? bridge.restart() : bridge.retry())))}><FolderIcon data-icon="inline-start" />Choose…</Button>
+							</div>
+						</Field>
+					) : null}
 				</FieldGroup>
 			</FieldSet>
-			<p className="text-muted-foreground">Pine {s.versions.app} · Electron {s.versions.electron}</p>
+			<p className="text-muted-foreground">Pine {s.versions.app}{local ? ` · Electron ${s.versions.electron}` : ""}</p>
 		</Page>
 	);
 }

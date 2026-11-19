@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, fn, within } from "storybook/test";
 import type { AgentDetail, AgentInfo, McpServer, Overview, Route, Schedule, Setting } from "./api.ts";
 import { store } from "./model.ts";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
@@ -96,7 +97,9 @@ const answers: Record<string, unknown> = {
 
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
 
-function Tab({ section, agent }: { section: string; agent?: string }) {
+function Tab({ section, agent, local = true }: { section: string; agent?: string; local?: boolean }) {
+	// What the bridge's `state()` says: false under a bridge with no "this computer" (the phone).
+	store.local = local;
 	store.section = section;
 	store.settingsAgent = agent;
 	store.agents = agents;
@@ -107,7 +110,21 @@ function Tab({ section, agent }: { section: string; agent?: string }) {
 	);
 }
 
-const meta = { component: Tab, parameters: { layout: "padded" } } satisfies Meta<typeof Tab>;
+const meta = {
+	component: Tab,
+	parameters: { layout: "padded" },
+	// What a story sets on the store is put back after it: the next story starts from the store as it was.
+	beforeEach: () => {
+		const { local, service, prefs, connected, section, settingsAgent, agents } = store;
+		return () => void Object.assign(store, { local, service, prefs, connected, section, settingsAgent, agents });
+	},
+} satisfies Meta<typeof Tab>;
+
+/** Nothing of a local machine on the page: no row for it, no "This Mac", nothing to use or set up there. */
+async function noLocalMachine(root: HTMLElement) {
+	await expect(root.querySelector('[data-environment="local"]')).toBeNull();
+	await expect(within(root).queryAllByText(/This Mac|This computer|Use this Mac|Set up pine/)).toHaveLength(0);
+}
 export default meta;
 type Story = StoryObj<typeof meta>;
 
@@ -203,6 +220,59 @@ export const NewRouteAsk: Story = {
 		const viewport = document.querySelector("[data-slot=dialog-content] [data-slot=scroll-area-viewport]");
 		const then = [...document.querySelectorAll("[data-slot=dialog-content] legend")].find((l) => l.textContent === "Then");
 		if (viewport && then) viewport.scrollTop += then.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
+	},
+};
+
+// The phone's own SSH key, as the mobile bridge gives it (the desktop's bridge has none, and shows no row for it).
+window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq3lYcVb0mXkJ2yq8rV6tZsP4dW1nE9fKcH7uR2aB3m pine-android", copy: async () => {}, share: async () => {} });
+
+/** A bridge with no local machine (the phone): only the machines added, no row for this computer, nothing about a port of it or its terminal, and the phone's key to copy or share. */
+export const EnvironmentsWithoutLocal: Story = {
+	args: { section: "environments", local: false },
+	render: Environments.render,
+	play: async ({ canvasElement, canvas }) => {
+		await canvas.findByText("This phone's key");
+		await expect(canvasElement.querySelector('[data-environment="me@build-box"]')).not.toBeNull();
+		await noLocalMachine(canvasElement);
+	},
+};
+
+const fingerprint = "SHA256:Xv2k0yq3pZ8bW9cQm1sT4uE7rN6aL5dH2fJ0gK3iO8Y";
+const trusted = fn();
+
+/** A machine met for the first time, on the phone: its row shows the host key's fingerprint and Trust this key, the owner's yes to exactly that one. */
+export const EnvironmentsHostKeyToConfirm: Story = {
+	args: { section: "environments", local: false },
+	render: (args) => {
+		store.prefs = { ...store.prefs, hosts: ["me@build-box", "studio"], use: "me@build-box" };
+		store.service = { status: "error", kind: "ssh", host: "me@build-box", fingerprint, changed: false, message: `This phone does not know me@build-box yet. Its host key's fingerprint is ${fingerprint}. If that is what the machine shows, trust it and connect.` };
+		store.connected = false;
+		return <Tab {...args} />;
+	},
+	beforeEach: () => {
+		trusted.mockClear();
+		window.pine.trustHostKey = trusted;
+		return () => void delete (window.pine as Partial<typeof window.pine>).trustHostKey;
+	},
+	play: async ({ canvasElement, userEvent }) => {
+		const row = canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"]')!;
+		await expect(row.querySelector('[data-slot="host-key-fingerprint"]')).toHaveTextContent(fingerprint);
+		// At a phone's width the three buttons go below the text instead of squeezing it into a column.
+		await expect(row.querySelector('[data-slot="item-content"]')!.getBoundingClientRect().width).toBeGreaterThan(row.getBoundingClientRect().width / 2);
+		await expect(canvasElement.querySelector('[data-environment="studio"] [data-slot="trust-host-key"]')).toBeNull();
+		await userEvent.click(row.querySelector<HTMLElement>('[data-slot="trust-host-key"]')!);
+		await expect(trusted).toHaveBeenCalledTimes(1);
+		await expect(trusted).toHaveBeenCalledWith("me@build-box", fingerprint);
+		await noLocalMachine(canvasElement);
+	},
+};
+
+/** The App page under a bridge with no local machine: the theme, the agent accent, notifications and the pine in use, without what only this computer has (its home folder, Keep running, Restart, the pine command, the browser build, the Electron version). */
+export const AppWithoutLocal: Story = {
+	args: { section: "app", local: false },
+	play: async ({ canvasElement, canvas }) => {
+		await canvas.findByText("Theme");
+		await noLocalMachine(canvasElement);
 	},
 };
 

@@ -32,6 +32,9 @@ Open the image and drag Pine into Applications. Nothing else has to be installed
 | pine's helpers | The small programs for dictating, app control and the `system` event source, built for both kinds of Mac. Elsewhere pine builds them on first use, which needs Apple's command line developer tools |
 | `pine` for a terminal | See below |
 
+An Android phone has an app of its own in the same release, for the pine of another machine
+([mobile.md](mobile.md)).
+
 ### A newer version
 
 The app does not update itself: it says when there is a newer one and where it is. To get it,
@@ -758,6 +761,15 @@ desktop/
   getting more of the system. A handler checks that the call comes from the app's own page.
   `src/preview-bridge.ts` implements it too: it returns the `Bridge` type, so a missing method
   fails `npm run check`. If it needs the daemon, `scripts/preview.ts` routes it under `/__pine/`.
+- The page is also the Android app's ([mobile.md](mobile.md)): `mobile/src/mobile-bridge.ts`
+  returns the same `Bridge` type. Three parts of the bridge are optional and only the mobile one
+  gives them: `local: false` in `state()` (no machine of its own: the page hides This Mac, Use
+  this Mac, Set up pine, the local row of Settings > Environments, the local-only parts of
+  Settings > App and the palette's "Use the pine on this Mac", and never sends `use(undefined)`),
+  `mediaBase` (where pictures, video and sound are fetched, in place of `pine-media://daemon`)
+  and `deviceKey` (the phone's SSH key, with Copy and Share in Settings > Environments). Absent,
+  the page is the desktop's as before. A change of the page is checked in both: `npm run check`
+  in `desktop/` and in `mobile/`.
 - What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a
   test there, then to `api.ts`. The app never does a daemon's work itself.
 - Text an answer or a tool produced is drawn through `markdown.tsx` or as plain text, never

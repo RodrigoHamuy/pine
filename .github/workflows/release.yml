@@ -22,9 +22,21 @@ name: Release
 # Without them the app is not built, and the job says so: an app that is not signed and notarised
 # is one macOS refuses to open, so none is handed out.
 #
-# The app of a release can be built again by hand, without publishing anything: Actions > Release >
-# Run workflow, from main, with the release's version (gh workflow run release.yml -f version=0.38.0).
-# It is built from that release's tag and attached to that release, in place of what is there.
+# A release from main also gets the Android app (mobile/), attached as Pine-<version>.apk, with
+# versionName the release's version and versionCode major*1000000 + minor*1000 + patch
+# (mobile/scripts/version-code.ts). It is signed with pine's release key, which takes four more
+# secrets in the same environment "release":
+#   ANDROID_KEYSTORE           the keystore with the key (a .jks or PKCS12 file), as base64
+#   ANDROID_KEYSTORE_PASSWORD  the password of that file
+#   ANDROID_KEY_ALIAS          the alias of the key in it
+#   ANDROID_KEY_PASSWORD       the password of the key (for PKCS12, the same as the file's)
+# Without any of them no APK is built, and the job says so; with only some of them it fails. Keep
+# that key: Android installs an update only over an app signed with the same key.
+#
+# The apps of a release (the disk images and the APK) can be built again by hand, without publishing
+# anything: Actions > Release > Run workflow, from main, with the release's version (gh workflow run
+# release.yml -f version=0.38.0). They are built from that release's tag and attached to that
+# release, in place of what is there.
 #
 # Publishing uses npm's trusted publishing: on npmjs.com, the package's settings name this
 # repository and this workflow file as a trusted publisher, and no token is stored anywhere.
@@ -171,3 +183,89 @@ jobs:
           GH_TOKEN: ${{ github.token }}
       - if: always()
         run: rm -f "$RUNNER_TEMP/app-store-connect.p8"
+
+  # The Android app of a release (mobile/): a signed APK attached to the release, next to the disk images.
+  android:
+    needs: release
+    # As the app job: after a release from main, or by hand for a release there already is.
+    if: always() && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write # the APK goes to the release
+    env:
+      VERSION: ${{ inputs.version || needs.release.outputs.version }}
+    steps:
+      - id: signing
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::\"$VERSION\" is not the version of a release (like 0.38.0)."
+            exit 1
+          fi
+          missing=""
+          for name in ANDROID_KEYSTORE ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
+            if [ -z "$(printenv "$name")" ]; then missing="$missing $name"; fi
+          done
+          if [ "$(echo $missing | wc -w)" -eq 4 ]; then
+            echo "::notice::The Android app was not built: the environment \"release\" has no Android signing secrets yet (see the top of release.yml)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          elif [ -n "$missing" ]; then
+            echo "::error::The Android app cannot be signed: these secrets are missing in the environment \"release\":$missing"
+            exit 1
+          else
+            printf '%s' "$ANDROID_KEYSTORE" | base64 -d > "$RUNNER_TEMP/release.jks"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.signing.outputs.ready == 'true'
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # By hand: the release's own commit.
+          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.sha }}
+          persist-credentials: false
+      - if: steps.signing.outputs.ready == 'true'
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - if: steps.signing.outputs.ready == 'true'
+        uses: actions/setup-java@d1374f8ac74474200d16ef8ecee22c7ae7a51880 # v6.3.0
+        with:
+          distribution: temurin
+          java-version: 21 # Capacitor's Android code is built for Java 21
+      - if: steps.signing.outputs.ready == 'true'
+        run: npm ci && npm ci --prefix desktop && npm ci --prefix mobile
+      - if: steps.signing.outputs.ready == 'true'
+        name: Check and test the mobile package
+        # The bridge, the configuration and both builds of the page: an APK is built only from what passes.
+        run: npm run check --prefix mobile && npm test --prefix mobile
+      - if: steps.signing.outputs.ready == 'true'
+        name: Build the page and a signed release APK
+        # On the runner's Android SDK (ANDROID_HOME) and the JDK above. The Gradle build signs with the
+        # key the environment names, and is given the release's version and its code.
+        run: |
+          PINE_VERSION_CODE="$(node mobile/scripts/version-code.ts "$VERSION")"
+          export PINE_VERSION_CODE
+          npm run apk:release --prefix mobile
+          cp mobile/android/app/build/outputs/apk/release/app-release.apk "Pine-$VERSION.apk"
+        env:
+          PINE_VERSION: ${{ env.VERSION }}
+          ANDROID_KEYSTORE_FILE: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - if: steps.signing.outputs.ready == 'true'
+        name: What a phone will say to it
+        run: |
+          apksigner="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/apksigner"
+          "$apksigner" verify --verbose --print-certs "Pine-$VERSION.apk"
+      - if: steps.signing.outputs.ready == 'true'
+        run: gh release upload "v$VERSION" "Pine-$VERSION.apk" --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
+      - if: always()
+        run: rm -f "$RUNNER_TEMP/release.jks"

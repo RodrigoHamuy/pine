@@ -20,8 +20,8 @@ export function Palette() {
 		for (const c of COMMANDS) if (!c.chat || chat) rows.push({ id: `c:${c.name}`, group: "Commands", label: c.title, about: c.about, keys: c.keys, run: () => void c.run("", s.active) });
 		for (const a of s.agents) rows.push({ id: `a:${a.id}`, group: "Agents", label: `New conversation with ${a.id}`, about: a.description, run: () => void s.newConversation(a.id) });
 		for (const [id, label] of [["general", "General"], ["agents", "Agents"], ["models", "Models"], ["mcp", "MCP servers"], ["skills", "Skills"], ["events", "Events"], ["instructions", "Instructions"], ["environments", "Environments"], ["app", "App"]]) rows.push({ id: `p:${id}`, group: "Settings", label: `Settings: ${label}`, run: () => void s.command(`settings:${id}`) });
-		// The machines whose pine the app can use (Settings > Environments), but the one it uses.
-		for (const host of [undefined, ...s.prefs.hosts]) if (host !== s.service.host) rows.push({ id: `e:${host ?? ""}`, group: "Environments", label: `Use the pine on ${host ?? (s.platform === "darwin" ? "this Mac" : "this computer")}`, run: () => void s.useMachine(host) });
+		// The machines whose pine the app can use (Settings > Environments), but the one it uses; this computer only where there is one.
+		for (const host of [...(s.local ? [undefined] : []), ...s.prefs.hosts]) if (host !== s.service.host) rows.push({ id: `e:${host ?? ""}`, group: "Environments", label: `Use the pine on ${host ?? (s.platform === "darwin" ? "this Mac" : "this computer")}`, run: () => void s.useMachine(host) });
 		return rows;
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [s.titles]);
