@@ -2029,7 +2029,7 @@ function DeviceKey() {
 	return (
 		<Item variant="outline" data-slot="device-key">
 			<ItemContent className="min-w-0 flex-[1_1_12rem]">
-				<ItemTitle>This phone's key</ItemTitle>
+				<ItemTitle>This device's key</ItemTitle>
 				<ItemDescription className="line-clamp-none font-mono text-xs break-all select-text">{key.key}</ItemDescription>
 				<ItemDescription className="line-clamp-none">Add it as a line of ~/.ssh/authorized_keys of the user you sign in as on each machine.</ItemDescription>
 			</ItemContent>
@@ -2138,7 +2138,7 @@ function Environments() {
 							<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
 						</>
 					) : (
-						<p>The machine needs pine with a home (pine init there), and this phone's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
+						<p>The machine needs pine with a home (pine init there), and this device's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
 					)}
 				</AlertDescription>
 			</Alert>

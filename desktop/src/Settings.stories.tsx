@@ -98,7 +98,7 @@ const answers: Record<string, unknown> = {
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
 
 function Tab({ section, agent, local = true }: { section: string; agent?: string; local?: boolean }) {
-	// What the bridge's `state()` says: false under a bridge with no "this computer" (the phone).
+	// What the bridge's `state()` says: false under a bridge with no "this computer" (a phone, a browser).
 	store.local = local;
 	store.section = section;
 	store.settingsAgent = agent;
@@ -223,15 +223,15 @@ export const NewRouteAsk: Story = {
 	},
 };
 
-// The phone's own SSH key, as the mobile bridge gives it (the desktop's bridge has none, and shows no row for it).
+// The client's own SSH key, as a bridge with an SSH of its own gives it (the mobile and the web bridge) (the desktop's bridge has none, and shows no row for it).
 window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq3lYcVb0mXkJ2yq8rV6tZsP4dW1nE9fKcH7uR2aB3m pine-android", copy: async () => {}, share: async () => {} });
 
-/** A bridge with no local machine (the phone): only the machines added, no row for this computer, nothing about a port of it or its terminal, and the phone's key to copy or share. */
+/** A bridge with no local machine (a phone's, a browser's): only the machines added, no row for this computer, nothing about a port of it or its terminal, and the client's key to copy or share. */
 export const EnvironmentsWithoutLocal: Story = {
 	args: { section: "environments", local: false },
 	render: Environments.render,
 	play: async ({ canvasElement, canvas }) => {
-		await canvas.findByText("This phone's key");
+		await canvas.findByText("This device's key");
 		await expect(canvasElement.querySelector('[data-environment="me@build-box"]')).not.toBeNull();
 		await noLocalMachine(canvasElement);
 	},
@@ -240,12 +240,12 @@ export const EnvironmentsWithoutLocal: Story = {
 const fingerprint = "SHA256:Xv2k0yq3pZ8bW9cQm1sT4uE7rN6aL5dH2fJ0gK3iO8Y";
 const trusted = fn();
 
-/** A machine met for the first time, on the phone: its row shows the host key's fingerprint and Trust this key, the owner's yes to exactly that one. */
+/** A machine met for the first time, under a bridge that keeps host keys of its own: its row shows the host key's fingerprint and Trust this key, the owner's yes to exactly that one. */
 export const EnvironmentsHostKeyToConfirm: Story = {
 	args: { section: "environments", local: false },
 	render: (args) => {
 		store.prefs = { ...store.prefs, hosts: ["me@build-box", "studio"], use: "me@build-box" };
-		store.service = { status: "error", kind: "ssh", host: "me@build-box", fingerprint, changed: false, message: `This phone does not know me@build-box yet. Its host key's fingerprint is ${fingerprint}. If that is what the machine shows, trust it and connect.` };
+		store.service = { status: "error", kind: "ssh", host: "me@build-box", fingerprint, changed: false, message: `This device does not know me@build-box yet. Its host key's fingerprint is ${fingerprint}. If that is what the machine shows, trust it and connect.` };
 		store.connected = false;
 		return <Tab {...args} />;
 	},
