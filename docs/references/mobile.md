@@ -54,7 +54,7 @@ keeps your machines and your key.
 On its first start the app makes an SSH key for this phone (Ed25519). The private key never
 leaves the app and is not in the phone's backups: on Android it is stored encrypted with a key
 of the Android Keystore, on an iPhone it is kept in the iOS Keychain, on this device only and
-readable after the phone's first unlock. Settings > Environments shows the public key, under "This phone's key", with
+readable after the phone's first unlock. Settings > Environments shows the public key, under "This device's key", with
 Copy and Share.
 
 Where the key goes: into `~/.ssh/authorized_keys` of the user you sign in as, on each server or

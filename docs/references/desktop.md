@@ -762,14 +762,15 @@ desktop/
   `src/preview-bridge.ts` implements it too: it returns the `Bridge` type, so a missing method
   fails `npm run check`. If it needs the daemon, `scripts/preview.ts` routes it under `/__pine/`.
 - The page is also the Android and iOS app's ([mobile.md](mobile.md)): `mobile/src/mobile-bridge.ts`
-  returns the same `Bridge` type. Three parts of the bridge are optional and only the mobile one
-  gives them: `local: false` in `state()` (no machine of its own: the page hides This Mac, Use
+  returns the same `Bridge` type, and so does the web client's (`web/src/frame-bridge.ts`,
+  [web.md](web.md)). Four parts of the bridge are optional and only those two give them: `local: false` in `state()` (no machine of its own: the page hides This Mac, Use
   this Mac, Set up pine, the local row of Settings > Environments, the local-only parts of
   Settings > App and the palette's "Use the pine on this Mac", and never sends `use(undefined)`),
   `mediaBase` (where pictures, video and sound are fetched, in place of `pine-media://daemon`)
-  and `deviceKey` (the phone's SSH key, with Copy and Share in Settings > Environments). Absent,
-  the page is the desktop's as before. A change of the page is checked in both: `npm run check`
-  in `desktop/` and in `mobile/`.
+  `deviceKey` (the client's own SSH key, with Copy and Share in Settings > Environments) and
+  `trustHostKey` (the owner's yes to the host key's fingerprint the page showed). Absent, the
+  page is the desktop's as before. A change of the page is checked in all three: `npm run check`
+  in `desktop/`, in `mobile/` and in `web/`.
 - What the daemon can do is added to the control API (`src/http.ts`, `src/owner.ts`) with a
   test there, then to `api.ts`. The app never does a daemon's work itself.
 - Text an answer or a tool produced is drawn through `markdown.tsx` or as plain text, never

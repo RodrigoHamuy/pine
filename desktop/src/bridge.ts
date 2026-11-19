@@ -16,7 +16,7 @@ export type ServiceState = { status: "starting"; host?: string } | { status: "re
 			kind: "no-home" | "no-node" | "no-pine" | "ssh" | "failed";
 			message: string;
 			host?: string;
-			/** The host key's fingerprint (SHA256, as OpenSSH prints it), when the connection stopped at it. Only a bridge that keeps host keys of its own sets it (the mobile app's). */
+			/** The host key's fingerprint (SHA256, as OpenSSH prints it), when the connection stopped at it. Only a bridge that keeps host keys of its own sets it (a client with an SSH of its own: the mobile app's, the web client's). */
 			fingerprint?: string;
 			/** Whether that key differs from the one the owner trusted before (never trusted then: the machine is forgotten and added again), or is not known yet (`trustHostKey`). */
 			changed?: boolean;
@@ -51,7 +51,7 @@ export interface AppState {
 	versions: { app: string; electron: string };
 	/**
 	 * Whether there is a "this computer" whose pine the app can use. Set to false by a bridge that
-	 * only reaches other machines (the mobile app's): the page then offers no local machine and
+	 * only reaches other machines (the mobile app's, the web client's): the page then offers no local machine and
 	 * never asks `use()` for one. The desktop app and the preview leave it out, which means there is.
 	 */
 	local?: boolean;
@@ -59,26 +59,26 @@ export interface AppState {
 
 /**
  * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the
- * preview's, the mobile app's).
+ * preview's, the mobile app's, the web client's).
  */
 export type PageBridge = Omit<Bridge, "state"> & {
 	state: () => Promise<AppState>;
 	/**
 	 * Where the daemon's pictures, video and sound are fetched from, set by a bridge whose page
-	 * fetches them from another address than the app's scheme (the mobile app's, on its own origin).
+	 * fetches them from another address than the app's scheme (the mobile app's, on its own origin; the web client's, whose page asks its bridge for the bytes).
 	 * The desktop app and the preview leave it out.
 	 */
 	mediaBase?: string;
 	/**
 	 * The SSH key of a bridge that signs in to other machines with a key of its own (the mobile app's,
-	 * made on the phone): its public key, to put into ~/.ssh/authorized_keys there, and the ways to
+	 * made on the phone; the web client's, made by the browser): its public key, to put into ~/.ssh/authorized_keys there, and the ways to
 	 * hand it over. Settings > Environments shows it. The desktop app, which uses the owner's ssh,
 	 * leaves it out.
 	 */
 	deviceKey?: () => Promise<{ key: string; copy: () => Promise<void>; share: () => Promise<void> }>;
 	/**
 	 * Trust the host key a connection stopped at, of a bridge that keeps host keys of its own (the
-	 * mobile app's): the owner's yes to exactly the fingerprint the page showed (the error state's
+	 * mobile app's, the web client's): the owner's yes to exactly the fingerprint the page showed (the error state's
 	 * `fingerprint`, with `changed` false), after which the bridge connects again. The desktop app,
 	 * which uses the owner's ssh and its known_hosts, leaves it out.
 	 */
