@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { AgentDetail, AgentInfo, McpServer, Overview, Setting } from "./api.ts";
+import type { AgentDetail, AgentInfo, McpServer, Overview, Route, Setting } from "./api.ts";
 import { store } from "./model.ts";
-import { AgentAccent, Settings, ThemePicker } from "./Settings.tsx";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { AgentAccent, NewRoute, Routes, Settings, ThemePicker } from "./Settings.tsx";
 import { THEMES } from "../.storybook/themes.ts";
 import type { ThemeEntry } from "./theme.ts";
 
@@ -67,6 +68,14 @@ const scout: AgentDetail = {
 	files: { instructions: "You look things up on the web.\n" },
 };
 
+/** One route of each kind: state set without an agent, a model's look passed on, an agent woken on that, a pause between alarms. */
+const routes: Route[] = [
+	{ name: "mode", on: ["source/house/message"], when: { "payload.topic": "house/mode" }, set: { "house/mode": "{{payload.value}}" } },
+	{ name: "classify", on: ["source/cam/added"], debounceMs: 4000, call: { prompt: "Camera file {{payload.file}}", system: "Answer PERSON, VEHICLE, ANIMAL or NOTHING." }, publish: { topic: "cam/classified" } },
+	{ name: "intruder", on: ["cam/classified"], when: { "payload.text": { regex: "^PERSON" }, "state.house/mode": "away" }, agent: "main", session: "new", prompt: "The camera saw somebody while the house is empty: {{payload.text}}" },
+	{ name: "smoke", on: ["source/house/message", "hook/smoke"], throttleMs: 300_000, agent: "scout", trust: "owner" },
+];
+
 const answers: Record<string, unknown> = {
 	"/overview": overview,
 	"/agents/scout/detail": scout,
@@ -74,6 +83,7 @@ const answers: Record<string, unknown> = {
 	"/models": models,
 	"/mcp": mcp,
 	"/mcp/states": { linear: "needs sign-in", notes: "connected" },
+	"/routes": routes,
 };
 
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
@@ -113,6 +123,52 @@ export const Environments: Story = {
 		store.service = { status: "ready", mode: "on build-box", started: false, home: "build-box:~/.pine", version: "0.23.0", from: "ssh me@build-box", host: "me@build-box", label: "build-box" };
 		store.connected = true;
 		return <Tab {...args} />;
+	},
+};
+
+/** Events › Routes: when a route is needed at all, then each route said as When and Then, with New route. */
+export const RouteList: Story = {
+	args: { section: "events" },
+	render: () => {
+		store.agents = agents;
+		return (
+			<div className="flex w-full max-w-250 flex-col gap-6">
+				<Routes />
+			</div>
+		);
+	},
+};
+
+/** The form for a new route as it opens: When (a topic, an optional condition, how often), Then waking an agent, a name. */
+export const NewRouteWake: Story = {
+	args: { section: "events" },
+	render: () => {
+		store.agents = agents;
+		return (
+			<Dialog open>
+				<DialogContent showCloseButton={false} className="sm:max-w-2xl"><NewRoute made={() => {}} /></DialogContent>
+			</Dialog>
+		);
+	},
+};
+
+/** The same form with Then set to Ask a model: the question, its instructions, the model and the topic its answer goes out on. */
+export const NewRouteAsk: Story = {
+	args: { section: "events" },
+	render: () => {
+		store.agents = agents;
+		return (
+			<Dialog open>
+				<DialogContent showCloseButton={false} className="sm:max-w-2xl"><NewRoute made={() => {}} does="ask" /></DialogContent>
+			</Dialog>
+		);
+	},
+	// The dialog scrolls at half the window's height: what this story is about begins at Then.
+	play: async () => {
+		await new Promise(requestAnimationFrame);
+		const viewport = document.querySelector("[data-slot=dialog-content] [data-slot=scroll-area-viewport]");
+		const then = [...document.querySelectorAll("[data-slot=dialog-content] legend")].find((l) => l.textContent === "Then");
+		if (viewport && then) viewport.scrollTop += then.getBoundingClientRect().top - viewport.getBoundingClientRect().top;
 	},
 };
 

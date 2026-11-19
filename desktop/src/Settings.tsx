@@ -6,7 +6,7 @@ import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSet, FieldTitle } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
@@ -16,13 +16,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "cn";
 import { type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { type AgentDetail, api, type LoginState, type Setting, type SourceType } from "./api.ts";
+import { type AgentDetail, api, type LoginState, type Route, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
 import type { DialogRootActions } from "@base-ui/react/dialog";
-import { Dialog, DialogClose, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -1618,60 +1618,267 @@ function Schedules() {
 	);
 }
 
-function Routes() {
-	const list = useLoad(() => api.routes());
+// A time in milliseconds as pine.json writes it: 5m, 30s, 2h.
+const span = (ms: number) => (ms % 3_600_000 === 0 ? `${ms / 3_600_000}h` : ms % 60_000 === 0 ? `${ms / 60_000}m` : ms % 1000 === 0 ? `${ms / 1000}s` : `${ms}ms`);
+
+const conversationOf = (session: string | undefined) => (!session || session === "main" ? "in its main conversation" : session === "new" ? "in a new conversation" : `in the conversation ${session}`);
+
+/** A route in the words of the form that makes one: when what arrives, then what happens. */
+function routeSaid(r: Route): { when: string; then: string } {
+	const when = [
+		r.on.join(" or "),
+		r.when ? `only if ${JSON.stringify(r.when)}` : "",
+		r.throttleMs ? `at most one per ${span(r.throttleMs)}` : "",
+		r.debounceMs ? `the last of a burst, once ${span(r.debounceMs)} passed without another` : "",
+	].filter(Boolean).join(", ");
+	const then = [
+		r.set ? `set ${Object.entries(r.set).map(([k, v]) => `${k} to ${JSON.stringify(v)}`).join(" and ")}` : "",
+		r.call ? `ask ${r.call.model ?? "the default model"} once: “${short(r.call.prompt, 80)}”` : "",
+		r.publish ? (r.call && r.publish.payload === undefined ? `publish the answer as ${r.publish.topic}` : `publish ${r.publish.topic}${r.publish.payload !== undefined ? ` with ${short(JSON.stringify(r.publish.payload), 60)}` : ""}`) : "",
+		r.agent ? `wake ${r.agent} ${conversationOf(r.session)}${r.prompt ? `: “${short(r.prompt, 100)}”` : ", with the event"}` : "",
+	].filter(Boolean).join(", then ");
+	return { when, then };
+}
+
+// What a route does when its event arrives: one of four, and the form shows the fields of that one only.
+// `takes` is what of the form goes to POST /routes for it (checkRoute in src/admin.ts).
+const ROUTE_DOES = {
+	wake: { label: "Wake an agent", about: "The agent gets the event as a task, in the conversation you name.", takes: ["agent", "session", "prompt"] },
+	set: { label: "Set shared state", about: "A value is written where agents and other routes read it (state.<key>). No agent is woken.", takes: ["set"] },
+	publish: { label: "Publish an event", about: "Another event goes out, for another route, an agent subscribed to it, or a source that sends (out/source/<name>).", takes: ["publish_topic", "publish_payload"] },
+	ask: { label: "Ask a model", about: "One model call, without tools or history. Its answer goes out as an event of your own, the answer in payload.text.", takes: ["call_prompt", "call_system", "call_model", "publish_topic"] },
+} as const;
+
+// How often a route fires: every event, one and then a pause (throttle), or the last of a burst (debounce).
+const ROUTE_PACE = {
+	every: { label: "Every event", time: "", about: "" },
+	throttle: { label: "At most one per", time: "At most one per", about: "After one event, the next ones are ignored for this long. For an alarm that repeats." },
+	debounce: { label: "The last of a burst", time: "Once quiet for", about: "Waits until no event has come for this long, then handles the last one. For a camera that uploads five pictures." },
+} as const;
+
+/** The form for a new route, in a dialog: When (topic, condition, pace), Then (one of four actions), a name. */
+export function NewRoute({ made, does: first = "wake" }: { made: () => void; does?: keyof typeof ROUTE_DOES }) {
 	const s = useModel(store);
-	const empty = { name: "", on: "", when: "", agent: "", prompt: "", session: "", throttle: "", set: "", publish_topic: "", publish_payload: "" };
-	const [f, setF] = useState(empty);
+	const models = useLoad(() => api.models());
+	const [f, setF] = useState({ name: "", on: "", when: "", pace: "every" as keyof typeof ROUTE_PACE, time: "", does: first, agent: "", session: "", prompt: "", set: "", publish_topic: "", publish_payload: "", call_prompt: "", call_system: "", call_model: "" });
+	const [busy, setBusy] = useState(false);
 	const field = useId();
-	const agentItems = [{ value: "", label: "nobody" }, ...s.agents.map((a) => ({ value: a.id, label: a.id }))];
+	const agentItems = s.agents.map((a) => ({ value: a.id, label: a.id }));
+	const modelItems = [{ value: "", label: "The default model" }, ...(models.data ?? []).map((m) => ({ value: m, label: m }))];
+	const does = ROUTE_DOES[f.does];
+	const pace = ROUTE_PACE[f.pace];
+	const ready = f.name.trim() && f.on.trim() && (f.pace === "every" || f.time.trim()) && { wake: f.agent, set: f.set.trim(), publish: f.publish_topic.trim(), ask: f.call_prompt.trim() && f.publish_topic.trim() }[f.does];
 	const add = async () => {
-		const body = Object.fromEntries(Object.entries(f).map(([k, v]) => [k, v.trim() || undefined]));
-		const done = await store.attempt(() => api.addRoute(body));
+		// Only the chosen action's fields are sent: one typed under another action and left there would add a second action.
+		const body: Record<string, string> = { name: f.name, on: f.on, when: f.when, ...(f.pace === "every" ? {} : { [f.pace]: f.time }) };
+		for (const key of does.takes) body[key] = f[key];
+		setBusy(true);
+		const done = await store.attempt(() => api.addRoute(Object.fromEntries(Object.entries(body).map(([k, v]) => [k, v.trim() || undefined]))));
+		setBusy(false);
 		if (!done) return;
 		store.flash(`Added the route ${done.name}: ${done.lines.join("; ")}.${done.wider ? ` Note: ${done.wider}` : ""}`, done.wider ? "warn" : "good", 8000);
-		setF(empty);
-		list.reload();
+		made();
 	};
-	const does = (r: NonNullable<typeof list.data>[number]) => [r.set ? `sets ${JSON.stringify(r.set)}` : "", r.call ? `asks a model: ${short(r.call.prompt, 80)}` : "", r.publish ? `publishes ${r.publish.topic}` : "", r.agent ? `wakes ${r.agent}${r.session ? ` (${r.session})` : ""}${r.prompt ? ` with: ${short(r.prompt, 100)}` : ""}` : ""].filter(Boolean).join("; ");
 	return (
 		<>
-			<p className="text-muted-foreground">Rules that turn an event into something: wake an agent, write shared state, publish another event. A subscription is the simple case and needs no route.</p>
+			<DialogHeader>
+				<DialogTitle>A new route</DialogTitle>
+				<DialogDescription>When an event arrives, then one thing happens.</DialogDescription>
+			</DialogHeader>
+			<ScrollArea className="-mx-4 flex max-h-(--dialog-scroll) min-w-0 wrap-break-word min-h-0 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade">
+				<FieldGroup className="px-4">
+					<FieldSet>
+						<FieldLegend>When</FieldLegend>
+						<FieldGroup>
+							<Field>
+								<FieldLabel htmlFor={`${field}-on`}>An event arrives on</FieldLabel>
+								<Input id={`${field}-on`} className="font-mono" placeholder="source/door/message" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
+								<FieldDescription>Its topic, as the event log shows it. Several: commas between. + is one part (cam/+/motion), # all below (source/door/#).</FieldDescription>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor={`${field}-when`}>Only if</FieldLabel>
+								<Input id={`${field}-when`} className="font-mono" placeholder={'{"payload.value.open": true}'} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
+								<FieldDescription>{'Optional, as JSON: a value, or a condition such as {"payload.value.temperature": {"gt": 30}}.'}</FieldDescription>
+							</Field>
+							<Field>
+								<FieldLabel htmlFor={`${field}-pace`}>How often</FieldLabel>
+								<ToggleGroup id={`${field}-pace`} aria-label="How often" variant="outline" className="flex-wrap" value={[f.pace]} onValueChange={one((p) => setF({ ...f, pace: p as keyof typeof ROUTE_PACE }))}>
+									{Object.entries(ROUTE_PACE).map(([value, p]) => (
+										<ToggleGroupItem key={value} value={value}>{p.label}</ToggleGroupItem>
+									))}
+								</ToggleGroup>
+							</Field>
+							{f.pace === "every" ? null : (
+								<Field>
+									<FieldLabel htmlFor={`${field}-time`}>{pace.time}</FieldLabel>
+									<Input id={`${field}-time`} className="font-mono" placeholder="5m" value={f.time} onChange={(e) => setF({ ...f, time: e.target.value })} />
+									<FieldDescription>{pace.about}</FieldDescription>
+								</Field>
+							)}
+						</FieldGroup>
+					</FieldSet>
+					<FieldSeparator />
+					<FieldSet>
+						<FieldLegend>Then</FieldLegend>
+						<FieldGroup>
+							<Field>
+								<FieldLabel htmlFor={`${field}-does`}>What happens</FieldLabel>
+								<ToggleGroup id={`${field}-does`} aria-label="What happens" variant="outline" className="flex-wrap" value={[f.does]} onValueChange={one((d) => setF({ ...f, does: d as keyof typeof ROUTE_DOES }))}>
+									{Object.entries(ROUTE_DOES).map(([value, d]) => (
+										<ToggleGroupItem key={value} value={value}>{d.label}</ToggleGroupItem>
+									))}
+								</ToggleGroup>
+								<FieldDescription>{does.about}</FieldDescription>
+							</Field>
+							{f.does === "wake" ? (
+								<>
+									<Field>
+										<FieldLabel htmlFor={`${field}-agent`}>Agent</FieldLabel>
+										<Select items={agentItems} value={f.agent || null} onValueChange={(agent) => setF({ ...f, agent: agent ?? "" })}>
+											<SelectTrigger id={`${field}-agent`}>
+												<SelectValue placeholder="Choose an agent…" />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectGroup>
+													{agentItems.map((o) => (
+														<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+													))}
+												</SelectGroup>
+											</SelectContent>
+										</Select>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor={`${field}-session`}>In the conversation</FieldLabel>
+										<Input id={`${field}-session`} className="font-mono" placeholder="main" value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} />
+										<FieldDescription>Empty: its main one. “new”: a fresh one for every event. Or a name of your own.</FieldDescription>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor={`${field}-prompt`}>Telling it</FieldLabel>
+										<Textarea id={`${field}-prompt`} className="min-h-14 max-h-44" placeholder="The front door opened at {{time}}." value={f.prompt} onChange={(e) => setF({ ...f, prompt: e.target.value })} />
+										<FieldDescription>{"Optional: without it the agent gets the event itself. {{payload.field}} stands for a value of the event, {{time}} for when it came."}</FieldDescription>
+									</Field>
+								</>
+							) : f.does === "set" ? (
+								<Field>
+									<FieldLabel htmlFor={`${field}-set`}>Shared state</FieldLabel>
+									<Input id={`${field}-set`} className="font-mono" placeholder={'{"house/mode": "{{payload.value}}"}'} value={f.set} onChange={(e) => setF({ ...f, set: e.target.value })} />
+									<FieldDescription>{"As JSON: each key and what it is set to. {{payload.field}} stands for a value of the event; null deletes the key."}</FieldDescription>
+								</Field>
+							) : f.does === "publish" ? (
+								<>
+									<Field>
+										<FieldLabel htmlFor={`${field}-topic`}>Topic</FieldLabel>
+										<Input id={`${field}-topic`} className="font-mono" placeholder="house/door" value={f.publish_topic} onChange={(e) => setF({ ...f, publish_topic: e.target.value })} />
+										<FieldDescription>A topic of your own. out/source/&lt;name&gt; sends through that source.</FieldDescription>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor={`${field}-payload`}>Payload</FieldLabel>
+										<Input id={`${field}-payload`} className="font-mono" placeholder={'{"open": "{{payload.value.open}}"}'} value={f.publish_payload} onChange={(e) => setF({ ...f, publish_payload: e.target.value })} />
+										<FieldDescription>Optional, JSON or text. Without it the event's own payload is passed on.</FieldDescription>
+									</Field>
+								</>
+							) : (
+								<>
+									<Field>
+										<FieldLabel htmlFor={`${field}-call`}>Asking it</FieldLabel>
+										<Textarea id={`${field}-call`} className="min-h-14 max-h-44" placeholder="Is this message urgent? Answer YES or NO. {{payload.text}}" value={f.call_prompt} onChange={(e) => setF({ ...f, call_prompt: e.target.value })} />
+										<FieldDescription>{"{{payload.field}} stands for a value of the event. A picture of the event goes with it if the model takes pictures."}</FieldDescription>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor={`${field}-system`}>Instructions</FieldLabel>
+										<Input id={`${field}-system`} placeholder="Answer in one line." value={f.call_system} onChange={(e) => setF({ ...f, call_system: e.target.value })} />
+										<FieldDescription>Optional: the system prompt of the call.</FieldDescription>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
+										<Select items={modelItems} value={f.call_model} onValueChange={(m) => setF({ ...f, call_model: m ?? "" })}>
+											<SelectTrigger id={`${field}-model`}>
+												<SelectValue />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectGroup>
+													{modelItems.map((o) => (
+														<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
+													))}
+												</SelectGroup>
+											</SelectContent>
+										</Select>
+									</Field>
+									<Field>
+										<FieldLabel htmlFor={`${field}-answer`}>Publish the answer as</FieldLabel>
+										<Input id={`${field}-answer`} className="font-mono" placeholder="mail/urgent" value={f.publish_topic} onChange={(e) => setF({ ...f, publish_topic: e.target.value })} />
+										<FieldDescription>A topic of your own. A second route on it can wake an agent, with “Only if” on the answer: {'{"payload.text": {"regex": "^YES"}}'}.</FieldDescription>
+									</Field>
+								</>
+							)}
+						</FieldGroup>
+					</FieldSet>
+					<FieldSeparator />
+					<Field>
+						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
+						<Input id={`${field}-name`} className="font-mono" placeholder="front-door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+						<FieldDescription>For the list and the log: lowercase letters, digits, - and _.</FieldDescription>
+					</Field>
+				</FieldGroup>
+			</ScrollArea>
+			<DialogFooter>
+				<DialogClose render={<Button variant="outline" />}>Cancel</DialogClose>
+				<Button disabled={busy || !ready} onClick={() => void add()}>Add route</Button>
+			</DialogFooter>
+		</>
+	);
+}
+
+/** Settings › Events › Routes: when a route is needed at all, each route as When and Then, and New route. */
+export function Routes() {
+	const list = useLoad(() => api.routes());
+	const adding = useRef<DialogRootActions>(null);
+	return (
+		<>
+			<div className="flex items-center gap-2">
+				<p className="grow text-muted-foreground">Most things need no route: an agent that reacts to a source is subscribed to it, and what happens at a time is a schedule. A route is a rule for the rest: when an event arrives, then one thing happens, often without waking an agent.</p>
+				<Dialog actionsRef={adding}>
+					<DialogTrigger render={<Button />}><PlusIcon data-icon="inline-start" />New route</DialogTrigger>
+					<DialogContent showCloseButton={false} className="sm:max-w-2xl"><NewRoute made={() => (adding.current?.close(), list.reload())} /></DialogContent>
+				</Dialog>
+			</div>
 			<ItemGroup>
 				{list.data ? (
 					list.data.length ? (
-						list.data.map((r) => (
-							<Item key={r.name} variant="outline">
-								<ItemContent className="min-w-0">
-									<ItemTitle>
-										{r.name}
-										<Badge variant="secondary" className="font-mono">on {r.on.join(", ")}</Badge>
-										{r.when ? <Badge variant="secondary" className="font-mono">when {short(JSON.stringify(r.when), 60)}</Badge> : null}
-										{r.trust === "owner" ? <Badge variant="outline">counts as your words</Badge> : null}
-									</ItemTitle>
-									<ItemDescription className="line-clamp-none wrap-anywhere">{does(r)}</ItemDescription>
-								</ItemContent>
-								<ItemActions>
-									<AlertDialog>
-										<Tooltip>
-											<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this route"><Trash2Icon /></AlertDialogTrigger>} />
-											<TooltipContent>Remove this route</TooltipContent>
-										</Tooltip>
-										<AlertDialogContent>
-											<AlertDialogHeader>
-												<AlertDialogTitle>Remove the route {r.name}?</AlertDialogTitle>
-											</AlertDialogHeader>
-											<AlertDialogFooter>
-												<AlertDialogCancel>Cancel</AlertDialogCancel>
-												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())}>Remove</AlertDialogCancel>
-											</AlertDialogFooter>
-										</AlertDialogContent>
-									</AlertDialog>
-								</ItemActions>
-							</Item>
-						))
+						list.data.map((r) => {
+							const said = routeSaid(r);
+							return (
+								<Item key={r.name} variant="outline">
+									<ItemContent className="min-w-0">
+										<ItemTitle>
+											{r.name}
+											{r.trust === "owner" ? <Badge variant="outline">counts as your words</Badge> : null}
+										</ItemTitle>
+										<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">When</span> {said.when}</ItemDescription>
+										<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">Then</span> {said.then}</ItemDescription>
+									</ItemContent>
+									<ItemActions>
+										<AlertDialog>
+											<Tooltip>
+												<TooltipTrigger render={<AlertDialogTrigger render={<Button variant="ghost" size="icon-xs" />} aria-label="Remove this route"><Trash2Icon /></AlertDialogTrigger>} />
+												<TooltipContent>Remove this route</TooltipContent>
+											</Tooltip>
+											<AlertDialogContent>
+												<AlertDialogHeader>
+													<AlertDialogTitle>Remove the route {r.name}?</AlertDialogTitle>
+												</AlertDialogHeader>
+												<AlertDialogFooter>
+													<AlertDialogCancel>Cancel</AlertDialogCancel>
+													<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeRoute(r.name)).then((x) => x && list.reload())}>Remove</AlertDialogCancel>
+												</AlertDialogFooter>
+											</AlertDialogContent>
+										</AlertDialog>
+									</ItemActions>
+								</Item>
+							);
+						})
 					) : (
-						<p className="text-muted-foreground">No routes.</p>
+						<EmptyView icon={GitBranchIcon} title="No routes">Nothing needs one to begin with. A route is for glue: noting a value in shared state, passing an event on, a quick model look before an agent is woken.</EmptyView>
 					)
 				) : list.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
@@ -1679,70 +1886,6 @@ function Routes() {
 					<Spinner className="m-auto" />
 				)}
 			</ItemGroup>
-			<FieldSet>
-				<FieldLegend>Add a route</FieldLegend>
-				<FieldGroup className={FORM_GRID}>
-					<Field>
-						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="font-mono" placeholder="door" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-on`}>On</FieldLabel>
-						<Input id={`${field}-on`} className="font-mono" placeholder="source/house/message" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
-						<FieldDescription>Topic patterns, separated by commas.</FieldDescription>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-when`}>Only when</FieldLabel>
-						<Input id={`${field}-when`} className="font-mono" placeholder={'{"payload.open": true}'} value={f.when} onChange={(e) => setF({ ...f, when: e.target.value })} />
-						<FieldDescription>Optional, as JSON.</FieldDescription>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-throttle`}>At most one per</FieldLabel>
-						<Input id={`${field}-throttle`} className="font-mono" value={f.throttle} onChange={(e) => setF({ ...f, throttle: e.target.value })} />
-						<FieldDescription>Optional, a time such as 5m.</FieldDescription>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-agent`}>Wake the agent</FieldLabel>
-						<Select items={agentItems} value={f.agent} onValueChange={(agent) => setF({ ...f, agent: agent ?? "" })}>
-							<SelectTrigger id={`${field}-agent`}>
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectGroup>
-									{agentItems.map((o) => (
-										<SelectItem key={o.value} value={o.value}>
-											{o.label}
-										</SelectItem>
-									))}
-								</SelectGroup>
-							</SelectContent>
-						</Select>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-session`}>In the conversation</FieldLabel>
-						<Input id={`${field}-session`} className="font-mono" disabled={!f.agent} value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} />
-						<FieldDescription>Empty: its main one. “new”: a fresh one for every event.</FieldDescription>
-					</Field>
-					<Field className="col-span-full">
-						<FieldLabel htmlFor={`${field}-prompt`}>With</FieldLabel>
-						<Input id={`${field}-prompt`} disabled={!f.agent} value={f.prompt} onChange={(e) => setF({ ...f, prompt: e.target.value })} />
-						<FieldDescription>What it is told. {"{{payload.field}}"} stands for a value of the event.</FieldDescription>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-set`}>Set shared state</FieldLabel>
-						<Input id={`${field}-set`} className="font-mono" placeholder={'{"house/mode": "{{payload.value}}"}'} value={f.set} onChange={(e) => setF({ ...f, set: e.target.value })} />
-						<FieldDescription>Optional, as JSON.</FieldDescription>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-publish`}>Publish the event</FieldLabel>
-						<Input id={`${field}-publish`} className="font-mono" value={f.publish_topic} onChange={(e) => setF({ ...f, publish_topic: e.target.value })} />
-						<FieldDescription>Optional: a topic of your own.</FieldDescription>
-					</Field>
-				</FieldGroup>
-				<Field orientation="horizontal" className="justify-end">
-					<Button disabled={!f.name.trim() || !f.on.trim()} onClick={() => void add()}>Add route</Button>
-				</Field>
-			</FieldSet>
 		</>
 	);
 }
