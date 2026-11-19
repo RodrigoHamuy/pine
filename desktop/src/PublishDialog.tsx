@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
-import { Spinner } from "@/components/ui/spinner";
+import { Pulse } from "@/components/pulse";
 import { Textarea } from "@/components/ui/textarea";
 import { store } from "./model.ts";
 
@@ -87,7 +87,7 @@ export function PublishDialog({ topic: firstTopic = "", payload: firstPayload = 
 					</FieldGroup>
 					<DialogFooter>
 						<Button type="button" variant="outline" onClick={close}>Cancel</Button>
-						<Button type="submit" disabled={sending}>{sending ? <Spinner data-icon="inline-start" /> : null}Publish <Kbd>⌘↩</Kbd></Button>
+						<Button type="submit" disabled={sending}>{sending ? <Pulse label="Loading" data-icon="inline-start" /> : null}Publish <Kbd>⌘↩</Kbd></Button>
 					</DialogFooter>
 				</form>
 			</DialogContent>

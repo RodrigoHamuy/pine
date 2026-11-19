@@ -852,11 +852,13 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	await sees("[data-slot=dialog-content][data-tone=warn]");
 	assert.match(await page.textContent("[data-slot=dialog-content][data-tone=warn]"), /Approval needed[\s\S]*echo hello/);
 	await shot("03-approval");
-	// What is at work is stock Spinner, announced as working: here the line of the turn's work and the
-	// line under the conversation, which came one after the other.
-	const working = await page.locator("[data-slot=spinner][role=status][aria-label=Working]").count();
-	assert.ok(working >= 2, `${working} spinners at work`);
-	assert.equal(await page.$$eval(".spinner", (els: Element[]) => els.length), 0);
+	// What is at work is a grey dot that pulses, announced as working: here the line of the turn's work and the line
+	// under the conversation (its tab and its row say ! instead). No spinner turns anywhere, and every dot is in step.
+	const working = await page.locator("[data-slot=pulse][role=status][aria-label=Working]").count();
+	assert.ok(working >= 2, `${working} dots at work`);
+	assert.equal(await page.locator("[data-slot=spinner]").count(), 0);
+	const beats = await page.$$eval("[data-slot=pulse]", (els: Element[]) => els.map((e) => (e as HTMLElement).getAnimations()[0]?.currentTime));
+	assert.ok(beats.every((t) => t === beats[0]), `every dot at the same point of the beat: ${beats.join(", ")}`);
 	await page.locator("[data-slot=dialog-content][data-tone=warn]").getByRole("button", { name: /^Allow/ }).click();
 	await sees('[data-item="approval"][data-state="allowed"]');
 	// Then the agent asks something: the answers it offers, the recommended one first.

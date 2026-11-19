@@ -18,7 +18,7 @@ import { errText } from "./text.ts";
 import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "@/components/ui/empty";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Spinner } from "@/components/ui/spinner";
+import { Pulse } from "@/components/pulse";
 import { cn } from "@/lib/utils";
 
 type Op = Record<string, unknown> & { do: string };
@@ -229,7 +229,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							if (e.key === "Escape") (setAddress(undefined), e.currentTarget.blur());
 						}}
 					/>
-					{busy ? <InputGroupAddon align="inline-end"><Spinner /></InputGroupAddon> : null}
+					{busy ? <InputGroupAddon align="inline-end"><Pulse label="Loading" /></InputGroupAddon> : null}
 				</InputGroup>
 			</div>
 			{open ? (
@@ -270,7 +270,7 @@ export function BrowserView({ tab }: { tab: Tab }) {
 							else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) (e.preventDefault(), act({ do: "text", text: e.key }, 90));
 						}}
 					/>
-					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Spinner /></div>}
+					{drawn ? null : <div className="absolute inset-0 grid place-items-center"><Pulse label="Loading" /></div>}
 				</ScrollArea>
 			) : (
 				<Empty>

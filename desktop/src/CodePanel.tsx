@@ -39,7 +39,7 @@ import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { TerminalView } from "./Terminal.tsx";
-import { Spinner } from "@/components/ui/spinner";
+import { Pulse } from "@/components/pulse";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
@@ -238,7 +238,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		return prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
 	};
 	if (list.error) return <EmptyView icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</EmptyView>;
-	if (!data) return <Spinner className="m-auto" />;
+	if (!data) return <Pulse label="Loading" className="m-auto" />;
 	if (!turn && !data.repo) return <EmptyView icon={GitBranchIcon} title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</EmptyView>;
 	if (file)
 		return (
@@ -248,7 +248,7 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 					<PathCrumbs path={file} />
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… the rest of this diff is too long to show.</p> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <Spinner className="m-auto" />}</div><ScrollBar orientation="horizontal" /></ScrollArea>
+				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… the rest of this diff is too long to show.</p> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <Pulse label="Loading" className="m-auto" />}</div><ScrollBar orientation="horizontal" /></ScrollArea>
 			</>
 		);
 	return (
@@ -293,7 +293,7 @@ function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void;
 		<>
 			{failed ? <EmptyView icon={FolderIcon} title="This folder cannot be read">{failed}</EmptyView> : null}
 			{entries && !entries.length ? <EmptyView icon={FolderIcon} title="This folder is empty" /> : null}
-			{entries || failed ? null : <Spinner className="m-auto" />}
+			{entries || failed ? null : <Pulse label="Loading" className="m-auto" />}
 			<Tree aria-label="Files" className="outline-none" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} expandOnPress onAction={(full) => !isDir(full) && pick(full)}>
 				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
 			</Tree>
@@ -416,7 +416,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				) : disk.error ? (
 					<EmptyView icon={FileIcon} title="This file cannot be shown">{disk.error}</EmptyView>
 				) : !disk.data ? (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				) : (
 					<EmptyView icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</EmptyView>
 				)}
@@ -446,7 +446,7 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{query.trim() ? (
-					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
+					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Pulse label="Loading" className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
@@ -467,7 +467,7 @@ function Output({ tab }: { tab: Tab }) {
 		return out;
 	}, [tab.key, tab.codeTick]);
 	const [open, setOpen] = useState<string>();
-	if (!calls.data) return calls.error ? <EmptyView icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</EmptyView> : <Spinner className="m-auto" />;
+	if (!calls.data) return calls.error ? <EmptyView icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</EmptyView> : <Pulse label="Loading" className="m-auto" />;
 	if (!calls.data.length) return <EmptyView icon={SquareTerminalIcon} title="No tool calls yet">What the agent's commands and tools print appears here.</EmptyView>;
 	const shown = calls.data.find((c) => `${c.task}:${c.n}` === open);
 	if (shown)
@@ -489,7 +489,7 @@ function Output({ tab }: { tab: Tab }) {
 			<Listbox aria-label="Tool calls" className="outline-none" {...LISTBOX} onValueChange={onPick(setOpen)}>
 			{calls.data.map((c) => (
 				<ListboxItem key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
-					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Spinner aria-label="Working" className="size-3.5" />}
+					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Pulse />}
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}

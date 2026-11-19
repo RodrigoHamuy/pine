@@ -10,7 +10,7 @@ import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLeg
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
-import { Spinner } from "@/components/ui/spinner";
+import { Pulse } from "@/components/pulse";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
@@ -195,7 +195,7 @@ function General() {
 			) : overview.error ? (
 				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{overview.error}</AlertDescription></Alert>
 			) : (
-				<Spinner className="m-auto" />
+				<Pulse label="Loading" className="m-auto" />
 			)}
 			{settings.data ? (
 				groups.map(([prefix, title]) => (
@@ -209,7 +209,7 @@ function General() {
 			) : settings.error ? (
 				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{settings.error}</AlertDescription></Alert>
 			) : (
-				<Spinner className="m-auto" />
+				<Pulse label="Loading" className="m-auto" />
 			)}
 		</Page>
 	);
@@ -300,7 +300,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 					<ChevronLeftIcon data-icon="inline-start" />
 					Agents
 				</Button>
-				{detail.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{detail.error}</AlertDescription></Alert> : <Spinner className="m-auto" />}
+				{detail.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{detail.error}</AlertDescription></Alert> : <Pulse label="Loading" className="m-auto" />}
 			</Page>
 		);
 	const now = <K extends keyof AgentDetail>(key: K): AgentDetail[K] => (key in change ? (change[key as string] as AgentDetail[K]) : d[key]);
@@ -694,7 +694,7 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 							</Field>
 						)
 					) : !state?.done && !error ? (
-						<div className="flex items-center gap-2 text-muted-foreground"><Spinner /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
+						<div className="flex items-center gap-2 text-muted-foreground"><Pulse label="Loading" /> {state?.url ? "Waiting for you to sign in in the browser…" : "Starting…"}</div>
 					) : null}
 					{state?.done && !state.error ? (
 						<Alert data-tone="good">
@@ -780,7 +780,7 @@ function Models() {
 				) : servers.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
 				) : (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
 			<FieldSet>
@@ -811,7 +811,7 @@ function Models() {
 				</FieldGroup>
 				<Field orientation="horizontal">
 					<FieldDescription>An agent that is given one of its models sends its whole conversations there.</FieldDescription>
-					<Button disabled={!f.name.trim() || !f.url.trim() || busy} onClick={() => void add()}>{busy ? <><Spinner data-icon="inline-start" />Asking the server…</> : "Add server"}</Button>
+					<Button disabled={!f.name.trim() || !f.url.trim() || busy} onClick={() => void add()}>{busy ? <><Pulse label="Loading" data-icon="inline-start" />Asking the server…</> : "Add server"}</Button>
 				</Field>
 			</FieldSet>
 
@@ -859,7 +859,7 @@ function Models() {
 				) : providers.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{providers.error}</AlertDescription></Alert>
 				) : (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
 
@@ -954,7 +954,7 @@ function Mcp() {
 										<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{x.target}</ItemDescription>
 									</ItemContent>
 									<ItemActions>
-										{x.remote ? <Button variant="outline" size="xs" disabled={busy === x.name} onClick={() => void login(x.name, agent)}>{busy === x.name ? <><Spinner data-icon="inline-start" />In your browser…</> : "Sign in"}</Button> : null}
+										{x.remote ? <Button variant="outline" size="xs" disabled={busy === x.name} onClick={() => void login(x.name, agent)}>{busy === x.name ? <><Pulse label="Loading" data-icon="inline-start" />In your browser…</> : "Sign in"}</Button> : null}
 										{x.target.startsWith("bundled:") ? null : <AlertDialog>
 											<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
 											<AlertDialogContent>
@@ -977,7 +977,7 @@ function Mcp() {
 				) : servers.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
 				) : (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
 			{out ? (
@@ -1154,7 +1154,7 @@ function Skills() {
 				) : skills.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{skills.error}</AlertDescription></Alert>
 				) : (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
 		</Page>
@@ -1459,7 +1459,7 @@ function Sources() {
 				) : sources.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{sources.error}</AlertDescription></Alert>
 				) : (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
 		</>
@@ -1648,7 +1648,7 @@ export function Schedules() {
 				) : list.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
 				) : (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
 		</>
@@ -1882,7 +1882,7 @@ export function Routes() {
 				) : list.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
 				) : (
-					<Spinner className="m-auto" />
+					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
 		</>
@@ -1936,7 +1936,7 @@ function Instructions() {
 			) : files.error ? (
 				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{files.error}</AlertDescription></Alert>
 			) : (
-				<Spinner className="m-auto" />
+				<Pulse label="Loading" className="m-auto" />
 			)}
 			<Alert>
 				<InfoIcon />
@@ -2069,7 +2069,7 @@ export function MachineList() {
 	/** How the pine of a row is, when it is the one the app uses; nothing is asked of the others. */
 	const status = (h?: string) => {
 		if (state.host !== h) return null;
-		if (state.status === "starting") return <Badge variant="outline"><Spinner data-icon="inline-start" />connecting</Badge>;
+		if (state.status === "starting") return <Badge variant="outline"><Pulse label="Loading" data-icon="inline-start" />connecting</Badge>;
 		if (state.status === "error") return <Badge variant="destructive">not reached</Badge>;
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
@@ -2265,7 +2265,7 @@ function AppPage() {
 									</CodeBlock>
 								) : null}
 							</FieldContent>
-							{s.browser ? null : <Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Spinner data-icon="inline-start" />Fetching…</> : "Fetch it"}</Button>}
+							{s.browser ? null : <Button variant="outline" size="xs" disabled={s.browserFetching} onClick={() => void s.fetchBrowser()}>{s.browserFetching ? <><Pulse label="Loading" data-icon="inline-start" />Fetching…</> : "Fetch it"}</Button>}
 						</Field>
 					) : null}
 					{local ? (

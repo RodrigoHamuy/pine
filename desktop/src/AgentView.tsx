@@ -9,7 +9,7 @@ import { api } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { childKind, MODES, oneLine, short } from "./text.ts";
 import { useLoad } from "./use-load.ts";
-import { Spinner } from "@/components/ui/spinner";
+import { Pulse } from "@/components/pulse";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { FieldLegend, FieldSet } from "@/components/ui/field";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -70,7 +70,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					<FieldLegend className={TITLE}>At work</FieldLegend>
 					{tab.busy ? (
 						<Item size="xs">
-							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
+							<ItemMedia><Pulse /></ItemMedia>
 							<ItemContent>
 								<ItemTitle>this conversation</ItemTitle>
 								<ItemDescription>{`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`}</ItemDescription>
@@ -79,7 +79,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					) : null}
 					{helpers.map(([id, c]) => (
 						<Item key={id} size="xs" render={<button type="button" onClick={() => void s.openTask(id)} />}>
-							<ItemMedia>{c.running ? <Spinner aria-label="Working" className="size-3" /> : <CheckIcon />}</ItemMedia>
+							<ItemMedia>{c.running ? <Pulse /> : <CheckIcon />}</ItemMedia>
 							<ItemContent>
 								<ItemTitle>{c.agent}</ItemTitle>
 								<ItemDescription>{`${childKind(c.kind)} #${id}: ${c.label}`}</ItemDescription>
@@ -89,7 +89,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					))}
 					{elsewhere.map((session) => (
 						<Item key={session} size="xs" render={<button type="button" onClick={() => void s.openTab(tab.agent, session)} />}>
-							<ItemMedia><Spinner aria-label="Working" className="size-3" /></ItemMedia>
+							<ItemMedia><Pulse /></ItemMedia>
 							<ItemContent>
 								<ItemTitle>{session}</ItemTitle>
 								<ItemDescription>another conversation of {tab.agent}</ItemDescription>
