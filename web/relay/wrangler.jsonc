@@ -1,0 +1,18 @@
+// The relay of pine's web client. `npm run dev` serves it locally; it is deployed only by hand
+// (`npx wrangler deploy` in web/relay), never by a workflow.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "pine-relay",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-01",
+  // No logs of the bytes carried: the relay writes none, and Workers Logs stay off.
+  "observability": { "enabled": false },
+  "ratelimits": [
+    {
+      // Connections per client IP: 20 a minute.
+      "name": "LIMITER",
+      "namespace_id": "1001",
+      "simple": { "limit": 20, "period": 60 }
+    }
+  ]
+}
