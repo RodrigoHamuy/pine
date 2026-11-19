@@ -2300,6 +2300,10 @@ test("another machine's pine is used from the foot of the side bar, and this Mac
 	// The foot of the side bar lists both machines; the other one is picked, and the window shows its pine.
 	await page.click("[data-slot=service-status]");
 	await sees("[data-slot=dropdown-menu-radio-item] >> text=This Mac");
+	// The menu opens over the side bar, which moves the window: it is no part of that, or a click on it would move the
+	// window instead (the system takes it, so a click of the driver's, which goes to the page, cannot show this).
+	const region = await page.$$eval("[data-slot=dropdown-menu-content], [data-slot=dropdown-menu-radio-item]", (els: Element[]) => els.map((e) => getComputedStyle(e).getPropertyValue("-webkit-app-region")));
+	assert.ok(region.length && region.every((r) => r === "no-drag"), `the menu takes its own clicks: ${region.join(", ")}`);
 	await shot("17-machines");
 	await page.click("[data-slot=dropdown-menu-radio-item][data-host='you@elsewhere']");
 	const agents = () => page.$$eval("[data-slot=agent-label] > :first-child", (els: Element[]) => els.map((e) => e.textContent?.trim()).join());

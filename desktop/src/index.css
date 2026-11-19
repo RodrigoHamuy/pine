@@ -214,6 +214,12 @@
 @utility app-no-drag {
 	-webkit-app-region: no-drag;
 }
+/* A drag region takes the clicks in its place whatever is drawn over it: a menu, a popover or a dialog that
+   opens over the side bar would move the window instead of being chosen from. What Base UI puts in a portal
+   is not part of the window's frame. */
+[data-base-ui-portal] * {
+	-webkit-app-region: no-drag;
+}
 
 :root {
 	--background: var(--bg);
