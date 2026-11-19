@@ -622,6 +622,25 @@ test("an empty composer is drawn at full strength, and its send button says ther
 	await page.fill("[data-slot=composer] textarea", "");
 });
 
+test("a click into the composer draws no ring and no brighter border: it looks as it did before", async () => {
+	const look = () =>
+		page.$eval("[data-slot=composer] [data-slot=input-group]", (el: Element) => {
+			const s = getComputedStyle(el);
+			// A ring is a box shadow; one drawn in a transparent color is not seen.
+			const seen = s.boxShadow.split(/,(?![^(]*\))/).filter((part) => !/^\s*rgba\(0, 0, 0, 0\)/.test(part) && part.trim() !== "none");
+			return { border: s.borderColor, ring: seen.join(",") };
+		});
+	// The fields fade their colors (transition-colors): each look waits for that to end.
+	const settled = () => new Promise((r) => setTimeout(r, 300));
+	await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+	await settled();
+	const before = await look();
+	await page.click("[data-slot=composer] textarea");
+	await settled();
+	assert.equal(await page.$eval("[data-slot=composer] textarea", (el: Element) => el.matches(":focus-visible")), true);
+	assert.deepEqual(await look(), before);
+});
+
 test("the context meter turns to a warning past two thirds, and to danger past 85%", async () => {
 	const meter = "[data-slot=conversation-head] [data-slot=hover-card-trigger]";
 	for (const [percent, tone] of [[70, "warn"], [86, "bad"]] as const) {

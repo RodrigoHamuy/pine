@@ -821,7 +821,8 @@ holds only tokens and base rules.
   `--sunk`, `--side`, `--line`, `--line-soft`, `--text`, `--text-muted`, `--faint`, `--brand`,
   `--warn`, `--bad`, `--info`, `--plan`, `--add`, `--del` and their soft variants, `--select`,
   `--scrim`). shadcn's tokens point at them (`--background` is `--bg`, `--primary` `--brand`,
-  `--accent` `--hover`, `--ring` `--faint`: what has the keyboard is grey, never the accent), and the
+  `--accent` `--hover`, `--ring` `--faint`: what the keyboard was taken to is grey, never the accent;
+  a click draws no ring, and a text field looks the same with the caret in it as without), and the
   ones shadcn has no name for are utilities of their own (`text-faint`, `border-line-soft`,
   `bg-press`, `bg-hover`, `text-warn`, `text-add`...). A new color points at a role, never at a
   literal color. The values in `index.css` are pmndre's: what the window shows before a theme is set,

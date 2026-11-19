@@ -220,6 +220,17 @@
 [data-base-ui-portal] * {
 	-webkit-app-region: no-drag;
 }
+/* A click draws no ring. A button shows its ring only when the keyboard brought it there (the browser's
+   :focus-visible), but a text field counts as focus-visible however it was reached, so the stock fields and
+   the input groups around them would light up a halo and a brighter border on every click. The caret says
+   where the typing goes: a field and what wraps it look the same with the keyboard as without. A field that
+   is wrong keeps its red. The stock fields draw their border in the input's color, so the ring's color is that
+   one here (`--ring`, which the theme inlines into the utilities). */
+:is(input, textarea, [contenteditable]):focus-visible:not([aria-invalid="true"]),
+[data-slot]:has(:is(input, textarea, [contenteditable]):focus-visible):not(:has([aria-invalid="true"])) {
+	--ring: var(--input);
+	--tw-ring-color: transparent;
+}
 
 :root {
 	--background: var(--bg);
