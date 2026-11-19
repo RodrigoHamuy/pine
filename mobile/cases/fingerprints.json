@@ -1,0 +1,9 @@
+{
+	"about": "A host key's fingerprint as OpenSSH prints it: SHA256 of the key's blob, base64 without padding. blob is the key's SSH wire blob in base64 (the second field of a .pub line). expect is what ssh-keygen -lf prints for it.",
+	"cases": [
+		{ "name": "ed25519", "blob": "AAAAC3NzaC1lZDI1NTE5AAAAIJHkhBgh8x7P1fbaUKi4lIq5I7OM+7RZ9y5zUowkOsIW", "expect": "SHA256:B5IL6HvjP+x66mzgtrtt447XrwHKB2n5qq7O5jRB8oE" },
+		{ "name": "ecdsa p-256", "blob": "AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCJzpopSerYBmmsJq8sJemP4/o4rZAXHguIGIqOLDHP+IrZvRIll/NjN2Z4m0iMBgRu2nslsjTYurx+8qRGNlZY=", "expect": "SHA256:Afbwfsh8Lw6E6p8zNNveZq3ZgFZ3ikur77VCcngmO1w" },
+		{ "name": "ecdsa p-384", "blob": "AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBGkOe2lOBskeI0klaeXhfAy30SBSzvX81erYtV5XgGD27hUlISHQlK6/dodYiwMkOr5S5vQxogvEyGH04pIxDJjCkG2oGNm6+vMkKE7A8+pWsKUJg76UTcV6VA1WMmSskg==", "expect": "SHA256:Ss37GMiUHwBJUYSTyTPGYZomeBFEZDTza6fwuci7ItU" },
+		{ "name": "rsa 2048", "blob": "AAAAB3NzaC1yc2EAAAADAQABAAABAQDV81l4VjT0ANYa0cXBv9S2cinqTZLy+yR9U7iNZ/rl+7OW7uu4NIMkNWQbgbi5K0C1gBCxHxP8l5NkJG4yblkirE1Y0KYRsbeJ+7lBt9jOrBQ7313nnGLUtA3P7tyxyLR2ucWxECCmdHZmRb1yFdBVYNRHfRYYEI5ZY5YhHaBHr7jmfoRf6kBLxpg13xEp5AdfgIhoKtyjk+WkUP5/Ocq1BRazCUDx85F4uR2VHIyviPrvG7YoOusx76axrbN+kWwAm+O22p9euas91TFDGqnWe3iZRdLmylCipzRVX8Q1oeCM47bnHRBt8q1exE6jc1P9InvxHxOADE01HFmZkl53", "expect": "SHA256:CA3kKu9844sYaSEWgaiQqzEOTLJl8MDyORj92HPOZLk" }
+	]
+}

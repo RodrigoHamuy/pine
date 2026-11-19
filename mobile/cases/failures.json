@@ -1,0 +1,14 @@
+{
+	"about": "The words of a failure when the command on the other machine gives no service line (src/remote.ts sshTrouble). stderr is what it writes on stderr; exit is its exit code, or null when it never ends and says nothing on stdout (the core gives up after its answer time). expect is {kind, message}; in the message, {given} is the machine as the owner wrote it.",
+	"cases": [
+		{ "name": "pine is not installed", "stderr": "pine is not installed there: no pine command on its PATH.\n", "exit": 127, "expect": { "kind": "ssh", "message": "pine is not installed on {given}, or not on the PATH of its login shell. pine is not installed there: no pine command on its PATH." } },
+		{ "name": "pine is not installed and the shell says nothing", "stderr": "", "exit": 127, "expect": { "kind": "ssh", "message": "pine is not installed on {given}, or not on the PATH of its login shell." } },
+		{ "name": "a pine without the service command", "stderr": "error: unknown command \"service\"\n", "exit": 1, "expect": { "kind": "ssh", "message": "The pine on {given} is too old to be reached this way: it has no \"service\" command. Update it there with \"pine update\", then try again." } },
+		{ "name": "the command says why it ended", "stderr": "boom\n", "exit": 1, "expect": { "kind": "ssh", "message": "boom" } },
+		{ "name": "comment lines of a banner are left out", "stderr": "# welcome\n# to the server\nreal trouble\n", "exit": 1, "expect": { "kind": "ssh", "message": "real trouble" } },
+		{ "name": "it ends without a word", "stderr": "", "exit": 3, "expect": { "kind": "ssh", "message": "SSH to {given} ended (exit 3) without saying why." } },
+		{ "name": "it never answers", "stderr": "", "exit": null, "expect": { "kind": "ssh", "message": "{given} did not answer over SSH within a minute." } },
+		{ "name": "it never answers and says something", "stderr": "hello\n", "exit": null, "expect": { "kind": "ssh", "message": "{given} did not answer over SSH within a minute. It said: hello" } },
+		{ "name": "Tailscale SSH asks the owner to sign in", "stderr": "To authenticate, visit: https://login.tailscale.com/a/abc123\n", "exit": null, "expect": { "kind": "ssh", "message": "Tailscale SSH wants you to confirm it is you before {given} lets you in. Open https://login.tailscale.com/a/abc123, sign in, then try again." } }
+	]
+}
