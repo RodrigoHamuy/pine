@@ -16,6 +16,7 @@
     "apk": "npm run sync && node scripts/gradle.mjs android assembleDebug",
     "apk:release": "npm run sync && node scripts/gradle.mjs android assembleRelease",
     "smoke": "node scripts/smoke.mjs",
+    "smoke:ios": "node scripts/smoke-ios.mjs",
     "ios": "npm run sync:ios && xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator -destination 'generic/platform=iOS Simulator' -derivedDataPath ios/DerivedData CODE_SIGNING_ALLOWED=NO build",
     "ios:run": "npm run sync:ios && cap run ios --no-sync"
   },
