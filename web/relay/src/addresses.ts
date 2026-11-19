@@ -85,7 +85,7 @@ const CARRIES_V4: [Range, number][] = [
 ];
 
 /** An IP address as a number, with the width of its family. */
-export type Address = { bits: 32 | 128; value: bigint };
+type Address = { bits: 32 | 128; value: bigint };
 
 /** An IP address written as such, as a number; null for anything else. Brackets and an IPv6 zone are dropped. */
 export function parse(text: string): Address | null {

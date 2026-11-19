@@ -149,3 +149,23 @@ test("a control API call whose path would break its request line is answered 400
 	assert.equal((await callDaemon(stand, "GET", "/agents")).status, 0);
 	assert.deepEqual(forwarded, ["127.0.0.1:1"]);
 });
+
+test("a control API call the daemon takes and never answers ends after the time limit, with what to do, and its channel is closed", async () => {
+	let closed = false;
+	const channel = {
+		onData: () => {},
+		onStderr: () => {},
+		send: async () => {},
+		close: async () => void (closed = true),
+		closed: new Promise(() => {}),
+	};
+	const stand = { connection: { forward: async () => channel }, host: "127.0.0.1", port: 1, token: "secret" } as unknown as Parameters<typeof callDaemon>[0];
+	const started = Date.now();
+	const answer = await callDaemon(stand, "GET", "/agents", undefined, 50);
+	assert.ok(Date.now() - started < 1000);
+	assert.equal(answer.ok, false);
+	assert.equal(answer.status, 0);
+	assert.match(answer.data.error, /^pine does not answer \(.+\)/);
+	assert.match(answer.data.error, /Disconnect/);
+	assert.equal(closed, true);
+});

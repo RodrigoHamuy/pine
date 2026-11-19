@@ -79,6 +79,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["how do I reach the computer at home from my mobile when I am out", /^mobile#making-a-machine-reachable/],
 		["where do I download the mac app, and do I have to install node first", /^desktop#getting-it/],
 		["I only installed the app, how do I get the pine command in my shell", /^desktop#pine-in-a-terminal/],
+		["how do I log out of the machine I'm connected to in the browser without forgetting it", /^desktop#environments-the-pine-of-another-machine$/],
+		["the app says it could not load the agents of my server, what now", /^desktop#environments-the-pine-of-another-machine$/],
 		["does the mac app tell me when there is a newer version, or do I have to look myself", /^desktop#a-newer-version/],
 		["check for updates", /^desktop#a-newer-version/],
 		["the browser in the app is empty, how do I get back to the page my agent had open", /^desktop#the-browser/],

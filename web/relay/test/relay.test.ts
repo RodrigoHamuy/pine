@@ -88,6 +88,15 @@ test("a server that says nothing is closed after the time limit", async () => {
 	assert.ok(Date.now() - started < 1000);
 });
 
+test("a server that sends a line that is not SSH and then waits (SMTP, FTP on the port) is said not to speak SSH when time is up", async () => {
+	const t = await setup({ onConnection: (socket) => socket.write("220 smtp ready\r\n"), timeoutMs: 100 });
+	await t.fetch(request("ssh.example.org", 25));
+	const [client] = t.clients;
+	client.send("SSH-2.0-pine-web\r\n");
+	assert.equal((await client.closes()).code, CLOSE.serverNotSsh);
+	assert.equal(client.received.length, 0);
+});
+
 test("a client that says nothing is closed after the time limit, without a connection", async () => {
 	const t = await setup({ timeoutMs: 100 });
 	await t.fetch(request("ssh.example.org"));

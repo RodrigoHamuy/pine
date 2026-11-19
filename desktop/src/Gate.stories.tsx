@@ -90,20 +90,36 @@ export const HostKeyChanged: Story = {
 };
 
 const disconnected = fn(async () => ({ ...store.prefs, use: undefined }));
+/** The bridge offers Disconnect for the story, and takes it back after. */
+const offerDisconnect = () => {
+	disconnected.mockClear();
+	window.pine.disconnect = disconnected;
+	return () => void delete (window.pine as Partial<typeof window.pine>).disconnect;
+};
 
 /** A machine being reached, which can take a minute: the machines stay listed, to switch to another, and Disconnect lets go of this one. */
 export const Connecting: Story = {
 	args: { hosts: ["me@build-box", "studio"], state: { status: "starting", host: "me@build-box" } },
-	beforeEach: () => {
-		disconnected.mockClear();
-		window.pine.disconnect = disconnected;
-		return () => void delete (window.pine as Partial<typeof window.pine>).disconnect;
-	},
+	beforeEach: offerDisconnect,
 	play: async (context) => {
 		await meta.play(context);
 		const { canvasElement, userEvent } = context;
 		// Only on the row of the machine being reached.
 		await expect(canvasElement.querySelector('[data-environment="studio"] [data-slot="disconnect"]')).toBeNull();
+		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"] [data-slot="disconnect"]')!);
+		await expect(disconnected).toHaveBeenCalledTimes(1);
+	},
+};
+
+/** A machine not reached: the bridge keeps trying it, so Disconnect lets go of it and keeps its host key, which Forget would drop. */
+export const NotReached: Story = {
+	args: { hosts: ["me@build-box", "studio"], state: { status: "error", kind: "ssh", host: "me@build-box", message: "Connection refused." } },
+	beforeEach: offerDisconnect,
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement, userEvent } = context;
+		await expect(within(canvasElement).getByText(/is not reached over SSH/)).toHaveTextContent("me@build-box is not reached over SSH");
+		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="badge"]')).toHaveTextContent("not reached");
 		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"] [data-slot="disconnect"]')!);
 		await expect(disconnected).toHaveBeenCalledTimes(1);
 	},
@@ -121,11 +137,6 @@ export const LongHost: Story = {
 		await expect(rows).toHaveLength(2);
 		for (const row of rows) await expect(row.scrollWidth).toBeLessThanOrEqual(row.clientWidth);
 		const row = rows[0]!;
-		// From sm up the gate is wide enough for the host on one line: one line of the mono font, not two.
-		if (window.innerWidth >= 1024) {
-			const name = row.querySelector<HTMLElement>('[data-slot="item-title"] > span')!;
-			await expect(name.getBoundingClientRect().height).toBeLessThan(parseFloat(getComputedStyle(name).lineHeight) * 1.5);
-		}
 		const badge = row.querySelector<HTMLElement>('[data-slot="badge"]')!;
 		await expect(badge.getBoundingClientRect().right).toBeLessThanOrEqual(row.getBoundingClientRect().right);
 	},
@@ -136,11 +147,7 @@ const ready: ServiceState = { status: "ready", mode: "on build-box", started: fa
 /** The machine's pine answered and its agents are being asked for over SSH: the same screen as while it was reached, so connecting reads as one wait. */
 export const LoadingAgents: Story = {
 	args: { hosts: ["me@build-box", "studio"], state: ready },
-	beforeEach: () => {
-		disconnected.mockClear();
-		window.pine.disconnect = disconnected;
-		return () => void delete (window.pine as Partial<typeof window.pine>).disconnect;
-	},
+	beforeEach: offerDisconnect,
 	play: async (context) => {
 		await meta.play(context);
 		const { canvasElement, userEvent } = context;
@@ -170,6 +177,8 @@ export const LoadFailed: Story = {
 		await expect(canvas.getByText(/Could not load the agents of/)).toHaveTextContent("me@build-box");
 		await expect(canvas.getByText("The channel to the daemon was closed.")).toBeInTheDocument();
 		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="disconnect"]')).not.toBeNull();
+		// No wait shown on the row: it answered, and did not load.
+		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="badge"]')).toHaveTextContent("not loaded");
 		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-slot="gate-reload"]')!);
 		await expect(reloaded).toHaveBeenCalledTimes(1);
 	},

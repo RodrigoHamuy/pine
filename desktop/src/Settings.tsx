@@ -2081,15 +2081,17 @@ export function MachineList() {
 	const status = (h?: string) => {
 		if (state.host !== h) return null;
 		// Ready, with its agents still being loaded: the event stream may not be up yet, which is no loss.
-		if (state.status === "starting" || (state.status === "ready" && !s.opened)) return <Badge variant="outline"><Pulse label="Loading" data-icon="inline-start" />connecting</Badge>;
+		if (state.status === "starting" || (state.status === "ready" && !s.opened && !s.loadError)) return <Badge variant="outline"><Pulse label="Loading" data-icon="inline-start" />connecting</Badge>;
+		// It answered and its agents did not load: no wait to show, the Gate says why and offers Try again.
+		if (state.status === "ready" && s.loadError) return <Badge variant="destructive">not loaded</Badge>;
 		if (state.status === "error") return <Badge variant="destructive">not reached</Badge>;
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
 			<ItemMedia variant="icon">{h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
-			{/* The text asks for 12rem before it shares its line: where the buttons would leave it less (a phone, the Gate), the Item wraps them onto a line of their own. */}
-			<ItemContent className="min-w-0 flex-[1_1_12rem]">
+			{/* The text asks for 20rem before it shares its line: where the buttons would leave it less (a phone, the Gate, the four of a machine in error), the Item wraps them onto a line of their own. */}
+			<ItemContent className="min-w-0 flex-[1_1_20rem]">
 				{/* A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`. */}
 				<ItemTitle className="name line-clamp-none flex w-full min-w-0 flex-wrap">
 					<span className={cn("min-w-0 wrap-anywhere", h && "font-mono")}>{h ? <Breakable host={h} /> : here}</span>
@@ -2104,7 +2106,7 @@ export function MachineList() {
 				{key && key.host === h ? <Button size="xs" data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
-				{h && state.host === h && s.canDisconnect ? <Button variant="outline" size="xs" data-slot="disconnect" onClick={() => void s.disconnect()}>Disconnect</Button> : null}
+				{state.host === h && s.canDisconnect ? <Button variant="outline" size="xs" data-slot="disconnect" onClick={() => void s.disconnect()}>Disconnect</Button> : null}
 				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
 				{h && (state.host !== h || (!s.local && state.status === "error")) ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
 			</ItemActions>

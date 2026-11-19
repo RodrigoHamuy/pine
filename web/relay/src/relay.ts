@@ -155,7 +155,9 @@ function carry(ws: RelayWebSocket, targets: string[], port: number, tls: boolean
 		} catch {}
 		tcp?.close().catch(() => {});
 	};
-	const timer = setTimeout(() => end(CLOSE.timeout, "No SSH identification in time."), deps.timeoutMs);
+	/** Whether the server sent anything: one that spoke and named no SSH in time is another service (SMTP, FTP), not a slow one. */
+	let heard = false;
+	const timer = setTimeout(() => (heard ? notSsh() : end(CLOSE.timeout, "No SSH identification in time.")), deps.timeoutMs);
 
 	// A TLS handshake that fails may show when the connection opens, or at the first write or read.
 	const failed = () => (tls ? end(CLOSE.tls, "No TLS from the server: Tailscale Funnel may be off for this port.") : end(CLOSE.unreachable, "The server could not be reached."));
@@ -212,6 +214,7 @@ function carry(ws: RelayWebSocket, targets: string[], port: number, tls: boolean
 					ws.send(value);
 					continue;
 				}
+				heard = true;
 				held = concat([held, value]);
 				for (let newline = held.indexOf(0x0a); newline !== -1; newline = held.indexOf(0x0a)) {
 					if (newline + 1 > MAX_LINE) return notSsh();

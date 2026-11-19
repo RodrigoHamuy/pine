@@ -73,17 +73,21 @@ export function Gate() {
 			<MachineList />
 		</div>
 	);
-	const [title, about, actions]: [React.ReactNode, React.ReactNode, React.ReactNode] =
+	type Screen = [React.ReactNode, React.ReactNode, React.ReactNode];
+	const named = host ? <span className="font-mono"><Breakable host={host} /></span> : null;
+	// Reaching another machine's pine and loading its agents are one wait: one screen, only what it says changes.
+	const connecting = (about: string): Screen => [
+		<>Connecting to {named}</>,
+		about,
+		<div key="s" className="flex w-full flex-col items-center gap-4">
+			<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
+			{machines}
+		</div>,
+	];
+	const [title, about, actions]: Screen =
 		state.status === "starting"
 			? host
-				? [
-						<>Connecting to <span className="font-mono"><Breakable host={host} /></span></>,
-						"Reaching its pine over SSH, or starting one there…",
-						<div key="s" className="flex w-full flex-col items-center gap-4">
-							<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
-							{machines}
-						</div>,
-					]
+				? connecting("Reaching its pine over SSH, or starting one there…")
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Pulse label="Loading" key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
@@ -99,7 +103,7 @@ export function Gate() {
 					]
 				: state.status === "error"
 					? [
-							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? `${host} is not reached over SSH` : "Choose a machine") : host ? `pine on ${host} did not start` : "pine did not start",
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? <>{named} is not reached over SSH</> : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
 							state.message,
 							<div key="b" className="flex w-full flex-col items-center gap-4">
 								{/* A host key met for the first time: its fingerprint, and the owner's yes to exactly that one. */}
@@ -116,7 +120,7 @@ export function Gate() {
 					: s.loadError
 						? // The pine answered and its agents could not be loaded: said, with a way to ask again, never a wait that does not end.
 							[
-								host ? <>Could not load the agents of <span className="font-mono"><Breakable host={host} /></span></> : "Could not load your agents",
+								host ? <>Could not load the agents of {named}</> : "Could not load your agents",
 								s.loadError,
 								<div key="l" className="flex w-full flex-col items-center gap-4">
 									<div className="flex items-center gap-2">
@@ -127,23 +131,14 @@ export function Gate() {
 								</div>,
 							]
 						: host
-							? // Another machine's pine answered and its agents are being asked for over SSH: the same screen as while it was reached, so connecting reads as one wait.
-								[
-									<>Connecting to <span className="font-mono"><Breakable host={host} /></span></>,
-									"Loading its agents…",
-									<div key="s" className="flex w-full flex-col items-center gap-4">
-										<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
-										{machines}
-									</div>,
-								]
+							? // Another machine's pine answered and its agents are being asked for over SSH.
+								connecting("Loading its agents…")
 							: ["Loading your agents…", "", <Pulse label="Loading" key="s" />];
 	// Before pine answers there is nothing to show yet: stock Empty, in a frame that moves the window.
-	// Stock caps its header and content at max-w-sm, made for a line or two of text: from sm up they get
-	// room for a machine's row, so that a tailnet host and its buttons share one line. A phone keeps the full width.
 	return (
 		<div className="m-1.5 flex flex-1 overflow-y-auto rounded-xl border bg-background app-drag">
 			<Empty className="app-no-drag">
-				<EmptyHeader className="sm:max-w-xl">
+				<EmptyHeader>
 					<EmptyMedia>
 						<Logo className="size-9" />
 					</EmptyMedia>
@@ -152,7 +147,7 @@ export function Gate() {
 					{/* A host key's fingerprint is one long word: it breaks anywhere, or it overflows its centered line on a phone. */}
 					{about ? <EmptyDescription className="wrap-anywhere select-text">{about}</EmptyDescription> : null}
 				</EmptyHeader>
-				<EmptyContent className="sm:max-w-2xl">{actions}</EmptyContent>
+				<EmptyContent>{actions}</EmptyContent>
 			</Empty>
 		</div>
 	);

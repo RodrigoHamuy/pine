@@ -167,20 +167,43 @@ export type Daemon = { connection: Connection; host: string; port: number; token
 
 const hostHeader = (d: Daemon) => (d.host.includes(":") ? `[${d.host}]:${d.port}` : `${d.host}:${d.port}`);
 
-/** One call of the control API in the owner's name, answered as desktop/electron/daemon.ts's `callDaemon` answers. */
-export async function callDaemon(daemon: Daemon | undefined, method: string, url: string, body?: unknown): Promise<{ ok: boolean; status: number; data: any }> {
+/** How long one call of the control API may take before it is given up: a daemon can take the channel and never answer. */
+export const CALL_MS = 30_000;
+
+/** Thrown when a call is given up after `ms`; its message goes inside "pine does not answer (...)". */
+class NoAnswer extends Error {}
+
+/**
+ * One call of the control API in the owner's name, answered as desktop/electron/daemon.ts's `callDaemon` answers.
+ * A call that gets no answer in `ms` is given up and its channel closed, so that the page is not left waiting.
+ */
+export async function callDaemon(daemon: Daemon | undefined, method: string, url: string, body?: unknown, ms = CALL_MS): Promise<{ ok: boolean; status: number; data: any }> {
 	if (!daemon) return { ok: false, status: 503, data: { error: "pine is not running yet" } };
 	if ((method !== "GET" && method !== "POST") || typeof url !== "string" || !daemonPath(url)) return { ok: false, status: 400, data: { error: "not a call of the control API" } };
 	try {
 		const channel = await daemon.connection.forward(daemon.host, daemon.port);
 		let head: Head | undefined;
 		const parts: Uint8Array[] = [];
-		await exchange(
-			channel,
-			{ method, path: url, host: hostHeader(daemon), headers: { Authorization: `Bearer ${daemon.token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) }, body: body !== undefined ? bytes(JSON.stringify(body)) : undefined },
-			(h) => (head = h),
-			(b) => parts.push(b),
-		);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const late = new Promise<never>((_, reject) => {
+			timer = setTimeout(() => {
+				void channel.close().catch(() => {});
+				reject(new NoAnswer(`nothing came back in ${Math.round(ms / 1000)} s`));
+			}, ms);
+		});
+		try {
+			await Promise.race([
+				exchange(
+					channel,
+					{ method, path: url, host: hostHeader(daemon), headers: { Authorization: `Bearer ${daemon.token}`, ...(body !== undefined ? { "Content-Type": "application/json" } : {}) }, body: body !== undefined ? bytes(JSON.stringify(body)) : undefined },
+					(h) => (head = h),
+					(b) => parts.push(b),
+				),
+				late,
+			]);
+		} finally {
+			clearTimeout(timer);
+		}
 		const got = concat(...parts);
 		const status = head!.status;
 		const ok = status >= 200 && status < 300;
@@ -194,6 +217,7 @@ export async function callDaemon(daemon: Daemon | undefined, method: string, url
 		}
 		return { ok, status, data: { mime: type, base64: base64(got) } };
 	} catch (e) {
+		if (e instanceof NoAnswer) return { ok: false, status: 0, data: { error: `pine does not answer (${e.message}). Its daemon on that machine may be stuck: try again, or Disconnect and connect again.` } };
 		return { ok: false, status: 0, data: { error: `pine does not answer (${e instanceof Error ? e.message : e})` } };
 	}
 }
