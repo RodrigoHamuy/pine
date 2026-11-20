@@ -826,7 +826,9 @@ test("tui: /branch goes on in a new tab from a message picked in a list, or from
 	// The list: all of it first, then the owner's messages, the latest first.
 	await t.send("/branch");
 	await t.sees("│ Branch idea from");
-	const order = ["all of it", "second thought", "first thought"].map((w) => t.text().indexOf(w, t.text().indexOf("Branch idea from")));
+	// Read inside the dialog's frame only: the conversation drawn beside it holds the same words.
+	const box = t.text().split("\n").map((l) => (l.includes("│") ? l.slice(l.indexOf("│") + 1) : "")).join("\n");
+	const order = ["all of it", "second thought", "first thought"].map((w) => box.indexOf(w, box.indexOf("Branch idea from")));
 	assert.ok(order.every((n, i) => n > 0 && (i === 0 || n > order[i - 1])), t.text());
 	t.term.type([KEY.down, KEY.down, KEY.enter]);
 	await t.sees(/3 main·idea-branch ×/);

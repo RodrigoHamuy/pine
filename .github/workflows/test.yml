@@ -127,9 +127,13 @@ jobs:
       - name: The app's tests
         if: runner.os == 'macOS'
         run: npm run desktop:test
+        env:
+          PINE_TEST_PATIENCE: "4"
       - name: The app's tests, on a virtual screen
         if: runner.os == 'Linux'
         run: xvfb-run -a npm run desktop:test
+        env:
+          PINE_TEST_PATIENCE: "4"
 
   # The Pine app packed for Linux and Windows as a release packs it (unsigned, the app's folder
   # alone), and started once from there: whether it runs on the pine and the Node it carries.

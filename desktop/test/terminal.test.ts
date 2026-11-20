@@ -22,7 +22,8 @@ function world(shell = "/bin/sh", stillRunningMs = 400) {
 	// for the answer, which xterm.js gives in the app. Here nothing draws, so the cursor is at the top.
 	const terms: Terminals = new Terminals({ data: (id, data) => (out.set(id, (out.get(id) ?? "") + data), data.split("\x1b[6n").slice(1).forEach(() => terms.write(id, "\x1b[1;1R"))), exit: (id, code) => ended.set(id, code), run: (id, r) => runs.push({ id, ...r }) }, { env: async () => ({ ...process.env, HOME: dir, PS1: "$ " }), hooks: path.join(dir, ".hooks"), shell: [shell], stillRunningMs });
 	const until = async (what: () => boolean, ms = 5000) => {
-		const end = Date.now() + ms;
+		// (GitHub's runners are slower than a desk: PINE_TEST_PATIENCE there.)
+		const end = Date.now() + ms * Math.max(1, Number(process.env.PINE_TEST_PATIENCE) || 1);
 		while (!what()) {
 			if (Date.now() > end) throw new Error(`waited in vain; the terminal says: ${JSON.stringify([...out])}`);
 			await new Promise((r) => setTimeout(r, 20));
