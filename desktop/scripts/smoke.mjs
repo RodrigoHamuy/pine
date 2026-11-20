@@ -106,6 +106,32 @@ try {
 	);
 	if (report.code !== 1 || !/ran-42/.test(report.output)) throw new Error(`the run reported ${JSON.stringify(report)}`);
 	console.log("ok: a terminal runs in the app's own node-pty, and a block run in the owner's shell says how it ended");
+	// Browser access: node-datachannel is the app's other native module, outside the archive. Loaded
+	// by the app's own program under its signature, as Node (the main process loads it the same
+	// way), and two of its peers on this Mac open a channel and pass a message.
+	const peered = execFileSync(binary, ["-e", `
+		const ndc = require(${JSON.stringify(path.join(resources, "app.asar", "node_modules", "node-datachannel"))});
+		const where = require.resolve(${JSON.stringify(path.join(resources, "app.asar", "node_modules", "node-datachannel"))});
+		const a = new ndc.PeerConnection("a", { iceServers: [] });
+		const b = new ndc.PeerConnection("b", { iceServers: [] });
+		a.onLocalDescription((sdp, type) => b.setRemoteDescription(sdp, type));
+		a.onLocalCandidate((c, mid) => b.addRemoteCandidate(c, mid));
+		b.onLocalDescription((sdp, type) => a.setRemoteDescription(sdp, type));
+		b.onLocalCandidate((c, mid) => a.addRemoteCandidate(c, mid));
+		const end = (said) => { a.close(); b.close(); ndc.cleanup(); console.log(said); };
+		const timer = setTimeout(() => end("no channel opened"), 15000);
+		b.onDataChannel((dc) => dc.onMessage((m) => { clearTimeout(timer); dc.close(); end(String(m) + " " + where); }));
+		const dc = a.createDataChannel("ssh");
+		dc.onOpen(() => dc.sendMessage("peered"));
+	`], { encoding: "utf8", env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 30_000 }).trim();
+	if (!peered.startsWith("peered ")) throw new Error(`node-datachannel in the app said: ${peered.slice(0, 400)}`);
+	// One binary, the one for the app's kind of Mac (an app for the other kind is tried here under Rosetta).
+	const bindings = path.join(resources, "app.asar.unpacked", "node_modules", "@node-datachannel");
+	const kinds = fs.existsSync(bindings) ? fs.readdirSync(bindings) : [];
+	if (kinds.length !== 1 || !fs.existsSync(path.join(bindings, kinds[0], "node_datachannel.node"))) throw new Error(`node-datachannel's binaries outside the archive: ${kinds.join(", ") || "none"}`);
+	execFileSync("/usr/bin/codesign", ["--verify", "--strict", path.join(bindings, kinds[0], "node_datachannel.node")]);
+	if (!peered.includes("app.asar")) throw new Error(`node-datachannel was loaded from outside the app: ${peered}`);
+	console.log("ok: node-datachannel loads in the app, outside the archive and signed, and two peers pass a message");
 	// PINE_SMOKE_HOLD=<seconds>: stays open that long, for somebody to look at the window.
 	if (Number(process.env.PINE_SMOKE_HOLD) > 0) await new Promise((r) => setTimeout(r, Number(process.env.PINE_SMOKE_HOLD) * 1000));
 	if (from !== "the app") throw new Error(`the app used the pine of "${from}", not the one it carries`);
