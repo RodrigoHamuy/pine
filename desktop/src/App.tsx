@@ -22,7 +22,7 @@ import { COMMANDS } from "./commands.ts";
 import { TabMenu, type TabMenuAction } from "@/components/tab-menu";
 import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
-import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
+import { type Beside, ROOM, store, type Tab, type UpdatePhase, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
 import { VIEW_KEY, ViewAside } from "./View.tsx";
 import { Breakable, MachineList, Settings } from "./Settings.tsx";
@@ -465,7 +465,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 function Sidebar() {
 	const s = useModel(store);
 	const front = s.active;
-	const newer = s.update?.status === "newer" ? s.update : undefined;
+	const update = s.updatePhase;
 	const older = s.service.status === "ready" && s.service.olderThan ? s.service : undefined;
 	const { isMobile } = useSidebar();
 	// shadcn's stock Sidebar. In a wide window it is fixed in its place (the panel around it sets its width),
@@ -495,23 +495,7 @@ function Sidebar() {
 			</SidebarContent>
 			<SidebarFooter className="gap-0">
 				<SidebarMenu>
-					{newer?.updater?.state === "ready" && s.updateWhenDone ? (
-						<SidebarMenuItem className="app-no-drag">
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.cancelUpdateWait()} />}><HourglassIcon /><span className="grow min-w-0 flex-1 truncate">Restarts when the work is done</span><XIcon /></TooltipTrigger><TooltipContent>{`Pine ${newer.version} is installed once no conversation is at work. Click to call it off: the update stays ready for a restart or a quit.`}</TooltipContent></HoverTooltip>
-						</SidebarMenuItem>
-					) : newer?.updater?.state === "ready" ? (
-						<SidebarMenuItem className="app-no-drag">
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void s.restartToUpdate()} />}><RotateCwIcon /><span className="grow min-w-0 flex-1 truncate">Restart to update</span></TooltipTrigger><TooltipContent>{`Pine ${newer.version} is downloaded. Pine quits, puts the new app in place of this one (${newer.mine}) and opens again, with the pine it started.`}</TooltipContent></HoverTooltip>
-						</SidebarMenuItem>
-					) : newer?.updater?.state === "downloading" ? (
-						<SidebarMenuItem className="app-no-drag">
-							<SidebarMenuButton disabled><DownloadIcon /><span className="grow min-w-0 flex-1 truncate">Downloading Pine {newer.version}…</span></SidebarMenuButton>
-						</SidebarMenuItem>
-					) : newer ? (
-						<SidebarMenuItem className="app-no-drag">
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`${newer.updater?.state === "failed" ? `${newer.updater.reason} ` : ""}This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></HoverTooltip>
-						</SidebarMenuItem>
-					) : null}
+					{update ? <SidebarMenuItem className="app-no-drag"><UpdateButton update={update} /></SidebarMenuItem> : null}
 					{older ? (
 						<SidebarMenuItem className="app-no-drag" data-notice="older-pine">
 							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.openSettings("app")} />}><TriangleAlertIcon /><span className="grow min-w-0 flex-1 truncate">An older pine runs</span></TooltipTrigger><TooltipContent>{`The pine this app attached to is ${older.version}, older than the app's own (${older.olderThan}). Restart it on the newer one: Settings › App says how.`}</TooltipContent></HoverTooltip>
@@ -772,46 +756,68 @@ function Help({ close }: { close: () => void }) {
 	);
 }
 
+/** The foot of the side bar for a newer app (`Store.updatePhase`): the wait and its call-off, Restart to update, the download, or the release's page. */
+function UpdateButton({ update: u }: { update: UpdatePhase }) {
+	const s = useModel(store);
+	switch (u.phase) {
+		case "waiting":
+			return <HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.cancelUpdateWait()} />}><HourglassIcon /><span className="grow min-w-0 flex-1 truncate">Restarts when the work is done</span><XIcon /></TooltipTrigger><TooltipContent>{`Pine ${u.version} is installed once no conversation is at work. Click to call it off: the update stays ready for a restart or a quit.`}</TooltipContent></HoverTooltip>;
+		case "ready":
+			return <HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void s.restartToUpdate()} />}><RotateCwIcon /><span className="grow min-w-0 flex-1 truncate">Restart to update</span></TooltipTrigger><TooltipContent>{`Pine ${u.version} is downloaded. Pine quits, puts the new app in place of this one (${u.mine}) and opens again, with the pine it started.`}</TooltipContent></HoverTooltip>;
+		case "downloading":
+			return <SidebarMenuButton disabled><DownloadIcon /><span className="grow min-w-0 flex-1 truncate">Downloading Pine {u.version}…</span></SidebarMenuButton>;
+		case "link":
+			return <HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(u.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {u.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`${u.reason ? `${u.reason} ` : ""}This is Pine ${u.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></HoverTooltip>;
+	}
+}
+
 /**
- * After "Check for Updates…" found a newer app: ready to install with a restart, being downloaded, or
+ * After "Check for Updates…" found a newer app: ready to install with a restart, waiting for the
+ * work to end before it restarts (the wait can be called off there), being downloaded, or
  * where it is when the app does not update itself (the setting off, a checkout, a download that failed).
  */
 function UpdateAsk() {
 	const s = useModel(store);
-	const u = s.update;
+	const u = s.updatePhase;
 	const close = () => ((s.updateAsk = false), s.touch());
-	if (u?.status !== "newer") return null;
-	if (u.updater?.state === "ready" || u.updater?.state === "downloading") {
-		const ready = u.updater.state === "ready";
+	if (!u) return null;
+	if (u.phase === "link") {
 		return (
 			<Dialog open onOpenChange={(open) => open || close()}>
 				<DialogContent showCloseButton={false} className="sm:max-w-lg">
 					<DialogHeader>
-						<DialogTitle>{ready ? `Pine ${u.version} is ready` : `Pine ${u.version} is being downloaded`}</DialogTitle>
+						<DialogTitle>Pine {u.version} is available</DialogTitle>
 					</DialogHeader>
-					<p className="text-muted-foreground select-text">{ready ? `This is Pine ${u.mine}. Restart to update: Pine quits, puts the new app in place of this one and opens again, with the pine it started. Or quit when you like: the update is installed then.` : `This is Pine ${u.mine}. The new app is downloaded in the background; "Restart to update" appears at the foot of the side bar when it is ready.`} Your pine home, with your agents, conversations and settings, stays as it is.</p>
+					<div className="select-text">
+						{u.reason ? <p className="mb-2.5 text-muted-foreground">{u.reason}</p> : null}
+						<p className="text-muted-foreground">This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
+						<p className="mt-2.5 cursor-auto font-mono text-xs text-faint select-text">{u.url}</p>
+					</div>
 					<DialogFooter>
-						<Button variant="outline" onClick={close}>{ready ? "Not now" : "Close"}</Button>
-						{ready ? <Button onClick={() => void s.restartToUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
+						<Button variant="outline" onClick={close}>Not now</Button>
+						<Button onClick={() => (void bridge.open(u.url), close())}><ExternalLinkIcon data-icon="inline-start" />Open the release page</Button>
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>
 		);
 	}
+	const title = { waiting: `Pine ${u.version} is ready`, ready: `Pine ${u.version} is ready`, downloading: `Pine ${u.version} is being downloaded` }[u.phase];
+	const text = {
+		waiting: `This is Pine ${u.mine}. Pine restarts to update once no conversation is at work. Call off the wait to keep working on this version: the update stays ready for a restart or a quit.`,
+		ready: `This is Pine ${u.mine}. Restart to update: Pine quits, puts the new app in place of this one and opens again, with the pine it started. Or quit when you like: the update is installed then.`,
+		downloading: `This is Pine ${u.mine}. The new app is downloaded in the background; "Restart to update" appears at the foot of the side bar when it is ready.`,
+	}[u.phase];
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
 			<DialogContent showCloseButton={false} className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>Pine {u.version} is available</DialogTitle>
+					<DialogTitle>{title}</DialogTitle>
 				</DialogHeader>
-				<div className="select-text">
-					{u.updater?.state === "failed" ? <p className="mb-2.5 text-muted-foreground">{u.updater.reason}</p> : null}
-					<p className="text-muted-foreground">This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
-					<p className="mt-2.5 cursor-auto font-mono text-xs text-faint select-text">{u.url}</p>
-				</div>
+				<p className="text-muted-foreground select-text">{text} Your pine home, with your agents, conversations and settings, stays as it is.</p>
 				<DialogFooter>
-					<Button variant="outline" onClick={close}>Not now</Button>
-					<Button onClick={() => (void bridge.open(u.url), close())}><ExternalLinkIcon data-icon="inline-start" />Open the release page</Button>
+					<Button variant="outline" onClick={close}>{u.phase === "ready" ? "Not now" : "Close"}</Button>
+					{u.phase === "ready" ? <Button onClick={() => void s.restartToUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
+					{u.phase === "waiting" ? <Button variant="outline" onClick={() => s.cancelUpdateWait()}><XIcon data-icon="inline-start" />Call off the wait</Button> : null}
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>

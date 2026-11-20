@@ -204,7 +204,7 @@ async function fromRegistry(name: string): Promise<string | undefined> {
 }
 
 /** What a pine of the app says about a newer version: the app is what is replaced, not pine inside it. */
-export const appNews = (latest: string, mine: string) => `pine ${latest} is available (this is ${mine}). This pine came with the Pine app, and a new app brings the new pine. Download it and put it in place of the old one:\n\n  ${APP_RELEASES}`;
+export const appNews = (latest: string, mine: string) => `pine ${latest} is available (this is ${mine}). This pine came with the Pine app, and a new app brings the new pine. The Pine app downloads the new release itself and installs it when you press "Restart to update" or quit it. Where it cannot, the release's page has the app:\n\n  ${APP_RELEASES}`;
 
 /**
  * Update pine, or with `check` only say whether there is something newer. Returns the exit code.

@@ -16,7 +16,7 @@ export interface Updater {
 	state(): UpdaterState;
 	/** Download the release of `version` from its feed; once is enough, a second call for the same release does nothing. */
 	download(feed: string, version: string): void;
-	/** Quit and install the update that is ready (the daemons the app started are stopped before). */
+	/** Quit and install the update that is ready (the daemons the app started are stopped before). An install that fails does not quit: the state turns to failed. */
 	install(): void;
 	/** The app quits: an update that is ready is installed on the way out. */
 	quitting(): void;
@@ -37,6 +37,8 @@ function squirrel(changed: (state: UpdaterState) => void): Updater {
 	let version = "";
 	const set = (s: UpdaterState) => changed((now = s));
 	autoUpdater.on("update-downloaded", () => set({ state: "ready", version }));
+	// The feed names a release, so "nothing newer" means Squirrel.Mac would not take it: a failure, not a download that never ends.
+	autoUpdater.on("update-not-available", () => set({ state: "failed", version, reason: FAILED }));
 	// Squirrel.Mac's own words are not shown; only whether it is the place the app runs from that is the trouble.
 	autoUpdater.on("error", (e) => set({ state: "failed", version, reason: /read-only|translocat/i.test(String(e?.message)) ? READ_ONLY : FAILED }));
 	return {
@@ -47,13 +49,20 @@ function squirrel(changed: (state: UpdaterState) => void): Updater {
 			set({ state: "downloading", version });
 			try {
 				// The feed is a file on the release ({ url, name, pub_date }), served as Squirrel.Mac's default server would answer.
-				autoUpdater.setFeedURL({ url: feed, serverType: "default" });
+				// Its requests say no more of this Mac than the update check's do.
+				autoUpdater.setFeedURL({ url: feed, serverType: "default", headers: { "User-Agent": "Pine" } });
 				autoUpdater.checkForUpdates();
 			} catch {
 				set({ state: "failed", version, reason: FAILED });
 			}
 		},
-		install: () => autoUpdater.quitAndInstall(),
+		install() {
+			try {
+				autoUpdater.quitAndInstall();
+			} catch {
+				set({ state: "failed", version, reason: FAILED });
+			}
+		},
 		// Squirrel.Mac installs a downloaded update when the app quits by itself.
 		quitting: () => {},
 	};
@@ -64,23 +73,31 @@ function standIn(folder: string, changed: (state: UpdaterState) => void): Update
 	let installed = false;
 	const set = (s: UpdaterState) => changed((now = s));
 	const note = (call: Record<string, unknown>) => fs.appendFileSync(path.join(folder, "calls.jsonl"), `${JSON.stringify(call)}\n`);
+	// What the test planned: how the download ends (`outcome`), and whether the install fails (`install`). No plan: both go well.
+	const plan = (): { outcome?: string; install?: string } => {
+		try {
+			return JSON.parse(fs.readFileSync(path.join(folder, "plan.json"), "utf8"));
+		} catch {
+			return {};
+		}
+	};
 	return {
 		state: () => now,
 		download(feed, version) {
 			if (now.state === "downloading" || now.state === "ready") return;
 			note({ call: "download", feed });
 			set({ state: "downloading", version });
-			let outcome = "ready";
-			try {
-				outcome = JSON.parse(fs.readFileSync(path.join(folder, "plan.json"), "utf8")).outcome ?? "ready";
-			} catch {
-				// no plan: it goes well
-			}
-			setTimeout(() => set(outcome === "failed" ? { state: "failed", version, reason: FAILED } : { state: "ready", version }), 200);
+			setTimeout(() => set(plan().outcome === "failed" ? { state: "failed", version, reason: FAILED } : { state: "ready", version }), 200);
 		},
 		install() {
-			installed = true;
 			note({ call: "install" });
+			// As Squirrel.Mac's error comes after quitAndInstall: the app does not quit, and is told a moment later.
+			if (plan().install === "failed") {
+				const version = now.state === "ready" ? now.version : "";
+				setTimeout(() => set({ state: "failed", version, reason: FAILED }), 200);
+				return;
+			}
+			installed = true;
 			app.quit();
 		},
 		quitting() {

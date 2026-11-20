@@ -211,6 +211,9 @@ const sessionName = () => `s${Date.now().toString(36)}`;
 const worktreeNote = (made: WorktreeMade) =>
 	`This conversation now works in the worktree ${made.branch} at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a checkout of its own, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} Merge it back from the folder's chip.`;
 
+/** Where the app's update of a newer release stands (`Store.updatePhase`), with what a view of it says. */
+export type UpdatePhase = { phase: "waiting" | "ready" | "downloading" | "link"; version: string; mine: string; url: string; reason?: string };
+
 export type Picker = { title: string; items: Array<{ value: string; label: string; about?: string; tone?: Tone }>; current?: string; done: (value: string | undefined) => void; placeholder?: string; free?: boolean };
 
 /** The app as a whole. */
@@ -368,7 +371,7 @@ export class Store extends Model {
 		bridge.onMenu((command: string) => void this.command(command));
 		// The app's own download of a newer release moves on (only the desktop app's bridge says so).
 		bridge.onUpdate?.((said: Update | undefined) => {
-			if (said && said.status !== "unknown") this.update = said;
+			this.noteUpdate(said);
 			this.touch();
 		});
 		// How a block run with a Run button went: the conversation it came from is told, and goes on.
@@ -504,10 +507,6 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/**
-	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > App
-	 * show it); when the owner asked (the menu, the settings), the answer is said too.
-	 */
 	/** The update the app downloaded, installed: the app quits and comes back on the new version, with the pine it started. */
 	async installUpdate(): Promise<void> {
 		this.updateAsk = false;
@@ -552,11 +551,40 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/** Installs the update the owner said to install once the work is done, when nothing is at work any more. */
+	/** Installs the update the owner said to install once the work is done, when nothing is at work any more and it is still ready. */
 	private installWhenDone(): void {
-		if (this.updateWhenDone && !this.working) void this.installUpdate();
+		if (this.updatePhase?.phase === "waiting" && !this.working) void this.installUpdate();
 	}
 
+	/**
+	 * What the app was told of a newer release. An update that is no longer ready (a new release
+	 * being downloaded, a failure) ends a wait for the end of the work: there is nothing to install.
+	 */
+	private noteUpdate(said: Update | undefined): void {
+		if (said && said.status !== "unknown") this.update = said;
+		if (this.update?.status !== "newer" || this.update.updater?.state !== "ready") this.updateWhenDone = false;
+	}
+
+	/**
+	 * Where the app's update of a newer release stands, the one place every view of it reads:
+	 * `waiting` ready and installed once no conversation is at work, `ready` for a restart or a quit,
+	 * `downloading`, or `link` to the release's page (the app does not update itself, or the download
+	 * failed: `reason`). None: no newer release.
+	 */
+	get updatePhase(): UpdatePhase | undefined {
+		const u = this.update;
+		if (u?.status !== "newer") return undefined;
+		const shown = { version: u.version, mine: u.mine, url: u.url };
+		const state = u.updater?.state;
+		if (state === "ready") return { phase: this.updateWhenDone ? "waiting" : "ready", ...shown };
+		if (state === "downloading") return { phase: "downloading", ...shown };
+		return { phase: "link", ...shown, reason: u.updater?.state === "failed" ? u.updater.reason : undefined };
+	}
+
+	/**
+	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > App
+	 * show it); when the owner asked (the menu, the settings), the answer is said too.
+	 */
 	async lookForUpdate(asked = false): Promise<void> {
 		if (!this.updates) return asked ? this.flash("This Pine runs from a checkout and is no release: update the checkout.") : undefined;
 		if (this.updateLooking) return;
@@ -564,7 +592,7 @@ export class Store extends Model {
 		this.touch();
 		const said: Update | undefined = await bridge.update(asked).catch(() => undefined);
 		this.updateLooking = false;
-		if (said && said.status !== "unknown") this.update = said;
+		this.noteUpdate(said);
 		this.touch();
 		if (!asked) return;
 		if (said?.status === "newer") this.updateAsk = true;
@@ -646,6 +674,8 @@ export class Store extends Model {
 		this.sessionModes = new Map();
 		this.pins = new Set();
 		this.busy = new Map();
+		// A wait for the end of the work was for that pine's work: the next one's would install in the middle of it.
+		this.updateWhenDone = false;
 		this.said = [];
 		this.titles = new Map();
 		this.saidAt = 0;

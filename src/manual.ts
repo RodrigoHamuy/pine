@@ -81,7 +81,8 @@ const SYNONYMS: string[][] = [
 	["system", "computer", "mac", "laptop", "sleep", "wake", "lock", "unlock", "battery"],
 	["catalogue", "catalog", "family", "families", "declare", "declared", "declaration", "toolset", "grouped", "schema"],
 	["cache", "cached", "caching", "slot", "warm", "reread", "reprocess", "reprocessing", "kept", "prefix", "page", "paging"],
-	["undo", "redo", "revert", "rollback", "rewind", "restore", "checkpoint", "snapshot", "unsend", "mistake"],
+	// Not "redo": it is the opposite of undo, and with it every undo part outranked the parts about /redo.
+	["undo", "revert", "rollback", "rewind", "restore", "checkpoint", "snapshot", "unsend", "mistake"],
 	["taint", "tainted", "outside", "untrusted", "injection", "external", "hostile"],
 	["trust", "owner", "trusted", "yours"],
 	["scope", "local", "global"],

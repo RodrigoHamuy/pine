@@ -483,10 +483,23 @@ let known: Update | undefined;
 let atStart: Promise<Update> | undefined;
 
 /** The app's own updater (updater.ts): none in an app from a checkout, unless a test names its stand-in. It tells the page how its download goes. */
-const updater = makeUpdater(() => send("pine:update-state", withUpdater(known)));
+const updater = makeUpdater((now) => {
+	// The install failed after the app's pine was stopped for it: that pine is started again, and the page shows the failure with the release's link.
+	if (installing && now.state === "failed") {
+		installing = false;
+		void startService();
+	}
+	send("pine:update-state", withUpdater(known));
+});
+/** Between "Restart to update" stopping the app's pines and the app quitting, or the updater saying it failed. */
+let installing = false;
 
-/** What is said of a newer release, with how the app's own update of it goes where there is one. */
-const withUpdater = (said: Update | undefined): Update | undefined => (said?.status === "newer" && updater ? { ...said, updater: updater.state() } : said);
+/**
+ * What is said of a newer release, with how the app's own update of it goes where there is one.
+ * With "Update automatically" off the page is not told of it, so that it offers the release page,
+ * also for an update that was downloaded before.
+ */
+const withUpdater = (said: Update | undefined): Update | undefined => (said?.status === "newer" && updater && prefs.autoUpdate ? { ...said, updater: updater.state() } : said);
 
 /** A newer release is downloaded when the owner lets the app update itself. */
 function downloadUpdate(): void {
@@ -507,7 +520,8 @@ async function askForUpdate(): Promise<Update> {
  * updater quits and installs.
  */
 async function installUpdate(): Promise<void> {
-	if (!updater || updater.state().state !== "ready") throw new Error("There is no update ready to install.");
+	if (!updater || !prefs.autoUpdate || updater.state().state !== "ready") throw new Error("There is no update ready to install.");
+	installing = true;
 	stream?.abort();
 	const ours = [...held.entries()].filter(([, s]) => s.started && !s.host);
 	for (const [key] of ours) held.delete(key);
@@ -675,8 +689,9 @@ function wire(): void {
 		if (typeof change.updates === "boolean") prefs.updates = change.updates;
 		if (typeof change.autoUpdate === "boolean") {
 			prefs.autoUpdate = change.autoUpdate;
-			// Turned on with a newer release known: it is downloaded now.
+			// Turned on with a newer release known: it is downloaded now. Either way the page is told how the update stands.
 			downloadUpdate();
+			send("pine:update-state", withUpdater(known));
 		}
 		if (typeof change.keepRunning === "boolean") prefs.keepRunning = change.keepRunning;
 		if ("home" in change) {

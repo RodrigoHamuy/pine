@@ -57,12 +57,13 @@ A release counts as a newer app once its disk image and its update feed for your
 are attached to it, which is some minutes after pine itself is published. A preview of pine is
 not a release, and the app never points at one. The address of the update is made by the app
 from the release's version and your kind of Mac, on pine's GitHub releases, and macOS installs
-only an app signed by the same developer as the one you run. Neither the question nor the
-download says anything about your computer or your pine. An app run from the disk image, or
+only an app signed by the same developer as the one you run. The question and the download
+send the user agent `Pine` and nothing else about your computer, your pine or the app. An app run from the disk image, or
 from a folder it cannot write, cannot replace itself: it says so and links to the release's
-page (move it to Applications). An update already downloaded is installed at the next quit even
-after **Update automatically** is turned off. `pine update` in a pine that came with the app
-says where the new app is. An app started from a checkout is no release, asks nobody and
+page (move it to Applications). When **Update automatically** is turned off after an update
+was downloaded, the app shows the release's link again, but macOS may still install that update
+at the next quit. `pine update` in a pine that came with the app says that the app updates
+itself, and links to the release's page. An app started from a checkout is no release, asks nobody and
 installs nothing.
 
 ### The first start
@@ -800,7 +801,7 @@ the agent to write. So:
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | Browser access | Off until you turn it on. Then the app's SSH server of its own (not the system's SSH server, Remote Login on macOS) accepts only the keys you allowed at this computer, by key and never by password, and gives them this computer's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
-| What the app itself asks the web | GitHub, for pine's last release (see "A newer version"). The question carries nothing about this computer, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
+| What the app itself asks the web | GitHub, for pine's last release and, when it is newer, its update (see "A newer version"). Both send the user agent `Pine` and nothing else about this computer, your pine or the app. Of the answer only the release's number is used, and the link and the update's address are made by the app and lead to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
 itself. What it knows, the daemon told it.
@@ -811,7 +812,7 @@ itself. What it knows, the daemon told it.
 
 | Flag | What it does |
 |---|---|
-| `--dmg` | Also a disk image, `release/Pine-<version>-<arch>.dmg` |
+| `--dmg` | Also a disk image, `release/Pine-<version>-<arch>.dmg`; the app zipped after its ticket is stapled, `Pine-<version>-<arch>.zip`; and the update feed that points at the zip, `Pine-<arch>.json` |
 | `--arch` | `arm64` or `x64`: the kind of Mac the app is for. Without it, the kind it is packed on. The helpers are built for both either way |
 | `--no-pine` | Without pine, Node and the helpers: the app then uses the `pine` of the owner's shell |
 | `--out` | Into another folder than `release/`, for a build beside one that is open |
@@ -836,12 +837,12 @@ built on is what is shipped. Whom it is signed for is set in the environment:
 | `PINE_VERSION` | The version of the app and of the pine inside it. Without it, the version in the checkout's `package.json` |
 
 The Release workflow (`.github/workflows/release.yml`) does this for every release from
-`main`, on a runner for each kind of Mac, and attaches the two disk images to the GitHub
-release. It takes the five values from secrets of an environment named `release`. Without
+`main`, on a runner for each kind of Mac, and attaches the disk images, the zips and the
+update feeds to the GitHub release. It takes the five values from secrets of an environment named `release`. Without
 them it builds no app and says so. To build the app of a release again (after a job that
 failed), run the workflow by hand from `main` with that release's version:
-`gh workflow run release.yml -f version=0.38.0`. Nothing is published; the disk images are
-attached to that release. Building the helpers takes the macOS 26 SDK or a newer one.
+`gh workflow run release.yml -f version=0.38.0`. Nothing is published; the disk images, zips and
+feeds are attached to that release. Building the helpers takes the macOS 26 SDK or a newer one.
 
 ## For changing the app
 
@@ -857,6 +858,10 @@ desktop/
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
     updates.ts     whether there is a newer app: GitHub asked for the last release, the link to its page
+                   and the address of its update feed
+    updater.ts     the app's own update: Electron's autoUpdater (Squirrel.Mac) on that feed, downloaded
+                   in the background, installed at Restart to update or at quit; a stand-in for tests
+                   (PINE_DESKTOP_UPDATER)
     access/        browser access, without Electron (they run under plain Node in tests and in the
                    web client's smoke): server.ts the access server (ssh2 on any duplex stream: the
                    remote command answered with this computer's service line, direct-tcpip to that loopback
@@ -912,7 +917,8 @@ desktop/
                    browser, `npm run dev:preview`: Vite's server makes every call for the page,
                    on a throwaway pine or the home `--home` names), test.mjs (`npm test`: the
                    app built once for the run), launch-json.mjs (the checkout's ports and
-                   .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter)
+                   .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter),
+                   update-feed.ts (the names of a release's zip and update feed, and the feed)
   test/            the app from end to end, driven through its real window; command.test.ts,
                    updates.test.ts, daemon.test.ts and preview.test.ts need no window.
                    support/: the build a test starts (app.ts), and a daemon of the test's own

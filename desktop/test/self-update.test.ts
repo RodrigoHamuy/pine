@@ -45,7 +45,7 @@ after(async () => {
 });
 
 /** A pine home of its own on a port of its own, the app's preferences, and the stand-in updater's folder with its plan. */
-async function setUp(prefs: Record<string, unknown>, outcome: "ready" | "failed" = "ready") {
+async function setUp(prefs: Record<string, unknown>, outcome: "ready" | "failed" = "ready", install: "quits" | "failed" = "quits") {
 	const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-update-")));
 	homes.push(home);
 	const port = await freePort();
@@ -58,7 +58,7 @@ async function setUp(prefs: Record<string, unknown>, outcome: "ready" | "failed"
 	for (const place of (await browserPlaces()) ?? []) write(path.join(browsers, path.basename(place), "INSTALLATION_COMPLETE"), "");
 	write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify(prefs));
 	const updater = path.join(home, "updater");
-	write(path.join(updater, "plan.json"), JSON.stringify({ outcome }));
+	write(path.join(updater, "plan.json"), JSON.stringify({ outcome, install }));
 	const calls = () => {
 		try {
 			return fs.readFileSync(path.join(updater, "calls.jsonl"), "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
@@ -195,4 +195,33 @@ test("Restart now in the warning installs at once, with the agent still at work"
 	await choose(page, "Restart now");
 	await exit;
 	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download", "install"]);
+});
+
+test("an install that fails after Restart to update starts the app's pine again and offers the release page", async () => {
+	const t = await setUp({}, "ready", "failed");
+	const { app, page } = await t.launch();
+	await page.waitForSelector(RESTART, { timeout: 20_000 });
+	await page.click(RESTART);
+	// The pine was stopped for the install; the install failed, so the app goes on with its pine started again.
+	await page.waitForSelector("[data-slot=sidebar-footer] >> text=Pine 9.9.9 is available", { timeout: 20_000 });
+	assert.equal(await page.$(RESTART), null);
+	await waitForDaemon(t.port, t.home, 30_000);
+	await page.waitForSelector("[data-slot=service-status] >> text=started here", { timeout: 20_000 });
+	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download", "install"]);
+	await app.close();
+});
+
+test("with an update downloaded, turning Update automatically off offers the release page instead of Restart to update", async () => {
+	const t = await setUp({});
+	const { app, page } = await t.launch();
+	await page.waitForSelector(RESTART, { timeout: 20_000 });
+	await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", "settings"));
+	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+	const sw = "[data-slot=field]:has-text('Update automatically') [role=switch]";
+	await page.click(`${sw}[aria-checked=true]`);
+	await page.waitForSelector(`${sw}[aria-checked=false]`);
+	await page.waitForSelector("[data-slot=sidebar-footer] >> text=Pine 9.9.9 is available", { timeout: 20_000 });
+	assert.equal(await page.$(RESTART), null);
+	assert.ok(await page.locator("[data-setting=updates]").getByRole("button", { name: "Release page" }).isVisible());
+	await app.close();
 });

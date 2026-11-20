@@ -24,6 +24,11 @@ let port: number;
  * checkout's pine, so that a daemon it starts says the checkout's version.
  */
 let newer: string;
+/**
+ * A pine of an older version: the checkout's own files, linked under a package that says 0.0.1 and
+ * run with the links kept, so that pine's root, and the version its daemon says, is that folder.
+ */
+let older: string;
 /** What a menu item does, sent as the menu sends it to the app's window. */
 const menu = (a: any, command: string) => a.evaluate(({ BrowserWindow }: any, c: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", c), command);
 
@@ -52,6 +57,10 @@ before(async () => {
 	newer = path.join(home, "newer-pine");
 	write(path.join(newer, "package.json"), JSON.stringify({ name: "@pmndre/pine", version: "99.0.0", type: "module" }));
 	write(path.join(newer, "bin", "pine.js"), `import ${JSON.stringify(pathToFileURL(path.join(root, "..", "bin", "pine.js")).href)};\n`);
+	older = path.join(home, "older-pine");
+	write(path.join(older, "package.json"), JSON.stringify({ name: "@pmndre/pine", version: "0.0.1", type: "module" }));
+	for (const part of ["src", "mcp", "docs", "examples", "node_modules"]) fs.symlinkSync(path.join(root, "..", part), path.join(older, part));
+	write(path.join(older, "bin", "pine.js"), `import "../src/cli.ts";\n`);
 	// A pine as somebody would have started it in a terminal.
 	daemon = spawn(process.execPath, [path.join(root, "..", "bin", "pine.js"), "start", "--home", home], { stdio: "ignore" });
 	await waitForDaemon(port, home);
@@ -91,7 +100,13 @@ test("attaches to a pine that runs, and leaves it running", async () => {
 });
 
 test("a pine that runs is said to be older than the app's own when it is", async () => {
-	app = await launchApp({ ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_DESKTOP_DEV_URL: "", PINE_CLI: path.join(newer, "bin", "pine.js") });
+	// The daemon that runs now is an older pine's, started in a terminal; the app's own pine is the
+	// checkout's. What tells them apart is the version the daemon itself says, not its CLI's.
+	daemon.kill("SIGTERM");
+	await daemonGone(port, home);
+	daemon = spawn(process.execPath, ["--preserve-symlinks", "--preserve-symlinks-main", path.join(older, "bin", "pine.js"), "start", "--home", home], { stdio: "ignore" });
+	await waitForDaemon(port, home);
+	app = await launchApp({ ...process.env, PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_DESKTOP_DEV_URL: "" });
 	const page = await app.firstWindow();
 	// (The conversation of the test before is the one shown, so the window is not empty.)
 	await page.waitForSelector("[data-slot=service-status] >> text=attached", { timeout: 30_000 });
@@ -102,7 +117,7 @@ test("a pine that runs is said to be older than the app's own when it is", async
 	await menu(app, "settings");
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
 	const said = (await (await page.waitForSelector("[data-slot=settings-page] [data-notice=older-pine]", { timeout: 10_000 })).textContent()) ?? "";
-	assert.ok(said.includes(version) && said.includes("99.0.0"), `the notice names both versions: ${said}`);
+	assert.ok(said.includes(version) && said.includes("0.0.1"), `the notice names both versions: ${said}`);
 	assert.match(said, /restart/i);
 	await app.close();
 	app = undefined;

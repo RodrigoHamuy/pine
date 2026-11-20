@@ -144,7 +144,7 @@ test/               node:test files; support/harness.ts builds a temp home and a
 baseline/           pi SDK behaviour checks and their results; the mock model server lives here
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
-                    main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app;
+                    main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app and its own update;
                     electron/access/ is browser access, without Electron: the access server on ssh2, this computer's host key and
                     the paired devices, pairing, the WebRTC data channel on node-datachannel, the host that waits at the
                     meeting service, and the control the page's Settings > Browser access reads), src/ the
