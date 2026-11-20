@@ -34,7 +34,11 @@ const PAIR_CODE = /^[A-Za-z0-9_-]{22}$/;
 /** A pairing link as the page reads it: the service's origin (`https` only), the machine id and the code. */
 export type PairLink = { service: string; id: string; code: string };
 
-/** An `https` origin and nothing else: no name, no password, no path, no query, no fragment. */
+/**
+ * The `https` origin of an address, written in lower case and without `:443`; none for another
+ * scheme, a name or password, a host in brackets or port 0. Path, query and fragment are the
+ * caller's to refuse.
+ */
 function httpsOrigin(text: string): string | undefined {
 	let url: URL;
 	try {
@@ -42,7 +46,7 @@ function httpsOrigin(text: string): string | undefined {
 	} catch {
 		return undefined;
 	}
-	if (url.protocol !== "https:" || !url.hostname || url.username || url.password) return undefined;
+	if (url.protocol !== "https:" || !url.hostname || url.hostname.startsWith("[") || url.port === "0" || url.username || url.password) return undefined;
 	return url.origin;
 }
 
@@ -71,8 +75,10 @@ export function readPairLink(text: string): PairLink | undefined {
 	if (at < 0) return undefined;
 	const base = link.slice(0, at);
 	const hash = link.slice(at);
+	// The origin and one slash, nothing more: no path, no query, no name before the host.
+	if (!/^https:\/\/[^/?#@\s]+\/$/i.test(base) || !hash.startsWith("#pair=")) return undefined;
 	const service = httpsOrigin(base);
-	if (!service || (base !== service && base !== `${service}/`) || !hash.startsWith("#pair=")) return undefined;
+	if (!service) return undefined;
 	const [id, code, ...more] = hash.slice("#pair=".length).split(".");
 	if (more.length || !MACHINE_ID.test(id ?? "") || !PAIR_CODE.test(code ?? "")) return undefined;
 	return { service, id, code };
