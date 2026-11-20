@@ -200,6 +200,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["what can a view script see of my conversations", /^(views|desktop#the-view)/],
 		["in the office view a letter with wings flies between two robots, what does that mean", /^desktop#the-view/],
 		["what are the starred books and the rack in a robot's room", /^desktop#the-view/],
+		["the christmas view with santa and his elves, what is a gumball in the machine", /^desktop#the-workshop/],
 		["why does the view zoom in and out by itself", /^(desktop#the-view|views)/],
 		["my safe agent hands a task to an agent in bypass mode, does that run in bypass", /^agents#handing-work-to-another-agent/],
 		["which agents may an agent hand tasks to by default", /^(agents#handing-work-to-another-agent|configuration#working-with-other-agents)/],

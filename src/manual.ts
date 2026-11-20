@@ -91,7 +91,7 @@ const SYNONYMS: string[][] = [
 	["model", "llm", "provider", "inference", "endpoint"],
 	["telegram", "messenger", "phone", "chat", "bot"],
 	["pair", "pairing", "link", "connect", "bind"],
-	["birdseye", "bird", "glance", "overview", "everything", "visualize", "visualise", "office", "building", "house", "pixel", "robot", "plugin", "views"],
+	["birdseye", "bird", "glance", "overview", "everything", "visualize", "visualise", "office", "building", "house", "pixel", "robot", "plugin", "views", "workshop", "santa", "elf", "elves", "christmas"],
 	["webhook", "hook", "callback", "http", "post"],
 	["http", "url", "website", "web", "page", "site", "address", "poll", "scrape"],
 	["command", "shell", "bash", "script", "terminal", "cli"],
@@ -396,7 +396,9 @@ export function createManual(parts: Part[]): Manual {
 					// A title that says what was asked, in the query's words or in the manual's own for them.
 					const title = entry.fields[0].tf;
 					const named = direct.filter((w) => title.has(w) || [...(SYNONYM_MAP.get(w) ?? [])].some((syn) => title.has(syn))).length;
-					if (named === direct.length) total += direct.length === entry.fields[0].len ? 4 : 2.5;
+					// A title that is the query, word for word, is the thing that was asked for by its name: "/redo", "bashTimeoutSec".
+					const exact = direct.length === entry.fields[0].len && direct.every((w) => title.has(w));
+					if (named === direct.length) total += exact ? 6 : direct.length === entry.fields[0].len ? 4 : 2.5;
 					else total += (named / direct.length) * 1.5;
 					if (joined.length > 5 && title.has(stem(joined))) total += 4;
 					// A question in several words asks how something is; the section explains it, a row only names it.
