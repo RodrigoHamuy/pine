@@ -192,7 +192,7 @@ class Remote internal constructor(
 		val stream = try {
 			openPeer(meeting(computer.service), id, http, native, openMs)
 		} catch (e: PeerClosed) {
-			throw RemoteError("ssh", words.peer(e.reason))
+			throw RemoteError("ssh", words.peer(e.reason), passing = true)
 		}
 		val ssh = client()
 		// What the computer may send before the phone says it took it in. libdatachannel's ICE on the
@@ -215,14 +215,14 @@ class Remote internal constructor(
 				ssh.connectVia(stream.input, stream.output)
 			} catch (e: IOException) {
 				seen?.let { throw HostKeyError(words.changed(expected, it), value, 0, it, changed = true) }
-				throw RemoteError("ssh", words.cut)
+				throw RemoteError("ssh", words.cut, passing = true)
 			}
 			try {
 				ssh.authPublickey(PAIRED_USER, key.provider())
 			} catch (e: UserAuthException) {
 				throw RemoteError("ssh", words.notKnown)
 			} catch (e: IOException) {
-				throw RemoteError("ssh", words.cut)
+				throw RemoteError("ssh", words.cut, passing = true)
 			}
 			return serve(ssh, value, label, stream)
 		} catch (e: Exception) {
@@ -275,7 +275,7 @@ class Remote internal constructor(
 			if (ended) runCatching { command.join(5, TimeUnit.SECONDS) }
 			reader.join(if (ended) 2_000 else 200)
 			val stderr = synchronized(err) { err.toString() }
-			if (transport != null && !transport.isOpen) throw RemoteError("ssh", PairedWords(label).lost)
+			if (transport != null && !transport.isOpen) throw RemoteError("ssh", PairedWords(label).lost, passing = true)
 			if (Regex("unknown command \"service\"").containsMatchIn(stderr)) throw RemoteError("ssh", "The pine on $shown is too old to be reached this way: it has no \"service\" command. Update it there with \"pine update\", then try again.")
 			throw RemoteError("ssh", trouble(shown, if (ended) "exit" else "timeout", command.exitStatus?.toString() ?: "", stderr))
 		}
