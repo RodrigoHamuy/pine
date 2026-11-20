@@ -276,7 +276,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
 	fs.appendFileSync(log + ".raw", m.params.name + (a.action ? " " + a.action : "") + "\\n");
 	// What pine's own server does for the owner's window: a picture into a file it names, the owner's hand as code.
 	if (m.params.name === "browser_run_code_unsafe") {
-		const dir = log.slice(0, log.lastIndexOf("/"));
+		const dir = log.slice(0, Math.max(log.lastIndexOf("/"), log.lastIndexOf("\\\\")));
 		if (!fs.existsSync(dir + "/first-code.txt")) fs.writeFileSync(dir + "/first-code.txt", a.code);
 		fs.writeFileSync(dir + "/last-code.txt", a.code);
 		const ops = JSON.parse(a.code.match(/const ops = (.*);\\n/)[1]);
@@ -547,10 +547,8 @@ test("browser view: a picture only while a page is open, the owner's hand in ord
 	assert.equal(b.log().filter((l) => l === "browser_take_screenshot").length, before + 1);
 
 	// Looking leaves the agent's page where it was: the pointer, the wheel and the size of the room go the short way.
-	// (On Windows the size does not reach the stand-in yet, which is open in the pull request that brought Windows.)
-	const sized = process.platform !== "win32";
-	await b.view.input([{ do: "move", x: 5, y: 6 }, { do: "wheel", dx: 0, dy: 300 }, ...(sized ? [{ do: "size" as const, w: 600, h: 500 }] : [])]);
-	assert.deepEqual(b.log().slice(sized ? -3 : -2), ["browser_mouse_move_xy 5,6", "browser_mouse_wheel 0,300", ...(sized ? ['hand [{"do":"size","w":600,"h":500}]'] : [])]);
+	await b.view.input([{ do: "move", x: 5, y: 6 }, { do: "wheel", dx: 0, dy: 300 }, { do: "size", w: 600, h: 500 }]);
+	assert.deepEqual(b.log().slice(-3), ["browser_mouse_move_xy 5,6", "browser_mouse_wheel 0,300", 'hand [{"do":"size","w":600,"h":500}]']);
 	assert.ok(!(await b.call("browser_snapshot")).text.includes("has changed"), "nothing to tell the agent about");
 
 	// What is clicked and typed goes together, in the order it was done, as values in code that is this server's own.

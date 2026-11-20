@@ -236,10 +236,13 @@ export function grouped(rows: Row[], ids: Set<number>): Row[] {
 	return rows;
 }
 
-/** Windows: end a process and everything it started. `force` is the second try, for what did not go when asked. */
-function endTree(pid: number, force: boolean): boolean {
+/**
+ * Windows: end a process and everything it started. A program of the console (most of what a
+ * command starts) cannot be asked to close, only ended: taskkill without /F refuses it.
+ */
+function endTree(pid: number): boolean {
 	try {
-		execFileSync(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"), ["/PID", String(pid), "/T", ...(force ? ["/F"] : [])], { stdio: "ignore", timeout: 10_000, windowsHide: true });
+		execFileSync(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "taskkill.exe"), ["/PID", String(pid), "/T", "/F"], { stdio: "ignore", timeout: 10_000, windowsHide: true });
 		return true;
 	} catch {
 		return false;
@@ -556,7 +559,7 @@ export class Programs {
 		if (!this.list(conversation).some((p) => p.id === id)) return false;
 		const job = this.running(conversation).find((j) => j.id === id);
 		const signal = (name: NodeJS.Signals) => {
-			if (WINDOWS) return this.endGroup(id, name === "SIGKILL");
+			if (WINDOWS) return this.endGroup(id);
 			try {
 				process.kill(-id, name);
 				return true;
@@ -580,12 +583,12 @@ export class Programs {
 	 * shell that waits for a background command, which notes how the command ended, as `trap :`
 	 * lets it on the other systems.
 	 */
-	private endGroup(id: number, force: boolean): boolean {
+	private endGroup(id: number): boolean {
 		const rows = processes(new Set([id])).filter((r) => r.group === id);
 		const inGroup = new Set(rows.map((r) => r.pid));
 		const tops = rows.filter((r) => r.pid !== id && (r.parent === id || !inGroup.has(r.parent ?? -1)));
 		let any = false;
-		for (const r of tops) any = endTree(r.pid, force) || any;
+		for (const r of tops) any = endTree(r.pid) || any;
 		return any;
 	}
 
