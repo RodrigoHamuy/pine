@@ -90,8 +90,18 @@ public final class Remote: Sendable {
 	/** How long a paired computer has to be reached, from the join of the meeting to the open channel. */
 	let meet: Duration
 	let group: EventLoopGroup
+	/**
+	 * Where a meeting service is reached, by its origin: the origin itself. Only a test hands in
+	 * another (the access host's helper answers on http on the loopback, which no link may name).
+	 */
+	let route: @Sendable (String) -> String
 
-	public init(key: DeviceKey, known: KnownHosts, answer: Duration = .seconds(60), connect: Duration = .seconds(15), read: Duration = .seconds(60), meet: Duration = .seconds(20), group: EventLoopGroup = MultiThreadedEventLoopGroup.singleton) {
+	public convenience init(key: DeviceKey, known: KnownHosts, answer: Duration = .seconds(60), connect: Duration = .seconds(15), read: Duration = .seconds(60), meet: Duration = .seconds(20), group: EventLoopGroup = MultiThreadedEventLoopGroup.singleton) {
+		self.init(key: key, known: known, answer: answer, connect: connect, read: read, meet: meet, group: group, route: { $0 })
+	}
+
+	init(key: DeviceKey, known: KnownHosts, answer: Duration = .seconds(60), connect: Duration = .seconds(15), read: Duration = .seconds(60), meet: Duration = .seconds(20), group: EventLoopGroup = MultiThreadedEventLoopGroup.singleton, route: @escaping @Sendable (String) -> String) {
+		self.route = route
 		self.key = key
 		self.known = known
 		self.answer = TimeAmount(answer)
@@ -178,7 +188,7 @@ public final class Remote: Sendable {
 				// Its code and the last of stderr come with the channel's end.
 				_ = await settled(command.channel.closeFuture, within: .seconds(5))
 				// A data channel that went while pine was asked: the network, not the machine.
-				if paired && !session.isActive { throw RemoteError("ssh", "The connection to \(label) was lost while pine there was asked to start.") }
+				if paired && !session.isActive { throw RemoteError("ssh", "The connection to \(label) was lost while pine there was asked to start.", passing: true) }
 				let (stderr, code) = await command.ended()
 				throw failure(given: given, stderr: stderr, exit: code ?? -1).withUnknownExit(code == nil)
 			}
@@ -190,7 +200,7 @@ public final class Remote: Sendable {
 	}
 
 	/** The session channel `pine service` runs in, once SSH let the phone in. */
-	private func execChannel(_ session: Channel) async throws -> Channel {
+	func execChannel(_ session: Channel) async throws -> Channel {
 		let promise = session.eventLoop.makePromise(of: Channel.self)
 		session.eventLoop.execute {
 			do {

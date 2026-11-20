@@ -19,11 +19,13 @@ final class PeerRig: @unchecked Sendable {
 	/** The phone's device id at the computer, once it was added. */
 	private(set) var device = ""
 
-	init(known: Bool = true, meet: Duration = .seconds(15), read: Duration = .seconds(60)) async throws {
+	init(known: Bool = true, meet: Duration = .seconds(15), read: Duration = .seconds(60), options: [String] = []) async throws {
 		key = DeviceKey(store)
 		daemon = try StandInDaemon()
-		host = try await AccessHost.start(serviceLine: Rig.line(daemon.base))
-		remote = Remote(key: key, known: KnownHosts(store), read: read, meet: meet)
+		let host = try await AccessHost.start(serviceLine: Rig.line(daemon.base), options: options)
+		self.host = host
+		// A link names an https service; the helper's answers on http on the loopback (PairingTests).
+		remote = Remote(key: key, known: KnownHosts(store), read: read, meet: meet, route: { $0 == TEST_SERVICE ? host.service : $0 })
 		if known { device = try await host.add(try key.publicKey()) }
 	}
 
@@ -40,8 +42,8 @@ final class PeerRig: @unchecked Sendable {
 	}
 }
 
-func withPeer(known: Bool = true, meet: Duration = .seconds(15), _ body: (PeerRig) async throws -> Void) async throws {
-	let rig = try await PeerRig(known: known, meet: meet)
+func withPeer(known: Bool = true, meet: Duration = .seconds(15), options: [String] = [], _ body: (PeerRig) async throws -> Void) async throws {
+	let rig = try await PeerRig(known: known, meet: meet, options: options)
 	do {
 		try await body(rig)
 	} catch {

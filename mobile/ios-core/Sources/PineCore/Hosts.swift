@@ -12,11 +12,17 @@ public struct RemoteError: Error, Equatable, CustomStringConvertible {
 	public let kind: String
 	public let message: String
 	public let hostKey: HostKeyRefusal?
+	/**
+	 * A trouble that may pass by itself (the network, a computer that sleeps): a paired computer is
+	 * tried again after it, with a growing wait. One only the owner can fix is not.
+	 */
+	public let passing: Bool
 
-	public init(_ kind: String, _ message: String, hostKey: HostKeyRefusal? = nil) {
+	public init(_ kind: String, _ message: String, hostKey: HostKeyRefusal? = nil, passing: Bool = false) {
 		self.kind = kind
 		self.message = message
 		self.hostKey = hostKey
+		self.passing = passing
 	}
 
 	public var description: String { message }

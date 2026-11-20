@@ -25,9 +25,9 @@ final class AccessHost: @unchecked Sendable {
 	private(set) var machineId = ""
 
 	/** Starts the helper; `serviceLine` points the access host at a daemon of the test's own. */
-	static func start(serviceLine: String? = nil, name: String = "Test Mac") async throws -> AccessHost {
+	static func start(serviceLine: String? = nil, name: String = "Test Mac", options: [String] = []) async throws -> AccessHost {
 		let host = AccessHost()
-		try host.run(["--computer-name", name] + (serviceLine.map { ["--service-line", $0] } ?? []))
+		try host.run(["--computer-name", name] + (serviceLine.map { ["--service-line", $0] } ?? []) + options)
 		let ready = try await host.next { _ in true }
 		guard ready["t"] as? String == "ready" else {
 			await host.stop()
@@ -90,6 +90,11 @@ final class AccessHost: @unchecked Sendable {
 	/** Whether an event `t` for `id` was written. */
 	func saw(_ t: String, _ id: String) -> Bool {
 		lock.withLock { lines.contains { $0["t"] as? String == t && $0["id"] as? String == id } }
+	}
+
+	/** The events `t` written so far, in order. */
+	func events(_ t: String) -> [[String: Any]] {
+		lock.withLock { lines.filter { $0["t"] as? String == t } }
 	}
 
 	/** Ends it as the protocol says: its standard input closed, then its exit waited for (and forced after ten seconds). */
