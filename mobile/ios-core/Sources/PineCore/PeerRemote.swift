@@ -53,7 +53,7 @@ extension Remote {
 		let hostKey = MachineIdCheck(trusted: trusted, words: words, host: host)
 		let link: PeerLink
 		do {
-			link = try await openPeer(service: route(computer.service), id: computer.id, within: meet)
+			link = try await openPeer(service: computer.service, id: computer.id, within: meet, route: route)
 		} catch let e as PeerClosed {
 			throw RemoteError("ssh", words.peer(e.reason), passing: true)
 		}

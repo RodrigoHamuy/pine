@@ -16,6 +16,8 @@ final class PeerRig: @unchecked Sendable {
 	let daemon: StandInDaemon
 	let host: AccessHost
 	let remote: Remote
+	/** Where the https origins the tests name are reached: `TEST_SERVICE` is the helper's meeting service. */
+	let routes: MemoryShelf
 	/** The phone's device id at the computer, once it was added. */
 	private(set) var device = ""
 
@@ -24,13 +26,16 @@ final class PeerRig: @unchecked Sendable {
 		daemon = try StandInDaemon()
 		let host = try await AccessHost.start(serviceLine: Rig.line(daemon.base), options: options)
 		self.host = host
-		// A link names an https service; the helper's answers on http on the loopback (PairingTests).
-		remote = Remote(key: key, known: KnownHosts(store), read: read, meet: meet, route: { $0 == TEST_SERVICE ? host.service : $0 })
+		let routes = MemoryShelf()
+		self.routes = routes
+		routes.set(TEST_SERVICE, host.service)
+		// A link names an https service; the helper's answers on http on the loopback. Only a test routes one to the other.
+		remote = Remote(key: key, known: KnownHosts(store), read: read, meet: meet, route: { routes.get($0) ?? $0 })
 		if known { device = try await host.add(try key.publicKey()) }
 	}
 
 	/** The computer as the phone keeps it once paired. */
-	var computer: PairedComputer { PairedComputer(id: host.machineId, service: host.service, name: "Test Mac") }
+	var computer: PairedComputer { PairedComputer(id: host.machineId, service: TEST_SERVICE, name: "Test Mac") }
 
 	func connected() async throws -> RemoteService {
 		try await remote.connect(computer.host, paired: computer)
@@ -173,7 +178,7 @@ struct PeerTests {
 	@Test("bytes the computer sends before SSH listens are kept for it")
 	func early() async throws {
 		try await withPeer { rig in
-			let link = try await openPeer(service: rig.host.service, id: rig.host.machineId, within: .seconds(15))
+			let link = try await openPeer(service: TEST_SERVICE, id: rig.host.machineId, within: .seconds(15), route: rig.remote.route)
 			// The access host sends its SSH banner as soon as the channel opens; nothing reads it yet.
 			try await Task.sleep(for: .milliseconds(500))
 			let collected = Collected()
@@ -245,7 +250,7 @@ struct PeerTests {
 	func failures() async throws {
 		try await withPeer(meet: .seconds(1)) { rig in
 			let words = PairedWords(label: "Test Mac")
-			let absent = PairedComputer(id: String(repeating: "A", count: 43), service: rig.host.service, name: "Test Mac")
+			let absent = PairedComputer(id: String(repeating: "A", count: 43), service: TEST_SERVICE, name: "Test Mac")
 			let e1 = try await #require(throws: RemoteError.self) { try await rig.remote.connect(paired: absent) }
 			#expect(e1.message == "Test Mac does not answer: it is off, asleep, or Pine is closed. This phone keeps trying, and connects when Test Mac is back.")
 
@@ -259,7 +264,8 @@ struct PeerTests {
 			#expect(e3.message == "Test Mac is there, but no direct connection could be made from this network. Try another network (another Wi-Fi, or your phone's data); this phone keeps trying meanwhile.")
 			#expect(ContinuousClock.now - started < .seconds(4), "within the time to the open channel")
 
-			let nowhere = PairedComputer(id: rig.host.machineId, service: "http://127.0.0.1:\(try freePort())", name: nil)
+			rig.routes.set("https://nowhere.test", "http://127.0.0.1:\(try freePort())")
+			let nowhere = PairedComputer(id: rig.host.machineId, service: "https://nowhere.test", name: nil)
 			let e4 = try await #require(throws: RemoteError.self) { try await rig.remote.connect(paired: nowhere) }
 			#expect(e4.message == "Could not connect to your computer. The meeting service could not be reached. Check the network, then try again.")
 			#expect(PairedWords(label: YOUR_COMPUTER).peer(.absent).hasPrefix("Your computer does not answer"))
@@ -270,6 +276,23 @@ struct PeerTests {
 			}
 			#expect(words.peer(.limits) == e2.message)
 			#expect(rig.daemon.seen.isEmpty)
+		}
+	}
+
+	@Test("a meeting service that is not https is never reached, for a paired computer or a pairing")
+	func httpsOnly() async throws {
+		try await withPeer { rig in
+			// The app's own Remote: no route, as on the phone.
+			let remote = Remote(key: rig.key, known: KnownHosts(rig.store))
+			let http = PairedComputer(id: rig.host.machineId, service: rig.host.service, name: "Test Mac")
+			let e = try await #require(throws: RemoteError.self) { try await remote.connect(paired: http) }
+			#expect(e.hostKey == nil)
+			let link = try #require(try await rig.host.command("open")["link"] as? String)
+			let code = String(link.split(separator: ".").last!)
+			let end = await remote.pair(PairLink(service: rig.host.service, host: "127.0.0.1", id: rig.host.machineId, code: code), name: "Pine on a test") { _ in }.result()
+			#expect(end != nil && end != .allowed(name: "Test Mac") && end != .expired)
+			#expect(rig.host.events("connected").isEmpty, "no session reached the computer")
+			#expect(rig.host.events("asked").isEmpty)
 		}
 	}
 

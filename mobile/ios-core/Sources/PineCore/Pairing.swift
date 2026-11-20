@@ -145,7 +145,7 @@ extension Remote {
 		}
 		let peer: PeerLink
 		do {
-			peer = try await openPeer(service: route(link.service), id: link.id, within: meet)
+			peer = try await openPeer(service: link.service, id: link.id, within: meet, route: route)
 		} catch let e as PeerClosed {
 			return .failed(message: PairWords.trouble(e.reason))
 		} catch {
