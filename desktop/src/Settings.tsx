@@ -31,6 +31,7 @@ import { HoverTooltip } from "@/components/hover-tooltip";
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
+import { APP_DOWNLOAD, isPaired } from "./machines.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -2087,18 +2088,21 @@ export function MachineList() {
 		if (state.status === "error") return <Badge variant="destructive">not reached</Badge>;
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
+	/** What a row says of its machine when nothing is wrong: a paired Mac by its name (its id says nothing), user@host as written. */
+	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this browser.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
-			<ItemMedia variant="icon">{h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
+			<ItemMedia variant="icon">{h && !isPaired(h) ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
 			{/* The text asks for 20rem before it shares its line: where the buttons would leave it less (a phone, the Gate, the four of a machine in error), the Item wraps them onto a line of their own. */}
 			<ItemContent className="min-w-0 flex-[1_1_20rem]">
 				{/* A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`. */}
 				<ItemTitle className="name line-clamp-none flex w-full min-w-0 flex-wrap">
-					<span className={cn("min-w-0 wrap-anywhere", h && "font-mono")}>{h ? <Breakable host={h} /> : here}</span>
+					{/* A machine with a name (a paired Mac, one the owner renamed) is shown by it; user@host without one as written, in mono. */}
+					<span className={cn("min-w-0 wrap-anywhere", h && !isPaired(h) && !s.prefs.names?.[h] && "font-mono")}>{h ? isPaired(h) || s.prefs.names?.[h] ? s.nameOf(h) : <Breakable host={h} /> : here}</span>
 					{status(h)}
 				</ItemTitle>
 				<ItemDescription className="line-clamp-none wrap-anywhere">
-					{state.host === h && state.status === "error" ? state.message : h ? <>The pine on <Breakable host={h} />, over SSH.</> : "The pine on this computer: the one that runs, or one this app starts."}
+					{state.host === h && state.status === "error" ? state.message : h ? about(h) : "The pine on this computer: the one that runs, or one this app starts."}
 				</ItemDescription>
 				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
 			</ItemContent>
@@ -2107,6 +2111,7 @@ export function MachineList() {
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
 				{state.host === h && s.canDisconnect ? <Button variant="outline" size="xs" data-slot="disconnect" onClick={() => void s.disconnect()}>Disconnect</Button> : null}
+				{h && s.canRename ? <Button variant="ghost" size="xs" data-slot="rename-machine" onClick={() => void s.renameMachine(h)}>Rename</Button> : null}
 				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
 				{h && (state.host !== h || (!s.local && state.status === "error")) ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
 			</ItemActions>
@@ -2118,8 +2123,9 @@ export function MachineList() {
 				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
-			{s.local ? null : <DeviceKey />}
-			<FieldSet>
+			{/* Where only a Mac paired by its code can be used (the official service), there is no user@host to add, nor a key for one. */}
+			{!s.canAddHost ? <PairHowTo /> : s.local ? null : <DeviceKey />}
+			{s.canAddHost ? <FieldSet>
 				<FieldLegend>Add a machine</FieldLegend>
 				<FieldGroup>
 					<Field>
@@ -2132,17 +2138,37 @@ export function MachineList() {
 					</Field>
 					{error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{error}</AlertDescription></Alert> : null}
 				</FieldGroup>
-			</FieldSet>
+			</FieldSet> : null}
 		</>
+	);
+}
+
+/** How a browser is paired with a Mac, in three lines, and where the Pine app is for a Mac without it: opened like every other link. */
+function PairHowTo() {
+	return (
+		<Item variant="outline" data-slot="pair-how-to">
+			<ItemContent className="min-w-0 basis-full">
+				<ItemTitle>Pair a Mac</ItemTitle>
+				<ol className="list-decimal ps-5 text-sm text-muted-foreground">
+					<li>Open the Pine app on your Mac.</li>
+					<li>Go to Settings &gt; Browser access and press Add a device.</li>
+					<li>Scan the code with this device's camera, or open the link it gives in this browser.</li>
+				</ol>
+			</ItemContent>
+			<ItemActions>
+				<Button variant="outline" size="xs" data-slot="get-the-app" onClick={() => void store.attempt(() => bridge.open(APP_DOWNLOAD))}><ExternalLinkIcon data-icon="inline-start" />Get the Pine app</Button>
+			</ItemActions>
+		</Item>
 	);
 }
 
 function Environments() {
 	const s = useModel(store);
 	return (
-		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : !s.canAddHost ? "The pine this browser uses: the one of the Pine app on a Mac paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
 			<MachineList />
-			<Alert>
+			{/* Where only paired Macs can be used, the list's how-to is all there is to say. */}
+			{s.canAddHost ? <Alert>
 				<InfoIcon />
 				<AlertDescription>
 					{/* A port of this computer and its terminal are not said where there is no local machine. */}
@@ -2156,7 +2182,7 @@ function Environments() {
 						<p>The machine needs pine with a home (pine init there), and this device's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
 					)}
 				</AlertDescription>
-			</Alert>
+			</Alert> : null}
 		</Page>
 	);
 }

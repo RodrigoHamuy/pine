@@ -141,6 +141,12 @@ const NO_MACHINE: ServiceState = {
 	kind: "ssh",
 	message: "Add the machine whose pine this browser is to use, as user@host or user@host:port. Put this browser's key into ~/.ssh/authorized_keys there first.",
 };
+/** The same where user@host machines cannot be added (the official service): only a Mac paired by its code can be used. */
+const NO_MAC: ServiceState = {
+	status: "error",
+	kind: "ssh",
+	message: "Pair this browser with the Pine app on your Mac: open Pine on your Mac, go to Settings > Browser access, and scan the code it shows.",
+};
 
 /** What `pine service` there could not do, in words that say what to do. */
 function serviceTrouble(host: string, e: ServiceTrouble): string {
@@ -181,6 +187,7 @@ export function webBridge(deps: WebBridgeDeps) {
 	let hostKeys: Record<string, string> = {};
 	// Whether user@host machines can be added: the deployment's configuration says, and a read that fails leaves them.
 	let canAddHost = true;
+	const noMachine = () => (canAddHost ? NO_MACHINE : NO_MAC);
 	let loaded: Promise<void> | undefined;
 	const load = () =>
 		(loaded ??= (async () => {
@@ -190,7 +197,7 @@ export function webBridge(deps: WebBridgeDeps) {
 			hostKeys = keys ?? {};
 			canAddHost = !(config && typeof config === "object" && (config as { relay?: unknown }).relay === false);
 			if (deps.pairLink) state = { status: "starting", pairing: {} };
-			else if (!kept.use) state = NO_MACHINE;
+			else if (!kept.use) state = noMachine();
 		})());
 	/** The configuration, or nothing when it cannot be read within a few seconds. */
 	const readConfig = async (): Promise<unknown> => {
@@ -371,7 +378,7 @@ export function webBridge(deps: WebBridgeDeps) {
 		kept = rest;
 		round++;
 		await letGo();
-		setState(NO_MACHINE);
+		setState(noMachine());
 	};
 
 	/**
@@ -438,7 +445,7 @@ export function webBridge(deps: WebBridgeDeps) {
 		async retry() {
 			await load();
 			if (kept.use) void connectTo(kept.use);
-			else setState(NO_MACHINE);
+			else setState(noMachine());
 		},
 		async call(method: string, url: string, body?: unknown) {
 			return callDaemon(state.status === "ready" ? current?.daemon : undefined, method, url, body);
