@@ -2067,7 +2067,13 @@ export function MachineList() {
 	const [distros, setDistros] = useState<string[]>([]);
 	const [installed, setInstalled] = useState<{ distro: string; sandbox: string }>();
 	const [installing, setInstalling] = useState<string>();
-	useEffect(() => void (s.local && bridge.wslDistros?.().then(setDistros, () => setDistros([]))), [s.local]);
+	useEffect(() => {
+		// (A bridge without WSL, or a stand-in, may answer with anything: only a list of names counts.)
+		if (s.local)
+			Promise.resolve(bridge.wslDistros?.())
+				.then((d) => setDistros(Array.isArray(d) ? d.filter((x): x is string => typeof x === "string") : []))
+				.catch(() => setDistros([]));
+	}, [s.local]);
 	const addWsl = async (d: string) => {
 		setError(undefined);
 		try {
