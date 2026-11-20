@@ -173,7 +173,7 @@ async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) =
 	const daemon = async () => {
 		try {
 			const api = client(cfg);
-			if (!(await fetch(`${api.base}/health`, { signal: AbortSignal.timeout(800) })).ok) return undefined;
+			if (!(await fetch(`${api.base}/health`, { signal: AbortSignal.timeout(5000) })).ok) return undefined;
 			await api.get("/status");
 			return api;
 		} catch {
@@ -308,7 +308,7 @@ async function mcpCommand(cfg: PineConfig, argv: string[], out: (v: unknown) => 
 	const live = async (body: unknown): Promise<boolean> => {
 		try {
 			const api = client(cfg);
-			if (!(await fetch(`${api.base}/health`, { signal: AbortSignal.timeout(800) })).ok) return false;
+			if (!(await fetch(`${api.base}/health`, { signal: AbortSignal.timeout(5000) })).ok) return false;
 			await api.post("/mcp", body);
 			return true;
 		} catch (e) {
@@ -576,7 +576,7 @@ async function main(): Promise<void> {
 		const refreshed = async (): Promise<boolean> => {
 			try {
 				const api = client(cfg);
-				if (!(await fetch(`${api.base}/health`, { signal: AbortSignal.timeout(800) })).ok) return false;
+				if (!(await fetch(`${api.base}/health`, { signal: AbortSignal.timeout(5000) })).ok) return false;
 				await api.post("/models/refresh");
 				return true;
 			} catch {
