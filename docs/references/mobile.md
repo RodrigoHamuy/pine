@@ -13,8 +13,9 @@ Capacitor around the page of `desktop/`: the same page and the same app on both 
 
 ## Getting it
 
-Every release of pine has the app attached, next to the Mac disk images:
-<https://github.com/pmndre/pine/releases/latest>
+A release of pine has the Android app attached, next to the Mac disk images:
+<https://github.com/pmndre/pine/releases/latest>. The iPhone app is not attached for now: it is
+built by hand (`npm run ipa`, below), and a release that has one lists it there.
 
 | File | For |
 |---|---|
@@ -210,10 +211,10 @@ from `main` and attaches it to the GitHub release, with `versionName` the releas
 `versionCode` major × 1 000 000 + minor × 1 000 + patch. It takes the key from four secrets of
 the environment `release`; without them it builds no APK and says so.
 
-The same release gets `Pine-<version>.ipa` from the job `ios`, on GitHub's runner image with
-Xcode 27 (`xcode-27`), with no secret: it checks and tests `mobile/`, runs `swift test` for the
-core, and `npm run ipa` with the release's version, whose build number is Android's
-`versionCode`.
+The release does not build the IPA for now: the core's `swift test` did not pass on GitHub's
+Xcode 27 preview image. On a Mac with Xcode 27, `npm run ipa -- <version>` in `mobile/` makes
+`Pine-<version>.ipa`, whose build number is Android's `versionCode`; run `npm test` there and
+`swift test` in `mobile/ios-core/` first.
 
-To build the APK and the IPA of a release again, run the workflow by hand from `main` with that
+To build the APK of a release again, run the workflow by hand from `main` with that
 release's version: `gh workflow run release.yml -f version=0.38.0`.

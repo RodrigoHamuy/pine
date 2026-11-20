@@ -118,7 +118,7 @@ npm run desktop
 
 On an Android phone or an iPhone, the Pine app shows the pine of a machine you reach over SSH
 (your Mac, a server): the same page, with its own SSH key and no pine on the phone. Each release
-has it as an APK and as an IPA to sideload with your own Apple ID
+has it as an APK; the IPA to sideload with your own Apple ID is built by hand for now
 ([mobile.md](docs/references/mobile.md)).
 
 To get a newer version later, with whatever it needs:
