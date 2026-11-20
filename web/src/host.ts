@@ -37,12 +37,18 @@ export type WebBridgeDeps = {
 	pairLink?: PairLink;
 	/** The browser's user agent, of which the paired computer is told this browser's name ("Chrome on Android"). */
 	userAgent?: string;
-	/** Reads the deployment's configuration (`GET /meet/config`: `{ice, relay}`); none, or a failed read: user@host machines can be added. */
+	/**
+	 * Reads the deployment's configuration (`GET /meet/config`: `{ice, relay}`). An answer says the
+	 * deployment has the meeting service, so a computer can be paired with; none, or a failed read:
+	 * there is nothing to pair with, and user@host machines can be added.
+	 */
 	config?(): Promise<unknown>;
 	/** Puts a text on the clipboard. */
 	clipboard(text: string): Promise<void>;
 	/** Hands a text to the system's share sheet; none: the clipboard. */
 	share?(title: string, text: string): Promise<void>;
+	/** The host of this deployment (the document's address), which the page names as the relay's and the meeting service's. */
+	serviceHost?: string;
 	/** The web client's version. */
 	version: string;
 	/** Waits between attempts to connect again (the tests make them short); none: a timer. */
@@ -149,7 +155,7 @@ const NO_MACHINE: ServiceState = {
 	kind: "ssh",
 	message: "Add the machine whose pine this browser is to use, as user@host or user@host:port. Put this browser's key into ~/.ssh/authorized_keys there first.",
 };
-/** The same where user@host machines cannot be added (the official service): only a computer paired by its code can be used. */
+/** The same where user@host machines cannot be added (a deployment whose relay is off): only a computer paired by its code can be used. */
 const NO_PAIRED: ServiceState = {
 	status: "error",
 	kind: "ssh",
@@ -195,6 +201,8 @@ export function webBridge(deps: WebBridgeDeps) {
 	let hostKeys: Record<string, string> = {};
 	// Whether user@host machines can be added: the deployment's configuration says, and a read that fails leaves them.
 	let canAddHost = true;
+	// Whether a computer can be paired with: the deployment answered its configuration, so it has the meeting service.
+	let canPair = false;
 	const noMachine = () => (canAddHost ? NO_MACHINE : NO_PAIRED);
 	let loaded: Promise<void> | undefined;
 	const load = () =>
@@ -203,7 +211,8 @@ export function webBridge(deps: WebBridgeDeps) {
 			const names = stored?.names && typeof stored.names === "object" ? stored.names : {};
 			kept = { prefs: { ...DEFAULTS, ...stored?.prefs }, hosts: Array.isArray(stored?.hosts) ? stored.hosts : [], names, ...(stored?.use ? { use: stored.use } : {}) };
 			hostKeys = keys ?? {};
-			canAddHost = !(config && typeof config === "object" && (config as { relay?: unknown }).relay === false);
+			canPair = !!config && typeof config === "object" && !Array.isArray(config);
+			canAddHost = !(canPair && (config as { relay?: unknown }).relay === false);
 			if (deps.pairLink) state = { status: "starting", pairing: {} };
 			else if (!kept.use) state = noMachine();
 		})());
@@ -439,7 +448,7 @@ export function webBridge(deps: WebBridgeDeps) {
 		},
 		async state(): Promise<AppState> {
 			await load();
-			return { state, connected, home: state.status === "ready" ? state.home : undefined, prefs: prefsOut(), platform: "web", focused: true, updates: false, versions: { app: deps.version, electron: "none" }, local: false, canAddHost };
+			return { state, connected, home: state.status === "ready" ? state.home : undefined, prefs: prefsOut(), platform: "web", focused: true, updates: false, versions: { app: deps.version, electron: "none" }, local: false, canAddHost, canPair, ...(deps.serviceHost ? { serviceHost: deps.serviceHost } : {}) };
 		},
 		/** The page has started: it is told the state as it is now, and the pairing link is paired with, or else the machine in use connected to (once). */
 		async ready() {

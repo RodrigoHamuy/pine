@@ -46,6 +46,7 @@ async function main() {
 		pairLink: link,
 		userAgent: navigator.userAgent,
 		config,
+		serviceHost: location.host,
 		clipboard: (text) => navigator.clipboard.writeText(text),
 		share: typeof navigator.share === "function" ? (title, text) => navigator.share({ title, text }) : undefined,
 		version: __PINE_WEB_VERSION__,

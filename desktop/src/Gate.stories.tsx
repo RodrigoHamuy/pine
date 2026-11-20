@@ -10,12 +10,14 @@ import { store } from "./model.ts";
 
 window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq3lYcVb0mXkJ2yq8rV6tZsP4dW1nE9fKcH7uR2aB3m pine-android", copy: async () => {}, share: async () => {} });
 
-function Before({ state, hosts, loadError, names, canAddHost = true, pairFailed = false }: { state: ServiceState; hosts: string[]; loadError?: string; names?: Record<string, string>; canAddHost?: boolean; pairFailed?: boolean }) {
+function Before({ state, hosts, loadError, names, canAddHost = true, canPair = false, serviceHost, pairFailed = false }: { state: ServiceState; hosts: string[]; loadError?: string; names?: Record<string, string>; canAddHost?: boolean; canPair?: boolean; serviceHost?: string; pairFailed?: boolean }) {
 	store.local = false;
 	store.prefs = { ...store.prefs, hosts, use: state.host, names };
 	store.service = state;
 	store.loadError = loadError;
 	store.canAddHost = canAddHost;
+	store.canPair = canPair;
+	store.serviceHost = serviceHost;
 	store.pairFailed = pairFailed;
 	return (
 		<div className="flex h-200 w-full">
@@ -29,8 +31,8 @@ const meta = {
 	parameters: { layout: "fullscreen" },
 	// What a story sets on the store is put back after it: the next story starts from the store as it was.
 	beforeEach: () => {
-		const { local, service, prefs, loadError, canAddHost, pairFailed } = store;
-		return () => void Object.assign(store, { local, service, prefs, loadError, canAddHost, pairFailed });
+		const { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed } = store;
+		return () => void Object.assign(store, { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed });
 	},
 	// Nothing of a local machine, and the machines listed: they are the only way to a pine.
 	play: async ({ canvasElement }) => {
@@ -45,6 +47,16 @@ type Story = StoryObj<typeof meta>;
 /** The first start: no machine yet, the client's key to put on one, and the field to add it. */
 export const NoMachineYet: Story = {
 	args: { hosts: [], state: { status: "error", kind: "ssh", message: "Add the machine whose pine this device is to use, as you would write it after ssh: user@host, or user@host:port. Put this device's key into ~/.ssh/authorized_keys there first." } },
+	// Nothing to pair with (the mobile app, a deployment without the meeting service): the SSH view alone, no back control, no relay named.
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement } = context;
+		await expect(canvasElement.querySelector("input")).not.toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="back-to-pairing"]')).toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="ssh-instead"]')).toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="relay-line"]')).toBeNull();
+	},
 };
 
 const fingerprint = "SHA256:Xv2k0yq3pZ8bW9cQm1sT4uE7rN6aL5dH2fJ0gK3iO8Y";
@@ -215,7 +227,7 @@ export const PairingExpired: Story = {
 
 const opened = fn(async () => {});
 
-/** The official service, nothing paired yet: how to pair in three lines and where the app is; no user@host field and no key for one. */
+/** A deployment whose relay is off, nothing paired yet: how to pair in three lines and where the app is; no user@host field, no key for one, no link to SSH. */
 export const PairFirst: Story = {
 	args: { hosts: [], canAddHost: false, state: { status: "error", kind: "ssh", message: "Pair this browser with the Pine app on your computer: open Pine on your computer, go to Settings > Browser access, and scan the code it shows." } },
 	beforeEach: () => {
@@ -233,6 +245,8 @@ export const PairFirst: Story = {
 		await expect(canvasElement.querySelector("input")).toBeNull();
 		await expect(canvasElement.querySelector('[data-slot="device-key"]')).toBeNull();
 		await expect(within(canvasElement).queryAllByText(/user@host/)).toHaveLength(0);
+		// The relay is off: no link to SSH.
+		await expect(canvasElement.querySelector('[data-slot="ssh-instead"]')).toBeNull();
 		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-slot="get-the-app"]')!);
 		await expect(opened).toHaveBeenCalledWith("https://github.com/pmndre/pine/releases/latest");
 	},
@@ -264,5 +278,54 @@ export const PairedComputerNotReached: Story = {
 		await userEvent.click(row.querySelector<HTMLElement>('[data-slot="rename-machine"]')!);
 		await expect(renamed).toHaveBeenCalledWith(PAIRED);
 		await expect(within(row).getByText("Forget")).toBeInTheDocument();
+	},
+};
+
+// ---- A service with both: pairing first, SSH behind a link ----
+
+const SERVICE = "pine.drcmda.workers.dev";
+
+/**
+ * The official service, nothing added yet: how to pair, and a discreet link to SSH. The link shows the SSH
+ * view (the back control at its top, the field, the key, and the relay named), and the back control returns.
+ */
+export const PairOrSsh: Story = {
+	args: { hosts: [], canPair: true, serviceHost: SERVICE, state: { status: "error", kind: "ssh", message: "Add the machine whose pine this browser is to use, as user@host or user@host:port. Put this browser's key into ~/.ssh/authorized_keys there first." } },
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement, userEvent } = context;
+		const canvas = within(canvasElement);
+		// The pairing view: never the SSH view beside it.
+		await expect(canvas.getByText("Pair this browser with your computer")).toBeInTheDocument();
+		await expect(canvasElement).not.toHaveTextContent(/\bMac\b/);
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).not.toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="meeting-line"]')).toHaveTextContent(`Found through ${SERVICE}, then connected directly.`);
+		await expect(canvasElement.querySelector("input")).toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="device-key"]')).toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="back-to-pairing"]')).toBeNull();
+		await userEvent.click(canvas.getByRole("button", { name: "Or connect to a server over SSH" }));
+		// The SSH view: the back control, the field, the key, the relay named; no pairing.
+		await expect(canvas.getByText("Choose a machine")).toBeInTheDocument();
+		await expect(canvas.getByRole("button", { name: "Back to pairing" })).toBeInTheDocument();
+		await expect(canvasElement.querySelector("input")).not.toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="device-key"]')).not.toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="relay-line"]')).toHaveTextContent(`Connections go through the relay at ${SERVICE}. It carries SSH only and cannot read it.`);
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="ssh-instead"]')).toBeNull();
+		await userEvent.click(canvas.getByRole("button", { name: "Back to pairing" }));
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).not.toBeNull();
+		await expect(canvasElement.querySelector("input")).toBeNull();
+	},
+};
+
+/** A browser with machines of both kinds lands on the SSH view, and each row says how its machine is reached through the service. */
+export const ThroughTheService: Story = {
+	args: { hosts: [PAIRED, "me@build-box"], canPair: true, serviceHost: SERVICE, names: { [PAIRED]: "Studio" }, state: { status: "starting", host: "me@build-box" } },
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement } = context;
+		await expect(canvasElement.querySelector('[data-slot="back-to-pairing"]')).not.toBeNull();
+		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="reached-through"]')).toHaveTextContent(`Through the relay at ${SERVICE}.`);
+		await expect(canvasElement.querySelector(`[data-environment="${PAIRED}"] [data-slot="reached-through"]`)).toHaveTextContent(`Found through ${SERVICE}, then connected directly.`);
 	},
 };

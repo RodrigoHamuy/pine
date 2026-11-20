@@ -42,7 +42,7 @@ function computer(): Machine {
 	return m;
 }
 
-function client(machine: Machine, options: { store?: ReturnType<typeof memoryStore>; pairLink?: PairLink; config?: WebBridgeDeps["config"]; waitMs?: number } = {}) {
+function client(machine: Machine, options: { store?: ReturnType<typeof memoryStore>; pairLink?: PairLink; config?: WebBridgeDeps["config"]; serviceHost?: string; waitMs?: number } = {}) {
 	const w = windows();
 	const store = options.store ?? memoryStore();
 	const waits: number[] = [];
@@ -55,6 +55,7 @@ function client(machine: Machine, options: { store?: ReturnType<typeof memorySto
 		pairLink: options.pairLink,
 		userAgent: ANDROID,
 		config: options.config,
+		serviceHost: options.serviceHost,
 		clipboard: async () => {},
 		version: "9.9.9",
 		wait,
@@ -224,6 +225,33 @@ test("whether user@host machines can be added comes from the service's configura
 		await c.page.addHost("me@box.example");
 		c.stop();
 	}
+});
+
+test("whether pairing is offered comes from the service's configuration too: a deployment that answers /meet/config has the meeting service", async () => {
+	const cases: [string, WebBridgeDeps["config"], { canPair: boolean; canAddHost: boolean }][] = [
+		["meeting and relay", async () => ({ ice: [], relay: true }), { canPair: true, canAddHost: true }],
+		["meeting only", async () => ({ ice: [], relay: false }), { canPair: true, canAddHost: false }],
+		// The default configuration answers /meet/config with 404, which bridge-main.ts reads as nothing.
+		["relay only", async () => undefined, { canPair: false, canAddHost: true }],
+		["a failed read", async () => Promise.reject(new Error("offline")), { canPair: false, canAddHost: true }],
+		["an answer that is no configuration", async () => "nonsense", { canPair: false, canAddHost: true }],
+		["no configuration", undefined, { canPair: false, canAddHost: true }],
+	];
+	for (const [name, config, said] of cases) {
+		const c = client(computer(), { config });
+		const s = await c.page.state();
+		assert.deepEqual({ canPair: s.canPair, canAddHost: s.canAddHost }, said, name);
+		c.stop();
+	}
+});
+
+test("the page is told the deployment's host, which it names as the relay's and the meeting service's; none is invented", async () => {
+	const named = client(computer(), { serviceHost: "pine.drcmda.workers.dev" });
+	assert.equal((await named.page.state()).serviceHost, "pine.drcmda.workers.dev");
+	named.stop();
+	const none = client(computer());
+	assert.equal("serviceHost" in (await none.page.state()), false);
+	none.stop();
 });
 
 test("a paired computer that does not answer, or no direct way from this network, is said and tried again with a growing wait", async () => {
