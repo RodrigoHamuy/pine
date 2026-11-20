@@ -11,7 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
-import { homeScreenKeeps, machineName, pairingEnded } from "./machines.ts";
+import { computerWord, homeScreenKeeps, machineName, pairingEnded } from "./machines.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
@@ -223,9 +223,9 @@ export class Store extends Model {
 	platform = "darwin";
 	/** Whether there is a "this computer" whose pine the app can use: not under a bridge that only reaches other machines (`AppState.local`). */
 	local = true;
-	/** Whether machines can be added as user@host: not where the bridge reaches only Macs paired by their code (`AppState.canAddHost`). */
+	/** Whether machines can be added as user@host: not where the bridge reaches only computers paired by their code (`AppState.canAddHost`). */
 	canAddHost = true;
-	/** The last pairing with a Mac ended without one: the first screen says so above the bridge's reason. */
+	/** The last pairing with a computer ended without one: the first screen says so above the bridge's reason. */
 	pairFailed = false;
 	/** The suggestion to add the web client to the home screen, shown once after a first pairing where that keeps the browser's key. */
 	homeScreen = false;
@@ -506,7 +506,7 @@ export class Store extends Model {
 	}
 
 	/**
-	 * A pairing link was paired with: the bridge kept the Mac among the machines, under its name,
+	 * A pairing link was paired with: the bridge kept the computer among the machines, under its name,
 	 * which the page is told by reading the preferences again. The first time, where a web app on
 	 * the home screen keeps this browser's key, the page suggests putting it there, once and for good.
 	 */
@@ -524,7 +524,7 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/** The name the owner sees for a machine of the list (machines.ts): a paired Mac's computer name, never its id. */
+	/** The name the owner sees for a machine of the list (machines.ts): a paired computer's name, never its id. */
 	nameOf(host: string): string {
 		return machineName(host, this.prefs.names);
 	}
@@ -912,7 +912,7 @@ export class Store extends Model {
 		const code = await bridge.browserInstall().catch(() => 1);
 		this.browserFetching = false;
 		await this.checkBrowser();
-		if (this.browser) this.flash("The browser of the web tools is on this Mac now.", "good");
+		if (this.browser) this.flash(`The browser of the web tools is on this ${computerWord(this.platform)} now.`, "good");
 		else this.flash(code === 0 ? "The browser is still not there. What was said is shown in Settings > App." : "The browser could not be fetched. What was said is shown in Settings > App; try again when you are online.", "bad", 8000);
 		this.touch();
 	}
@@ -1923,7 +1923,7 @@ export class Store extends Model {
 		const tab = this.active;
 		const chat = tab?.kind === "chat" ? tab : undefined;
 		// A folder opened with the app from the Finder is this computer's.
-		if (name.startsWith("folder:")) return this.remote ? this.flash(`That folder is on this computer, and the app uses the pine on ${this.remote}. Use this Mac's pine to open it.`, "warn", 7000) : this.openFolder(name.slice(7));
+		if (name.startsWith("folder:")) return this.remote ? this.flash(`That folder is on this computer, and the app uses the pine on ${this.remote}. Use this ${computerWord(this.platform)}'s pine to open it.`, "warn", 7000) : this.openFolder(name.slice(7));
 		if (name.startsWith("focus:")) return this.activate(this.tabs.find((t) => t.key === name.slice(6)));
 		if (name.startsWith("tab-")) return this.activate(this.tabs[Number(name.slice(4)) - 1]);
 		if (name.startsWith("code-")) {

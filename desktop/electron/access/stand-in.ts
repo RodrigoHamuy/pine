@@ -81,11 +81,11 @@ export async function startStandIn(options: AccessHostOptions & { waitMs?: numbe
 		options.onStatus?.(status);
 	});
 
-	/** The phone connects to the server over an in-memory stream, pinning this Mac's machine id. */
+	/** The phone connects to the server over an in-memory stream, pinning this computer's machine id. */
 	const connect = (username: string, privateKey: string) =>
 		new Promise<ssh2.Client>((resolve, reject) => {
-			const [mac, phone] = duplexPair();
-			if (!server.accept(mac, { path: "lan" })) return reject(new Error("turned away"));
+			const [computer, phone] = duplexPair();
+			if (!server.accept(computer, { path: "lan" })) return reject(new Error("turned away"));
 			const client = new ssh2.Client();
 			clients.add(client);
 			client.on("close", () => clients.delete(client));

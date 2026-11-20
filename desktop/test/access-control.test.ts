@@ -46,7 +46,7 @@ function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined;
 		loginItem: (open) => void calls.login.push(open),
 		paired: (device) => void calls.paired.push(device),
 		changed: (state) => void calls.changes.push(state),
-		computerName: () => "The Mac",
+		computerName: () => "Studio Mac",
 		start: async (options) => {
 			calls.starts++;
 			const host = await startStandIn({ ...options, waitMs: more.waitMs });

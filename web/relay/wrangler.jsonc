@@ -62,7 +62,7 @@
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Meeting"] }],
       "vars": {
         "RELAY": "off",
-        // The servers that help a browser and a Mac connect directly, which both read from /meet/config.
+        // The servers that help a browser and a paired computer connect directly, which both read from /meet/config.
         "ICE": [{ "urls": "stun:stun.cloudflare.com:3478" }]
       }
     },

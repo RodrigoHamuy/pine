@@ -23,9 +23,9 @@ export type MeetingServer = {
 	url: string;
 	/** The routes and machine ids of every meeting socket that came, in order. */
 	sockets(): { kind: "host" | "join"; id: string }[];
-	/** Sends the browsers that join `from` to the Mac waiting under `to`: a service that lies about who is the Mac. */
+	/** Sends the browsers that join `from` to the computer waiting under `to`: a service that lies about who is the computer. */
 	swap(from: string, to: string): void;
-	/** Browsers that join `id` are told the Mac is there, and then hear nothing: no connection is ever made. */
+	/** Browsers that join `id` are told the computer is there, and then hear nothing: no connection is ever made. */
 	hold(id: string): void;
 	/** Browsers that join `id` are closed at once with `code`, as the service does when it is over its limits. */
 	refuse(id: string, code: number): void;

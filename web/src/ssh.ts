@@ -225,7 +225,7 @@ function wrap(channel: SshChannel): Channel {
 
 /**
  * A duplex byte stream that carries the SSH bytes, open: the WebSocket to the relay
- * (`relayStream`), or a data channel to a paired Mac. The SSH code after it is the same for both.
+ * (`relayStream`), or a data channel to a paired computer. The SSH code after it is the same for both.
  */
 export type Transport = {
 	/** Sends bytes; settles when the transport took them (one that waits for room settles later). */
@@ -279,15 +279,15 @@ export class RelayClosed extends Error {
 }
 
 /**
- * The way to a paired Mac could not be opened: no Mac waits at the meeting service under its id
- * ("absent"), the Mac is there but no direct connection could be made from this network
+ * The way to a paired computer could not be opened: no computer waits at the meeting service under
+ * its id ("absent"), the computer is there but no direct connection could be made from this network
  * ("no-path"), or the meeting service is over its limits ("limits"). Thrown by the peer transport's
  * opener (peer.ts); the bridge tells the owner each in words of its own.
  */
 export class PeerClosed extends Error {
 	readonly reason: "absent" | "no-path" | "limits";
 	constructor(reason: "absent" | "no-path" | "limits", message?: string) {
-		super(message ?? `The way to the Mac could not be opened (${reason}).`);
+		super(message ?? `The way to the paired computer could not be opened (${reason}).`);
 		this.name = "PeerClosed";
 		this.reason = reason;
 	}

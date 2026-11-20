@@ -120,10 +120,10 @@ const meta = {
 	},
 } satisfies Meta<typeof Tab>;
 
-/** Nothing of a local machine on the page: no row for it, no "This Mac", nothing to use or set up there. */
+/** Nothing of a local machine on the page: no row for it, no "This Mac" or "This computer", nothing to use or set up there. */
 async function noLocalMachine(root: HTMLElement) {
 	await expect(root.querySelector('[data-environment="local"]')).toBeNull();
-	await expect(within(root).queryAllByText(/This Mac|This computer|Use this Mac|Set up pine/)).toHaveLength(0);
+	await expect(within(root).queryAllByText(/This (Mac|computer)|Use this (Mac|computer)|Set up pine/)).toHaveLength(0);
 }
 export default meta;
 type Story = StoryObj<typeof meta>;
@@ -302,7 +302,7 @@ async function generalInstead(root: HTMLElement) {
 	await expect(root.querySelector("[data-slot=sidebar-menu-button][aria-current=page]")).toHaveTextContent("General");
 }
 
-/** The desktop app on this Mac's pine: Browser access is in the navigation, between Environments and App. */
+/** The desktop app on this computer's pine: Browser access is in the navigation, between Environments and App. */
 export const AccessOffered: Story = {
 	args: { section: "general" },
 	play: async ({ canvasElement }) => {
@@ -316,7 +316,7 @@ export const AccessNotOfferedWithoutLocal: Story = {
 	play: async ({ canvasElement }) => await generalInstead(canvasElement),
 };
 
-/** The desktop app on another machine's pine: Browser access is this Mac's door, so it is not offered there. */
+/** The desktop app on another machine's pine: Browser access is this computer's door, so it is not offered there. */
 export const AccessNotOfferedOnAnotherMachine: Story = {
 	args: { section: "access" },
 	render: Environments.render,

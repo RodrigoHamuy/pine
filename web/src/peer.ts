@@ -1,11 +1,11 @@
-// The way to a paired Mac: the web bridge's second stream opener (ssh.ts `OpenStream`). It joins
-// the meeting service under the Mac's machine id, makes a WebRTC peer connection in this, the
+// The way to a paired computer: the web bridge's second stream opener (ssh.ts `OpenStream`). It
+// joins the meeting service under the computer's machine id, makes a WebRTC peer connection in this, the
 // top-level document (never in the page's iframe), and hands SSH the data channel labelled `ssh`
 // as its byte stream. The meeting service only passes the few messages that set the connection up;
 // what crosses the channel is SSH, end to end, checked against the machine id's host key.
 import { PeerClosed, type OpenStream, type Transport } from "./ssh.ts";
 
-/** The channel the browser makes and the Mac takes. */
+/** The channel the browser makes and the paired computer takes. */
 export const LABEL = "ssh";
 /** Writes are cut to this: the size every data channel carries without trouble. */
 export const PIECE = 16 * 1024;
@@ -23,7 +23,7 @@ export type PeerOptions = {
 	service: string;
 	/** Reads the deployment's configuration (`GET /meet/config`: `{ice, relay}`), whose `ice` are the servers that help a connection. */
 	config(): Promise<unknown>;
-	/** How long the Mac has to be reached, from the join to the open channel; none: 20 seconds. */
+	/** How long the paired computer has to be reached, from the join to the open channel; none: 20 seconds. */
 	openMs?: number;
 };
 
@@ -40,8 +40,8 @@ function whyClosed(code: number): PeerClosed {
 	if (code === ABSENT) return new PeerClosed("absent");
 	if (code === LIMITS) return new PeerClosed("limits");
 	if (code === TIMEOUT) return new PeerClosed("no-path");
-	// The Mac ended the meeting (it has as many browsers as it takes), or the service went: no way this time.
-	return new PeerClosed("no-path", `The meeting ended before a connection to the Mac was made (${code}).`);
+	// The computer ended the meeting (it has as many browsers as it takes), or the service went: no way this time.
+	return new PeerClosed("no-path", `The meeting ended before a connection to the computer was made (${code}).`);
 }
 
 /**
@@ -83,7 +83,7 @@ export function channelTransport(pc: RTCPeerConnection, dc: RTCDataChannel, earl
 	let queue = Promise.resolve();
 	const send = async (bytes: Uint8Array) => {
 		for (let at = 0; at < bytes.length; ) {
-			if (over) throw new Error("The connection to the Mac is closed.");
+			if (over) throw new Error("The connection to the computer is closed.");
 			if (dc.bufferedAmount > HIGH) {
 				await new Promise<void>((resolve) => (room = resolve));
 				continue;
@@ -109,8 +109,8 @@ export function channelTransport(pc: RTCPeerConnection, dc: RTCDataChannel, earl
 }
 
 /**
- * Opens the way to the paired Mac `id`: the join socket of the meeting service, the offer and the
- * `ssh` channel, the Mac's answer. Throws `PeerClosed` when no Mac waits ("absent"), when the meeting
+ * Opens the way to the paired computer `id`: the join socket of the meeting service, the offer and
+ * the `ssh` channel, the computer's answer. Throws `PeerClosed` when no computer waits ("absent"), when the meeting
  * service is over its limits ("limits"), or when no connection was made in time ("no-path"). Once the
  * channel is open the join socket is closed: the meeting has done its part.
  */
@@ -134,7 +134,7 @@ export function peerStream(id: string, options: PeerOptions): OpenStream {
 			};
 			const timer = setTimeout(() => fail(new PeerClosed("no-path")), ms);
 			const signal = (d: unknown) => socket.readyState === WebSocket.OPEN && socket.send(JSON.stringify({ t: "signal", d }));
-			// The Mac's candidates may come before its answer is set: they wait for it.
+			// The computer's candidates may come before its answer is set: they wait for it.
 			const pending: RTCIceCandidateInit[] = [];
 			let answered = false;
 			socket.onerror = () => {};
@@ -157,7 +157,7 @@ export function peerStream(id: string, options: PeerOptions): OpenStream {
 					peer.onconnectionstatechange = () => peer.connectionState === "failed" && fail(new PeerClosed("no-path"));
 					const dc = peer.createDataChannel(LABEL, { ordered: true });
 					dc.binaryType = "arraybuffer";
-					// Bytes the Mac sends as soon as the channel opens (SSH's banner) are kept for SSH.
+					// Bytes the computer sends as soon as the channel opens (SSH's banner) are kept for SSH.
 					const early: Uint8Array[] = [];
 					dc.onmessage = (m) => early.push(new Uint8Array(m.data as ArrayBuffer));
 					dc.onopen = () => {
@@ -171,7 +171,7 @@ export function peerStream(id: string, options: PeerOptions): OpenStream {
 						await peer.setLocalDescription(await peer.createOffer());
 						signal({ sdp: { type: peer.localDescription!.type, sdp: peer.localDescription!.sdp } });
 					} catch (error) {
-						fail(new PeerClosed("no-path", `No connection could be offered to the Mac: ${error instanceof Error ? error.message : error}`));
+						fail(new PeerClosed("no-path", `No connection could be offered to the computer: ${error instanceof Error ? error.message : error}`));
 					}
 					return;
 				}

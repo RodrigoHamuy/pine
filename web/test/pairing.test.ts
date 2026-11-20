@@ -1,7 +1,9 @@
-// What the web bridge reads of a pairing link, and the name it gives this browser for the Mac.
+// What the web bridge reads of a pairing link, and the name it gives this browser for the
+// computer it pairs with.
 import assert from "node:assert/strict";
 import test from "node:test";
-import { deviceName, macFingerprint, takePairLink } from "../src/pairing.ts";
+import { isPaired, PAIRED } from "../../desktop/src/machines.ts";
+import { deviceName, pairedFingerprint, takePairLink } from "../src/pairing.ts";
 
 const ID = "Zm9vYmFyLWJhei1xdXV4LTAxMjM0NTY3ODktYWJjZGVm".slice(0, 43);
 const CODE = "AAECAwQFBgcICQoLDA0ODw";
@@ -45,11 +47,11 @@ test("an address without a pairing link is left as it is", () => {
 	}
 });
 
-test("a machine id is the fingerprint of the Mac's host key, in the form OpenSSH prints", () => {
-	assert.equal(macFingerprint("ab-_cd" + "x".repeat(37)), `SHA256:ab+/cd${"x".repeat(37)}`);
+test("a machine id is the fingerprint of the computer's host key, in the form OpenSSH prints", () => {
+	assert.equal(pairedFingerprint("ab-_cd" + "x".repeat(37)), `SHA256:ab+/cd${"x".repeat(37)}`);
 });
 
-test("this browser's name for the Mac: the browser and the system", () => {
+test("this browser's name for the computer it pairs with: the browser and the system", () => {
 	const named: [string, string][] = [
 		["Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36", "Chrome on Android"],
 		["Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1", "Safari on iPhone"],
@@ -64,4 +66,15 @@ test("this browser's name for the Mac: the browser and the system", () => {
 		["Something\u0007odd/1.0", "A web browser"],
 	];
 	for (const [agent, name] of named) assert.equal(deviceName(agent), name, agent);
+});
+
+test("a paired computer is written paired: and its machine id among the machines; nothing else is one", () => {
+	assert.equal(PAIRED, "paired:");
+	assert.equal(isPaired(`paired:${ID}`), true);
+	for (const other of [`mac:${ID}`, `paired:${ID.slice(1)}`, `paired:${ID}x`, "me@box.example", ID]) assert.equal(isPaired(other), false, other);
+});
+
+test("a pairing link that cannot be read says what to do in words that fit any computer", () => {
+	const a = address("https://pine.example/#pair=bad");
+	assert.doesNotMatch(takePairLink(a.at, a.replace).problem ?? "", /\bMac\b/);
 });

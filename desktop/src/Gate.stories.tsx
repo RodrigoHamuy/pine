@@ -36,7 +36,7 @@ const meta = {
 	play: async ({ canvasElement }) => {
 		await expect(canvasElement.querySelector('[data-slot="gate-machines"]')).not.toBeNull();
 		await expect(canvasElement.querySelector('[data-environment="local"]')).toBeNull();
-		await expect(within(canvasElement).queryAllByText(/This Mac|This computer|Use this Mac|Set up pine/)).toHaveLength(0);
+		await expect(within(canvasElement).queryAllByText(/This (Mac|computer)|Use this (Mac|computer)|Set up pine/)).toHaveLength(0);
 	},
 } satisfies Meta<typeof Before>;
 export default meta;
@@ -186,16 +186,17 @@ export const LoadFailed: Story = {
 	},
 };
 
-// ---- Macs paired by their code (the web client's) ----
+// ---- Computers paired by their code (the web client's) ----
 
-const MAC = "mac:q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x-_";
+const PAIRED = "paired:q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x-_";
 
-/** A pairing link being paired with, the Mac asking the owner: the four digits it shows too, and where to answer. */
-export const PairingConfirmOnMac: Story = {
+/** A pairing link being paired with, the computer asking the owner: the four digits it shows too, and where to answer. Its name is not known yet. */
+export const PairingConfirmOnComputer: Story = {
 	args: { hosts: [], state: { status: "starting", pairing: { code: "4821", name: "Chrome on Android" } } },
 	play: async ({ canvasElement }) => {
 		const canvas = within(canvasElement);
-		await expect(canvas.getByText("Confirm on your Mac")).toBeInTheDocument();
+		await expect(canvas.getByText("Confirm on your computer")).toBeInTheDocument();
+		await expect(canvasElement).not.toHaveTextContent(/\bMac\b/);
 		await expect(canvasElement.querySelector('[data-slot="pairing-code"]')).toHaveTextContent("4821");
 		await expect(canvas.getByText(/Chrome on Android/)).toBeInTheDocument();
 	},
@@ -203,7 +204,7 @@ export const PairingConfirmOnMac: Story = {
 
 /** A pairing link that expired or was used: said, with what to do next. */
 export const PairingExpired: Story = {
-	args: { hosts: [], canAddHost: false, pairFailed: true, state: { status: "error", kind: "ssh", message: "This pairing link has expired or was used already. Open Pine on the Mac and add this device again." } },
+	args: { hosts: [], canAddHost: false, pairFailed: true, state: { status: "error", kind: "ssh", message: "This pairing link has expired or was used already. Open Pine on your computer and add this device again." } },
 	play: async (context) => {
 		await meta.play(context);
 		const canvas = within(context.canvasElement);
@@ -216,7 +217,7 @@ const opened = fn(async () => {});
 
 /** The official service, nothing paired yet: how to pair in three lines and where the app is; no user@host field and no key for one. */
 export const PairFirst: Story = {
-	args: { hosts: [], canAddHost: false, state: { status: "error", kind: "ssh", message: "Pair this browser with the Pine app on your Mac: open Pine on your Mac, go to Settings > Browser access, and scan the code it shows." } },
+	args: { hosts: [], canAddHost: false, state: { status: "error", kind: "ssh", message: "Pair this browser with the Pine app on your computer: open Pine on your computer, go to Settings > Browser access, and scan the code it shows." } },
 	beforeEach: () => {
 		opened.mockClear();
 		const was = window.pine.open;
@@ -226,7 +227,8 @@ export const PairFirst: Story = {
 	play: async (context) => {
 		await meta.play(context);
 		const { canvasElement, userEvent } = context;
-		await expect(within(canvasElement).getByText("Pair this browser with your Mac")).toBeInTheDocument();
+		await expect(within(canvasElement).getByText("Pair this browser with your computer")).toBeInTheDocument();
+		await expect(canvasElement).not.toHaveTextContent(/\bMac\b/);
 		await expect(canvasElement.querySelectorAll('[data-slot="pair-how-to"] li')).toHaveLength(3);
 		await expect(canvasElement.querySelector("input")).toBeNull();
 		await expect(canvasElement.querySelector('[data-slot="device-key"]')).toBeNull();
@@ -238,9 +240,9 @@ export const PairFirst: Story = {
 
 const renamed = fn(async () => {});
 
-/** A paired Mac that does not answer: by its name, never its id, with what the owner is told and Rename and Forget on its row. */
-export const PairedMacNotReached: Story = {
-	args: { hosts: [MAC], canAddHost: false, names: { [MAC]: "Studio Mac" }, state: { status: "error", kind: "ssh", host: MAC, message: "Your Mac does not answer: it is off, asleep, or Pine is closed. This browser keeps trying, and connects when the Mac is back." } },
+/** A paired computer that does not answer: by its name, never its id, with what the owner is told and Rename and Forget on its row. */
+export const PairedComputerNotReached: Story = {
+	args: { hosts: [PAIRED], canAddHost: false, names: { [PAIRED]: "Studio Mac" }, state: { status: "error", kind: "ssh", host: PAIRED, message: "Studio Mac does not answer: it is off, asleep, or Pine is closed. This browser keeps trying, and connects when Studio Mac is back." } },
 	beforeEach: () => {
 		renamed.mockClear();
 		window.pine.renameHost = async () => store.prefs;
@@ -256,11 +258,11 @@ export const PairedMacNotReached: Story = {
 		const { canvasElement, userEvent } = context;
 		await expect(within(canvasElement).getByText(/is not reached$/)).toHaveTextContent("Studio Mac is not reached");
 		await expect(within(canvasElement).queryAllByText(/q1w2e3r4/)).toHaveLength(0);
-		const row = canvasElement.querySelector<HTMLElement>(`[data-environment="${MAC}"]`)!;
+		const row = canvasElement.querySelector<HTMLElement>(`[data-environment="${PAIRED}"]`)!;
 		await expect(row).toHaveTextContent("Studio Mac");
-		await expect(row).toHaveTextContent(/Your Mac does not answer/);
+		await expect(row).toHaveTextContent(/Studio Mac does not answer/);
 		await userEvent.click(row.querySelector<HTMLElement>('[data-slot="rename-machine"]')!);
-		await expect(renamed).toHaveBeenCalledWith(MAC);
+		await expect(renamed).toHaveBeenCalledWith(PAIRED);
 		await expect(within(row).getByText("Forget")).toBeInTheDocument();
 	},
 };

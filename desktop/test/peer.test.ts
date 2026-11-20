@@ -17,19 +17,19 @@ const nearbyCandidate = (d: Signal) => {
 
 /**
  * Two peers whose signals go to each other as JSON, as they would cross the meeting service. With
- * `nearby`, only candidates of the same network cross: on a Mac with a VPN interface (Tailscale's
+ * `nearby`, only candidates of the same network cross: on a computer with a VPN interface (Tailscale's
  * 100.64.0.0/10, a tunnel and not the same network) the library may otherwise pick that one.
  */
-function pair({ nearby = false } = {}): { mac: Peer; browser: Peer } {
-	let mac: Peer | undefined;
+function pair({ nearby = false } = {}): { computer: Peer; browser: Peer } {
+	let computer: Peer | undefined;
 	let browser: Peer | undefined;
 	const early: Signal[] = [];
 	const cross = (d: Signal) => JSON.parse(JSON.stringify(d)) as Signal;
 	const passes = (d: Signal) => !nearby || nearbyCandidate(d);
-	browser = offer({ ice: [], send: (d) => passes(d) && (mac ? mac.signal(cross(d)) : early.push(cross(d))) });
-	mac = answer({ ice: [], send: (d) => passes(d) && browser.signal(cross(d)) });
-	for (const d of early.splice(0)) mac.signal(d);
-	return { mac, browser };
+	browser = offer({ ice: [], send: (d) => passes(d) && (computer ? computer.signal(cross(d)) : early.push(cross(d))) });
+	computer = answer({ ice: [], send: (d) => passes(d) && browser.signal(cross(d)) });
+	for (const d of early.splice(0)) computer.signal(d);
+	return { computer, browser };
 }
 
 /** Everything a stream gives until `n` bytes came, or what came when it ended first. */
@@ -54,9 +54,9 @@ const ended = (s: Duplex) => new Promise<void>((resolve) => (s.readableEnded || 
 const sha = (b: Buffer) => createHash("sha256").update(b).digest("hex");
 
 test("two peers on this computer open the ssh channel and pass bytes both ways", async () => {
-	const { mac, browser } = pair();
+	const { computer, browser } = pair();
 	try {
-		const [a, b] = await Promise.all([mac.channel, browser.channel]);
+		const [a, b] = await Promise.all([computer.channel, browser.channel]);
 		const back = readBytes(a, 5);
 		b.write("hello");
 		assert.equal((await back).toString(), "hello");
@@ -64,15 +64,15 @@ test("two peers on this computer open the ssh channel and pass bytes both ways",
 		a.write("world");
 		assert.equal((await forth).toString(), "world");
 	} finally {
-		mac.close();
+		computer.close();
 		browser.close();
 	}
 });
 
 test("several megabytes cross both ways at once, whole and in order, in large writes", async () => {
-	const { mac, browser } = pair();
+	const { computer, browser } = pair();
 	try {
-		const [a, b] = await Promise.all([mac.channel, browser.channel]);
+		const [a, b] = await Promise.all([computer.channel, browser.channel]);
 		const size = 6 * 1024 * 1024;
 		const toMac = randomBytes(size);
 		const toBrowser = randomBytes(size);
@@ -89,15 +89,15 @@ test("several megabytes cross both ways at once, whole and in order, in large wr
 		assert.equal(sha(m), sha(toMac));
 		assert.equal(sha(w), sha(toBrowser));
 	} finally {
-		mac.close();
+		computer.close();
 		browser.close();
 	}
 });
 
 test("a writer waits while the channel holds too much, and no message is above 16 KiB", async () => {
-	const { mac, browser } = pair();
+	const { computer, browser } = pair();
 	try {
-		const [a, b] = await Promise.all([mac.channel, browser.channel]);
+		const [a, b] = await Promise.all([computer.channel, browser.channel]);
 		const sizes: number[] = [];
 		b.on("data", (chunk: Buffer) => sizes.push(chunk.length));
 		// One write of 16 MiB: what waits in the channel to be sent stays near the threshold the
@@ -106,7 +106,7 @@ test("a writer waits while the channel holds too much, and no message is above 1
 		let most = 0;
 		let writing = true;
 		const sample = () => {
-			most = Math.max(most, mac.buffered());
+			most = Math.max(most, computer.buffered());
 			if (writing) setImmediate(sample);
 		};
 		sample();
@@ -117,44 +117,44 @@ test("a writer waits while the channel holds too much, and no message is above 1
 		assert.ok(most <= 2 * 1024 * 1024, `at most ${most} bytes waited in the channel`);
 		assert.ok(Math.max(...sizes) <= 16 * 1024, `largest message ${Math.max(...sizes)}`);
 	} finally {
-		mac.close();
+		computer.close();
 		browser.close();
 	}
 });
 
-test("closing the browser's side ends the Mac's stream, and the other way round", async () => {
-	for (const closer of ["browser", "mac"] as const) {
-		const { mac, browser } = pair();
-		const [a, b] = await Promise.all([mac.channel, browser.channel]);
+test("closing the browser's side ends the computer's stream, and the other way round", async () => {
+	for (const closer of ["browser", "computer"] as const) {
+		const { computer, browser } = pair();
+		const [a, b] = await Promise.all([computer.channel, browser.channel]);
 		a.resume();
 		b.resume();
 		const other = closer === "browser" ? a : b;
-		(closer === "browser" ? browser : mac).close();
+		(closer === "browser" ? browser : computer).close();
 		await ended(other);
 		assert.ok(other.readableEnded || other.destroyed);
-		await Promise.all([mac.closed, browser.closed]);
+		await Promise.all([computer.closed, browser.closed]);
 	}
 });
 
 test("ending the stream closes the connection on both sides", async () => {
-	const { mac, browser } = pair();
-	const [a, b] = await Promise.all([mac.channel, browser.channel]);
+	const { computer, browser } = pair();
+	const [a, b] = await Promise.all([computer.channel, browser.channel]);
 	b.resume();
 	a.resume();
 	a.end();
 	await ended(b);
-	await Promise.all([mac.closed, browser.closed]);
+	await Promise.all([computer.closed, browser.closed]);
 });
 
 test("the path a connection took can be read from the peer: on this computer, the same network", async () => {
-	const { mac, browser } = pair({ nearby: true });
+	const { computer, browser } = pair({ nearby: true });
 	try {
-		assert.equal(mac.path(), undefined);
-		await Promise.all([mac.channel, browser.channel]);
-		assert.equal(mac.path(), "lan");
+		assert.equal(computer.path(), undefined);
+		await Promise.all([computer.channel, browser.channel]);
+		assert.equal(computer.path(), "lan");
 		assert.equal(browser.path(), "lan");
 	} finally {
-		mac.close();
+		computer.close();
 		browser.close();
 	}
 });
@@ -175,15 +175,15 @@ test("a process whose connections all closed ends by itself: nothing is left hol
 	const script = `
 		import { answer, offer } from ${JSON.stringify(new URL("../electron/access/peer.ts", import.meta.url).href)};
 		async function once(label) {
-			let mac;
+			let computer;
 			const early = [];
-			const browser = offer({ ice: [], label, send: (d) => (mac ? mac.signal(d) : early.push(d)) });
-			mac = answer({ ice: [], timeoutMs: 800, send: (d) => browser.signal(d) });
-			for (const d of early) mac.signal(d);
-			await mac.channel.catch(() => {});
-			mac.close();
+			const browser = offer({ ice: [], label, send: (d) => (computer ? computer.signal(d) : early.push(d)) });
+			computer = answer({ ice: [], timeoutMs: 800, send: (d) => browser.signal(d) });
+			for (const d of early) computer.signal(d);
+			await computer.channel.catch(() => {});
+			computer.close();
 			browser.close();
-			await Promise.all([mac.closed, browser.closed]);
+			await Promise.all([computer.closed, browser.closed]);
 		}
 		await once("ssh");
 		await once("other");
@@ -201,12 +201,12 @@ test("a process whose connections all closed ends by itself: nothing is left hol
 });
 
 test("a channel with another label is not the one handed back, and is closed", async () => {
-	let mac: Peer | undefined;
+	let computer: Peer | undefined;
 	const early: Signal[] = [];
-	const browser = offer({ ice: [], label: "other", send: (d) => (mac ? mac.signal(d) : early.push(d)) });
-	mac = answer({ ice: [], timeoutMs: 1500, send: (d) => browser.signal(d) });
-	for (const d of early.splice(0)) mac.signal(d);
-	await assert.rejects(mac.channel, /no ssh channel/);
+	const browser = offer({ ice: [], label: "other", send: (d) => (computer ? computer.signal(d) : early.push(d)) });
+	computer = answer({ ice: [], timeoutMs: 1500, send: (d) => browser.signal(d) });
+	for (const d of early.splice(0)) computer.signal(d);
+	await assert.rejects(computer.channel, /no ssh channel/);
 	browser.close();
-	await Promise.all([mac.closed, browser.closed]);
+	await Promise.all([computer.closed, browser.closed]);
 });

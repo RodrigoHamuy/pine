@@ -49,7 +49,7 @@ const folders: string[] = [];
 const hosts: AccessHost[] = [];
 
 /** An access host that waits at the meeting; with pairing, an owner who allows every request, and what admission saw. */
-async function mac() {
+async function computer() {
 	const folder = mkdtempSync(join(tmpdir(), "pine-web-peer-"));
 	folders.push(folder);
 	const admitted: string[] = [];
@@ -93,10 +93,10 @@ after(async () => {
 	for (const f of folders) rmSync(f, { recursive: true, force: true });
 });
 
-let first: Awaited<ReturnType<typeof mac>>;
+let first: Awaited<ReturnType<typeof computer>>;
 
 test("pairing by link, then a paired connection over a data channel labelled ssh, made through the join route with the configuration's servers", async () => {
-	first = await mac();
+	first = await computer();
 	const link = first.link();
 	const result = await page.evaluate(async (link) => {
 		Object.assign(globalThis, { paired: start(link) });
@@ -109,8 +109,8 @@ test("pairing by link, then a paired connection over a data channel labelled ssh
 	assert.equal(result.ready.status === "ready" && result.ready.label, "Test Mac");
 	assert.deepEqual(result.answer.data, { echoed: { text: "hello over the data channel" } });
 	assert.match(String(result.codes[0]), /^\d{4}$/);
-	assert.deepEqual(result.hosts, [`mac:${first.host.machineId}`]);
-	assert.deepEqual(result.names, { [`mac:${first.host.machineId}`]: "Test Mac" });
+	assert.deepEqual(result.hosts, [`paired:${first.host.machineId}`]);
+	assert.deepEqual(result.names, { [`paired:${first.host.machineId}`]: "Test Mac" });
 	// One meeting for pairing, one for the paired session: both by the join route, under the link's id.
 	assert.deepEqual(
 		meeting.sockets().filter((s) => s.kind === "join"),
@@ -162,13 +162,13 @@ test("a data channel that drops is made again by itself: a new meeting, a new ch
 	assert.ok(after.connections > before.connections, "a new peer connection was made");
 	assert.deepEqual(after.answer, { echoed: { text: "again" } });
 	assert.ok(meeting.sockets().filter((s) => s.kind === "join").length > joins, "a new meeting was joined");
-	assert.ok(first.connected.length > sessions, "a new SSH session was authenticated at the Mac");
+	assert.ok(first.connected.length > sessions, "a new SSH session was authenticated at the computer");
 });
 
-test("a Mac whose host key is not the link's id is refused before the browser's key is offered", async () => {
-	const named = await mac();
-	const other = await mac();
-	// The service sends a browser that asks for the named Mac to the other one.
+test("a computer whose host key is not the link's id is refused before the browser's key is offered", async () => {
+	const named = await computer();
+	const other = await computer();
+	// The service sends a browser that asks for the named computer to the other one.
 	meeting.swap(named.host.machineId, other.host.machineId);
 	const state = await page.evaluate(async (link) => {
 		const lied = start(link);
@@ -178,11 +178,11 @@ test("a Mac whose host key is not the link's id is refused before the browser's 
 		return end;
 	}, named.link());
 	assert.match(state.status === "error" ? state.message : "", /not the one this pairing link names/);
-	assert.deepEqual(other.admitted, [], "the other Mac was never offered a key");
+	assert.deepEqual(other.admitted, [], "the other computer was never offered a key");
 	assert.deepEqual(named.admitted, []);
 });
 
-test("the ways a Mac cannot be reached are told apart: nobody waits, no connection in time, the service over its limits", async () => {
+test("the ways a paired computer cannot be reached are told apart: nobody waits, no connection in time, the service over its limits", async () => {
 	const nobody = "n".repeat(43);
 	const silent = "s".repeat(43);
 	const busy = "b".repeat(43);
@@ -193,7 +193,7 @@ test("the ways a Mac cannot be reached are told apart: nobody waits, no connecti
 	assert.deepEqual({ name: seen.silent.name, reason: seen.silent.reason }, { name: "PeerClosed", reason: "no-path" });
 	assert.ok(seen.silent.ms! >= 300 && seen.silent.ms! < 3000, `given up after the time limit (${seen.silent.ms} ms)`);
 	assert.deepEqual({ name: seen.busy.name, reason: seen.busy.reason }, { name: "PeerClosed", reason: "limits" });
-	// Through the bridge, in the owner's words: a pairing link for a Mac that is not there.
+	// Through the bridge, in the owner's words: a pairing link for a computer that is not there, whose name is not known yet.
 	const said = await page.evaluate(async (link) => {
 		const lone = start(link);
 		await lone.bridge.ready();
@@ -201,10 +201,10 @@ test("the ways a Mac cannot be reached are told apart: nobody waits, no connecti
 		lone.bridge.stop();
 		return end.status === "error" ? end.message : "";
 	}, `${meeting.url}/#pair=${nobody}.AAECAwQFBgcICQoLDA0ODw`);
-	assert.match(said, /^Your Mac does not answer: it is off, asleep, or Pine is closed/);
+	assert.match(said, /^Your computer does not answer: it is off, asleep, or Pine is closed\. Open Pine on your computer and add this device again\.$/);
 });
 
-test("a browser whose key the Mac no longer knows is told so, and stops trying", async () => {
+test("a browser whose key the paired computer no longer knows is told so, and stops trying", async () => {
 	const [device] = first.host.connected();
 	assert.ok(device, "the paired browser is connected");
 	await first.host.remove(device.id);
@@ -214,6 +214,6 @@ test("a browser whose key the Mac no longer knows is told so, and stops trying",
 		await new Promise((r) => setTimeout(r, 300));
 		return { message: end.status === "error" ? end.message : "", again: made.opened - opened };
 	});
-	assert.equal(said.again, 0, "no way to the Mac was opened again");
-	assert.equal(said.message,"This browser is no longer known to your Mac. Open Pine on the Mac and add this device again.");
+	assert.equal(said.again, 0, "no way to the computer was opened again");
+	assert.equal(said.message, "This browser is no longer known to Test Mac. Open Pine on Test Mac and add this device again.");
 });

@@ -178,7 +178,7 @@ test("Settings > Browser access through the window: turned on with open at login
 	await page.locator("[data-slot=pairing-dialog]").getByRole("button", { name: "Copy link" }).click();
 	await until("the link is on the clipboard", async () => (await app.evaluate(({ clipboard }: any) => clipboard.readText())) === pairing.link, 3000);
 
-	// The stand-in phone uses the link: the Mac asks, with the device's name and its four digits.
+	// The stand-in phone uses the link: the computer asks, with the device's name and its four digits.
 	await sees("[data-slot=pairing-request]");
 	const { request } = await bridge("access");
 	await sees(`[data-slot=pairing-request] [data-slot=pairing-device] >> text=${request.name}`);
