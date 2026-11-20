@@ -612,7 +612,7 @@ test("tui: reasoning level and context use are shown in the bottom bar; the leve
 	await until(() => /context \d+%/.test(bar()), 2000, "the context figure");
 	const first = Number(bar().match(/context (\d+)%/)![1]);
 	assert.ok(first > 0 && first < 100, `a plausible share of a 40000 token window: ${first}%`);
-	await t.send(`a longer message ${"that takes up room ".repeat(60)}`);
+	await t.send(`a longer message ${"that takes up room ".repeat(300)}`);
 	await until(() => Number(bar().match(/context (\d+)%/)?.[1] ?? 0) > first, 3000, "the figure to grow with the conversation");
 	// The second message found the first one in the model server's cache.
 	await until(() => /cache \d+%/.test(bar()), 2000, "the cache figure");
