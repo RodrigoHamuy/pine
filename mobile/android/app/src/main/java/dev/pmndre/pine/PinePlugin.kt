@@ -68,7 +68,7 @@ class PinePlugin : Plugin() {
 		val vault = SealedVault(::keystoreKey, shelf)
 		device = DeviceKey(vault)
 		val known = KnownHosts(vault)
-		pines = Pines(Remote(device, known), known, shelf, object : Page {
+		pines = Pines(Remote(device, known, LibWebRtc(context)), known, shelf, object : Page {
 			override fun service(state: JSONObject) = notifyListeners("service", JSObject().put("state", state))
 			override fun events(batch: List<Any>) = notifyListeners("events", JSObject().put("events", JSONArray(batch)))
 			override fun connection(up: Boolean) = notifyListeners("connection", JSObject().put("connected", up))

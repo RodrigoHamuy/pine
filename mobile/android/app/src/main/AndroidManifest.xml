@@ -38,4 +38,7 @@
     <!-- Permissions -->
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- libwebrtc (LibWebRtc.kt) reads which networks the phone has, to gather candidates on them, and
+         aborts the app without it. A permission given at install, never asked: it reads, and changes nothing. -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 </manifest>

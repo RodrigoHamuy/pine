@@ -35,6 +35,9 @@ android {
     buildTypes {
         release {
             if (keystore) signingConfig signingConfigs.release
+            // Phones are arm: the release packs libwebrtc for those two ABIs alone (x86 and x86_64,
+            // for emulators, stay in debug builds).
+            ndk { abiFilters 'arm64-v8a', 'armeabi-v7a' }
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
@@ -64,12 +67,15 @@ dependencies {
     implementation 'pine.mobile:pine-mobile-core'
     // The full BouncyCastle the core's SSH needs, put in place of Android's cut-down one (PinePlugin.load).
     implementation 'org.bouncycastle:bcprov-jdk18on:1.84'
-    // The native libdatachannel for each Android ABI, under the binding the core uses
-    // (tel.schich:libdatachannel-java in ../core). It is published with its debug symbols:
-    // the release build strips them (stripReleaseDebugSymbols, with the NDK).
-    implementation 'tel.schich:libdatachannel-java-android:0.24.1.1'
+    // The WebRTC library under a paired computer's data channel (LibWebRtc.kt, handed to the core):
+    // Google's libwebrtc as LiveKit builds it without video codecs (BSD-3-Clause), its classes under
+    // livekit.org.webrtc. Published stripped, its 64-bit natives aligned for 16 KB pages; its
+    // manifest asks for no permission. It depends on nothing else.
+    implementation 'io.github.webrtc-sdk:android-prefixed-stripped:150.7871.08'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
+    // The emulator check of LibWebRtc.kt asks the run's meeting service first, as the core does (../core).
+    androidTestImplementation 'com.squareup.okhttp3:okhttp:5.3.2'
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
 }

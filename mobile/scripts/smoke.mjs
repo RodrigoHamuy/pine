@@ -5,7 +5,14 @@
 // pine home of its own whose model is the scripted mock server. Nothing of this computer's own
 // sshd or settings is touched. Run it before a release that changes the mobile app.
 //
-//   npm run smoke [-- --shot <file.png>] [-- --avd <name>] [-- --keep]
+//   npm run smoke [-- --shot <file.png>] [-- --avd <name>] [-- --keep] [-- --transport-only]
+//
+// First, the app's WebRTC library under the core (LibWebRtc.kt), which no suite on the JVM reaches:
+// an instrumented test (androidTest/.../LibWebRtcTest.kt) pairs with the Pine app's real access host
+// (mobile/test/support/access-host.ts) on this computer and moves several megabytes each way through
+// the data channel, bursts of more than 1 MiB from the computer included. The emulator reaches it at
+// 10.0.2.2, through a TLS front of the run's own (a pairing link names https only) whose authority
+// the test is handed. `--transport-only` runs that alone.
 //
 // The app is driven as a person would, through adb (uiautomator for what is on screen, input for
 // taps and keys): it reads the phone's key from the page and shares it (the system's chooser comes
@@ -32,13 +39,15 @@
 // JDK (JAVA_HOME, default Android Studio's).
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
+import tls from "node:tls";
 import { parseArgs } from "node:util";
 import { startMock } from "../../baseline/tests/mock.mjs";
 
-const { values: opts } = parseArgs({ options: { shot: { type: "string" }, avd: { type: "string" }, keep: { type: "boolean" } } });
+const { values: opts } = parseArgs({ options: { shot: { type: "string" }, avd: { type: "string" }, keep: { type: "boolean" }, "transport-only": { type: "boolean" } } });
 const mobile = path.resolve(import.meta.dirname, "..");
 const repo = path.resolve(mobile, "..");
 const sdk = process.env.ANDROID_HOME ?? path.join(os.homedir(), "Library/Android/sdk");
@@ -52,6 +61,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const step = (text) => console.log(`- ${text}`);
 const write = (file, content) => (fs.mkdirSync(path.dirname(file), { recursive: true }), fs.writeFileSync(file, content));
 
+/** Thrown to end a run of the transport check alone, with its cleanup. */
+class TransportOnly extends Error {}
+
 const cleanups = [];
 async function cleanup() {
 	for (const fn of cleanups.reverse()) await Promise.resolve().then(fn).catch(() => {});
@@ -62,40 +74,84 @@ process.on("SIGINT", () => void cleanup().then(() => process.exit(130)));
 const run = (cmd, args, cwd = mobile) => execFileSync(cmd, args, { cwd, env, stdio: ["ignore", "pipe", "inherit"], maxBuffer: 64 * 1024 * 1024 }).toString();
 const adb = (...args) => execFileSync(ADB, args, { env, maxBuffer: 64 * 1024 * 1024 }).toString();
 
+/**
+ * A certificate authority of the run's own and a certificate it signed for 10.0.2.2, the address the
+ * emulator reaches this computer's loopback at, in `dir`. Only the instrumented test is told to trust
+ * that authority (Remote's `trust`): nothing of this computer's or the emulator's own trust changes.
+ */
+function certificates(dir) {
+	const at = (name) => path.join(dir, name);
+	fs.mkdirSync(dir, { recursive: true });
+	const openssl = (...args) => execFileSync("openssl", args, { cwd: dir, stdio: ["ignore", "ignore", "pipe"] });
+	// Valid from a day ago: a fresh emulator's clock may run behind this computer's (OpenSSL 3.4 or later).
+	const since = `${new Date(Date.now() - 86_400_000).toISOString().replace(/[-:T]/g, "").slice(0, 14)}Z`;
+	openssl("req", "-x509", "-newkey", "rsa:2048", "-nodes", "-keyout", at("ca.key"), "-out", at("ca.pem"), "-not_before", since, "-days", "30", "-sha256", "-subj", "/CN=Pine smoke run", "-addext", "basicConstraints=critical,CA:TRUE", "-addext", "keyUsage=critical,keyCertSign,cRLSign");
+	openssl("req", "-newkey", "rsa:2048", "-nodes", "-keyout", at("leaf.key"), "-out", at("leaf.csr"), "-subj", "/CN=10.0.2.2");
+	write(at("leaf.ext"), "subjectAltName=IP:10.0.2.2\nextendedKeyUsage=serverAuth\nbasicConstraints=CA:FALSE\nkeyUsage=critical,digitalSignature,keyEncipherment\n");
+	openssl("x509", "-req", "-in", at("leaf.csr"), "-CA", at("ca.pem"), "-CAkey", at("ca.key"), "-CAcreateserial", "-out", at("leaf.pem"), "-not_before", since, "-days", "30", "-sha256", "-extfile", at("leaf.ext"));
+	return { ca: fs.readFileSync(at("ca.pem")), key: fs.readFileSync(at("leaf.key")), cert: fs.readFileSync(at("leaf.pem")) };
+}
+
+/**
+ * The computer for the transport check: the Pine app's real access host (its top comment is its
+ * protocol) with its own stand-in daemon, which echoes every call, and a TLS front before its meeting
+ * service on this computer's loopback. `ask` sends one command and gives its answer.
+ */
+async function accessHost(keys) {
+	const child = spawn(process.execPath, [path.join(mobile, "test", "support", "access-host.ts"), "--computer-name", "Smoke Mac"], { env, stdio: ["pipe", "pipe", "inherit"] });
+	const answers = [];
+	let ready;
+	const first = new Promise((resolve, reject) => {
+		ready = resolve;
+		child.on("exit", (code) => reject(new Error(`the access host ended (${code})`)));
+	});
+	readline.createInterface({ input: child.stdout }).on("line", (line) => {
+		const said = JSON.parse(line);
+		if (said.t === "ready" || said.t === "missing") return ready(said);
+		if (["asked", "paired", "connected", "left"].includes(said.t)) return;
+		answers.shift()?.(said);
+	});
+	const up = await first;
+	if (up.t !== "ready") throw new Error(up.message);
+	const port = Number(new URL(up.service).port);
+	let stopping;
+	// The front: TLS, then the bytes as they are, both ways (HTTP and the meeting's WebSocket alike).
+	const front = await new Promise((resolve, reject) => {
+		const server = tls.createServer({ key: keys.key, cert: keys.cert }, (socket) => {
+			const back = net.connect(port, "127.0.0.1");
+			socket.pipe(back).pipe(socket);
+			socket.on("error", () => back.destroy());
+			back.on("error", () => socket.destroy());
+		});
+		server.once("error", reject);
+		server.listen(0, "127.0.0.1", () => resolve(server));
+	});
+	return {
+		service: up.service,
+		https: `https://10.0.2.2:${front.address().port}`,
+		ask: (command) =>
+			new Promise((resolve) => {
+				answers.push(resolve);
+				child.stdin.write(`${command}\n`);
+			}),
+		// Once: the run stops it when its check is done, and the cleanup again.
+		stop: () =>
+			(stopping ??= new Promise((resolve) => {
+				front.close();
+				if (child.exitCode !== null) return resolve();
+				child.once("exit", resolve);
+				child.stdin.end();
+			})),
+	};
+}
+
 try {
 	// ---- the app ----------------------------------------------------------------------------------
 	step("building the page and the debug APK");
 	run("npm", ["run", "sync"]);
-	run(path.join(mobile, "android", "gradlew"), ["assembleDebug", "--console=plain", "-q"], path.join(mobile, "android"));
+	run(path.join(mobile, "android", "gradlew"), ["assembleDebug", ":app:assembleDebugAndroidTest", "--console=plain", "-q"], path.join(mobile, "android"));
 	const apk = path.join(mobile, "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
-
-	// ---- the machine ------------------------------------------------------------------------------
-	step("starting the machine: the mock model, a pine home, and an SSH server on this computer's loopback");
-	const mock = await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g });
-	cleanups.push(() => mock.close());
-	const home = path.join(work, "far");
-	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
-	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false } }, null, 2));
-	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent: it administers pine" }));
-	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
-	write(path.join(home, "agents", "scout", "agent.json"), JSON.stringify({ description: "Looks things up on the web" }));
-	write(path.join(home, "agents", "scout", "workspace", "AGENTS.md"), "You are scout.\n");
-	const keys = path.join(work, "authorized_keys");
-	const classpath = run(path.join(mobile, "core", "gradlew"), ["-q", "smokeClasspath", "--console=plain"], path.join(mobile, "core")).trim().split("\n").at(-1);
-	const machine = spawn(path.join(javaHome, "bin", "java"), ["-cp", classpath, "pine.mobile.core.SmokeMachineKt", keys, home, process.execPath, path.join(repo, "bin", "pine.js")], { env, stdio: ["pipe", "pipe", "inherit"] });
-	cleanups.push(() => machine.stdin.end());
-	const said = {};
-	const lines = readline.createInterface({ input: machine.stdout });
-	await new Promise((resolve, reject) => {
-		lines.on("line", (line) => {
-			const [k, v] = line.split(" ");
-			said[k] = v;
-			if (said.port && said.fingerprint) resolve();
-		});
-		machine.on("exit", (code) => reject(new Error(`the SSH server ended (${code})`)));
-	});
-	const host = `me@10.0.2.2:${said.port}`;
-	step(`machine ${host}, host key ${said.fingerprint}`);
+	const testApk = path.join(mobile, "android", "app", "build", "outputs", "apk", "androidTest", "debug", "app-debug-androidTest.apk");
 
 	// ---- the emulator -----------------------------------------------------------------------------
 	const running = () => adb("devices").split("\n").some((l) => /^emulator-\d+\s+device/.test(l));
@@ -186,6 +242,58 @@ try {
 		const ns = screen();
 		calm = ns.length && !answerAnr(ns) && /launcher/i.test(frontActivity() ?? "") ? calm + 1 : 0;
 	}
+
+	// ---- the transport: libwebrtc under the core, against the real access host ---------------------
+	step("the transport: libwebrtc on the emulator pairs with the real access host and moves megabytes both ways");
+	adb("install", "-r", apk);
+	adb("install", "-r", testApk);
+	const computer = await accessHost(certificates(path.join(work, "tls")));
+	cleanups.push(() => computer.stop());
+	const opened = await computer.ask("open");
+	await computer.ask("allow");
+	const link = opened.link.replace(computer.service, computer.https);
+	step(`computer at ${computer.https} (in front of ${computer.service})`);
+	const ca = fs.readFileSync(path.join(work, "tls", "ca.pem")).toString("base64");
+	// am's arguments go through the emulator's shell: each is quoted there.
+	const quoted = (text) => `'${text.replace(/'/g, "'\\''")}'`;
+	// Not with execFileSync: the TLS front lives in this process, and has to answer while the test runs.
+	const instrument = spawn(ADB, ["shell", `am instrument -w -r -e class dev.pmndre.pine.LibWebRtcTest -e link ${quoted(link)} -e ca ${quoted(ca)} ${APP}.test/androidx.test.runner.AndroidJUnitRunner`], { env, stdio: ["ignore", "pipe", "inherit"] });
+	let report = "";
+	instrument.stdout.on("data", (d) => (report += d));
+	await new Promise((resolve) => instrument.on("close", resolve));
+	const passed = /^OK \(1 test\)/m.test(report);
+	console.log(`  ${passed ? "ok" : "NOT OK"}  libwebrtc: paired, then 2, 4 and 6 MiB up and echoed back in one burst each, whole and in order`);
+	if (!passed) throw new Error(`the transport check failed:\n${report.split("\n").filter((l) => !/^INSTRUMENTATION_STATUS: (stream|id|class|current|numtests|test)=/.test(l)).join("\n").slice(0, 4000)}`);
+	await computer.stop();
+	if (opts["transport-only"]) throw new TransportOnly();
+
+	// ---- the machine ------------------------------------------------------------------------------
+	step("starting the machine: the mock model, a pine home, and an SSH server on this computer's loopback");
+	const mock = await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g });
+	cleanups.push(() => mock.close());
+	const home = path.join(work, "far");
+	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
+	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false } }, null, 2));
+	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ description: "The main agent: it administers pine" }));
+	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "You are the main agent.\n");
+	write(path.join(home, "agents", "scout", "agent.json"), JSON.stringify({ description: "Looks things up on the web" }));
+	write(path.join(home, "agents", "scout", "workspace", "AGENTS.md"), "You are scout.\n");
+	const keys = path.join(work, "authorized_keys");
+	const classpath = run(path.join(mobile, "core", "gradlew"), ["-q", "smokeClasspath", "--console=plain"], path.join(mobile, "core")).trim().split("\n").at(-1);
+	const machine = spawn(path.join(javaHome, "bin", "java"), ["-cp", classpath, "pine.mobile.core.SmokeMachineKt", keys, home, process.execPath, path.join(repo, "bin", "pine.js")], { env, stdio: ["pipe", "pipe", "inherit"] });
+	cleanups.push(() => machine.stdin.end());
+	const said = {};
+	const lines = readline.createInterface({ input: machine.stdout });
+	await new Promise((resolve, reject) => {
+		lines.on("line", (line) => {
+			const [k, v] = line.split(" ");
+			said[k] = v;
+			if (said.port && said.fingerprint) resolve();
+		});
+		machine.on("exit", (code) => reject(new Error(`the SSH server ended (${code})`)));
+	});
+	const host = `me@10.0.2.2:${said.port}`;
+	step(`machine ${host}, host key ${said.fingerprint}`);
 
 	step("installing and opening the app, on fresh data");
 	adb("install", "-r", apk);
@@ -369,8 +477,11 @@ try {
 	if (anr) throw new Error(`the app was not responding (ANR) during the run: ${anr.trim()}`);
 	step("done: the app reached the pine of the machine and shows its agents");
 } catch (e) {
-	console.error(`smoke run failed: ${e instanceof Error ? e.message : e}`);
-	process.exitCode = 1;
+	if (e instanceof TransportOnly) step("done: the transport check alone (--transport-only)");
+	else {
+		console.error(`smoke run failed: ${e instanceof Error ? e.message : e}`);
+		process.exitCode = 1;
+	}
 } finally {
 	await cleanup();
 }
