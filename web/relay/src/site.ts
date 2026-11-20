@@ -9,7 +9,8 @@
 //
 // The meeting service lives at the web client's own address, so that the bridge's policy
 // (`connect-src 'self'`) reaches it unchanged. Each machine id has one Durable Object, which
-// holds the sockets of that id's meeting (meet-object.ts).
+// holds the sockets of that id's meeting (meet-object.ts). A configuration without that binding
+// (the default one, whose versions the preview workflow uploads) has no meeting routes at all.
 import { CLOSE, meetConfig, route } from "./meet.ts";
 import type { Env, RelaySocket } from "./relay.ts";
 
@@ -21,7 +22,8 @@ export type MeetNamespace = {
 
 export type SiteEnv = Env & {
 	ASSETS: { fetch(request: Request): Promise<Response> };
-	MEET: MeetNamespace;
+	/** The meetings' objects: only a configuration with the meeting service has them (env.official, env.full). */
+	MEET?: MeetNamespace;
 	/** "on" serves the SSH relay at /ssh; anything else, or nothing, refuses it. */
 	RELAY?: string;
 	/** The servers that help a connection (STUN), as `RTCIceServer`s; a public STUN server when none are given. */
@@ -48,6 +50,8 @@ export function site(deps: SiteDeps) {
 			if (env.RELAY !== "on") return text(404, "The SSH relay is off on this service. Pair a Mac from the Pine app instead.");
 			return deps.relay(request, env);
 		}
+		const meets = url.pathname === "/meet/config" || url.pathname === "/meet/host" || url.pathname === "/meet/join";
+		if (meets && !env.MEET) return text(404, "There is no meeting service on this deployment.");
 		if (url.pathname === "/meet/config") {
 			if (await limited(request, env)) return text(429, "Too many requests from this address. Wait a minute and try again.");
 			return new Response(JSON.stringify(meetConfig(env.ICE, env.RELAY === "on")), { headers: { "Content-Type": "application/json", "Cache-Control": "no-store" } });
@@ -63,7 +67,7 @@ export function site(deps: SiteDeps) {
 				socket.close(CLOSE.limits, "Too many connections from this address. Wait a minute and try again.");
 				return response;
 			}
-			return env.MEET.get(env.MEET.idFromName(where.id)).fetch(request);
+			return env.MEET!.get(env.MEET!.idFromName(where.id)).fetch(request);
 		}
 		const served = await env.ASSETS.fetch(request);
 		const response = new Response(served.body, served);

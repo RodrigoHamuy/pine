@@ -82,6 +82,19 @@ test("over the per-address limit, a meeting socket is closed with the over-limit
 	assert.equal(t.MEET.calls.length, 2);
 });
 
+test("without the meeting's binding, the meeting routes are not there, and the rest is as before", async () => {
+	const t = setup({ MEET: undefined });
+	const { id } = macKey();
+	for (const path of ["/meet/config", `/meet/host?id=${id}`, `/meet/join?id=${id}`]) {
+		assert.equal((await t.go(path)).status, 404, path);
+		assert.equal((await t.ws(path)).status, 404, path);
+	}
+	assert.equal(t.clients.length, 0);
+	assert.deepEqual(t.MEET.calls, []);
+	assert.equal(await (await t.go("/ssh?host=a&port=22")).text(), "relayed");
+	assert.equal(await (await t.go("/")).text(), "asset");
+});
+
 test("with the relay on, /ssh is the relay as before", async () => {
 	const t = setup({ RELAY: "on" });
 	assert.equal(await (await t.go("/ssh?host=a&port=22")).text(), "relayed");

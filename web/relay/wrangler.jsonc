@@ -1,11 +1,17 @@
-// The relay of pine's web client. `npm run dev` serves it locally. A pull request that touches the
-// web client, and every push to next and main that does, gets a version of its own under a preview
-// alias (pr-<number>, next, main: .github/workflows/web-preview.yml);
-// the Worker's live version is changed only by hand (`npx wrangler deploy` in web/relay).
+// The relay of pine's web client, in three configurations:
 //
-// Two configurations: this default one, for an owner's own deployment, with the SSH relay on and
-// the meeting service beside it; and `official` (`npx wrangler deploy --env official`), the
-// project's one service, with the relay off and an address on workers.dev.
+// - The default one (no --env): the SSH relay and the web client, no meeting service. It is what
+//   `.github/workflows/web-preview.yml` uploads as versions under a preview alias (pr-<number>,
+//   next, main), and what `npx wrangler deploy` deploys by hand. It declares no Durable Object on
+//   purpose: a version that adds one cannot be uploaded, and a Worker that holds one gets no
+//   version addresses, which is all a preview is.
+// - `official` (`npx wrangler deploy --env official`): the project's one service. The web client
+//   and the meeting service, the relay off, at pine.<account>.workers.dev.
+// - `full` (`npx wrangler deploy --env full`): an owner's own deployment that wants both, the
+//   meeting service and the relay. `npx wrangler dev --env full` serves that locally.
+//
+// The Worker's live versions are changed only by hand. Bindings and variables are not inherited
+// by an environment, so each one writes its own.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "pine-relay",
@@ -28,20 +34,12 @@
       "simple": { "limit": 20, "period": 60 }
     }
   ],
-  // The meeting service: one object per machine id, holding that meeting's hibernating sockets
-  // and no storage (src/meet-object.ts).
-  "durable_objects": { "bindings": [{ "name": "MEET", "class_name": "Meeting" }] },
-  // The free plan has Durable Objects backed by SQLite only; the class uses none of its storage.
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Meeting"] }],
   "vars": {
-    // "on" serves the SSH relay at /ssh, for machines added as user@host.
-    "RELAY": "on",
-    // The servers that help a browser and a Mac connect directly, which both read from /meet/config.
-    "ICE": [{ "urls": "stun:stun.cloudflare.com:3478" }]
+    // "on" serves the SSH relay at /ssh, for machines added as user@host; anything else refuses it.
+    "RELAY": "on"
   },
   "env": {
-    // The project's official service: the web client and the meeting service, and no public SSH
-    // proxy. Bindings and variables are not inherited by an environment, so each is written again.
+    // The project's official service: the web client and the meeting service, and no public SSH proxy.
     "official": {
       "name": "pine",
       // Its fixed address: pine.<account>.workers.dev.
@@ -57,10 +55,36 @@
           "simple": { "limit": 20, "period": 60 }
         }
       ],
+      // The meeting service: one object per machine id, holding that meeting's hibernating
+      // sockets and no storage (src/meet-object.ts).
       "durable_objects": { "bindings": [{ "name": "MEET", "class_name": "Meeting" }] },
+      // The free plan has Durable Objects backed by SQLite only; the class uses none of its storage.
       "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Meeting"] }],
       "vars": {
         "RELAY": "off",
+        // The servers that help a browser and a Mac connect directly, which both read from /meet/config.
+        "ICE": [{ "urls": "stun:stun.cloudflare.com:3478" }]
+      }
+    },
+    // A deployment of one's own with the meeting service and the relay side by side.
+    "full": {
+      "name": "pine-full",
+      "workers_dev": false,
+      // A Worker that holds a Durable Object gets no version addresses.
+      "preview_urls": false,
+      "assets": { "directory": "../dist", "binding": "ASSETS", "run_worker_first": true },
+      "observability": { "enabled": false },
+      "ratelimits": [
+        {
+          "name": "LIMITER",
+          "namespace_id": "1003",
+          "simple": { "limit": 20, "period": 60 }
+        }
+      ],
+      "durable_objects": { "bindings": [{ "name": "MEET", "class_name": "Meeting" }] },
+      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Meeting"] }],
+      "vars": {
+        "RELAY": "on",
         "ICE": [{ "urls": "stun:stun.cloudflare.com:3478" }]
       }
     }
