@@ -297,10 +297,11 @@ export function Composer({ tab }: { tab: Tab }) {
 					<AlertDescription>{voice === "starting" ? "" : "speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</AlertDescription>
 				</Alert>
 			) : null}
-			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the daemon). */}
-			<form
+			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the daemon).
+			    Not a form: the web client's page runs in a frame that may not submit one (no `allow-forms`,
+			    AGENTS.md rule 10), so the Send button sends by its click and Enter by `onKey`. */}
+			<div
 				data-slot="composer"
-				onSubmit={(e) => (e.preventDefault(), void send("steer"))}
 				onDragOver={(e) => {
 					if (![...e.dataTransfer.types].includes("Files")) return;
 					e.preventDefault();
@@ -483,7 +484,7 @@ export function Composer({ tab }: { tab: Tab }) {
 							<HoverTooltip>
 								{/* Said as disabled, not disabled: a disabled button inside an InputGroup dims the whole
 								    composer (`has-disabled:`). With nothing to send, `send` does nothing. */}
-								<TooltipTrigger render={<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
+								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" onClick={() => void send("steer")} aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
 								<TooltipContent>
 									{tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"}
 									<Kbd>↩</Kbd>
@@ -492,7 +493,7 @@ export function Composer({ tab }: { tab: Tab }) {
 						)}
 					</InputGroupAddon>
 				</InputGroup>
-			</form>
+			</div>
 			<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />
 			{tab.folder && !tab.items.length ? <div className="px-1 pt-1.5 text-faint text-xs">{tab.agent}'s tools start in {tilde(tab.folder)} and may read and change what is in it.</div> : null}
 		</>
