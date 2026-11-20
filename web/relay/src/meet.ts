@@ -222,6 +222,8 @@ export function meeting(room: Room, options: Options = {}) {
 	}
 
 	return {
+		/** Whether a Mac waits: a browser has someone to meet. */
+		present: () => Boolean(mac()),
 		/** A Mac's socket: it is challenged, and waits once it proved its key. */
 		host(peer: Peer, id: string, origin: string) {
 			const nonce = random(32);
@@ -259,13 +261,14 @@ export function meeting(room: Room, options: Options = {}) {
 		closed(peer: Peer) {
 			const note = peer.note();
 			if (!note || note.gone) return;
-			peer.keep({ ...note, gone: true });
+			// A socket that closed may still be listed for a moment, and its note can no longer be written.
+			const others = live().filter((p) => p.note()!.k !== note.k);
 			if (note.role === "join") {
-				mac()?.send(JSON.stringify({ t: "close", s: note.s }));
+				others.find((p) => { const n = p.note()!; return n.role === "host" && n.proven; })?.send(JSON.stringify({ t: "close", s: note.s }));
 				return;
 			}
 			// The Mac that left was the one browsers met: their sessions have nobody at the other end.
-			if (note.proven && !mac()) for (const other of live()) if (other.note()!.role === "join") leave(other, CLOSE.absent, "The Mac left.");
+			if (note.proven) for (const other of others) if (other.note()!.role === "join") leave(other, CLOSE.absent, "The Mac left.");
 		},
 	};
 }
