@@ -11,7 +11,7 @@ const root = path.resolve(import.meta.dirname, "..");
 
 /** The main process and the preload, into `<app>/dist-electron`. */
 export async function buildMain(app = root) {
-	const common = { bundle: true, platform: "node", target: "node24", external: ["electron", "node-pty", "node-datachannel"], sourcemap: true, logLevel: "warning", absWorkingDir: root };
+	const common = { bundle: true, platform: "node", target: "node24", external: ["electron", "node-pty", "node-datachannel", "ssh2"], sourcemap: true, logLevel: "warning", absWorkingDir: root };
 	await build({ ...common, entryPoints: ["electron/main.ts"], outfile: path.join(app, "dist-electron", "main.js"), format: "esm" });
 	// A sandboxed preload is loaded as a classic script.
 	await build({ ...common, entryPoints: ["electron/preload.ts"], outfile: path.join(app, "dist-electron", "preload.cjs"), format: "cjs" });

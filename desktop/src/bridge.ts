@@ -82,11 +82,19 @@ export interface AppState {
 	canAddHost?: boolean;
 }
 
+export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../electron/access/control.ts";
+
+/**
+ * Browser access to this Mac's pine (Settings > Browser access): only the desktop app's bridge
+ * has these calls, and a page shows the section only where they are there.
+ */
+export type AccessCalls = "access" | "setAccess" | "openPairing" | "cancelPairing" | "answerPairing" | "removeDevice" | "onAccess";
+
 /**
  * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the
  * preview's, the mobile app's, the web client's).
  */
-export type PageBridge = Omit<Bridge, "state"> & {
+export type PageBridge = Omit<Bridge, "state" | AccessCalls> & Partial<Pick<Bridge, AccessCalls>> & {
 	state: () => Promise<AppState>;
 	/**
 	 * Where the daemon's pictures, video and sound are fetched from, set by a bridge whose page
