@@ -539,11 +539,17 @@ files.
 
 ## Handing work to another agent
 
-The `delegate` tool exists for an agent when its `delegates` list is not empty. The main agent
-(`"main"` in `pine.json`) may delegate to everyone by default.
+Every agent may hand work to every other agent but the main one, unless its `agent.json` lists
+fewer: `delegates` is `["*"]` by default, and `*` leaves out the agent that `main` in
+`pine.json` names, the administrator. The main agent's own `*` is everyone else. An agent hands
+the main agent work only where its list names it. An empty list takes the `delegate` tool away.
 
 ```json
 { "delegates": ["gonzo", "scout"] }
+```
+
+```json
+{ "delegates": ["*", "main"] }
 ```
 
 What the model sees:
@@ -561,6 +567,17 @@ delegate(agent, task, wait?, thread?, worktree?)
   conversation with it, so it remembers earlier tasks of that thread.
 - An agent already waiting further up the chain cannot be called again, and chains stop at
   `limits.maxDelegationDepth`. The model gets an error it can act on.
+- The other agent works in its own mode or in the caller's, whichever is stricter (from the
+  strictest: `manual`, `safe`, `auto`, `bypass`). An agent in `safe` mode that hands work to one
+  in `bypass` gets that work done in `safe` mode, in the other agent's sandbox: handing work on
+  never reaches further than the caller could itself. An agent in `bypass` that hands work to one
+  in `safe` leaves it in `safe`. A chain is held to its strictest link, and a caller in `bypass`
+  that has read outside content (where bypass is paused) hands on `auto`. A `thread` held to a
+  stricter mode is kept apart (`thread-okapi~safe` beside `thread-okapi`): it never shares
+  history or MCP servers with the same thread in the mode the other agent has by itself.
+- Once the caller has read outside content, every delegation is put to you, whoever it is for:
+  the answer can carry that agent's files to where somebody else may be steering
+  ([security.md](security.md), "What asks you").
 - `worktree: true` (in your own conversations, when they have a folder): the other agent does
   the task in a worktree of its own of the conversation's folder, and its work comes back as a
   branch to merge, as for sub-agents below. Not with `thread` or `wait: false`.

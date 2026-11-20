@@ -194,6 +194,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["can a sub-agent ask my owner for permission", /^(agents#sub-agents|security#)/],
 		["which models can I use", /^(setup#|agents#sub-agents)/],
 		["hand work to another agent", /^agents#handing-work-to-another-agent/],
+		["my safe agent hands a task to an agent in bypass mode, does that run in bypass", /^agents#handing-work-to-another-agent/],
+		["which agents may an agent hand tasks to by default", /^(agents#handing-work-to-another-agent|configuration#working-with-other-agents)/],
 		["open a project folder for a conversation", /^coding#a-folder-for-a-conversation/],
 		["the agent messed up my files with its last change, how do I get them back the way they were", /^coding#(taking-a-message-back|what-is-restored)/],
 		["revert what the agent just did and ask again differently", /^(coding#(taking-a-message-back|what-is-restored)|tui#commands\/undo)/],

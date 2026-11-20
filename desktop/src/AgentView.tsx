@@ -63,7 +63,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickModel(tab)} />}><CpuIcon data-icon="inline-start" />{info.model}</Badge>} /><TooltipContent>The model it runs on</TooltipContent></HoverTooltip>
 				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickReasoning(tab)} />}><SparkleIcon data-icon="inline-start" />reasoning {info.thinking}</Badge>} /><TooltipContent>How much its model thinks before it answers</TooltipContent></HoverTooltip>
 				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickMode(tab)} />}><ShieldIcon data-icon="inline-start" />{info.mode} · {info.mode === "auto" || info.mode === "bypass" ? "your account" : "in its sandbox"}</Badge>} /><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></HoverTooltip>
-				{info.delegates.length ? <Badge variant="outline">hands work to {info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</Badge> : null}
+				{info.delegates.length ? <Badge variant="outline">hands work to {info.delegates.includes("*") ? (info.main ? "every other agent" : "every agent but main") : info.delegates.join(", ")}</Badge> : null}
 			</div>
 
 			{tab.busy || helpers.length || elsewhere.length ? (

@@ -6,9 +6,10 @@ import { test } from "node:test";
 import { pineOwn } from "../src/actions.ts";
 import { loadConfig } from "../src/config.ts";
 import { audit, levelOf, rootsFor, sandboxAvailable, sandboxRecheck, shellEnv } from "../src/security.ts";
-import { harness, MCP_STUB, mockMsg, notesOf, until, refused } from "./support/harness.ts";
+import { harness, MCP_STUB, mockMsg, notesOf, textOf, until, refused } from "./support/harness.ts";
 
 const owner = { trust: "owner" as const };
+const users = (req: any) => req.body.messages.filter((m: any) => m.role === "user").map((m: any) => textOf(m.content));
 const mac = { skip: !sandboxAvailable() };
 const feed = { command: process.execPath, args: [MCP_STUB], env: { MCP_LABEL: "feed" }, taints: true };
 const call = (name: string, args: any) => ({ name, args });
@@ -682,9 +683,87 @@ test("a machine without a sandbox: a mode nobody chose becomes auto, safe mode b
 	assert.match(shell, /^Not run: you are in safe mode, which runs your shell in a sandbox, and this machine has none\..*switch you to auto mode/);
 	assert.ok(read.includes("IN-THE-WORKSPACE"), read);
 
+	// Nor is it widened by handing work to an agent that works in auto mode here: that run is held to safe, and gets no shell either.
+	h.mock.state.scripts.shell = [{ tools: [call("bash", { command: "echo NEVER" })] }];
+	const handed = await h.pine.agents.run({ agent: "boxed", prompt: mockMsg([{ tools: [call("delegate", { agent: "helper", task: "@@REF:shell@@" })] }]), session: "new", ...owner });
+	assert.match(handed.text, /Not run: you are in safe mode, which runs your shell in a sandbox, and this machine has none/);
+	assert.ok(!handed.text.includes("NEVER\n"), handed.text);
+
 	// A run that an event from outside started has no shell here, whatever its profile lists and whatever the agent's mode.
 	h.pine.bus.publish("hook/in", { text: mockMsg([{ tools: [call("bash", { command: "echo NEVER" })] }]) }, { source: "http" });
 	await until(() => h.pine.tasks.list({ status: "done" }).some((x) => x.kind === "event"));
 	assert.equal(h.toolResults().at(-1), "Tool bash not found");
+	await h.close();
+});
+
+test("a task handed on works in the stricter of the two modes: a safe agent gains nothing by asking one in bypass", mac, async (t) => {
+	const dir = elsewhere(t);
+	const file = path.join(dir, "notes.txt");
+	const h = await harness({ agents: { main: { agent: { mode: "safe" } }, wide: { agent: { mode: "bypass" } }, third: { agent: { mode: "bypass" } }, narrow: { agent: { mode: "safe" } } } });
+	const reach = (name: string) => [call("bash", { command: `cat ${file}; echo x | tee ${dir}/${name}.txt` }), call("read", { path: file })];
+	const tasksOf = (agent: string) => h.pine.tasks.list({ agent }).sort((a, b) => a.id - b.id);
+
+	// By itself, in bypass mode, wide reaches the whole account.
+	await h.pine.agents.run({ agent: "wide", prompt: mockMsg([{ tools: reach("by-wide") }]), ...owner });
+	assert.ok(fs.existsSync(path.join(dir, "by-wide.txt")));
+	assert.ok(h.toolResults().every((r) => r.includes("ELSEWHERE-CONTENT")));
+
+	// Handed the same work by main, which is in safe mode, it works in main's sandbox: the shell and the file tools alike.
+	h.mock.state.scripts.reach = [{ tools: reach("from-safe") }];
+	let r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("delegate", { agent: "wide", task: "@@REF:reach@@" })] }]), session: "new", ...owner });
+	assert.ok(!fs.existsSync(path.join(dir, "from-safe.txt")), "nothing written outside main's reach");
+	// wide's own last request: the one that carries the results of its two calls.
+	const [shell, read] = h.toolResults(h.mock.state.requests.findLast((q: any) => users(q)[0]?.startsWith("[task from agent main]") && q.body.messages.some((m: any) => m.role === "tool")));
+	assert.match(shell, refused);
+	assert.ok(!shell.includes("ELSEWHERE-CONTENT") && !read.includes("ELSEWHERE-CONTENT"), `${shell}\n${read}`);
+	assert.ok(!r.text.includes("ELSEWHERE-CONTENT"), r.text);
+	assert.equal(tasksOf("wide").at(-1)!.meta.level, "safe");
+
+	// Passed on once more, from wide to third (also bypass): still held to safe. A chain is as narrow as its narrowest link.
+	h.mock.state.scripts.further = [{ tools: [call("delegate", { agent: "third", task: "@@REF:reach3@@" })] }];
+	h.mock.state.scripts.reach3 = [{ tools: reach("from-chain") }];
+	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("delegate", { agent: "wide", task: "@@REF:further@@" })] }]), session: "new", ...owner });
+	assert.ok(!fs.existsSync(path.join(dir, "from-chain.txt")));
+	assert.equal(tasksOf("third").at(-1)!.meta.level, "safe");
+	assert.ok(!r.text.includes("ELSEWHERE-CONTENT"), r.text);
+
+	// The other way round, narrow stays in its own safe mode when wide (bypass) hands it work: no level is widened by a caller.
+	h.mock.state.scripts.narrow = [{ tools: reach("from-wide") }];
+	r = await h.pine.agents.run({ agent: "wide", prompt: mockMsg([{ tools: [call("delegate", { agent: "narrow", task: "@@REF:narrow@@" })] }]), session: "new", ...owner });
+	assert.ok(!fs.existsSync(path.join(dir, "from-wide.txt")));
+	assert.equal(tasksOf("narrow").at(-1)!.meta.level, undefined, "nothing to cap: its own level is the stricter");
+	assert.ok(!r.text.includes("ELSEWHERE-CONTENT"), r.text);
+	await h.close();
+});
+
+test("a thread with an agent is never shared between a run held to a stricter mode and one that is not", mac, async (t) => {
+	const dir = elsewhere(t);
+	const h = await harness({ agents: { main: { agent: { mode: "safe" } }, wide: { agent: { mode: "bypass" } }, boss: { agent: { mode: "bypass" } } } });
+	const write = (name: string) => [call("bash", { command: `echo x | tee ${dir}/${name}.txt` })];
+	h.mock.state.scripts.fromBoss = [{ tools: write("thread-boss") }];
+	h.mock.state.scripts.fromMain = [{ tools: write("thread-main") }];
+	await h.pine.agents.run({ agent: "boss", prompt: mockMsg([{ tools: [call("delegate", { agent: "wide", task: "BOSS-SAYS @@REF:fromBoss@@", thread: "okapi" })] }]), ...owner });
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("delegate", { agent: "wide", task: "MAIN-SAYS @@REF:fromMain@@", thread: "okapi" })] }]), ...owner });
+	const [boss, main] = h.pine.tasks.list({ agent: "wide" }).sort((a, b) => a.id - b.id);
+	assert.deepEqual([boss.session, main.session], ["thread-okapi", "thread-okapi~safe"]);
+	assert.ok(fs.existsSync(path.join(dir, "thread-boss.txt")), "boss is in bypass too: nothing to cap");
+	assert.ok(!fs.existsSync(path.join(dir, "thread-main.txt")), "the same thread name from main gets a session held to safe");
+	// wide's side of the thread main started: it begins with main's task, and holds nothing of boss's.
+	const mainSide = h.mock.state.requests.find((q: any) => users(q)[0]?.startsWith("[task from agent main]"));
+	assert.ok(mainSide && !JSON.stringify(mainSide.body.messages).includes("BOSS-SAYS"), "and none of the other session's history");
+	// What a model or the owner names a session can never end in a cap: the "~" is pine's alone.
+	await h.pine.agents.run({ agent: "wide", prompt: "hello", session: "thread-okapi~safe", ...owner });
+	assert.equal(h.pine.tasks.list({ agent: "wide" }).sort((a, b) => a.id - b.id).at(-1)!.session, "thread-okapi_safe");
+	await h.close();
+});
+
+test("bypass paused by outside content is what a caller hands on: auto, not bypass", mac, async () => {
+	const h = await harness({ pine: { security: { approvalTimeout: "2s" } }, agents: { main: { agent: { mode: "bypass", mcp: { feed } } }, wide: { agent: { mode: "bypass" } } } });
+	// After outside content bypass is paused: main works as in auto, where handing work on is put to the owner, and the run it hands on is held to auto.
+	const asked = answering(h, () => true);
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("mcp__feed__echo", { text: "x" })] }, { tools: [call("delegate", { agent: "wide", task: "hello" })] }]), ...owner });
+	assert.equal(asked.length, 1);
+	assert.match(asked[0].why, /the other agent's answer can carry its files into it/);
+	assert.equal(h.pine.tasks.list({ agent: "wide" }).at(-1)!.meta.level, "auto");
 	await h.close();
 });

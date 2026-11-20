@@ -84,7 +84,7 @@ asked you for it (`pine model add`, `add_model_server`); `models.json` names it 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `main` | none | Id of the main agent. It may delegate to every other agent unless its `agent.json` says otherwise, and it is the only one that can create agents and set things up for all agents ([setup.md](setup.md)). Without this key, the agent called `main` (or else the first one) has those setup rights, but nobody delegates by default. |
+| `main` | none | Id of the main agent. It is the only one that can create agents and set things up for all agents ([setup.md](setup.md)), and the one agent that `*` in another agent's `delegates` leaves out. Without this key, the agent called `main` (or else the first one) is the main agent. |
 | `logLevel` | `info` | `debug`, `info`, `warn`, `error`, `silent`. Logs go to stderr; a daemon started inside the terminal UI logs to `data/pine.log`. |
 | `dataDir` | `data` | Where the database, media and control token live. |
 | `defaults.model` | none | `provider/model-id` from `models.json`: the model of every agent whose `agent.json` names none. There is no built-in fallback: an agent with neither is a configuration error, which `pine check` and the start of pine report. |
@@ -185,7 +185,7 @@ Every key is optional; `{}` is a valid agent.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `delegates` | `["*"]` for the agent that `main` in `pine.json` names, else `[]` | Agents this one may hand tasks to. |
+| `delegates` | `["*"]` | Agents this one may hand tasks to. `*` is every other agent but the main one; name the main agent to include it. `[]`: none, and no `delegate` tool. A task it hands on runs in the other agent's mode or this one's, whichever is stricter. |
 | `subagents` | on, 4 in parallel | `false`, or `{ "maxParallel": 4, "tools": [...], "mcp": true }`. `tools` narrows what sub-agents get. Which model they run on, the agent says call by call (`model` of `subagent`); without it, the agent's own. |
 | `publish` | `[]` | Topic patterns the `publish_event` tool may publish on. Empty: the agent has no such tool. |
 | `state.read` | `["#"]` | State keys the agent may read. |

@@ -174,7 +174,7 @@ test("computer: looking at an app is a look, acting in an allowed one is not ask
 	const h = await harness({ agents: { main: {} }, start: false });
 	const cfg = loadConfig(h.home);
 	const roots = rootsFor(cfg, cfg.agents.main);
-	const base = { roots, cwd: roots.workspace, shellReaches: true, sends: false, canSendOut: () => true, reachable: () => false };
+	const base = { roots, cwd: roots.workspace, shellReaches: true, sends: false, reachable: () => false };
 	const cls = (app: { look: boolean }, mcp = { readOnly: false, watched: false }) => classify("mcp__computer__x", {}, { ...base, app, mcp } as any).cls;
 	assert.equal(cls({ look: true }), "look");
 	assert.equal(cls({ look: false }), "local", "local is never asked about, whatever the conversation has read");

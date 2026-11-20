@@ -203,6 +203,10 @@ export const LEVELS: Level[] = ["auto", "safe", "manual", "bypass"];
 export const MODES: Mode[] = [...LEVELS, "plan"];
 /** Whether a level leaves the sandbox off: the owner's whole account and the network. */
 export const unsandboxed = (level: Level) => level === "auto" || level === "bypass";
+/** The levels from the one that asks most and reaches least to the one that asks nothing and reaches everything. */
+const NARROW_TO_WIDE: Level[] = ["manual", "safe", "auto", "bypass"];
+/** The stricter of an agent's level and a cap on it (a delegated run is held to its caller's level). No cap: the level. */
+export const stricter = (level: Level, cap?: Level): Level => (cap && NARROW_TO_WIDE.indexOf(cap) < NARROW_TO_WIDE.indexOf(level) ? cap : level);
 
 export interface SandboxConfig {
 	/** Shell commands may open network connections. */
@@ -446,7 +450,7 @@ function loadAgent(id: string, dir: string, raw: any, cfg: PineConfig, problems:
 		extensions: paths(raw.extensions, dir),
 		skills: paths(raw.skills, dir),
 		context: paths(raw.context, dir),
-		delegates: strings(raw.delegates, id === cfg.main ? ["*"] : []),
+		delegates: strings(raw.delegates, ["*"]),
 		subagents: { enabled: sub.enabled ?? true, maxParallel: sub.maxParallel ?? 4, tools: sub.tools, mcp: sub.mcp ?? true },
 		publish: strings(raw.publish, []),
 		state: { read: strings(state.read, ["#"]), write: strings(state.write, [`agent/${id}/#`]), inject: strings(state.inject, []) },
@@ -909,8 +913,21 @@ export function sourceFor(cfg: PineConfig, agentId: string, name: string): { sou
 
 export const mcpTaints = (server: McpServerConfig) => server.taints ?? (server.pine ? (BUNDLED[server.pine]?.taints ?? false) : false);
 
-/** Agents `from` may delegate to. */
+/** Whom an agent may hand work to, in words: "*" said as what it means. */
+export function delegatesText(cfg: PineConfig, a: AgentConfig): string {
+	const main = mainAgentId(cfg);
+	const named = a.delegates.filter((d) => d !== "*");
+	if (!a.delegates.includes("*")) return named.join(", ") || "nobody";
+	const all = a.id === main ? "every other agent" : `every agent but the main one (${main})`;
+	return `${all} ("*")${named.length ? `, and ${named.join(", ")}` : ""}`;
+}
+
+/**
+ * Agents `from` may delegate to. "*" is every other agent but the main one: the administrator
+ * takes work from the owner, and from another agent only where that agent's list names it.
+ */
 export function delegateTargets(cfg: PineConfig, from: AgentConfig): AgentConfig[] {
 	const all = from.delegates.includes("*");
-	return Object.values(cfg.agents).filter((a) => a.id !== from.id && (all || from.delegates.includes(a.id)));
+	const main = mainAgentId(cfg);
+	return Object.values(cfg.agents).filter((a) => a.id !== from.id && (from.delegates.includes(a.id) || (all && a.id !== main)));
 }

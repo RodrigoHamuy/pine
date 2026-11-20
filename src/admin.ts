@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AGENT_TOOLS } from "./agent-admin.ts";
-import { type AgentConfig, isColor, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
+import { type AgentConfig, delegatesText, isColor, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
 import { renameEnv, secretName, unsetEnv } from "./env-file.ts";
 import { DEFAULT_THEME, listThemes } from "./themes.ts";
 import { editJson } from "./mcp-config.ts";
@@ -36,7 +36,7 @@ export interface AgentChange {
 	/** A mode, or "default" for what pine gives an agent that names none (auto for the main agent, safe for the others). */
 	mode?: string;
 	tools?: string[];
-	/** Agents it may hand work to; "*" is every agent. */
+	/** Agents it may hand work to; "*" is every agent but the main one. */
 	delegates?: string[];
 	network?: boolean;
 	/** Folders outside its workspace it may read from now on. */
@@ -111,8 +111,8 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 	}
 	if (change.delegates !== undefined) {
 		const unknown = change.delegates.filter((d) => d !== "*" && (!cfg.agents[d] || d === agent.id));
-		if (unknown.length) throw new Error(`"delegates" names ${unknown.join(", ")}, which ${unknown.length === 1 ? "is" : "are"} not another agent. Agents: ${Object.keys(cfg.agents).filter((id) => id !== agent.id).join(", ") || "none"}; "*" is every agent`);
-		lines.push(`may hand work to: ${agent.delegates.join(", ") || "nobody"} -> ${change.delegates.join(", ") || "nobody"}`);
+		if (unknown.length) throw new Error(`"delegates" names ${unknown.join(", ")}, which ${unknown.length === 1 ? "is" : "are"} not another agent. Agents: ${Object.keys(cfg.agents).filter((id) => id !== agent.id).join(", ") || "none"}; "*" is every agent but the main one`);
+		lines.push(`may hand work to: ${delegatesText(cfg, agent)} -> ${delegatesText(cfg, { ...agent, delegates: change.delegates })}`);
 		steps.push((raw) => (raw.delegates = change.delegates));
 	}
 	if (change.network !== undefined) {

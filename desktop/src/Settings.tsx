@@ -423,7 +423,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-delegates`}>May hand work to</FieldLabel>
 					{others.length ? <Checks id={`${field}-delegates`} label="May hand work to" all={["*", ...others]} value={now("delegates")} onChange={(v) => put("delegates", v)} /> : <p id={`${field}-delegates`} className="text-muted-foreground">There is no other agent yet.</p>}
-					<FieldDescription>{d.main ? "The main agent may delegate to everyone." : "Agents it can give a task to with its delegate tool."}</FieldDescription>
+					<FieldDescription>{d.main ? "Agents it can give a task to with its delegate tool; * is every other agent." : "Agents it can give a task to with its delegate tool; * is every agent but the main one."} The task runs in the other agent's mode or in this one's, whichever is stricter.</FieldDescription>
 				</Field>
 				<Field orientation="horizontal" className="col-span-full">
 					<FieldContent>

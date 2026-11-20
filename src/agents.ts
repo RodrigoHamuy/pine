@@ -18,7 +18,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { dropConversationSkills, renameConversationSkills, skillDirs } from "./skills.ts";
-import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, purposeOf, sharedFiles, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
+import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, purposeOf, sharedFiles, stricter, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import { Limiter, type Slot } from "./limiter.ts";
 import { modelRuntime } from "./models.ts";
 import { families, NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
@@ -224,6 +224,8 @@ export interface SubmitOptions {
 	label?: string;
 	/** The folder of the conversation that hands this task on (delegation). */
 	folder?: string;
+	/** The level the agent that hands this task on works at (delegation): the run is held to it where it is stricter than its own. */
+	level?: Level;
 	/** A worktree made for this task alone (`worktree` of subagent and delegate), which it works in instead of a folder. */
 	worktree?: worktrees.Worktree;
 }
@@ -259,6 +261,8 @@ export interface Live {
 	taint(reason: string): void;
 	/** True when the run must not change instructions or act without checks: untrusted start or tainted session. */
 	restricted(): boolean;
+	/** The level this session is held to below its agent's own (TaskMeta.level), for a run handed on from a stricter one. */
+	cap?: Level;
 	/** The mode in force for the call that is about to run (see effectiveMode). */
 	mode(): Mode;
 	/** Which sandbox the next shell or file call runs in. */
@@ -702,9 +706,14 @@ export class AgentManager {
 
 		const wanted = o.session ?? "main";
 		const ephemeral = wanted === "new";
+		// Handed on from a run at a stricter level: held to that level. A run from outside is held to "safe" anyway.
+		const itsLevel = levelOf(agent);
+		const level = trust === "owner" && o.level && stricter(itsLevel, o.level) !== itsLevel ? o.level : undefined;
 		// Untrusted work never shares a session, and so never shares history or tools, with the owner's.
+		// Nor does a run held to a stricter level share one with the agent's own, whose MCP servers run
+		// at that agent's level ("~safe"; a name of the owner's or a model's never has a "~").
 		// A leading underscore is reserved for one-off sessions ("_t<task id>").
-		const session = ephemeral ? "pending" : `${sessionKey(wanted)}${trust === "untrusted" ? "~u" : ""}`;
+		const session = ephemeral ? "pending" : `${sessionKey(wanted)}${level ? `~${level}` : ""}${trust === "untrusted" ? "~u" : ""}`;
 		// A message of the owner's own in a conversation that works on a goal: the goal waits for their word (src/goals.ts).
 		if (trust === "owner" && !ephemeral && !o.parent) this.goals.incoming(agent.id, session, o.kind ?? (o.event ? "event" : "prompt"), Boolean(o.reply));
 		let prompt = truncate(o.prompt, Math.max(this.cfg.limits.maxEventChars, 1000) * (trust === "owner" ? 10 : 1));
@@ -776,6 +785,7 @@ export class AgentManager {
 				via: trust === "owner" && o.via === "app" ? "app" : undefined,
 				trust,
 				tainted: o.tainted,
+				level,
 				// Only for a run of its own: a conversation the other agent keeps would keep the folder too.
 				folder: ephemeral && trust === "owner" ? o.folder : undefined,
 				worktree: ephemeral && trust === "owner" ? o.worktree : undefined,
@@ -2357,15 +2367,15 @@ export class AgentManager {
 		}
 		// App control is registered only where it may be used: the owner's own conversations of an agent
 		// that works without a sandbox ("auto", "bypass"), on a system that has it. Everything else never sees the server.
-		const apps = Object.entries(p.mcp).filter(([, s]) => s.pine === "computer" && !this.computerFor(agent, trust, s));
+		const apps = Object.entries(p.mcp).filter(([, s]) => s.pine === "computer" && !this.computerFor(agent, trust, s, task?.meta.level));
 		if (apps.length) p = { ...p, mcp: Object.fromEntries(Object.entries(p.mcp).filter(([n]) => !apps.some(([name]) => name === n))) };
 		if (leaf) p = { ...p, tools: task?.meta.tools ? p.tools.filter((t) => task.meta.tools!.includes(t)) : p.tools, mcp: agent.subagents.mcp ? p.mcp : {}, delegates: [], subagents: false };
 		return p;
 	}
 
 	/** What pine tells the app control server of a session, or undefined where the session does not get it (see computerSession). */
-	private computerFor(agent: AgentConfig, trust: Trust, server: McpServerConfig): { helperDir: string } | undefined {
-		return computerSession({ owner: trust === "owner", level: levelOf(agent), dataDir: this.cfg.dataDir, standIn: Boolean((server.options as { helper?: unknown } | undefined)?.helper) });
+	private computerFor(agent: AgentConfig, trust: Trust, server: McpServerConfig, cap?: Level): { helperDir: string } | undefined {
+		return computerSession({ owner: trust === "owner", level: stricter(levelOf(agent), cap), dataDir: this.cfg.dataDir, standIn: Boolean((server.options as { helper?: unknown } | undefined)?.helper) });
 	}
 
 	private live(agent: AgentConfig, task: Task): Promise<Live> {
@@ -2424,6 +2434,7 @@ export class AgentManager {
 			folder,
 			ephemeral,
 			trust,
+			cap: trust === "owner" ? task.meta.level : undefined,
 			runtime: undefined,
 			session: undefined,
 			tainted: trust === "untrusted" ? "an untrusted event started this session" : persistTaint ? (this.kv.get<string>(taintKey) ?? undefined) : undefined,
@@ -2563,15 +2574,15 @@ export class AgentManager {
 	 * and bypass is suspended in a session that has read outside content unless the configuration
 	 * says otherwise: those are the two situations in which someone else may be steering.
 	 */
-	effectiveLevel(agent: AgentConfig, live: Pick<Live, "trust" | "tainted" | "key"> & { perm?: string }): Level {
+	effectiveLevel(agent: AgentConfig, live: Pick<Live, "trust" | "tainted" | "key" | "cap"> & { perm?: string }): Level {
 		if (live.trust === "untrusted") return "safe";
-		const level = levelOf(agent);
+		const level = stricter(levelOf(agent), live.cap);
 		if (level === "bypass" && live.tainted && !this.cfg.security.bypassWhenTainted && !this.bypassAnyway.has(live.perm ?? `${agent.id}:${live.key}`)) return "auto";
 		return level;
 	}
 
 	/** The mode that applies right now: "plan" where the agent plans (also in a run from outside), else its level. */
-	effectiveMode(agent: AgentConfig, live: Pick<Live, "trust" | "tainted" | "key"> & { perm?: string }): Mode {
+	effectiveMode(agent: AgentConfig, live: Pick<Live, "trust" | "tainted" | "key" | "cap"> & { perm?: string }): Mode {
 		return agent.mode === "plan" ? "plan" : this.effectiveLevel(agent, live);
 	}
 
@@ -2744,7 +2755,7 @@ export class AgentManager {
 		live.syncGrants = sync;
 		live.network = () => !sandboxed || agent.sandbox.network || network || live.wide();
 		// An agent that works with the owner's account in its owner's conversations.
-		const account = sandboxed && live.trust === "owner" && unsandboxed(levelOf(agent));
+		const account = sandboxed && live.trust === "owner" && unsandboxed(stricter(levelOf(agent), live.cap));
 		live.grant = (kind, target) => {
 			if (!jail) return "there is no sandbox on this session, so there is nothing to widen";
 			const g = this.grants.get(live.perm) ?? { network: false, read: [], write: [], local: [], apps: [] };
@@ -3026,12 +3037,12 @@ export class AgentManager {
 					// A local server that an agent added is a program somebody else wrote, started because
 					// an agent asked. It runs where that agent's shell runs: the same sandbox, the same
 					// home and environment, so it reaches nothing the agent could not reach itself.
-					if (!jail && !(live.trust === "owner" && unsandboxed(levelOf(agent)))) {
+					if (!jail && !(live.trust === "owner" && unsandboxed(stricter(levelOf(agent), live.cap)))) {
 						this.log.warn(`${agent.id}: the MCP server "${name}" is not started, because it has to run in a sandbox and this machine has none`);
 						continue;
 					}
 					const prefix = !jail || account ? [] : sandboxArgv(cfg, agent, roots, live.restricted() ? "restricted" : "normal", true);
-					const env = { ...shellEnv(agent, roots, {}, live.trust === "owner" && unsandboxed(levelOf(agent))), ...(server.env ?? {}) };
+					const env = { ...shellEnv(agent, roots, {}, live.trust === "owner" && unsandboxed(stricter(levelOf(agent), live.cap))), ...(server.env ?? {}) };
 					// Whoever starts the program hands it the daemon's environment as well. Take out by name
 					// what the agent's shell would not have (names only: values never go on a command line).
 					const unset = Object.keys(process.env).filter((k) => !(k in env) && /^[A-Za-z_][A-Za-z0-9_]*$/.test(k)).flatMap((k) => ["-u", k]);
@@ -3042,7 +3053,7 @@ export class AgentManager {
 				// The browser of an owner's conversation learns which local addresses the owner allowed there,
 				// and may be put on the owner's screen. A run started from outside gets neither, whatever the options say.
 				// App control: the profile holds this server only where the session may have it; here it learns where its helper is kept.
-				const extra = server.pine === "commands" ? { cwd: roots.cwd, sandbox: jail?.("restricted"), env: shellEnv(agent, roots, {}) } : server.pine === "browser" ? browserSession(live.trust === "owner", this.localFile(live.perm), profile.leaf ? undefined : this.views.file(live.perm)) : server.pine === "computer" ? (this.computerFor(agent, live.trust, server) ?? {}) : {};
+				const extra = server.pine === "commands" ? { cwd: roots.cwd, sandbox: jail?.("restricted"), env: shellEnv(agent, roots, {}) } : server.pine === "browser" ? browserSession(live.trust === "owner", this.localFile(live.perm), profile.leaf ? undefined : this.views.file(live.perm)) : server.pine === "computer" ? (this.computerFor(agent, live.trust, server, live.cap) ?? {}) : {};
 				pi.registerMcpServer(name, toPiMcp(name, server, extra));
 			}
 
@@ -3269,7 +3280,6 @@ export class AgentManager {
 						mcp: s !== undefined ? { readOnly: pi.getAllTools().find((x: any) => x.name === tool)?.annotations?.readOnlyHint === true, watched: false } : undefined,
 						app: appTool !== undefined ? { look: APP_LOOK.includes(appTool) } : undefined,
 						sends: false,
-						canSendOut: () => true,
 						reachable: () => false,
 					});
 					if (planned.cls !== "look") return { block: true, reason: PLAN_REFUSAL };
@@ -3406,7 +3416,6 @@ export class AgentManager {
 					app: appTool !== undefined ? { look: APP_LOOK.includes(appTool) } : undefined,
 					sends: matchesToolPattern(agent.approveWhenTainted, tool, subject),
 					toOwner: tool === "send" && (this.sources?.tellsOwner(agent.id, String(input?.source ?? ""), conversationOf(agent.id, live.perm)) ?? false),
-					canSendOut: (id) => this.canSendOut(id),
 					reachable: (url) => reachable(url) || !live.network(),
 					// pine's program files: a sandbox keeps them from being written, a shell without one is looked at.
 					names: (command) => (!boxed() && reaches(command, { cwd: roots.cwd, shellHome: realish(os.homedir()), ownerHome: realish(os.homedir()) }).some((r) => isInside(realish(PINE_ROOT), realish(r.path))) ? "names pine's own program files, which agents do not change" : undefined),
@@ -3428,7 +3437,7 @@ export class AgentManager {
 				} else if (critical) why = yes ? undefined : `this is a critical action: it ${action.note ?? "can do lasting harm"}${live.tainted ? `. Careful: this conversation has read content from outside (${live.tainted}), which may be where it comes from` : ""}`;
 				else if (readOnly || yes) why = undefined;
 				else if (mode === "manual") why = "manual mode: actions wait for your go-ahead";
-				else if (live.tainted && (tool === "subscribe" || action.cls === "send")) why = `this conversation has read content from outside (${live.tainted}), and this action can send information out or act on the world`;
+				else if (live.tainted && (tool === "subscribe" || action.cls === "send")) why = `this conversation has read content from outside (${live.tainted}), and ${tool === "delegate" ? "the other agent's answer can carry its files into it, from where they could be sent on" : "this action can send information out or act on the world"}`;
 				// The owner has just said yes to this very call.
 				if (why && !answered) {
 					if (lone) return { block: true, reason: `${tool}${subject ? ` (${truncate(subject, 120)})` : ""} was not done. ${SUBAGENT_CANNOT_ASK}` };
@@ -3446,17 +3455,6 @@ export class AgentManager {
 		};
 	}
 
-	/**
-	 * Can this agent move information out of the machine: web or remote MCP tools, or a shell with
-	 * network? A tainted session that hands such an agent a task could be leaking through it.
-	 */
-	canSendOut(agentId: string): boolean {
-		const a = this.cfg.agents[agentId];
-		if (!a) return false;
-		const tools = a.tools ?? DEFAULT_TOOLS;
-		if (tools.includes("bash") && (unsandboxed(levelOf(a)) || a.sandbox.network)) return true;
-		return Object.values(effectiveMcp(this.cfg, a)).some((s) => mcpTaints(s) || typeof s.url === "string");
-	}
 
 	/**
 	 * The part of the system prompt that pine adds. Everything here is fixed for the life of a

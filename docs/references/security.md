@@ -353,7 +353,7 @@ asking, with two exceptions, and both are a question to you:
 | The action | Examples | When you are asked |
 |---|---|---|
 | is critical | shell startup files, ssh keys, git hooks and a repository's configuration, launch agents; a force push, `git reset --hard`, `git clean -f`, `curl ... \| sh`, `sudo`, deleting a home folder | In every conversation, also one that has read nothing from outside |
-| sends something out | `send` through a source that reaches somebody or something else (an MQTT device), events, the acting tools of MCP servers marked `"approve": "tainted"`, a task for an agent that can send things out, `subscribe` | Once the conversation has read outside content |
+| sends something out | `send` through a source that reaches somebody or something else (an MQTT device), events, the acting tools of MCP servers marked `"approve": "tainted"`, a task for another agent (its answer can carry that agent's files back), `subscribe` | Once the conversation has read outside content |
 
 Everything else runs, also after outside content: shell commands, files anywhere the agent
 reaches, downloads, the agent's own memory and instructions, and a message to you.
@@ -535,7 +535,9 @@ above depends on the model, and a run started by an outside event chooses none. 
 widened by this: a sub-agent inherits the conversation's outside-content mark
 as well, and another conversation of the same agent, or a run started by an outside event, has
 none of it. An agent that a task is *delegated* to is a different agent with its own sandbox and
-its own permissions.
+its own permissions, held to the mode of the agent that handed the task on where that mode is
+stricter than its own: an agent in `safe` mode cannot reach your account by asking one in
+`bypass` mode to do it ([agents.md](agents.md), "Handing work to another agent").
 
 **Downloads.** In the sandbox the shell has no network, but getting a file from a
 server you connected is routine, so there is a `download` tool for it. It fetches an address into
@@ -907,13 +909,16 @@ send things out. Once you have agents with private data, split those:
 | Agent | Has | Does not have |
 |---|---|---|
 | `main` | Your conversation, your account, delegation to everyone | Web tools |
-| `scout` | Web search and page reading | Anything private: an empty workspace, no delegation, no state |
+| `scout` | Web search and page reading | Anything private: an empty workspace, no delegation (`"delegates": []`), no state |
 | Specialists (`gonzo`, `house`) | Their repository, their own MCP servers | Web tools, network |
 | `house` | Events from cameras and sensors (untrusted profile), writes `house/` state | A shell, the network |
 
 `main` asks `scout` to research. What comes back is text, and it taints `main`'s session: from
-then on `main` needs your approval to publish events or to hand `scout` another task. Scout
-itself can be fooled by a page, but it has nothing to give away and cannot act.
+then on `main` needs your approval to publish events or to hand any agent another task. Scout
+itself can be fooled by a page, but it has nothing to give away and cannot act. Give it
+`"delegates": []`: every agent hands work to the others by default, and a scout that can ask
+`gonzo` for a file has something to give away after all. Its own delegations would be put to
+you once it has read a page, which is a question you would have to answer for every search.
 
 ## What is not solved
 

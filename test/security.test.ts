@@ -219,8 +219,15 @@ test("trust is inherited: work handed on by an untrusted run stays untrusted", a
 		agents: { main: { agent: { untrusted: { tools: ["read"], delegates: ["gonzo"] } } }, gonzo: {} },
 	});
 	h.mock.state.scripts.tryshell = [{ tools: [{ name: "bash", args: { command: "touch pwned" } }] }];
+	// A run that an event started holds outside content from its first word: handing work on is put to the owner.
+	const asked: any[] = [];
+	h.pine.bus.subscribe("approval/requested", (e) => {
+		asked.push(e.payload);
+		h.pine.approvals.decide((e.payload as any).id, true, "test");
+	});
 	h.pine.bus.publish("hook/in", { text: mockMsg([{ tools: [{ name: "delegate", args: { agent: "gonzo", task: "@@REF:tryshell@@" } }] }]) }, { source: "http" });
 	await until(() => h.pine.tasks.list({ agent: "main", status: "done" }).length === 1);
+	assert.deepEqual(asked.map((a) => a.tool), ["delegate"]);
 	const child = h.pine.tasks.list({ agent: "gonzo" })[0];
 	assert.equal(child.meta.trust, "untrusted");
 	const gonzoReq = h.requestsFor("PERSONA-GONZO")[0];
@@ -475,7 +482,7 @@ test("agents cannot read each other's workspaces, and odd session names cannot e
 	await h.close();
 });
 
-test("a tainted session needs approval to hand work to an agent that can reach the internet", async () => {
+test("a tainted session needs approval to hand work to any agent: what comes back can carry that agent's files", async () => {
 	const h = await harness({
 		pine: { main: "main", mcp: { web: { pine: "web", agents: ["scout"] } }, security: { approvalTimeout: "100ms" } },
 		agents: { main: { agent: { mcp: { feed } } }, scout: {}, gonzo: {} },
@@ -486,9 +493,11 @@ test("a tainted session needs approval to hand work to an agent that can reach t
 	const clean = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [to("scout")] }]), ...owner });
 	assert.ok(clean.text.includes("[scout] ECHO") && asked.length === 0, "an untainted session delegates freely");
 	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "mcp__feed__echo", args: { text: "x" } }] }, { tools: [to("gonzo"), to("scout")] }]), ...owner });
-	assert.equal(asked.length, 1);
-	assert.ok(asked[0].summary.startsWith("delegate: scout"));
-	assert.ok(r.text.includes("[gonzo] ECHO") && /not approved \(timeout\)/.test(r.text), r.text);
+	// gonzo cannot send anything out, and is asked about all the same: its answer would bring its files into a conversation that can.
+	assert.deepEqual(asked.map((a) => a.summary.split("\n")[0].slice(0, 15)), ["delegate: gonzo", "delegate: scout"]);
+	assert.match(asked[0].why, /has read content from outside .* the other agent's answer can carry its files into it/);
+	assert.ok(!r.text.includes("[gonzo] ECHO") && !r.text.includes("[scout] ECHO"), r.text);
+	assert.equal((r.text.match(/not approved \(timeout\)/g) ?? []).length, 2, r.text);
 	await h.close();
 });
 
