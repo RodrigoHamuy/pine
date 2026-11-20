@@ -195,7 +195,9 @@ await packApp({
 		// The exceptions are node-pty, the terminal's pseudo-terminal, and node-datachannel, browser
 		// access's peer connection (dependencies of the app's, which the packer adds by itself):
 		// native, so they lie outside the archive, where they are signed with the app. Of
-		// node-datachannel's binaries only the one for this app's kind of Mac goes in.
+		// node-datachannel's binaries only the one for this app's kind of Mac goes in. ssh2, the access
+		// server's SSH, is not bundled either (it is CommonJS that needs `__dirname`): it is added by
+		// the packer like them, inside the archive, without its native bindings (scripts/ssh2-pure.mjs).
 		files: ["dist/**", "dist-electron/**", "package.json", `!node_modules/@node-datachannel/darwin-${otherArch}/**`],
 		asarUnpack: ["node_modules/node-pty/**", "node_modules/node-datachannel/**", "node_modules/@node-datachannel/**"],
 		// pine goes in whole, with what it depends on, before the app is signed. (Listed as a resource,
