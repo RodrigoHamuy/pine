@@ -72,7 +72,10 @@ struct PinesTests {
 		try await withPines { rig, pines, page, shelf in
 			pines.ready()
 			#expect(page.status == "error")
-			#expect((page.last?["message"] as? String)?.contains("Add the machine") == true)
+			// Both ways to a pine: pairing with a computer by its link, and user@host over SSH.
+			let none = page.last?["message"] as? String ?? ""
+			#expect(none.contains("Pair this phone with your computer"), "\(none)")
+			#expect(none.contains("user@host"), "\(none)")
 			#expect(page.last?["host"] == nil)
 			try rig.known.forget(host: "127.0.0.1", port: rig.machine.port)
 			try pines.addHost(rig.host)

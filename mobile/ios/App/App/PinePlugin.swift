@@ -1,6 +1,7 @@
 // The native plugin the mobile bridge talks to (mobile/src/plugin.ts, registered as `Pine`): what
 // Electron's main process is for the desktop page, and PinePlugin.kt on Android. It holds the SSH
-// sessions and the daemons' tokens and makes every call; the page never sees either. What it
+// sessions and the daemons' tokens and makes every call; the page never sees either. A computer
+// paired by its link is reached the same way, SSH over a data channel the core opens. What it
 // decides lives in the core (mobile/ios-core, PineCore, tested by `swift test`): this file is the
 // iOS glue around it (the Keychain, the app's defaults, Safari, the share sheet, the status bar,
 // the app's life). PineViewController registers it and hardens the web view.
@@ -17,6 +18,7 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	public let pluginMethods: [CAPPluginMethod] = [
 		"state", "ready", "call", "retry", "use", "addHost", "forgetHost", "loadPrefs", "savePrefs",
 		"openExternal", "share", "copy", "systemBars", "leave", "publicKey", "trustHostKey", "forgetHostKey",
+		"pair", "cancelPairing",
 	].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
 
 	private(set) var pines: Pines?
@@ -26,8 +28,15 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	 * so that a link it follows is noted and not opened.
 	 */
 	var opener: (URL) -> Void = { UIApplication.shared.open($0) }
+	/**
+	 * What the computer is told this phone is called when it pairs, and what it lists in its Settings >
+	 * Browser access: "Pine on iPhone" (or iPad). iOS gives an app the kind of device, not the owner's
+	 * name for it, and no model name without a table of hardware ids that would age.
+	 */
+	private var phone = deviceName(nil)
 
 	override public func load() {
+		phone = deviceName(UIDevice.current.model)
 		let store = KeychainSecretStore()
 		let remote = Remote(key: DeviceKey(store), known: KnownHosts(store))
 		pines = Pines(remote: remote, shelf: DefaultsShelf(), page: PageOut(self))
@@ -92,7 +101,31 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	@objc func state(_ call: CAPPluginCall) {
 		guard let pines else { return call.reject("The app has not started yet.") }
 		let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-		call.resolve(["state": pines.state(), "connected": pines.connected, "version": version])
+		// This build pairs with a computer by its link (the page then offers pairing first).
+		call.resolve(["state": pines.state(), "connected": pines.connected, "version": version, "canPair": true])
+	}
+
+	/**
+	 * The owner's yes, in the page, to a pairing link: read again by the core (an https service only,
+	 * the machine id and code of their shape), which rejects anything else, or a second pairing.
+	 */
+	@objc func pair(_ call: CAPPluginCall) {
+		let link = call.getString("link") ?? ""
+		later(call) { [phone] in try $0.pair(link, name: phone); return nil }
+	}
+
+	@objc func cancelPairing(_ call: CAPPluginCall) { later(call) { $0.cancelPairing(); return nil } }
+
+	/**
+	 * An address of the app's own scheme the app was opened with (the web client's "Open in the Pine
+	 * app" on an iPhone). It starts nothing: the page reads it as it reads a pasted link, says so when
+	 * it is not one, and otherwise asks the owner, whose yes calls `pair`. Kept until the page listens,
+	 * for an address the app was started with. A text longer than any pairing link is not handed on.
+	 */
+	func opened(_ url: URL) {
+		let text = url.absoluteString
+		guard PineViewController.isPine(url), text.utf8.count <= 1024 else { return }
+		notifyListeners("link", data: ["link": text], retainUntilConsumed: true)
 	}
 
 	@objc func ready(_ call: CAPPluginCall) { later(call) { $0.ready(); return nil } }
@@ -117,6 +150,9 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 			var out: [String: Any] = ["hosts": pines.hosts]
 			if let text = pines.prefs, let prefs = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] { out["prefs"] = prefs }
 			if let use = pines.inUse { out["use"] = use }
+			// The names paired computers gave, which the page shows in place of their machine ids.
+			let names = pines.names
+			if !names.isEmpty { out["names"] = names }
 			return out
 		}
 	}

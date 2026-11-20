@@ -11,7 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
-import { computerWord, deviceWord, homeScreenKeeps, isPaired, machineName, machinesView, pairingEnded, readPairLink, type MachinesViewName, type PairLink } from "./machines.ts";
+import { computerWord, deviceWord, homeScreenKeeps, httpService, isPaired, machineName, machinesView, pairingEnded, readPairLink, type MachinesViewName, type PairLink } from "./machines.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
@@ -572,6 +572,8 @@ export class Store extends Model {
 	askToPair(text: string): string | undefined {
 		if (!this.canPasteLink) return undefined;
 		const link = readPairLink(text);
+		const http = link ? undefined : httpService(text);
+		if (http) return `This pairing link reaches your computer through ${http} over http, and this ${this.device} pairs only through https: nothing was used. Pair with a link of an https meeting service, or connect over SSH instead.`;
 		if (!link) return "That is not a pairing link. In the Pine app on your computer, go to Settings > Browser access, press Add a device, and copy the link it gives.";
 		this.pairAsk = { ...link, link: text.trim() };
 		this.touch();
