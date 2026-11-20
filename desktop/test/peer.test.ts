@@ -6,7 +6,16 @@ import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import type { Duplex } from "node:stream";
 import { test } from "node:test";
-import { answer, offer, pathOf, type Peer, type Signal } from "../electron/access/peer.ts";
+import { answer, iceServerOf, offer, pathOf, type Peer, type RelayServer, type Signal, tryRelay } from "../electron/access/peer.ts";
+import { freeUdpPort, silentUdpPort, startTurn, TURN_PASSWORD, TURN_USER } from "./support/turn.ts";
+
+const until = async (what: string, ok: () => boolean, ms = 5000) => {
+	const end = Date.now() + ms;
+	while (!ok()) {
+		if (Date.now() > end) throw new Error(`timed out: ${what}`);
+		await new Promise((r) => setTimeout(r, 20));
+	}
+};
 
 /** Whether a candidate's address is one of the same network (`pathOf` says "lan" for it with itself). */
 const nearbyCandidate = (d: Signal) => {
@@ -198,6 +207,109 @@ test("a process whose connections all closed ends by itself: nothing is left hol
 	assert.equal(out.trim(), "closed");
 	assert.equal(signal, null, "the process had to be killed: something held it after every connection closed");
 	assert.equal(code, 0);
+});
+
+// ---- the owner's relay (TURN) server ----------------------------------------------------------
+
+const relayOn = (port: number, more: Partial<RelayServer> = {}): RelayServer => ({ hostname: "127.0.0.1", port, transport: "udp", username: TURN_USER, password: TURN_PASSWORD, ...more });
+const isRelay = (d: Signal) => "ice" in d && / typ relay\b/.test(d.ice.candidate);
+
+test("with a relay, the computer offers an address on it among its candidates; the browser is given none", async () => {
+	const turn = await startTurn();
+	let computer: Peer | undefined;
+	const early: Signal[] = [];
+	const fromComputer: Signal[] = [];
+	const fromBrowser: Signal[] = [];
+	const browser = offer({ ice: [], send: (d) => (fromBrowser.push(d), computer ? computer.signal(d) : early.push(d)) });
+	computer = answer({ ice: [], relay: relayOn(turn.port), send: (d) => (fromComputer.push(d), browser.signal(d)) });
+	for (const d of early.splice(0)) computer.signal(d);
+	try {
+		await Promise.all([computer.channel, browser.channel]);
+		await until("the relay's candidate is offered", () => fromComputer.some(isRelay));
+		assert.ok(!fromBrowser.some(isRelay), "the browser has no relay");
+		assert.ok(!JSON.stringify(fromComputer).includes(TURN_PASSWORD), "the password is in no signal");
+		// Nothing forces the relay: on one computer the direct path is chosen.
+		assert.notEqual(computer.path(), "relay");
+	} finally {
+		computer.close();
+		browser.close();
+		await turn.close();
+	}
+});
+
+test("a TURN server named by the meeting service is not used: only the owner's own relay is", async () => {
+	const turn = await startTurn();
+	const sent: Signal[] = [];
+	const lone = offer({ ice: [{ urls: `turn:${TURN_USER}:${TURN_PASSWORD}@127.0.0.1:${turn.port}` }], send: (d) => sent.push(d) });
+	try {
+		await new Promise((r) => setTimeout(r, 1500));
+		assert.ok(!sent.some(isRelay), "no relay candidate from the service's list");
+	} finally {
+		lone.close();
+		await turn.close();
+	}
+});
+
+test("two peers that offer nothing but addresses on the relay exchange bytes through it, and the path reads relay", async () => {
+	// Each side offers no candidate but an address on the relay. (Of the browser's own addresses, the
+	// computer could otherwise reach one directly.) The library still sends checks from its own socket,
+	// and in a process where other connections were made it can settle on a direct pair over the
+	// loopback, rightly named "lan": so the two meet in a process of their own.
+	const script = `
+		import assert from "node:assert/strict";
+		import { answer, offer } from ${JSON.stringify(new URL("../electron/access/peer.ts", import.meta.url).href)};
+		import { startTurn, TURN_PASSWORD, TURN_USER } from ${JSON.stringify(new URL("./support/turn.ts", import.meta.url).href)};
+		const turn = await startTurn();
+		const relay = { hostname: "127.0.0.1", port: turn.port, transport: "udp", username: TURN_USER, password: TURN_PASSWORD };
+		let computer;
+		const early = [];
+		const browser = offer({ ice: [], relay, onlyRelay: true, send: (d) => (computer ? computer.signal(d) : early.push(d)) });
+		computer = answer({ ice: [], relay, onlyRelay: true, send: (d) => browser.signal(d) });
+		for (const d of early) computer.signal(d);
+		const [a, b] = await Promise.all([computer.channel, browser.channel]);
+		const got = (s) => new Promise((r) => s.once("data", (d) => r(String(d))));
+		const back = got(a);
+		b.write("hello");
+		const forth = got(b);
+		a.write("relay");
+		// The computer's side is the one that names the path (the device list).
+		console.log(JSON.stringify({ back: await back, forth: await forth, path: computer.path(), relayed: turn.allocations() }));
+		process.exit(0);
+	`;
+	const child = spawn(process.execPath, ["--input-type=module", "-e", script], { stdio: ["ignore", "pipe", "inherit"] });
+	let out = "";
+	child.stdout.on("data", (b) => (out += b));
+	const timer = setTimeout(() => child.kill("SIGKILL"), 20_000);
+	await once(child, "exit");
+	clearTimeout(timer);
+	const said = JSON.parse(out.trim() || "{}");
+	assert.equal(said.back, "hello");
+	assert.equal(said.forth, "relay");
+	assert.ok(said.relayed >= 2, `addresses reserved on the relay: ${said.relayed}`);
+	assert.equal(said.path, "relay");
+});
+
+test("a try of a relay: usable when it gives an address, refused for a wrong password, silent when nothing answers, unknown for a name that is not found", async () => {
+	const turn = await startTurn();
+	const silent = await silentUdpPort();
+	try {
+		assert.equal(await tryRelay(relayOn(turn.port)), "usable");
+		assert.equal(await tryRelay(relayOn(turn.port, { password: "wrong" })), "refused");
+		assert.equal(await tryRelay(relayOn(turn.port, { username: "nobody" })), "refused");
+		assert.equal(await tryRelay(relayOn(silent.port), 800), "silent");
+		assert.equal(await tryRelay(relayOn(await freeUdpPort()), 800), "silent");
+		assert.equal(await tryRelay(relayOn(3478, { hostname: "relay.example.invalid" }), 800), "unknown");
+	} finally {
+		await silent.close();
+		await turn.close();
+	}
+});
+
+test("the relay is handed to the library as an object: transport by type, and no credentials in a URL", () => {
+	assert.deepEqual(iceServerOf({ hostname: "relay.example", port: 3478, transport: "udp", username: "u", password: "p" }), { hostname: "relay.example", port: 3478, relayType: "TurnUdp", username: "u", password: "p" });
+	assert.equal(iceServerOf({ hostname: "relay.example", port: 3478, transport: "tcp", username: "u", password: "p" }).relayType, "TurnTcp");
+	assert.equal(iceServerOf({ hostname: "relay.example", port: 5349, transport: "tls", username: "", password: "" }).relayType, "TurnTls");
+	assert.deepEqual(iceServerOf({ hostname: "::1", port: 5349, transport: "tls", username: "", password: "" }), { hostname: "::1", port: 5349, relayType: "TurnTls" });
 });
 
 test("a channel with another label is not the one handed back, and is closed", async () => {

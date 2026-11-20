@@ -105,6 +105,8 @@ export interface Browser {
 	closed: Promise<number>;
 	/** The data channel, once it is open. */
 	channel: Promise<Duplex>;
+	/** What the computer sent through the meeting (its description and candidates), in order. */
+	received: Signal[];
 	close(): void;
 }
 
@@ -119,13 +121,14 @@ export function join(service: string, id: string): Browser {
 		else early.push(text);
 	};
 	const closed = new Promise<number>((resolve) => ws.addEventListener("close", (e) => resolve(e.code)));
+	const received: Signal[] = [];
 	let peer: Peer | undefined;
 	ws.addEventListener("message", (e) => {
 		const message = JSON.parse(String(e.data));
 		if (message.t === "ready") {
 			ready = true;
 			for (const text of early.splice(0)) ws.send(text);
-		} else if (message.t === "signal") peer?.signal(message.d);
+		} else if (message.t === "signal") (received.push(message.d), peer?.signal(message.d));
 	});
 	// The offer is made once the computer is there, as the web client does.
 	const opened = new Promise<Peer>((resolve, reject) => {
@@ -150,6 +153,7 @@ export function join(service: string, id: string): Browser {
 		},
 		closed,
 		channel,
+		received,
 		close() {
 			ws.close();
 			peer?.close();

@@ -78,6 +78,47 @@ export const PairingExpired: Story = {
 	args: { state: waiting, opened: { link: LINK, expires: new Date(NOW - 1000).toISOString() } },
 };
 
+/** No relay server: its fields are empty, with the sentence that says when one is used. */
+export const NoRelay: Story = {
+	args: { state: waiting },
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText("Relay server (TURN)")).toBeInTheDocument();
+		await expect(canvas.getByText(/Used when no direct connection can be made/)).toBeInTheDocument();
+		await expect(canvas.getByLabelText("Address")).toHaveValue("");
+		await expect(canvasElement.querySelector("[data-slot=relay-check]")).toBeNull();
+	},
+};
+
+const RELAY = { address: "turn:relay.example.com:3478", username: "pine" };
+
+/** A relay that gave this Mac an address, and a device connected through it. The password field shows that one is kept, never the password. */
+export const RelayUsable: Story = {
+	args: {
+		state: {
+			...waiting,
+			devices: [{ ...devices[0], connected: { path: "relay" } }, devices[1]],
+			relay: { ...RELAY, password: true, check: { result: "usable", message: "This relay works: it gave this Mac an address." } },
+		},
+	},
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		await expect(canvas.getByLabelText("Password")).toHaveValue("");
+		await expect(canvas.getByLabelText("Password")).toHaveAttribute("placeholder", expect.stringMatching(/^Kept/));
+		await expect(canvas.getByText(/relayed/)).toBeInTheDocument();
+	},
+};
+
+/** A relay that refused the user name or password: it is kept, and the line under it says what to check. */
+export const RelayRefused: Story = {
+	args: {
+		state: { ...waiting, relay: { ...RELAY, password: true, check: { result: "failed", message: "Could not use this relay: it refused the user name or password. It is kept; check them and save again." } } },
+	},
+	play: async ({ canvasElement }) => {
+		await expect(within(canvasElement).getByText(/refused the user name or password/)).toBeInTheDocument();
+	},
+};
+
 /** A device used the code: its name and the four digits its screen shows, with Allow and Refuse. */
 export const PairingRequest: Story = {
 	args: { state: { ...waiting, request: { name: "Chrome on Android", code: "4821" } }, opened: { link: LINK, expires: new Date(NOW + 60_000).toISOString(), asked: true } },

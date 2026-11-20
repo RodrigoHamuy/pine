@@ -302,10 +302,14 @@ function startAccess(): void {
 /** What the page may ask to change, value by value. */
 function accessChange(raw: unknown): AccessChange {
 	const said = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+	const relay = said.relay && typeof said.relay === "object" ? (said.relay as Record<string, unknown>) : undefined;
+	const text = (value: unknown) => (typeof value === "string" ? value.slice(0, 400) : undefined);
 	return {
 		...(typeof said.enabled === "boolean" ? { enabled: said.enabled } : {}),
 		...(typeof said.openAtLogin === "boolean" ? { openAtLogin: said.openAtLogin } : {}),
 		...(typeof said.service === "string" ? { service: said.service.slice(0, 400) } : {}),
+		// The relay's password passes here once, to the sealed file, and is never sent back to the page.
+		...(relay && typeof relay.address === "string" ? { relay: { address: relay.address.slice(0, 400), username: text(relay.username), password: text(relay.password) } } : {}),
 	};
 }
 

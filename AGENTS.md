@@ -617,7 +617,11 @@ These are invariants. A change that breaks one needs a test that shows why it is
    one-time code from the QR code (compared in constant time, consumed on first use) and four
    digits shown on both sides; refused or expired, nothing is stored, and a removed device's
    sessions are cut at once. The host key is kept encrypted with the keychain (Electron's safe
-   storage), and a device's name is plain text of 60 characters at most. The pairing link
+   storage), and a device's name is plain text of 60 characters at most. A relay (TURN) server the
+   owner names in the app is the computer's alone, beside the service's STUN servers (a TURN entry
+   from the service is dropped): its password is kept like the host key, in that encrypted file and
+   never in `prefs.json`, and never reaches the page (which is told only that one is kept), a log,
+   a status line or an error text. The pairing link
    (`#pair=<machine id>.<code>`, in the fragment, which no server sees) is the second way a host
    key is trusted in the web client, beside the owner's press on "Trust this key": the machine id
    is the fingerprint of that computer's host key, accepted once, for the machine that link names alone,
@@ -881,7 +885,9 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
 - Browser access is tested without a network. `desktop/test/access-*.test.ts` run the access host
   and its parts under plain Node, with an in-memory stream or the Worker's meeting module served on
   a loopback port, and `desktop/test/peer.test.ts` joins two peers on this computer by hand, with no
-  STUN server. The app's tests put the stand-in host behind the app (`PINE_DESKTOP_ACCESS_STAND_IN`,
+  STUN server. The owner's relay is tested on a TURN server in the test (`node-turn` on a loopback
+  UDP port, `desktop/test/support/turn.ts`), through which two peers that offer nothing but relay
+  candidates pass bytes. The app's tests put the stand-in host behind the app (`PINE_DESKTOP_ACCESS_STAND_IN`,
   for tests only, `desktop/electron/access/stand-in.ts`), which also switches the app to Chromium's
   mock keychain. `web/test/peer.test.ts` pairs the web bridge with the real access host. Real
   networks (cellular, carrier NAT) are tried by hand.

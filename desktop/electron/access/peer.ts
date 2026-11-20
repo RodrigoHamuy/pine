@@ -5,7 +5,8 @@
 import { createRequire } from "node:module";
 import net from "node:net";
 import { Duplex } from "node:stream";
-import type { DataChannel, PeerConnection } from "node-datachannel";
+import { lookup } from "node:dns/promises";
+import type { DataChannel, IceServer as IceServerConfig, PeerConnection } from "node-datachannel";
 
 /** A message for the other peer, in the shape a browser's RTCPeerConnection gives and takes. */
 export type Signal = { sdp: { type: string; sdp: string } } | { ice: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null } };
@@ -15,8 +16,23 @@ export interface IceServer {
 	urls: string | string[];
 }
 
-/** How a connection reached the other peer: inside the same network, or directly over IPv4 or IPv6. */
-export type PeerPath = "lan" | "ipv4" | "ipv6";
+/**
+ * How a connection reached the other peer: inside the same network, directly over IPv4 or IPv6, or
+ * through the owner's relay (TURN) server.
+ */
+export type PeerPath = "lan" | "ipv4" | "ipv6" | "relay";
+
+/**
+ * A relay (TURN) server of the owner's own: where it is, how it is reached (`udp`, `tcp`, or TLS
+ * over TCP for `turns:`), and the user name and password it takes. Only the computer's side has one.
+ */
+export interface RelayServer {
+	hostname: string;
+	port: number;
+	transport: "udp" | "tcp" | "tls";
+	username: string;
+	password: string;
+}
 
 export interface Peer {
 	/** Hands this peer a message the other one sent. */
@@ -36,6 +52,13 @@ export interface Peer {
 export interface PeerOptions {
 	/** The servers that help (STUN). Empty: only the addresses of this computer's own interfaces. */
 	ice: IceServer[];
+	/**
+	 * The owner's relay server, besides `ice`: the computer reserves an address on it and offers it as
+	 * one more candidate. ICE still prefers a direct path; the relay is used where none is found.
+	 */
+	relay?: RelayServer;
+	/** Tests only: no candidate but the relay's, so that two peers on one computer can only meet through it. */
+	onlyRelay?: boolean;
 	/** Sends a message to the other peer (through the meeting service). */
 	send(d: Signal): void;
 	/** How long the channel may take to open, in milliseconds. */
@@ -92,8 +115,10 @@ function release(ndc: Module) {
 
 function start(options: PeerOptions, label: string | undefined): Peer {
 	const ndc = datachannel();
-	const servers = options.ice.flatMap((s) => (Array.isArray(s.urls) ? s.urls : [s.urls])).filter((u) => /^stuns?:/.test(u));
-	const pc: PeerConnection = new ndc.PeerConnection(`pine-${++count}`, { iceServers: servers });
+	// A TURN entry is taken from the owner's own setting alone (`relay`), never from the service's list.
+	const servers: Array<string | IceServerConfig> = options.ice.flatMap((s) => (Array.isArray(s.urls) ? s.urls : [s.urls])).filter((u) => /^stuns?:/.test(u));
+	if (options.relay) servers.push(iceServerOf(options.relay));
+	const pc: PeerConnection = new ndc.PeerConnection(`pine-${++count}`, { iceServers: servers, ...(options.onlyRelay ? { iceTransportPolicy: "relay" as const } : {}) });
 	live++;
 	let done = false;
 	let stream: ChannelStream | undefined;
@@ -169,12 +194,88 @@ function start(options: PeerOptions, label: string | undefined): Peer {
 		path() {
 			if (done) return undefined;
 			const pair = pc.getSelectedCandidatePair();
-			return pair ? pathOf(pair.remote.address, pair.local.address) : undefined;
+			if (!pair) return undefined;
+			if (pair.local.type === "relay" || pair.remote.type === "relay") return "relay";
+			return pathOf(pair.remote.address, pair.local.address);
 		},
 		buffered: () => stream?.buffered() ?? 0,
 		close: () => close(),
 		closed,
 	};
+}
+
+/** The relay as node-datachannel takes it: an object, so that no user name or password is written into a URL. */
+export function iceServerOf(relay: RelayServer): IceServerConfig {
+	const relayType = relay.transport === "tls" ? "TurnTls" : relay.transport === "tcp" ? "TurnTcp" : "TurnUdp";
+	return { hostname: relay.hostname, port: relay.port, relayType, ...(relay.username ? { username: relay.username } : {}), ...(relay.password ? { password: relay.password } : {}) };
+}
+
+/**
+ * What a try of a relay found. `usable`: it gave this computer an address. `refused`: it answered
+ * and gave none, which a TURN server does when the user name or password is wrong (the library does
+ * not say which error the server sent, so another refusal reads the same). `silent`: nothing came
+ * back in time. `unknown`: its name was not found. `unavailable`: the library cannot run here.
+ */
+export type RelayTry = "usable" | "refused" | "silent" | "unknown" | "unavailable";
+
+/**
+ * Tries to reserve an address on a relay: a connection of its own that gathers relay candidates
+ * only, closed as soon as one comes, or gathering ends without one, or `ms` is over. Never throws,
+ * and says nothing of the password.
+ */
+export async function tryRelay(relay: RelayServer, ms = 5000): Promise<RelayTry> {
+	let ndc: Module;
+	try {
+		ndc = datachannel();
+	} catch {
+		return "unavailable";
+	}
+	if (!net.isIP(relay.hostname)) {
+		try {
+			await lookup(relay.hostname);
+		} catch {
+			return "unknown";
+		}
+	}
+	let pc: PeerConnection;
+	try {
+		pc = new ndc.PeerConnection(`pine-relay-${++count}`, { iceServers: [iceServerOf(relay)], iceTransportPolicy: "relay" });
+	} catch {
+		return "refused";
+	}
+	live++;
+	return new Promise<RelayTry>((resolve) => {
+		let done = false;
+		let dc: DataChannel | undefined;
+		const end = (result: RelayTry) => {
+			if (done) return;
+			done = true;
+			clearTimeout(timer);
+			// Closed outside the library's own callback, which may be the one ending the try. The
+			// channel first: one left to the library's cleanup after its connection closed is freed
+			// memory there, and the app crashes.
+			setImmediate(() => {
+				try {
+					dc?.close();
+					pc.close();
+				} catch {
+					// already closed
+				}
+				live--;
+				release(ndc);
+			});
+			resolve(result);
+		};
+		const timer = setTimeout(() => end("silent"), ms);
+		pc.onLocalCandidate((candidate) => / typ relay\b/.test(candidate) && end("usable"));
+		pc.onGatheringStateChange((state) => state === "complete" && end("refused"));
+		try {
+			// A channel is what starts gathering; it never opens.
+			dc = pc.createDataChannel("relay-try");
+		} catch {
+			end("refused");
+		}
+	});
 }
 
 /** Same network when the other peer's address is one no network outside would hand out. */

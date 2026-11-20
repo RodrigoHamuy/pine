@@ -315,6 +315,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["scan a qr code on my computer to open my conversations on my phone", /^(desktop#browser-access|web#a-computer-paired-by-qr-code)/],
 		["my phone says your mac does not answer", /^(web#when-a-paired-computer-does-not-answer|desktop#when-a-paired-device-does-not-connect)/],
 		["my phone says your computer does not answer", /^(web#when-a-paired-computer-does-not-answer|desktop#when-a-paired-device-does-not-connect)/],
+		["my phone cannot connect from mobile data", /^desktop#a-relay-server-of-your-own/],
+		["set up a turn server so my phone connects from mobile data", /^desktop#a-relay-server-of-your-own/],
 		["remove a phone that can reach my mac", /^desktop#(pairing-a-device|browser-access)/],
 		["remove a phone that can reach my computer", /^desktop#(pairing-a-device|browser-access)/],
 		["link my phone to pine with a barcode", /^(web#a-computer-paired-by-qr-code|desktop#(pairing-a-device|browser-access))/],

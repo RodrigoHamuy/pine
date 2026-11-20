@@ -331,7 +331,7 @@ service and lets nobody in.
 | `Service address` | Where browsers open the web client and find this computer. By default the project's own service, `https://pine.drcmda.workers.dev`. Write the address of a deployment of your own instead (see "Deploying it" in [web.md](web.md#deploying-it)). Only `https://` and `http://` addresses are kept. Changing it makes the browsers paired at the old address pair again: a browser's key and its machines belong to the address it opened |
 | `Add a device` | Shows a QR code, and Copy link for a computer that has no camera (send yourself the link and open it in that browser). The code works once, for two minutes, and stops when you close the dialog; New code makes another. Five wrong codes close it. Only one is open at a time, and only at this computer: nobody pairs a browser from afar |
 | `Allow` and `Refuse` | When a browser uses the code, the app names it ("Chrome on Android") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
-| `Devices` | Each paired browser by its name, the day it was paired and its last connection; "connected now" and how (same network, direct IPv4, direct IPv6) while it is connected. No notification for a reconnection |
+| `Devices` | Each paired browser by its name, the day it was paired and its last connection; "connected now" and how (same network, direct IPv4, direct IPv6, or relayed through your relay server) while it is connected. No notification for a reconnection |
 | `Remove` | Removes a paired phone, tablet or computer: it can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
 
 ### What a paired browser can do
@@ -347,12 +347,23 @@ What is kept: the switch, the service address and Open Pine at login in the app'
 `prefs.json` (`access`); this computer's key and the paired devices in `access.bin` beside it. Nothing
 is written into pine's home.
 
+### A relay server of your own, for a phone that cannot connect from mobile data
+
+Below the service address in Settings > Browser access. The project runs no relay; leave it empty
+if you have none.
+
+| What | How |
+|---|---|
+| `Relay server (TURN)` | A relay server of your own, used when no direct connection can be made, for example from mobile data on some mobile networks: its address (`turn:host:port` or `turns:host:port`, with `?transport=udp` or `tcp` if needed; `turns:` is TLS), a user name and a password. This computer reserves an address on it and offers it beside its direct ones; a direct path is still preferred, and the browser needs nothing. A device connected through it is listed as relayed |
+| The line under it | Saved, the relay is tried at once: it works, or why not (it did not answer, it refused the user name or password, or its name was not found). A relay that fails the try is kept, since its server may be down for a moment |
+| What is kept | The address and user name in `prefs.json`, the password in `access.bin`, encrypted by the keychain. The password is never shown again: the field says one is kept, and a new one replaces it. Saving the fields empty removes the relay and its password. Devices stay paired |
+
 ### When a paired device does not connect
 
 | It says | What to do |
 |---|---|
 | The phone says "<name> does not answer", by the name it was given at pairing ("Your computer" before) | It is asleep or shut down, Pine is closed, or the switch of browser access is not on. The phone keeps trying and connects when it is back |
-| The phone says "no direct connection could be made from this network" | Some networks (often a phone's data) do not let two devices connect directly, and there is no relay in between. Try another Wi-Fi, or the phone's data instead of the Wi-Fi |
+| The phone says "no direct connection could be made from this network" | Some networks (often a phone's data) do not let two devices connect directly. Try another Wi-Fi, or the phone's data instead of the Wi-Fi, or name a relay server of your own (`Relay server (TURN)`) |
 | The phone says "This browser is no longer known to <name>" | Its device was removed here, or the browser's data was cleared there. Add it again |
 | The section says the service cannot be reached | The app is offline, or the service address is wrong. Everything else in the app works |
 | A browser on a Mac asks about the local network | macOS may ask whether that browser may find devices on the local network. Allow it for a direct connection on the same Wi-Fi |

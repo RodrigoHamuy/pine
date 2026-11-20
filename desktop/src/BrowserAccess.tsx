@@ -48,7 +48,7 @@ const STATUS = {
 } as const;
 
 /** How a device is connected, in the owner's words. */
-const PATH = { lan: "same network", ipv4: "direct, IPv4", ipv6: "direct, IPv6" } as const;
+const PATH = { lan: "same network", ipv4: "direct, IPv4", ipv6: "direct, IPv6", relay: "relayed" } as const;
 
 /** Minutes and seconds left, as a clock: 1:58. */
 const left = (ms: number) => {
@@ -79,6 +79,21 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 	const [login, setLogin] = useState(true);
 	const [error, setError] = useState<string>();
 	useEffect(() => setService(state.service), [state.service]);
+	// The relay's fields: the address and user name as kept; the password field always starts empty, and says when one is kept.
+	const [relay, setRelay] = useState({ address: state.relay?.address ?? "", username: state.relay?.username ?? "", password: "" });
+	const [relayError, setRelayError] = useState<string>();
+	useEffect(() => setRelay({ address: state.relay?.address ?? "", username: state.relay?.username ?? "", password: "" }), [state.relay?.address, state.relay?.username]);
+	const relayChanged = relay.address.trim() !== (state.relay?.address ?? "") || relay.username.trim() !== (state.relay?.username ?? "") || relay.password !== "";
+	const saveRelay = async () => {
+		setRelayError(undefined);
+		try {
+			await actions.set({ relay });
+			setRelay((r) => ({ ...r, password: "" }));
+		} catch (e) {
+			setRelayError(errText(e));
+		}
+	};
+	const check = state.relay?.check;
 
 	const status = STATUS[state.status];
 	/** A change from a switch or a dialog; what went wrong is said under the switch. */
@@ -138,6 +153,30 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 						<FieldDescription>Where browsers open the web client and find this {computer}. Changing it makes the paired browsers that use the old address pair again.</FieldDescription>
 						{serviceError ? <FieldError>{serviceError}</FieldError> : null}
 					</Field>
+				</FieldGroup>
+			</FieldSet>
+
+			{/* A set of its own: inside the group of This Mac, its fields were drawn with no height once the try's line appeared. */}
+			<FieldSet data-setting="access-relay" data-invalid={relayError ? true : undefined}>
+				<FieldLegend>Relay server (TURN)</FieldLegend>
+				<FieldDescription>Used when no direct connection can be made, for example from some mobile networks. Leave it empty if you have none.</FieldDescription>
+				<FieldGroup>
+					<Field>
+						<FieldLabel htmlFor={`${field}-relay`}>Address</FieldLabel>
+						<Input id={`${field}-relay`} data-slot="relay-address" className="font-mono" placeholder="turn:relay.example.com:3478" autoComplete="off" spellCheck={false} value={relay.address} aria-invalid={relayError ? true : undefined} onChange={(e) => setRelay({ ...relay, address: e.target.value })} />
+					</Field>
+					<Field>
+						<FieldLabel htmlFor={`${field}-relay-user`}>User name</FieldLabel>
+						<Input id={`${field}-relay-user`} data-slot="relay-username" autoComplete="off" spellCheck={false} value={relay.username} onChange={(e) => setRelay({ ...relay, username: e.target.value })} />
+					</Field>
+					<Field>
+						<FieldLabel htmlFor={`${field}-relay-password`}>Password</FieldLabel>
+						<Input id={`${field}-relay-password`} data-slot="relay-password" type="password" autoComplete="new-password" placeholder={state.relay?.password ? "Kept. Write a new one to change it" : ""} value={relay.password} onChange={(e) => setRelay({ ...relay, password: e.target.value })} onKeyDown={(e) => e.key === "Enter" && relayChanged && void saveRelay()} />
+					</Field>
+					<div>
+						<Button variant="outline" disabled={!relayChanged} onClick={() => void saveRelay()}>Save</Button>
+					</div>
+					{relayError ? <FieldError>{relayError}</FieldError> : check ? <FieldDescription data-slot="relay-check" data-result={check.result} className="data-[result=failed]:text-destructive">{check.message}</FieldDescription> : null}
 				</FieldGroup>
 			</FieldSet>
 

@@ -37,6 +37,8 @@ interface Kept {
 	/** The host key, OpenSSH private key format. */
 	hostKey: string;
 	devices: Device[];
+	/** The password of the owner's relay server: kept here, encrypted with the host key, and never in the app's preferences. */
+	relayPassword?: string;
 }
 
 /** The SHA-256 of an SSH public key blob in base64url without padding: a machine id, or a device's id. */
@@ -109,7 +111,7 @@ export class AccessStore {
 		const text = await vault.load();
 		if (text !== undefined) {
 			const kept = JSON.parse(text) as Kept;
-			return new AccessStore(vault, { hostKey: kept.hostKey, devices: Array.isArray(kept.devices) ? kept.devices : [] });
+			return new AccessStore(vault, { hostKey: kept.hostKey, devices: Array.isArray(kept.devices) ? kept.devices : [], ...(typeof kept.relayPassword === "string" && kept.relayPassword ? { relayPassword: kept.relayPassword } : {}) });
 		}
 		const store = new AccessStore(vault, { hostKey: newEd25519Key().private, devices: [] });
 		await store.write();
@@ -161,6 +163,19 @@ export class AccessStore {
 		const device = this.kept.devices.find((d) => d.id === id);
 		if (!device) return;
 		device.seen = when.toISOString();
+		await this.write();
+	}
+
+	/** The relay server's password, when one is kept. */
+	relayPassword(): string | undefined {
+		return this.kept.relayPassword;
+	}
+
+	/** Keeps the relay server's password, or forgets it (`undefined` or empty). */
+	async setRelayPassword(password: string | undefined): Promise<void> {
+		if ((password || undefined) === this.kept.relayPassword) return;
+		if (password) this.kept.relayPassword = password;
+		else delete this.kept.relayPassword;
 		await this.write();
 	}
 
