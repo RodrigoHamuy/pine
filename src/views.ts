@@ -14,6 +14,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { stripTypeScriptTypes } from "node:module";
 import { PINE_ROOT } from "./config.ts";
 
@@ -26,6 +27,8 @@ export const viewsDir = (home: string) => path.join(home, "views");
 const bundled = () => path.join(PINE_ROOT, "examples", "home", "views");
 /** The module views import, as it ships: the TypeScript itself, in the checkout and in the package. */
 const KIT = () => path.join(PINE_ROOT, "src", "view-kit.ts");
+/** How to write a view, in the folder itself: what a coding agent opened there reads first. */
+const GUIDE = "AGENTS.md";
 
 const TSCONFIG = `{
 	// For your editor: views import "pine/view", which pine keeps in .pine/view.ts.
@@ -44,11 +47,51 @@ const TSCONFIG = `{
 }
 `;
 
+/**
+ * The guide to writing a view, AGENTS.md in the views folder. It is put there when there is none, and again
+ * when what it describes has changed: pine's own guide, or the module views import. In between it is the
+ * owner's: a file of theirs that was there before pine's, or a change they made to pine's, is left alone.
+ * When the guide is written anew over such a file, theirs is kept beside it as AGENTS.before.md.
+ * `.pine/guide.json` says which guide pine last had (`for`) and the text it last wrote (`wrote`), as hashes.
+ * No agent of pine's reads the guide.
+ */
+function seedGuide(dir: string, kit: string): void {
+	const from = path.join(bundled(), GUIDE);
+	if (!fs.existsSync(from)) return;
+	const now = fs.readFileSync(from, "utf8");
+	const hash = (s: string) => createHash("sha256").update(s).digest("hex").slice(0, 16);
+	const version = hash(`${now}\n${kit}`);
+	const file = path.join(dir, GUIDE);
+	const stampFile = path.join(dir, ".pine", "guide.json");
+	let stamp: { for?: string; wrote?: string } = {};
+	try {
+		stamp = JSON.parse(fs.readFileSync(stampFile, "utf8"));
+	} catch {}
+	const there = fs.existsSync(file) && fs.lstatSync(file).isFile() ? fs.readFileSync(file, "utf8") : undefined;
+	const put = () => {
+		fs.rmSync(file, { force: true });
+		fs.writeFileSync(file, now, { mode: 0o600 });
+		stamp.wrote = hash(now);
+	};
+	if (there === undefined) put();
+	// The owner's own file, there before pine ever wrote one: it is left alone until the guide changes.
+	else if (stamp.for !== undefined && stamp.for !== version && there !== now) {
+		if (hash(there) !== stamp.wrote) fs.writeFileSync(path.join(dir, "AGENTS.before.md"), there, { mode: 0o600 });
+		put();
+	}
+	if (stamp.for !== version || !fs.existsSync(stampFile)) {
+		stamp.for = version;
+		fs.writeFileSync(stampFile, `${JSON.stringify(stamp)}\n`, { mode: 0o600 });
+	}
+}
+
 export type ViewEntry = { id: string; file: string } | { id: string; file: string; problem: string };
 
 /**
  * The first start of a home without a views folder: pine's own views go into it. At every start, the
- * module views import is brought up to date in .pine/, and a tsconfig.json put there if none is.
+ * module views import is brought up to date in .pine/, a tsconfig.json is put there if none is, and the
+ * guide to writing a view (AGENTS.md, for the owner or a coding agent opened in the folder) if there is
+ * none or what it describes has changed (`seedGuide`).
  */
 export function seedViews(home: string): void {
 	const dir = viewsDir(home);
@@ -69,6 +112,7 @@ export function seedViews(home: string): void {
 	}
 	const tsconfig = path.join(dir, "tsconfig.json");
 	if (!fs.existsSync(tsconfig)) fs.writeFileSync(tsconfig, TSCONFIG, { mode: 0o600 });
+	seedGuide(dir, text);
 }
 
 /** Every view in the home's folder, by name: a file pine cannot hand on is listed with what is wrong with it. */

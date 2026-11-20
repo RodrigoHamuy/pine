@@ -10,7 +10,7 @@ import { type Harness, harness } from "./support/harness.ts";
 
 const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-views-")));
 
-test("a home gets pine's views once, the module views import and a tsconfig for the owner's editor; after that the folder is the owner's", () => {
+test("a home gets pine's views once, the module views import, a tsconfig for the owner's editor and the guide to writing a view; after that the folder is the owner's", () => {
 	const home = tmp();
 	try {
 		seedViews(home);
@@ -18,13 +18,49 @@ test("a home gets pine's views once, the module views import and a tsconfig for 
 		assert.ok(fs.existsSync(path.join(dir, "office.ts")));
 		assert.equal(fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8"), fs.readFileSync(path.resolve(import.meta.dirname, "..", "src", "view-kit.ts"), "utf8"));
 		assert.match(fs.readFileSync(path.join(dir, "tsconfig.json"), "utf8"), /"pine\/view": \["\.\/\.pine\/view\.ts"\]/);
+		// The guide for whoever writes a view, also a coding agent opened in the folder: it names what the module really has.
+		const guide = fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8");
+		const kit = fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8");
+		for (const name of ["defineView", "running", "frame", "ease", "union", "inside", "along", "lengthOf", "hashOf", "seeded", "mix", "shade", "rgb"]) assert.ok(guide.includes("`" + name) && new RegExp(`export (function|const) ${name}\\b`).test(kit), `${name} is in the guide and in the module`);
+		for (const field of ["agents", "work", "inputs", "schedules", "selected", "dark", "focused"]) assert.ok(guide.includes(`\`${field}\``) && new RegExp(`\\b${field}\\??:`).test(kit), `ViewState.${field}`);
+		// It is the owner's while pine's guide is the same: a change is kept, and one that was taken out comes back.
+		fs.writeFileSync(path.join(dir, "AGENTS.md"), "mine");
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), "mine");
+		fs.rmSync(path.join(dir, "AGENTS.md"));
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), guide);
+		// What the guide describes changes (the module views import, here: as an older pine had it): it is written
+		// anew. Untouched since pine wrote it, nothing of it is kept; changed by the owner, theirs is kept beside it.
+		const stamp = path.join(dir, ".pine", "guide.json");
+		const older = () => fs.writeFileSync(stamp, JSON.stringify({ ...JSON.parse(fs.readFileSync(stamp, "utf8")), for: "an-older-pine" }));
+		older();
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), guide);
+		assert.ok(!fs.existsSync(path.join(dir, "AGENTS.before.md")), "an unchanged guide leaves nothing behind");
+		fs.writeFileSync(path.join(dir, "AGENTS.md"), "mine, with notes");
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), "mine, with notes", "the same pine: the owner's change stays");
+		older();
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8"), guide, "the API changed: the guide is pine's new one");
+		assert.equal(fs.readFileSync(path.join(dir, "AGENTS.before.md"), "utf8"), "mine, with notes", "and the owner's is kept beside it");
+		fs.rmSync(path.join(dir, "AGENTS.before.md"));
+		// A file of the owner's own that was there before pine ever wrote a guide is left alone.
+		const own = tmp();
+		fs.mkdirSync(path.join(own, "views"));
+		fs.writeFileSync(path.join(own, "views", "AGENTS.md"), "my own notes");
+		seedViews(own);
+		seedViews(own);
+		assert.equal(fs.readFileSync(path.join(own, "views", "AGENTS.md"), "utf8"), "my own notes");
+		fs.rmSync(own, { recursive: true, force: true });
 		// The owner takes the office out: it stays out. The kit is brought back up to date all the same.
 		fs.rmSync(path.join(dir, "office.ts"));
 		fs.writeFileSync(path.join(dir, ".pine", "view.ts"), "old");
 		seedViews(home);
 		assert.ok(!fs.existsSync(path.join(dir, "office.ts")));
 		assert.notEqual(fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8"), "old");
-		assert.deepEqual(listViews(home), [], "the kit and the tsconfig are no views");
+		assert.deepEqual(listViews(home), [], "the kit, the tsconfig and the guide are no views");
 		assert.equal(viewInForce(undefined, listViews(home)), undefined, "no view: the app shows no button");
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });

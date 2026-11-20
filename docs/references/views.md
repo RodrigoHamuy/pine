@@ -54,6 +54,14 @@ pine keeps the module a view imports beside the views, as `views/.pine/view.ts`,
 the completion and the checks are there. `.pine/` and the tsconfig are pine's, brought up to date at
 every start; they are no views.
 
+The folder also has a guide, `views/AGENTS.md`: the rules of a view, the smallest one, what the host
+gives it and how to try it. It is there for you and for a coding agent you open in that folder to
+have a view written; pine's own agents do not read it, and none of them can write a view (the folder
+lies in pine's home). pine puts it there when there is none, and again when what it describes has
+changed with a new version of pine (the guide itself, or the module a view imports). In between it
+is yours: a change of yours is kept. When pine writes the guide anew over one you changed, yours is
+kept beside it as `AGENTS.before.md`.
+
 The TypeScript is taken away before the app runs a view (Node's own type stripping), so a view uses
 types that can simply be erased: no `enum`, no `namespace`, no parameter properties.
 

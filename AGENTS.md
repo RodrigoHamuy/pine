@@ -75,7 +75,10 @@ src/
   themes.ts         the themes of the owner's UIs: VS Code color theme files in <home>/themes (seeded once from
                     examples/home/themes), listed for `GET /themes`, the one `ui.theme` names
   views.ts          the views of the Pine app's panel: scripts of the owner's in <home>/views, listed, handed over
-                    with their types stripped (never run by the daemon), `ui.view`; seeded once from examples/home/views
+                    with their types stripped (never run by the daemon), `ui.view`; seeded once from examples/home/views,
+                    with the guide to writing one (`views/AGENTS.md`, for the owner or a coding agent opened there;
+                    no agent of pine's reads it), which is written anew when it or `view-kit.ts` changed (`seedGuide`).
+                    Keep that guide true to `view-kit.ts`: `test/views.test.ts` checks its names
   view-kit.ts       `pine/view`, what a view imports: the types of what a view is told, `defineView`, helpers. No
                     Node, no DOM: the app's view frame runs it, and pine copies it into <home>/views/.pine for editors
   theme-colors.ts   a VS Code color theme resolved into pine's color roles, as hex colors and nothing else (no
