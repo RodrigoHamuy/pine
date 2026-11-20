@@ -2325,6 +2325,12 @@ function AppPage() {
 							</div>
 						) : null}
 					</Field>
+					{service?.olderThan ? (
+						<Alert data-notice="older-pine">
+							<TriangleAlertIcon />
+							<AlertDescription>{`This pine is ${service.version}, older than the pine of this app (${service.olderThan}). The app did not start it, so it leaves it as it is: restart that pine on ${service.olderThan} (update it with "pine update" if it is an install of its own), or stop it and the app starts its own.`}</AlertDescription>
+						</Alert>
+					) : null}
 					{local ? (
 						<Field orientation="horizontal">
 							<FieldContent>

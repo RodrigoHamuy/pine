@@ -11,10 +11,10 @@ import type { Cipher } from "./access/host.ts";
 import { startStandIn } from "./access/stand-in.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp, VIEW_CSP } from "./daemon.ts";
-import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
+import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, pineVersion, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
 import { Terminals } from "./terminal.ts";
 import { makeUpdater } from "./updater.ts";
-import { LATEST, lookForUpdate, type Update } from "./updates.ts";
+import { ahead, LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanLook, type Look } from "../src/theme.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -134,7 +134,18 @@ function savePrefs(): void {
 
 // One pine at a time: this computer's, or another machine's over SSH (Settings > Environments). The
 // page knows only that there is one; which it is, it is told in the state (`host`, `label`).
-type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | { status: "error"; kind: ServiceError["kind"]; message: string; host?: string };
+type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string; olderThan?: string } | { status: "error"; kind: ServiceError["kind"]; message: string; host?: string };
+
+/**
+ * The version of the pine this app runs (the one it carries, in a packed app) when the daemon of
+ * this computer it attached to says an older one, by the rule of the update check. A daemon the
+ * app started, another machine's, or one on the same or a newer version: undefined.
+ */
+function olderThan(s: Service, host: string | undefined): string | undefined {
+	if (host || s.started || !s.version || !launch) return undefined;
+	const mine = pineVersion(launch);
+	return mine && ahead(mine, s.version) ? mine : undefined;
+}
 
 let win: BrowserWindow | undefined;
 let service: Service | undefined;
@@ -176,7 +187,7 @@ async function startService(): Promise<void> {
 		// Another machine was picked while this one connected: it stays held, and the other is shown.
 		if (mine !== round) return;
 		service = s;
-		setState({ status: "ready", mode: s.mode, started: s.started, home: s.home, version: s.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: s.host, label: s.label });
+		setState({ status: "ready", mode: s.mode, started: s.started, home: s.home, version: s.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: s.host, label: s.label, olderThan: olderThan(s, host) });
 		follow(s);
 	} catch (e) {
 		if (mine !== round) return;

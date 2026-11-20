@@ -185,6 +185,7 @@ for the daemon of your home:
 | What it finds | What happens |
 |---|---|
 | A pine is running for this home (started in a terminal, at login, by the terminal UI) | The app attaches to it. The side bar says `attached`. Quitting the app leaves it running |
+| `An older pine runs` | The pine the app attached to is older than the pine the app carries. Said at the foot of the side bar and in Settings > App, with both versions. Restart that pine on the newer version yourself, or stop it and let the app start its own. Never said of a pine the app started |
 | Nothing runs | The app starts one, as the terminal UI does, logging to `data/pine.log`. The side bar says `started here`. Quitting the app stops it, cleanly |
 | There is no pine home yet | A first screen offers to set pine up (`pine init`): the example home and the browser its web tools drive |
 | No Node, or no pine | A screen that says what to install |

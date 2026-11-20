@@ -138,6 +138,20 @@ export function pineRoot(launch: Launch): string | undefined {
 	}
 }
 
+/**
+ * The version of the pine the app runs, as its package says: in a packed app the pine it carries,
+ * whose version is the app's. Undefined when it cannot be told.
+ */
+export function pineVersion(launch: Launch): string | undefined {
+	const root = pineRoot(launch);
+	try {
+		const version = root ? JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version : undefined;
+		return typeof version === "string" ? version : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 /** Run a pine command to its end and hand on what it prints, line by line. For `pine init` on a first start. */
 export function runPine(launch: Launch, args: string[], onLine: (line: string) => void, extraEnv: NodeJS.ProcessEnv = {}): Promise<number> {
 	return new Promise((resolve) => {

@@ -20,7 +20,21 @@ export type ServiceState = {
 			 * Before the computer answered, neither. The other bridges leave it out.
 			 */
 			pairing?: { code?: string; name?: string };
-	  } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | {
+	  } | {
+			status: "ready";
+			mode: string;
+			started: boolean;
+			home: string;
+			version?: string;
+			from: string;
+			host?: string;
+			label?: string;
+			/**
+			 * The version of the pine this app runs (the one it carries), when the daemon of this computer
+			 * that it attached to (not started) says an older one. The desktop bridge alone sets it.
+			 */
+			olderThan?: string;
+	  } | {
 			status: "error";
 			kind: "no-home" | "no-node" | "no-pine" | "ssh" | "failed";
 			message: string;

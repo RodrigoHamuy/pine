@@ -68,6 +68,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["can I run the commands the agent gives me with a play button", /^desktop#the-terminal/],
 		["where do I type shell commands myself in the Pine app", /^desktop#the-terminal/],
 		["does the mac app start pine or do I have to start it first", /^desktop#the-daemon-started-or-reused/],
+		["the mac app says an older pine runs, the one I started in a terminal", /^desktop#the-daemon-started-or-reused/],
 		["can I use pine on my phone", /^mobile/],
 		["where do I download pine for Android", /^mobile#getting-it/],
 		["how do I install pine on my iPhone", /^mobile#(getting-it|on-an-iphone)/],
