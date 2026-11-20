@@ -28,9 +28,11 @@ export const macFingerprint = (id: string) => `SHA256:${id.replace(/-/g, "+").re
  * keeps, malformed or not. A malformed one is ignored, with a message for the console.
  */
 export function takePairLink(address: { href: string; hash: string }, replace: (url: string) => void): { link?: PairLink; problem?: string } {
-	if (!address.hash.startsWith("#pair=")) return {};
-	replace(address.href.slice(0, address.href.indexOf("#")));
-	const [id, code, ...more] = address.hash.slice("#pair=".length).split(".");
+	// Read before it is replaced: `location` says the new address at once.
+	const { href, hash } = address;
+	if (!hash.startsWith("#pair=")) return {};
+	replace(href.slice(0, href.indexOf("#")));
+	const [id, code, ...more] = hash.slice("#pair=".length).split(".");
 	if (more.length || !MACHINE_ID.test(id ?? "") || !PAIR_CODE.test(code ?? "")) return { problem: "That pairing link is not one this page can read: it was ignored. Open Pine on the Mac and add this device again." };
 	return { link: { id, code } };
 }
