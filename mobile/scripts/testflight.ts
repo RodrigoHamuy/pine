@@ -3,6 +3,8 @@
 // adds it to the external group with the public link and submits it to Beta App Review, for a
 // preview (`next`) adds it to the internal group. A build already in its group, or already
 // submitted, is a success: a rebuild of a release from its tag runs this again.
+// scripts/upload.ts calls `distribute` itself once the build is uploaded; the command below is
+// for running a distribution by hand, for a build that is on App Store Connect already:
 //   node scripts/testflight.ts --key AuthKey_ABC123DEFG.p8 --key-id ABC123DEFG --issuer-id <uuid> \
 //     --version 0.39.0 --build 39999 --channel latest --notes "feat: ..."
 // The key may be given as content in ASC_KEY instead of --key (the Release workflow's secret), and
@@ -16,6 +18,8 @@ import { parseArgs } from "node:util";
 export type Key = { pem: string; keyId: string; issuerId: string };
 export type Channel = "latest" | "next";
 
+/** The app's bundle id, as in ios/App/App.xcodeproj. */
+export const BUNDLE_ID = "dev.pmndre.pine";
 /** The external TestFlight group with the public link: every release from `main`. */
 export const EXTERNAL_GROUP = "Public";
 /** The internal TestFlight group, the maintainers' own devices: every preview from `next`. */
@@ -67,7 +71,9 @@ type ApiErrorEntry = { status?: string; code?: string; title?: string; detail?: 
 function advice(status: number, errors: ApiErrorEntry[]): string {
 	const codes = errors.map((e) => e.code ?? "").join(" ");
 	if (status === 401) return "Check the key id, the issuer id and the key file: they must be one App Store Connect API key of the team, not revoked.";
-	if (status === 403) return "The API key needs the App Manager role in App Store Connect (Users and Access > Integrations).";
+	// Admin, not App Manager: the cloud-managed distribution signing of scripts/upload.ts needs
+	// it, and one key serves both.
+	if (status === 403) return "The API key needs the Admin role in App Store Connect (Users and Access > Integrations): make a key with it, then run this again.";
 	if (codes.includes("CONTRACT")) return "Accept the current agreements in App Store Connect (Business) and the Program License Agreement at developer.apple.com, then run this again.";
 	if (status === 429) return "App Store Connect limits how often it is called: run this again in an hour.";
 	if (status >= 500) return "App Store Connect failed on its side: run this again later.";
@@ -98,6 +104,17 @@ async function already(action: () => Promise<unknown>) {
 		if (e instanceof ApiError && e.status === 409 && e.errors.some((x) => /already/i.test(`${x.detail} ${x.title}`))) return;
 		throw e;
 	}
+}
+
+/** The key's content, checked to be a private key before anything is signed with it. */
+export function privateKey(pem: string): string {
+	try {
+		crypto.createPrivateKey(pem);
+	} catch {
+		// Not the key in the message: it is a secret even when it is malformed.
+		throw new Error("The key is not a private key: give the AuthKey_<id>.p8 file App Store Connect gave for the API key, as it was downloaded.");
+	}
+	return pem;
 }
 
 export async function distribute(options: Options): Promise<void> {
@@ -192,7 +209,7 @@ async function main() {
 			key: { type: "string" },
 			"key-id": { type: "string" },
 			"issuer-id": { type: "string" },
-			"bundle-id": { type: "string", default: "dev.pmndre.pine" },
+			"bundle-id": { type: "string", default: BUNDLE_ID },
 			version: { type: "string" },
 			build: { type: "string" },
 			channel: { type: "string" },
@@ -210,12 +227,7 @@ async function main() {
 	if (channel !== "latest" && channel !== "next") throw new Error(`--channel is latest (a release from main) or next (a preview), not "${channel}".`);
 	if (!/^\d+\.\d+\.\d+$/.test(version!)) throw new Error(`--version is X.Y.Z (CFBundleShortVersionString), not "${version}".`);
 	if (!/^\d+$/.test(build!)) throw new Error(`--build is a number (CFBundleVersion), not "${build}".`);
-	try {
-		crypto.createPrivateKey(pem!);
-	} catch {
-		// Not the key in the message: it is a secret even when it is malformed.
-		throw new Error("The key is not a private key: give the AuthKey_<id>.p8 file App Store Connect gave for the API key, as it was downloaded.");
-	}
+	privateKey(pem!);
 	await distribute({ key: { pem: pem!, keyId: keyId!, issuerId: issuerId! }, bundleId: values["bundle-id"]!, version: version!, build: build!, channel, notes: notes!, base: values.api });
 }
 

@@ -225,7 +225,7 @@ Components).
 | `npm run sync:ios` | Builds the page for iOS (WebKit, media on `pine-media:`) and copies it into `ios/` |
 | `npm run ios` | A debug build for the simulator, in `ios/DerivedData` |
 | `npm run ios:run` | Builds the app and opens it in the Simulator app |
-| `npm run ipa` | The IPA of a release or a preview, not signed, in `ios/App/output/Pine-<version>.ipa` (`npm run ipa -- 0.38.0`, or a preview's `0.38.0-next.4`, whose file keeps the full version; 0.0.0 without a version). It fails unless the app inside is unsigned and arm64. The TestFlight build is the same archive, signed and uploaded by the Release workflow (see "In a release") |
+| `npm run ipa` | The IPA of a release or a preview, not signed, in `ios/App/output/Pine-<version>.ipa` (`npm run ipa -- 0.38.0`, or a preview's `0.38.0-next.4`, whose file keeps the full version; 0.0.0 without a version). It fails unless the app inside is unsigned and arm64. The TestFlight build is the same app, signed and uploaded by `npm run testflight` (see "In a release") |
 | `npm run smoke:ios` | Builds the app and a test that runs inside it, starts a simulator of its own without a window, and drives the page against a test machine on the Mac's loopback. It is the test of the web view's hardening (the page's policy, no camera, microphone or motion sensors, no file access, the media scheme's rules and ranges, no window, no navigation away), of the page inside the safe area with and without the keyboard, of a host key's fingerprint within the screen's width, of the return from the background, of the status bar in a dark theme and a light one, and of the key kept across a relaunch. Run it before a release that changes `mobile/` or upgrades Capacitor |
 | `swift test` (in `ios-core/`) | The iOS app's Swift core on the Mac, against an OpenSSH `sshd` of the test's own and a stand-in daemon |
 
@@ -254,8 +254,9 @@ The same release gets `Pine-<version>.ipa` from the job `ios`, on GitHub's runne
 Xcode 27 (`xcode-27`), with no secret: it checks and tests `mobile/`, runs `swift test` for the
 core, and `npm run ipa` with the release's version.
 
-The job `testflight` builds the same app signed by the maintainer's Apple team and uploads it to
-App Store Connect, for every release from `main` and every preview from `next`:
+The job `testflight` runs `npm run testflight` (`scripts/upload.ts`), which builds the same app
+signed by the maintainer's Apple team and uploads it to App Store Connect, for every release from
+`main` and every preview from `next`:
 
 | Channel | Where the build goes |
 |---|---|
@@ -263,9 +264,11 @@ App Store Connect, for every release from `main` and every preview from `next`:
 | A preview from `next` | The internal group `Maintainers`, the maintainer's own devices, with no review |
 
 Its "What to Test" is the release's commit subject. It takes the App Store Connect API key from
-the environment `testflight`; without it the job uploads nothing and says so, and the rest of
-the release is unaffected. After the upload, `scripts/testflight.ts` puts the build into its group
-through the App Store Connect API. It needs, once, in App Store Connect: an external group named
+the environment `testflight` (a key with the Admin role, which cloud-managed signing needs);
+without it the job uploads nothing and says so, and the rest of the release is unaffected. After
+the upload, in the same run, `scripts/testflight.ts` puts the build into its group through the App
+Store Connect API. The maintainer can run the same on a Mac: `npm run testflight -- --version
+<X.Y.Z or X.Y.Z-next.N> --key <AuthKey.p8> --key-id <id> --issuer-id <uuid>`. It needs, once, in App Store Connect: an external group named
 exactly `Public` with its public link on, an internal group named exactly `Maintainers`, and the
 beta agreement accepted (without it a review submission fails with `BETA_CONTRACT_MISSING`).
 
@@ -274,5 +277,6 @@ build number (`CFBundleVersion`): Android's `versionCode` × 1000, plus `N` for 
 `X.Y.Z-next.N` and 999 for the release, so that a release comes after all its previews.
 
 To build the APK and the IPAs of a release again, run the workflow by hand from `main` with that
-release's version: `gh workflow run release.yml -f version=0.38.0`. A build App Store Connect
-already has is reported as uploaded already.
+release's version: `gh workflow run release.yml -f version=0.38.0`. `npm run testflight` keeps
+the build number it was given, so a build App Store Connect already has is reported as uploaded
+already.

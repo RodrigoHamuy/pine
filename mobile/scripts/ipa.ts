@@ -1,6 +1,6 @@
 // The iOS app of a release as an unsigned IPA, the file a person sideloads with AltStore or
-// Sideloadly, which sign it with their own Apple ID when they install it. Nothing here signs: pine
-// has no Apple certificate, profile or account, and wants none.
+// Sideloadly, which sign it with their own Apple ID when they install it. Nothing here signs: the
+// signed build for TestFlight is scripts/upload.ts's.
 //   node scripts/ipa.ts [version]      (npm run ipa -- 0.38.0, or a preview: 0.38.0-next.4)
 // Builds the page for iOS and syncs it (npm run sync:ios), archives the app for devices with code
 // signing off, its version X.Y.Z and its build number the one a signed build of the same version

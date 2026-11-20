@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { alreadyUploaded, archiveArgs, exportArgs, exportOptions, inputsOf, TEAM } from "../scripts/upload.ts";
+import { alreadyUploaded, archiveArgs, exportArgs, exportOptions, failed, inputsOf, TEAM } from "../scripts/upload.ts";
 
 const key = { ASC_KEY: "-----BEGIN PRIVATE KEY-----\nabc\n-----END PRIVATE KEY-----\n", ASC_KEY_ID: "ABC123DEFG", ASC_ISSUER_ID: "57246542-96fe-1a63-e053-0824d011072a" };
 
@@ -122,4 +122,35 @@ test("run as a command without the key, it passes and writes in the job's summar
 	assert.equal(r.status, 0, r.stderr);
 	assert.match(r.stdout, /nothing was uploaded/);
 	assert.match(fs.readFileSync(file, "utf8"), /nothing was uploaded/);
+});
+
+test("a step that fails is named and says what to do next", () => {
+	const archive = failed("xcodebuild archive", 65);
+	assert.match(archive, /^xcodebuild archive failed \(exit 65\)/);
+	assert.match(archive, /output above/);
+	assert.match(archive, /Admin role/);
+	assert.match(archive, /agreements/);
+	assert.match(archive, /developer\.apple\.com/);
+	assert.match(archive, /App Store Connect/);
+	assert.match(archive, /run this again/);
+	assert.doesNotMatch(archive, /App Manager/);
+	assert.match(failed("npm run sync:ios", 1), /^npm run sync:ios failed \(exit 1\)/);
+});
+
+test("run as a command with a key that is not one, it says so before it builds anything", () => {
+	// An empty PATH: were npm or xcodebuild started, the run would fail on that instead.
+	const env = { PATH: fs.mkdtempSync(path.join(os.tmpdir(), "pine-nopath-")), ASC_KEY: "-----BEGIN PRIVATE KEY-----\nnonsense\n-----END PRIVATE KEY-----\n", ASC_KEY_ID: "ABC123DEFG", ASC_ISSUER_ID: "issuer" };
+	const r = spawnSync(process.execPath, [path.join(import.meta.dirname, "../scripts/upload.ts"), "--version", "0.39.0", "--notes", "x"], { encoding: "utf8", env });
+	assert.equal(r.status, 1);
+	assert.match(r.stderr, /not a private key/);
+	assert.doesNotMatch(r.stdout + r.stderr, /nonsense/);
+	assert.doesNotMatch(r.stdout, /signed by team/);
+});
+
+test("run as a command with a key file that is not there, it says so before it builds anything", () => {
+	const env = { PATH: fs.mkdtempSync(path.join(os.tmpdir(), "pine-nopath-")) };
+	const r = spawnSync(process.execPath, [path.join(import.meta.dirname, "../scripts/upload.ts"), "--version", "0.39.0", "--notes", "x", "--key", "/nowhere/AuthKey_X.p8", "--key-id", "X", "--issuer-id", "i"], { encoding: "utf8", env });
+	assert.equal(r.status, 1);
+	assert.match(r.stderr, /\/nowhere\/AuthKey_X\.p8/);
+	assert.doesNotMatch(r.stdout, /signed by team/);
 });

@@ -46,7 +46,7 @@ name: Release
 # to Beta App Review, for a preview added to the internal group "Maintainers"
 # (mobile/scripts/testflight.ts). That needs three secrets, in an environment named "testflight"
 # restricted to the branches main and next, so that the secrets of "release" stay main's alone:
-#   ASC_KEY        an App Store Connect API key with the App Manager role: the text of its .p8 file
+#   ASC_KEY        an App Store Connect API key with the Admin role (cloud-managed signing needs it): the text of its .p8 file
 #   ASC_KEY_ID     that key's ID
 #   ASC_ISSUER_ID  the issuer ID shown above the keys
 # Without them nothing is uploaded, the job passes and its summary says so; with only some it
@@ -413,9 +413,10 @@ jobs:
           DEVELOPER_DIR="$xcode/Contents/Developer" xcodebuild -version
       - if: steps.key.outputs.ready == 'true'
         run: npm ci && npm ci --prefix desktop && npm ci --prefix mobile
-      - if: steps.key.outputs.ready == 'true'
+      - if: steps.key.outputs.ready == 'true' && github.event_name != 'workflow_dispatch' && needs.release.outputs.channel == 'next'
         name: Check and test the mobile package and the iOS core
-        # A preview gets no ios job: what its build is made from is tested here.
+        # A preview gets no ios job: what its build is made from is tested here. A release from main
+        # and a run by hand have the ios job, which runs the same checks.
         run: npm run check --prefix mobile && npm test --prefix mobile && swift test --package-path mobile/ios-core
       - if: steps.key.outputs.ready == 'true'
         name: Sign, upload and distribute

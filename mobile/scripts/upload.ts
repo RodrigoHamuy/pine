@@ -14,14 +14,16 @@
 // line, and nowhere in the project, so the unsigned IPA (scripts/ipa.ts) and the simulator builds
 // are unchanged. The archive is exported with destination `upload`, which uploads it; a build App
 // Store Connect already has is reported as such and the distribution goes on (a rebuild of a tag).
-// Then scripts/testflight.ts waits for the build and distributes it. Node's own modules only; the
-// key's content is written to a file of its own, removed whatever happens, and never printed.
+// Then `distribute` of scripts/testflight.ts, called here, waits for the build and distributes it.
+// The key is read once and checked to be a private key before anything is built; xcodebuild is
+// given a file (the one of --key, or the content of ASC_KEY written to one of its own, removed
+// whatever happens), and nothing prints it. Node's own modules only.
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { parseArgs } from "node:util";
-import type { Channel } from "./testflight.ts";
+import { BUNDLE_ID, type Channel, distribute, type Key, privateKey } from "./testflight.ts";
 import { iosVersion } from "./version-code.ts";
 
 /** The maintainer's Apple Developer team (individual), which signs the TestFlight builds. */
@@ -139,12 +141,23 @@ export function exportArgs(o: { archive: string; exportPath: string; options: st
 // number '1.0'." (ITMS-90189, earlier ITMS-4238), and in later uploads "The bundle version must be
 // higher than the previously uploaded version: '12'." with the code
 // ENTITY_ERROR.ATTRIBUTE.INVALID.DUPLICATE. The second also comes for a number lower than one
-// uploaded before; testflight.ts then finds no such build and fails, which is right.
+// uploaded before; `distribute` then finds no such build and fails, which is right.
 const ALREADY = [/Redundant Binary Upload/i, /already uploaded a build with build number/i, /bundle version must be higher than the previously uploaded version/i, /ENTITY_ERROR\.ATTRIBUTE\.INVALID\.DUPLICATE/];
 
 /** Whether xcodebuild's output says App Store Connect already has this build. */
 export function alreadyUploaded(output: string): boolean {
 	return ALREADY.some((re) => re.test(output));
+}
+
+/** What a failed step says: which step, and what to do before running this again. */
+export function failed(step: string, status: number | string | null): string {
+	return [
+		`${step} failed (exit ${status}).`,
+		"Read its output above for the cause.",
+		// What most often stops automatic signing with an API key.
+		"For a signing error, check that the App Store Connect API key has the Admin role (Users and Access > Integrations) and that the current agreements are accepted at developer.apple.com and in App Store Connect (Business).",
+		"Then run this again.",
+	].join(" ");
 }
 
 const mobile = path.resolve(import.meta.dirname, "..");
@@ -163,6 +176,20 @@ async function main() {
 	}
 	const { channel, short, build, notes } = inputs;
 
+	// The key is read once, here, and checked before anything is built with it.
+	let pem: string;
+	if ("pem" in inputs.key) {
+		pem = inputs.key.pem;
+	} else {
+		try {
+			pem = fs.readFileSync(inputs.key.path, "utf8");
+		} catch (e) {
+			throw new Error(`The key file ${inputs.key.path} cannot be read (${(e as NodeJS.ErrnoException).code}): give the path of the AuthKey_<id>.p8 file App Store Connect gave for the API key.`);
+		}
+	}
+	privateKey(pem);
+	const ascKey: Key = { pem, keyId: inputs.key.keyId, issuerId: inputs.key.issuerId };
+
 	// The key's content goes into a file only this user reads, in a folder of its own that is
 	// removed at the end, also when the run is interrupted.
 	const temp = fs.mkdtempSync(path.join(os.tmpdir(), "pine-asc-"));
@@ -172,7 +199,7 @@ async function main() {
 	let keyPath: string;
 	if ("pem" in inputs.key) {
 		keyPath = path.join(temp, `AuthKey_${inputs.key.keyId}.p8`);
-		fs.writeFileSync(keyPath, inputs.key.pem.endsWith("\n") ? inputs.key.pem : `${inputs.key.pem}\n`, { mode: 0o600 });
+		fs.writeFileSync(keyPath, pem.endsWith("\n") ? pem : `${pem}\n`, { mode: 0o600 });
 	} else {
 		keyPath = path.resolve(inputs.key.path);
 	}
@@ -181,9 +208,10 @@ async function main() {
 	const env = { ...process.env };
 	delete env.ASC_KEY;
 
-	const run = (cmd: string, args: string[]) => {
+	const run = (step: string, cmd: string, args: string[]) => {
 		const r = spawnSync(cmd, args, { cwd: mobile, stdio: "inherit", env });
-		if (r.status !== 0) throw new Error(`${cmd} ${args[0]} failed (exit ${r.status ?? r.signal}).`);
+		if (r.error) throw new Error(`${step} could not start: ${r.error.message}. ${cmd} has to be on the PATH (Xcode for xcodebuild, Node for npm).`);
+		if (r.status !== 0) throw new Error(failed(step, r.status ?? r.signal));
 	};
 	// The output is shown as it comes and kept, to read App Store Connect's answer in it.
 	const runKept = (cmd: string, args: string[]) =>
@@ -205,23 +233,23 @@ async function main() {
 	const work = path.join(mobile, "ios", "App", "build", "testflight");
 	const archive = path.join(work, "App.xcarchive");
 	console.log(`Pine ${short} (${build}) for TestFlight, channel ${channel}, signed by team ${TEAM}`);
-	run("npm", ["run", "sync:ios"]);
+	run("npm run sync:ios", "npm", ["run", "sync:ios"]);
 	fs.rmSync(work, { recursive: true, force: true });
 	fs.mkdirSync(work, { recursive: true });
-	run("xcodebuild", archiveArgs({ archive, derivedData: path.join(work, "DerivedData"), short, build, key }));
+	run("xcodebuild archive", "xcodebuild", archiveArgs({ archive, derivedData: path.join(work, "DerivedData"), short, build, key }));
 
 	const options = path.join(work, "ExportOptions.plist");
 	fs.writeFileSync(options, exportOptions(TEAM));
 	const exported = await runKept("xcodebuild", exportArgs({ archive, exportPath: path.join(work, "export"), options, key }));
 	if (exported.status !== 0) {
-		if (!alreadyUploaded(exported.output)) throw new Error(`xcodebuild -exportArchive failed (exit ${exported.status}): the build was not uploaded.`);
+		if (!alreadyUploaded(exported.output)) throw new Error(`The build was not uploaded. ${failed("xcodebuild -exportArchive (the upload)", exported.status)}`);
 		console.log(`App Store Connect already has Pine ${short} (${build}): it was uploaded before, and is distributed as it is.`);
 		summary(`Pine ${short} (${build}) was already on App Store Connect; it was not uploaded again.`);
 	} else {
 		summary(`Pine ${short} (${build}) was signed by team ${TEAM} and uploaded to App Store Connect.`);
 	}
 
-	run(process.execPath, [path.join(mobile, "scripts", "testflight.ts"), "--key", keyPath, "--key-id", key.keyId, "--issuer-id", key.issuerId, "--version", short, "--build", String(build), "--channel", channel, "--notes", notes]);
+	await distribute({ key: ascKey, bundleId: BUNDLE_ID, version: short, build: String(build), channel, notes });
 	summary(`Pine ${short} (${build}) is on TestFlight, in the ${channel === "latest" ? "external group and submitted to Beta App Review" : "internal group"}.`);
 }
 

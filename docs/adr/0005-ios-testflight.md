@@ -26,8 +26,8 @@ link the README and the release page give, and submitted to Beta App Review. Eve
 that a preview is tried on a real iPhone before `next` is moved to `main`. The unsigned IPA stays
 attached to every release, and its job `ios` keeps no secret and no environment.
 
-**One App Store Connect API key, cloud-managed signing.** The key (role App Manager) is the only
-Apple secret. `xcodebuild` signs automatically with it (`-allowProvisioningUpdates`), with Apple's
+**One App Store Connect API key, cloud-managed signing.** The key (role Admin: cloud-managed
+signing needs it, App Manager is not enough) is the only Apple secret. `xcodebuild` signs automatically with it (`-allowProvisioningUpdates`), with Apple's
 cloud-managed distribution certificate: no `.p12`, no provisioning profile, no fastlane, nothing
 to rotate by hand. The team is given on the command line of the signed build only
 (`DEVELOPMENT_TEAM`), never committed into the project, so the unsigned and simulator builds are

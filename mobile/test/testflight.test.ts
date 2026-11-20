@@ -9,7 +9,7 @@ import type { AddressInfo } from "node:net";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { distribute, EXTERNAL_GROUP, INTERNAL_GROUP, token } from "../scripts/testflight.ts";
+import { distribute, EXTERNAL_GROUP, INTERNAL_GROUP, privateKey, token } from "../scripts/testflight.ts";
 
 const pair = crypto.generateKeyPairSync("ec", { namedCurve: "prime256v1" });
 const pem = pair.privateKey.export({ type: "pkcs8", format: "pem" }) as string;
@@ -259,6 +259,18 @@ test("an error answer is reported with Apple's code and what to do", async (t) =
 		fail: new Map([["POST /v1/betaAppReviewSubmissions", { status: 422, errors: [{ status: "422", code: "ENTITY_UNPROCESSABLE.BETA_CONTRACT_MISSING", title: "Beta contract is missing.", detail: "Beta contract is missing for the app." }] }]]),
 	});
 	await assert.rejects(distribute(options(base, { channel: "latest", build: "39999" })), (e: Error) => /422/.test(e.message) && /BETA_CONTRACT_MISSING/.test(e.message) && /agreement/i.test(e.message));
+});
+
+test("a key without the role is told it needs Admin, which signing in the cloud requires", async (t) => {
+	const { base } = await standIn(t, { fail: new Map([["GET /v1/apps", { status: 403, errors: [{ status: "403", code: "FORBIDDEN_ERROR", title: "This request is forbidden for security reasons", detail: "The API key in use does not allow this request" }] }]]) });
+	await assert.rejects(distribute(options(base)), (e: Error) => /403/.test(e.message) && /Admin role/.test(e.message) && !/App Manager/.test(e.message));
+});
+
+test("a key is checked to be a private key without the key in the message", () => {
+	assert.equal(privateKey(pem), pem);
+	const broken = pem.replace(pem.split("\n")[2], "nonsense");
+	assert.throws(() => privateKey(broken), (e: Error) => /not a private key/.test(e.message) && !e.message.includes(pem.split("\n")[1]));
+	assert.throws(() => privateKey(""), /not a private key/);
 });
 
 test("a key App Store Connect refuses is reported as such", async (t) => {
