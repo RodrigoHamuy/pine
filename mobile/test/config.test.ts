@@ -42,6 +42,12 @@ test("the iOS app: iOS 17 and later, and a sentence for the local network prompt
 	assert.match(project, /PRODUCT_BUNDLE_IDENTIFIER = dev\.pmndre\.pine;/);
 });
 
+test("the iOS app asks for nothing but the local network (no camera: a pairing link comes by its pine: address), and takes that scheme", () => {
+	const plist = fs.readFileSync(path.join(import.meta.dirname, "../ios/App/App/Info.plist"), "utf8");
+	assert.deepEqual([...plist.matchAll(/<key>(NS\w*UsageDescription)<\/key>/g)].map((m) => m[1]), ["NSLocalNetworkUsageDescription"]);
+	assert.match(plist, /<key>CFBundleURLSchemes<\/key>\s*<array>\s*<string>pine<\/string>\s*<\/array>/);
+});
+
 test("on iOS the web view takes the whole screen (the page keeps itself inside the safe area), does not scroll, and shows no link previews", () => {
 	assert.equal(config.ios?.contentInset, "never");
 	assert.equal(config.ios?.scrollEnabled, false);

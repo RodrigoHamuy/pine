@@ -450,7 +450,7 @@ public final class Pines: @unchecked Sendable {
 			"status": "error",
 			"kind": "ssh",
 			"message": hosts.isEmpty
-				? "Add the machine whose pine this phone is to use, as you would write it after ssh: user@host, or user@host:port. Put this phone's key into ~/.ssh/authorized_keys there first."
+				? "Pair this phone with your computer: in the Pine app there, go to Settings > Browser access, press Add a device, and open its link on this phone. Or add a machine as you would write it after ssh (user@host, or user@host:port), with this phone's key in ~/.ssh/authorized_keys there."
 				: "Choose the machine whose pine this phone is to use.",
 		]
 	}

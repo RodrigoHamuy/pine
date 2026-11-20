@@ -91,6 +91,31 @@ export function readPairLink(text: string): PairLink | undefined {
 export const otherService = (link: PairLink): string | undefined => (link.service === OFFICIAL_SERVICE ? undefined : new URL(link.service).host);
 
 /**
+ * The host of a pairing link's service when that service is on http: a link `readPairLink` refuses
+ * (the web client of a test deployment offers one to the iOS app), whose refusal can then say why.
+ * None for anything else.
+ */
+export function httpService(text: string): string | undefined {
+	const link = text.trim();
+	let service: string | null | undefined;
+	if (link.startsWith("pine:")) {
+		const m = /^pine:\/\/pair\?([^#]*)$/.exec(link);
+		try {
+			service = m ? new URLSearchParams(m[1]).get("service") : undefined;
+		} catch {
+			return undefined;
+		}
+	} else if (link.includes("#")) service = link.slice(0, link.indexOf("#"));
+	if (!service) return undefined;
+	try {
+		const url = new URL(service);
+		return url.protocol === "http:" && url.host ? url.host : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+/**
  * What the page calls the device it runs on when it pairs: "phone" in the mobile app, "browser"
  * in the web client (and anywhere else, where nothing is paired).
  */
