@@ -201,7 +201,7 @@ function standIn(h: Awaited<ReturnType<typeof harness>>, reads = true) {
 	return { reports };
 }
 
-test("access: the log is read while commands run and a little longer, and again for the next one", async (t) => {
+test("access: the log is read while commands run and a little longer, and again for the next one", { skip: process.platform === "win32" && "the stand-in for the system's log is a shell script" }, async (t) => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pine-denials-"));
 	const { tools, reports } = standInTools(dir);
 	const d = new Denials(quiet, tools, 60);

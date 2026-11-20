@@ -639,7 +639,7 @@ export function TitleBar() {
 	// a menu), and when the window gets wide. A click on the conversation already in front puts it away too (ConversationRow).
 	useEffect(() => setOpenMobile(false), [s.active?.id, isMobile, setOpenMobile]);
 	return (
-		<header className={cn("flex h-11 flex-none items-center gap-1 pr-window-controls app-drag", column ? "pl-0.5" : "pl-window-buttons")}>
+		<header className={cn("flex h-11 flex-none items-center gap-1 app-drag", s.platform === "darwin" ? "pr-2" : "pr-window-controls", column ? "pl-0.5" : "pl-window-buttons")}>
 			{column ? null : <HoverTooltip><TooltipTrigger render={<SidebarTrigger size="icon" className="app-no-drag" aria-label="Show the sidebar" />} /><TooltipContent>Show the sidebar<Kbd>{shortcut("⌘B")}</Kbd></TooltipContent></HoverTooltip>}
 			{/* A row that scrolls cuts off what a tab draws outside itself (the line around the tab in front, the mark where a dragged tab
 			    would land): the padding is the room for both, and the margin keeps the tabs where they were. It scrolls without a bar;

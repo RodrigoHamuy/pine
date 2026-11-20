@@ -612,13 +612,15 @@ test("auto mode runs a command without a sandbox, safe mode runs it in one", { s
 });
 
 test("without a sandbox, a command that names pine's own files, program or control port is not run", (t) => {
-	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-own-")));
+	// On Windows the paths as Git's bash writes them: with /, which it does not take as an escape.
+	const join = process.platform === "win32" ? path.posix.join : path.join;
+	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-own-"))).replace(/\\/g, process.platform === "win32" ? "/" : "\\");
 	t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
-	const home = path.join(dir, ".pine");
-	const code = path.join(dir, "opt", "pine");
-	const workspace = path.join(home, "agents", "main", "workspace");
-	for (const d of [workspace, path.join(home, "sandbox", "main"), path.join(code, "src")]) fs.mkdirSync(d, { recursive: true });
-	const o = { home, own: [workspace, path.join(home, "sandbox", "main")], code, cwd: workspace, ownerHome: dir, port: 7463 };
+	const home = join(dir, ".pine");
+	const code = join(dir, "opt", "pine");
+	const workspace = join(home, "agents", "main", "workspace");
+	for (const d of [workspace, join(home, "sandbox", "main"), join(code, "src")]) fs.mkdirSync(d, { recursive: true });
+	const o = { home, own: [workspace, join(home, "sandbox", "main")], code, cwd: workspace, ownerHome: dir, port: 7463 };
 	const no = (command: string, why: RegExp) => assert.match(pineOwn(command, o) ?? "", why, command);
 	const yes = (command: string) => assert.equal(pineOwn(command, o), undefined, command);
 
@@ -629,7 +631,7 @@ test("without a sandbox, a command that names pine's own files, program or contr
 
 	// What the agent's event sources received lies in pine's home and is read all the same. It is
 	// not changed, what lies beside it stays closed, and without a subscription there is nothing to read.
-	const files = path.join(home, "data", "sources", "cam", "files");
+	const files = join(home, "data", "sources", "cam", "files");
 	const got = { ...o, received: [files] };
 	for (const c of [`ffmpeg -i ${files}/clip.mp4 frame.jpg`, `cp ${files}/clip.mp4 .`, `ls -la ${files}`, "file ~/.pine/data/sources/cam/files/clip.mp4"]) assert.equal(pineOwn(c, got), undefined, c);
 	for (const c of [`rm ${files}/clip.mp4`, `echo x > ${files}/clip.mp4`]) assert.match(pineOwn(c, got) ?? "", /is a file an event source received, which you can read and not change/, c);

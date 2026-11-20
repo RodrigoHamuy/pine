@@ -295,7 +295,8 @@ test("agents are told how pine works and can read its manual, but not pi's or pi
 	assert.ok(out[0].includes("If you are an agent running inside pine"), out[0].slice(0, 200));
 	assert.ok(out[1].includes("configuration.md") && out[1].includes("globalMcp"), out[1].slice(0, 200));
 	if (sandboxAvailable()) assert.ok(out[2].includes("# MCP servers"), out[2]);
-	assert.match(out[3], /outside the paths this agent may read/);
+	// (Without a sandbox, as on Windows, pine's code is read as any file of the owner's; pine's home stays closed.)
+	if (sandboxAvailable()) assert.match(out[3], /outside the paths this agent may read/);
 	assert.match(out[4], /not accessible to agents/);
 	await h.close();
 });

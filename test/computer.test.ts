@@ -269,7 +269,7 @@ test("computer: which app a call is about, and who gets the server at all", () =
 	assert.equal(appTarget("app_press", { app: 7 }), undefined);
 
 	const on = { owner: true, level: "auto" as const, dataDir: "/home/pine/data", platform: "darwin" };
-	assert.deepEqual(computerSession(on), { helperDir: "/home/pine/data/computer" });
+	assert.deepEqual(computerSession(on), { helperDir: path.join("/home/pine/data", "computer") });
 	assert.equal(computerSession({ ...on, owner: false }), undefined, "never a run started from outside");
 	assert.equal(computerSession({ ...on, level: "safe" }), undefined, "never an agent that works in its sandbox");
 });
@@ -949,7 +949,8 @@ test("live: on Linux with X11 the real helper reads and operates a GTK window, b
 // The Windows helper, built with the compiler Windows carries, on a window of its own: Notepad.
 test("windows: the real helper is built, lists the apps and reads Notepad's window as an outline", { skip: process.platform !== "win32" && "Windows only", timeout: 180_000 }, async (t) => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pine-computer-win-"));
-	t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+	// (Windows keeps a program's file locked a moment after it ended.)
+	t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
 	const program = buildCsharp(WINDOWS_SOURCE, "pine-computer", "app control", windowsReferences(), { dir });
 	const [status] = await askHelper([program], [{ cmd: "status" }]);
 	assert.equal(status.ok, true, JSON.stringify(status));

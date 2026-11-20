@@ -286,7 +286,7 @@ readline.createInterface({ input: process.stdin }).on("line", (line) => {
 	}
 	if (m.params.name === "browser_take_screenshot" && a.filename) {
 		note(m.params.name);
-		const file = log.slice(0, log.lastIndexOf("/")) + "/" + a.filename;
+		const file = log.slice(0, Math.max(log.lastIndexOf("/"), log.lastIndexOf("\\\\"))) + "/" + a.filename;
 		fs.writeFileSync(file, Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.from("picture of " + tabs[at])]));
 		return reply("### Result\\n- [Screenshot of viewport](" + file + ")");
 	}
