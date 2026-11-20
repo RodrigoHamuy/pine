@@ -12,10 +12,11 @@ import { AccessStore, type Device } from "./store.ts";
 
 /**
  * The address of the project's own service (the web client and the meeting service), which the
- * app uses unless the owner names another. Empty until that service is deployed: until then the
- * owner has to name one (the state says so).
+ * app uses unless the owner names another: the Worker `pine` of web/relay (`--env official`) on
+ * the project's workers.dev account. A browser's key and its paired Macs belong to this address, so
+ * changing it makes every owner pair again.
  */
-export const OFFICIAL_SERVICE = "";
+export const OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev";
 
 /** The owner's choices, kept in the app's preferences. No `service`: the official one. */
 export interface AccessPrefs {

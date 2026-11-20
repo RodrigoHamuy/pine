@@ -81,7 +81,8 @@ test("access control: preferences are read off by default, with the official add
 	assert.deepEqual(readAccessPrefs({ enabled: true, service: "https://mine.example/some/path", openAtLogin: true }), { enabled: true, service: "https://mine.example", openAtLogin: true });
 	for (const service of ["file:///etc/passwd", "javascript:alert(1)", "https://user:pw@mine.example", "not an address", 42]) assert.equal(readAccessPrefs({ service }).service, undefined, String(service));
 	assert.equal(readAccessPrefs({ enabled: "yes" }).enabled, false);
-	assert.equal(OFFICIAL_SERVICE, "", "the official address is not known yet");
+	assert.equal(OFFICIAL_SERVICE, "https://pine.drcmda.workers.dev", "the project's own service");
+	assert.equal(readAccessPrefs({ service: OFFICIAL_SERVICE }).service, OFFICIAL_SERVICE, "an address the settings accept");
 });
 
 test("access control: turned on, the host key is kept encrypted in a file of the app's data folder, and the host waits", async () => {
@@ -108,8 +109,8 @@ test("access control: where the keychain cannot be used, browser access cannot b
 	assert.deepEqual(readdirSync(folder), []);
 });
 
-test("access control: without an address (the official one is not known yet) it says one is needed, and an address the owner gives is used", async () => {
-	const { control, calls, prefs } = make({ official: OFFICIAL_SERVICE });
+test("access control: with no official address (a build that names none) it says one is needed, and an address the owner gives is used", async () => {
+	const { control, calls, prefs } = make({ official: "" });
 	const state = await control.state();
 	assert.equal(state.service, "");
 	assert.equal(state.problem?.kind, "address");
@@ -121,7 +122,7 @@ test("access control: without an address (the official one is not known yet) it 
 	assert.equal(prefs().service, "https://mine.example");
 	assert.equal(set.problem, undefined);
 	assert.equal(calls.starts, 1);
-	// Back to the official one: none, so the host stops and the address is asked for again.
+	// Back to the official one: none here, so the host stops and the address is asked for again.
 	const back = await control.set({ service: "" });
 	assert.equal(back.status, "off");
 	assert.equal(back.problem?.kind, "address");

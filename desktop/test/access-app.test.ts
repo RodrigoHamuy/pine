@@ -48,7 +48,7 @@ before(async () => {
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	data = path.join(home, "desktop-data");
-	// The official service's address is not known yet: the owner's own is named.
+	// The stand-in reaches no network: an address of the owner's own is named, never the official service.
 	write(path.join(data, "prefs.json"), JSON.stringify({ updates: false, access: { service: SERVICE } }));
 
 	// The stand-in phone uses a pairing link 4 s after it is opened: time for the window's test to read the QR code first.
