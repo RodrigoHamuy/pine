@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, CheckIcon, RadarIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,7 @@ import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
+import { VIEW_KEY, ViewAside } from "./View.tsx";
 import { Breakable, MachineList, Settings } from "./Settings.tsx";
 import { computerWord, firstScreen, isPaired, noMachineSaid } from "./machines.ts";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
@@ -620,16 +621,17 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 }
 
 /**
- * The icon of the side panel or of the browser's aside, at the top right of the title bar. Pressed while it is open; open
- * but behind the other (a window with room for one only) it is pressed more lightly, and a click brings it to the front.
- * Only a conversation has them: on another tab they stay in their place and cannot be pressed.
+ * The icon of the side panel, the browser's aside or the view, at the top right of the title bar. Pressed while
+ * it is open; open but behind the others (a window with too little room) it is pressed more lightly, and a click brings it
+ * to the front. The side panel and the browser belong to a conversation: on another tab they stay in their place and
+ * cannot be pressed. The view can be opened beside any tab, where there is one (`store.hasView`).
  */
 function BesideToggle({ which, label, keys, icon }: { which: Beside; label: string; keys: string; icon: React.ReactNode }) {
 	const s = store;
 	const behind = s.behind(which);
 	return (
 		<HoverTooltip>
-			<TooltipTrigger render={<Toggle size="sm" data-toggle={which === "aside" ? "browser" : "code"} data-behind={behind || undefined} className="app-no-drag aria-pressed:bg-background aria-pressed:ring-1 aria-pressed:ring-border data-behind:bg-transparent data-behind:text-muted-foreground" disabled={s.active?.kind !== "chat"} pressed={which === "code" ? s.code : s.aside} onPressedChange={() => s.toggle(which)} aria-label={label} />}>{icon}</TooltipTrigger>
+			<TooltipTrigger render={<Toggle size="sm" data-toggle={which === "aside" ? "browser" : which} data-behind={behind || undefined} className="app-no-drag aria-pressed:bg-background aria-pressed:ring-1 aria-pressed:ring-border data-behind:bg-transparent data-behind:text-muted-foreground" disabled={which !== "view" && s.active?.kind !== "chat"} pressed={s.isOpen(which)} onPressedChange={() => s.toggle(which)} aria-label={label} />}>{icon}</TooltipTrigger>
 			<TooltipContent>{label}<Kbd>{keys}</Kbd></TooltipContent>
 		</HoverTooltip>
 	);
@@ -637,7 +639,7 @@ function BesideToggle({ which, label, keys, icon }: { which: Beside; label: stri
 
 /**
  * Follows the width of the room beside the side bar, where the conversation, the side panel and the aside lie: with less
- * than `BOTH`, the side panel and the aside are not both drawn (`store.one`). A ref of a callback, because the room is
+ * than `BOTH` or `THREE`, not all the panels beside it are drawn (`store.fits`). A ref of a callback, because the room is
  * there only once the app is ready.
  */
 function measureRoom(el: HTMLDivElement | null): (() => void) | undefined {
@@ -674,6 +676,7 @@ function TitleBar() {
 			<span className="min-w-0 flex-1" />
 			<BesideToggle which="code" label="Side panel: the agent, its files, changes, output and what is running" keys="⌥⌘B" icon={<PanelRightIcon />} />
 			<BesideToggle which="aside" label="Browser: the page the agent works in" keys="⇧⌘B" icon={<GlobeIcon />} />
+			{s.hasView ? <BesideToggle which="view" label={`View: all of pine at a glance, drawn by ${s.view}`} keys="⇧⌘O" icon={<RadarIcon />} /> : null}
 		</header>
 	);
 }
@@ -887,12 +890,14 @@ export function App() {
 								<div ref={measureRoom} data-slot="room" className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !column && "pl-1.5")}>
 									{/* The conversation, the side panel beside it, and the browser's aside at the far right. Each panel's width is
 									    its own: dragging the edge between the two changes both, and both are kept. */}
-									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && (keepWidth(layout, "code-panel", CODE_KEY), keepWidth(layout, "browser-panel", ASIDE_KEY))}>
+									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && (keepWidth(layout, "code-panel", CODE_KEY), keepWidth(layout, "browser-panel", ASIDE_KEY), keepWidth(layout, "view-panel", VIEW_KEY))}>
 										<ResizablePanel id="view" className="flex" minSize={320}>
 											{!tab ? <NoTab /> : tab.kind === "settings" ? <Settings /> : tab.kind === "events" ? <Events tab={tab} /> : <Conversation key={tab.id} tab={tab} />}
 										</ResizablePanel>
 										{chat && s.shown("code") ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
 										{chat && s.shown("aside") ? <BrowserAside key={`aside:${tab!.id}`} tab={tab!} /> : null}
+										{/* The view of all of pine, beside any tab. */}
+										{s.shown("view") ? <ViewAside key="view" /> : null}
 									</ResizablePanelGroup>
 								</div>
 							</div>

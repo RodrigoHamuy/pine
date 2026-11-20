@@ -92,6 +92,12 @@ export interface AppState {
 	 * meeting service are never forgotten. The others leave it out: they reach machines without one.
 	 */
 	serviceHost?: string;
+	/**
+	 * Whether the page can run a view of the owner's (View.tsx): only where its frame (view.html) is built and
+	 * served under its own policy, which the desktop app's main process does. The other bridges leave it out,
+	 * and their page then shows no button for the view.
+	 */
+	views?: boolean;
 }
 
 export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../electron/access/control.ts";

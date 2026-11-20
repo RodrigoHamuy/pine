@@ -13,6 +13,7 @@ import { Approvals, audit, Redactor } from "./security.ts";
 import { Bus, Kv, openDb, State, TaskStore } from "./store.ts";
 import { Scheduler } from "./timers.ts";
 import { seedThemes, themesDir } from "./themes.ts";
+import { seedViews, viewsDir } from "./views.ts";
 import { createLogger, errText, type Logger } from "./util.ts";
 
 export interface Pine {
@@ -86,6 +87,12 @@ export async function startPine(opts: { home?: string; config?: PineConfig; log?
 		seedThemes(cfg.home);
 	} catch (e) {
 		log.warn(`could not put pine's themes into ${themesDir(cfg.home)}: ${errText(e)}`);
+	}
+	// The views of the app's panel, likewise; and the module views import, brought up to date for the owner's editor.
+	try {
+		seedViews(cfg.home);
+	} catch (e) {
+		log.warn(`could not put pine's views into ${viewsDir(cfg.home)}: ${errText(e)}`);
 	}
 	installModelTimeouts(cfg);
 

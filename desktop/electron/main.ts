@@ -10,7 +10,7 @@ import { type AccessChange, type AccessControl, type AccessPrefs, createAccessCo
 import type { Cipher } from "./access/host.ts";
 import { startStandIn } from "./access/stand-in.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
-import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
+import { callDaemon, followEvents, mediaFromDaemon, pageCsp, VIEW_CSP } from "./daemon.ts";
 import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
 import { Terminals } from "./terminal.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
@@ -46,7 +46,8 @@ if (process.env.PINE_DESKTOP_DATA) app.setPath("userData", path.resolve(process.
 app.setName("Pine");
 
 protocol.registerSchemesAsPrivileged([
-	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	// corsEnabled: the view frame (view.html) is sandboxed into an origin of its own, and loads its module scripts across it.
+	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 	{ scheme: "pine-media", privileges: { standard: true, secure: true, stream: true, bypassCSP: false } },
 ]);
 
@@ -320,7 +321,8 @@ const accessOn = () => {
 
 // ---- the page ----------------------------------------------------------------------------------
 
-const CSP = pageCsp();
+// The page may hold one kind of frame: the app's own view.html, which runs a view (View.tsx).
+const CSP = pageCsp({ frame: ["app://pine/view.html"] });
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json", ".map": "application/json" };
 
@@ -330,7 +332,9 @@ function page(request: Request): Response {
 	const rel = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
 	const file = path.normalize(path.join(dist, rel));
 	if (!file.startsWith(dist + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return new Response("not found", { status: 404 });
-	return new Response(fs.readFileSync(file), { headers: { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "content-security-policy": CSP, "x-content-type-options": "nosniff" } });
+	const view = rel === "/view.html";
+	// The view frame's own document gets its own policy; its scripts are read across its opaque origin.
+	return new Response(fs.readFileSync(file), { headers: { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "content-security-policy": view ? VIEW_CSP : CSP, "x-content-type-options": "nosniff", ...(/\.(js|css)$/.test(file) ? { "access-control-allow-origin": "*" } : {}) } });
 }
 
 function fromPage(e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): boolean {
@@ -524,6 +528,7 @@ function buildMenu(): void {
 				item("Changes", "code-changes", "CmdOrCtrl+Shift+G"),
 				item("Terminal", "code-terminal", "Ctrl+`"),
 				item("Toggle Browser", "browser", "CmdOrCtrl+Shift+B"),
+				item("Toggle View", "view", "CmdOrCtrl+Shift+O"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
 				{ role: "resetZoom" },
@@ -574,7 +579,7 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 }
 
 function wire(): void {
-	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
+	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron }, views: true }));
 	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
 	handle("pine:retry", () => startService());
 	handle("pine:update", (again?: boolean) => update(again === true));

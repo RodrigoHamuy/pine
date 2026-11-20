@@ -74,6 +74,10 @@ src/
   env-file.ts       sets and removes entries in .env (secrets of sources that agents set up)
   themes.ts         the themes of the owner's UIs: VS Code color theme files in <home>/themes (seeded once from
                     examples/home/themes), listed for `GET /themes`, the one `ui.theme` names
+  views.ts          the views of the Pine app's panel: scripts of the owner's in <home>/views, listed, handed over
+                    with their types stripped (never run by the daemon), `ui.view`; seeded once from examples/home/views
+  view-kit.ts       `pine/view`, what a view imports: the types of what a view is told, `defineView`, helpers. No
+                    Node, no DOM: the app's view frame runs it, and pine copies it into <home>/views/.pine for editors
   theme-colors.ts   a VS Code color theme resolved into pine's color roles, as hex colors and nothing else (no
                     fs: Storybook uses it too); a theme's `pine` object overrides a role by name
   update.ts         `pine update`: brings pine up to date the way it was installed (git or npm) and fetches what the new version needs;
@@ -545,6 +549,19 @@ These are invariants. A change that breaks one needs a test that shows why it is
    its cleaning rules (`CLEAN`), its link component and its image component. On every upgrade
    of Streamdown read its defaults again and run `npm run desktop:test`.
    `desktop/test/app.test.ts` has a test for it; keep it failing without each of the three.
+   A view of the owner's (<home>/views, `src/views.ts`, docs/references/views.md) is the one script
+   the page runs that is not the app's, and it runs in the page's one frame (`desktop/view.html`,
+   `desktop/src/view-frame.ts`): sandboxed with `allow-scripts` and nothing else, so its origin is
+   nobody's, under a policy of its own that allows no address (`VIEW_CSP` in `desktop/electron/daemon.ts`;
+   the page's own policy allows that frame and no other). It is handed the state that
+   `desktop/src/view-state.ts` builds anew from an allow-list (names, modes, states, tool names: never a
+   prompt, an answer, a path, a tool's arguments, an event's text), and what it asks the panel to show or
+   open is checked against what the panel knows (`knownTarget`). Never add `allow-same-origin` or another
+   permission to the frame, never hand it the bridge, the token or text, and never let it import more
+   than `pine/view`. `desktop/test/view-app.test.ts` has a view that tries to reach the bridge, the top
+   window, storage and an address on this computer, and looks for a word from a prompt and a path; it
+   fails without the sandbox. Only the desktop app's bridge says it can run a view (`AppState.views`);
+   the mobile app and the web client build no frame and show no view.
    The terminal beside a conversation (`desktop/electron/terminal.ts`) is the owner's own shell,
    run by the main process; the page only types into it. What an answer holds reaches it only by
    the owner's press on a code block's Run button, and only a block whose every character shows
@@ -864,6 +881,11 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   the title bar's drag area; the window's options in `electron/main.ts`: `titleBarStyle`,
   `trafficLightPosition`, `vibrancy`), look at it once in light and dark, with the side panel
   open in a window narrower than 1024 pixels too.
+- What the view costs is measured by `desktop/test/view-perf.test.ts`, skipped unless `PINE_PERF=1`: the app's
+  CPU as the system counts it (`top`, its own processes, not its pine) with the view's panel closed, open
+  at rest, open while three agents work and open with the window behind, and the frames the view draws.
+  The window has to be in front to measure the view as it draws in front. Run it after a change to how a
+  view is drawn or fed (`desktop/src/View.tsx`, `view-state.ts`, `examples/home/views/office.ts`).
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).

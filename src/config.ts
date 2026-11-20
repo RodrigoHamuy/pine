@@ -342,8 +342,9 @@ export interface PineConfig {
 		 */
 		askAccess: boolean;
 	};
-	/** How pine's UIs look: `theme` names a file in <home>/themes (src/themes.ts). Not set: pmndre. */
-	ui: { theme?: string };
+	/** How pine's UIs look: `theme` names a file in <home>/themes (src/themes.ts). Not set: pmndre. `view` names a
+	 *  view in <home>/views for the Pine app's panel (src/views.ts), or "off"; not set: the first view there is. */
+	ui: { theme?: string; view?: string };
 	/** Values that must never leave the daemon in events or messages. */
 	secrets: string[];
 	mcp: Record<string, McpServerConfig>;
@@ -614,7 +615,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 			bypassWhenTainted: raw.security?.bypassWhenTainted === true,
 			askAccess: raw.security?.askAccess !== false,
 		},
-		ui: { theme: typeof raw.ui?.theme === "string" && raw.ui.theme ? raw.ui.theme : undefined },
+		ui: { theme: typeof raw.ui?.theme === "string" && raw.ui.theme ? raw.ui.theme : undefined, view: typeof raw.ui?.view === "string" && raw.ui.view ? raw.ui.view : undefined },
 		secrets: Object.values(fileEnv).filter((v) => v.length >= 8),
 		mcp: raw.mcp ?? {},
 		sources: loadSources(raw.sources, home, "pine.json: sources", problems, Object.keys(sourceTypes)),
@@ -632,6 +633,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 		if (raw.security?.[key] !== undefined) problems.push(`pine.json: security.${key} is gone: pine has no reviewer any more. In auto and safe mode you are asked about critical actions, and after outside content about what is sent out. Take the entry out${key === "reviewer" ? ' (the model that judges goals is "defaults.judge" now)' : ""}`);
 	}
 	if (raw.ui?.theme !== undefined && !(typeof raw.ui.theme === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.theme))) problems.push('pine.json: ui.theme names a theme by its file in the themes folder, without .json, for example "pmndre"');
+	if (raw.ui?.view !== undefined && !(typeof raw.ui.view === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.view))) problems.push('pine.json: ui.view names a view by its file in the views folder, without .ts, for example "house", or is "off"');
 	if (d.judge !== undefined && !/^[^/\s]+\/\S+$/.test(String(d.judge))) problems.push("pine.json: defaults.judge names a model as provider/model-id");
 	if (cfg.http) {
 		for (const [name, h] of Object.entries<any>(raw.http?.hooks ?? {})) {

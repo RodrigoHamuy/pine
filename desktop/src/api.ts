@@ -471,6 +471,10 @@ export const api = {
 	setSetting: (key: string, value: unknown) => post<{ key: string; now: string; live: boolean }>("/settings", { key, value }),
 	// The themes of pine's home, as colors (theme.ts), and the one in force. A pine older than themes has none: an empty list.
 	themes: () => get<{ theme: string; chosen: string | null; themes: ThemeEntry[] }>("/themes"),
+	/** The views of the panel (src/views.ts): the one in force, none when there is none or `ui.view` is off. */
+	views: () => get<{ view: string | null; chosen: string | null; views: Array<{ id: string; problem?: string }> }>("/views"),
+	/** A view's code, its types taken away: run only in the view frame (View.tsx). */
+	viewCode: (id: string) => get<{ id: string; code: string } | { id: string; problem: string }>(`/views/${encodeURIComponent(id)}`),
 	agentDetail: (agent: string) => get<AgentDetail>(`${a(agent)}/detail`),
 	// What it is for is the first paragraph of `instructions` (the daemon's `purposeOf`).
 	createAgent: (body: { id: string; instructions: string; model?: string; tools?: string[] }) => post<{ id: string; workspace: string }>("/agents", body),

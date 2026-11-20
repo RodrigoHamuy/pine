@@ -24,6 +24,7 @@ import type { SourceHost } from "./sources.ts";
 import { localTime, type Scheduler } from "./timers.ts";
 import { errText, type Logger, parseDuration } from "./util.ts";
 import { listThemes, themeInForce } from "./themes.ts";
+import { listViews, viewCode, viewInForce } from "./views.ts";
 import { MAX_EDIT, writeText } from "./workspace-view.ts";
 
 /** A request that is refused, with the status it is answered with and what a client needs besides the sentence. */
@@ -294,6 +295,13 @@ export class OwnerApi {
 			const themes = listThemes(cfg.home);
 			return { theme: themeInForce(cfg.home, cfg.ui.theme, themes).id, chosen: cfg.ui.theme ?? null, themes };
 		}
+		// The views of the app's panel and the one in force (none: the app shows no panel), and a view's code,
+		// its types taken away. The daemon runs none of it: the app runs it in a sandboxed frame.
+		if (at === "views") {
+			const views = listViews(cfg.home).map((v) => ("problem" in v ? { id: v.id, problem: v.problem } : { id: v.id }));
+			return { view: viewInForce(cfg.ui.view, listViews(cfg.home)) ?? null, chosen: cfg.ui.view ?? null, views };
+		}
+		if (parts[0] === "views" && parts.length === 2) return viewCode(cfg.home, parts[1]);
 		if (at === "shared") return SHARED_FILES.map((name) => ({ name, about: SHARED_ABOUT[name] ?? "", text: textOf(path.join(cfg.home, name)) ?? "" }));
 		if (at === "skills") return allSkills(cfg).map((s) => ({ ...s, instructions: skillBody(s.dir) }));
 		if (at === "schedules") return this.need(this.schedules, "a scheduler").list();

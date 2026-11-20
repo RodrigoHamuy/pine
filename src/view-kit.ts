@@ -1,0 +1,250 @@
+// `pine/view`: what a view imports. A view is a script of the owner's in <home>/views that draws pine
+// in the panel of the Pine app (docs/references/views.md). It is written against this module:
+//
+//   import { defineView, seeded } from "pine/view";
+//   export default defineView((host) => { ... });
+//
+// This one file is both sides of that import. The app's view frame resolves "pine/view" to it at run
+// time, and pine copies it as it is into <home>/views/.pine/view.ts, where views/tsconfig.json points
+// the owner's editor at it. So it holds only types, `defineView` and helpers that need nothing but the
+// language: no Node, no DOM, no import.
+//
+// What a view is told is the shape of pine and nothing of its content: which agents there are and how
+// they work, what each piece of work is doing and where it came from, which tools, MCP servers, skills
+// and sources are in use. Never a prompt, an answer, a tool's arguments, a path, a conversation's name
+// or what an event said. A view can draw all of pine and read none of it.
+
+/** An agent, as a view knows it. */
+export interface ViewAgent {
+	id: string;
+	/** The agent the owner talks to first, which runs pine. */
+	main: boolean;
+	/** Its color, as #rrggbb. */
+	color: string;
+	/** How it works: "manual", "safe" (a sandbox), "auto" (the owner's account), "bypass" (asks nothing), "plan". */
+	mode: string;
+	/** The names of the MCP servers it has, of the skills it has, of the event sources it listens to, of its schedules. */
+	mcp: string[];
+	skills: string[];
+	sources: string[];
+	schedules: string[];
+}
+
+/** Where a piece of work came from. */
+export type ViewFrom =
+	| { k: "you" }
+	| { k: "clock"; name?: string }
+	| { k: "source"; name: string }
+	| { k: "outside"; name: string }
+	| { k: "agent"; id: string }
+	| { k: "copy"; id: string }
+	| { k: "pine" };
+
+/** What a piece of work is doing. */
+export type ViewDoing = "thinking" | "tool" | "writing" | "waiting" | "asking" | "done" | "failed" | "cancelled";
+
+/** A piece of work: a task an agent does. Times are the page's clock, in milliseconds. */
+export interface ViewWork {
+	id: number;
+	agent: string;
+	/** A copy of the agent at work for its conversation (a sub-agent). */
+	copy: boolean;
+	/** The work that started it, if any, and how deep it is under the work the owner or an event started. */
+	parent?: number;
+	depth: number;
+	from: ViewFrom;
+	doing: ViewDoing;
+	/** The tool it is in, while it is in one: its name only. */
+	tool?: string;
+	/** The MCP server of that tool, for a tool of an MCP server. */
+	mcp?: string;
+	/** The agents and copies it waits for, by their work's id. */
+	waitingOn: number[];
+	started: number;
+	finished?: number;
+	tools: number;
+	/** It waits for the owner's answer. */
+	asking: boolean;
+	/** The mode it runs in now, and whether that is stricter than its agent's own (handed on from a stricter mode). */
+	mode?: string;
+	held: boolean;
+	/** Its conversation read content from outside: from now on, sending something out asks the owner. */
+	outside: boolean;
+}
+
+/** A way work comes in: the owner, the clock, an event source, another way. */
+export interface ViewInput {
+	/** "you", "clock", "source:<name>" or "outside:<name>". */
+	id: string;
+	kind: "you" | "clock" | "source" | "outside";
+	name: string;
+	/** An event source's type ("mail", "webhook", ...). */
+	type?: string;
+	count: number;
+	/** When it last brought something in. */
+	last?: number;
+}
+
+/** What is chosen in the panel. */
+export type ViewTarget = { agent: string } | { work: number };
+
+/** All of pine, as a view sees it. */
+export interface ViewState {
+	/** The page's clock when this was made. */
+	at: number;
+	/** The main agent first, then by name. */
+	agents: ViewAgent[];
+	/** What runs now, and what ended in the last half hour. */
+	work: ViewWork[];
+	inputs: ViewInput[];
+	selected?: ViewTarget;
+	/** Whether the app is drawn dark. */
+	dark: boolean;
+	/** Whether the app's window is in front. A view that animates can draw seldom while it is not: it saves the battery. */
+	focused: boolean;
+}
+
+/** Something that just happened, as it happens: for a view that animates. */
+export type ViewHappening =
+	| { k: "started"; work: number; agent: string }
+	| { k: "ended"; work: number; agent: string; failed: boolean }
+	| { k: "tool"; work: number; agent: string; tool: string; mcp?: string }
+	| { k: "skill"; work: number; agent: string; skill: string }
+	| { k: "event"; input: string }
+	| { k: "handed"; work: number; from: string; to: string }
+	| { k: "answered"; work: number; from: string; to: string }
+	| { k: "copied"; work: number; agent: string }
+	| { k: "asked"; work: number; agent: string }
+	| { k: "decided"; work?: number; agent?: string; allowed: boolean }
+	| { k: "sent"; work: number; agent: string; tool: string };
+
+/** What the panel gives a view. */
+export interface ViewHost {
+	/** The element to draw in: the whole panel's lens, empty. */
+	root: HTMLElement;
+	/** pine as it is now. */
+	state(): ViewState;
+	/** Called with every new state (several times a second while work runs), and with what just happened. Returns a function that stops it. */
+	on(what: "state", fn: (state: ViewState) => void): () => void;
+	on(what: "happening", fn: (h: ViewHappening) => void): () => void;
+	/** Shows an agent or a piece of work in the panel, under the view; nothing for none. */
+	select(target?: ViewTarget): void;
+	/** Opens an agent's conversation, or a piece of work by itself. */
+	open(target: ViewTarget): void;
+}
+
+export interface View {
+	readonly pineView: 1;
+	start(host: ViewHost): void | (() => void);
+}
+
+/** A view: called once with the panel, it draws there and follows `host`; what it returns is called when the panel closes. */
+export function defineView(start: (host: ViewHost) => void | (() => void)): View {
+	return { pineView: 1, start };
+}
+
+// ---- helpers ---------------------------------------------------------------------------------------------------------
+
+export interface Pt {
+	x: number;
+	y: number;
+}
+export interface Box {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+}
+/** A camera: the drawing's point in the middle of the view, and how many screen pixels a drawing pixel is. */
+export interface Cam {
+	x: number;
+	y: number;
+	z: number;
+}
+
+/** The working pieces among `work`: not ended. */
+export const running = (work: ViewWork[]) => work.filter((w) => w.doing !== "done" && w.doing !== "failed" && w.doing !== "cancelled");
+
+export function union(boxes: Box[]): Box {
+	const x0 = Math.min(...boxes.map((b) => b.x));
+	const y0 = Math.min(...boxes.map((b) => b.y));
+	const x1 = Math.max(...boxes.map((b) => b.x + b.w));
+	const y1 = Math.max(...boxes.map((b) => b.y + b.h));
+	return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
+}
+
+export const inside = (p: Pt, b: Box) => p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h;
+
+/**
+ * Where a camera goes to show `aim` in a view of `view`: the box with a margin, never smaller than `min`,
+ * never closer than `zMax`, never further out than `whole` needs, and never showing more of what lies
+ * outside `whole` than it has to. The zoom comes in steps of a quarter, so that pixels stay even.
+ */
+export function frame(aim: Box, view: { w: number; h: number }, whole: Box, o: { zMax: number; min: { w: number; h: number } }): Cam {
+	const vw = Math.max(1, view.w);
+	const vh = Math.max(1, view.h);
+	const zAll = Math.min(vw / (whole.w + 8), vh / (whole.h + 8));
+	const w = Math.max(aim.w + 16, o.min.w);
+	const h = Math.max(aim.h + 16, o.min.h);
+	const z = Math.max(Math.min(zAll, o.zMax), Math.min(o.zMax, vw / w, vh / h));
+	const zz = Math.max(0.25, Math.floor(z * 4) / 4);
+	const keep = (c: number, half: number, size: number, start: number) => (half * 2 >= size ? start + size / 2 : Math.min(start + size - half, Math.max(start + half, c)));
+	return { x: keep(aim.x + aim.w / 2, vw / zz / 2, whole.w, whole.x), y: keep(aim.y + aim.h / 2, vh / zz / 2, whole.h, whole.y), z: zz };
+}
+
+/** A camera moved a frame of `dt` milliseconds towards `target`: most of the way in a third of a second, the zoom on a log scale. */
+export function ease(cam: Cam, target: Cam, dt: number): Cam {
+	const k = dt ? 1 - Math.exp(-dt / 320) : 1;
+	const next = { x: cam.x + (target.x - cam.x) * k, y: cam.y + (target.y - cam.y) * k, z: Math.exp(Math.log(cam.z) + (Math.log(target.z) - Math.log(cam.z)) * k) };
+	return Math.abs(next.z - target.z) < 0.002 && Math.abs(next.x - target.x) < 0.05 && Math.abs(next.y - target.y) < 0.05 ? { ...target } : next;
+}
+
+/** A point along a path of straight pieces, `t` from 0 to 1. */
+export function along(path: Pt[], t: number): Pt {
+	const lens = path.slice(1).map((p, i) => Math.hypot(p.x - path[i].x, p.y - path[i].y));
+	let left = lens.reduce((a, b) => a + b, 0) * Math.max(0, Math.min(1, t));
+	for (let i = 0; i < lens.length; i++) {
+		if (left <= lens[i]) {
+			const k = lens[i] ? left / lens[i] : 0;
+			return { x: path[i].x + (path[i + 1].x - path[i].x) * k, y: path[i].y + (path[i + 1].y - path[i].y) * k };
+		}
+		left -= lens[i];
+	}
+	return path[path.length - 1] ?? { x: 0, y: 0 };
+}
+
+export const lengthOf = (path: Pt[]) => path.slice(1).reduce((n, p, i) => n + Math.hypot(p.x - path[i].x, p.y - path[i].y), 0);
+
+/** Random numbers that are the same for the same seed. */
+export function seeded(seed: number): () => number {
+	let a = seed >>> 0;
+	return () => {
+		a = (a + 0x6d2b79f5) >>> 0;
+		let t = a;
+		t = Math.imul(t ^ (t >>> 15), t | 1);
+		t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+		return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+	};
+}
+
+/** A number from a name, the same every time. */
+export function hashOf(s: string): number {
+	let h = 2166136261;
+	for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+	return h >>> 0;
+}
+
+export function rgb(hex: string): [number, number, number] {
+	const h = hex.replace("#", "");
+	return [parseInt(h.slice(0, 2), 16), parseInt(h.slice(2, 4), 16), parseInt(h.slice(4, 6), 16)];
+}
+
+/** Between two #rrggbb colors: `t` 0 is `a`, 1 is `b`. */
+export function mix(a: string, b: string, t: number): string {
+	const x = rgb(a);
+	const y = rgb(b);
+	return `#${x.map((v, i) => Math.max(0, Math.min(255, Math.round(v + (y[i] - v) * t))).toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Lighter (amount > 0) or darker (amount < 0). */
+export const shade = (color: string, amount: number) => mix(color, amount > 0 ? "#ffffff" : "#000000", Math.abs(amount));
