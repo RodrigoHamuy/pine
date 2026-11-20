@@ -1,6 +1,9 @@
 name: Chromatic
 
 # The desktop app's stories (desktop/src/*.stories.tsx), published to Chromatic for visual review.
+# A build of `next` is accepted as it is (`autoAcceptChanges`): `next` is what a pull request is
+# compared with, and nobody reviews a push there, so without it its changes stay pending and every
+# pull request after it shows them again.
 # Without the CHROMATIC_PROJECT_TOKEN secret (a fork, or a repository not set up for it) the job
 # says so and passes.
 
@@ -41,3 +44,4 @@ jobs:
           projectToken: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
           onlyChanged: true
           exitZeroOnChanges: true
+          autoAcceptChanges: next
