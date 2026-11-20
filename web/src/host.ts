@@ -39,8 +39,9 @@ export type WebBridgeDeps = {
 	userAgent?: string;
 	/**
 	 * Reads the deployment's configuration (`GET /meet/config`: `{ice, relay}`). An answer says the
-	 * deployment has the meeting service, so a computer can be paired with; none, or a failed read:
-	 * there is nothing to pair with, and user@host machines can be added.
+	 * deployment has the meeting service, so a computer can be paired with. `null` (a 404) says it
+	 * has none, for good: there is nothing to pair with, and user@host machines can be added. A
+	 * failed read (it throws: offline, a 429, a 5xx) says neither, and is read again.
 	 */
 	config?(): Promise<unknown>;
 	/** Puts a text on the clipboard. */
@@ -67,6 +68,10 @@ export const backoff = (n: number) => Math.min(1000 * 2 ** n, 30_000);
 const QUIET_TRIES = 3;
 /** Losses of the event stream in a row, with SSH still up, after which pine there is taken for gone and the connection is made again (as desktop/electron/main.ts does). */
 const STREAM_LOSSES = 5;
+/** Reads of the deployment's configuration before the page is first answered; a configuration still not read is read again at the next state read. */
+const CONFIG_TRIES = 3;
+/** A read of the configuration that said nothing: it failed, or took too long. */
+const UNREAD = Symbol("unread");
 
 /** A picture, video or sound of the daemon's, by its path and query: one of `MEDIA`'s paths, nothing that could be read as another request. */
 function mediaTarget(target: string): string {
@@ -204,30 +209,55 @@ export function webBridge(deps: WebBridgeDeps) {
 	// Whether a computer can be paired with: the deployment answered its configuration, so it has the meeting service.
 	let canPair = false;
 	const noMachine = () => (canAddHost ? NO_MACHINE : NO_PAIRED);
+	// Whether the configuration said what the deployment has: an answer or a 404 is kept for the visit; a failed read is not.
+	let configKnown = !deps.config;
 	let loaded: Promise<void> | undefined;
 	const load = () =>
 		(loaded ??= (async () => {
-			const [stored, keys, config] = (await Promise.all([deps.store.get("prefs"), deps.store.get("hostKeys"), readConfig()])) as [Partial<Kept> | undefined, Record<string, string> | undefined, unknown];
+			const [stored, keys] = (await Promise.all([deps.store.get("prefs"), deps.store.get("hostKeys"), learnConfig(1)])) as [Partial<Kept> | undefined, Record<string, string> | undefined, void];
 			const names = stored?.names && typeof stored.names === "object" ? stored.names : {};
 			kept = { prefs: { ...DEFAULTS, ...stored?.prefs }, hosts: Array.isArray(stored?.hosts) ? stored.hosts : [], names, ...(stored?.use ? { use: stored.use } : {}) };
 			hostKeys = keys ?? {};
-			canPair = !!config && typeof config === "object" && !Array.isArray(config);
-			canAddHost = !(canPair && (config as { relay?: unknown }).relay === false);
 			if (deps.pairLink) state = { status: "starting", pairing: {} };
 			else if (!kept.use) state = noMachine();
+			// Not read: the first answer does not wait for more tries, which go on meanwhile.
+			if (!configKnown) relearning = learnConfig(CONFIG_TRIES - 1, true).finally(() => (relearning = undefined));
 		})());
-	/** The configuration, or nothing when it cannot be read within a few seconds. */
+	/** The configuration; `UNREAD` when it could not be read within a few seconds, or the read failed. */
 	const readConfig = async (): Promise<unknown> => {
-		if (!deps.config) return undefined;
+		if (!deps.config) return null;
 		let timer: Parameters<typeof clearTimeout>[0];
-		const late = new Promise<undefined>((resolve) => (timer = setTimeout(resolve, 5000)));
+		const late = new Promise<typeof UNREAD>((resolve) => (timer = setTimeout(() => resolve(UNREAD), 5000)));
 		try {
 			return await Promise.race([deps.config(), late]);
 		} catch {
-			return undefined;
+			return UNREAD;
 		} finally {
 			clearTimeout(timer);
 		}
+	};
+	/**
+	 * Reads the configuration, up to `tries` times with a wait between (`waitFirst`: before the
+	 * first too), until it says what the deployment has. The first screen follows what it says.
+	 */
+	const learnConfig = async (tries: number, waitFirst = false) => {
+		for (let n = 0; n < tries && !configKnown; n++) {
+			if (n > 0 || waitFirst) await wait(backoff(n));
+			const config = await readConfig();
+			if (config === UNREAD) continue;
+			configKnown = true;
+			canPair = !!config && typeof config === "object" && !Array.isArray(config);
+			canAddHost = !(canPair && (config as { relay?: unknown }).relay === false);
+			if (state === NO_MACHINE || state === NO_PAIRED) setState(noMachine());
+		}
+	};
+	// The reads under way after the first one failed; a state read waits for them, or makes one more.
+	let relearning: Promise<void> | undefined;
+	let answered = false;
+	/** A configuration not known yet at a later state read is read again (never for the first answer, which `load` read for). */
+	const relearn = async () => {
+		if (configKnown || !answered) return;
+		await (relearning ??= learnConfig(1).finally(() => (relearning = undefined)));
 	};
 	const save = () => deps.store.set("prefs", kept);
 	const saveKeys = () => deps.store.set("hostKeys", hostKeys);
@@ -468,6 +498,8 @@ export function webBridge(deps: WebBridgeDeps) {
 		},
 		async state(): Promise<AppState> {
 			await load();
+			await relearn();
+			answered = true;
 			return { state, connected, home: state.status === "ready" ? state.home : undefined, prefs: prefsOut(), platform: "web", focused: true, updates: false, versions: { app: deps.version, electron: "none" }, local: false, canAddHost, canPair, ...(deps.serviceHost ? { serviceHost: deps.serviceHost } : {}) };
 		},
 		/** The page has started: it is told the state as it is now, and the pairing link is paired with, or else the machine in use connected to (once). */

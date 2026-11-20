@@ -284,9 +284,8 @@ test("whether pairing is offered comes from the service's configuration too: a d
 	const cases: [string, WebBridgeDeps["config"], { canPair: boolean; canAddHost: boolean }][] = [
 		["meeting and relay", async () => ({ ice: [], relay: true }), { canPair: true, canAddHost: true }],
 		["meeting only", async () => ({ ice: [], relay: false }), { canPair: true, canAddHost: false }],
-		// The default configuration answers /meet/config with 404, which bridge-main.ts reads as nothing.
-		["relay only", async () => undefined, { canPair: false, canAddHost: true }],
-		["a failed read", async () => Promise.reject(new Error("offline")), { canPair: false, canAddHost: true }],
+		// The default configuration answers /meet/config with 404, which bridge-main.ts reads as null.
+		["relay only", async () => null, { canPair: false, canAddHost: true }],
 		["an answer that is no configuration", async () => "nonsense", { canPair: false, canAddHost: true }],
 		["no configuration", undefined, { canPair: false, canAddHost: true }],
 	];
@@ -296,6 +295,45 @@ test("whether pairing is offered comes from the service's configuration too: a d
 		assert.deepEqual({ canPair: s.canPair, canAddHost: s.canAddHost }, said, name);
 		c.stop();
 	}
+});
+
+test("a deployment without the meeting service (404) is told once and for the visit: the configuration is not read again", async () => {
+	let reads = 0;
+	const c = client(computer(), { config: async () => (reads++, null) });
+	assert.equal((await c.page.state()).canPair, false);
+	assert.equal((await c.page.state()).canPair, false);
+	assert.equal(reads, 1);
+	c.stop();
+});
+
+test("a failed read of the configuration (offline, a 429, a 5xx) is not taken for no meeting service: it is read again, and pairing is offered once it answers", async () => {
+	// Fails once, then answers: the first answer is not held up, and the bridge reads it again by itself.
+	let reads = 0;
+	const flaky = client(computer(), { config: async () => (++reads <= 1 ? Promise.reject(new Error("429")) : { ice: [], relay: true }) });
+	assert.equal((await flaky.page.state()).canPair, false);
+	const until = Date.now() + 2000;
+	while (reads < 2 && Date.now() < until) await new Promise((r) => setTimeout(r, 5));
+	const s = await flaky.page.state();
+	assert.deepEqual({ canPair: s.canPair, canAddHost: s.canAddHost }, { canPair: true, canAddHost: true });
+	flaky.stop();
+	// Fails for longer than the bridge tries by itself: read again at the next state read, which can say yes.
+	let down = true;
+	let tries = 0;
+	const later = client(computer(), { config: async () => (tries++, down ? Promise.reject(new Error("offline")) : { ice: [], relay: false }) });
+	const first = await later.page.state();
+	assert.deepEqual({ canPair: first.canPair, canAddHost: first.canAddHost }, { canPair: false, canAddHost: true });
+	while (tries < 3 && Date.now() < until + 2000) await new Promise((r) => setTimeout(r, 5));
+	assert.equal(tries, 3, "the bridge's own tries");
+	assert.equal((await later.page.state()).canPair, false);
+	assert.equal(tries, 4, "read again at a state read");
+	down = false;
+	const next = await later.page.state();
+	assert.deepEqual({ canPair: next.canPair, canAddHost: next.canAddHost }, { canPair: true, canAddHost: false });
+	// Known now: the first screen says to pair, and nothing is read again.
+	assert.doesNotMatch(message(next.state), /user@host/);
+	await later.page.state();
+	assert.equal(tries, 5);
+	later.stop();
 });
 
 test("the page is told the deployment's host, which it names as the relay's and the meeting service's; none is invented", async () => {
