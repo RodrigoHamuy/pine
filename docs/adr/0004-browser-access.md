@@ -1,7 +1,8 @@
 # 0004: Browser access to the Pine app's pine
 
 Status: accepted. Amends what ADR 0001 says about a network of the app's own, and ADR 0003 on
-how a host key is trusted and what the Worker carries.
+how a host key is trusted and what the Worker carries. Amended since: the mobile app pairs too
+(see the end).
 
 ## Context
 
@@ -132,3 +133,40 @@ machines would be a list of every owner's computers, kept by the project.
   the computer. The computer has to be awake and the app open.
 - The crossing of real networks is proven by no test: it is tried by hand before a release, from
   a phone on cellular data, on another Wi-Fi and on the same Wi-Fi.
+
+## Amended: the mobile app pairs too
+
+Pairing was the browser's alone: a phone with the mobile app that scanned the QR code paired its
+browser, and the mobile app itself needed SSH. Now the mobile app pairs with the same QR code and
+reaches the computer over the same kind of data channel, carrying the same SSH
+([0001](0001-mobile-app.md), "Amended: the app pairs with the Pine app"). Nothing on the
+computer's side changed: the access server, pairing at the computer, the meeting protocol and the
+Pine app's settings are as above, and a native client is told apart from a browser nowhere (the
+meeting service checks no origin, the access server sees SSH only). Released browsers and apps
+keep working.
+
+- **The phone is a device like a browser.** It signs in with its own Ed25519 key, the one it has for
+  SSH, and is listed in Settings > Browser access by its name, "Pine on" and the phone's model
+  ("Pine on Pixel 9"; "Pine on iPhone", since iOS gives no model name). Remove there shuts it out;
+  Forget in the app removes the entry on the phone only.
+- **The host key is trusted by the link here too.** The native cores check the key the computer
+  presents against the machine id during key exchange, before the phone's key is offered, and keep
+  nothing else for a paired computer: the id is the trusted key. A computer that presents another
+  key is refused for good.
+- **`https` only.** The app takes the meeting service a link names when it is `https`, and shows
+  its host before the owner confirms when it is not the official one. No setting accepts `http`;
+  the tests reach an `http` helper through a seam of their own.
+- **How the link reaches the app.** On Android, App Links: the official service serves
+  `/.well-known/assetlinks.json` for the release-signed app once its configuration names the
+  release key's fingerprint (`ANDROID_CERT_SHA256`). On an iPhone or iPad the link opens the
+  browser, and the web client offers "Open in the Pine app" (a `pine:` address) or "Continue in
+  this browser" before it uses the code, which works once for whichever pairs first. That choice and
+  the statement file are the only changes to the web client and its Worker; the choice is shown on
+  no other device.
+- **The libraries.** The computer and the iOS app run libdatachannel; the Android app runs Google's
+  libwebrtc, which needs one more permission there, `ACCESS_NETWORK_STATE`
+  ([0001](0001-mobile-app.md)). The two interoperate over the same protocol; that is proven on the
+  emulator against the real access host, not yet on a real phone or over cellular.
+- **The ICE servers** are the service's, TURN included where a service names one; the app has no
+  relay setting of its own. A relay the computer's owner names serves the phone as it serves a
+  browser, from the computer's side.
