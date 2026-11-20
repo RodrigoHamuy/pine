@@ -120,12 +120,12 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	 * An address of the app's own scheme the app was opened with (the web client's "Open in the Pine
 	 * app" on an iPhone). It starts nothing: the page reads it as it reads a pasted link, says so when
 	 * it is not one, and otherwise asks the owner, whose yes calls `pair`. Kept until the page listens,
-	 * for an address the app was started with. A text longer than any pairing link is not handed on.
+	 * for an address the app was started with. Only what comes as the web client's address for the
+	 * app (the core's `openedLink`, mobile/cases/opened-links.json).
 	 */
 	func opened(_ url: URL) {
-		let text = url.absoluteString
-		guard PineViewController.isPine(url), text.utf8.count <= 1024 else { return }
-		notifyListeners("link", data: ["link": text], retainUntilConsumed: true)
+		guard let link = openedLink(url.absoluteString) else { return }
+		notifyListeners("link", data: ["link": link], retainUntilConsumed: true)
 	}
 
 	@objc func ready(_ call: CAPPluginCall) { later(call) { $0.ready(); return nil } }

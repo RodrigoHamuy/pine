@@ -81,6 +81,27 @@ fun pairLink(value: String?): PairLink? {
 	return PairLink(service, id, code)
 }
 
+/** The longest address the app hands the page: more than any pairing link has. */
+private const val OPENED_LENGTH = 1024
+
+/**
+ * An address the app was opened with (an App Link of Pine's meeting service, or a view intent
+ * another app sends it by name), as the plugin hands it to the page; null when it drops it. Only
+ * what comes as a pairing link of the web client comes: http or https with a host, the fragment
+ * `pair=` and what follows, printable ASCII, at most 1024 characters. An http service and a
+ * malformed pairing are let through on purpose: the page says why it refuses them, and the owner
+ * sees that the link was read. Handing it on starts nothing: the page asks the owner, and `pair`
+ * reads the link again with `pairLink`. iOS is opened with its own scheme instead (Paired.swift).
+ */
+fun openedLink(value: String?): String? {
+	if (value.isNullOrEmpty() || value.length > OPENED_LENGTH) return null
+	if (value.any { it < '!' || it > '~' }) return null
+	if (!outside(value)) return null
+	val hash = value.indexOf('#')
+	if (hash < 0 || !value.startsWith("pair=", hash + 1)) return null
+	return value
+}
+
 /** The host key fingerprint a machine id stands for, as OpenSSH prints it (`SHA256:` and base64); null for what is not a machine id. */
 fun pairedFingerprint(id: String): String? =
 	if (MACHINE_ID.matches(id)) "SHA256:" + id.replace('-', '+').replace('_', '/') else null
