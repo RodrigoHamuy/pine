@@ -28,6 +28,7 @@ import { Breakable, MachineList, Settings } from "./Settings.tsx";
 import { computerWord, firstScreen, isPaired, noMachineSaid } from "./machines.ts";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
+import { PairConfirm } from "./Pairing.tsx";
 import { PickDialog } from "./PickDialog.tsx";
 import { PublishDialog } from "./PublishDialog.tsx";
 import { QuestionDialog } from "./QuestionDialog.tsx";
@@ -90,7 +91,7 @@ export function Gate() {
 		</div>,
 	];
 	// A pairing link being paired with (the web client's): the four digits the computer shows too, once it showed them.
-	const pairing = firstScreen(state);
+	const pairing = firstScreen(state, s.device);
 	// The sentence under the title follows the view shown, never the emptiness of the list (machines.ts).
 	const said = state.status === "error" ? noMachineSaid(state, s.machinesShown.view, s.pairFailed) : undefined;
 	const pairFirst = state.status === "error" && said === undefined && !s.prefs.hosts.length;
@@ -101,6 +102,8 @@ export function Gate() {
 				<div key="p" className="flex w-full flex-col items-center gap-4">
 					{pairing.code ? <span className="font-mono text-4xl font-semibold tracking-widest select-text" data-slot="pairing-code">{pairing.code}</span> : null}
 					<Pulse label="Loading" />
+					{/* A pairing started from the owner's hand can be ended from here; the web client's has no way to. */}
+					{s.canCancelPair ? <Button variant="outline" data-slot="cancel-pairing" onClick={() => void s.cancelPair()}>Cancel</Button> : null}
 				</div>,
 			]
 		: state.status === "starting"
@@ -121,7 +124,7 @@ export function Gate() {
 					]
 				: state.status === "error"
 					? [
-							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? paired ? <>{named} is not reached</> : <>{named} is not reached over SSH</> : s.pairFailed ? "The pairing did not go through" : pairFirst ? "Pair this browser with your computer" : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? paired ? <>{named} is not reached</> : <>{named} is not reached over SSH</> : s.pairFailed ? "The pairing did not go through" : pairFirst ? `Pair this ${s.device} with your computer` : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
 							// No machine in use in the pairing view: the list's three lines say how, once.
 							said ?? "",
 							<div key="b" className="flex w-full flex-col items-center gap-4">
@@ -534,7 +537,7 @@ export function Machines() {
 			: !s.connected
 				? "pine does not answer"
 				: `pine${state.version ? ` ${state.version}` : ""} · ${on ?? (state.started ? "started here" : "attached")}`;
-	const about = state.status === "ready" ? `${state.home} · ${state.host ? (isPaired(state.host) ? "paired with this browser" : `over SSH (${state.host})`) : state.started ? "started by this app" : "a pine that was already running"}` : "";
+	const about = state.status === "ready" ? `${state.home} · ${state.host ? (isPaired(state.host) ? `paired with this ${s.device}` : `over SSH (${state.host})`) : state.started ? "started by this app" : "a pine that was already running"}` : "";
 	return (
 		<SidebarMenuItem className="app-no-drag">
 			<DropdownMenu>
@@ -903,6 +906,7 @@ export function App() {
 			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.updateAsk ? <UpdateAsk /> : null}
 			{s.homeScreen ? <HomeScreenTip /> : null}
+			{s.pairAsk ? <PairConfirm key={s.pairAsk.link} link={s.pairAsk} device={s.device} onPair={() => void s.confirmPair()} onCancel={() => s.dropPair()} /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
 			{s.publishing ? <PublishDialog /> : null}
 			{s.palette ? <Palette /> : null}

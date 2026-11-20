@@ -114,6 +114,51 @@ public final class Pines: @unchecked Sendable {
 	}
 
 	/**
+	 * Add a computer the phone was paired with by its link, as `paired:<machine id>`, with the
+	 * meeting service it is reached through and the name it gave (cleaned; none kept when empty).
+	 * Paired again, it keeps its place and takes the new service and name.
+	 */
+	@discardableResult
+	public func addPaired(id: String, service: String, name: String?) throws -> [String] {
+		if pairedFingerprint(id) == nil { throw RemoteError("ssh", "That is not a computer's machine id: pair it again from the Pine app.") }
+		if httpsOrigin(service)?.origin != service { throw RemoteError("ssh", "The meeting service of a paired computer is an https address: pair it again from the Pine app.") }
+		let host = PAIRED + id
+		return try lock.withLock {
+			let list = hosts
+			if !list.contains(host) && list.count >= MAX_HOSTS { throw RemoteError("ssh", "There are \(MAX_HOSTS) machines in the list already: forget one first.") }
+			var entry = ["service": service]
+			let cleaned = cleanName(name ?? "")
+			if !cleaned.isEmpty { entry["name"] = cleaned }
+			var entries = pairedEntries()
+			entries[host] = entry
+			shelf.set(Self.PAIRED_ENTRIES, Self.text(entries))
+			let next = list.contains(host) ? list : list + [host]
+			shelf.set(Self.HOSTS, Self.text(next))
+			return next
+		}
+	}
+
+	/** What is kept beside a paired computer of the list; nil for any other machine. */
+	public func paired(_ host: String) -> PairedComputer? {
+		guard case let .paired(id)? = try? listed(host), hosts.contains(host), let entry = pairedEntries()[host] as? [String: Any],
+			let service = entry["service"] as? String, httpsOrigin(service)?.origin == service else { return nil }
+		let name = (entry["name"] as? String).flatMap { $0.isEmpty ? nil : $0 }
+		return PairedComputer(id: id, service: service, name: name)
+	}
+
+	/** The names the owner sees for machines, by machine: those paired computers gave (`Prefs.names` of the page). */
+	public var names: [String: String] {
+		var out: [String: String] = [:]
+		for host in hosts { if let name = paired(host)?.name { out[host] = name } }
+		return out
+	}
+
+	private func pairedEntries() -> [String: Any] {
+		guard let text = shelf.get(Self.PAIRED_ENTRIES), let entries = try? JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any] else { return [:] }
+		return entries
+	}
+
+	/**
 	 * Take a machine out of the list and let go of its connection (a pine it started there stops).
 	 * The one in use is refused while it is reached or being reached; one that could not be reached
 	 * may go (its host key changed, say), and then no machine is in use.
@@ -125,6 +170,9 @@ public final class Pines: @unchecked Sendable {
 			if wasInUse && current["status"] as? String != "error" { throw RemoteError("ssh", "The app uses this machine now. Use another one first.") }
 			if wasInUse { shelf.set(Self.USE, nil) }
 			shelf.set(Self.HOSTS, Self.text(hosts.filter { $0 != host }))
+			// Only the phone's entry: the computer keeps this phone until Remove in the Pine app.
+			var entries = pairedEntries()
+			if entries.removeValue(forKey: host) != nil { shelf.set(Self.PAIRED_ENTRIES, Self.text(entries)) }
 			unknown[host] = nil
 			streams[host] = nil
 			return (held.removeValue(forKey: host), wasInUse)
@@ -160,7 +208,8 @@ public final class Pines: @unchecked Sendable {
 
 	/** Forget the host key stored for a machine: the next connection shows its key again. */
 	public func forgetKey(_ host: String) throws {
-		guard let named = try? sshHost(host) else { return }
+		// A paired computer's key is its machine id: there is nothing to forget but the machine.
+		guard case let .ssh(named)? = try? listed(host) else { return }
 		try known.forget(host: named.host, port: named.port)
 		lock.withLock { unknown[host] = nil }
 	}
@@ -321,9 +370,11 @@ public final class Pines: @unchecked Sendable {
 	private static let HOSTS = "hosts"
 	private static let USE = "use"
 	private static let PREFS = "prefs"
+	/** What is kept beside each paired computer of the list, by machine: `{service, name}`, the same key as on Android. */
+	private static let PAIRED_ENTRIES = "paired"
 
-	private static func text(_ list: [String]) -> String {
-		String(decoding: try! JSONSerialization.data(withJSONObject: list, options: [.withoutEscapingSlashes]), as: UTF8.self)
+	private static func text(_ value: Any) -> String {
+		String(decoding: try! JSONSerialization.data(withJSONObject: value, options: [.withoutEscapingSlashes]), as: UTF8.self)
 	}
 
 	private static func starting(_ host: String) -> [String: Any] { ["status": "starting", "host": host] }

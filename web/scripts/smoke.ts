@@ -615,6 +615,35 @@ try {
 		assert.deepEqual(phoneErrors.filter((e) => /Content Security Policy|Refused/.test(e)), [], "the paired browser's page broke no policy");
 	});
 
+	await check("on an iPhone a pairing link waits for the owner's choice: the app's button uses no code, and Continue in this browser pairs", async () => {
+		const iphone = await headless();
+		cleanups.push(() => iphone.stop());
+		await iphone.page.addInitScript(() => {
+			Object.defineProperty(navigator, "userAgent", { get: () => "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1" });
+		});
+		const its = iphone.page.frameLocator("iframe");
+		shownCode = async () => (await its.locator("[data-slot=pairing-code]").innerText({ timeout: 20_000 })).trim();
+		const before = asked.length;
+		const { link } = pairing!.open();
+		await iphone.page.goto(link);
+		const app = iphone.page.locator('.choice button[data-choice="app"]');
+		await app.waitFor({ timeout: 20_000 });
+		// The link's fragment left the address before the choice was drawn.
+		assert.equal(iphone.page.url(), `${origin}/`);
+		await app.click();
+		await iphone.page.locator(".choice .note").waitFor({ timeout: 5000 });
+		await new Promise((r) => setTimeout(r, 500));
+		assert.equal(asked.length, before, "the computer was asked nothing before the owner chose the browser");
+		await iphone.page.locator('.choice button[data-choice="browser"]').click();
+		await its.locator("textarea").first().waitFor({ timeout: 90_000 });
+		assert.equal(asked.length, before + 1, "the owner was asked once");
+		assert.equal(asked.at(-1)!.name, "Safari on iPhone");
+		assert.equal(asked.at(-1)!.shown, asked.at(-1)!.code);
+		assert.equal(await iphone.page.locator(".choice").count(), 0, "the choice is gone");
+		assert.equal(await iphone.page.locator("iframe").getAttribute("sandbox"), "allow-scripts");
+		await iphone.stop();
+	});
+
 	await check("a browser without Ed25519 in WebCrypto is told which browsers work, and nothing else starts", async () => {
 		const other = await browser.context.newPage();
 		await other.addInitScript(() => {

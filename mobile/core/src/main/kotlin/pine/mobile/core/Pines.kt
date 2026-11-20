@@ -90,6 +90,39 @@ class Pines(
 	}
 
 	/**
+	 * Add a computer the phone was paired with by its link, as `paired:<machine id>`, with the
+	 * meeting service it is reached through and the name it gave (cleaned; none kept when empty).
+	 * Paired again, it keeps its place and takes the new service and name.
+	 */
+	fun addPaired(id: String, service: String, name: String?): List<String> {
+		if (pairedFingerprint(id) == null) throw RemoteError("ssh", "That is not a computer's machine id: pair it again from the Pine app.")
+		if (httpsOrigin(service)?.first != service) throw RemoteError("ssh", "The meeting service of a paired computer is an https address: pair it again from the Pine app.")
+		val host = PAIRED + id
+		synchronized(lock) {
+			val list = hosts
+			if (host !in list && list.size >= MAX_HOSTS) throw RemoteError("ssh", "There are $MAX_HOSTS machines in the list already: forget one first.")
+			val entry = JSONObject().put("service", service)
+			cleanName(name ?: "").ifEmpty { null }?.let { entry.put("name", it) }
+			shelf.set(PAIRED_ENTRIES, pairedEntries().put(host, entry).toString())
+			return (if (host in list) list else list + host).also { shelf.set(HOSTS, JSONArray(it).toString()) }
+		}
+	}
+
+	/** What is kept beside a paired computer of the list; null for any other machine. */
+	fun paired(host: String): PairedComputer? {
+		val id = (runCatching { listed(host) }.getOrNull() as? Listed.Paired)?.id ?: return null
+		val entry = pairedEntries().optJSONObject(host)?.takeIf { host in hosts } ?: return null
+		val service = entry.optString("service").takeIf { httpsOrigin(it)?.first == it } ?: return null
+		return PairedComputer(id, service, entry.optString("name").ifEmpty { null })
+	}
+
+	/** The names the owner sees for machines, by machine: those paired computers gave (`Prefs.names` of the page). */
+	val names: Map<String, String>
+		get() = hosts.mapNotNull { host -> paired(host)?.name?.let { host to it } }.toMap()
+
+	private fun pairedEntries(): JSONObject = shelf.get(PAIRED_ENTRIES)?.let { runCatching { JSONObject(it) }.getOrNull() } ?: JSONObject()
+
+	/**
 	 * Take a machine out of the list and let go of its connection (a pine it started there stops).
 	 * The one in use is refused while it is reached or being reached; one that could not be reached
 	 * may go (its host key changed, say), and then no machine is in use.
@@ -102,6 +135,8 @@ class Pines(
 			if (wasInUse && state.optString("status") != "error") throw RemoteError("ssh", "The app uses this machine now. Use another one first.")
 			if (wasInUse) shelf.set(USE, null)
 			shelf.set(HOSTS, JSONArray(hosts.filter { it != host }).toString())
+			// Only the phone's entry: the computer keeps this phone until Remove in the Pine app.
+			pairedEntries().let { if (it.remove(host) != null) shelf.set(PAIRED_ENTRIES, it.toString()) }
 			unknown.remove(host)
 			streams.remove(host)
 			stop = held.remove(host)
@@ -137,7 +172,8 @@ class Pines(
 
 	/** Forget the host key stored for a machine: the next connection shows its key again. */
 	fun forgetKey(host: String) {
-		val named = sshHost(host) ?: return
+		// A paired computer's key is its machine id: there is nothing to forget but the machine.
+		val named = (runCatching { listed(host) }.getOrNull() as? Listed.Ssh)?.host ?: return
 		known.forget(named.host, named.port)
 		synchronized(lock) { unknown.remove(host) }
 	}
@@ -265,6 +301,8 @@ class Pines(
 		const val HOSTS = "hosts"
 		const val USE = "use"
 		const val PREFS = "prefs"
+		/** What is kept beside each paired computer of the list, by machine: `{service, name}`. */
+		const val PAIRED_ENTRIES = "paired"
 
 		fun starting(host: String) = JSONObject().put("status", "starting").put("host", host)
 

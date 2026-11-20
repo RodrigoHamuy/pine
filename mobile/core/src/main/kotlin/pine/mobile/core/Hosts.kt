@@ -23,6 +23,8 @@ fun sshHost(value: String?): SshHost? {
 	val given = value?.trim() ?: return null
 	if (given.isEmpty()) return null
 	val refused = RemoteError("ssh", "\"${given.take(80)}\" is not a host for ssh. Write it as host, user@host or user@host:port.")
+	// A paired computer (Paired.kt), never a host "paired" whose port follows the colon.
+	if (given.startsWith(PAIRED)) throw refused
 	val colon = given.lastIndexOf(':')
 	val name = if (colon < 0) given else given.substring(0, colon)
 	val port = if (colon < 0) 22 else given.substring(colon + 1).takeIf { Regex("^[0-9]{1,5}$").matches(it) }?.toInt() ?: throw refused

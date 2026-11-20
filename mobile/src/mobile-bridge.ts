@@ -4,6 +4,7 @@
 // other machines. What only the desktop app can do refuses or does nothing, as the preview's
 // stand-in does (desktop/src/preview-bridge.ts).
 import type { AppState, PageBridge, Prefs } from "../../desktop/src/bridge.ts";
+import { isPaired, readPairLink } from "../../desktop/src/machines.ts";
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
 import { ORIGINS, type PagePrefs, type PinePlugin, type Platform } from "./plugin.ts";
 
@@ -37,7 +38,7 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 
 	const load = async () => {
 		const stored = await plugin.loadPrefs();
-		prefs = { ...DEFAULTS, ...stored.prefs, hosts: stored.hosts, ...(stored.use ? { use: stored.use } : {}) };
+		prefs = { ...DEFAULTS, ...stored.prefs, hosts: stored.hosts, ...(stored.use ? { use: stored.use } : {}), ...(stored.names ? { names: { ...stored.names } } : {}) };
 	};
 
 	// The page's listeners of each kind. The plugin is listened to once per kind, on the first page
@@ -48,7 +49,7 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 	const emit = (event: string, value: unknown) => heard.get(event)?.forEach((fn) => fn(value));
 	// `own` takes a message for the bridge itself, which the page then never hears (the back button).
 	const on =
-		(event: "service" | "events" | "connection" | "focus" | "menu", unwrap: (data: any) => unknown, own: (value: unknown) => boolean = () => false) =>
+		(event: "service" | "events" | "connection" | "focus" | "menu" | "link", unwrap: (data: any) => unknown, own: (value: unknown) => boolean = () => false) =>
 		(fn: Listener) => {
 			let set = heard.get(event);
 			if (!set) {
@@ -83,7 +84,7 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 		state: async (): Promise<AppState> => {
 			const [s] = await Promise.all([plugin.state(), load()]);
 			bars(prefs.look);
-			return { state: s.state, connected: s.connected, home: s.state.status === "ready" ? s.state.home : undefined, prefs: { ...prefs }, platform, focused: true, updates: false, versions: { app: s.version, electron: "none" }, local: false };
+			return { state: s.state, connected: s.connected, home: s.state.status === "ready" ? s.state.home : undefined, prefs: { ...prefs }, platform, focused: true, updates: false, versions: { app: s.version, electron: "none" }, local: false, canPair: s.canPair === true };
 		},
 		// As Electron's `send`, nothing to wait for: a plugin that cannot start says so as a connection that failed.
 		ready: () =>
@@ -102,7 +103,7 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 			const look = "look" in change ? cleanLook(change.look) : prefs.look;
 			if (look) next.look = look;
 			await plugin.savePrefs({ prefs: next });
-			prefs = { ...next, hosts: prefs.hosts, ...(prefs.use ? { use: prefs.use } : {}) };
+			prefs = { ...next, hosts: prefs.hosts, ...(prefs.use ? { use: prefs.use } : {}), ...(prefs.names ? { names: prefs.names } : {}) };
 			if ("look" in change) bars(look);
 			return { ...prefs };
 		},
@@ -121,13 +122,26 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 			prefs = { ...prefs, hosts: (await plugin.addHost({ host })).hosts };
 			return { ...prefs };
 		},
-		// A machine forgotten takes its host key along: added again, it is asked about as a new one.
+		// A machine forgotten takes its host key along: added again, it is asked about as a new one. A
+		// paired computer has none to forget (its machine id is its key), and its name goes with it.
+		// Forgetting is the phone's alone: only Remove in the Pine app closes a paired computer's access.
 		forgetHost: async (host: string) => {
 			prefs = { ...prefs, hosts: (await plugin.forgetHost({ host })).hosts };
 			if (prefs.use === host) delete prefs.use;
-			await plugin.forgetHostKey({ host });
+			if (prefs.names?.[host] !== undefined) {
+				const { [host]: _gone, ...names } = prefs.names;
+				prefs = { ...prefs, names };
+			}
+			if (!isPaired(host)) await plugin.forgetHostKey({ host });
 			return { ...prefs };
 		},
+		// Only a pairing link of an https service reaches the plugin, which reads it again with the core's parser.
+		pair: async (link: string) => {
+			if (!readPairLink(link)) throw new Error("That is not a pairing link: open Pine on your computer, go to Settings > Browser access, and add this device again.");
+			await plugin.pair({ link });
+		},
+		stopPairing: () => plugin.cancelPairing(),
+		onPairLink: on("link", (d) => (typeof d?.link === "string" ? d.link : ""), (link) => !link),
 		deviceKey: async () => {
 			const { key } = await plugin.publicKey();
 			return { key, copy: () => plugin.copy({ text: key }), share: () => plugin.share({ title: "This phone's SSH key", text: key }) };
