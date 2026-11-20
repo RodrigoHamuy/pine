@@ -13,7 +13,6 @@ import net.schmizz.sshj.userauth.UserAuthException
 import net.schmizz.keepalive.KeepAliveProvider
 import net.schmizz.keepalive.KeepAliveRunner
 import okhttp3.OkHttpClient
-import tel.schich.libdatachannel.LibDataChannel
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -23,6 +22,8 @@ import java.net.SocketTimeoutException
 import java.security.PublicKey
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
+import javax.net.ssl.SSLContext
+import javax.net.ssl.X509TrustManager
 import kotlin.concurrent.thread
 
 /** What runs on the other machine: src/remote.ts's `remoteCommand()`, character for character. */
@@ -81,8 +82,11 @@ class RemoteService internal constructor(
  * confirmed, or, for a computer paired by its link, whose host key is its machine id. `answerMs` is
  * how long `pine service` there has to say where its daemon answers; `connectMs` how long the
  * machine has to answer at all (ssh's ConnectTimeout); `openMs` how long a paired computer has to
- * be reached, from the join of its meeting to the open channel. `native` loads the WebRTC library:
- * the Android app's by default, the JVM's in the tests.
+ * be reached, from the join of its meeting to the open channel. `webrtc` is the WebRTC library a
+ * paired computer is reached with (WebRtc.kt): libwebrtc in the Android app, libdatachannel in the
+ * tests. `trust` is what a meeting service's certificate is checked against, the system's when it is
+ * null: only the app's emulator check hands in an authority of its own. (A meeting service is trusted
+ * with signals and nothing more: the computer is checked by its host key, whatever the service says.)
  */
 class Remote internal constructor(
 	private val key: DeviceKey,
@@ -95,7 +99,8 @@ class Remote internal constructor(
 	 */
 	private val readMs: Int = 60_000,
 	private val openMs: Long = 20_000,
-	private val native: () -> Unit = LibDataChannel::initialize,
+	private val webrtc: WebRtc,
+	private val trust: X509TrustManager? = null,
 	/**
 	 * Where a meeting service is reached, by its https origin: the origin itself. Only a test hands
 	 * in another (the access host's helper answers on http on the loopback, which no link may name):
@@ -106,12 +111,13 @@ class Remote internal constructor(
 	constructor(
 		key: DeviceKey,
 		known: KnownHosts,
+		webrtc: WebRtc,
 		answerMs: Long = 60_000,
 		connectMs: Int = 15_000,
 		readMs: Int = 60_000,
 		openMs: Long = 20_000,
-		native: () -> Unit = LibDataChannel::initialize,
-	) : this(key, known, answerMs, connectMs, readMs, openMs, native, { it })
+		trust: X509TrustManager? = null,
+	) : this(key, known, answerMs, connectMs, readMs, openMs, webrtc, trust, { it })
 
 	/** Where the meeting service `service` is reached: checked to be an https origin before anything is routed or reached. */
 	private fun meeting(service: String): String =
@@ -122,6 +128,12 @@ class Remote internal constructor(
 			.connectTimeout(connectMs.toLong(), TimeUnit.MILLISECONDS)
 			.readTimeout(connectMs.toLong(), TimeUnit.MILLISECONDS)
 			.followRedirects(false)
+			.apply {
+				trust?.let { trusted ->
+					val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trusted), null) }
+					sslSocketFactory(tls.socketFactory, trusted)
+				}
+			}
 			.build()
 	}
 
@@ -190,16 +202,14 @@ class Remote internal constructor(
 		val words = PairedWords(label)
 		val expected = pairedFingerprint(id)!!
 		val stream = try {
-			openPeer(meeting(computer.service), id, http, native, openMs)
+			openPeer(meeting(computer.service), id, http, webrtc, openMs)
 		} catch (e: PeerClosed) {
 			throw RemoteError("ssh", words.peer(e.reason), passing = true)
 		}
 		val ssh = client()
-		// What the computer may send before the phone says it took it in. libdatachannel's ICE on the
-		// JVM fails outright when a burst of more than about a megabyte comes in at once from the Pine
-		// app's (found against its real access host: a 2 MiB answer under sshj's default window of
-		// 2 MiB fails, under this one it crosses); every channel of the session has a window of its own.
-		ssh.connection.windowSize = 512L * 1024
+		// What the computer may send before the phone says it took it in: sshj's own, unless the library
+		// cannot take such a burst at once (`WebRtc.sshWindow`).
+		webrtc.sshWindow?.let { ssh.connection.windowSize = it }
 		var seen: String? = null
 		ssh.addHostKeyVerifier(object : HostKeyVerifier {
 			override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
@@ -238,7 +248,7 @@ class Remote internal constructor(
 	 * `Allowed` the caller keeps the computer (`Pines.addPaired`) and connects to it as a paired phone.
 	 */
 	fun pair(link: PairLink, name: String, on: (PairingState) -> Unit): Pairing =
-		startPairing(link, name, on, key, open = { openPeer(meeting(link.service), link.id, http, native, openMs) }, client = {
+		startPairing(link, name, on, key, open = { openPeer(meeting(link.service), link.id, http, webrtc, openMs) }, client = {
 			// The owner may take the computer's two minutes to answer: a read waits as long as the pairing does.
 			client(readMs = PAIR_WAIT_MS.toInt())
 		})

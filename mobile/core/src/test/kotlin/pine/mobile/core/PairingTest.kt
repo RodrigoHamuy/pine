@@ -1,7 +1,6 @@
 package pine.mobile.core
 
 import org.json.JSONObject
-import tel.schich.libdatachannel.LibDataChannelArchDetect
 import java.util.Collections
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -16,7 +15,7 @@ class PairingTest {
 	private val key = DeviceKey(vault)
 	private val daemon = StandInDaemon()
 	private val computer = AccessHost("""{"base":"${daemon.base}","token":"secret-token","mode":"safe","started":true,"home":"/Users/me/.pine","version":"0.40.0"}""")
-	private val remote = Remote(key, KnownHosts(vault), answerMs = 5_000, native = LibDataChannelArchDetect::initialize, route = { if (it == SERVICE) computer.service else it })
+	private val remote = Remote(key, KnownHosts(vault), answerMs = 5_000, webrtc = LibDataChannelRtc, route = { if (it == SERVICE) computer.service else it })
 	private val told = Collections.synchronizedList(mutableListOf<PairingState>())
 	private val open = mutableListOf<AutoCloseable>()
 
@@ -65,7 +64,7 @@ class PairingTest {
 	@Test
 	fun `with no answer in time, it ends as expired and nothing is stored`() {
 		val slow = AccessHost("""{"base":"${daemon.base}","token":"t"}""", "--answer-ms", "300").also { open.add(it) }
-		val routed = Remote(key, KnownHosts(vault), native = LibDataChannelArchDetect::initialize, route = { slow.service })
+		val routed = Remote(key, KnownHosts(vault), webrtc = LibDataChannelRtc, route = { slow.service })
 		val link = pairLink(slow.command("open").getString("link").replace(slow.service, SERVICE))!!
 		val pairing = routed.pair(link, "Pine on Pixel 9") { told.add(it) }
 		slow.event("asked")

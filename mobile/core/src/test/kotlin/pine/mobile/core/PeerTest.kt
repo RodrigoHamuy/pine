@@ -1,7 +1,6 @@
 package pine.mobile.core
 
 import org.json.JSONObject
-import tel.schich.libdatachannel.LibDataChannelArchDetect
 import java.net.InetAddress
 import java.net.ServerSocket
 import java.security.SecureRandom
@@ -44,7 +43,7 @@ class PeerTest {
 	/** Where the test's https names of meeting services are reached: the helper's meeting is http on the loopback, which no link and no stored machine may name. */
 	private val routes = mutableMapOf(SERVICE to computer.service)
 
-	private fun remote(openMs: Long = 20_000) = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = openMs, native = LibDataChannelArchDetect::initialize, route = { routes[it] ?: it })
+	private fun remote(openMs: Long = 20_000) = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = openMs, webrtc = LibDataChannelRtc, route = { routes[it] ?: it })
 
 	/** The computer as the phone keeps it once paired, under the https name the test routes to the helper's meeting. */
 	private fun paired(name: String? = "Test Mac", id: String = computer.machineId, service: String = SERVICE) = PairedComputer(id, service, name)
@@ -216,7 +215,7 @@ class PeerTest {
 	fun `without the test's seam, the helper's http meeting service is not reached, on the loopback or anywhere`() {
 		computer.pair(key)
 		// The app's Remote: no route but the service itself.
-		val app = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = 2_000, native = LibDataChannelArchDetect::initialize)
+		val app = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = 2_000, webrtc = LibDataChannelRtc)
 		for (service in listOf(computer.service, "http://127.0.0.1:1", "http://pine.example")) {
 			assertNull(meetingService(service), service)
 			assertContains(assertFailsWith<RemoteError> { app.connect(host, paired(service = service)) }.message!!, "https", message = service)
