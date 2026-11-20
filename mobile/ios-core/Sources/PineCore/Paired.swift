@@ -6,9 +6,6 @@
 // holds both cores to them.
 import Foundation
 
-/** The project's meeting service, as the Pine app's access control names it (`OFFICIAL_SERVICE`). */
-public let OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev"
-
 /** How a computer paired by its link is written among the machines: `paired:` and its machine id. */
 public let PAIRED = "paired:"
 
@@ -20,23 +17,18 @@ private let PAIR_CODE = "[A-Za-z0-9_-]{22}"
 
 /**
  * What a pairing link names: the meeting service every connection to that computer goes through
- * (`service`, an https origin), the computer's machine id and the one-time code. `host` is the
- * service as the owner is shown it before confirming, where it is not the official one.
+ * (`service`, an https origin), the computer's machine id and the one-time code.
  */
 public struct PairLink: Equatable, Sendable {
 	public let service: String
-	public let host: String
 	public let id: String
 	public let code: String
 
-	public init(service: String, host: String, id: String, code: String) {
+	public init(service: String, id: String, code: String) {
 		self.service = service
-		self.host = host
 		self.id = id
 		self.code = code
 	}
-
-	public var official: Bool { service == OFFICIAL_SERVICE }
 }
 
 /** An https origin, scheme and host in lower case and without :443, and its host and port; nil for anything else. */
@@ -93,7 +85,7 @@ public func pairLink(_ value: String?) -> PairLink? {
 		(origin, id, code) = (String(given[..<given.index(before: hash.lowerBound)]), String(ids[0]), String(ids[1]))
 	}
 	guard let service = httpsOrigin(origin), wholeMatch(MACHINE_ID, id) != nil, wholeMatch(PAIR_CODE, code) != nil else { return nil }
-	return PairLink(service: service.origin, host: service.host, id: id, code: code)
+	return PairLink(service: service.origin, id: id, code: code)
 }
 
 /** The host key fingerprint a machine id stands for, as OpenSSH prints it (`SHA256:` and base64); nil for what is not a machine id. */

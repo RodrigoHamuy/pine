@@ -10,8 +10,8 @@ struct PairedTests {
 	func link(_ c: Case) {
 		let read = pairLink(c.text("input"))
 		guard let e = c.expect as? [String: Any] else { return #expect(read == nil) }
-		#expect(read == PairLink(service: e["service"] as! String, host: e["host"] as! String, id: e["id"] as! String, code: e["code"] as! String))
-		#expect(read?.official == e["official"] as? Bool)
+		// `host` and `official` of the case are the page's to read (desktop/src/machines.ts); the phone needs neither.
+		#expect(read == PairLink(service: e["service"] as! String, id: e["id"] as! String, code: e["code"] as! String))
 	}
 
 	@Test("a machine id is the fingerprint of the computer's host key", arguments: try cases("machine-ids"))

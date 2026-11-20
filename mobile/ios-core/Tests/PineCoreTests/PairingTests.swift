@@ -91,7 +91,7 @@ struct PairingTests {
 	func wrongCode() async throws {
 		try await withPeer(known: false) { rig in
 			let link = try await rig.opened()
-			let wrong = PairLink(service: link.service, host: link.host, id: link.id, code: String(repeating: "A", count: 22))
+			let wrong = PairLink(service: link.service, id: link.id, code: String(repeating: "A", count: 22))
 			let (end, told) = await rig.pair(wrong)
 			#expect(end == .expired)
 			#expect(told.states == [.expired], "no digits: the computer never asked")
@@ -133,7 +133,7 @@ struct PairingTests {
 	@Test("a computer that is not there ends the pairing in the web client's words")
 	func absent() async throws {
 		try await withPeer(known: false) { rig in
-			let link = PairLink(service: TEST_SERVICE, host: "pine.test", id: String(repeating: "A", count: 43), code: String(repeating: "B", count: 22))
+			let link = PairLink(service: TEST_SERVICE, id: String(repeating: "A", count: 43), code: String(repeating: "B", count: 22))
 			let (end, _) = await rig.pair(link)
 			#expect(end == .failed(message: "Your computer does not answer: it is off, asleep, or Pine is closed. Open Pine on your computer and add this device again."))
 		}

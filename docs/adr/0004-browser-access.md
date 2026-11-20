@@ -167,6 +167,7 @@ keep working.
   libwebrtc, which needs one more permission there, `ACCESS_NETWORK_STATE`
   ([0001](0001-mobile-app.md)). The two interoperate over the same protocol; that is proven on the
   emulator against the real access host, not yet on a real phone or over cellular.
-- **The ICE servers** are the service's, TURN included where a service names one; the app has no
-  relay setting of its own. A relay the computer's owner names serves the phone as it serves a
-  browser, from the computer's side.
+- **The ICE servers** are the service's STUN servers. A TURN server a service names cannot be used
+  by the app, as by no client today: the service and every client keep only each server's `urls`, so
+  no user name or credential reaches them. The app has no relay setting of its own. A relay the
+  computer's owner names serves the phone as it serves a browser, from the computer's side.

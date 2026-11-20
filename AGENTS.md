@@ -579,9 +579,16 @@ These are invariants. A change that breaks one needs a test that shows why it is
    phone, where any app could reach it), serves the page only pictures, video and sound under
    `MEDIA`'s rules (`mobile/core/.../Media.kt`), opens only `http(s)` addresses outside, lets
    the page navigate nowhere, open no window and have no permission, and the page there carries
-   the same policy. The mobile bridge gives the page three things the preload does not, and
+   the same policy. The mobile bridge gives the page these things the preload does not, and
    only these: `local: false` in `state()` (no machine of its own), `mediaBase` (the address
-   the plugin answers media at) and `deviceKey` (the phone's public SSH key). A host key is
+   the plugin answers media at), `deviceKey` (the phone's public SSH key), `trustHostKey` (the
+   owner's press on "Trust this key", for the fingerprint shown), and for pairing (below)
+   `canPair` in `state()`, `pair`, `stopPairing`, `onPairLink` and `names` in the stored
+   preferences. Those hand text and nothing more: `onPairLink` passes on a link the system
+   opened the app with and starts nothing, `pair` is called only after the owner confirmed the
+   link in the page and the plugin reads it again before it uses the code, `stopPairing` ends
+   the pairing that is open, and `names` are the names paired computers gave, for the page to
+   show. The token and the phone's key never reach the page on any of them. A host key is
    trusted only as the owner confirmed it in the page, exactly the fingerprint shown, and a
    changed one is refused. `mobile/test/build.test.ts` fails when a build carries the other's
    stand-in. What the WebView is kept from (permissions, `onCreateWindow`, a second window, file
