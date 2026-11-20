@@ -60,6 +60,10 @@ const SYNONYMS: string[][] = [
 	["vpn", "tailscale", "tailnet", "funnel", "zerotier", "wireguard", "tunnel", "reachable"],
 	// Browser access: what an owner calls pairing a device by the QR code the Pine app shows.
 	["pair", "pairing", "paired", "qr", "qrcode", "barcode", "scan"],
+	// What an owner calls taking a paired device away: Forget on the phone, Remove in the Pine app.
+	["forget", "unpair", "unpaired", "unlink", "revoke", "revoked"],
+	// How a scanned link opens the mobile app: App Links on Android, the `pine:` scheme on iOS.
+	["applinks", "applink", "deeplink", "deeplinks"],
 	["fingerprint", "hostkey", "known_hosts", "knownhosts"],
 	["rss", "atom", "podcast", "blog", "newsletter", "release", "changelog", "syndication"],
 	["calendar", "ical", "ics", "icalendar", "webcal", "caldav", "appointment", "meeting", "agenda"],

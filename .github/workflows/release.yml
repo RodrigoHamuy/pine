@@ -249,9 +249,10 @@ jobs:
         # The bridge, the configuration and both builds of the page: an APK is built only from what passes.
         run: npm run check --prefix mobile && npm test --prefix mobile
       - if: steps.signing.outputs.ready == 'true'
-        name: The NDK that strips libdatachannel
-        # The exact one mobile/android/variables.gradle names: without it AGP packages the library
-        # with its debug symbols (about 30 MB per ABI instead of 9) and only warns.
+        name: The NDK that strips the APK's native libraries
+        # The exact one mobile/android/variables.gradle names: without it AGP packages a native
+        # library with its debug symbols and only warns. libwebrtc comes stripped, but a library
+        # added later may not; the check after the build ("What a phone will say to it") fails then.
         run: |
           ndk="$(sed -n "s/^ *ndkVersion = '\(.*\)'/\1/p" mobile/android/variables.gradle)"
           yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install "ndk;$ndk" > /dev/null
