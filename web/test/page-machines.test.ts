@@ -4,7 +4,7 @@
 // the screen that asks which pine to use is shown, with which controls.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { firstScreen, homeScreenKeeps, isPaired, machineName, machinesView, meetingLine, pairingEnded, reachedThrough, relayLine } from "../../desktop/src/machines.ts";
+import { firstScreen, homeScreenKeeps, isPaired, machineName, machinesView, meetingLine, noMachineSaid, pairingEnded, reachedThrough, relayLine } from "../../desktop/src/machines.ts";
 
 const PAIRED = "paired:q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x-_";
 const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36";
@@ -91,10 +91,25 @@ test("a browser that already has machines lands where it did: the SSH view when 
 	assert.equal(machinesView({ ...both, hosts: ["me@box.example"], chosen: "pair" }).view, "pair");
 });
 
-test("the relay and the meeting service are said by the deployment's host: SSH through the relay, which cannot read it; a paired computer found there, then reached directly", () => {
+test("with no machine in use the first screen's sentence follows the view shown: the bridge's (add user@host) in the SSH view, none in the pairing view, whose how-to says what to do", () => {
+	const none = { status: "error", kind: "ssh", message: "Add the machine whose pine this browser is to use, as user@host or user@host:port. Put this browser's key into ~/.ssh/authorized_keys there first." } as const;
+	// One paired computer and no user@host machine, with relay and meeting both on: the pairing view.
+	const view = machinesView({ canPair: true, canAddHost: true, hosts: [PAIRED] }).view;
+	assert.equal(view, "pair");
+	assert.equal(noMachineSaid(none, view, false), undefined);
+	// The owner switched to the SSH view: the bridge's sentence is the one for it.
+	assert.equal(noMachineSaid(none, "ssh", false), none.message);
+	// Anything else is said as the bridge says it: a pairing that failed, a machine in use that is not reached.
+	const failed = { status: "error", kind: "ssh", message: "Your computer refused this browser." } as const;
+	assert.equal(noMachineSaid(failed, "pair", true), failed.message);
+	const lost = { status: "error", kind: "ssh", host: PAIRED, message: "Studio Mac does not answer." } as const;
+	assert.equal(noMachineSaid(lost, "pair", false), lost.message);
+});
+
+test("the relay and the meeting service are said by the deployment's host: SSH through the relay, which cannot read it; a paired computer found there, then reached directly or through a relay server its owner named", () => {
 	const host = "pine.drcmda.workers.dev";
 	assert.equal(relayLine(host), "Connections go through the relay at pine.drcmda.workers.dev. It carries SSH only and cannot read it.");
-	assert.equal(meetingLine(host), "Found through pine.drcmda.workers.dev, then connected directly.");
+	assert.equal(meetingLine(host), "Found through pine.drcmda.workers.dev. The connection is then made between the two devices, directly or through a relay server the computer's owner named.");
 	assert.equal(reachedThrough("me@box.example", host), "Through the relay at pine.drcmda.workers.dev.");
 	assert.equal(reachedThrough(PAIRED, host), meetingLine(host));
 	// A bridge that names no service (the desktop and mobile apps) gets no such line.
