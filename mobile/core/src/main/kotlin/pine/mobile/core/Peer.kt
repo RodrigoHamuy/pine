@@ -3,8 +3,8 @@
 // machine id, makes the offer and one channel labelled `ssh`, and the two exchange the offer, the
 // answer and their candidates as the service's signal messages; once the channel is open the
 // meeting is left. The channel is then SSH's byte stream (Remote.kt), end to end, checked against
-// the machine id's host key. libdatachannel through tel.schich's binding, the library the Pine
-// app's access host runs on.
+// the machine id's host key. The WebRTC library below is handed in (WebRtc.kt): Google's libwebrtc in
+// the Android app, libdatachannel in the tests.
 package pine.mobile.core
 
 import okhttp3.OkHttpClient
@@ -14,17 +14,10 @@ import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.json.JSONArray
 import org.json.JSONObject
-import tel.schich.libdatachannel.DataChannel
-import tel.schich.libdatachannel.DataChannelCallback
-import tel.schich.libdatachannel.PeerConnection
-import tel.schich.libdatachannel.PeerConnectionConfiguration
-import tel.schich.libdatachannel.PeerState
-import tel.schich.libdatachannel.SessionDescriptionType
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.URI
-import java.nio.ByteBuffer
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.ExecutionException
 import java.util.concurrent.LinkedBlockingQueue
@@ -121,27 +114,53 @@ fun meetingService(service: String): String? = httpsOrigin(service)?.first?.take
  * not hang on a channel that closed. `output` cuts writes into pieces of `PIECE` and waits while
  * more than `HIGH` is buffered. Closing either closes the channel and the connection.
  *
- * The library calls back on threads of its own, where a throw is lost without a word, and where its
- * own calls must not be made (closing there can wait on itself): the callbacks only copy bytes and
- * set flags, and the connection is closed on a thread of its own.
+ * `make` makes the connection and its channel (`WebRtc.offer`) with the events this stream listens
+ * to; `around` hears them too, for the signals and the channel's end. The library calls back on
+ * threads of its own, where a throw is lost without a word, and where its own calls must not be made
+ * (closing there can wait on itself): the callbacks only copy bytes and set flags, and the connection
+ * is closed on a thread of its own.
  */
-class ChannelStream internal constructor(private val pc: PeerConnection, private val dc: DataChannel) : AutoCloseable {
+class ChannelStream internal constructor(make: (PeerEvents) -> PeerChannel, private val around: PeerEvents? = null) : AutoCloseable {
 	private val lock = Object()
 	private val arrived = LinkedBlockingQueue<ByteArray>()
 	@Volatile
 	private var ended = false
 	private var closing = false
 
-	init {
-		dc.bufferedAmountLowThreshold(LOW)
-		dc.onMessage.register(DataChannelCallback.Message.handleBinary { _, buffer ->
-			arrived.add(ByteArray(buffer.remaining()).also { buffer.get(it) })
-		})
-		dc.onBufferedAmountLow.register { synchronized(lock) { lock.notifyAll() } }
-		dc.onClosed.register { end() }
-		dc.onError.register { _, _ -> end() }
-		pc.onStateChange.register { _, state -> if (state == PeerState.RTC_FAILED || state == PeerState.RTC_CLOSED) end() }
-	}
+	/** Done once the channel is open. */
+	internal val opened = CompletableFuture<Unit>()
+
+	private val channel: PeerChannel = make(object : PeerEvents {
+		override fun description(type: String, sdp: String) {
+			around?.description(type, sdp)
+		}
+
+		override fun candidate(candidate: String, mid: String) {
+			around?.candidate(candidate, mid)
+		}
+
+		override fun open() {
+			opened.complete(Unit)
+			around?.open()
+		}
+
+		override fun message(bytes: ByteArray) {
+			if (!ended) arrived.add(bytes)
+		}
+
+		override fun drained() {
+			synchronized(lock) { lock.notifyAll() }
+		}
+
+		override fun ended() {
+			end()
+			around?.ended()
+		}
+	})
+
+	/** The computer's answer, and its candidates after it. */
+	internal fun answer(sdp: String) = channel.answer(sdp)
+	internal fun candidate(candidate: String, mid: String) = channel.candidate(candidate, mid)
 
 	/** Whether the channel still stands. */
 	val isOpen: Boolean get() = !ended
@@ -196,10 +215,8 @@ class ChannelStream internal constructor(private val pc: PeerConnection, private
 				}
 				if (ended) throw IOException("The connection to the computer is closed.")
 				val n = minOf(PIECE, off + len - at)
-				// The binding sends only a direct buffer: it hands the native side its address.
-				val piece = ByteBuffer.allocateDirect(n).put(b, at, n).flip()
 				try {
-					dc.sendMessage(piece)
+					channel.send(b, at, n)
 				} catch (e: Exception) {
 					end()
 					throw IOException("The connection to the computer is closed.", e)
@@ -212,7 +229,7 @@ class ChannelStream internal constructor(private val pc: PeerConnection, private
 	}
 
 	/** How many bytes wait in the channel to be sent. */
-	fun buffered(): Int = if (ended) 0 else runCatching { dc.bufferedAmount() }.getOrDefault(0)
+	fun buffered(): Long = if (ended) 0 else runCatching { channel.buffered() }.getOrDefault(0)
 
 	override fun close() {
 		end()
@@ -220,10 +237,7 @@ class ChannelStream internal constructor(private val pc: PeerConnection, private
 			if (closing) return
 			closing = true
 		}
-		thread(isDaemon = true, name = "pine-peer-close") {
-			runCatching { dc.close() }
-			runCatching { pc.close() }
-		}
+		thread(isDaemon = true, name = "pine-peer-close") { runCatching { channel.close() } }
 	}
 
 	private companion object {
@@ -234,66 +248,76 @@ class ChannelStream internal constructor(private val pc: PeerConnection, private
 
 /**
  * Opens the way to the paired computer `id` through the meeting service at `base` (an origin
- * `Remote` checked to be https, then routed): its
- * configuration (the ICE servers), the join socket, the offer and the `ssh` channel, the computer's
- * answer and candidates (kept until its answer is set). Throws `PeerClosed` when there is no way to
- * it, and when no channel opened within `openMs`. `native` loads the library: it differs on
- * Android and on the JVM.
+ * `Remote` checked to be https, then routed) on the library `webrtc`: its configuration (the ICE
+ * servers), the join socket, the offer and the `ssh` channel, the computer's answer and candidates
+ * (kept until its answer is set). Throws `PeerClosed` when there is no way to it, and when no
+ * channel opened within `openMs`.
+ *
+ * The library's calls may wait for its own threads (libwebrtc's do), so its callbacks here take no
+ * lock that is held while one of its calls is made: they only send signals and complete futures.
  */
-internal fun openPeer(base: String, id: String, http: OkHttpClient, native: () -> Unit, openMs: Long = 20_000): ChannelStream {
-	native()
+internal fun openPeer(base: String, id: String, http: OkHttpClient, webrtc: WebRtc, openMs: Long = 20_000): ChannelStream {
 	val config = runCatching {
 		http.newCall(Request.Builder().url("$base/meet/config").build()).execute().use { r -> if (r.isSuccessful) JSONObject(r.body.string()) else null }
 	}.getOrNull()
 	val ice = iceOf(config)
 	val result = CompletableFuture<ChannelStream>()
 	val lock = Object()
-	var pc: PeerConnection? = null
 	var stream: ChannelStream? = null
 	var answered = false
 	val pending = mutableListOf<Pair<String, String>>()
 
 	val join = base.replaceFirst(Regex("^http"), "ws") + "/meet/join?id=$id"
 	lateinit var socket: WebSocket
-	val signal = { d: JSONObject -> socket.send(JSONObject().put("t", "signal").put("d", d).toString()) }
 	val fail = { e: Exception -> if (result.completeExceptionally(e)) socket.cancel() }
 
 	socket = http.newWebSocket(Request.Builder().url(join).build(), object : WebSocketListener() {
 		override fun onMessage(webSocket: WebSocket, text: String) {
 			val message = runCatching { JSONObject(text) }.getOrNull() ?: return
+			val signal = { d: JSONObject -> webSocket.send(JSONObject().put("t", "signal").put("d", d).toString()) }
 			try {
 				if (message.optString("t") == "ready") {
 					synchronized(lock) {
-						if (pc != null || result.isDone) return
-						val peer = PeerConnection.createPeer(PeerConnectionConfiguration.DEFAULT.withIceServers(ice))
-						pc = peer
-						peer.onLocalDescription.register { _, sdp, type -> signal(JSONObject().put("sdp", JSONObject().put("type", type.name.lowercase()).put("sdp", sdp))) }
-						peer.onLocalCandidate.register { _, candidate, mid -> signal(JSONObject().put("ice", JSONObject().put("candidate", candidate.removePrefix("a=")).put("sdpMid", mid).put("sdpMLineIndex", 0))) }
-						peer.onStateChange.register { _, state -> if (state == PeerState.RTC_FAILED) fail(PeerClosed("no-path")) }
+						if (stream != null || result.isDone) return
 						// Made before the channel opens, so that the bytes the computer sends at once (SSH's banner) are kept.
-						val dc = peer.createDataChannel(LABEL)
-						val made = ChannelStream(peer, dc)
+						val made = ChannelStream({ events -> webrtc.offer(ice, LABEL, events) }, object : PeerEvents {
+							override fun description(type: String, sdp: String) {
+								signal(JSONObject().put("sdp", JSONObject().put("type", type).put("sdp", sdp)))
+							}
+
+							override fun candidate(candidate: String, mid: String) {
+								signal(JSONObject().put("ice", JSONObject().put("candidate", candidate.removePrefix("a=")).put("sdpMid", mid).put("sdpMLineIndex", 0)))
+							}
+
+							override fun open() = Unit
+							override fun message(bytes: ByteArray) = Unit
+							override fun drained() = Unit
+
+							// Before the channel opened there is no way this time; after, it is the stream's own end.
+							override fun ended() {
+								fail(PeerClosed("no-path"))
+							}
+						})
 						stream = made
-						dc.onOpen.register {
-							if (result.complete(made)) webSocket.close(1000, "The channel is open.")
-						}
+						made.opened.thenRun { if (result.complete(made)) webSocket.close(1000, "The channel is open.") }
 					}
 					return
 				}
 				if (message.optString("t") != "signal") return
 				val d = message.optJSONObject("d") ?: return
 				synchronized(lock) {
-					val peer = pc ?: return
+					val peer = stream ?: return
 					val sdp = d.optJSONObject("sdp")
 					val ice = d.optJSONObject("ice")
 					if (sdp != null && sdp.optString("type") == "answer" && sdp.opt("sdp") is String) {
-						peer.setRemoteDescription(sdp.getString("sdp"), SessionDescriptionType.ANSWER)
+						if (answered) return
+						peer.answer(sdp.getString("sdp"))
 						answered = true
-						pending.forEach { (c, mid) -> peer.addRemoteCandidate(c, mid) }
+						pending.forEach { (c, mid) -> peer.candidate(c, mid) }
 						pending.clear()
 					} else if (ice != null && ice.optString("candidate").isNotEmpty()) {
 						val candidate = ice.getString("candidate") to (ice.opt("sdpMid") as? String ?: "0")
-						if (answered) peer.addRemoteCandidate(candidate.first, candidate.second) else pending.add(candidate)
+						if (answered) peer.candidate(candidate.first, candidate.second) else pending.add(candidate)
 					}
 				}
 			} catch (e: Exception) {
@@ -308,7 +332,7 @@ internal fun openPeer(base: String, id: String, http: OkHttpClient, native: () -
 
 		override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
 			// A socket that never reached the meeting: the service could not be reached, or refused it outright.
-			fail(if (synchronized(lock) { pc == null }) PeerClosed("unreachable") else PeerClosed("no-path"))
+			fail(if (synchronized(lock) { stream == null }) PeerClosed("unreachable") else PeerClosed("no-path"))
 		}
 	})
 
@@ -316,9 +340,7 @@ internal fun openPeer(base: String, id: String, http: OkHttpClient, native: () -
 		return result.get(openMs, TimeUnit.MILLISECONDS)
 	} catch (e: Exception) {
 		fail(PeerClosed("no-path"))
-		synchronized(lock) {
-			stream?.close() ?: pc?.let { peer -> thread(isDaemon = true, name = "pine-peer-close") { runCatching { peer.close() } } }
-		}
+		synchronized(lock) { stream?.close() }
 		throw when (e) {
 			is ExecutionException -> e.cause as? Exception ?: PeerClosed("no-path")
 			is TimeoutException -> PeerClosed("no-path")

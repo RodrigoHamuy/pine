@@ -1,7 +1,6 @@
 package pine.mobile.core
 
 import org.json.JSONObject
-import tel.schich.libdatachannel.LibDataChannelArchDetect
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
@@ -21,7 +20,7 @@ class PairedPinesTest {
 	private val key = DeviceKey(vault)
 	private val daemon = StandInDaemon()
 	private val computer = AccessHost("""{"base":"${daemon.base}","token":"secret-token","mode":"safe","started":true,"home":"/Users/me/.pine","version":"0.40.0"}""")
-	private val remote = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = 3_000, native = LibDataChannelArchDetect::initialize, route = { if (it == SERVICE) computer.service else it })
+	private val remote = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = 3_000, webrtc = LibDataChannelRtc, route = { if (it == SERVICE) computer.service else it })
 	private val shelf = MemoryShelf()
 	private val page = SeenPage()
 	private val pines = Pines(remote, KnownHosts(vault), shelf, page, retryMs = 50, backoffMs = { 100 })
