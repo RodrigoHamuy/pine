@@ -30,7 +30,8 @@ const cipher: Cipher = {
 const SERVICE = "https://pine.example.workers.dev";
 const daemonLine = JSON.stringify({ base: "http://127.0.0.1:9", token: "t", mode: "attached", started: false, home: "/h" });
 
-function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined; folder?: string; official?: string } = {}) {
+/** `waitMs`: how long the stand-in phone waits before it uses a pairing link (its own default otherwise). */
+function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined; folder?: string; official?: string; waitMs?: number } = {}) {
 	const folder = more.folder ?? mkdtempSync(path.join(tmpdir(), "pine-access-control-"));
 	folders.push(folder);
 	let prefs: AccessPrefs = { enabled: false, openAtLogin: false, ...more.prefs };
@@ -48,7 +49,7 @@ function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined;
 		computerName: () => "The Mac",
 		start: async (options) => {
 			calls.starts++;
-			const host = await startStandIn(options);
+			const host = await startStandIn({ ...options, waitMs: more.waitMs });
 			hosts.push(host);
 			return host;
 		},
@@ -167,7 +168,8 @@ test("access control: a pairing is opened, the owner is asked with the device's 
 });
 
 test("access control: a no, or a pairing cancelled, adds nothing and notifies nobody", async () => {
-	const { control, calls } = make();
+	// The phone uses a link after 50 ms, so that 250 ms is well past its try at the cancelled one.
+	const { control, calls } = make({ waitMs: 50 });
 	await control.set({ enabled: true });
 	await control.openPairing();
 	await until("the owner is asked", async () => (await control.state()).request !== undefined);
@@ -177,7 +179,7 @@ test("access control: a no, or a pairing cancelled, adds nothing and notifies no
 	await control.openPairing();
 	await control.cancelPairing();
 	assert.equal((await control.state()).pairing, undefined);
-	await new Promise((r) => setTimeout(r, 500));
+	await new Promise((r) => setTimeout(r, 250));
 	const state = await control.state();
 	assert.equal(state.request, undefined, "a cancelled pairing's link no longer works");
 	assert.deepEqual(state.devices, []);

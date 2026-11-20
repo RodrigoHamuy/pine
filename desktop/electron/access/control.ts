@@ -182,8 +182,10 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 		const cipher = options.cipher();
 		if (!cipher) return undefined;
 		const vault = fileVault(file, cipher);
-		if ((await vault.load()) === undefined) return undefined;
-		return AccessStore.open(vault);
+		// Read and decrypted once: the store opens on what was read, and still saves to the file.
+		const text = await vault.load();
+		if (text === undefined) return undefined;
+		return AccessStore.open({ load: async () => text, save: (next) => vault.save(next) });
 	}
 
 	async function state(): Promise<AccessState> {

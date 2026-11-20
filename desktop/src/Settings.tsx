@@ -58,6 +58,9 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
  */
 const offersAccess = (s: { local: boolean; remote?: string }) => s.local && !s.remote && typeof bridge.access === "function";
 
+/** The sections the navigation lists for this state: every one, but Browser access only where it is offered. */
+const offeredSections = (s: { local: boolean; remote?: string }) => SECTIONS.filter((x) => x.id !== "access" || offersAccess(s));
+
 function Access() {
 	return (
 		<Page title="Browser access" lead="Your conversations in a browser on your phone or another computer, with this Mac's pine. A device is let in once by scanning a code here, and connects by itself from then on.">
@@ -2351,6 +2354,9 @@ function AppPage() {
 
 export function Settings() {
 	const s = useModel(store);
+	const sections = offeredSections(s);
+	// A section chosen while it was offered (Browser access, before the app went to another machine's pine) opens General, which the navigation marks.
+	const section = sections.some((x) => x.id === s.section) ? s.section : "general";
 	// The sections are a column beside the page where there is room, and a row above it where there is not
 	// (a narrow window, or a wide panel beside): measured on the settings themselves, not on the window.
 	// An item's title wraps (its badges go under its name where the row is narrow): set once here for every row.
@@ -2366,9 +2372,9 @@ export function Settings() {
 								<SidebarGroup role="navigation" className="py-2 @3xl/settings:py-4">
 									<SidebarGroupContent>
 										<SidebarMenu className="flex-row @3xl/settings:flex-col">
-											{SECTIONS.map((x) => (
+											{sections.map((x) => (
 												<SidebarMenuItem key={x.id} className="flex-none @3xl/settings:flex-initial">
-													<SidebarMenuButton isActive={s.section === x.id} aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
+													<SidebarMenuButton isActive={section === x.id} aria-current={section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
 												</SidebarMenuItem>
 											))}
 										</SidebarMenu>
@@ -2378,8 +2384,8 @@ export function Settings() {
 						</SidebarContent>
 					</SidebarRoot>
 				</SidebarProvider>
-				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={s.section}>
-					{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "environments" ? <Environments /> : s.section === "access" && offersAccess(s) ? <Access /> : s.section === "app" ? <AppPage /> : <General />}
+				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={section}>
+					{section === "agents" ? <Agents /> : section === "models" ? <Models /> : section === "mcp" ? <Mcp /> : section === "skills" ? <Skills /> : section === "events" ? <EventsPage /> : section === "instructions" ? <Instructions /> : section === "environments" ? <Environments /> : section === "access" ? <Access /> : section === "app" ? <AppPage /> : <General />}
 				</ScrollArea>
 			</div>
 		</div>

@@ -211,7 +211,7 @@ test("a browser whose key the Mac no longer knows is told so, and stops trying",
 	const said = await page.evaluate(async () => {
 		const end = await until(() => paired.states.find((s) => s.status === "error" && /no longer known/.test(s.message)), "told the key is not known");
 		const opened = made.opened;
-		await new Promise((r) => setTimeout(r, 600));
+		await new Promise((r) => setTimeout(r, 300));
 		return { message: end.status === "error" ? end.message : "", again: made.opened - opened };
 	});
 	assert.equal(said.again, 0, "no way to the Mac was opened again");

@@ -17,19 +17,29 @@ import { AccessStore, keyId, newEd25519Key } from "./store.ts";
 /** The name the stand-in phone gives itself. */
 export const STAND_IN_NAME = "Stand-in phone";
 
-/** Two ends of an in-memory stream whose bytes arrive on a later turn, as a socket's do (ssh2 needs that). */
-function duplexPair(): [Duplex, Duplex] {
+/**
+ * Two ends of an in-memory stream whose bytes arrive on a later turn of the event loop, as a
+ * socket's or a data channel's do. (Node's `duplexPair` hands them over inside the write, and
+ * ssh2 is not written for an answer that arrives while it is still sending.) The tests use it too.
+ */
+export function duplexPair(): [Duplex, Duplex] {
 	const other = new Map<Duplex, Duplex>();
 	const make = () =>
 		new Duplex({
 			read() {},
 			write(chunk, _encoding, done) {
 				const to = other.get(this)!;
-				setImmediate(() => (to.destroyed || to.push(chunk), done()));
+				setImmediate(() => {
+					if (!to.destroyed) to.push(chunk);
+					done();
+				});
 			},
 			final(done) {
 				const to = other.get(this)!;
-				setImmediate(() => (to.push(null), done()));
+				setImmediate(() => {
+					to.push(null);
+					done();
+				});
 			},
 			destroy(err, done) {
 				const to = other.get(this)!;

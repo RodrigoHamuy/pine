@@ -66,7 +66,9 @@
         "ICE": [{ "urls": "stun:stun.cloudflare.com:3478" }]
       }
     },
-    // A deployment of one's own with the meeting service and the relay side by side.
+    // A deployment of one's own with the meeting service and the relay side by side. As configured
+    // it has no address (no workers.dev address, no version addresses, no route): give it one
+    // before the Pine app can name it, a route or a custom domain of your own, or workers_dev: true.
     "full": {
       "name": "pine-full",
       "workers_dev": false,

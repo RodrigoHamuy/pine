@@ -9,7 +9,7 @@ import { remoteCommand } from "../../src/remote.ts";
 import { type AccessServer, createAccessServer } from "../electron/access/server.ts";
 import { AccessStore, memoryVault, newEd25519Key } from "../electron/access/store.ts";
 import { type Ask, createPairing, type Pairing, type PairingOptions } from "../electron/access/pairing.ts";
-import { duplexPair } from "./support/duplex.ts";
+import { duplexPair } from "../electron/access/stand-in.ts";
 
 const SERVICE = "https://pine.example.workers.dev";
 const serviceLine = JSON.stringify({ base: "http://127.0.0.1:1", token: "the-token" });

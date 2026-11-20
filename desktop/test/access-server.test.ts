@@ -5,12 +5,13 @@ import assert from "node:assert/strict";
 import { createRequire } from "node:module";
 import net from "node:net";
 import type { AddressInfo } from "node:net";
-import { Duplex } from "node:stream";
+import type { Duplex } from "node:stream";
 import { after, before, test } from "node:test";
 import ssh2 from "ssh2";
 import type { Client, ClientChannel, ConnectConfig } from "ssh2";
 import { remoteCommand } from "../../src/remote.ts";
 import { type AccessServer, type AccessServerOptions, createAccessServer, pairedKeys, type SessionEvent } from "../electron/access/server.ts";
+import { duplexPair } from "../electron/access/stand-in.ts";
 import { AccessStore, memoryVault, newEd25519Key } from "../electron/access/store.ts";
 
 /** The stand-in daemon: echoes what it is sent, after a word of its own. */
@@ -36,43 +37,7 @@ after(() => {
 	other.close();
 });
 
-/**
- * Two ends of an in-memory stream whose bytes arrive on a later turn of the event loop, as a
- * socket's or a data channel's do. (Node's `duplexPair` hands them over inside the write, and
- * ssh2 is not written for an answer that arrives while it is still sending.)
- */
-function duplexPair(): [Duplex, Duplex] {
-	const make = (): Duplex =>
-		new Duplex({
-			read() {},
-			write(chunk, _encoding, done) {
-				const to = peer.get(this)!;
-				setImmediate(() => {
-					if (!to.destroyed) to.push(chunk);
-					done();
-				});
-			},
-			final(done) {
-				const to = peer.get(this)!;
-				setImmediate(() => {
-					to.push(null);
-					done();
-				});
-			},
-			destroy(err, done) {
-				const to = peer.get(this)!;
-				setImmediate(() => to.destroy());
-				done(err);
-			},
-		});
-	const peer = new Map<Duplex, Duplex>();
-	const a = make();
-	const b = make();
-	peer.set(a, b).set(b, a);
-	return [a, b];
-}
-
-const serviceLine = () => JSON.stringify({ base: `http://127.0.0.1:${daemonPort}`, token: "the-token", mode: "safe", started: true, home: "/nowhere", version: "0.0.0" });
+const serviceLine = (port = daemonPort) => JSON.stringify({ base: `http://127.0.0.1:${port}`, token: "the-token", mode: "safe", started: true, home: "/nowhere", version: "0.0.0" });
 
 /** A key pair as OpenSSH writes it (not ssh2's generator, which gets one Ed25519 key in 128 wrong). */
 const ed25519 = () => {
@@ -95,7 +60,7 @@ interface Setup {
 	/** A client connected over a new in-memory stream; resolves when it is ready, rejects when it is refused. */
 	connect(config?: Partial<ConnectConfig>): Promise<Client>;
 	/** A client whose stream is handed over, and the server's end of it, without connecting it. */
-	streams(): { client: import("node:stream").Duplex; server: import("node:stream").Duplex };
+	streams(): { client: Duplex; server: Duplex };
 }
 
 const live: Setup[] = [];
@@ -335,22 +300,61 @@ test("access server: a connection that has not authenticated in time is closed",
 	await ended;
 });
 
-test("access server: the daemon is asked for once and shared; a session that ends stops nothing", async () => {
-	const s = await setup();
+test("access server: the daemon is asked for by every remote command, once for those asking at the same time; a session that ends stops nothing", async () => {
+	let asked = 0;
+	// The provider answers when the test lets it, so that two commands can be waiting at once.
+	let release = () => {};
+	const s = await setup({
+		daemon: () => {
+			asked++;
+			return new Promise<string>((resolve) => (release = () => resolve(serviceLine())));
+		},
+	});
 	const first = await s.connect();
-	await firstLine(await exec(first, remoteCommand()));
+	const one = exec(first, remoteCommand());
+	await one;
+	release();
+	await firstLine(await one);
 	first.end();
 	await closed(first);
+	assert.equal(asked, 1);
 	const second = await s.connect();
-	assert.equal(await firstLine(await exec(second, remoteCommand())), serviceLine());
 	const third = await s.connect();
-	assert.equal(await firstLine(await exec(third, remoteCommand())), serviceLine());
-	assert.equal(s.asked(), 1);
+	// Each exec is answered once the server has asked for the daemon: both wait on the same call.
+	const [a, b] = await Promise.all([exec(second, remoteCommand()), exec(third, remoteCommand())]);
+	release();
+	assert.deepEqual(await Promise.all([firstLine(a), firstLine(b)]), [serviceLine(), serviceLine()]);
+	assert.equal(asked, 2);
 	const channel = await tunnel(second, "127.0.0.1", daemonPort);
 	channel.write("still");
 	assert.equal(await readAll(channel, "daemon:still".length), "daemon:still", "the daemon is still there for the others");
 	second.end();
 	third.end();
+});
+
+test("access server: a daemon that changed is asked for again: the next session gets its new line and reaches it, and the old port is refused", async (t) => {
+	const moved = net.createServer((socket) => {
+		socket.write("moved:");
+		socket.pipe(socket);
+	});
+	await new Promise<void>((r) => moved.listen(0, "127.0.0.1", r));
+	t.after(() => void moved.close());
+	const movedPort = (moved.address() as AddressInfo).port;
+	let port = daemonPort;
+	const s = await setup({ daemon: async () => serviceLine(port) });
+	const first = await s.connect();
+	assert.equal(await firstLine(await exec(first, remoteCommand())), serviceLine(daemonPort));
+	first.end();
+	await closed(first);
+
+	port = movedPort;
+	const second = await s.connect();
+	assert.equal(await firstLine(await exec(second, remoteCommand())), serviceLine(movedPort));
+	const channel = await tunnel(second, "127.0.0.1", movedPort);
+	channel.write("here");
+	assert.equal(await readAll(channel, "moved:here".length), "moved:here");
+	await assert.rejects(tunnel(second, "127.0.0.1", daemonPort));
+	second.end();
 });
 
 test("access server: a daemon that cannot be had is said on the channel and asked for again next time", async () => {

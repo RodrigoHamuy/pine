@@ -77,7 +77,10 @@ export interface AccessServerOptions {
 	/** The host key, OpenSSH private key format (`AccessStore.hostKey()`). */
 	hostKey: string;
 	admit: Admit;
-	/** This computer's daemon: `pine service`'s one line of JSON. Asked once, and shared by every session after. */
+	/**
+	 * This computer's daemon: `pine service`'s one line of JSON. Asked for by every remote command
+	 * (one call for those asking at the same time), so it should reuse a daemon that still answers.
+	 */
 	daemon: () => Promise<string>;
 	authTimeoutMs?: number;
 	maxConnections?: number;
@@ -130,19 +133,24 @@ export function createAccessServer(options: AccessServerOptions): AccessServer {
 	const command = remoteCommand();
 	const live = new Set<Live>();
 
-	// The daemon belongs to the app, not to a session: asked for once, kept while it answers.
-	let daemon: Promise<Known> | undefined;
+	// The daemon belongs to the app, not to a session. Every remote command asks for it again, since
+	// it may have stopped or moved since the last one; the caller's function reuses one that still
+	// answers. Commands that ask at the same time share one call.
+	let asking: Promise<Known> | undefined;
+	/** The latest answer: what a channel to the daemon may reach. */
 	let daemonKnown: Known | undefined;
 	const getDaemon = () => {
-		if (daemon) return daemon;
-		const asking = options.daemon().then(known);
-		daemon = asking;
-		asking.then(
-			(k) => void (daemonKnown = k),
-			// A daemon that could not be had is asked for again by the next session.
-			() => void (daemon = undefined),
-		);
-		return asking;
+		if (asking) return asking;
+		const call = options.daemon().then(known);
+		asking = call;
+		// Settled either way, the next command asks anew: a failure is not kept either.
+		call
+			.then(
+				(k) => void (daemonKnown = k),
+				() => {},
+			)
+			.finally(() => void (asking = undefined));
+		return call;
 	};
 
 	const end = (entry: Live) => {

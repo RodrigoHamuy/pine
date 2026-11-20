@@ -292,3 +292,43 @@ export const Theme: Story = {
 		);
 	},
 };
+
+/** The entries of the settings' navigation, by their label. */
+const entries = (root: HTMLElement) => [...root.querySelectorAll("[data-slot=sidebar-menu-button]")].map((b) => b.textContent);
+
+/** The page drawn for a section that is not offered: General, marked as the entry in use, never a page with no entry lit. */
+async function generalInstead(root: HTMLElement) {
+	await expect(entries(root)).not.toContain("Browser access");
+	await expect(root.querySelector("[data-slot=sidebar-menu-button][aria-current=page]")).toHaveTextContent("General");
+}
+
+/** The desktop app on this Mac's pine: Browser access is in the navigation, between Environments and App. */
+export const AccessOffered: Story = {
+	args: { section: "general" },
+	play: async ({ canvasElement }) => {
+		await expect(entries(canvasElement)).toEqual(expect.arrayContaining(["Environments", "Browser access", "App"]));
+	},
+};
+
+/** A bridge with no local machine (the web client, a phone): no Browser access in the navigation, and the section once chosen opens General. */
+export const AccessNotOfferedWithoutLocal: Story = {
+	args: { section: "access", local: false },
+	play: async ({ canvasElement }) => await generalInstead(canvasElement),
+};
+
+/** The desktop app on another machine's pine: Browser access is this Mac's door, so it is not offered there. */
+export const AccessNotOfferedOnAnotherMachine: Story = {
+	args: { section: "access" },
+	render: Environments.render,
+	play: async ({ canvasElement }) => await generalInstead(canvasElement),
+};
+
+/** A bridge that has no calls for Browser access (Storybook's stand-in answers every name, so the story takes it away). */
+export const AccessNotOfferedWithoutBridgeCalls: Story = {
+	args: { section: "access" },
+	beforeEach: () => {
+		(window.pine as unknown as Record<string, unknown>).access = false;
+		return () => void delete (window.pine as Partial<typeof window.pine>).access;
+	},
+	play: async ({ canvasElement }) => await generalInstead(canvasElement),
+};

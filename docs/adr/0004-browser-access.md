@@ -55,8 +55,10 @@ Durable Object is one adapter.
 
 **No relay fallback.** No TURN server and no carrying of the bytes by the Worker. Where two
 devices cannot connect directly (some cellular networks behind carrier NAT), the owner is told so
-and advised to try another network. The servers that help a connection (`ICE`) are the service's
-configuration, read by both sides, so a fallback can be added without changing the clients.
+and advised to try another network. The STUN servers that help a connection (`ICE`) are the service's
+configuration, read by both sides. A relay (TURN) is not carried today: the Mac keeps only `stun:`
+and `stuns:` addresses, and both sides keep only each server's `urls`, without a username or a
+credential, so a fallback needs a release of the Pine app and of the web client.
 
 **One official service.** The project runs the Worker `pine` (`--env official`) at
 `https://pine.drcmda.workers.dev`: the web client and the meeting service, the SSH relay off. It
@@ -75,8 +77,8 @@ System Settings, and still an address to reach.
 daemon on the loopback, and a port of the network reaches nobody away from home.
 
 **A relay that carries the bytes (TURN, or the Worker).** Left out, not rejected: it would cost
-per byte on a free plan that has no such allowance, and the meeting configuration leaves room for
-it. Its absence is the accepted risk below.
+per byte on a free plan that has no such allowance, and adding it takes a release of both clients
+besides the service's configuration. Its absence is the accepted risk below.
 
 **`werift` (pure TypeScript) for the Mac's data channel.** Kept as the fallback behind the same
 small interface; not needed once `node-datachannel` loaded in the packed, signed app.
