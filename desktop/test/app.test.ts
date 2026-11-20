@@ -623,7 +623,8 @@ test("an empty composer is drawn at full strength, and its send button says ther
 });
 
 test("the send button sends what was typed with a click, as Enter does", async () => {
-	// A toast left by an earlier test lies over the button for a few seconds.
+	// A toast left by an earlier test lies over the button (its timer waits while the window is in the background): closed.
+	await page.$$eval("[data-slot=toast-close]", (buttons: Element[]) => buttons.forEach((b) => (b as HTMLElement).click()));
 	await page.waitForSelector("[data-slot=toast]", { state: "detached", timeout: 15_000 });
 	await page.fill("[data-slot=composer] textarea", mockMsg([{ text: "sent by the button" }], "click to send "));
 	await page.locator("[data-slot=composer] [data-slot=input-group]").getByRole("button", { name: "Send", exact: true }).click();
