@@ -897,8 +897,9 @@ stand-ins: the bridge in `.storybook/preview.tsx` is one whose every call does n
 | `npm run build-storybook` | The stories built into `storybook-static/`. |
 
 Every pull request and every push to `next` publishes the stories to Chromatic
-(`.github/workflows/chromatic.yml`), which shows what changed in a picture for review. It
-needs the repository secret `CHROMATIC_PROJECT_TOKEN`; without it the job says so and passes.
+(`.github/workflows/chromatic.yml`), which shows what changed in a picture for review. A
+build of `next` is accepted as it is (`autoAcceptChanges`) and becomes the baseline a pull
+request is compared with, so a pull request shows only its own changes. It needs the repository secret `CHROMATIC_PROJECT_TOKEN`; without it the job says so and passes.
 Chromatic takes each story in light and dark, each at a phone's width (360, the window's
 smallest) and at the window's first width (1280), through its modes (`.storybook/modes.ts`,
 which set the `theme` global and a viewport), so no dark or phone twin of a story is written:
