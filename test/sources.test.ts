@@ -560,7 +560,9 @@ test("sources: an agent can be woken in a fresh conversation for every event, so
 	});
 	const run = (session: string, steps: any[]) => h.pine.agents.run({ agent: "main", prompt: mockMsg(steps), session, ...owner });
 	let r = await run("main", [{ tools: [call("subscribe", { source: "beep", note: "judge each one by itself", throttle: "150ms", fresh: true })] }, { tools: [call("sources", {})] }]);
-	assert.match(h.toolResults()[0], /Subscribed to beep \(agent\)\. It is running\. Each event it reports \(source\/beep\/\.\.\.\) will start a conversation of its own, with your instructions and nothing else in it, which is closed when you have answered\. Nothing of one event is there in the next/);
+	// The source beeps every 40 ms, so a fresh conversation's request can already be the last one the mock saw.
+	const mine = h.mock.state.requests.filter((q: any) => q.body.messages.some((m: any) => m.role === "tool")).at(-1);
+	assert.match(h.toolResults(mine)[0], /Subscribed to beep \(agent\)\. It is running\. Each event it reports \(source\/beep\/\.\.\.\) will start a conversation of its own, with your instructions and nothing else in it, which is closed when you have answered\. Nothing of one event is there in the next/);
 	assert.match(r.text, /agent: you are subscribed as an agent, and every event is handled in a conversation of its own that starts empty and is closed afterwards\. Its events do not arrive in this conversation\. Note: judge each one by itself/);
 	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(h.home, "agents", "main", "agent.json"), "utf8")).subscribe, [{ source: "beep", note: "judge each one by itself", throttle: "150ms", session: "new" }]);
 	assert.deepEqual(h.pine.sources.list()[0].subscribers, ["main (a fresh conversation for every event)"]);
