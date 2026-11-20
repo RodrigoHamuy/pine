@@ -11,6 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
+import { computerWord, homeScreenKeeps, machineName, machinesView, pairingEnded, type MachinesViewName } from "./machines.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
@@ -200,6 +201,8 @@ export class Tab extends Model {
 const STOP_GRACE = 3000;
 /** What the gate says of a pine that answered with no agent at all, until one is made there. */
 const NO_AGENTS = "This pine has no agents.";
+/** Kept once the home-screen suggestion was made, so that it is never made again. */
+const HOME_SCREEN_KEY = "pine.homeScreen";
 const sessionName = () => `s${Date.now().toString(36)}`;
 /** What a conversation is told when it moves into a worktree. */
 const worktreeNote = (made: WorktreeMade) =>
@@ -220,6 +223,18 @@ export class Store extends Model {
 	platform = "darwin";
 	/** Whether there is a "this computer" whose pine the app can use: not under a bridge that only reaches other machines (`AppState.local`). */
 	local = true;
+	/** Whether machines can be added as user@host: not where the bridge reaches only computers paired by their code (`AppState.canAddHost`). */
+	canAddHost = true;
+	/** Whether a computer can be paired with by its link: only where the bridge says so, the web client on a deployment with the meeting service (`AppState.canPair`). */
+	canPair = false;
+	/** The host of the service machines are reached through, named beside them (`AppState.serviceHost`): the web client's deployment only. */
+	serviceHost?: string;
+	/** The view of the machines the owner chose with the link to SSH or the back control (`machinesView`): for this visit only, never kept. */
+	machinesChosen?: MachinesViewName;
+	/** The last pairing with a computer ended without one: the first screen says so above the bridge's reason. */
+	pairFailed = false;
+	/** The suggestion to add the web client to the home screen, shown once after a first pairing where that keeps the browser's key. */
+	homeScreen = false;
 	focused = true;
 	versions = { app: "", electron: "" };
 	/** Whether this app asks for a newer one at all: an app from a checkout is no release and does not. */
@@ -355,6 +370,9 @@ export class Store extends Model {
 		applyLook(cleanLook(first.prefs.look));
 		this.platform = first.platform;
 		this.local = first.local !== false;
+		this.canAddHost = first.canAddHost !== false;
+		this.canPair = first.canPair === true;
+		this.serviceHost = typeof first.serviceHost === "string" && first.serviceHost ? first.serviceHost : undefined;
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;
@@ -483,12 +501,54 @@ export class Store extends Model {
 		// Another pine than before (another machine was picked): nothing of the last one is kept, not even what an agent of the same name was doing.
 		const moved = s.host !== this.service.host || s.status !== was;
 		if (s.host !== this.service.host) this.forgetPine();
+		const ended = pairingEnded(this.service, s);
+		if (ended) this.pairFailed = ended === "failed";
+		else if (s.host || (s.status === "starting" && s.pairing)) this.pairFailed = false;
 		this.service = s;
+		if (ended === "paired") void this.paired();
 		const again = s.status === "ready" && (was !== "ready" || !this.agents.length);
 		// A reason the agents did not load is wiped only by a new attempt or another pine: never left in place of one, never wiped without one.
 		if (again || moved) this.loadError = undefined;
 		this.touch();
 		if (again) await this.load();
+	}
+
+	/**
+	 * A pairing link was paired with: the bridge kept the computer among the machines, under its name,
+	 * which the page is told by reading the preferences again. The first time, where a web app on
+	 * the home screen keeps this browser's key, the page suggests putting it there, once and for good.
+	 */
+	private async paired(): Promise<void> {
+		const now = await bridge.state().catch(() => undefined);
+		if (now) this.prefs = now.prefs;
+		try {
+			if (homeScreenKeeps(navigator.userAgent, navigator.maxTouchPoints) && !localStorage.getItem(HOME_SCREEN_KEY)) {
+				localStorage.setItem(HOME_SCREEN_KEY, "offered");
+				this.homeScreen = true;
+			}
+		} catch {
+			// No storage to remember it by: not offered, rather than offered at every pairing.
+		}
+		this.touch();
+	}
+
+	/** The name the owner sees for a machine of the list (machines.ts): a paired computer's name, never its id. */
+	nameOf(host: string): string {
+		return machineName(host, this.prefs.names);
+	}
+
+	/** Whether machines can be renamed: under a bridge that keeps their names (the web client's). */
+	get canRename(): boolean {
+		return typeof bridge.renameHost === "function";
+	}
+
+	/** Give a machine of the list another name, typed by the owner; the bridge cleans and cuts it. */
+	async renameMachine(host: string): Promise<void> {
+		if (!this.canRename) return;
+		const typed = await this.pick({ title: `Rename ${this.nameOf(host)}`, items: [], free: true, placeholder: "The name this browser shows for it" });
+		if (!typed?.trim()) return;
+		const prefs = await this.attempt(() => bridge.renameHost!(host, typed));
+		if (prefs) (this.prefs = prefs), this.touch();
 	}
 
 	/** Ask the pine that answered for its agents again, after loading them failed. */
@@ -525,7 +585,7 @@ export class Store extends Model {
 	/** The machine whose pine the app uses, by its short name; none when it is this computer's. */
 	get remote(): string | undefined {
 		const s = this.service;
-		return s.status === "ready" ? s.label : s.host;
+		return s.status === "ready" ? s.label : s.host && this.nameOf(s.host);
 	}
 
 	/**
@@ -541,6 +601,17 @@ export class Store extends Model {
 	/** The owner's yes to the host key the page showed: exactly that fingerprint, which the bridge then connects with. */
 	async trustHostKey(key: { host: string; fingerprint: string }): Promise<void> {
 		await this.attempt(() => bridge.trustHostKey!(key.host, key.fingerprint));
+	}
+
+	/** Which view of the machines is shown, and with which controls (`machinesView`): for the first screen and Settings > Environments alike. */
+	get machinesShown(): ReturnType<typeof machinesView> {
+		return machinesView({ canPair: this.canPair, canAddHost: this.canAddHost, hosts: this.prefs.hosts, chosen: this.machinesChosen });
+	}
+
+	/** The owner's choice of a view of the machines, by the link to SSH or the back control. */
+	showMachines(view: MachinesViewName): void {
+		this.machinesChosen = view;
+		this.touch();
 	}
 
 	/**
@@ -860,7 +931,7 @@ export class Store extends Model {
 		const code = await bridge.browserInstall().catch(() => 1);
 		this.browserFetching = false;
 		await this.checkBrowser();
-		if (this.browser) this.flash("The browser of the web tools is on this Mac now.", "good");
+		if (this.browser) this.flash(`The browser of the web tools is on this ${computerWord(this.platform)} now.`, "good");
 		else this.flash(code === 0 ? "The browser is still not there. What was said is shown in Settings > App." : "The browser could not be fetched. What was said is shown in Settings > App; try again when you are online.", "bad", 8000);
 		this.touch();
 	}
@@ -1871,7 +1942,7 @@ export class Store extends Model {
 		const tab = this.active;
 		const chat = tab?.kind === "chat" ? tab : undefined;
 		// A folder opened with the app from the Finder is this computer's.
-		if (name.startsWith("folder:")) return this.remote ? this.flash(`That folder is on this computer, and the app uses the pine on ${this.remote}. Use this Mac's pine to open it.`, "warn", 7000) : this.openFolder(name.slice(7));
+		if (name.startsWith("folder:")) return this.remote ? this.flash(`That folder is on this computer, and the app uses the pine on ${this.remote}. Use this ${computerWord(this.platform)}'s pine to open it.`, "warn", 7000) : this.openFolder(name.slice(7));
 		if (name.startsWith("focus:")) return this.activate(this.tabs.find((t) => t.key === name.slice(6)));
 		if (name.startsWith("tab-")) return this.activate(this.tabs[Number(name.slice(4)) - 1]);
 		if (name.startsWith("code-")) {

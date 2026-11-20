@@ -25,6 +25,7 @@ import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
 import { Breakable, MachineList, Settings } from "./Settings.tsx";
+import { computerWord, firstScreen, isPaired, noMachineSaid } from "./machines.ts";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
@@ -74,20 +75,37 @@ export function Gate() {
 		</div>
 	);
 	type Screen = [React.ReactNode, React.ReactNode, React.ReactNode];
-	const named = host ? <span className="font-mono"><Breakable host={host} /></span> : null;
+	// A machine by the name the owner sees: a paired computer by its name, never its id; user@host as written, in mono.
+	const paired = host ? isPaired(host) : false;
+	// The button back to this computer's pine, in the desktop app: "Use this Mac" on macOS.
+	const useHere = `Use this ${computerWord(s.platform)}`;
+	const named = host ? paired || s.prefs.names?.[host] ? <span>{s.nameOf(host)}</span> : <span className="font-mono"><Breakable host={host} /></span> : null;
 	// Reaching another machine's pine and loading its agents are one wait: one screen, only what it says changes.
 	const connecting = (about: string): Screen => [
 		<>Connecting to {named}</>,
 		about,
 		<div key="s" className="flex w-full flex-col items-center gap-4">
-			<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}</div>
+			<div className="flex items-center gap-2"><Pulse label="Loading" />{s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>{useHere}</Button> : null}</div>
 			{machines}
 		</div>,
 	];
-	const [title, about, actions]: Screen =
-		state.status === "starting"
+	// A pairing link being paired with (the web client's): the four digits the computer shows too, once it showed them.
+	const pairing = firstScreen(state);
+	// The sentence under the title follows the view shown, never the emptiness of the list (machines.ts).
+	const said = state.status === "error" ? noMachineSaid(state, s.machinesShown.view, s.pairFailed) : undefined;
+	const pairFirst = state.status === "error" && said === undefined && !s.prefs.hosts.length;
+	const [title, about, actions]: Screen = pairing
+		? [
+				pairing.title,
+				pairing.about,
+				<div key="p" className="flex w-full flex-col items-center gap-4">
+					{pairing.code ? <span className="font-mono text-4xl font-semibold tracking-widest select-text" data-slot="pairing-code">{pairing.code}</span> : null}
+					<Pulse label="Loading" />
+				</div>,
+			]
+		: state.status === "starting"
 			? host
-				? connecting("Reaching its pine over SSH, or starting one there…")
+				? connecting(paired ? `Reaching ${s.nameOf(host)}, then its pine…` : "Reaching its pine over SSH, or starting one there…")
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Pulse label="Loading" key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
@@ -103,8 +121,9 @@ export function Gate() {
 					]
 				: state.status === "error"
 					? [
-							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? <>{named} is not reached over SSH</> : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
-							state.message,
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? paired ? <>{named} is not reached</> : <>{named} is not reached over SSH</> : s.pairFailed ? "The pairing did not go through" : pairFirst ? "Pair this browser with your computer" : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
+							// No machine in use in the pairing view: the list's three lines say how, once.
+							said ?? "",
 							<div key="b" className="flex w-full flex-col items-center gap-4">
 								{/* A host key met for the first time: its fingerprint, and the owner's yes to exactly that one. */}
 								{key ? <span className="font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</span> : null}
@@ -112,7 +131,7 @@ export function Gate() {
 									{key ? <Button data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
 									{host || s.local ? <Button variant={key ? "outline" : "default"} onClick={() => void bridge.retry()}>Try again</Button> : null}
 									{state.kind === "no-node" ? <Button variant="outline" onClick={() => void bridge.open("https://nodejs.org")}>nodejs.org</Button> : null}
-									{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
+									{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>{useHere}</Button> : null}
 								</div>
 								{machines}
 							</div>,
@@ -125,7 +144,7 @@ export function Gate() {
 								<div key="l" className="flex w-full flex-col items-center gap-4">
 									<div className="flex items-center gap-2">
 										<Button data-slot="gate-reload" onClick={() => void s.reload()}>Try again</Button>
-										{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>Use this Mac</Button> : null}
+										{host && s.local ? <Button variant="outline" onClick={() => void s.useMachine()}>{useHere}</Button> : null}
 									</div>
 									{machines}
 								</div>,
@@ -501,19 +520,21 @@ function Sidebar() {
 export function Machines() {
 	const s = useModel(store);
 	const state = s.service;
-	const here = s.platform === "darwin" ? "This Mac" : "This computer";
+	const here = `This ${computerWord(s.platform)}`;
 	const on = state.status === "ready" ? state.label : state.host;
+	// A paired computer by its name, never its id.
+	const reached = state.host && s.nameOf(state.host);
 	const text =
 		state.status !== "ready"
-			? state.host
+			? reached
 				? state.status === "error"
-					? `${state.host} not reached`
-					: `connecting to ${state.host}`
+					? `${reached} not reached`
+					: `connecting to ${reached}`
 				: "starting"
 			: !s.connected
 				? "pine does not answer"
 				: `pine${state.version ? ` ${state.version}` : ""} · ${on ?? (state.started ? "started here" : "attached")}`;
-	const about = state.status === "ready" ? `${state.home} · ${state.host ? `over SSH (${state.host})` : state.started ? "started by this app" : "a pine that was already running"}` : "";
+	const about = state.status === "ready" ? `${state.home} · ${state.host ? (isPaired(state.host) ? "paired with this browser" : `over SSH (${state.host})`) : state.started ? "started by this app" : "a pine that was already running"}` : "";
 	return (
 		<SidebarMenuItem className="app-no-drag">
 			<DropdownMenu>
@@ -529,7 +550,7 @@ export function Machines() {
 						<DropdownMenuRadioGroup value={state.host ?? ""} onValueChange={(host: string) => void s.useMachine(host || undefined)}>
 							{s.local ? <DropdownMenuRadioItem value="" closeOnClick><LaptopIcon />{here}</DropdownMenuRadioItem> : null}
 							{s.prefs.hosts.map((host) => (
-								<DropdownMenuRadioItem key={host} value={host} closeOnClick data-host={host}><ServerIcon /><span className="truncate">{host}</span></DropdownMenuRadioItem>
+								<DropdownMenuRadioItem key={host} value={host} closeOnClick data-host={host}>{isPaired(host) ? <LaptopIcon /> : <ServerIcon />}<span className="truncate">{s.nameOf(host)}</span></DropdownMenuRadioItem>
 							))}
 						</DropdownMenuRadioGroup>
 					</DropdownMenuGroup>
@@ -756,7 +777,29 @@ function UpdateAsk() {
 }
 
 /**
- * The browser the web tools drive is not on this Mac in the build this pine needs: asked at the
+ * After the first pairing, where a web app on the home screen keeps this browser's key (machines.ts
+ * `homeScreenKeeps`): the suggestion to put it there. Made once; closing it closes it for good.
+ */
+function HomeScreenTip() {
+	const s = useModel(store);
+	const close = () => ((s.homeScreen = false), s.touch());
+	return (
+		<Dialog open onOpenChange={(open) => open || close()}>
+			<DialogContent showCloseButton={false} className="sm:max-w-lg" data-slot="home-screen-tip">
+				<DialogHeader>
+					<DialogTitle>Add Pine to your home screen</DialogTitle>
+				</DialogHeader>
+				<p className="text-muted-foreground select-text">In your browser's menu, choose Add to Home screen. Pine then opens like an app and connects to {s.service.host ? s.nameOf(s.service.host) : "your computer"} by itself: it keeps this browser's key, so there is nothing to pair again.</p>
+				<DialogFooter>
+					<Button onClick={close}>Got it</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+/**
+ * The browser the web tools drive is not on this computer in the build this pine needs: asked at the
  * start, once for a version of pine. Settings > App offers the same at any time. While it is
  * fetched, the dialog stays.
  */
@@ -767,7 +810,7 @@ function BrowserAsk() {
 		<Dialog open onOpenChange={(open) => open || s.browserFetching || later()}>
 			<DialogContent showCloseButton={false} className="sm:max-w-xl">
 				<DialogHeader>
-					<DialogTitle>The browser for the web tools is not on this Mac</DialogTitle>
+					<DialogTitle>The browser for the web tools is not on this {computerWord(s.platform)}</DialogTitle>
 				</DialogHeader>
 				<div className="flex flex-col gap-3 select-text">
 					<p className="text-muted-foreground">Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
@@ -859,6 +902,7 @@ export function App() {
 			)}
 			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.updateAsk ? <UpdateAsk /> : null}
+			{s.homeScreen ? <HomeScreenTip /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
 			{s.publishing ? <PublishDialog /> : null}
 			{s.palette ? <Palette /> : null}

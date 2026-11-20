@@ -79,7 +79,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["how do I reach the computer at home from my mobile when I am out", /^mobile#making-a-machine-reachable/],
 		["where do I download the mac app, and do I have to install node first", /^desktop#getting-it/],
 		["I only installed the app, how do I get the pine command in my shell", /^desktop#pine-in-a-terminal/],
-		["how do I log out of the machine I'm connected to in the browser without forgetting it", /^desktop#environments-the-pine-of-another-machine$/],
+		["how do I log out of the machine I'm connected to in the browser without forgetting it", /^(desktop#environments-the-pine-of-another-machine|web#using-it)$/],
 		["the app says it could not load the agents of my server, what now", /^desktop#environments-the-pine-of-another-machine$/],
 		["does the mac app tell me when there is a newer version, or do I have to look myself", /^desktop#a-newer-version/],
 		["check for updates", /^desktop#a-newer-version/],
@@ -307,6 +307,21 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["try the browser version of a pull request before it is merged", /^web#(previews|web-preview)/],
 		["use the web client with a machine on my tailscale network", /^web#a-machine-on-a-tailnet/],
 		["the browser cannot reach my mac that is only on tailscale", /^web#a-machine-on-a-tailnet/],
+		// The first screen's link to the SSH view: in "The first screen" (Using it), and the official service's row of the paired section.
+		["the web page only shows a qr code, where do I type my server's user@host", /^web#(using-it|a-computer-paired-by-qr-code)/],
+		// "The relay" row (How it works: SSH end to end, neither key nor token), or the first screen's relay line (Using it).
+		["does the official web address relay my ssh connection and can it read it", /^web#(how-it-works|using-it)/],
+		// Browser access to the Pine app's pine, asked for by somebody who does not know its name.
+		["use pine from my phone without ssh", /^(desktop#(browser-access|from-a-phone-without-ssh)|web#a-computer-paired-by-qr-code)/],
+		["scan a qr code on the mac to open my conversations on my phone", /^(desktop#browser-access|web#a-computer-paired-by-qr-code)/],
+		["scan a qr code on my computer to open my conversations on my phone", /^(desktop#browser-access|web#a-computer-paired-by-qr-code)/],
+		["my phone says your mac does not answer", /^(web#when-a-paired-computer-does-not-answer|desktop#when-a-paired-device-does-not-connect)/],
+		["my phone says your computer does not answer", /^(web#when-a-paired-computer-does-not-answer|desktop#when-a-paired-device-does-not-connect)/],
+		["my phone cannot connect from mobile data", /^desktop#a-relay-server-of-your-own/],
+		["set up a turn server so my phone connects from mobile data", /^desktop#a-relay-server-of-your-own/],
+		["remove a phone that can reach my mac", /^desktop#(pairing-a-device|browser-access)/],
+		["remove a phone that can reach my computer", /^desktop#(pairing-a-device|browser-access)/],
+		["link my phone to pine with a barcode", /^(web#a-computer-paired-by-qr-code|desktop#(pairing-a-device|browser-access))/],
 	];
 	const missed = cases.filter(([q, want]) => !top(q).some((id) => want.test(id))).map(([q]) => `${q} → ${top(q).join(", ")}`);
 	assert.deepEqual(missed, []);

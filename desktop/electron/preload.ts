@@ -1,6 +1,7 @@
 // The bridge between the page and the main process: a short list of things the page may ask
 // for, each by name. The page has no Node, no token and no other way out.
 import { contextBridge, ipcRenderer, webUtils } from "electron";
+import type { AccessChange, AccessState } from "./access/control.ts";
 
 const on = (channel: string) => (fn: (...args: any[]) => void) => {
 	const listener = (_e: unknown, ...args: any[]) => fn(...args);
@@ -49,6 +50,22 @@ const bridge = {
 	onTermExit: on("pine:term-exit"),
 	/** A block run with a Run button is still running, or has ended (`RunReport` of terminal.ts). */
 	onTermRun: on("pine:term-run"),
+	/** Browser access (Settings > Browser access): its state, as access/control.ts gives it. */
+	access: () => ipcRenderer.invoke("pine:access") as Promise<AccessState>,
+	/** Turns it on or off, names the service's address (empty: the official one), sets open at login. What comes back is the state now. */
+	setAccess: (change: AccessChange) => ipcRenderer.invoke("pine:access-set", change) as Promise<AccessState>,
+	/** Opens a pairing: the link the QR code encodes, and when it stops working (an ISO date). */
+	openPairing: () => ipcRenderer.invoke("pine:access-pair") as Promise<{ link: string; expires: string }>,
+	/** Puts the open pairing's link on the clipboard. */
+	copyPairingLink: () => ipcRenderer.invoke("pine:access-copy") as Promise<void>,
+	/** Closes the open pairing (the dialog was closed). */
+	cancelPairing: () => ipcRenderer.invoke("pine:access-cancel") as Promise<void>,
+	/** The owner's answer to the state's `request`: true allows the device. */
+	answerPairing: (yes: boolean) => ipcRenderer.invoke("pine:access-answer", yes) as Promise<void>,
+	/** Forgets a paired device and cuts its connection. */
+	removeDevice: (id: string) => ipcRenderer.invoke("pine:access-remove", id) as Promise<boolean>,
+	/** The state of browser access, each time it changes. */
+	onAccess: on("pine:access") as (fn: (state: AccessState) => void) => () => void,
 	onService: on("pine:service"),
 	onEvents: on("pine:events"),
 	onConnection: on("pine:connection"),

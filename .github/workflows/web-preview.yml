@@ -24,6 +24,9 @@ on:
       - "desktop/package-lock.json"
       # The desktop page measures a sound's levels with the terminal UI's code.
       - "src/tui/levels.ts"
+      # web/test/peer.test.ts runs the Pine app's access host, which runs the remote command.
+      - "desktop/electron/access/**"
+      - "src/remote.ts"
       - ".github/workflows/web-preview.yml"
   push:
     branches: [next, main]

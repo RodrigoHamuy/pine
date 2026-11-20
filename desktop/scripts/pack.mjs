@@ -164,6 +164,22 @@ for (const dir of fs.existsSync(path.join(root, "node_modules", "node-pty", "pre
 	if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
 }
 
+// node-datachannel, the peer connection of browser access, loads the binary of a package of its
+// own for each kind of Mac, and npm installs only this Mac's. For an app of the other kind the
+// other one is fetched here, at the version node-datachannel names, through npm, which checks it
+// against the registry's checksum, and put beside this Mac's.
+const datachannel = path.join(root, "node_modules", "@node-datachannel", `darwin-${arch}`);
+if (!fs.existsSync(path.join(datachannel, "node_datachannel.node"))) {
+	const version = JSON.parse(fs.readFileSync(path.join(root, "node_modules", "node-datachannel", "package.json"), "utf8")).optionalDependencies[`@node-datachannel/darwin-${arch}`];
+	const into = path.join(root, ".stage", "datachannel");
+	fs.rmSync(into, { recursive: true, force: true });
+	fs.mkdirSync(into, { recursive: true });
+	const file = execFileSync("npm", ["pack", `@node-datachannel/darwin-${arch}@${version}`, "--pack-destination", into, "--silent"], { cwd: into, encoding: "utf8" }).trim().split("\n").pop();
+	fs.mkdirSync(datachannel, { recursive: true });
+	run("/usr/bin/tar", ["-xzf", path.join(into, file), "--strip-components", "1", "-C", datachannel], into);
+}
+const otherArch = arch === "arm64" ? "x64" : "arm64";
+
 const targets = flags.has("--dmg") ? ["dmg", "dir"] : ["dir"];
 await packApp({
 	projectDir: root,
@@ -176,10 +192,14 @@ await packApp({
 		// The app has the version of the pine it carries: they are made and handed out together.
 		extraMetadata: { version: pineVersion },
 		// Everything the app runs is in the two built folders: the page and the main process are bundles.
-		// The one exception is node-pty, the terminal's pseudo-terminal (a dependency of the app's,
-		// which the packer adds by itself): native, so it lies outside the archive.
-		files: ["dist/**", "dist-electron/**", "package.json"],
-		asarUnpack: ["node_modules/node-pty/**"],
+		// The exceptions are node-pty, the terminal's pseudo-terminal, and node-datachannel, browser
+		// access's peer connection (dependencies of the app's, which the packer adds by itself):
+		// native, so they lie outside the archive, where they are signed with the app. Of
+		// node-datachannel's binaries only the one for this app's kind of Mac goes in. ssh2, the access
+		// server's SSH, is not bundled either (it is CommonJS that needs `__dirname`): it is added by
+		// the packer like them, inside the archive, without its native bindings (scripts/ssh2-pure.mjs).
+		files: ["dist/**", "dist-electron/**", "package.json", `!node_modules/@node-datachannel/darwin-${otherArch}/**`],
+		asarUnpack: ["node_modules/node-pty/**", "node_modules/node-datachannel/**", "node_modules/@node-datachannel/**"],
 		// pine goes in whole, with what it depends on, before the app is signed. (Listed as a resource,
 		// the packer would leave its node_modules out.) With it the Node it runs on and `pine` for a terminal.
 		afterPack: (context) => {

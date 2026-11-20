@@ -1,11 +1,14 @@
 // The app's main process. It owns three things the page must not: the daemon's token, the
 // operating system (windows, menus, dialogs, notifications), and the child that is the daemon
 // when this app had to start one. The page gets a narrow bridge (preload.ts) and nothing else.
-import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, safeStorage, session, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
+import { type AccessChange, type AccessControl, type AccessPrefs, createAccessControl, readAccessPrefs } from "./access/control.ts";
+import type { Cipher } from "./access/host.ts";
+import { startStandIn } from "./access/stand-in.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
 import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
@@ -30,6 +33,13 @@ const isMac = process.platform === "darwin";
 /** Tests only: the window opens behind the owner's windows and the app never takes the focus or a place in the Dock. */
 const BACKGROUND = Boolean(process.env.PINE_DESKTOP_BACKGROUND);
 if (BACKGROUND && isMac) app.setActivationPolicy("accessory");
+/**
+ * Tests only: browser access runs on its stand-in (access/stand-in.ts), which needs no network;
+ * the value is how long its phone waits before it uses a pairing's link, in milliseconds. The
+ * keychain is Chromium's mock one then, so that a test never writes into the owner's keychain.
+ */
+const ACCESS_STAND_IN = process.env.PINE_DESKTOP_ACCESS_STAND_IN;
+if (ACCESS_STAND_IN !== undefined) app.commandLine.appendSwitch("use-mock-keychain");
 
 // A second set of windows and data for tests and for trying things out beside the real app.
 if (process.env.PINE_DESKTOP_DATA) app.setPath("userData", path.resolve(process.env.PINE_DESKTOP_DATA));
@@ -62,10 +72,12 @@ interface Prefs {
 	 */
 	look?: Look;
 	bounds?: { x?: number; y?: number; width: number; height: number };
+	/** Browser access: on or off, the service's address, open at login (access/control.ts). The host key and the devices are a file of their own beside this one. */
+	access: AccessPrefs;
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, commandTried: false };
+let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, commandTried: false, access: readAccessPrefs(undefined) };
 
 function loadPrefs(): void {
 	try {
@@ -80,6 +92,7 @@ function loadPrefs(): void {
 			commandTried: raw.commandTried === true,
 			look: cleanLook(raw.look),
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
+			access: readAccessPrefs(raw.access),
 		};
 		// Only a machine that is in the list: what else might be written there is not connected to.
 		if (typeof raw.use === "string" && prefs.hosts.includes(raw.use)) prefs.use = raw.use;
@@ -154,21 +167,7 @@ async function startService(): Promise<void> {
 	connected = false;
 	setState({ status: "starting", host });
 	try {
-		let s = held.get(host ?? "");
-		// One held from before answers still: it is used again at once. One that does not is let go of and made anew.
-		if (s && !(await answers(s))) {
-			held.delete(host ?? "");
-			void letGo(s);
-			s = undefined;
-		}
-		if (!s) {
-			const made = host ? await connectSsh(host, await loginEnv()) : await connect((launch = await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined)), { home: prefs.home ?? process.env.PINE_HOME, keep: prefs.keepRunning });
-			// Asked for twice (Try again while it connected): the one that came first is kept.
-			const first = held.get(host ?? "");
-			if (first) void letGo(made);
-			else held.set(host ?? "", made);
-			s = first ?? made;
-		}
+		const s = await hold(host);
 		// Another machine was picked while this one connected: it stays held, and the other is shown.
 		if (mine !== round) return;
 		service = s;
@@ -186,6 +185,28 @@ async function startService(): Promise<void> {
  * while another is shown. They are let go of when the app quits.
  */
 const held = new Map<string, Service>();
+
+/**
+ * The pine of a machine (none: this computer's) as the app holds it: the one held from before when
+ * it answers still, else one made anew and held. The window uses it, and browser access for this
+ * computer's, also while the window shows another machine's pine.
+ */
+async function hold(host: string | undefined): Promise<Service> {
+	let s = held.get(host ?? "");
+	// One held from before answers still: it is used again at once. One that does not is let go of and made anew.
+	if (s && !(await answers(s))) {
+		if (held.get(host ?? "") === s) held.delete(host ?? "");
+		void letGo(s);
+		s = undefined;
+	}
+	if (s) return s;
+	const made = host ? await connectSsh(host, await loginEnv()) : await connect((launch = await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined)), { home: prefs.home ?? process.env.PINE_HOME, keep: prefs.keepRunning });
+	// Asked for twice (Try again while it connected, or browser access at the same time): the one that came first is kept.
+	const first = held.get(host ?? "");
+	if (first) void letGo(made);
+	else held.set(host ?? "", made);
+	return first ?? made;
+}
 
 /** Whether a pine still answers: one on another machine may have lost its connection meanwhile. */
 const answers = (s: Service) => fetch(`${s.base}/health`, { signal: AbortSignal.timeout(2500) }).then((r) => r.ok, () => false);
@@ -232,6 +253,70 @@ async function media(request: Request): Promise<Response> {
 	const url = new URL(request.url);
 	return mediaFromDaemon(service, request.method, url.pathname, url.search);
 }
+
+// ---- browser access ----------------------------------------------------------------------------
+
+/** The keychain's encryption (Electron's safe storage), where it can be used. */
+function keychain(): Cipher | undefined {
+	if (!safeStorage.isEncryptionAvailable()) return undefined;
+	return { seal: (text) => safeStorage.encryptString(text), open: (bytes) => safeStorage.decryptString(bytes) };
+}
+
+/** A device was added: said under the app's notification preference, even while the window is in front (a yes given by mistake is to be noticed). */
+function notifyPaired(name: string): void {
+	if (!prefs.notify || !Notification.isSupported()) return;
+	const n = new Notification({ title: "Browser access", body: `${name} can now access Pine.`.slice(0, 160), silent: false });
+	n.on("click", () => show());
+	n.show();
+}
+
+/**
+ * Browser access (access/control.ts), made when the app is ready. Its daemon is this computer's,
+ * held as the window holds it: it ends when the app quits, or goes on with "keep pine running".
+ */
+let access: AccessControl | undefined;
+
+function startAccess(): void {
+	access = createAccessControl({
+		folder: app.getPath("userData"),
+		cipher: keychain,
+		prefs: {
+			read: () => prefs.access,
+			write: (next) => {
+				prefs.access = next;
+				savePrefs();
+			},
+		},
+		daemon: async () => {
+			const s = await hold(undefined);
+			return JSON.stringify({ base: s.base, token: s.token, mode: s.mode, started: s.started, home: s.home, version: s.version });
+		},
+		loginItem: (open) => app.setLoginItemSettings({ openAtLogin: open }),
+		paired: (device) => notifyPaired(device.name),
+		changed: (s) => send("pine:access", s),
+		start: ACCESS_STAND_IN !== undefined ? (options) => startStandIn({ ...options, waitMs: Number(ACCESS_STAND_IN) || undefined }) : undefined,
+	});
+	void access.start();
+}
+
+/** What the page may ask to change, value by value. */
+function accessChange(raw: unknown): AccessChange {
+	const said = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+	const relay = said.relay && typeof said.relay === "object" ? (said.relay as Record<string, unknown>) : undefined;
+	const text = (value: unknown) => (typeof value === "string" ? value.slice(0, 400) : undefined);
+	return {
+		...(typeof said.enabled === "boolean" ? { enabled: said.enabled } : {}),
+		...(typeof said.openAtLogin === "boolean" ? { openAtLogin: said.openAtLogin } : {}),
+		...(typeof said.service === "string" ? { service: said.service.slice(0, 400) } : {}),
+		// The relay's password passes here once, to the sealed file, and is never sent back to the page.
+		...(relay && typeof relay.address === "string" ? { relay: { address: relay.address.slice(0, 400), username: text(relay.username), password: text(relay.password) } } : {}),
+	};
+}
+
+const accessOn = () => {
+	if (!access) throw new Error("Browser access is not ready yet.");
+	return access;
+};
 
 // ---- the page ----------------------------------------------------------------------------------
 
@@ -561,6 +646,22 @@ function wire(): void {
 		savePrefs();
 		return { ...prefs, bounds: undefined };
 	});
+	// Browser access: its state, and the owner's changes to it.
+	handle("pine:access", () => accessOn().state());
+	handle("pine:access-set", (change: unknown) => accessOn().set(accessChange(change)));
+	handle("pine:access-pair", () => accessOn().openPairing());
+	handle("pine:access-cancel", () => accessOn().cancelPairing());
+	// The link of the open pairing, put on the clipboard here: the page names no text (and is given no clipboard of its own).
+	handle("pine:access-copy", async () => {
+		const { pairing } = await accessOn().state();
+		if (!pairing) throw new Error("No pairing is open now: press Add a device.");
+		clipboard.writeText(pairing.link);
+	});
+	handle("pine:access-answer", (yes: unknown) => accessOn().answer(yes === true));
+	handle("pine:access-remove", (id: unknown) => {
+		if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("That is not a device of the list.");
+		return accessOn().remove(id);
+	});
 	handle("pine:pick-folder", async (title?: string) => {
 		const r = await dialog.showOpenDialog(win!, { title: typeof title === "string" ? title.slice(0, 80) : "Choose a folder", properties: ["openDirectory", "createDirectory"] });
 		return r.canceled ? undefined : r.filePaths[0];
@@ -671,6 +772,7 @@ else {
 		protocol.handle("pine-media", media);
 		session.defaultSession.setPermissionRequestHandler((_wc, _permission, done) => done(false));
 		wire();
+		startAccess();
 		ipcMain.on("pine:ready", (e) => {
 			if (!fromPage(e)) return;
 			pageReady = true;
@@ -700,6 +802,8 @@ else {
 		if (quitting) return;
 		savePrefs();
 		terminals.closeAll();
+		// Browser access closes its sockets; its daemon is one of those held, and follows them.
+		void access?.stop();
 		// The connections to other machines end with the app, and a pine one started there with it.
 		const going = [...held.values()].filter((s) => s.host || (s.started && !prefs.keepRunning));
 		if (!going.length) return;

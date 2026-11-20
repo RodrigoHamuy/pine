@@ -1,7 +1,7 @@
 // Settings: everything about pine that is otherwise a command in a shell or a sentence to the
 // main agent. Each page asks the daemon what there is and tells it what to change; the daemon
 // checks every change as it checks the main agent's, and nothing here writes a file itself.
-import { AudioLinesIcon, BookIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowLeftIcon, AudioLinesIcon, BookIcon, MonitorSmartphoneIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -31,10 +31,12 @@ import { HoverTooltip } from "@/components/hover-tooltip";
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
+import { APP_DOWNLOAD, computerWord, isPaired, meetingLine, reachedThrough, relayLine } from "./machines.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
+import { BrowserAccess } from "./BrowserAccess.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -45,8 +47,27 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "events", label: "Events", icon: ZapIcon },
 	{ id: "instructions", label: "Instructions", icon: PencilIcon },
 	{ id: "environments", label: "Environments", icon: ServerIcon },
+	{ id: "access", label: "Browser access", icon: MonitorSmartphoneIcon },
 	{ id: "app", label: "App", icon: SettingsIcon },
 ];
+
+/**
+ * Whether Settings > Browser access is offered: only by the desktop app's bridge, which has its calls,
+ * and only while the app uses this computer's pine. Browser access is this computer's door: the web client,
+ * the mobile apps and another machine's pine have none to show.
+ */
+const offersAccess = (s: { local: boolean; remote?: string }) => s.local && !s.remote && typeof bridge.access === "function";
+
+/** The sections the navigation lists for this state: every one, but Browser access only where it is offered. */
+const offeredSections = (s: { local: boolean; remote?: string }) => SECTIONS.filter((x) => x.id !== "access" || offersAccess(s));
+
+function Access() {
+	return (
+		<Page title="Browser access" lead={`Your conversations in a browser on your phone or another computer, with this ${computerWord(store.platform)}'s pine. A device is let in once by scanning a code here, and connects by itself from then on.`}>
+			<BrowserAccess />
+		</Page>
+	);
+}
 
 // Every page is made of stock Item, Field, Badge and Alert, written out where they are used. Some
 // carry a class the desktop tests look for (set-group, item, name, ctl, form, log, tag, notice,
@@ -2062,7 +2083,9 @@ export function MachineList() {
 	const field = useId();
 	const state = s.service;
 	const key = s.keyToTrust;
-	const here = s.platform === "darwin" ? "This Mac" : "This computer";
+	const here = `This ${computerWord(s.platform)}`;
+	// How to pair, or the user@host machines over SSH: never both at once (`machinesView`).
+	const shown = s.machinesShown;
 	const add = async () => {
 		setError(undefined);
 		try {
@@ -2087,19 +2110,23 @@ export function MachineList() {
 		if (state.status === "error") return <Badge variant="destructive">not reached</Badge>;
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
+	/** What a row says of its machine when nothing is wrong: a paired computer by its name (its id says nothing), user@host as written. */
+	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this browser.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
-			<ItemMedia variant="icon">{h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
+			<ItemMedia variant="icon">{h && !isPaired(h) ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
 			{/* The text asks for 20rem before it shares its line: where the buttons would leave it less (a phone, the Gate, the four of a machine in error), the Item wraps them onto a line of their own. */}
 			<ItemContent className="min-w-0 flex-[1_1_20rem]">
 				{/* A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`. */}
 				<ItemTitle className="name line-clamp-none flex w-full min-w-0 flex-wrap">
-					<span className={cn("min-w-0 wrap-anywhere", h && "font-mono")}>{h ? <Breakable host={h} /> : here}</span>
+					{/* A machine with a name (a paired computer, one the owner renamed) is shown by it; user@host without one as written, in mono. */}
+					<span className={cn("min-w-0 wrap-anywhere", h && !isPaired(h) && !s.prefs.names?.[h] && "font-mono")}>{h ? isPaired(h) || s.prefs.names?.[h] ? s.nameOf(h) : <Breakable host={h} /> : here}</span>
 					{status(h)}
 				</ItemTitle>
 				<ItemDescription className="line-clamp-none wrap-anywhere">
-					{state.host === h && state.status === "error" ? state.message : h ? <>The pine on <Breakable host={h} />, over SSH.</> : "The pine on this computer: the one that runs, or one this app starts."}
+					{state.host === h && state.status === "error" ? state.message : h ? about(h) : "The pine on this computer: the one that runs, or one this app starts."}
 				</ItemDescription>
+				{h && reachedThrough(h, s.serviceHost) ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="reached-through">{reachedThrough(h, s.serviceHost)}</ItemDescription> : null}
 				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
@@ -2107,6 +2134,7 @@ export function MachineList() {
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
 				{state.host === h && s.canDisconnect ? <Button variant="outline" size="xs" data-slot="disconnect" onClick={() => void s.disconnect()}>Disconnect</Button> : null}
+				{h && s.canRename ? <Button variant="ghost" size="xs" data-slot="rename-machine" onClick={() => void s.renameMachine(h)}>Rename</Button> : null}
 				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
 				{h && (state.host !== h || (!s.local && state.status === "error")) ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
 			</ItemActions>
@@ -2114,12 +2142,23 @@ export function MachineList() {
 	);
 	return (
 		<>
+			{shown.back ? (
+				<Button variant="ghost" size="icon-sm" className="self-start" data-slot="back-to-pairing" aria-label="Back to pairing" onClick={() => s.showMachines("pair")}>
+					<ArrowLeftIcon />
+				</Button>
+			) : null}
 			<ItemGroup>
 				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
-			{s.local ? null : <DeviceKey />}
-			<FieldSet>
+			{/* The pairing view has no user@host to add, nor a key for one. */}
+			{shown.view === "pair" ? <PairHowTo /> : s.local ? null : <DeviceKey />}
+			{shown.toSsh ? (
+				<Button variant="link" size="sm" className="self-start px-0" data-slot="ssh-instead" onClick={() => s.showMachines("ssh")}>
+					Or connect to a server over SSH
+				</Button>
+			) : null}
+			{shown.view === "ssh" ? <FieldSet>
 				<FieldLegend>Add a machine</FieldLegend>
 				<FieldGroup>
 					<Field>
@@ -2131,18 +2170,43 @@ export function MachineList() {
 						<FieldDescription>{s.local ? "As you would write it after ssh: host, user@host, or a name from ~/.ssh/config. It is connected to when you pick it." : "As you would write it after ssh: user@host, or user@host:port. It is connected to when you pick it."}</FieldDescription>
 					</Field>
 					{error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{error}</AlertDescription></Alert> : null}
+					{/* Where a relay is in play (the web client), it is said plainly, so that nobody forgets it. */}
+					{s.serviceHost ? <FieldDescription data-slot="relay-line">{relayLine(s.serviceHost)}</FieldDescription> : null}
 				</FieldGroup>
-			</FieldSet>
+			</FieldSet> : null}
 		</>
+	);
+}
+
+/** How a browser is paired with a computer, in three lines, and where the Pine app is for a computer without it: opened like every other link. */
+function PairHowTo() {
+	const s = useModel(store);
+	return (
+		<Item variant="outline" data-slot="pair-how-to">
+			<ItemContent className="min-w-0 basis-full">
+				<ItemTitle>Pair with your computer</ItemTitle>
+				<ol className="list-decimal ps-5 text-sm text-muted-foreground">
+					<li>Open the Pine app on your computer.</li>
+					<li>Go to Settings &gt; Browser access and press Add a device.</li>
+					<li>Scan the code with this device's camera, or open the link it gives in this browser.</li>
+				</ol>
+				{s.serviceHost ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="meeting-line">{meetingLine(s.serviceHost)}</ItemDescription> : null}
+			</ItemContent>
+			<ItemActions>
+				<Button variant="outline" size="xs" data-slot="get-the-app" onClick={() => void store.attempt(() => bridge.open(APP_DOWNLOAD))}><ExternalLinkIcon data-icon="inline-start" />Get the Pine app</Button>
+			</ItemActions>
+		</Item>
 	);
 }
 
 function Environments() {
 	const s = useModel(store);
+	const pairing = s.machinesShown.view === "pair";
 	return (
-		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : pairing ? "The pine this browser uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
 			<MachineList />
-			<Alert>
+			{/* In the pairing view, the list's how-to is all there is to say. */}
+			{!pairing ? <Alert>
 				<InfoIcon />
 				<AlertDescription>
 					{/* A port of this computer and its terminal are not said where there is no local machine. */}
@@ -2156,7 +2220,7 @@ function Environments() {
 						<p>The machine needs pine with a home (pine init there), and this device's key in ~/.ssh/authorized_keys of the user you name. The first time, the app shows the machine's host key fingerprint: compare it with what the machine shows, then trust it.</p>
 					)}
 				</AlertDescription>
-			</Alert>
+			</Alert> : null}
 		</Page>
 	);
 }
@@ -2205,7 +2269,7 @@ function AppPage() {
 						<Field orientation="horizontal">
 							<FieldContent>
 								<FieldLabel htmlFor={`${field}-updates`}>Look for a newer version at the start</FieldLabel>
-								<FieldDescription>One question to GitHub each time the app starts. It says nothing about this Mac or your pine.</FieldDescription>
+								<FieldDescription>One question to GitHub each time the app starts. It says nothing about this {computerWord(s.platform)} or your pine.</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
 								<Switch id={`${field}-updates`} checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} />
@@ -2272,7 +2336,7 @@ function AppPage() {
 							<FieldContent>
 								<FieldTitle>
 									Browser for the web tools
-									<Badge variant={s.browser ? "default" : "outline"}>{s.browser ? "on this Mac" : "not on this Mac"}</Badge>
+									<Badge variant={s.browser ? "default" : "outline"}>{`${s.browser ? "on" : "not on"} this ${computerWord(s.platform)}`}</Badge>
 								</FieldTitle>
 								<FieldDescription>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</FieldDescription>
 								{!s.browser && s.initLines.length ? (
@@ -2308,6 +2372,9 @@ function AppPage() {
 
 export function Settings() {
 	const s = useModel(store);
+	const sections = offeredSections(s);
+	// A section chosen while it was offered (Browser access, before the app went to another machine's pine) opens General, which the navigation marks.
+	const section = sections.some((x) => x.id === s.section) ? s.section : "general";
 	// The sections are a column beside the page where there is room, and a row above it where there is not
 	// (a narrow window, or a wide panel beside): measured on the settings themselves, not on the window.
 	// An item's title wraps (its badges go under its name where the row is narrow): set once here for every row.
@@ -2323,9 +2390,9 @@ export function Settings() {
 								<SidebarGroup role="navigation" className="py-2 @3xl/settings:py-4">
 									<SidebarGroupContent>
 										<SidebarMenu className="flex-row @3xl/settings:flex-col">
-											{SECTIONS.map((x) => (
+											{sections.map((x) => (
 												<SidebarMenuItem key={x.id} className="flex-none @3xl/settings:flex-initial">
-													<SidebarMenuButton isActive={s.section === x.id} aria-current={s.section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
+													<SidebarMenuButton isActive={section === x.id} aria-current={section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
 												</SidebarMenuItem>
 											))}
 										</SidebarMenu>
@@ -2335,8 +2402,8 @@ export function Settings() {
 						</SidebarContent>
 					</SidebarRoot>
 				</SidebarProvider>
-				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={s.section}>
-					{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "environments" ? <Environments /> : s.section === "app" ? <AppPage /> : <General />}
+				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={section}>
+					{section === "agents" ? <Agents /> : section === "models" ? <Models /> : section === "mcp" ? <Mcp /> : section === "skills" ? <Skills /> : section === "events" ? <EventsPage /> : section === "instructions" ? <Instructions /> : section === "environments" ? <Environments /> : section === "access" ? <Access /> : section === "app" ? <AppPage /> : <General />}
 				</ScrollArea>
 			</div>
 		</div>

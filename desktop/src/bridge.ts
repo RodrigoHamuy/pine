@@ -11,7 +11,16 @@ declare global {
 }
 
 /** The pine the app uses, and how it is. `host` and `label` name another machine reached over SSH; without them it is this computer's. */
-export type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | {
+export type ServiceState = {
+			status: "starting";
+			host?: string;
+			/**
+			 * A pairing with a computer under way, from a pairing link (the web client's): `code` is the four
+			 * digits the computer shows beside `name`, this browser's name, while the owner decides there.
+			 * Before the computer answered, neither. The other bridges leave it out.
+			 */
+			pairing?: { code?: string; name?: string };
+	  } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | {
 			status: "error";
 			kind: "no-home" | "no-node" | "no-pine" | "ssh" | "failed";
 			message: string;
@@ -29,6 +38,11 @@ export interface Prefs {
 	hosts: string[];
 	/** The one the app uses; none: this computer's pine. */
 	use?: string;
+	/**
+	 * The names the owner sees for machines, by machine: the name a paired computer gave, or what the
+	 * owner renamed a machine to (`renameHost`). Kept by the web client's bridge; the others leave it out.
+	 */
+	names?: Record<string, string>;
 	notify: boolean;
 	updates: boolean;
 	/** The theme the window was last drawn in (theme.ts), so that it opens in it; none: pmndre. */
@@ -60,13 +74,39 @@ export interface AppState {
 	 * never asks `use()` for one. The desktop app and the preview leave it out, which means there is.
 	 */
 	local?: boolean;
+	/**
+	 * Whether machines can be added as user@host. The web client's bridge sets it from its
+	 * deployment's configuration: false where the deployment carries no SSH to such machines (its
+	 * relay is off), and only a computer paired by its link can be used. The others leave it out, which means they can.
+	 */
+	canAddHost?: boolean;
+	/**
+	 * Whether a computer can be paired with by its link: the deployment has the meeting service. The
+	 * web client's bridge sets it from its deployment's configuration (`/meet/config` answers). The
+	 * others leave it out, which means there is nothing to pair with, and the page offers no pairing.
+	 */
+	canPair?: boolean;
+	/**
+	 * The host of the service a machine is reached through (the web client's deployment, its
+	 * document's address: "pine.drcmda.workers.dev"), which the page names so that the relay and the
+	 * meeting service are never forgotten. The others leave it out: they reach machines without one.
+	 */
+	serviceHost?: string;
 }
+
+export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../electron/access/control.ts";
+
+/**
+ * Browser access to this computer's pine (Settings > Browser access): only the desktop app's bridge
+ * has these calls, and a page shows the section only where they are there.
+ */
+export type AccessCalls = "access" | "setAccess" | "openPairing" | "copyPairingLink" | "cancelPairing" | "answerPairing" | "removeDevice" | "onAccess";
 
 /**
  * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the
  * preview's, the mobile app's, the web client's).
  */
-export type PageBridge = Omit<Bridge, "state"> & {
+export type PageBridge = Omit<Bridge, "state" | AccessCalls> & Partial<Pick<Bridge, AccessCalls>> & {
 	state: () => Promise<AppState>;
 	/**
 	 * Where the daemon's pictures, video and sound are fetched from, set by a bridge whose page
@@ -94,6 +134,11 @@ export type PageBridge = Omit<Bridge, "state"> & {
 	 * (the web client's); the others leave it out and the page shows no Disconnect.
 	 */
 	disconnect?: () => Promise<Prefs>;
+	/**
+	 * Gives a machine of the list the name the owner sees for it (`Prefs.names`). Set by a bridge that
+	 * keeps names (the web client's); the others leave it out.
+	 */
+	renameHost?: (host: string, name: string) => Promise<Prefs>;
 };
 
 export const bridge = window.pine;
