@@ -28,7 +28,10 @@ const real = (p: string) => {
 
 export function installKind(root: string, globalRoot?: string): InstallKind {
 	if (fs.existsSync(path.join(root, ".git")) && fs.existsSync(path.join(root, "src", "cli.ts"))) return "checkout";
-	if (/\.app\/Contents\/Resources\/pine$/.test(real(root))) return "app";
+	// The Pine app carries pine in its resources: Pine.app/Contents/Resources/pine on a Mac,
+	// resources/pine beside the app's own app.asar on Linux and Windows.
+	if (/\.app[\\/]Contents[\\/]Resources[\\/]pine$/.test(real(root))) return "app";
+	if (path.basename(root) === "pine" && /^resources$/i.test(path.basename(path.dirname(root))) && fs.existsSync(path.join(path.dirname(root), "app.asar"))) return "app";
 	if (globalRoot && (real(root) + path.sep).startsWith(real(globalRoot) + path.sep)) return "global";
 	return "local";
 }

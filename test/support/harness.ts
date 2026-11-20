@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -180,4 +182,15 @@ export async function until(fn: () => unknown, ms = 5000, what = "condition"): P
 		await sleep(25);
 	}
 	throw new Error(`timed out waiting for ${what}`);
+}
+
+/**
+ * That only the owner can read a file (or folder): its mode on macOS and Linux (0o600, 0o700 for
+ * a folder). Windows has no mode bits: there a file in the owner's profile is the owner's (and
+ * the system's and administrators') by what it inherits, and nobody else is granted anything on it.
+ */
+export function assertPrivate(file: string, mode = fs.statSync(file).isDirectory() ? 0o700 : 0o600, what = file): void {
+	if (process.platform !== "win32") return assert.equal(fs.statSync(file).mode & 0o777, mode, what);
+	const acl = execFileSync(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "icacls.exe"), [file], { encoding: "utf8" });
+	assert.ok(!/\b(Everyone|BUILTIN\\Users|Authenticated Users|NT AUTHORITY\\INTERACTIVE)\b/i.test(acl), `${what} is open to others: ${acl}`);
 }

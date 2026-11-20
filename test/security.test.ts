@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { audit, globMatch, matchesToolPattern, sandboxAvailable, sandboxKind } from "../src/security.ts";
-import { harness, MCP_STUB, mockMsg, notesOf, sleep, textOf, until, refused, toolRefused } from "./support/harness.ts";
+import { assertPrivate, harness, MCP_STUB, mockMsg, notesOf, refused, sleep, textOf, toolRefused, until } from "./support/harness.ts";
 
 const owner = { trust: "owner" as const };
 const bash = (...commands: string[]) => mockMsg([{ tools: commands.map((command) => ({ name: "bash", args: { command } })) }]);
@@ -420,7 +420,7 @@ test("control API: token, no browsers, signed webhooks, bounded bodies", async (
 	assert.equal(await status("/events", { method: "POST", headers: { ...auth, "content-type": "text/plain" }, body: "{}" }), 415);
 	assert.equal(await status("/events", { method: "POST", headers: { ...auth, ...json }, body: JSON.stringify({ topic: "x", payload: "y".repeat(1100000) }) }), 413);
 	assert.equal(await status("/agents/nobody/prompt", { method: "POST", headers: { ...auth, ...json }, body: JSON.stringify({ prompt: "x" }) }), 400);
-	assert.equal(fs.statSync(path.join(h.home, "data", "http-token")).mode & 0o777, 0o600);
+	assertPrivate(path.join(h.home, "data", "http-token"), 0o600);
 
 	const answer: any = await (await fetch(`${base}/agents/main/prompt`, { method: "POST", headers: { ...auth, ...json }, body: JSON.stringify({ prompt: "via api" }) })).json();
 	assert.equal(answer.text, "ECHO[via api]");

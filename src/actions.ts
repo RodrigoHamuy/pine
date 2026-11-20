@@ -34,6 +34,8 @@ const PROTECTED_HOME = [
 	".zshrc", ".zshenv", ".zprofile", ".zlogin", ".bashrc", ".bash_profile", ".bash_login", ".profile", ".envrc",
 	".config/fish", ".ssh", ".gnupg", ".aws", ".azure", ".kube", ".config/gcloud", ".docker/config.json", ".netrc", ".npmrc", ".yarnrc", ".yarnrc.yml", ".pypirc",
 	".gitconfig", ".config/git", "Library/LaunchAgents", ".config/systemd", ".config/autostart",
+	// Windows: what PowerShell runs at its start, and what Windows starts at sign-in.
+	"Documents/PowerShell", "Documents/WindowsPowerShell", "AppData/Roaming/Microsoft/Windows/Start Menu/Programs/Startup",
 ];
 /** Parts of a path that mean the same anywhere: a repository's hooks and configuration run programs for whoever uses git there. */
 const PROTECTED_ANYWHERE = /(^|\/)\.git\/(hooks(\/|$)|config$)|(^|\/)\.husky(\/|$)/;
@@ -43,7 +45,8 @@ const PROTECTED_IN_COMMAND = /(^|[\s"'=/~])(\.(zshrc|zshenv|zprofile|bashrc|bash
 /** Whether a file is one of the protected ones. */
 export function isProtectedPath(p: string): boolean {
 	const home = realish(os.homedir());
-	if (PROTECTED_ANYWHERE.test(p)) return true;
+	// (A path of Windows says the same with its own separator.)
+	if (PROTECTED_ANYWHERE.test(p.replace(/\\/g, "/"))) return true;
 	return PROTECTED_HOME.some((rel) => isInside(path.join(home, rel), p));
 }
 

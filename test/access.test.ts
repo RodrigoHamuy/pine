@@ -37,7 +37,7 @@ const runner = (h: Awaited<ReturnType<typeof harness>>, session = "work", trust:
 	return h.toolResults().slice(-tools.length);
 };
 
-test("access: the paths a command names are read from its text, with what it writes", () => {
+test("access: the paths a command names are read from its text, with what it writes", { skip: process.platform === "win32" && "what a command names is read as a POSIX shell's paths; Windows paths there are not read yet" }, () => {
 	const where = { cwd: "/w/space", shellHome: "/pine/sandbox/a", ownerHome: "/Users/o" };
 	const of = (command: string) => reaches(command, where).map((r) => `${r.write ? "write" : "read"} ${r.path}${r.owner ? ` (owner: ${r.owner})` : ""}`);
 	assert.deepEqual(of("cat /Users/o/notes/a.txt"), ["read /Users/o/notes/a.txt"]);
@@ -58,7 +58,7 @@ test("access: the paths a command names are read from its text, with what it wri
 	assert.deepEqual(of("cat /Users/o/a; echo x >> /Users/o/a"), ["write /Users/o/a"]);
 });
 
-test("access: the system's reports and a failed command's words are sorted into paths, network and services", () => {
+test("access: the system's reports and a failed command's words are sorted into paths, network and services", { skip: process.platform === "win32" && "what a command names is read as a POSIX shell's paths; Windows paths there are not read yet" }, () => {
 	const d = (op: string, target: string) => ({ process: "p", op, target });
 	const sorted = sortDenials([
 		d("file-read-data", "/Users/o/a"),

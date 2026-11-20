@@ -858,7 +858,8 @@ export class Sound implements Component {
 		this.before = this.played();
 		this.paused = true;
 		const child = this.child;
-		if (this.player?.from) {
+		// Windows cannot hold a process (no SIGSTOP): there the player ends as well.
+		if (this.player?.from || process.platform === "win32") {
 			// It can start in the middle: end it, and play starts one from here.
 			this.child = undefined;
 			this.signal(child, "SIGKILL");

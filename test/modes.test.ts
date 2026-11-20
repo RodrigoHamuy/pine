@@ -650,7 +650,7 @@ test("without a sandbox, a command that names pine's own files, program or contr
 	assert.equal(pineOwn("curl localhost:7463", { ...o, port: undefined }), undefined, "no control API, no port to guard");
 });
 
-test("a machine without a sandbox: a mode nobody chose becomes auto, safe mode by hand has no shell, a run from outside has none either", async (t) => {
+test("a machine without a sandbox: a mode nobody chose becomes auto, safe mode by hand has no shell, a run from outside has none either", { skip: process.platform === "win32" && "it pretends to be another system, which on Windows takes Git's bash away too" }, async (t) => {
 	// A system pine has no sandbox for stands in for a container that was started without the rights for one.
 	const platform = Object.getOwnPropertyDescriptor(process, "platform")!;
 	Object.defineProperty(process, "platform", { value: "freebsd" });

@@ -541,7 +541,7 @@ test("sound: the line shows the levels as bars that follow the clock while it pl
 	assert.equal(plain(bare.render(100)[0]), " ‖ pause · ♪ odd one · 0:00   ▸ open in player");
 });
 
-test("tui: a sound an answer points at is played when it arrives, by the system's player; pause and play go on where it was", async (t) => {
+test("tui: a sound an answer points at is played when it arrives, by the system's player; pause and play go on where it was", { skip: process.platform === "win32" && "the stand-in player is found and held with ps and SIGSTOP, which Windows does not have" }, async (t) => {
 	const { execFileSync } = await import("node:child_process");
 	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-sound-test-")));
 	t.after(() => fs.rmSync(dir, { recursive: true, force: true }));

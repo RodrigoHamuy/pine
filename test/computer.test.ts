@@ -577,7 +577,7 @@ test("computer: the bundled server is configured like the others and marks sessi
 	assert.equal(mcpTaints(server), true, "what a screen shows was written by others");
 	// Where the helper is kept is pine's to say, whatever the options say.
 	const pi = toPiMcp("computer", server, computerSession({ owner: true, level: "auto", dataDir: cfg.dataDir, platform: "darwin" })) as any;
-	assert.ok(pi.args[0].endsWith("mcp/computer.ts"));
+	assert.ok(pi.args[0].endsWith(path.join("mcp", "computer.ts")));
 	assert.deepEqual(JSON.parse(pi.env.PINE_MCP_OPTIONS), { images: false, helperDir: path.join(cfg.dataDir, "computer") });
 	// The example home has it, and loads on any system.
 	const example = JSON.parse(fs.readFileSync(path.resolve(import.meta.dirname, "../examples/home/pine.json"), "utf8"));

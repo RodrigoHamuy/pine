@@ -43,7 +43,7 @@ test("admin: the main agent lists agents and changes one by tool call; what is w
 	// What an agent is for is the first paragraph of its AGENTS.md (the heading aside); in an older home without one, `description` in agent.json.
 	assert.match(out[0], /- aide: Second pair of hands\n/);
 	assert.match(out[0], /- helper: Reads papers\.\n    model mock\/m \(the default\) · reasoning off · mode safe · reach its own folders, in the sandbox · built-in tools read, bash, edit, write, grep, find, ls\n    conversations: none · event sources: none · MCP servers: none · schedules: none · skills: none · 2 files in its workspace/);
-	assert.match(out[1], /workspace: .*agents\/helper\/workspace\n    may hand work to: none\n\nIts instructions \(AGENTS\.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them\):\n# Helper\n\nReads papers\.\n\nYou are HELPER\./);
+	assert.match(out[1], /workspace: .*agents[\\/]helper[\\/]workspace\n    may hand work to: none\n\nIts instructions \(AGENTS\.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them\):\n# Helper\n\nReads papers\.\n\nYou are HELPER\./);
 	assert.match(out[2], /there is no agent "nobody"\. Agents: aide, helper, main/);
 	assert.equal(asked.length, 0, "looking asks nobody");
 

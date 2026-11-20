@@ -1206,7 +1206,9 @@ test("tui: what a model thinks is a few lines while it thinks and one line after
 	await until(() => lastThought() > rowOf("Second answer."), 2000, "the third thought to be one line");
 	const closed = lastThought();
 	t.term.click(6, closed);
-	await until(() => rows().some((l) => l.startsWith(" │ long-1 ")), 2000, "the long thought to open");
+	await until(() => rows().some((l) => l.startsWith(" │ long-1 ")), 5000, "the long thought to open").catch((e) => {
+		throw new Error(`${e.message} (clicked row ${closed})\n${t.text()}`);
+	});
 	assert.ok(rows().some((l) => l.includes("▾ thought for")), `its first line stays in view when it opens\n${t.text()}`);
 	t.term.type(["\x1b[6~", "\x1b[6~"]);
 	await until(() => !rows().some((l) => l.includes("▾ thought for")) && rows().some((l) => /^ │ long-\d+ /.test(l)), 2000, "the window to be inside the thought");

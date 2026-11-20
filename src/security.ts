@@ -834,6 +834,20 @@ export const timingSafeEqual = (a: string, b: string) => {
 	return crypto.timingSafeEqual(ha, hb);
 };
 
+/**
+ * Windows has no mode bits: who else a file is open to is in its permissions. Undefined when it
+ * is the owner's alone (with the system's and the administrators', as everything in a profile is).
+ */
+function openTo(p: string): string | undefined {
+	if (!fs.existsSync(p)) return undefined;
+	try {
+		const acl = execFileSync(path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "icacls.exe"), [p], { encoding: "utf8", timeout: 10_000, windowsHide: true });
+		return /\b(Everyone|BUILTIN\\Users|Authenticated Users|NT AUTHORITY\\INTERACTIVE)\b/i.exec(acl)?.[1];
+	} catch {
+		return undefined;
+	}
+}
+
 /** Things about a configuration that weaken its defences. Shown by `pine check` and at startup. */
 export function audit(cfg: PineConfig): string[] {
 	const out: string[] = [];
@@ -845,11 +859,18 @@ export function audit(cfg: PineConfig): string[] {
 		}
 	};
 	for (const f of [".env", "auth.json", "models.json", "pine.json"]) {
+		if (process.platform === "win32") {
+			const who = openTo(path.join(cfg.home, f));
+			if (who) out.push(`${f} is readable by ${who}; run: icacls "${path.join(cfg.home, f)}" /inheritance:r /grant:r "%USERNAME%:F"`);
+			continue;
+		}
 		const m = mode(path.join(cfg.home, f));
 		if (m !== undefined && m & 0o077) out.push(`${f} is readable by other users (mode ${m.toString(8)}); run: chmod 600 ${path.join(cfg.home, f)}`);
 	}
 	if (!sandboxAvailable()) out.push(`no sandbox on this machine: ${sandboxMissing()}. An agent in auto or bypass mode works as everywhere, with your rights. An agent set to safe mode gets no shell, runs that events from outside start get none either, and command sources do not run`);
-	const homeMode = mode(cfg.home);
+	const homeOpen = process.platform === "win32" ? openTo(cfg.home) : undefined;
+	if (homeOpen) out.push(`pine's home is open to ${homeOpen}; move it into your user folder, or run: icacls "${cfg.home}" /inheritance:r /grant:r "%USERNAME%:(OI)(CI)F"`);
+	const homeMode = process.platform === "win32" ? undefined : mode(cfg.home);
 	if (homeMode !== undefined && homeMode & 0o077) out.push(`pine's home is open to other users (mode ${homeMode.toString(8)}); run: chmod 700 ${cfg.home}`);
 	for (const a of Object.values(cfg.agents)) {
 		const tools = a.tools ?? ["read", "bash", "edit", "write"];

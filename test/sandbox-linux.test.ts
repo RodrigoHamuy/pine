@@ -69,7 +69,7 @@ const service = (t: { after(fn: () => void): void }, file: string) =>
 		t.after(() => server.close());
 	});
 
-test("linux sandbox: the same rules as on macOS, said with mounts", async (t) => {
+test("linux sandbox: the same rules as on macOS, said with mounts", { skip: process.platform === "win32" && "bubblewrap's arguments are paths of Linux" }, async (t) => {
 	const m = machine(t);
 	const args = bwrapArgs(m.jail);
 	assert.deepEqual(args.slice(0, 7), ["--ro-bind", "/", "/", "--dev", "/dev", "--proc", "/proc"], "everything can be read and nothing written, to begin with");
@@ -136,7 +136,7 @@ test("linux sandbox: the same rules as on macOS, said with mounts", async (t) =>
 	assert.ok(helper.includes("--unshare-net"));
 });
 
-test("linux sandbox: a run in a worktree writes its own part of the shared git folder and nothing else of it; the main checkout's run cannot write the worktrees", (t) => {
+test("linux sandbox: a run in a worktree writes its own part of the shared git folder and nothing else of it; the main checkout's run cannot write the worktrees", { skip: process.platform === "win32" && "bubblewrap's arguments are paths of Linux" }, (t) => {
 	const m = machine(t);
 	const common = m.mk("home/me/dev/shop/.git");
 	m.mk("home/me/dev/shop/.git/config", "[core]\n");
@@ -189,7 +189,7 @@ test("linux sandbox: without the network a command cannot make a socket to anoth
 	assert.deepEqual(jailed("/usr/bin/bwrap", ["--"], false, "riscv64"), ["/usr/bin/bwrap", "--"]);
 });
 
-test("linux sandbox: what a run that read outside content may not change is frozen, and what it may not create is taken away again", (t) => {
+test("linux sandbox: what a run that read outside content may not change is frozen, and what it may not create is taken away again", { skip: process.platform === "win32" && "bubblewrap's arguments are paths of Linux" }, (t) => {
 	const m = machine(t);
 	const ws = m.workspace;
 	const user = m.mk("home/me/.pine/USER.md", "about me\n");

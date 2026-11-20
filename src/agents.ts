@@ -805,7 +805,8 @@ export class AgentManager {
 			const clean = path.basename(String(f.name ?? "file")).replace(/[^A-Za-z0-9._-]+/g, "_").replace(/^\.+/, "").slice(-80) || "file";
 			const target = path.join(dir, `${stamp}${i}-${clean}`);
 			fs.writeFileSync(target, buf, { flag: "wx", mode: 0o644 });
-			out.files.push(path.relative(workspace, target));
+			// With / as the agent's shell writes paths, on Windows too.
+			out.files.push(path.relative(workspace, target).split(path.sep).join("/"));
 			const mimeType = types[path.extname(clean).toLowerCase()];
 			if (mimeType && buf.length <= 10 * 1024 * 1024) out.images.push({ path: target, mimeType });
 		}
