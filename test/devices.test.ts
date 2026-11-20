@@ -9,7 +9,7 @@ import path from "node:path";
 import { test } from "node:test";
 import { readings } from "../src/sources/modbus.ts";
 import { element, notifications, security, timing as camTiming } from "../src/sources/onvif.ts";
-import { browseLine, dnsQuery, dnsRead, timing as netTiming, tracker } from "../src/sources/presence.ts";
+import { answers, browseLine, dnsQuery, dnsRead, standIn as netStandIn, timing as netTiming, tracker } from "../src/sources/presence.ts";
 import { lines, listen, portOf, timing as portTiming } from "../src/sources/serial.ts";
 import { harness, mockMsg, sleep, until } from "./support/harness.ts";
 
@@ -461,6 +461,9 @@ test("presence: silence is not leaving until it has lasted; coming back says for
 
 test("presence: who is there at the start is not reported; a device that came and one that went are", async () => {
 	Object.assign(netTiming, { probeMs: 300, listenMs: 50 });
+	// The loopback is asked for real; an address that should lead nowhere may still be answered for by
+	// the network the test runs on (a router that takes every connection to port 80), so it answers nothing.
+	netStandIn.answers = (ip) => (ip === "127.0.0.1" ? answers(ip) : Promise.resolve(false));
 	const net2 = { type: "presence", hosts: { here: "127.0.0.1", nobody: "192.0.2.1" }, every: "50ms", away: "200ms" };
 	const h = await harness({ pine: { sources: { lan: { ...net2, start: "always" }, known: net2 } }, agents: { main: {} } });
 	await until(() => /1 of 2 there$/.test(infoOf(h, "lan").status ?? ""), 6000, "the first look");
@@ -481,6 +484,7 @@ test("presence: who is there at the start is not reported; a device that came an
 	await sleep(200);
 	assert.equal(eventsOf(h, "known").length, 2, "each is said once");
 	await h.close();
+	delete netStandIn.answers;
 });
 
 // ---- by asking ------------------------------------------------------------------------------------
