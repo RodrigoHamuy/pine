@@ -4,17 +4,17 @@
 import { webBridge } from "./host.ts";
 import { idbStore } from "./idb-store.ts";
 import { serve } from "./serve.ts";
-import { connect } from "./ssh.ts";
+import { connect, relayStream } from "./ssh.ts";
 import { unsupported } from "./supported.ts";
 
 declare const __PINE_WEB_VERSION__: string;
 
 /** The relay of this deployment, for a host and port: the same host, at /ssh. */
-function relay(host: string, port: number): string {
+function relay(host: string, port: number) {
 	const url = new URL("ssh", location.href);
 	url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
 	url.search = new URLSearchParams({ host, port: String(port) }).toString();
-	return url.toString();
+	return relayStream(url.toString());
 }
 
 async function main() {

@@ -10,7 +10,7 @@ import { FUNNEL_PORTS, isFunnel } from "../relay/src/addresses.ts";
 import { CLOSE } from "../relay/src/relay.ts";
 import { daemonPath, type BridgeEvent } from "./protocol.ts";
 import { REMOTE_COMMAND } from "./remote-command.ts";
-import { generateKey, publicKeyLine, RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions } from "./ssh.ts";
+import { generateKey, publicKeyLine, RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions, type OpenStream } from "./ssh.ts";
 import { callDaemon, followEvents, loopbackEnd, mediaOf, runService, ServiceTrouble, type Daemon } from "./tunnel.ts";
 
 /** Where the bridge keeps what it remembers: IndexedDB in a browser (idb-store.ts), a map in the tests. Values are structured-cloned, CryptoKeys included. */
@@ -23,8 +23,8 @@ export type WebBridgeDeps = {
 	/** The SSH core's `connect` (ssh.ts), or a stand-in. */
 	connect(options: ConnectOptions): Promise<Connection>;
 	store: Store;
-	/** The relay's WebSocket address for a host and port. */
-	relay(host: string, port: number): string;
+	/** The transport to a host and port through the relay: its WebSocket (ssh.ts `relayStream`). */
+	relay(host: string, port: number): OpenStream;
 	/** Puts a text on the clipboard. */
 	clipboard(text: string): Promise<void>;
 	/** Hands a text to the system's share sheet; none: the clipboard. */
@@ -224,7 +224,7 @@ export function webBridge(deps: WebBridgeDeps) {
 		try {
 			const { user, hostname, port } = parseHost(host);
 			// With no key trusted yet, a fingerprint no key has: the core stops at the host key and says which it saw, before the browser's key is offered.
-			connection = await deps.connect({ url: deps.relay(hostname, port), user, key: await key(), hostFingerprint: known ?? "none" });
+			connection = await deps.connect({ open: deps.relay(hostname, port), user, key: await key(), hostFingerprint: known ?? "none" });
 		} catch (e) {
 			if (mine !== round) return "superseded";
 			if (e instanceof SshRefused && e.reason === "host-key" && e.hostFingerprint) {

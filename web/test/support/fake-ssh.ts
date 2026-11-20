@@ -4,7 +4,7 @@
 // on a loopback port of this computer.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import net, { type AddressInfo } from "node:net";
-import { RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions } from "../../src/ssh.ts";
+import { RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions, type OpenStream, type Transport } from "../../src/ssh.ts";
 
 export type Daemon = { port: number; token: string; seen: { method: string; url: string; auth?: string; host?: string; body: string }[]; stop(): Promise<void> };
 
@@ -106,6 +106,14 @@ export type Machine = {
 
 export const fp = (c: string) => `SHA256:${c.repeat(43)}`;
 
+/** A transport that carries nothing: the stand-in connection never reads it, and only says where it went. */
+export type FakeTransport = Transport & { where: string };
+
+/** An opener of a transport that says it goes to `where` (the relay's address the bridge asked for). */
+export function fakeStream(where: string): OpenStream {
+	return async (): Promise<FakeTransport> => ({ where, write: async () => {}, onData: () => {}, ended: new Promise(() => {}), close: () => {} });
+}
+
 /** A machine whose pine runs the daemon given, at its port on the loopback. */
 export function fakeMachine(daemon: Daemon): Machine {
 	const cuts = new Set<() => void>();
@@ -122,7 +130,8 @@ export function fakeMachine(daemon: Daemon): Machine {
 			for (const cut of [...cuts]) cut();
 		},
 		async connect(options) {
-			m.connects.push({ url: options.url, user: options.user, hostFingerprint: options.hostFingerprint });
+			const transport = (await options.open()) as FakeTransport;
+			m.connects.push({ url: transport.where, user: options.user, hostFingerprint: options.hostFingerprint });
 			if (m.reachable === "refused") throw new RelayClosed(0, "");
 			if (m.reachable === "tls") throw new RelayClosed(4525, "No TLS from the server: Tailscale Funnel may be off for this port.");
 			if (!m.reachable) throw new RelayClosed(4504, "The server could not be reached.");
