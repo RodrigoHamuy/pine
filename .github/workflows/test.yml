@@ -111,6 +111,12 @@ jobs:
           # programs with an AppArmor rule. A test runner has no reason to keep that restriction.
           sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: npm ci
+      - name: Set up the sandbox as pine init does
+        if: runner.os == 'Linux'
+        env:
+          PINE_HOME: ${{ runner.temp }}/pine-home
+          PINE_SKIP_DOWNLOADS: "1"
+        run: node src/cli.ts init --yes
       - run: npm ci
         working-directory: desktop
       # The app runs pine on the owner's Node, found by the login shell's PATH: on a runner that is an

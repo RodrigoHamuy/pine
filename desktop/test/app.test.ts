@@ -14,6 +14,7 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { after, afterEach, before, test } from "node:test";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
+import { sandboxMissing } from "../../src/security.ts";
 import { httpMcp } from "../../test/support/http-mcp.ts";
 import { launchApp } from "./support/app.ts";
 import { daemonGone, ours } from "./support/daemon.ts";
@@ -64,6 +65,10 @@ const menu = (command: string) => app.evaluate(({ BrowserWindow }: any, c: strin
 const api = (method: string, url: string, body?: unknown) => page.evaluate(([m, u, b]: [string, string, unknown]) => (window as any).pine.call(m, u, b), [method, url, body]);
 
 before(async () => {
+	// The agents here work in `safe` mode, in the sandbox, as an owner's do. On Linux it is bubblewrap,
+	// which `pine init` sets up: without it they get no shell and see no folder, and half of what is
+	// tested here cannot happen. That is said once, here, and not as a dozen timeouts.
+	if (process.platform === "linux" && sandboxMissing()) throw new Error(`No sandbox on this computer: ${sandboxMissing()}. The app's tests need one: run "node src/cli.ts init --yes" at the root first.`);
 	mock = await startMock({ strip: /<pine-note>[\s\S]*?<\/pine-note>\s*/g, promptTokens: (body: any, raw: string) => contextAt(body) ?? Math.ceil(raw.length / 4) });
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
@@ -100,7 +105,8 @@ process.stdin.resume();
 	github = http.createServer((_req, res) => {
 		releases.asked++;
 		const version = releases.tag.slice(1);
-		res.writeHead(releases.status, { "content-type": "application/json" }).end(JSON.stringify({ tag_name: releases.tag, html_url: "https://example.invalid/elsewhere", assets: ["arm64", "x64"].map((arch) => ({ name: `Pine-${version}-${arch}.dmg` })) }));
+		// The app for each system and processor is attached (`appFile` in electron/updates.ts), so a release counts wherever the test runs.
+		res.writeHead(releases.status, { "content-type": "application/json" }).end(JSON.stringify({ tag_name: releases.tag, html_url: "https://example.invalid/elsewhere", assets: ["arm64", "x64"].flatMap((arch) => [".dmg", ".AppImage", "-setup.exe"].map((kind) => ({ name: `Pine-${version}-${arch}${kind}` }))) }));
 	});
 	await new Promise<void>((r) => github.listen(0, "127.0.0.1", r));
 
@@ -367,8 +373,12 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 		await waitFor("the click arrived", () => ops().some((o) => o.do === "click"));
 		const click = ops().find((o) => o.do === "click");
 		assert.ok(Math.abs(click.x - 100 * box.k) <= 1 && Math.abs(click.y - 60 * box.k) <= 1 && click.button === "left", JSON.stringify(click));
-		// Letters typed in a row go as one text, a key by its name, and what is pasted as text too.
-		await page.keyboard.type("okapi");
+		// Letters typed in a row go as one text, a key by its name, and what is pasted as text too. (The letters
+		// are pressed in one go: the driver's keys take a round trip each, which on a busy machine can leave them
+		// further apart than a hand's, and a letter that comes late is rightly sent on its own.)
+		await page.evaluate(() => {
+			for (const key of "okapi") document.activeElement!.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true }));
+		});
 		await page.keyboard.press("Enter");
 		// The key of shortcuts (⌘ here, Ctrl elsewhere) goes as the shortcut key of the system the agent's browser runs on.
 		await page.keyboard.press("ControlOrMeta+KeyA");
@@ -519,16 +529,21 @@ const activeOption = () =>
  * and a look before the second finds the line from before, or none.
  */
 const named = (pattern: RegExp, is = true) =>
-	page.waitForFunction(
-		([source, is]: [string, boolean]) => {
-			const field = document.activeElement;
-			const id = field?.getAttribute("aria-activedescendant");
-			const option = id ? document.getElementById(id) : null;
-			return field?.getAttribute("role") === "combobox" && option !== null && new RegExp(source).test(option.textContent ?? "") === is;
-		},
-		[pattern.source, is],
-		{ timeout: 20_000 },
-	);
+	page
+		.waitForFunction(
+			([source, is]: [string, boolean]) => {
+				const field = document.activeElement;
+				const id = field?.getAttribute("aria-activedescendant");
+				const option = id ? document.getElementById(id) : null;
+				return field?.getAttribute("role") === "combobox" && option !== null && new RegExp(source).test(option.textContent ?? "") === is;
+			},
+			[pattern.source, is],
+			{ timeout: 20_000 },
+		)
+		.catch(async () => {
+			const lines = await page.$$eval("[role=dialog] [role=option]", (els: Element[]) => els.slice(0, 8).map((e) => e.textContent));
+			throw new Error(`The line named is ${is ? "not" : "still"} ${pattern}: ${JSON.stringify({ named: await activeOption(), lines })}`);
+		});
 
 /**
  * Waits until a dialog that was drawn has the keyboard, and its list, where it has one, a chosen line.
@@ -1157,6 +1172,8 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees(`${list} [role=option][data-highlighted]`);
 	await page.keyboard.press("Escape");
 	await page.waitForSelector(list, { state: "detached" });
+	// (Focus comes back a moment after the list is gone.)
+	for (let i = 0; i < 40 && !(await reasoning.evaluate((el: Element) => el === document.activeElement)); i++) await new Promise((r) => setTimeout(r, 50));
 	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
 	await page.keyboard.press("Enter");
 	await sees(`${list} [role=option][data-highlighted]`);
@@ -1724,6 +1741,8 @@ test("a conversation is opened from the palette with the keyboard alone", async 
 	// Its results keep their group headers.
 	await sees("[cmdk-group-heading] >> text=Conversations");
 	await sees("[role=option] >> text=scout · where is the okapi invoice");
+	// The first line is chosen anew a moment after the last letter: an arrow before that is undone by it.
+	await named(/scout · where is the okapi invoice/);
 	await page.keyboard.press("ArrowDown");
 	await page.keyboard.press("ArrowUp");
 	await named(/scout · where is the okapi invoice/);
@@ -2158,10 +2177,13 @@ test("a phone-wide window lays the side bar and the panel over the conversation,
 		await sees("[data-slot=sheet-content] [data-slot=code-panel]");
 		await menu("code");
 		await page.waitForSelector("[data-slot=code-panel]", { state: "detached" });
-		// Wide again: the side bar is a column as wide as it was.
+		// Wide again: the side bar is a column as wide as it was. (The window grows first and the column
+		// is put back a moment after: what is measured at once can be the step between.)
 		await size(1280, 820);
 		await sees("#sidebar-panel [data-slot=sidebar]");
-		assert.equal(Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width)), wide);
+		const sidebarWidth = () => page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => Math.round(el.getBoundingClientRect().width));
+		await page.waitForFunction((w: number) => Math.round(document.querySelector("#sidebar-panel [data-slot=sidebar]")!.getBoundingClientRect().width) === w, wide, { timeout: 5000 }).catch(() => {});
+		assert.equal(await sidebarWidth(), wide);
 	} finally {
 		// The tests after this one have the width the start of this file set, whatever failed here.
 		await size(1280, 820);

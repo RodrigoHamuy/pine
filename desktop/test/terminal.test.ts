@@ -13,12 +13,14 @@ import { runnable } from "../src/runnable.ts";
 /** The tests that type POSIX shell into the terminal: a POSIX shell there is not, on Windows. */
 const posix = process.platform === "win32" ? "Windows has no /bin/sh: PowerShell is tested below" : false;
 
-function world(shell = "/bin/sh") {
+function world(shell = "/bin/sh", stillRunningMs = 400) {
 	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-terminal-")));
 	const out = new Map<string, string>();
 	const ended = new Map<string, number>();
 	const runs: Array<RunReport & { id: string }> = [];
-	const terms = new Terminals({ data: (id, data) => out.set(id, (out.get(id) ?? "") + data), exit: (id, code) => ended.set(id, code), run: (id, r) => runs.push({ id, ...r }) }, { env: async () => ({ ...process.env, HOME: dir, PS1: "$ " }), hooks: path.join(dir, ".hooks"), shell: [shell], stillRunningMs: 400 });
+	// What a terminal answers by itself: PowerShell asks where the cursor is (DSR, ESC [6n) and waits
+	// for the answer, which xterm.js gives in the app. Here nothing draws, so the cursor is at the top.
+	const terms: Terminals = new Terminals({ data: (id, data) => (out.set(id, (out.get(id) ?? "") + data), data.split("\x1b[6n").slice(1).forEach(() => terms.write(id, "\x1b[1;1R"))), exit: (id, code) => ended.set(id, code), run: (id, r) => runs.push({ id, ...r }) }, { env: async () => ({ ...process.env, HOME: dir, PS1: "$ " }), hooks: path.join(dir, ".hooks"), shell: [shell], stillRunningMs });
 	const until = async (what: () => boolean, ms = 5000) => {
 		const end = Date.now() + ms;
 		while (!what()) {
@@ -244,7 +246,9 @@ test("terminal: the hooks go to bash however it is named (Git Bash's bash.exe) a
 const pwsh = process.env.PATH?.split(path.delimiter).map((d) => path.join(d, "pwsh")).find((f) => fs.existsSync(f));
 for (const shell of process.platform === "win32" ? ["powershell.exe"] : pwsh ? [pwsh] : []) {
 	test(`terminal (${path.basename(shell)}): a block run with its button says when it has ended, how, and what it printed`, async () => {
-		const w = world(shell);
+		// PowerShell's first commands take a while on a busy machine (each cmdlet is compiled the first time
+		// it runs): what is tested here is the report at the end, so the notice of a block that runs on comes late.
+		const w = world(shell, 15_000);
 		try {
 			await w.terms.open("main:ps", w.dir, 80, 24);
 			assert.deepEqual(await w.terms.run("main:ps", `Write-Output "one-$(40+2)"; ${process.platform === "win32" ? "cmd /c exit 3" : "sh -c 'exit 3'"}`), { reports: true });

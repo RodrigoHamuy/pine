@@ -8,6 +8,7 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { sealed } from "./fds.ts";
 import { connectRemote, connectWsl, RemoteError, sshHost, wslDistro } from "../../src/remote.ts";
 
 export interface Service {
@@ -177,7 +178,7 @@ export function pineRoot(launch: Launch): string | undefined {
 export function runPine(launch: Launch, args: string[], onLine: (line: string) => void, extraEnv: NodeJS.ProcessEnv = {}): Promise<number> {
 	return new Promise((resolve) => {
 		const how = started(launch.argv[0], [...launch.argv.slice(1), ...args]);
-		const child = spawn(how.file, how.args, { env: { ...launch.env, ...extraEnv }, stdio: ["ignore", "pipe", "pipe"], shell: how.shell, windowsHide: true });
+		const child = spawn(how.file, how.args, { env: { ...launch.env, ...extraEnv }, stdio: sealed(["ignore", "pipe", "pipe"]), shell: how.shell, windowsHide: true });
 		let buf = "";
 		const take = (d: Buffer) => {
 			buf += d.toString("utf8").replace(/\r/g, "\n");
@@ -187,8 +188,8 @@ export function runPine(launch: Launch, args: string[], onLine: (line: string) =
 				if (line.trim()) onLine(line);
 			}
 		};
-		child.stdout.on("data", take);
-		child.stderr.on("data", take);
+		child.stdout!.on("data", take);
+		child.stderr!.on("data", take);
 		child.on("error", (e) => (onLine(e.message), resolve(1)));
 		child.on("close", (code) => (buf.trim() && onLine(buf), resolve(code ?? 1)));
 	});
@@ -204,7 +205,7 @@ export function connect(launch: Launch, opts: { home?: string; keep?: boolean } 
 		// Its stdin is the leash: when this app dies without a word, the pipe closes and the daemon stops.
 		// (One that is kept gets no pipe it could still be writing into when this app is gone, but for its one line.)
 		const how = started(launch.argv[0], args);
-		const child: ChildProcess = spawn(how.file, how.args, { env: launch.env, stdio: opts.keep ? ["ignore", "pipe", "ignore"] : ["pipe", "pipe", "pipe"], detached: Boolean(opts.keep), shell: how.shell, windowsHide: true });
+		const child: ChildProcess = spawn(how.file, how.args, { env: launch.env, stdio: sealed(opts.keep ? ["ignore", "pipe", "ignore"] : ["pipe", "pipe", "pipe"]), detached: Boolean(opts.keep), shell: how.shell, windowsHide: true });
 		let out = "";
 		let err = "";
 		let settled = false;
