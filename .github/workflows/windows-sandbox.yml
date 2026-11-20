@@ -68,6 +68,22 @@ jobs:
           Probe "with --net: this computer's loopback" @($node, "-e", "fetch('http://127.0.0.1:47123').then(r=>r.text()).then(console.log,e=>console.log('refused',e.cause?.code))") @("--net")
           Probe "no --net: loopback" @($node, "-e", "fetch('http://127.0.0.1:47123').then(r=>r.text()).then(console.log,e=>console.log('refused',e.cause?.code))")
           Stop-Job $server
+          Probe "node opens NUL" @($node, "-e", "require('fs').closeSync(require('fs').openSync('\\\\.\\NUL','r+'));console.log('NUL ok')")
+          Probe "cmd writes to nul" @("cmd.exe", "/c", "echo x > nul && echo nul ok")
+          # Git's bash from a copy of its own, with the object folder its runtime asks for made by pine-box.
+          $copy = "$env:RUNNER_TEMP\msys"
+          robocopy "C:\Program Files\Git\usr\bin" "$copy\usr\bin" /E /NFL /NDL /NJH /NJS | Out-Null
+          robocopy "C:\Program Files\Git\etc" "$copy\etc" /E /NFL /NDL /NJH /NJS | Out-Null
+          $cbash = "$copy\usr\bin\bash.exe"
+          $first = ("" | & $box box --name pine.ci.probe --read $copy --write $work --cwd $work -- $cbash -c "echo copy ok" 2>&1 | Out-String)
+          "copy, as it is:  $($first.Trim())"
+          if ($first -match 'NtCreateDirectoryObject\(([^)]+)\)') {
+            $folder = $Matches[1]
+            "the runtime asks for $folder"
+            Probe "copy bash, with its objects" @($cbash, "-c", "echo bash ok; uname -a; ls | head -3; echo hi > b.txt; cat b.txt") @("--objects", $folder, "--read", $copy)
+            Probe "copy bash runs node" @($cbash, "-c", "'$($node -replace '\\','/')' -e 'console.log(7*6)'") @("--objects", $folder, "--read", $copy)
+            Probe "copy bash reads outside" @($cbash, "-c", "cat '$($outside -replace '\\','/')/secret.txt'") @("--objects", $folder, "--read", $copy)
+          }
           Write-Output "--- ACL of Git's folders"
           icacls "C:\Program Files\Git\usr\bin\bash.exe"
           icacls "C:\Program Files\Git\usr\bin\msys-2.0.dll"

@@ -1,7 +1,7 @@
 // pine-box: pine's helper on Windows. It decides nothing: the daemon says what a command may
 // read and write, and this program asks Windows for exactly that.
 //
-//   pine-box box --name N [--net] [--ledger FILE] [--read DIR]... [--write DIR]... [--deny FILE]... [--cwd DIR] -- PROGRAM ARGS...
+//   pine-box box --name N [--net] [--ledger FILE] [--read DIR]... [--write DIR]... [--deny FILE]... [--objects NAME]... [--cwd DIR] -- PROGRAM ARGS...
 //       Runs PROGRAM in an AppContainer named N (made on first use): it reads what Windows lets
 //       every app read (the system, Program Files) and what --read and --write name, writes only
 //       what --write names, and reaches no network unless --net (and never this computer's own
@@ -10,6 +10,11 @@
 //       permission this adds to a file or folder is written to --ledger, one line each, so that
 //       `ungrant` can take it back. The command and everything it starts are in one job object,
 //       which ends them all when this program ends. Its exit code is the command's.
+//       --objects makes a folder of named objects in the session's \BaseNamedObjects that the
+//       AppContainer may use, for as long as the command runs: the runtime of Git's bash (MSYS)
+//       keeps its shared state in one, and an AppContainer may not make one there itself. pine
+//       names one that belongs to a copy of that runtime of its own, so that the shell an owner
+//       runs outside the sandbox never shares it.
 //   pine-box ungrant --ledger FILE
 //       Takes back every permission the ledger names, and empties it.
 //   pine-box sid --name N
@@ -117,6 +122,48 @@ static class PineBox
 	static extern bool SetHandleInformation(IntPtr handle, uint mask, uint flags);
 	[DllImport("kernel32.dll")]
 	static extern IntPtr LocalFree(IntPtr mem);
+
+	[StructLayout(LayoutKind.Sequential)]
+	struct UNICODE_STRING { public ushort Length, MaximumLength; public IntPtr Buffer; }
+
+	[StructLayout(LayoutKind.Sequential)]
+	struct OBJECT_ATTRIBUTES { public int Length; public IntPtr RootDirectory, ObjectName; public uint Attributes; public IntPtr SecurityDescriptor, SecurityQualityOfService; }
+
+	[DllImport("ntdll.dll")]
+	static extern int NtCreateDirectoryObject(out IntPtr handle, uint access, ref OBJECT_ATTRIBUTES attributes);
+	[DllImport("kernel32.dll")]
+	static extern uint WTSGetActiveConsoleSessionId();
+	[DllImport("kernel32.dll", SetLastError = true)]
+	static extern bool ProcessIdToSessionId(uint pid, out uint session);
+	[DllImport("kernel32.dll")]
+	static extern uint GetCurrentProcessId();
+	[DllImport("advapi32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+	static extern bool ConvertStringSecurityDescriptorToSecurityDescriptor(string sddl, int revision, out IntPtr sd, IntPtr size);
+
+	const uint DIRECTORY_ALL_ACCESS = 0x000F000F;
+	const uint OBJ_CASE_INSENSITIVE = 0x40;
+
+	/** A folder of named objects (as the runtime that wants it names it), open to the container and to this user, held while the command runs. */
+	static IntPtr ObjectFolder(string full, SecurityIdentifier container)
+	{
+		// Exactly one new name in the global or this session's namespace of named objects, nothing else.
+		if (!System.Text.RegularExpressions.Regex.IsMatch(full, @"^\\(Sessions\\\d+\\)?BaseNamedObjects\\[A-Za-z0-9._-]{1,100}$")) throw new ArgumentException("--objects takes a name like \\BaseNamedObjects\\msys-2.0S5-<key>");
+		string me = WindowsIdentity.GetCurrent().User.Value;
+		IntPtr sd;
+		if (!ConvertStringSecurityDescriptorToSecurityDescriptor("D:P(A;;GA;;;" + container.Value + ")(A;;GA;;;" + me + ")(A;;GA;;;SY)", 1, out sd, IntPtr.Zero)) throw new Win32Exception();
+		var text = new UNICODE_STRING();
+		text.Buffer = Marshal.StringToHGlobalUni(full);
+		text.Length = (ushort)(full.Length * 2);
+		text.MaximumLength = (ushort)(full.Length * 2 + 2);
+		IntPtr textPtr = Marshal.AllocHGlobal(Marshal.SizeOf(text));
+		Marshal.StructureToPtr(text, textPtr, false);
+		var oa = new OBJECT_ATTRIBUTES { Length = Marshal.SizeOf(typeof(OBJECT_ATTRIBUTES)), ObjectName = textPtr, Attributes = OBJ_CASE_INSENSITIVE, SecurityDescriptor = sd };
+		IntPtr handle;
+		int status = NtCreateDirectoryObject(out handle, DIRECTORY_ALL_ACCESS, ref oa);
+		// One that is there already belongs to somebody else's shell: it is not opened up to the container.
+		if (status != 0) throw new Win32Exception(string.Format("the object folder {0} could not be made (0x{1:X8})", full, status));
+		return handle;
+	}
 
 	static int Main(string[] argv)
 	{
@@ -239,6 +286,9 @@ static class PineBox
 		IntPtr sid = Container(name);
 		var who = new SecurityIdentifier(SidText(sid));
 
+		var folders = new List<IntPtr>();
+		foreach (string o in Values(argv, "--objects")) folders.Add(ObjectFolder(o, who));
+
 		string ledgerFile = Values(argv, "--ledger").Count > 0 ? Values(argv, "--ledger")[0] : Path.Combine(Path.GetTempPath(), "pine-box-" + name + ".ledger");
 		using (var ledger = new StreamWriter(ledgerFile, true))
 		{
@@ -307,6 +357,7 @@ static class PineBox
 		DeleteProcThreadAttributeList(list);
 		// Closing the job ends what the command left behind, as bwrap --die-with-parent does.
 		CloseHandle(job);
+		foreach (IntPtr f in folders) CloseHandle(f);
 		return (int)code;
 	}
 }
