@@ -149,8 +149,10 @@ export function openInSystem(target: string): void {
 
 /** "vite --port 5173" from "node /Users/x/project/node_modules/.bin/vite --port 5173": what a person would call it. */
 export function programName(command: string, max = 60): string {
-	const words = command.trim().split(/\s+/);
-	const base = (w: string) => w.split("/").pop() || w;
+	// Windows writes the program by its path in quotes ("C:\\Program Files\\nodejs\\node.exe" x.js): that is one word.
+	const quoted = /^"([^"]+)"(.*)$/.exec(command.trim());
+	const words = quoted ? [quoted[1], ...quoted[2].trim().split(/\s+/).filter(Boolean)] : command.trim().split(/\s+/);
+	const base = (w: string) => (w.split(/[\\/]/).pop() || w).replace(/\.exe$/i, "");
 	// An interpreter in front of a script says less than the script.
 	if (words.length > 1 && /^(node|bun|deno|python[\d.]*|ruby|sh|bash|zsh)$/.test(base(words[0])) && !words[1].startsWith("-")) words.shift();
 	words[0] = base(words[0]);

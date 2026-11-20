@@ -29,6 +29,8 @@ test("programs: how one is named and how long it has run", () => {
 	assert.equal(programName("node /Users/x/project/node_modules/.bin/vite --port 5173 --host"), "vite --port 5173 --host");
 	assert.equal(programName("/usr/bin/python3 -m http.server 8000"), "python3 -m http.server 8000");
 	assert.equal(programName("sleep 60"), "sleep 60");
+	assert.equal(programName('"C:\\Program Files\\Git\\usr\\bin\\sleep.exe" 301'), "sleep 301");
+	assert.equal(programName('"C:\\Program Files\\nodejs\\node.exe" C:\\work\\node_modules\\.bin\\vite.js --port 5173'), "vite.js --port 5173");
 	assert.equal(programName(`node ${"a".repeat(100)}`, 20).length, 20);
 	assert.deepEqual([5, 61, 3600, 7800].map(since), ["5 s", "1 min", "1 h", "2 h 10 min"]);
 });
@@ -88,7 +90,8 @@ test("programs: what a command leaves running is listed for its conversation, th
 	});
 	const [web, sleeper] = [list().find((p) => p.ports.length)!, list().find((p) => !p.ports.length)!];
 	assert.ok(web.command.includes("createServer") && web.ports[0] > 0 && (web.processes === 1 || windows), JSON.stringify(web));
-	assert.ok(sleeper.command.includes("sleep 301"), JSON.stringify(sleeper));
+	// (Windows' command line names the program by its path, in quotes: "...\sleep.exe" 301.)
+	assert.ok(/sleep(\.exe")? 301/.test(sleeper.command), JSON.stringify(sleeper));
 	assert.deepEqual(list("other"), [], "another conversation has none of it");
 
 	// The agent knows without looking, and has a tool for it.

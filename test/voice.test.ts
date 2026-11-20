@@ -13,7 +13,13 @@ import { FakeTerminal, KEY } from "./support/terminal.ts";
 const CTRL_R = "\x12";
 const tmp = (t: { after(fn: () => void): void }) => {
 	const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-voice-")));
-	t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+	t.after(() => {
+		try {
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		} catch {
+			// Windows still holds a program that just ended: the temp folder is left, which is no part of a test.
+		}
+	});
 	return dir;
 };
 

@@ -98,6 +98,18 @@ after(async () => {
 	for (const h of [...open]) await h.close().catch(() => {});
 });
 
+// Windows: the temp folder by its long name (C:\\Users\\runneradmin, not RUNNER~1), as pine resolves
+// every path it compares; a test that names a folder of its own then names it as pine does.
+if (process.platform === "win32") {
+	for (const k of ["TEMP", "TMP"]) {
+		try {
+			if (process.env[k]) process.env[k] = fs.realpathSync.native(process.env[k]!);
+		} catch {
+			// as it is
+		}
+	}
+}
+
 const write = (file: string, content: string) => {
 	fs.mkdirSync(path.dirname(file), { recursive: true });
 	fs.writeFileSync(file, content);
