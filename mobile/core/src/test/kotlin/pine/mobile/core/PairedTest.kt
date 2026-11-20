@@ -18,8 +18,8 @@ class PairedTest {
 		val read = pairLink(case.text("input"))
 		if (expect == null) return@replay assertNull(read)
 		expect as JSONObject
-		assertEquals(PairLink(expect.getString("service"), expect.getString("host"), expect.getString("id"), expect.getString("code")), read)
-		assertEquals(expect.getBoolean("official"), read!!.official)
+		// `host` and `official` are what the page shows the owner of the service: the page's test reads them, the core keeps neither.
+		assertEquals(PairLink(expect.getString("service"), expect.getString("id"), expect.getString("code")), read)
 	}
 
 	@TestFactory

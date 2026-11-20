@@ -197,6 +197,8 @@ class PinesTest {
 	}
 
 	private val id = "EKN2VkO6uLv7SOTEAyIGDru_1I_cTOGadqwTlLFm-qs"
+	/** The project's meeting service, as a pairing link of the Pine app names it. */
+	private val OFFICIAL = "https://pine.drcmda.workers.dev"
 	private val computer = "paired:$id"
 
 	@Test
@@ -207,12 +209,12 @@ class PinesTest {
 		assertEquals(mapOf(computer to "Studio Mac"), pines.names, "the name the page shows, cleaned")
 		assertNull(pines.paired("me@server"))
 		// Paired again: one entry, the service and the name it gave this time.
-		assertEquals(listOf("me@server", computer), pines.addPaired(id, OFFICIAL_SERVICE, ""))
-		assertEquals(PairedComputer(id, OFFICIAL_SERVICE, null), pines.paired(computer))
+		assertEquals(listOf("me@server", computer), pines.addPaired(id, OFFICIAL, ""))
+		assertEquals(PairedComputer(id, OFFICIAL, null), pines.paired(computer))
 		assertEquals(emptyMap(), pines.names, "no name given: the page says \"your computer\"")
 		val again = Pines(rig.remote, rig.known, shelf, SeenPage())
 		assertEquals(listOf("me@server", computer), again.hosts, "kept on the shelf")
-		assertEquals(PairedComputer(id, OFFICIAL_SERVICE, null), again.paired(computer))
+		assertEquals(PairedComputer(id, OFFICIAL, null), again.paired(computer))
 	}
 
 	@Test
@@ -221,7 +223,7 @@ class PinesTest {
 		assertFailsWith<RemoteError> { pines.addHost("paired:22") }
 		assertFailsWith<RemoteError> { pines.addPaired(id, "http://pine.example.com", null) }
 		assertFailsWith<RemoteError> { pines.addPaired(id, "https://pine.example.com/x", null) }
-		assertFailsWith<RemoteError> { pines.addPaired(id.drop(1), OFFICIAL_SERVICE, null) }
+		assertFailsWith<RemoteError> { pines.addPaired(id.drop(1), OFFICIAL, null) }
 		assertEquals(emptyList(), pines.hosts)
 		assertNull(shelf.entries["paired"])
 	}
@@ -229,8 +231,8 @@ class PinesTest {
 	@Test
 	fun `paired computers count among the twenty machines`() {
 		(1..19).forEach { pines.addHost("me@host$it") }
-		pines.addPaired(id, OFFICIAL_SERVICE, null)
-		assertFailsWith<RemoteError> { pines.addPaired("B5IL6HvjP-x66mzgtrtt447XrwHKB2n5qq7O5jRB8oE", OFFICIAL_SERVICE, null) }
+		pines.addPaired(id, OFFICIAL, null)
+		assertFailsWith<RemoteError> { pines.addPaired("B5IL6HvjP-x66mzgtrtt447XrwHKB2n5qq7O5jRB8oE", OFFICIAL, null) }
 		assertFailsWith<RemoteError> { pines.addHost("me@one-too-many") }
 		assertEquals(20, pines.hosts.size)
 	}
@@ -238,7 +240,7 @@ class PinesTest {
 	@Test
 	fun `a paired computer is selected and forgotten like any machine, and forgetting it forgets its service`() {
 		pines.addHost("me@server")
-		pines.addPaired(id, OFFICIAL_SERVICE, "Studio")
+		pines.addPaired(id, OFFICIAL, "Studio")
 		pines.use(computer)
 		assertEquals(computer, pines.use)
 		// Nothing reaches a paired computer yet: the page is told so, and the machine can go.
@@ -258,6 +260,6 @@ class PinesTest {
 		assertEquals(listOf("me@server", "you@other:2222"), old.hosts)
 		assertEquals("you@other:2222", old.use)
 		assertEquals(emptyMap(), old.names)
-		assertEquals(listOf("me@server", "you@other:2222", computer), old.addPaired(id, OFFICIAL_SERVICE, null))
+		assertEquals(listOf("me@server", "you@other:2222", computer), old.addPaired(id, OFFICIAL, null))
 	}
 }

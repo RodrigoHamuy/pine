@@ -16,6 +16,8 @@ class AccessHost(serviceLine: String, vararg options: String) : AutoCloseable {
 	private val process: Process
 	private val lines = LinkedBlockingQueue<JSONObject>()
 	private val events = LinkedBlockingQueue<JSONObject>()
+	/** Every event so far, whether `event()` took it or not. */
+	private val all = java.util.concurrent.ConcurrentLinkedQueue<JSONObject>()
 
 	/** The meeting service's origin (http, on the loopback). */
 	val service: String
@@ -32,7 +34,10 @@ class AccessHost(serviceLine: String, vararg options: String) : AutoCloseable {
 		thread(isDaemon = true, name = "access-host-out") {
 			process.inputStream.bufferedReader().forEachLine { line ->
 				val said = runCatching { JSONObject(line) }.getOrNull() ?: return@forEachLine
-				if (said.optString("t") in EVENTS) events.add(said) else lines.add(said)
+				if (said.optString("t") in EVENTS) {
+					all.add(said)
+					events.add(said)
+				} else lines.add(said)
 			}
 		}
 		val ready = next(20_000)
@@ -65,6 +70,9 @@ class AccessHost(serviceLine: String, vararg options: String) : AutoCloseable {
 			if (e.optString("t") == t) return e
 		}
 	}
+
+	/** How many SSH sessions the device `id` began so far. */
+	fun connections(id: String): Int = all.count { it.optString("t") == "connected" && it.optString("id") == id }
 
 	override fun close() {
 		runCatching { process.outputStream.close() }

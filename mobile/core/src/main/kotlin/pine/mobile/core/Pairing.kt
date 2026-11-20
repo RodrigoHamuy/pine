@@ -17,12 +17,10 @@
 package pine.mobile.core
 
 import net.schmizz.sshj.SSHClient
-import net.schmizz.sshj.transport.verification.HostKeyVerifier
 import net.schmizz.sshj.userauth.UserAuthException
 import org.json.JSONObject
 import java.io.ByteArrayOutputStream
 import java.io.IOException
-import java.security.PublicKey
 import java.util.Base64
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
@@ -62,9 +60,14 @@ object PairWords {
 	const val IMPOSTOR = "The computer that answered is not the one this pairing link names: nothing was trusted. Open Pine on your computer and add this device again."
 	const val CUT = "Could not reach your computer to pair with it. The connection to the computer closed before SSH let this phone in."
 	const val NOT_A_LINK = "That is not a pairing link this phone can read. Open Pine on your computer and add this device again."
-	const val BUSY = "A pairing is under way already: finish or cancel it first."
+	const val BUSY = "A pairing is open already: cancel it first."
+	/** After the owner's yes, when the list has no room for the computer. */
+	const val FULL = "There are $MAX_HOSTS machines already: forget one first, then add this device again at your computer."
 
-	/** While pairing nothing is tried again: the link is for one use and two minutes. */
+	/**
+	 * While pairing, only a channel that closed before the code was offered is tried again, once: the
+	 * link is for one use and two minutes, so none of these troubles is.
+	 */
 	fun trouble(reason: String): String = when (reason) {
 		"absent" -> "Your computer does not answer: it is off, asleep, or Pine is closed. Open Pine on your computer and add this device again."
 		"no-path" -> "Your computer is there, but no direct connection could be made from this network. Try another network (another Wi-Fi, or your phone's data), then add this device again at your computer."
@@ -149,6 +152,16 @@ internal fun startPairing(link: PairLink, name: String, on: (PairingState) -> Un
 
 private fun pairingEnd(link: PairLink, name: String, pairing: Pairing, key: DeviceKey, open: () -> ChannelStream, client: () -> SSHClient, tell: (PairingState) -> Unit): PairingState {
 	val trusted = pairedFingerprint(link.id) ?: return PairingState.Failed(PairWords.IMPOSTOR)
+	// A channel that closed before SSH let the phone in never used the code (the computer can let go
+	// of a channel that is slow to reach it): one more is tried, as the web client and the iOS core do.
+	val first = attempt(link, name, pairing, key, trusted, open, client, tell)
+	if (first != null) return first
+	if (pairing.isCancelled) return PairingState.Expired
+	return attempt(link, name, pairing, key, trusted, open, client, tell) ?: PairingState.Failed(PairWords.CUT)
+}
+
+/** One data channel and one pairing session over it; null when it closed before the code was offered. */
+private fun attempt(link: PairLink, name: String, pairing: Pairing, key: DeviceKey, trusted: String, open: () -> ChannelStream, client: () -> SSHClient, tell: (PairingState) -> Unit): PairingState? {
 	val stream = try {
 		open()
 	} catch (e: PeerClosed) {
@@ -159,20 +172,15 @@ private fun pairingEnd(link: PairLink, name: String, pairing: Pairing, key: Devi
 	if (!pairing.hold(stream)) return PairingState.Expired
 	val ssh = client()
 	if (!pairing.hold(AutoCloseable { ssh.disconnect() })) return PairingState.Expired
-	var seen: String? = null
-	ssh.addHostKeyVerifier(object : HostKeyVerifier {
-		override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
-			val presented = fingerprint(key)
-			if (presented == trusted) return true
-			seen = presented
-			return false
-		}
-		override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
-	})
+	val pinned = PinnedKey(trusted)
+	ssh.addHostKeyVerifier(pinned)
 	try {
 		ssh.connectVia(stream.input, stream.output)
 	} catch (e: IOException) {
-		return PairingState.Failed(if (seen != null) PairWords.IMPOSTOR else PairWords.CUT)
+		if (pinned.seen != null) return PairingState.Failed(PairWords.IMPOSTOR)
+		runCatching { ssh.disconnect() }
+		runCatching { stream.close() }
+		return null
 	}
 	try {
 		ssh.authPublickey(PAIR_USER + link.code, key.provider())

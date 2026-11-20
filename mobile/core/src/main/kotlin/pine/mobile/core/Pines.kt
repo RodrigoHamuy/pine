@@ -167,7 +167,8 @@ class Pines(
 			try {
 				addPaired(link.id, link.service, (state as PairingState.Allowed).name)
 			} catch (e: RemoteError) {
-				return show(mine, JSONObject().put("status", "error").put("kind", "ssh").put("message", e.message ?: ""), null)
+				// The link was read already: what can refuse it now is a list that is full.
+				return show(mine, JSONObject().put("status", "error").put("kind", "ssh").put("message", PairWords.FULL), null)
 			}
 			shelf.set(USE, PAIRED + link.id)
 			return start(PAIRED + link.id)

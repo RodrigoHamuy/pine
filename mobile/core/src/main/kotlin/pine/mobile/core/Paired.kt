@@ -5,8 +5,8 @@
 // desktop/electron/access/store.ts) on the phone; mobile/cases holds both cores to them.
 package pine.mobile.core
 
-/** The project's meeting service, as the Pine app's access control names it (`OFFICIAL_SERVICE`). */
-const val OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev"
+import net.schmizz.sshj.transport.verification.HostKeyVerifier
+import java.security.PublicKey
 
 /** How a computer paired by its link is written among the machines: `paired:` and its machine id. */
 const val PAIRED = "paired:"
@@ -19,12 +19,10 @@ private val PAIR_CODE = Regex("^[A-Za-z0-9_-]{22}$")
 
 /**
  * What a pairing link names: the meeting service every connection to that computer goes through
- * (`service`, an https origin), the computer's machine id and the one-time code. `host` is the
- * service as the owner is shown it before confirming, where it is not the official one.
+ * (`service`, an https origin), the computer's machine id and the one-time code. What the owner is
+ * shown of the service before confirming is the page's to say (it reads the link itself).
  */
-data class PairLink(val service: String, val host: String, val id: String, val code: String) {
-	val official: Boolean get() = service == OFFICIAL_SERVICE
-}
+data class PairLink(val service: String, val id: String, val code: String)
 
 /** An https origin, scheme and host in lower case and without :443, and its host and port; null for anything else. */
 internal fun httpsOrigin(text: String): Pair<String, String>? {
@@ -78,14 +76,34 @@ fun pairLink(value: String?): PairLink? {
 			Triple(given.substring(0, hash - 1), ids[0], ids[1])
 		}
 	}
-	val (service, host) = httpsOrigin(origin) ?: return null
+	val (service, _) = httpsOrigin(origin) ?: return null
 	if (!MACHINE_ID.matches(id) || !PAIR_CODE.matches(code)) return null
-	return PairLink(service, host, id, code)
+	return PairLink(service, id, code)
 }
 
 /** The host key fingerprint a machine id stands for, as OpenSSH prints it (`SHA256:` and base64); null for what is not a machine id. */
 fun pairedFingerprint(id: String): String? =
 	if (MACHINE_ID.matches(id)) "SHA256:" + id.replace('-', '+').replace('_', '/') else null
+
+/**
+ * The host key check of a computer paired by its link: only the key its machine id stands for
+ * (`trusted`, from `pairedFingerprint`) is taken, during key exchange, before the phone's key is
+ * offered. `seen` is the other key it presented, if it presented one.
+ */
+internal class PinnedKey(private val trusted: String) : HostKeyVerifier {
+	@Volatile
+	var seen: String? = null
+		private set
+
+	override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
+		val presented = fingerprint(key)
+		if (presented == trusted) return true
+		seen = presented
+		return false
+	}
+
+	override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
+}
 
 /** The longest name the Pine app keeps for a device (`NAME_LENGTH`). */
 private const val NAME_LENGTH = 60
