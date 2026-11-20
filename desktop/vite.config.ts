@@ -12,7 +12,8 @@ function viewFrame(): Plugin {
 	return {
 		name: "pine-view-frame",
 		apply: "build",
-		config: (c) => (path.resolve(c.root ?? process.cwd()) === import.meta.dirname ? { build: { rollupOptions: { input: { main: path.resolve(import.meta.dirname, "index.html"), view: path.resolve(import.meta.dirname, "view.html") } } } } : undefined),
+		// Only the app's own build: Storybook builds from this folder too, with an input of its own (iframe.html).
+		config: (c) => (path.resolve(c.root ?? process.cwd()) === import.meta.dirname && !c.build?.rollupOptions?.input && !c.build?.rolldownOptions?.input ? { build: { rollupOptions: { input: { main: path.resolve(import.meta.dirname, "index.html"), view: path.resolve(import.meta.dirname, "view.html") } } } } : undefined),
 	};
 }
 
