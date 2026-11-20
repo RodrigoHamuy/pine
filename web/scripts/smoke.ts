@@ -120,9 +120,10 @@ try {
 	//
 	// It is the configuration `full` (`--env full`): the relay and the meeting service side by side,
 	// so that a machine added as user@host and a Mac paired by link are both tried on one deployment.
-	// One change is made to it, in a copy in the smoke's folder: the servers that help a connection
+	// Two changes are made to it, in a copy in the smoke's folder: the servers that help a connection
 	// (ICE) are a closed port of the loopback, so that no public STUN server is asked. An empty list
-	// would not do: the service falls back to a public one.
+	// would not do: the service falls back to a public one. And the limit per client address is
+	// raised (below), since every client here has the one loopback address.
 	const relayPort = await freePort();
 	const inspectorPort = await freePort();
 	const wranglerState = path.join(dir, "wrangler");
@@ -133,6 +134,9 @@ try {
 	// Paths are read from the copy's folder: the ones that point out of web/relay are made whole.
 	for (const where of [config, ...Object.values(config.env as Record<string, { assets?: { directory: string } }>)]) if (where.assets) where.assets = { ...where.assets, directory: dist };
 	config.env.full.vars = { ...config.env.full.vars, ICE: [{ urls: "stun:127.0.0.1:9" }] };
+	// And the limit per client address: every browser, the access host and the relay's connections
+	// here come from the one loopback address, which a minute of reconnecting takes past 20.
+	for (const limit of config.env.full.ratelimits) limit.simple = { ...limit.simple, limit: 1000 };
 	delete config.$schema;
 	const configFile = path.join(wranglerState, "wrangler.json");
 	write(configFile, JSON.stringify(config, null, 2));
