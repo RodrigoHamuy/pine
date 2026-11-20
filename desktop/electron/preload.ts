@@ -56,6 +56,8 @@ const bridge = {
 	setAccess: (change: AccessChange) => ipcRenderer.invoke("pine:access-set", change) as Promise<AccessState>,
 	/** Opens a pairing: the link the QR code encodes, and when it stops working (an ISO date). */
 	openPairing: () => ipcRenderer.invoke("pine:access-pair") as Promise<{ link: string; expires: string }>,
+	/** Puts the open pairing's link on the clipboard. */
+	copyPairingLink: () => ipcRenderer.invoke("pine:access-copy") as Promise<void>,
 	/** Closes the open pairing (the dialog was closed). */
 	cancelPairing: () => ipcRenderer.invoke("pine:access-cancel") as Promise<void>,
 	/** The owner's answer to the state's `request`: true allows the device. */

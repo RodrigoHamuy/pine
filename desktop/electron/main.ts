@@ -1,7 +1,7 @@
 // The app's main process. It owns three things the page must not: the daemon's token, the
 // operating system (windows, menus, dialogs, notifications), and the child that is the daemon
 // when this app had to start one. The page gets a narrow bridge (preload.ts) and nothing else.
-import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, safeStorage, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, safeStorage, session, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -647,6 +647,12 @@ function wire(): void {
 	handle("pine:access-set", (change: unknown) => accessOn().set(accessChange(change)));
 	handle("pine:access-pair", () => accessOn().openPairing());
 	handle("pine:access-cancel", () => accessOn().cancelPairing());
+	// The link of the open pairing, put on the clipboard here: the page names no text (and is given no clipboard of its own).
+	handle("pine:access-copy", async () => {
+		const { pairing } = await accessOn().state();
+		if (!pairing) throw new Error("No pairing is open now: press Add a device.");
+		clipboard.writeText(pairing.link);
+	});
 	handle("pine:access-answer", (yes: unknown) => accessOn().answer(yes === true));
 	handle("pine:access-remove", (id: unknown) => {
 		if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("That is not a device of the list.");

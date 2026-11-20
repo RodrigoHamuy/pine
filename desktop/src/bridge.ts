@@ -88,7 +88,7 @@ export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../
  * Browser access to this Mac's pine (Settings > Browser access): only the desktop app's bridge
  * has these calls, and a page shows the section only where they are there.
  */
-export type AccessCalls = "access" | "setAccess" | "openPairing" | "cancelPairing" | "answerPairing" | "removeDevice" | "onAccess";
+export type AccessCalls = "access" | "setAccess" | "openPairing" | "copyPairingLink" | "cancelPairing" | "answerPairing" | "removeDevice" | "onAccess";
 
 /**
  * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the

@@ -7,6 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
+import jsQR from "jsqr";
 import { startMock } from "../../baseline/tests/mock.mjs";
 import { launchApp } from "./support/app.ts";
 
@@ -50,7 +51,8 @@ before(async () => {
 	// The official service's address is not known yet: the owner's own is named.
 	write(path.join(data, "prefs.json"), JSON.stringify({ updates: false, access: { service: SERVICE } }));
 
-	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: data, PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "", PINE_DESKTOP_ACCESS_STAND_IN: "200" });
+	// The stand-in phone uses a pairing link 4 s after it is opened: time for the window's test to read the QR code first.
+	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: data, PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "", PINE_DESKTOP_ACCESS_STAND_IN: "4000" });
 	page = await app.firstWindow();
 	await app.evaluate(({ app, Notification }: any) => {
 		const noted = ((globalThis as any).noted = { login: [] as unknown[], notified: [] as unknown[] });
@@ -120,4 +122,104 @@ test("browser access in the app: off at first, nothing written; on, it waits; a 
 test("browser access in the app: an address that is not http(s) is refused and not kept", async () => {
 	await assert.rejects(bridge("setAccess", { service: "file:///etc/passwd" }), /https:\/\//);
 	assert.equal((await bridge("access")).service, SERVICE);
+});
+
+/** Waits for a selector to be on screen, and says what the section shows when it does not come. */
+async function sees(selector: string, ms = 15_000) {
+	try {
+		await page.waitForSelector(selector, { timeout: ms });
+	} catch {
+		const there = await page.evaluate(() => ({ page: (document.querySelector("[data-slot=settings-page]") as HTMLElement | null)?.innerText?.slice(0, 1500), dialog: [...document.querySelectorAll("[data-slot=dialog-content], [data-slot=alert-dialog-content]")].map((d) => (d as HTMLElement).innerText.slice(0, 600)) }));
+		throw new Error(`not seen: ${selector}. There: ${JSON.stringify(there)}`);
+	}
+}
+
+/** The text a QR code on screen says: its picture taken from the window and read back, as a camera would. */
+async function scanned(selector: string): Promise<string | undefined> {
+	const png: Buffer = await page.locator(selector).screenshot();
+	const { width, height, bgra } = await app.evaluate(({ nativeImage }: any, b64: string) => {
+		const image = nativeImage.createFromBuffer(Buffer.from(b64, "base64"));
+		// Made at scale 1: its size is the picture's own pixels.
+		const { width, height } = image.getSize();
+		return { width, height, bgra: image.toBitmap().toString("base64") };
+	}, png.toString("base64"));
+	const pixels = Buffer.from(bgra, "base64");
+	const rgba = new Uint8ClampedArray(pixels.length);
+	for (let i = 0; i < pixels.length; i += 4) (rgba[i] = pixels[i + 2]), (rgba[i + 1] = pixels[i + 1]), (rgba[i + 2] = pixels[i]), (rgba[i + 3] = pixels[i + 3]);
+	return jsQR(rgba, width, height)?.data;
+}
+
+const menu = (command: string) => app.evaluate(({ BrowserWindow }: any, c: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", c), command);
+
+test("Settings > Browser access through the window: turned on with open at login offered, a device added by its QR code and allowed, listed as connected now, removed", async () => {
+	const section = "[data-slot=settings-page]";
+	// The test home has no browser build: that is asked once at the start, and put off.
+	await page.locator("[data-slot=dialog-footer]").getByRole("button", { name: "Not now" }).click();
+	await menu("settings");
+	await page.locator("[data-sidebar=menu-button]", { hasText: "Browser access" }).click();
+	await sees(`${section} h1 >> text=Browser access`);
+	await sees(`${section} [data-slot=access-status] >> text=off`);
+
+	// Turned on the first time: "Open Pine at login" is offered, checked.
+	await page.locator(`${section} [data-slot=access-switch]`).click();
+	await sees("[data-slot=access-turn-on] [data-slot=checkbox][data-checked]");
+	await page.locator("[data-slot=access-turn-on]").getByRole("button", { name: "Turn on" }).click();
+	await sees(`${section} [data-slot=access-status] >> text=waiting`);
+	assert.equal((await bridge("access")).openAtLogin, true);
+	assert.deepEqual((await noted()).login.at(-1), { openAtLogin: true });
+
+	// Add a device: the QR code says the pairing link, Copy link puts it on the clipboard, and the time left is shown.
+	await page.locator(section).getByRole("button", { name: "Add a device" }).click();
+	await sees("[data-slot=pairing-dialog] [data-slot=qr-code]");
+	const { pairing } = await bridge("access");
+	assert.ok(pairing?.link.startsWith(`${SERVICE}/#pair=`), JSON.stringify(pairing));
+	assert.equal(await scanned("[data-slot=pairing-dialog] [data-slot=qr-code]"), pairing.link);
+	await sees("[data-slot=pairing-dialog] [data-slot=pairing-time] >> text=/\\d:\\d\\d/");
+	await page.locator("[data-slot=pairing-dialog]").getByRole("button", { name: "Copy link" }).click();
+	await until("the link is on the clipboard", async () => (await app.evaluate(({ clipboard }: any) => clipboard.readText())) === pairing.link, 3000);
+
+	// The stand-in phone uses the link: the Mac asks, with the device's name and its four digits.
+	await sees("[data-slot=pairing-request]");
+	const { request } = await bridge("access");
+	await sees(`[data-slot=pairing-request] [data-slot=pairing-device] >> text=${request.name}`);
+	assert.equal(await page.textContent("[data-slot=pairing-request] [data-slot=pairing-code]"), request.code);
+	await page.locator("[data-slot=pairing-request]").getByRole("button", { name: "Allow" }).click();
+	await page.waitForSelector("[data-slot=pairing-request], [data-slot=pairing-dialog]", { state: "detached" });
+	await sees(`${section} [data-slot=access-device] >> text=Stand-in phone`);
+	await sees(`${section} [data-slot=access-device] >> text=connected now`);
+	await sees(`${section} [data-slot=access-device] >> text=same network`);
+
+	// Remove asks once, then the device is gone.
+	await page.locator(`${section} [data-slot=access-device]`).getByRole("button", { name: "Remove" }).click();
+	await page.locator("[data-slot=alert-dialog-content]").getByRole("button", { name: "Remove" }).click();
+	await page.waitForSelector(`${section} [data-slot=access-device]`, { state: "detached" });
+	assert.deepEqual((await bridge("access")).devices, []);
+
+	// A dialog closed cancels its pairing.
+	await page.locator(section).getByRole("button", { name: "Add a device" }).click();
+	await sees("[data-slot=pairing-dialog] [data-slot=qr-code]");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[data-slot=pairing-dialog]", { state: "detached" });
+	await until("the pairing is cancelled", async () => (await bridge("access")).pairing === undefined);
+
+	// Off again from the switch: no question, the devices kept (none here), the status off.
+	await page.locator(`${section} [data-slot=access-switch]`).click();
+	await sees(`${section} [data-slot=access-status] >> text=off`);
+});
+
+test("Settings > Browser access: the open-at-login switch and the service address are changed in the section", async () => {
+	const section = "[data-slot=settings-page]";
+	await sees(`${section} h1 >> text=Browser access`);
+	await page.locator(`${section} [data-slot=access-login]`).click();
+	await until("open at login is off", async () => (await bridge("access")).openAtLogin === false);
+	const address = page.locator(`${section} [data-setting=access-service] input`);
+	await address.fill("ftp://nowhere");
+	await page.locator(`${section} [data-setting=access-service]`).getByRole("button", { name: "Save" }).click();
+	await sees(`${section} [data-setting=access-service] [data-slot=field-error] >> text=https://`);
+	await address.fill("https://pine.other.invalid");
+	await page.locator(`${section} [data-setting=access-service]`).getByRole("button", { name: "Save" }).click();
+	await until("the address is kept", async () => (await bridge("access")).service === "https://pine.other.invalid");
+	await address.fill(SERVICE);
+	await page.locator(`${section} [data-setting=access-service]`).getByRole("button", { name: "Save" }).click();
+	await until("the address is back", async () => (await bridge("access")).service === SERVICE);
 });
