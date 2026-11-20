@@ -88,6 +88,21 @@ app record to that organisation: TestFlight testers and builds do not carry over
 public link open the new team's link once, and since the Keychain's access group follows the
 team, the app makes a new key there too.
 
+An App Transfer needs a version released on the App Store, which a TestFlight-only app does not
+have. Without one, another maintainer's team takes over by setting it up again, which is what this
+decision did once and costs the owners the same as a transfer (a new link, a new key):
+
+1. On the new team: accept the Program License Agreement, create an App Store Connect API key with
+   the Admin role, register the bundle id, create the app record and the groups `Public` (public
+   link on) and `Maintainers`, and fill the beta review information.
+2. The bundle id `dev.pmndre.pine` stays registered on the old team while its app record exists.
+   Either the old team removes the app record and the bundle id first, or the new team takes
+   another bundle id (then `appId` in `capacitor.config.json`, `PRODUCT_BUNDLE_IDENTIFIER` in the
+   project, the Keychain service and `BUNDLE_ID` in `mobile/scripts/testflight.ts` change with it).
+3. In the code: `TEAM` in `mobile/scripts/upload.ts`.
+4. In GitHub: the three secrets of the environment `testflight` and the variable `TESTFLIGHT_LINK`.
+5. The old team's public link is turned off, and the README and the release notes give the new one.
+
 ## Consequences
 
 - An owner with an iPhone or an iPad installs Pine from a link and gets every release as an
