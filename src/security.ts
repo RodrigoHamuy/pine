@@ -390,7 +390,35 @@ export function sandboxProfile(_cfg: PineConfig, agent: AgentConfig, roots: Root
 
 /** Where a system program lies on this machine: the same few folders on macOS and Linux, never the agent's PATH. */
 export function bin(name: string): string {
+	if (process.platform === "win32") return winBin(name);
 	return ["/bin", "/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"].map((d) => path.join(d, name)).find((f) => fs.existsSync(f)) ?? name;
+}
+
+let gitFolder: string | null | undefined;
+
+/**
+ * Where Git for Windows is installed, or undefined. On Windows the shell pine gives an agent is
+ * its bash, and the programs pine's own tools run (cat, head, find, grep, sh) are the ones that
+ * come with it, in usr\bin: the same programs as on Linux. Looked for where its installer puts
+ * it, and beside a git.exe on the PATH the daemon was started with.
+ */
+export function gitForWindows(): string | undefined {
+	if (gitFolder !== undefined) return gitFolder ?? undefined;
+	const roots = [process.env.ProgramFiles, process.env["ProgramFiles(x86)"], process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, "Programs")].filter((d): d is string => !!d).map((d) => path.join(d, "Git"));
+	for (const dir of (process.env.PATH ?? process.env.Path ?? "").split(path.delimiter)) {
+		if (path.isAbsolute(dir) && fs.existsSync(path.join(dir, "git.exe"))) roots.push(path.dirname(dir), path.dirname(path.dirname(dir)));
+	}
+	gitFolder = roots.find((r) => fs.existsSync(path.join(r, "usr", "bin", "bash.exe"))) ?? null;
+	return gitFolder ?? undefined;
+}
+
+function winBin(name: string): string {
+	const git = gitForWindows();
+	const exe = name.endsWith(".exe") ? name : `${name}.exe`;
+	if (name === "git" && git && fs.existsSync(path.join(git, "cmd", "git.exe"))) return path.join(git, "cmd", "git.exe");
+	if (git && fs.existsSync(path.join(git, "usr", "bin", exe))) return path.join(git, "usr", "bin", exe);
+	const system = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", exe);
+	return fs.existsSync(system) ? system : name;
 }
 
 let kind: "macos" | "linux" | null | undefined;

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { elapsed } from "../src/programs.ts";
+import { elapsed, grouped } from "../src/programs.ts";
 import { sandboxAvailable } from "../src/security.ts";
 import { PineTui } from "../src/tui/app.ts";
 import { Client } from "../src/tui/client.ts";
@@ -10,6 +10,9 @@ import { FakeTerminal } from "./support/terminal.ts";
 
 const owner = { trust: "owner" as const };
 const mac = { skip: !sandboxAvailable() };
+/** Without a sandbox an agent of the owner's works with the owner's account (auto), as on Windows today: programs are found the same way. */
+const windows = process.platform === "win32";
+const everywhere = { skip: !sandboxAvailable() && !windows };
 const call = (name: string, args: any) => ({ name, args });
 /** A program that stays: the way an agent starts a development server and returns. */
 const leave = (seconds: number) => `nohup sleep ${seconds} >/dev/null 2>&1 &`;
@@ -28,7 +31,16 @@ test("programs: how one is named and how long it has run", () => {
 	assert.deepEqual([5, 61, 3600, 7800].map(since), ["5 s", "1 min", "1 h", "2 h 10 min"]);
 });
 
-test("programs: what a command leaves running is listed for its conversation, the agent is told, and the owner or the agent stops it", mac, async (t) => {
+test("programs: on Windows a program belongs to the shell it descends from, also once that shell has gone", () => {
+	const row = (pid: number, parent: number, seconds: number) => ({ pid, parent, seconds, command: String(pid), group: 0 });
+	// 10 is a noted shell that has gone; 20 its child; 21 a grandchild; 30 a shell still there with child 31;
+	// 50 names 60 as its parent, but 60 is younger than 50: another process that got the old number. 70 is nobody's.
+	const rows = grouped([row(20, 10, 100), row(21, 20, 90), row(30, 1, 50), row(31, 30, 40), row(60, 1, 5), row(50, 60, 30), row(70, 1, 1000)], new Set([10, 30, 60]));
+	const groups = Object.fromEntries(rows.map((r) => [r.pid, r.group]));
+	assert.deepEqual(groups, { 20: 10, 21: 10, 30: 30, 31: 30, 60: 60, 50: 0, 70: 0 });
+});
+
+test("programs: what a command leaves running is listed for its conversation, the agent is told, and the owner or the agent stops it", everywhere, async (t) => {
 	// The agent as pine ships it: with the owner's account, so that a server of its own can listen.
 	const h = await harness({ pine: { defaults: { mode: undefined }, http: { port: 0 } }, agents: { main: {} } });
 	const list = (session = "main") => h.pine.agents.programsOf("main", session);
@@ -36,7 +48,7 @@ test("programs: what a command leaves running is listed for its conversation, th
 		for (const session of ["main", "other"]) for (const p of list(session)) h.pine.agents.stopProgram("main", session, p.id);
 	});
 	const run = (steps: any[], session?: string) => h.pine.agents.run({ agent: "main", prompt: mockMsg(steps), ...(session ? { session } : {}), ...owner });
-	const server = `nohup ${process.execPath} -e "require('http').createServer().listen(0, '127.0.0.1')" >/dev/null 2>&1 &`;
+	const server = `nohup ${process.execPath.replace(/\\/g, "/")} -e "require('http').createServer().listen(0, '127.0.0.1')" >/dev/null 2>&1 &`;
 
 	// A command that ends leaves nothing; one that puts a program into the background leaves that.
 	await run([{ tools: [call("bash", { command: "echo done" })] }]);
@@ -44,7 +56,7 @@ test("programs: what a command leaves running is listed for its conversation, th
 	await run([{ tools: [call("bash", { command: server })] }, { tools: [call("bash", { command: leave(301) })] }]);
 	await until(() => list().length === 2 && list().some((p) => p.ports.length === 1), 5000, "both programs, one of them listening");
 	const [web, sleeper] = [list().find((p) => p.ports.length)!, list().find((p) => !p.ports.length)!];
-	assert.ok(web.command.includes("createServer") && web.ports[0] > 0 && web.processes === 1, JSON.stringify(web));
+	assert.ok(web.command.includes("createServer") && web.ports[0] > 0 && (web.processes === 1 || windows), JSON.stringify(web));
 	assert.ok(sleeper.command.includes("sleep 301"), JSON.stringify(sleeper));
 	assert.deepEqual(list("other"), [], "another conversation has none of it");
 
