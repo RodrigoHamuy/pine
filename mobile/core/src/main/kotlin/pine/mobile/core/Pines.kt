@@ -221,7 +221,7 @@ class Pines(
 		try {
 			val h = synchronized(lock) {
 				if (closed) return
-				held.getOrPut(host) { HeldRemote(remote, host, follow(host), failed = { e -> lost(host, e) }, retryMs, batchMs) }
+				held.getOrPut(host) { HeldRemote(remote, host, follow(host), failed = { e -> lost(host, e) }, retryMs, batchMs, computer = { paired(host) }) }
 			}
 			show(mine, ready(h.ensure()), host)
 		} catch (e: Exception) {
@@ -269,6 +269,8 @@ class Pines(
 	private fun failure(host: String, e: Exception): JSONObject {
 		val out = JSONObject().put("status", "error").put("host", host)
 		when (e) {
+			// A paired computer's key is its machine id: another one is refused for good, in the words of Remote.
+			is HostKeyError if host.startsWith(PAIRED) -> out.put("kind", "ssh").put("fingerprint", e.fingerprint).put("changed", true).put("message", e.message ?: "")
 			is HostKeyError -> {
 				if (!e.changed) synchronized(lock) { unknown[host] = e }
 				out.put("kind", "ssh").put("fingerprint", e.fingerprint).put("changed", e.changed).put(
@@ -306,6 +308,6 @@ class Pines(
 
 		fun starting(host: String) = JSONObject().put("status", "starting").put("host", host)
 
-		fun ready(s: RemoteService) = JSONObject().put("status", "ready").put("mode", "on ${s.label}").put("started", s.started).put("home", "${s.label}:${s.home}").apply { s.version?.let { put("version", it) } }.put("from", "ssh ${s.host}").put("host", s.host).put("label", s.label)
+		fun ready(s: RemoteService) = JSONObject().put("status", "ready").put("mode", "on ${s.label}").put("started", s.started).put("home", "${s.label}:${s.home}").apply { s.version?.let { put("version", it) } }.put("from", if (s.paired) "paired ${s.label}" else "ssh ${s.host}").put("host", s.host).put("label", s.label)
 	}
 }

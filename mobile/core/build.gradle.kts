@@ -28,6 +28,9 @@ dependencies {
 	// desktop builds below.
 	implementation("tel.schich:libdatachannel-java:0.24.1.1")
 	testImplementation("tel.schich:libdatachannel-java-arch-detect:0.24.1.1")
+	// The meeting service's join socket and configuration (Peer.kt): a WebSocket client that runs on
+	// Android and on the JVM alike (Android has no java.net.http).
+	implementation("com.squareup.okhttp3:okhttp:5.3.2")
 	testImplementation("org.json:json:20250517")
 
 	testImplementation(kotlin("test"))
