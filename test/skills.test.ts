@@ -120,7 +120,7 @@ test("skills: an agent writes one down for a conversation, for itself, or (the m
 	// Taking one away: one's own without a question, the owner's not at all, one for everyone only by the main agent.
 	await run("books", "april", [call("remove_skill", { name: "tone" }), call("remove_skill", { name: "letter" }), call("remove_skill", { name: "nope" })]);
 	const kept = h.toolResults().slice(-3);
-	assert.match(kept[0], /"tone" was put there by your owner \(.*house-rules\/tone\) and is theirs to remove/);
+	assert.match(kept[0], /"tone" was put there by your owner \(.*house-rules[\\/]tone\) and is theirs to remove/);
 	assert.match(kept[1], /Only the main agent \(main\) can remove a skill for all agents/);
 	assert.match(kept[2], /there is no skill called "nope"\. Yours: invoices \(local\), ledger \(agent\), letter \(all agents\), tone \(all agents\)$/);
 	await run("main", undefined, [call("remove_skill", { name: "letter" })]);

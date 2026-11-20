@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { pathToFileURL } from "node:url";
 import { after, test } from "node:test";
 import { PineTui, searchItems, urlAt } from "../src/tui/app.ts";
 import { Client } from "../src/tui/client.ts";
@@ -414,13 +415,14 @@ test("tui: dropped files are attached, shown, removable, and arrive in the agent
 	fs.writeFileSync(path.join(dir, "shot one.png"), png);
 	fs.writeFileSync(path.join(dir, "notes.txt"), "the notes\n");
 	fs.writeFileSync(path.join(dir, "extra.txt"), "x");
-	const esc = (p: string) => p.replace(/ /g, "\\ ");
+	// (Windows' terminals quote a path with spaces instead.)
+	const esc = (p: string) => (process.platform === "win32" ? `"${p}"` : p.replace(/ /g, "\\ "));
 	const t = await open({ agents: { main: {} } });
 	await t.sees("type a message");
 
 	// Terminals paste dropped files as paths: escaped, quoted, or as file:// URLs.
 	t.term.paste(`${esc(path.join(dir, "shot one.png"))} '${path.join(dir, "notes.txt")}'`);
-	t.term.paste(`file://${encodeURI(path.join(dir, "extra.txt"))}`);
+	t.term.paste(pathToFileURL(path.join(dir, "extra.txt")).href);
 	await t.sees(/attached: shot one\.png 1 KB ×\s+notes\.txt 1 KB ×\s+extra\.txt 1 KB ×/);
 	const row = t.app.screen().findIndex((l) => l.includes("attached:"));
 	t.term.click(t.app.screen()[row].lastIndexOf("×"), row);

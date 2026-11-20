@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
 import { after, test } from "node:test";
 import { elapsed, grouped } from "../src/programs.ts";
 import { sandboxAvailable } from "../src/security.ts";
@@ -54,7 +56,12 @@ test("programs: what a command leaves running is listed for its conversation, th
 	await run([{ tools: [call("bash", { command: "echo done" })] }]);
 	assert.deepEqual(list(), []);
 	await run([{ tools: [call("bash", { command: server })] }, { tools: [call("bash", { command: leave(301) })] }]);
-	await until(() => list().length === 2 && list().some((p) => p.ports.length === 1), 5000, "both programs, one of them listening");
+	await until(() => list().length === 2 && list().some((p) => p.ports.length === 1), 5000, "both programs, one of them listening").catch((e) => {
+		// What was noted and what was found, to see where it went wrong on a system of its own (Windows).
+		const dir = path.join(h.home, "data", "programs");
+		const noted = fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => `${f}: ${fs.statSync(path.join(dir, f)).isFile() ? fs.readFileSync(path.join(dir, f), "utf8").trim() : "(folder)"}`) : [];
+		throw new Error(`${e.message}\nnoted: ${noted.join(" | ")}\nlisted: ${JSON.stringify(list())}\nresults: ${h.toolResults().join(" | ").slice(0, 600)}`);
+	});
 	const [web, sleeper] = [list().find((p) => p.ports.length)!, list().find((p) => !p.ports.length)!];
 	assert.ok(web.command.includes("createServer") && web.ports[0] > 0 && (web.processes === 1 || windows), JSON.stringify(web));
 	assert.ok(sleeper.command.includes("sleep 301"), JSON.stringify(sleeper));
