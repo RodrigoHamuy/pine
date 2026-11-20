@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
 import { pineOwn } from "../src/actions.ts";
+import { reaches } from "../src/access.ts";
 import { loadConfig } from "../src/config.ts";
 import { audit, levelOf, rootsFor, sandboxAvailable, sandboxRecheck, shellEnv } from "../src/security.ts";
 import { harness, MCP_STUB, mockMsg, notesOf, until, refused } from "./support/harness.ts";
@@ -621,7 +622,7 @@ test("without a sandbox, a command that names pine's own files, program or contr
 	const workspace = join(home, "agents", "main", "workspace");
 	for (const d of [workspace, join(home, "sandbox", "main"), join(code, "src")]) fs.mkdirSync(d, { recursive: true });
 	const o = { home, own: [workspace, join(home, "sandbox", "main")], code, cwd: workspace, ownerHome: dir, port: 7463 };
-	const no = (command: string, why: RegExp) => assert.match(pineOwn(command, o) ?? "", why, command);
+	const no = (command: string, why: RegExp) => assert.match(pineOwn(command, o) ?? "", why, `${command}\nread as: ${JSON.stringify(reaches(command, { cwd: o.cwd, shellHome: o.ownerHome, ownerHome: o.ownerHome }))}\nhome: ${o.home}`);
 	const yes = (command: string) => assert.equal(pineOwn(command, o), undefined, command);
 
 	// pine's home, however it is written: in full, from the owner's home, or from where the shell starts.

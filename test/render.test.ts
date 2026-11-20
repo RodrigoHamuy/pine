@@ -200,7 +200,8 @@ test("http with render: a helper that does not answer is ended at the time limit
 		await h.close();
 		const pids = notes("pids.log");
 		assert.ok(pids.length >= 4, `${pids.length} programs were started`);
-		assert.deepEqual(pids.filter(alive), [], "nothing is left running");
+		// (A process that was ended a moment ago may still be on its way out.)
+		await until(() => pids.filter(alive).length === 0, 3000, "nothing to be left running").catch(() => assert.deepEqual(pids.filter(alive), [], "nothing is left running"));
 		for (const name of ["stuck", "deaf", "left"]) assert.ok(!fs.existsSync(path.join(h.pine.cfg.dataDir, "sources", name, "browser")));
 	} finally {
 		delete rendering.timeoutMs;

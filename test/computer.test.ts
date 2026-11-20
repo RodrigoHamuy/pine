@@ -676,7 +676,7 @@ async function withApps(t: { after(fn: () => void): void }, pine: Record<string,
 	const h = await harness({
 		// The main agent as pine ships it: auto mode, the owner's account.
 		pine: { defaults: { mode: undefined }, mcp: { computer: { pine: "computer", options: { helper: [process.execPath, script, log, ...flags] } } }, ...pine },
-		agents: { main: { agent: { untrusted: { tools: ["read"], mcp: ["computer"] }, ...main } }, clerk: { agent: {} } },
+		agents: { main: { agent: { untrusted: { tools: ["read"], mcp: ["computer"] }, ...main } }, clerk: { agent: { mode: "safe" } } },
 		mockOptions: {
 			withoutTools: ({ user }: { user: string }) => {
 				if (!user.includes("ALLOW or BLOCK?")) return "SUMMARY-OK";
@@ -950,7 +950,13 @@ test("live: on Linux with X11 the real helper reads and operates a GTK window, b
 test("windows: the real helper is built, lists the apps and reads Notepad's window as an outline", { skip: process.platform !== "win32" && "Windows only", timeout: 180_000 }, async (t) => {
 	const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pine-computer-win-"));
 	// (Windows keeps a program's file locked a moment after it ended.)
-	t.after(() => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }));
+	t.after(() => {
+		try {
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 });
+		} catch {
+			// A program Windows still holds open: the temp folder is left, which is no part of the test.
+		}
+	});
 	const program = buildCsharp(WINDOWS_SOURCE, "pine-computer", "app control", windowsReferences(), { dir });
 	const [status] = await askHelper([program], [{ cmd: "status" }]);
 	assert.equal(status.ok, true, JSON.stringify(status));

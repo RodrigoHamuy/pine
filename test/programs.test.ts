@@ -60,7 +60,7 @@ test("programs: what a command leaves running is listed for its conversation, th
 		// What was noted and what was found, to see where it went wrong on a system of its own (Windows).
 		const dir = path.join(h.home, "data", "programs");
 		const noted = fs.existsSync(dir) ? fs.readdirSync(dir).map((f) => `${f}: ${fs.statSync(path.join(dir, f)).isFile() ? fs.readFileSync(path.join(dir, f), "utf8").trim() : "(folder)"}`) : [];
-		const probe = h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("bash", { command: "echo pid=$$; cat /proc/$$/winpid; echo; ls -la /proc/$$ | head -5; type cat" })] }]), ...owner });
+		const probe = h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("bash", { command: "echo pid=$$; cat /proc/$$/winpid; echo; tr '\\0' ' ' < /proc/$$/cmdline | head -c 800" })] }]), ...owner });
 		return probe.then(() => {
 			throw new Error(`${e.message}\nnoted: ${noted.join(" | ")}\nlisted: ${JSON.stringify(list())}\nresults: ${h.toolResults().join(" | ").slice(0, 600)}\nnote: ${h.pine.agents.programs.note("main:main")}`);
 		});

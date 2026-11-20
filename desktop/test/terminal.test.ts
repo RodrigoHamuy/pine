@@ -118,7 +118,8 @@ for (const shell of ["/bin/bash", "/bin/zsh"].filter((s) => fs.existsSync(s))) {
 			assert.equal(r.command, "echo one-$((40+2))\nls /nowhere-at-all");
 			// What the owner types is theirs: it is not reported.
 			w.terms.write("main:c", "echo by-hand\r");
-			await w.until(() => /by-hand[\s\S]*by-hand[\s\S]*133;D/.test(w.out.get("main:c") ?? ""));
+			// The output's line, then the end of the command. (Its echo may be redrawn in pieces as it is typed: zsh on a slow machine.)
+			await w.until(() => /(\x07|\n)by-hand\r?\n[\s\S]*133;D/.test(w.out.get("main:c") ?? ""));
 			await new Promise((res) => setTimeout(res, 500));
 			assert.equal(w.runs.length, 1);
 			// The history is the owner's, not in the folder of the hooks.
