@@ -3582,11 +3582,17 @@ export class AgentManager {
 		const firstAt = payload.messages.findIndex((m: any) => m.role === "user");
 		if (at < 0 || firstAt < 0) return undefined;
 		const hash = (v: string) => createHash("sha256").update(v).digest("hex").slice(0, 16);
-		// pi puts the files and the folder into the system prompt: here they are taken out of it.
+		// pi puts the files and the folder into the system prompt: here they are taken out of it. The files are
+		// those pi read when the session began (refresh() does not have it read them again), so what they say now is
+		// read here, in pi's own form.
 		const own: string[] = [];
+		const cwd: string[] = [];
 		const fixed = text(payload.messages[at].content)
-			.replace(/\n*<project_context>[\s\S]*<\/project_context>\n*/, (m) => (own.push(m.trim()), "\n\n"))
-			.replace(/\n*<cwd>[\s\S]*?<\/cwd>\n*/, (m) => (own.push(m.trim()), "\n\n"));
+			.replace(/\n*<project_context>[\s\S]*<\/project_context>\n*/, "\n\n")
+			.replace(/\n*<cwd>[\s\S]*?<\/cwd>\n*/, (m) => (cwd.push(m.trim()), "\n\n"));
+		const files = Object.entries(this.fileTexts(agent, live.folder));
+		if (files.length) own.push(`<project_context>\n${["Project-specific instructions and guidelines:", ...files.map(([file, content]) => `<project_instructions path="${file}">\n${content}\n</project_instructions>`)].join("\n\n")}\n</project_context>`);
+		own.push(...cwd);
 		const headNow = own.length ? `<instructions>\n${own.join("\n\n")}\n</instructions>` : "";
 		const first = payload.messages[firstAt];
 		const began = hash(text(first.content));
@@ -4086,6 +4092,10 @@ export class AgentManager {
 		const now = this.stamp(live.agent, live.folder);
 		if (now === live.contextStamp) return;
 		live.contextStamp = now;
+		// An owner's conversation is given its files by steady(), read as they are at each request, and told what
+		// changed in the note. pi's reload would add nothing there, and it starts every extension anew: that stops the
+		// conversation's MCP servers, and with them the browser the owner is looking at.
+		if (short(live.trust)) return;
 		await live.session.reload();
 	}
 

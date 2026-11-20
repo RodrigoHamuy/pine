@@ -183,6 +183,28 @@ test("cache: a request begins with the one before it, whatever changed in betwee
 	await h.close();
 });
 
+test("an agent that writes its own instruction files keeps its MCP servers, and the browser the owner looks at", async () => {
+	const h = await harness({ agents: { main: { agent: { mcp: { feed } }, files: { "MEMORY.md": "# Memory\n\n- The owner likes tea.\n", "SOUL.md": "# Soul\n\n- Dry humour.\n" } } } });
+	const say = (prompt: string) => h.pine.agents.run({ agent: "main", prompt, ...owner });
+	const pid = async () => {
+		await say(mockMsg([{ tools: [call("feed", { action: "whoami" })] }, { text: "done" }]));
+		return JSON.parse(h.toolResults().at(-1) ?? "{}").pid as number;
+	};
+	const head = () => rawTextOf(h.mock.state.requests.at(-1).wire.messages[1].content);
+	const first = await pid();
+	assert.ok(first > 0);
+	// A line in its memory (what ttt wrote after every game): told in the note, and the server is the same process.
+	fs.appendFileSync(path.join(h.workspace("main"), "MEMORY.md"), "- Two draws so far.\n");
+	assert.equal(await pid(), first, "a line in MEMORY.md started the MCP servers anew");
+	assert.match(rawTextOf(h.mock.state.requests.at(-2).wire.messages.at(-1).content), /New in your MEMORY\.md[\s\S]*Two draws so far/);
+	// A rule taken back: the files are read anew for the model, still without starting anything again.
+	fs.writeFileSync(path.join(h.workspace("main"), "SOUL.md"), "# Soul\n\n- Plain and brief.\n");
+	assert.equal(await pid(), first, "a changed SOUL.md started the MCP servers anew");
+	assert.match(head(), /Plain and brief/);
+	assert.doesNotMatch(head(), /Dry humour/);
+	await h.close();
+});
+
 test("cache: a conversation keeps its slot on the model server, and a second one takes another", async () => {
 	{
 		const h = await harness({ pine: { limits: { warmSlots: false } }, agents: { main: {} }, mockOptions: { props: { total_slots: 2 } } });
