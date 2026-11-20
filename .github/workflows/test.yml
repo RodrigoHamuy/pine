@@ -19,9 +19,12 @@ on:
 permissions:
   contents: read
 
+# One run at a time for a branch, and a run that has started is finished: the Windows job takes
+# longer than the time between two pushes, and would otherwise never be seen to the end. (A run
+# that waits is replaced by the next push's.)
 concurrency:
   group: test-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   pine:
