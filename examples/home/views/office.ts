@@ -1437,6 +1437,21 @@ function drawRobot(look: Look, color: string, x: number, y: number, o: RobotArgs
 	return { x: hx - 3, y: top, w: HW + 6, h: Math.round(y) - top + 1 };
 }
 
+/**
+ * An agent's robot by itself, drawn into a canvas of the picture's own pixels: for a picture of one outside
+ * the house. Its feet stand on (`x`, `y`). Returns the box it takes.
+ */
+export function drawPortrait(ctx: CanvasRenderingContext2D, id: string, color: string, x: number, y: number, o: RobotArgs): Box {
+	const was = g;
+	const light = T;
+	g = ctx;
+	T = PLAIN;
+	const box = drawRobot(lookOf(id), color, x, y, o);
+	g = was;
+	T = light;
+	return box;
+}
+
 // ---- who else lives here -----------------------------------------------------------------------------------------------
 
 /** You, at your desk in the hall: head and shoulders. */
@@ -2577,8 +2592,8 @@ export class Office {
 			const n = Math.max(8, Math.round(Math.hypot(b.x - a.x, b.y - a.y) / 2));
 			const march = Math.floor(now / 70);
 			const at = (i: number) => ({ x: Math.round(lerp(a.x, b.x, i / n)), y: Math.round(lerp(a.y, b.y, i / n) - Math.sin((Math.PI * i) / n) * lift) });
-			for (let i = 2; i < n - 1; i++) if (((i - march) % 6 + 6) % 6 < 3) R(at(i).x - 1, at(i).y - 1, 3, 3, INK);
-			for (let i = 2; i < n - 1; i++) if (((i - march) % 6 + 6) % 6 < 3) R(at(i).x, at(i).y, 1, 1, ((i - march) % 6 + 6) % 6 === 2 ? "#ffffff" : tone(l.color, 1));
+			for (let i = 2; i < n - 1; i++) if (((i - march) % 6 + 6) % 6 < 3) R(at(i).x, at(i).y + 1, 1, 1, INK);
+			for (let i = 2; i < n - 1; i++) if (((i - march) % 6 + 6) % 6 < 3) R(at(i).x, at(i).y, 1, 1, ((i - march) % 6 + 6) % 6 === 2 ? "#ffffff" : tone(l.color, 2));
 		}
 		for (const l of this.letters) {
 			const p = this.letterAt(l, now);
@@ -3872,8 +3887,10 @@ export default defineView((host: ViewHost) => {
 		const uy = (wy: number) => Math.round(((wy - top) * z) / U);
 		const back = s.dark ? "#2b2140" : PAPER;
 		const fore = s.dark ? PAPER : INK;
-		const close = z >= 2;
+		// Words in the bubbles from one and a half times on: below that a room is too small for them.
+		const close = z >= 1.5;
 		const placed: Box[] = [];
+		const plates: Box[] = [];
 		const tags = office.tags(s, now);
 		for (const tag of tags) {
 			if (tag.k !== "plate") continue;
@@ -3896,13 +3913,15 @@ export default defineView((host: ViewHost) => {
 			cx += widthOf(name) + 2;
 			if (tag.outside) sign("warn", cx, py + 2, light(color) ? "#b3600a" : "#ffd27a"), (cx += 11);
 			if (tag.busy) R(cx + 1, py + 5, 3, 3, Math.floor(now / 350) % 2 ? "#ffffff" : tone(color, 2)), R(cx + 1, py + 5, 3, 3, Math.floor(now / 350) % 2 ? "#ffffff" : ink);
-			placed.push({ x: px - 1, y: py - 1, w: tw + 2, h: 15 });
+			plates.push({ x: px - 1, y: py - 1, w: tw + 2, h: 15 });
 		}
 		for (const tag of tags) {
 			if (tag.k !== "label" || !tag.text) continue;
 			if (!close && !tag.sign && tag.text !== "you" && !tag.hot) continue;
 			const text = fit(tag.text, tag.sign ? 120 : tag.hot ? 60 : Math.max(20, (40 * z) / U - 2));
 			const tw = widthOf(text) + (tag.sign ? 11 : 0) + 4;
+			// A name is written where its thing is: one that is out of the picture is not pushed back into it.
+			if (ux(tag.x) < 4 || ux(tag.x) > W - 4) continue;
 			const px = clamp(ux(tag.x) - Math.round(tw / 2), 1, W - tw - 1);
 			let py = uy(tag.y) + 1;
 			if (py > H || py < -12) continue;
@@ -3930,6 +3949,14 @@ export default defineView((host: ViewHost) => {
 			const bounce = sayNow.loud ? [0, -1, -2, -1][Math.floor(now / 110) % 4] : 0;
 			let bx = clamp(hx - Math.round(bw / 2), 1, Math.max(1, W - bw - 1));
 			let by = hy - bh - 6 + bounce;
+			// A bubble keeps clear of a door plate by moving aside, as far as its tail still reaches the robot:
+			// moved up, it would hang in the room above.
+			for (const p of plates) {
+				if (!(bx < p.x + p.w && bx + bw > p.x && by < p.y + p.h && by + bh > p.y)) continue;
+				const right = p.x + p.w + 1;
+				if (hx >= right - 4 && right + bw < W) bx = right;
+				else if (hx <= p.x + 4 && p.x - bw - 1 > 0) bx = p.x - bw - 1;
+			}
 			for (let tries = 0; tries < 4 && placed.some((p) => bx < p.x + p.w && bx + bw > p.x && by < p.y + p.h && by + bh > p.y); tries++) by -= 8;
 			by = Math.max(1, by);
 			placed.push({ x: bx - 1, y: by - 1, w: bw + 2, h: bh + 2 });
