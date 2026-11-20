@@ -4,6 +4,7 @@
 import { webBridge } from "./host.ts";
 import { idbStore } from "./idb-store.ts";
 import { takePairLink } from "./pairing.ts";
+import { peerStream } from "./peer.ts";
 import { serve } from "./serve.ts";
 import { connect, relayStream } from "./ssh.ts";
 import { unsupported } from "./supported.ts";
@@ -40,6 +41,8 @@ async function main() {
 		connect,
 		store: idbStore(),
 		relay,
+		// A paired Mac, peer to peer: the meeting service at this deployment's address, the peer connection in this document.
+		peer: (id) => peerStream(id, { service: location.href, config }),
 		pairLink: link,
 		userAgent: navigator.userAgent,
 		config,
