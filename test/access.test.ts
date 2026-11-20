@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { Denials, type DenialTools, fromOutput, gather, reaches, sortDenials } from "../src/access.ts";
+import { Denials, type DenialTools, fromOutput, gather, reaches, sortDenials, windowsPath } from "../src/access.ts";
 import { rootsFor, sandboxAvailable, sandboxProfile } from "../src/security.ts";
 import { harness, MCP_STUB, mockMsg, notesOf } from "./support/harness.ts";
 
@@ -36,6 +36,14 @@ const runner = (h: Awaited<ReturnType<typeof harness>>, session = "work", trust:
 	await h.pine.agents.run({ agent: "banks", session, prompt: mockMsg([{ tools }]), trust });
 	return h.toolResults().slice(-tools.length);
 };
+
+test("access: a path of Windows is read as Git's bash writes it there: C:\\x, C:/x and /c/x", () => {
+	assert.equal(windowsPath("C:\\Users\\me\\.pine/.env"), "C:\\Users\\me\\.pine\\.env");
+	assert.equal(windowsPath("C:/Users/me"), "C:\\Users\\me");
+	assert.equal(windowsPath("/c/Users/me/.pine"), "C:\\Users\\me\\.pine");
+	assert.equal(windowsPath("/d"), "D:\\");
+	for (const not of ["/etc/hosts", "/tmp/x", "relative/x", "~/x", "-C"]) assert.equal(windowsPath(not), undefined, not);
+});
 
 test("access: the paths a command names are read from its text, with what it writes", { skip: process.platform === "win32" && "what a command names is read as a POSIX shell's paths; Windows paths there are not read yet" }, () => {
 	const where = { cwd: "/w/space", shellHome: "/pine/sandbox/a", ownerHome: "/Users/o" };

@@ -111,7 +111,7 @@ test("tui: what /reset cleared does not come back when the UI is opened again", 
 	await t.h.close();
 });
 
-test("tui: tabs, slash commands and keys", async () => {
+test("tui: tabs, slash commands and keys", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const t = await open({ agents: { main: {}, gonzo: { agent: { description: "law" } } } });
 	await t.sees("type a message");
 
@@ -354,7 +354,7 @@ test("tui: a click into the input leaves it the place where keys go", async () =
 	await t.close();
 });
 
-test("tui: the mouse works on tabs, their close buttons, the bottom bar and the lists it opens", async () => {
+test("tui: the mouse works on tabs, their close buttons, the bottom bar and the lists it opens", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const t = await open({ agents: { main: {}, gonzo: { agent: { description: "law" } } } });
 	await t.sees("type a message");
 	const last = () => t.app.screen().length - 1;
@@ -597,7 +597,7 @@ test("tui: finding the address under a click", () => {
 	assert.equal(urlAt([" ftp://x.example/ file:///etc/hosts javascript:alert(1)"], 0, 8, 80), undefined, "only http and https");
 });
 
-test("tui: reasoning level and context use are shown in the bottom bar; the level is set by click, list or command", async () => {
+test("tui: reasoning level and context use are shown in the bottom bar; the level is set by click, list or command", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const t = await open({ agents: { main: { agent: { description: "front desk" } } }, model: { reasoning: true, contextWindow: 20000 }, mockOptions: { prefixCache: true } });
 	await t.sees("type a message");
 	const bar = () => t.app.screen().at(-1)!;

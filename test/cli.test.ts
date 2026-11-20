@@ -74,7 +74,7 @@ test("the command line drives a running daemon", async (t) => {
 	await h.close();
 });
 
-test("pine agent list, add, update and remove: in the files when no daemon runs, through the daemon when one does; a removed agent leaves nothing", async (t) => {
+test("pine agent list, add, update and remove: in the files when no daemon runs, through the daemon when one does; a removed agent leaves nothing", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async (t) => {
 	const port = await freePort();
 	const h = await harness({
 		pine: { http: { port }, logLevel: "warn", routes: [{ name: "wake-old", on: "test/old", agent: "old", prompt: "x" }, { name: "keep", on: "test/keep", set: { seen: "yes" } }] },

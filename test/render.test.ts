@@ -132,7 +132,7 @@ test("http with render: the first look reports nothing, a change reports once, f
 		assert.equal(j.raw, `${JSON.stringify(j.job)}\n`, "one line");
 		assert.deepEqual(Object.keys(j.job).filter((k) => !["url", "select", "attr", "timeout", "localFile"].includes(k)), []);
 		// (macOS adds the last one to every program.)
-		assert.deepEqual(j.env.filter((k: string) => !["HOME", "PATH", "TMPDIR", "PLAYWRIGHT_BROWSERS_PATH", "__CF_USER_TEXT_ENCODING"].includes(k)), []);
+		assert.deepEqual(j.env.filter((k: string) => !["HOME", "PATH", "TMPDIR", "PLAYWRIGHT_BROWSERS_PATH", "__CF_USER_TEXT_ENCODING", ...(process.platform === "win32" ? ["SystemRoot", "SYSTEMROOT", "windir", "WINDIR", "PATHEXT", "USERPROFILE", "LOCALAPPDATA", "APPDATA", "TEMP", "TMP", "Path"] : [])].includes(k)), []);
 	}
 	// It works in a folder of the source's own in pine's data, which is gone after the look.
 	const folder = path.join(h.pine.cfg.dataDir, "sources", "el", "browser");

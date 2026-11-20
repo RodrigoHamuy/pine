@@ -8,7 +8,7 @@ import { sandboxAvailable } from "../src/security.ts";
 const users = (req: any) => req.body.messages.filter((m: any) => m.role === "user").map((m: any) => textOf(m.content));
 const owner = { trust: "owner" as const };
 
-test("each agent has its own workspace, instructions and tools in one process", async () => {
+test("each agent has its own workspace, instructions and tools in one process", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const h = await harness({
 		agents: {
 			main: { files: { "AGENTS.md": "WORKSPACE-RULES-MAIN\n" } },
@@ -365,7 +365,7 @@ test("a model chosen for an agent is saved and still set after a restart", async
 	await h.close();
 });
 
-test("what a model server has already read never changes: later requests only add to the end", async () => {
+test("what a model server has already read never changes: later requests only add to the end", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const stub = path.resolve(import.meta.dirname, "../baseline/tests/mcp-stdio-server.mjs");
 	const h = await harness({ agents: { main: { agent: { state: { inject: ["house/#"] }, mcp: { notes: { command: process.execPath, args: [stub] } } } } } });
 	h.pine.state.set("house/mode", "home");

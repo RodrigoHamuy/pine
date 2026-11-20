@@ -303,7 +303,7 @@ test("bypass does not survive outside content, and never applies to runs started
 	await h2.close();
 });
 
-test("the mode can be changed while the daemon runs, and a wrong mode is a configuration error", async () => {
+test("the mode can be changed while the daemon runs, and a wrong mode is a configuration error", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const h = await harness({ pine: { http: { port: 0 } }, agents: { main: {} } });
 	const api = async (url: string, body?: unknown) => {
 		const res = await fetch(`http://127.0.0.1:${h.pine.http!.port}${url}`, { method: body ? "POST" : "GET", headers: { authorization: `Bearer ${h.pine.token}`, "content-type": "application/json" }, body: body ? JSON.stringify(body) : undefined });

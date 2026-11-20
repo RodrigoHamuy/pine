@@ -91,7 +91,7 @@ test("with the network granted, a command reaches addresses but not other progra
 	await h.close();
 });
 
-test("file tools are jailed to the workspace, symlinks included", async () => {
+test("file tools are jailed to the workspace, symlinks included", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const h = await harness({ agents: { main: { agent: { tools: ["read", "write", "edit", "grep", "find", "ls"], sandbox: { sharedTmp: false } }, files: { "ok.txt": "fine\n" } } } });
 	fs.symlinkSync("/", path.join(h.workspace("main"), "rootlink"));
 	fs.symlinkSync(h.home, path.join(h.workspace("main"), "homelink"));
@@ -213,7 +213,7 @@ test("a run started by an outside event gets a reduced tool set and its own sess
 	await h.close();
 });
 
-test("trust is inherited: work handed on by an untrusted run stays untrusted", async () => {
+test("trust is inherited: work handed on by an untrusted run stays untrusted", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const h = await harness({
 		pine: { main: "main", routes: [{ on: "hook/in", agent: "main" }] },
 		agents: { main: { agent: { untrusted: { tools: ["read"], delegates: ["gonzo"] } } }, gonzo: {} },
@@ -441,7 +441,7 @@ test("control API: token, no browsers, signed webhooks, bounded bodies", async (
 	await h.close();
 });
 
-test("tool patterns and the configuration audit", async () => {
+test("tool patterns and the configuration audit", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	assert.ok(globMatch("mcp__mqtt__*", "mcp__mqtt__publish") && !globMatch("mcp__mqtt__*", "mcp__web__fetch"));
 	assert.ok(matchesToolPattern(["bash:*rm *"], "bash", "sudo rm -rf x") && !matchesToolPattern(["bash:*rm *"], "bash", "echo format"));
 	assert.ok(matchesToolPattern(["publish_event:out/mqtt/*"], "publish_event", "out/mqtt/door") && !matchesToolPattern(["publish_event:out/mqtt/*"], "publish_event", "out/telegram/main"));
@@ -476,7 +476,7 @@ test("agents cannot read each other's workspaces, and odd session names cannot e
 	await h.close();
 });
 
-test("a tainted session needs approval to hand work to an agent that can reach the internet", async () => {
+test("a tainted session needs approval to hand work to an agent that can reach the internet", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const h = await harness({
 		pine: { main: "main", mcp: { web: { pine: "web", agents: ["scout"] } }, security: { approvalTimeout: "100ms" } },
 		agents: { main: { agent: { mcp: { feed } } }, scout: {}, gonzo: {} },
@@ -493,7 +493,7 @@ test("a tainted session needs approval to hand work to an agent that can reach t
 	await h.close();
 });
 
-test("the policy gate is still in place after a session reloads its instructions", async () => {
+test("the policy gate is still in place after a session reloads its instructions", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const h = await harness({ agents: { main: { agent: { bashDeny: ["sudo"] }, files: { "AGENTS.md": "V1\n" } } } });
 	const probe = mockMsg([{ tools: [{ name: "bash", args: { command: "sudo ls" } }, { name: "read", args: { path: "/etc/hosts" } }] }]);
 	await h.pine.agents.run({ agent: "main", prompt: probe, session: "new", ...owner });

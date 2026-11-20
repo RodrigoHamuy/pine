@@ -29,7 +29,7 @@ const tmp = (t: { after(fn: () => void): void }, name: string) => {
 	return dir;
 };
 
-test("the owner reads how pine is set up: overview, settings, an agent in full, the files for all agents", async () => {
+test("the owner reads how pine is set up: overview, settings, an agent in full, the files for all agents", { skip: process.platform === "win32" && "describes an agent in safe mode, which needs a sandbox Windows does not have (docs/adr/0004-three-systems.md)" }, async () => {
 	const h = await harness({
 		pine: { http: { port: 0 } },
 		agents: { main: { files: { "AGENTS.md": "I keep the house.\n", "MEMORY.md": "The boiler is new.\n" } }, books: { agent: { description: "Keeps the books", delegates: [], sandbox: { network: true } } } },
