@@ -681,7 +681,7 @@ the table above).
 
 What the panel draws is a view: a script of yours in the `views` folder of pine's home, chosen with
 the view's name at the top of the panel, which is a list of the views in the folder (`ui.view`). pine
-comes with `office`, pine as an office building. How to write
+comes with `office`, pine as a little house full of robots. How to write
 one, and what a view is told, is in [views.md](views.md). With no view in the folder, or the setting
 `off`, there is no button and no panel. The mobile app and the web client show no view.
 
@@ -696,17 +696,39 @@ The words below the view are the app's own, and say everything. The view is told
 pine: it never sees a prompt, an answer, a path or what an event said, and it reaches neither the app,
 nor pine, nor the web ([views.md](views.md), "What a view cannot do").
 
-`office` draws an office building, cut open, from the street to the penthouse where the main agent
-works. Each agent has an office and a robot of its own look, in its color. At rest the robot sits at its
-desk, now and then gets a coffee or looks out of the window. At work the office lights up: it reads at
-its shelf while it thinks, types while it writes or uses a tool, waits with an hourglass, and waves with
-a red ! while it asks you. A copy (sub-agent) is a smaller robot just like it. A task handed on is a
-phone call, and so is the answer. Events are capsules in pneumatic pipes from the mailroom in the lobby
-(a box each for you and every event source, the clock for schedules) up to the office. On the wall a
-shield means `safe`, a lock `manual`, an alarm light and hazard tape `bypass`; a shield on a robot's chest
-is work held to a stricter mode, an amber sign work that read outside content. The sky follows your
-clock. A camera goes where agents work; scroll, drag or pinch to look yourself, and the target button
-follows again.
+`office` draws pine as a little tower house, cut open, in pixels: the main agent lives under the
+roof, the others on the floors below, you sit at your desk in the hall. Each agent has a room and a
+robot of its own look, in its color, and a plate at the door with its name and a sign for its mode. A
+robot's bubble says what it does, in words: "thinking...", "reading a file", "running a command",
+"browser: navigate", "skill: invoices", "waits for scout", "asks you!". What it does also shows in
+where it stands:
+
+| In the house | What it is |
+|---|---|
+| A robot paces its room | It thinks |
+| A robot at its shelf with a book; a book with a star | It reads or searches files; it reads one of its skills. Each starred book on the shelf is a skill the agent has |
+| A robot at its desk, the screen full of lines | It runs a command, edits a file, or writes its answer |
+| A robot at the rack | It uses a tool of an MCP server. Each lit slot of the rack is an MCP server the agent has; the one in use blinks |
+| A robot on its chair, legs swinging, an hourglass | It waits for work it handed on or for its copies |
+| A robot jumps, a red "!" | It asks you. The bell on your desk in the hall rings, and the panel has the question on top |
+| Small robots beside it | Copies (sub-agents), for as long as they work |
+| A letter with wings flies from one robot to another | A task handed on (`delegate`). A dashed line joins the two rooms while the work lasts; the answer flies back with a tick, or a cross if it failed |
+| A capsule in the glass tube | An event: from your desk (what you asked; the answer comes back down), from the box of an event source in the hall, or down from the clock in the turret when a schedule is due |
+| Alarm clocks over a desk; the clock in the turret | The agent's schedules; the turret's clock shows your time, and above it the schedule that runs next. They ring when one is due |
+| The board on the wall | The agent's conversations: a line for the main one, a fork for each branch, a leaf on one that works in a worktree, a small flag on one with a goal |
+| Pips under a bubble; a flag on the desk | The steps of its to-do list that are done; a goal that pine calls it for again and again |
+| A letter flies up to the dish on the roof | The agent sent something out (`send`, `publish_event`) |
+| Shield, lock, bolt, warning sign, blueprint on a door plate | The agent's mode: `safe`, `manual`, `auto`, `bypass` (with hazard tape and a beacon in the room), `plan` |
+| An amber lamp in a room, amber eyes | The work read outside content: sending something out asks you from now on. A shield on a robot's chest is work held to a stricter mode |
+| A robot throws its arms up; a robot droops under a puff of smoke | Work is done; work failed |
+
+The `?` at the top right shows this key in the view itself, and the pointer over anything says what
+it is: over a rack the names of the MCP servers, over a shelf the skills, over the clocks the schedules
+and when each runs next, over the board how many conversations and branches, over a box in the hall
+which agents the source wakes. The sky follows your clock and the year: dawn, day, the golden hour,
+dusk and night with the moon in its phase, and the trees of the season. At night an agent at rest
+sleeps at its desk. A camera goes where agents work, in whole steps so that pixels stay whole; scroll,
+drag or pinch to look yourself, the eye follows again, and the frame beside it shows the whole house.
 
 ## Settings
 

@@ -26,7 +26,7 @@ import type { ViewHappening, ViewTarget } from "../../src/view-kit.ts";
 import { api } from "./api.ts";
 import { ROOM, store, useModel } from "./model.ts";
 import { AGENT_COLORS } from "./theme.ts";
-import { type Holdings, happeningsOf, knownTarget, viewStateOf } from "./view-state.ts";
+import { type Holdings, happeningsOf, knownTarget, talkHappenings, viewStateOf } from "./view-state.ts";
 import { colorFor, ENDED, type From, fromText, type Job, World } from "./view-world.ts";
 
 export const VIEW_KEY = "pine.view.width";
@@ -46,10 +46,20 @@ export const world = new World();
 export const holdings = new Map<string, Holdings>();
 /** Who hears what just happened: the frame of the view, while it is open. */
 const happenings = new Set<(h: ViewHappening) => void>();
+const announce = (list: ViewHappening[]) => {
+	for (const h of list) for (const fn of happenings) fn(h);
+};
+/** What the events do not say and the view shows: asked again when an event says it may have changed. */
+const stale = { conversations: true, schedules: true };
 store.taps.add((batch) => {
 	world.take(batch);
+	for (const e of batch) {
+		// A conversation was made, removed, branched or given a worktree; work began or ended in one (a branch is new with its first work).
+		if (e.topic === "pine/conversation" || /^agent\/[^/]+\/(started|done|failed)$/.test(e.topic)) stale.conversations = true;
+		if (e.source === "timer" || e.topic === "pine/settings" || /^agent\/[^/]+\/tool$/.test(e.topic)) stale.schedules ||= e.source === "timer" || e.topic === "pine/settings" || /schedule/.test(String((e.payload as { tool?: unknown })?.tool ?? ""));
+	}
 	if (!happenings.size) return;
-	for (const h of happeningsOf(batch, world, holdings)) for (const fn of happenings) fn(h);
+	announce(happeningsOf(batch, world, holdings));
 });
 
 const PALETTE = AGENT_COLORS.map((c) => c.hex);
@@ -127,15 +137,42 @@ function useSeed(): void {
 		const rooms = async () => {
 			asked = Date.now();
 			const st = await api.status().catch(() => undefined);
-			if (!gone && st) world.setRooms(st.sessions.map((r) => ({ agent: r.agent, session: r.session, busy: r.busy, outside: r.tainted, mode: r.mode, trust: r.trust })));
+			if (gone || !st) return;
+			const read = world.setRooms(st.sessions.map((r) => ({ agent: r.agent, session: r.session, busy: r.busy, outside: r.tainted, mode: r.mode, trust: r.trust })));
+			announce(read.map((r) => ({ k: "outside" as const, agent: r.agent, ...(world.talks.has(`${r.agent}:${r.session}`) ? { conversation: world.talkId(r.agent, r.session) } : {}) })));
 		};
 		void rooms();
+		// Each agent's conversations (which is a branch of which, which works in a worktree) and the schedules with
+		// their next time: asked when an event says they may have changed, and now and then.
+		let talked = 0;
+		let timed = 0;
+		const conversations = async () => {
+			talked = Date.now();
+			stale.conversations = false;
+			await Promise.all(
+				[...world.places.keys()].map(async (agent) => {
+					const list = await api.sessions(agent).catch(() => undefined);
+					if (!gone && list && world.places.has(agent)) announce(talkHappenings(world.setConversations(agent, list)));
+				}),
+			);
+		};
+		const schedules = async () => {
+			timed = Date.now();
+			stale.schedules = false;
+			const list = await api.schedules().catch(() => undefined);
+			if (!gone && list) world.setSchedules(list);
+		};
 		const id = window.setInterval(() => {
 			const working = world.working();
 			const now = working.map((j) => j.id).join(",");
 			const fresh = now !== known;
 			known = now;
 			if (fresh || (working.length && Date.now() - asked > 1500) || Date.now() - asked > 8000) void rooms();
+			const t = Date.now();
+			if (world.places.size && ((stale.conversations && t - talked > 700) || t - talked > 20_000)) void conversations();
+			// A schedule whose time has passed is asked about again: its next time is another.
+			const due = world.schedules.some((s) => s.next !== undefined && s.next - world.skew < t - 1500);
+			if ((stale.schedules && t - timed > 700) || (due && t - timed > 3000) || t - timed > 30_000) void schedules();
 		}, 300);
 		return () => ((gone = true), window.clearInterval(id));
 	}, [s.home, s.remote]);

@@ -34,6 +34,10 @@ export interface Job {
 	/** The tool it is in, while it is in one. */
 	tool?: string;
 	subject?: string;
+	/** The skill it is reading (a `read` of a SKILL.md), by its folder's name: the view names it only if the agent has it. */
+	skill?: string;
+	/** Its to-do list (`todo`): how many steps are done, of how many. */
+	steps?: { done: number; total: number };
 	/** The agents it is waiting for (delegations and copies it started that have not ended). */
 	waitingOn: number[];
 	started: number;
@@ -85,6 +89,35 @@ export interface Room {
 	mode: string;
 	trust: string;
 }
+
+/** A conversation of an agent with the owner, as `/agents/<id>/sessions` lists it. `n` is the number a view knows it by. */
+export interface Talk {
+	agent: string;
+	session: string;
+	n: number;
+	main: boolean;
+	/** The conversation it was branched from, by its session. */
+	branchOf?: string;
+	worktree: boolean;
+	last: number;
+}
+
+/** A schedule, as `/schedules` lists it. */
+export interface Sched {
+	name: string;
+	/** The agent it wakes; "global" for one that is for all. */
+	scope: string;
+	when?: string;
+	next?: number;
+	/** When it last fired while the page was open: the daemon's clock. */
+	last?: number;
+}
+
+export type GoalStatus = "active" | "paused" | "met" | "blocked" | "limit";
+const GOAL: GoalStatus[] = ["active", "paused", "met", "blocked", "limit"];
+
+/** What changed about conversations between two looks at them: for a view that animates. */
+export type TalkNews = { k: "branched"; agent: string; conversation: number; from?: number; worktree: boolean } | { k: "worktree"; agent: string; conversation: number; made: boolean };
 
 export interface Place {
 	id: string;
@@ -153,6 +186,15 @@ export class World {
 	jobs = new Map<number, Job>();
 	stations = new Map<string, Station>();
 	rooms = new Map<string, Room>();
+	/** The owner's conversations with each agent, by "agent:session"; the number of each, kept while the page lives. */
+	talks = new Map<string, Talk>();
+	private talkIds = new Map<string, number>();
+	private talked = new Set<string>();
+	schedules: Sched[] = [];
+	/** The goal of a conversation, by "agent:session": where it stands and the round it is in. */
+	goals = new Map<string, { status: GoalStatus; round: number; task?: number }>();
+	/** The sources that say they failed, and who listens to each. */
+	sourceInfo = new Map<string, { agents: string[]; failing: boolean }>();
 	pulses: Pulse[] = [];
 	/** The same moments of travel, kept as long as ended work is: what the timeline draws as arrows. */
 	trail: Pulse[] = [];
@@ -181,6 +223,12 @@ export class World {
 		this.jobs.clear();
 		this.stations = new Map([["you", { id: "you", kind: "you", name: "you", count: 0 }]]);
 		this.rooms.clear();
+		this.talks.clear();
+		this.talked.clear();
+		this.roomed = false;
+		this.schedules = [];
+		this.goals.clear();
+		this.sourceInfo.clear();
 		this.causes.clear();
 		this.pulses = [];
 		this.trail = [];
@@ -204,9 +252,12 @@ export class World {
 	}
 
 	/** The event sources there are, also those that have reported nothing yet. */
-	setSources(list: Array<{ name: string; type: string; last?: { ts: number }; events: number }>): void {
+	setSources(list: Array<{ name: string; type: string; last?: { ts: number }; events: number; subscribers?: string[]; running?: boolean; error?: string }>): void {
 		for (const s of list) {
 			const id = `source:${s.name}`;
+			// A subscriber is an agent, or one conversation of it ("agent:session"): the agent is what a view is told.
+			const agents = [...new Set((s.subscribers ?? []).map((x) => String(x).split(":")[0]).filter((a) => this.places.has(a)))];
+			this.sourceInfo.set(id, { agents, failing: Boolean(s.error) });
 			const was = this.stations.get(id);
 			this.stations.set(id, { id, kind: "source", name: s.name, type: s.type, last: Math.max(was?.last ?? 0, s.last?.ts ?? 0) || undefined, count: Math.max(was?.count ?? 0, s.events) });
 		}
@@ -214,8 +265,71 @@ export class World {
 	}
 
 	/** The conversations the daemon has open, with the mode each works in and whether it read outside content. */
-	setRooms(list: Room[]): void {
+	setRooms(list: Room[]): Array<{ agent: string; session: string }> {
+		const was = this.rooms;
+		const first = !this.roomed;
+		this.roomed = true;
 		this.rooms = new Map(list.map((r) => [`${r.agent}:${r.session}`, r]));
+		this.touch();
+		// The conversations that have read outside content since the last look.
+		return first ? [] : list.filter((r) => r.outside && !was.get(`${r.agent}:${r.session}`)?.outside).map((r) => ({ agent: r.agent, session: r.session }));
+	}
+	private roomed = false;
+
+	/** The number a view knows a conversation by: given once, kept while the page lives. */
+	talkId(agent: string, session: string): number {
+		const key = `${agent}:${session}`;
+		let n = this.talkIds.get(key);
+		if (n === undefined) this.talkIds.set(key, (n = this.talkIds.size + 1));
+		return n;
+	}
+
+	/**
+	 * An agent's conversations with the owner, as the daemon lists them. Returns what is new since the
+	 * last look (a branch, a worktree made or gone); nothing the first time, when all of it is new.
+	 */
+	setConversations(agent: string, list: Array<{ session: string; last?: number; branch?: { from: string }; worktree?: unknown }>): TalkNews[] {
+		const news: TalkNews[] = [];
+		const first = !this.talked.has(agent);
+		this.talked.add(agent);
+		const mine = list.filter((c) => typeof c.session === "string" && !c.session.endsWith("~u") && !c.session.startsWith("_t"));
+		const keys = new Set(mine.map((c) => `${agent}:${c.session}`));
+		for (const [key, t] of this.talks) if (t.agent === agent && !keys.has(key)) this.talks.delete(key);
+		for (const c of mine) {
+			const key = `${agent}:${c.session}`;
+			const was = this.talks.get(key);
+			const now: Talk = { agent, session: c.session, n: this.talkId(agent, c.session), main: c.session === "main", branchOf: c.branch?.from, worktree: Boolean(c.worktree), last: c.last ?? 0 };
+			this.talks.set(key, now);
+			if (first) continue;
+			if (!was && now.branchOf !== undefined) news.push({ k: "branched", agent, conversation: now.n, from: this.talkId(agent, now.branchOf), worktree: now.worktree });
+			else if (!was && now.worktree) news.push({ k: "worktree", agent, conversation: now.n, made: true });
+			else if (was && was.worktree !== now.worktree) news.push({ k: "worktree", agent, conversation: now.n, made: now.worktree });
+		}
+		this.touch();
+		return news;
+	}
+
+	/** The owner's conversations with an agent: the main one first, then the one used last. */
+	talksOf(agent: string): Talk[] {
+		return [...this.talks.values()].filter((t) => t.agent === agent).sort((a, b) => Number(b.main) - Number(a.main) || b.last - a.last);
+	}
+
+	/** The conversation a piece of work runs in or for: its own, or the one of the work of the same agent that started it. */
+	talkOf(job: Job): Talk | undefined {
+		let j: Job | undefined = job;
+		for (let i = 0; j && i < 8; i++) {
+			const t = this.talks.get(`${j.agent}:${j.session}`);
+			if (t) return t;
+			const p: Job | undefined = j.parent !== undefined ? this.jobs.get(j.parent) : undefined;
+			j = p && p.agent === job.agent ? p : undefined;
+		}
+		return undefined;
+	}
+
+	/** Every schedule, as the daemon lists them. What the page saw fire is kept. */
+	setSchedules(list: Array<{ name: string; scope: string; when?: string; next?: number }>): void {
+		const last = new Map(this.schedules.map((s) => [`${s.name}@${s.scope}`, s.last]));
+		this.schedules = list.filter((s) => typeof s.name === "string").map((s) => ({ name: s.name, scope: String(s.scope ?? "global"), when: typeof s.when === "string" ? s.when : undefined, next: typeof s.next === "number" ? s.next : undefined, last: last.get(`${s.name}@${s.scope}`) }));
 		this.touch();
 	}
 
@@ -348,6 +462,7 @@ export class World {
 				from = { k: "source", name };
 			} else if (e.source === "timer") {
 				this.station("clock", "clock", "clock", at);
+				for (const sc of this.schedules) if (sc.name === p.name) (sc.last = at), sc.next !== undefined && sc.next <= at && (sc.next = undefined);
 				from = { k: "clock", name: typeof p.name === "string" ? p.name : undefined };
 			} else if (e.trust === "owner" && e.source === "http") {
 				this.station("you", "you", "you", at);
@@ -364,8 +479,24 @@ export class World {
 			if (this.causes.size > 2000) this.causes.delete(this.causes.keys().next().value!);
 			return Boolean(from);
 		}
+		// A conversation's goal (goal mode): where it stands. The objective is never kept.
+		if (ns === "agent" && kind === "goal" && typeof p.session === "string") {
+			const status = GOAL.includes(p.status) ? (p.status as GoalStatus) : undefined;
+			const key = `${String(p.agent ?? who)}:${p.session}`;
+			if (!status || p.event === "cleared") this.goals.delete(key);
+			else this.goals.set(key, { status, round: Number(p.round) || 0, task: typeof p.task === "number" ? p.task : undefined });
+			return true;
+		}
 		if (ns !== "agent" || typeof p.task !== "number") return false;
 		const agent = String(p.agent ?? who);
+		// The to-do list of a conversation's work: only how far it is.
+		if (kind === "todos") {
+			const job = this.jobs.get(p.task) ?? this.working(agent).find((j) => j.session === p.session && j.depth === 0);
+			if (!job || !Array.isArray(p.items)) return false;
+			const total = p.items.length;
+			job.steps = total ? { done: p.items.filter((i: any) => i?.status === "done" || i?.status === "completed").length, total } : undefined;
+			return true;
+		}
 
 		if (kind === "started") {
 			const parent = p.parent !== undefined ? this.jobs.get(p.parent) : undefined;
@@ -427,11 +558,13 @@ export class World {
 				job.tools++;
 				job.tool = String(p.tool ?? "");
 				job.subject = p.subject ? label(String(p.subject), 80) : undefined;
+				job.skill = job.tool === "read" ? /\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/.exec(String(p.subject ?? ""))?.[1] : undefined;
 				if (job.doing !== "asking") job.doing = /(^|_)(delegate|subagent)$/.test(job.tool) ? "waiting" : "tool";
 			} else if (job.doing !== "asking") {
 				job.doing = job.waitingOn.some((c) => !ENDED.includes(this.jobs.get(c)?.doing ?? "done")) ? "waiting" : "thinking";
 				job.tool = undefined;
 				job.subject = undefined;
+				job.skill = undefined;
 			}
 			return true;
 		}
@@ -440,6 +573,7 @@ export class World {
 			job.finished = at;
 			job.ask = undefined;
 			job.tool = undefined;
+			job.skill = undefined;
 			job.error = p.error ? label(String(p.error), 160) : undefined;
 			const parent = job.parent !== undefined ? this.jobs.get(job.parent) : undefined;
 			if (parent && !ENDED.includes(parent.doing)) {

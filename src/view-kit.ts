@@ -28,6 +28,26 @@ export interface ViewAgent {
 	skills: string[];
 	sources: string[];
 	schedules: string[];
+	/** Its conversations with the owner: the main one first, then the one used last. Their shape, never their names. */
+	conversations: ViewConversation[];
+}
+
+/** A conversation of an agent, as a view knows it: a number and its shape. */
+export interface ViewConversation {
+	/** A number for it, the same for as long as the panel is open. */
+	id: number;
+	/** The agent's main conversation. */
+	main: boolean;
+	/** A branch: the number of the conversation it was branched from. */
+	branchOf?: number;
+	/** It works in a worktree: a checkout of its own of its folder's repository, on a git branch of its own. */
+	worktree: boolean;
+	/** Work runs in it now. */
+	busy: boolean;
+	/** It has read content from outside. */
+	outside: boolean;
+	/** It has a goal (goal mode), and where that stands. */
+	goal?: "active" | "paused" | "met" | "blocked" | "limit";
 }
 
 /** Where a piece of work came from. */
@@ -70,6 +90,17 @@ export interface ViewWork {
 	held: boolean;
 	/** Its conversation read content from outside: from now on, sending something out asks the owner. */
 	outside: boolean;
+	/** The conversation it runs in or for (`ViewConversation.id`), where it is one of the owner's. */
+	conversation?: number;
+	/** That conversation is a branch of another; it works in a worktree. */
+	branch: boolean;
+	worktree: boolean;
+	/** The skill it is reading now, for a skill its agent has: its name. */
+	skill?: string;
+	/** Its to-do list, once it keeps one: how many steps are done, of how many. */
+	steps?: { done: number; total: number };
+	/** The round of its conversation's goal it is (goal mode: pine calls the agent again until the goal is met). */
+	round?: number;
 }
 
 /** A way work comes in: the owner, the clock, an event source, another way. */
@@ -82,6 +113,22 @@ export interface ViewInput {
 	type?: string;
 	count: number;
 	/** When it last brought something in. */
+	last?: number;
+	/** The agents that listen to it (an event source). */
+	agents: string[];
+	/** An event source that could not start or lost its connection. */
+	failing: boolean;
+}
+
+/** A schedule: the clock wakes an agent with a task, at a time or again and again. */
+export interface ViewSchedule {
+	name: string;
+	/** The agent it wakes; none for one that publishes an event for all. */
+	agent?: string;
+	/** When, as it was set: a cron line ("0 9 * * 1-5"), an interval ("every 30m") or a time. */
+	when?: string;
+	/** When it runs next, and when it last ran while the panel was open: the page's clock. */
+	next?: number;
 	last?: number;
 }
 
@@ -97,6 +144,8 @@ export interface ViewState {
 	/** What runs now, and what ended in the last half hour. */
 	work: ViewWork[];
 	inputs: ViewInput[];
+	/** Every schedule, the one that runs next first. */
+	schedules: ViewSchedule[];
 	selected?: ViewTarget;
 	/** Whether the app is drawn dark. */
 	dark: boolean;
@@ -109,8 +158,16 @@ export type ViewHappening =
 	| { k: "started"; work: number; agent: string }
 	| { k: "ended"; work: number; agent: string; failed: boolean }
 	| { k: "tool"; work: number; agent: string; tool: string; mcp?: string }
+	| { k: "toolEnded"; work: number; agent: string; tool: string; ok: boolean }
 	| { k: "skill"; work: number; agent: string; skill: string }
+	| { k: "steps"; work: number; agent: string; done: number; total: number }
 	| { k: "event"; input: string }
+	| { k: "scheduled"; name?: string; agent?: string }
+	| { k: "said"; work: number; agent: string }
+	| { k: "branched"; agent: string; conversation: number; from?: number; worktree: boolean }
+	| { k: "worktree"; agent: string; conversation: number; made: boolean }
+	| { k: "goal"; agent: string; conversation?: number; status: "active" | "paused" | "met" | "blocked" | "limit" }
+	| { k: "outside"; agent: string; conversation?: number }
 	| { k: "handed"; work: number; from: string; to: string }
 	| { k: "answered"; work: number; from: string; to: string }
 	| { k: "copied"; work: number; agent: string }
@@ -178,16 +235,18 @@ export const inside = (p: Pt, b: Box) => p.x >= b.x && p.x < b.x + b.w && p.y >=
 /**
  * Where a camera goes to show `aim` in a view of `view`: the box with a margin, never smaller than `min`,
  * never closer than `zMax`, never further out than `whole` needs, and never showing more of what lies
- * outside `whole` than it has to. The zoom comes in steps of a quarter, so that pixels stay even.
+ * outside `whole` than it has to. The zoom comes in steps of a quarter, so that pixels stay even; `step`
+ * says another (1 for pixel art that is to keep whole pixels), `zMin` the furthest out it goes.
  */
-export function frame(aim: Box, view: { w: number; h: number }, whole: Box, o: { zMax: number; min: { w: number; h: number } }): Cam {
+export function frame(aim: Box, view: { w: number; h: number }, whole: Box, o: { zMax: number; min: { w: number; h: number }; step?: number; zMin?: number }): Cam {
 	const vw = Math.max(1, view.w);
 	const vh = Math.max(1, view.h);
 	const zAll = Math.min(vw / (whole.w + 8), vh / (whole.h + 8));
 	const w = Math.max(aim.w + 16, o.min.w);
 	const h = Math.max(aim.h + 16, o.min.h);
 	const z = Math.max(Math.min(zAll, o.zMax), Math.min(o.zMax, vw / w, vh / h));
-	const zz = Math.max(0.25, Math.floor(z * 4) / 4);
+	const step = o.step && o.step > 0 ? o.step : 0.25;
+	const zz = Math.max(o.zMin ?? step, Math.floor(z / step + 1e-9) * step);
 	const keep = (c: number, half: number, size: number, start: number) => (half * 2 >= size ? start + size / 2 : Math.min(start + size - half, Math.max(start + half, c)));
 	return { x: keep(aim.x + aim.w / 2, vw / zz / 2, whole.w, whole.x), y: keep(aim.y + aim.h / 2, vh / zz / 2, whole.h, whole.y), z: zz };
 }

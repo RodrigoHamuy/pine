@@ -85,7 +85,7 @@ test("pine puts its own view into the home, and the panel runs it beside any tab
 	await sees("[data-slot=view-aside] [data-slot=view][data-view=office] [data-slot=view-frame][data-ready]", "the office, running in its frame");
 	await frame().locator("[data-slot=office-words] > li[data-agent=books]").waitFor({ state: "attached", timeout: 10_000 });
 	assert.match(await said("books"), /books, bypass mode: at rest/);
-	assert.match(await said("main"), /main, safe mode, the main agent, in the penthouse/);
+	assert.match(await said("main"), /main, safe mode, the main agent, under the roof/);
 	assert.equal(await page.getAttribute("[data-toggle=view]", "aria-pressed"), "true");
 	assert.match(await page.textContent("[data-slot=view-select]"), /office/, "the view's name, at the top, is where another is picked");
 });
