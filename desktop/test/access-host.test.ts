@@ -12,11 +12,12 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { remoteCommand } from "../../src/remote.ts";
-import { type AccessHost, type HostStatus, startAccessHost } from "../electron/access/host.ts";
+import { ACCESS_FILE, type AccessHost, fileVault, type HostStatus, startAccessHost } from "../electron/access/host.ts";
 import { createPairing, type Pairing, type PairingRequest } from "../electron/access/pairing.ts";
 import { pairedKeys } from "../electron/access/server.ts";
-import { newEd25519Key } from "../electron/access/store.ts";
+import { AccessStore, newEd25519Key } from "../electron/access/store.ts";
 import { exec, firstLine, join, type Meeting, serveMeeting, sshOver, tunnel, until } from "./support/meeting.ts";
+import { startTurn, TURN_PASSWORD, TURN_USER } from "./support/turn.ts";
 
 let daemon: net.Server;
 let daemonPort: number;
@@ -207,6 +208,29 @@ test("access host: each connected device is listed with the kind of path its con
 	await until(() => host.store.devices()[0].seen !== undefined, "the device was seen");
 	client.end();
 	browser.close();
+});
+
+test("access host: with the owner's relay, the computer offers an address on it, with the password from its own store; the browser is given no relay", async () => {
+	const turn = await startTurn();
+	try {
+		const m = await meeting();
+		const dir = folder();
+		// The password is kept in the store's file, as the app keeps it; the host is told the rest.
+		const vault = fileVault(path.join(dir, ACCESS_FILE.plain));
+		await (await AccessStore.open(vault)).setRelayPassword(TURN_PASSWORD);
+		const { host, phone } = await setup(m.url, { folder: dir, relay: { hostname: "127.0.0.1", port: turn.port, transport: "udp", username: TURN_USER } });
+		await until(() => host.status() === "waiting", "the host waits");
+		const browser = join(m.url, host.machineId);
+		const client = await sshOver(await browser.channel, host.machineId, phone.private).ready;
+		// The relay gave the computer an address, which it takes only with the right password. (Its candidate
+		// may come after the direct path opened and the meeting ended, so it is not looked for in the signals.)
+		await until(() => turn.allocations() > 0, "the computer reserved an address on the relay");
+		assert.ok(!JSON.stringify(browser.received).includes(TURN_PASSWORD), "the password crossed nowhere");
+		client.end();
+		browser.close();
+	} finally {
+		await turn.close();
+	}
 });
 
 test("access host: removing a device cuts its connection at once", async () => {

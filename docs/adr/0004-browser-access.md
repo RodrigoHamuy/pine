@@ -69,6 +69,14 @@ configuration, read by both sides. A relay (TURN) is not carried today: the app 
 and `stuns:` addresses, and both sides keep only each server's `urls`, without a username or a
 credential, so a fallback needs a release of the Pine app and of the web client.
 
+Amended: the project still runs no relay, and the service still names none, but the owner of a
+computer may name a relay (TURN) server of their own, in the Pine app only (Settings > Browser
+access). Only the computer's side uses it: it reserves an address on the relay and offers it as one
+more candidate, and once the browser's checks reach that address the connection is relayed. So the
+browser is given nothing, and neither the web client nor the service changes. ICE still prefers a
+direct path. The relay's password is kept like the host key, in the file the keychain encrypts, and
+never reaches the page; a TURN entry from the service's list is still dropped.
+
 **One official service.** The project runs the Worker `pine` (`--env official`) at
 `https://pine.drcmda.workers.dev`: the web client and the meeting service, the SSH relay off. It
 is the app's default (`OFFICIAL_SERVICE`); an owner who runs their own deployment (`--env full`,

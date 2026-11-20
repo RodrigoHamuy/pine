@@ -89,7 +89,7 @@ an owner gave theirs), and "your computer" while it is being paired:
 | It says | What to do |
 |---|---|
 | Studio Mac does not answer: it is off, asleep, or Pine is closed | Wake the computer or open Pine; check that Browser access is on. The browser keeps trying |
-| Studio Mac is there, but no direct connection could be made from this network | Some networks, often a phone's data, do not let two devices connect directly, and there is no relay to fall back on. Try another Wi-Fi, or the phone's data instead of the Wi-Fi |
+| Studio Mac is there, but no direct connection could be made from this network | Some networks, often a phone's data, do not let two devices connect directly. Try another Wi-Fi, or the phone's data instead of the Wi-Fi. The project runs no relay, but the owner of the computer can name one of their own in the Pine app (Settings > Browser access, `Relay server (TURN)` in [desktop.md](desktop.md#a-relay-server-of-your-own-for-a-phone-that-cannot-connect-from-mobile-data)): the connection then goes through it, and the browser needs nothing for it |
 | The meeting service is over its limits for now | Wait and try again; the browser keeps trying |
 | This browser is no longer known to Studio Mac | The device was removed in the app, or the key was lost. Open Pine on the computer and add this device again |
 | This pairing link has expired or was used already | Press New code on the computer and scan again |

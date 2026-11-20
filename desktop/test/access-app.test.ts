@@ -10,6 +10,7 @@ import { after, before, test } from "node:test";
 import jsQR from "jsqr";
 import { startMock } from "../../baseline/tests/mock.mjs";
 import { launchApp } from "./support/app.ts";
+import { startTurn, TURN_PASSWORD, TURN_USER } from "./support/turn.ts";
 
 const SERVICE = "https://pine.example.invalid";
 
@@ -222,4 +223,47 @@ test("Settings > Browser access: the open-at-login switch and the service addres
 	await address.fill(SERVICE);
 	await page.locator(`${section} [data-setting=access-service]`).getByRole("button", { name: "Save" }).click();
 	await until("the address is back", async () => (await bridge("access")).service === SERVICE);
+});
+
+test("Settings > Browser access: a relay server is saved from its fields and tried; its password is kept sealed, never shown, and never told to the page", async () => {
+	const turn = await startTurn();
+	try {
+		const section = "[data-slot=settings-page]";
+		const relay = `${section} [data-setting=access-relay]`;
+		await sees(`${relay} >> text=Relay server (TURN)`);
+		await sees(`${relay} >> text=Used when no direct connection can be made, for example from some mobile networks. Leave it empty if you have none.`);
+		await page.locator(`${relay} [data-slot=relay-address]`).fill(`turn:127.0.0.1:${turn.port}`);
+		await page.locator(`${relay} [data-slot=relay-username]`).fill(TURN_USER);
+		await page.locator(`${relay} [data-slot=relay-password]`).fill(TURN_PASSWORD);
+		await page.locator(relay).getByRole("button", { name: "Save" }).click();
+		await sees(`${relay} [data-slot=relay-check][data-result=usable] >> text=This relay works`);
+
+		// The password field is empty again, and says one is kept; nothing on the page or in the page's state holds it.
+		assert.equal(await page.locator(`${relay} [data-slot=relay-password]`).inputValue(), "");
+		assert.match(await page.locator(`${relay} [data-slot=relay-password]`).getAttribute("placeholder"), /^Kept/);
+		const state = await bridge("access");
+		assert.deepEqual({ address: state.relay.address, username: state.relay.username, password: state.relay.password }, { address: `turn:127.0.0.1:${turn.port}`, username: TURN_USER, password: true });
+		assert.ok(!JSON.stringify(state).includes(TURN_PASSWORD) && !JSON.stringify(await told()).includes(TURN_PASSWORD), "the page is never told the password");
+		assert.ok(!JSON.stringify((await bridge("state")).prefs).includes(TURN_PASSWORD), "nor through the app's preferences");
+		assert.ok(!(await page.content()).includes(TURN_PASSWORD), "nor drawn");
+		// Kept: the address and user name in prefs.json, the password in the sealed file only.
+		assert.deepEqual(JSON.parse(fs.readFileSync(path.join(data, "prefs.json"), "utf8")).access.relay, { address: `turn:127.0.0.1:${turn.port}`, username: TURN_USER });
+		assert.ok(!fs.readFileSync(path.join(data, "prefs.json"), "utf8").includes(TURN_PASSWORD));
+		assert.ok(!fs.readFileSync(path.join(data, "access.bin")).includes(TURN_PASSWORD), "sealed");
+
+		// A wrong password: the relay is kept, and the line says what is wrong.
+		await page.locator(`${relay} [data-slot=relay-password]`).fill("not-the-password");
+		await page.locator(relay).getByRole("button", { name: "Save" }).click();
+		await sees(`${relay} [data-slot=relay-check][data-result=failed] >> text=refused the user name or password`);
+		assert.equal((await bridge("access")).relay.address, `turn:127.0.0.1:${turn.port}`);
+
+		// Saved empty, the relay is gone.
+		await page.locator(`${relay} [data-slot=relay-address]`).fill("");
+		await page.locator(`${relay} [data-slot=relay-username]`).fill("");
+		await page.locator(relay).getByRole("button", { name: "Save" }).click();
+		await until("the relay is removed", async () => (await bridge("access")).relay === undefined);
+		assert.equal(JSON.parse(fs.readFileSync(path.join(data, "prefs.json"), "utf8")).access.relay, undefined);
+	} finally {
+		await turn.close();
+	}
 });

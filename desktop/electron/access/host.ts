@@ -9,7 +9,7 @@ import { randomBytes } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import ssh2 from "ssh2";
-import { answer, type IceServer, type Peer, type PeerPath, type Signal } from "./peer.ts";
+import { answer, type IceServer, type Peer, type PeerPath, type RelayServer, type Signal } from "./peer.ts";
 import { type AccessServer, type Admit, createAccessServer, MAX_CONNECTIONS, pairedKeys, type SessionEvent } from "./server.ts";
 import { AccessStore, type Vault } from "./store.ts";
 
@@ -92,6 +92,11 @@ export interface AccessHostOptions {
 	retry?: { firstMs?: number; maxMs?: number };
 	/** How long a browser may take to open its channel. */
 	peerTimeoutMs?: number;
+	/**
+	 * The owner's relay server, without its password, which the host reads from its own store (the
+	 * sealed file): every peer connection reserves an address on it, beside the service's STUN servers.
+	 */
+	relay?: Omit<RelayServer, "password">;
 }
 
 export interface AccessHost {
@@ -137,6 +142,7 @@ export async function startAccessHost(options: AccessHostOptions): Promise<Acces
 	if (parsed instanceof Error) throw parsed;
 	const hostKey: ssh2.ParsedKey = parsed;
 	const publicBlob = hostKey.getPublicSSH();
+	const relay: RelayServer | undefined = options.relay && { ...options.relay, password: store.relayPassword() ?? "" };
 	const maxPeers = options.maxPeers ?? MAX_CONNECTIONS;
 	const firstMs = options.retry?.firstMs ?? 1000;
 	const maxMs = options.retry?.maxMs ?? 60_000;
@@ -232,7 +238,7 @@ export async function startAccessHost(options: AccessHostOptions): Promise<Acces
 		if (typeof s !== "string") return;
 		if (message.t === "open") {
 			if (peers.size >= maxPeers || meeting.has(s)) return send({ t: "close", s });
-			const peer = answer({ ice, send: (d: Signal) => send({ t: "signal", s, d }), timeoutMs: options.peerTimeoutMs });
+			const peer = answer({ ice, relay, send: (d: Signal) => send({ t: "signal", s, d }), timeoutMs: options.peerTimeoutMs });
 			meeting.set(s, peer);
 			peers.add(peer);
 			peer.closed.then(() => {

@@ -8,7 +8,8 @@ import path from "node:path";
 import { computerWord } from "../../src/machines.ts";
 import { ACCESS_FILE, type AccessHost, type AccessHostOptions, type Cipher, fileVault, type HostStatus, startAccessHost } from "./host.ts";
 import { createPairing, type Pairing, type PairingRequest } from "./pairing.ts";
-import type { PeerPath } from "./peer.ts";
+import net from "node:net";
+import { type PeerPath, type RelayServer, type RelayTry, tryRelay } from "./peer.ts";
 import { AccessStore, type Device } from "./store.ts";
 
 /**
@@ -19,15 +20,48 @@ import { AccessStore, type Device } from "./store.ts";
  */
 export const OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev";
 
-/** The owner's choices, kept in the app's preferences. No `service`: the official one. */
+/**
+ * The owner's choices, kept in the app's preferences. No `service`: the official one. `relay`: the
+ * address and user name of the owner's relay (TURN) server; its password is never here, but in the
+ * sealed file with the host key.
+ */
 export interface AccessPrefs {
 	enabled: boolean;
 	service?: string;
 	openAtLogin: boolean;
+	relay?: { address: string; username: string };
 }
 
 /** The longest address taken. */
 const ADDRESS_LENGTH = 200;
+/** The longest user name and password of a relay taken. */
+const CREDENTIAL_LENGTH = 200;
+
+const RELAY_FORM = "Write the relay's address as turn:host:port or turns:host:port, for example turn:relay.example.com:3478. The user name and password go in their own fields.";
+
+/**
+ * A relay server's address as the owner wrote it, checked: `turn:` or `turns:`, a host name or an
+ * IP address (IPv6 in brackets), a port (3478, or 5349 for `turns:`, when none is written), and
+ * `?transport=udp` or `tcp` and nothing else. `turns:` is TLS, over TCP. The address as it is kept,
+ * and what the library is handed.
+ */
+export function relayAddress(value: string): { address: string; hostname: string; port: number; transport: RelayServer["transport"] } {
+	const text = value.trim();
+	const match = text.length <= ADDRESS_LENGTH ? /^(turns?):(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?(?:\?transport=(udp|tcp))?$/.exec(text) : null;
+	if (!match) throw new Error(RELAY_FORM);
+	const [, scheme, host, portText, transport] = match;
+	const hostname = host.startsWith("[") ? host.slice(1, -1) : host;
+	if (host.startsWith("[") && !net.isIPv6(hostname)) throw new Error(RELAY_FORM);
+	if (!host.startsWith("[") && (!/[A-Za-z0-9]/.test(hostname) || hostname.startsWith(".") || hostname.startsWith("-"))) throw new Error(RELAY_FORM);
+	const port = portText ? Number(portText) : scheme === "turns" ? 5349 : 3478;
+	if (port < 1 || port > 65535) throw new Error(RELAY_FORM);
+	if (scheme === "turns" && transport === "udp") throw new Error("A turns: address is TLS, which runs over TCP: leave out ?transport=udp, or write turn: for UDP.");
+	const kind: RelayServer["transport"] = scheme === "turns" ? "tls" : transport === "tcp" ? "tcp" : "udp";
+	return { address: `${scheme}:${host}:${port}${transport ? `?transport=${transport}` : ""}`, hostname, port, transport: kind };
+}
+
+/** A relay's user name as kept: plain text, short. */
+const relayUser = (value: unknown) => (typeof value === "string" ? value.replace(/[\p{Cc}\p{Cf}]/gu, "").trim().slice(0, CREDENTIAL_LENGTH) : "");
 
 /** A meeting service's address as the owner wrote it, checked: `http(s)`, a host, no name or password. Its origin. */
 export function serviceAddress(value: string): string {
@@ -52,7 +86,14 @@ export function readAccessPrefs(raw: unknown): AccessPrefs {
 	} catch {
 		// an address that is not one is not used
 	}
-	return { enabled: said.enabled === true, service, openAtLogin: said.openAtLogin === true };
+	let relay: AccessPrefs["relay"];
+	const kept = said.relay && typeof said.relay === "object" ? (said.relay as Record<string, unknown>) : undefined;
+	try {
+		if (kept && typeof kept.address === "string") relay = { address: relayAddress(kept.address).address, username: relayUser(kept.username) };
+	} catch {
+		// nor a relay's
+	}
+	return { enabled: said.enabled === true, service, openAtLogin: said.openAtLogin === true, ...(relay ? { relay } : {}) };
 }
 
 /** A paired device as the page shows it. `connected`: it is connected now, by this kind of path (unknown while the path is being chosen). */
@@ -88,13 +129,32 @@ export interface AccessState {
 	/** The question to the owner: the device's name and the four digits its screen shows. */
 	request?: PairingRequest;
 	problem?: AccessProblem;
+	/** The owner's relay server: its address and user name, whether a password is kept (never the password), and what its last try found. */
+	relay?: AccessRelay;
 }
 
-/** A change the page asks for. `service`: an address, or empty for the official one. */
+/**
+ * The relay as the page reads it. `check`: the try made when it was saved; `trying` while it runs,
+ * `usable` when the relay gave this computer an address, `failed` otherwise, with the reason in
+ * `message`. A relay that failed is kept all the same.
+ */
+export interface AccessRelay {
+	address: string;
+	username: string;
+	password: boolean;
+	check?: { result: "trying" | "usable" | "failed"; message: string };
+}
+
+/**
+ * A change the page asks for. `service`: an address, or empty for the official one. `relay`: an
+ * address, a user name and a password; an empty address removes the relay and its password, and an
+ * empty password keeps the one that is kept.
+ */
 export interface AccessChange {
 	enabled?: boolean;
 	service?: string;
 	openAtLogin?: boolean;
+	relay?: { address: string; username?: string; password?: string };
 }
 
 /** The access host as the control drives it. `opened` is the stand-in's alone: it tells a stand-in phone the link. */
@@ -120,6 +180,8 @@ export interface AccessControlOptions {
 	computerName?: () => string;
 	/** Starts the access host (`startAccessHost`; a test's stand-in). */
 	start?: (options: AccessHostOptions) => Promise<Host>;
+	/** Tries a relay when it is saved (`tryRelay`). */
+	tryRelay?: (relay: RelayServer) => Promise<RelayTry>;
 }
 
 export interface AccessControl {
@@ -143,6 +205,23 @@ const NO_KEYCHAIN = `This ${COMPUTER}'s keychain cannot be used here, and browse
 const NO_ADDRESS = "Browser access needs the address of the service a browser opens: write the address of your own deployment of pine's web client.";
 const REPLACED = `Another copy of Pine with this ${COMPUTER}'s key waits at the service now, so this one stopped. Turn browser access off and on again to wait here.`;
 
+/** What a try of the relay found, said under its field. Nothing here repeats the user name or the password. */
+const TRIED: Record<RelayTry | "trying", { result: "trying" | "usable" | "failed"; message: string }> = {
+	trying: { result: "trying", message: "Trying the relay..." },
+	usable: { result: "usable", message: `This relay works: it gave this ${COMPUTER} an address.` },
+	refused: { result: "failed", message: "Could not use this relay: it refused the user name or password. It is kept; check them and save again." },
+	silent: { result: "failed", message: "Could not use this relay: it did not answer. It is kept and used when it answers; check the address and that the server is running." },
+	unknown: { result: "failed", message: "Could not use this relay: its name was not found. It is kept; check the address." },
+	unavailable: { result: "failed", message: "Could not try this relay: browser access cannot connect on this system." },
+};
+
+/** The relay of the preferences as the host is handed it, without its password. */
+const relayOf = (prefs: AccessPrefs): Omit<RelayServer, "password"> | undefined => {
+	if (!prefs.relay) return undefined;
+	const { hostname, port, transport } = relayAddress(prefs.relay.address);
+	return { hostname, port, transport, username: prefs.relay.username };
+};
+
 export function createAccessControl(options: AccessControlOptions): AccessControl {
 	const official = options.official ?? OFFICIAL_SERVICE;
 	const file = path.join(options.folder, ACCESS_FILE.sealed);
@@ -152,6 +231,9 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	let pairing: Pairing | undefined;
 	let asking: { request: PairingRequest; resolve: (yes: boolean) => void } | undefined;
 	let failure: AccessProblem | undefined;
+	/** What the last try of the relay found, and how many were started (the last one's result is the one shown). */
+	let check: AccessRelay["check"];
+	let tries = 0;
 	let expiry: ReturnType<typeof setTimeout> | undefined;
 	/** Starting and stopping the host, one after the other. */
 	let queue: Promise<unknown> = Promise.resolve();
@@ -194,11 +276,15 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	async function state(): Promise<AccessState> {
 		const prefs = options.prefs.read();
 		let devices: Device[] = [];
+		let password = false;
 		try {
-			devices = host ? host.store.devices() : ((await kept())?.devices() ?? []);
+			const store = host ? host.store : await kept();
+			devices = store?.devices() ?? [];
+			password = Boolean(store?.relayPassword());
 		} catch {
 			// a file that cannot be read shows no devices; starting the host says why
 		}
+		const relay: AccessRelay | undefined = prefs.relay && { address: prefs.relay.address, username: prefs.relay.username, password, ...(check ? { check: { ...check } } : {}) };
 		const live = new Map((host?.connected() ?? []).map((c) => [c.id, c.path]));
 		const status = host?.status();
 		const problem = blocked(prefs) ?? (status === "replaced" ? { kind: "replaced" as const, message: REPLACED } : failure);
@@ -212,7 +298,42 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 			...(opened ? { pairing: { link: opened.link, expires: opened.expires.toISOString() } } : {}),
 			...(asking ? { request: { ...asking.request } } : {}),
 			...(problem ? { problem } : {}),
+			...(relay ? { relay } : {}),
 		};
+	}
+
+	/**
+	 * Keeps the relay's password in the sealed file, or forgets it: while no host runs, so that the
+	 * host's own copy of the file is not written over. A file is made for it if there is none.
+	 */
+	async function keepPassword(password: string | undefined): Promise<void> {
+		const cipher = options.cipher();
+		if (!cipher) throw new Error(NO_KEYCHAIN);
+		if (!password && !(await kept())) return;
+		const store = await AccessStore.open(fileVault(file, cipher));
+		await store.setRelayPassword(password);
+	}
+
+	/** Tries the relay of the preferences, and says the result in the state. A newer save makes an older try's result moot. */
+	async function tryKept(prefs: AccessPrefs): Promise<void> {
+		const mine = ++tries;
+		const server = relayOf(prefs);
+		if (!server) {
+			check = undefined;
+			return emit();
+		}
+		check = TRIED.trying;
+		emit();
+		let found: RelayTry;
+		try {
+			const password = (await kept())?.relayPassword() ?? "";
+			found = await (options.tryRelay ?? tryRelay)({ ...server, password });
+		} catch {
+			found = "unavailable";
+		}
+		if (mine !== tries) return;
+		check = TRIED[found] ?? TRIED.unavailable;
+		emit();
 	}
 
 	/** The owner is asked about a device: the question stands until answered or withdrawn. */
@@ -239,6 +360,7 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 			host = await startHost({
 				service: serviceOf(prefs),
 				vault: fileVault(file, options.cipher()!),
+				relay: relayOf(prefs),
 				daemon: options.daemon,
 				admit: ({ store, service, cut }) =>
 					(pairing = createPairing({
@@ -283,16 +405,43 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 				if (problem) throw new Error(problem.message);
 			}
 			const moved = serviceOf(prefs) !== serviceOf(options.prefs.read());
+			// The relay: checked before anything is written. An empty address removes it, and its password with it.
+			let password: { keep: true } | { set: string | undefined } = { keep: true };
+			if (change.relay !== undefined) {
+				const address = String(change.relay.address ?? "").trim();
+				if (address) {
+					prefs.relay = { address: relayAddress(address).address, username: relayUser(change.relay.username) };
+					const given = typeof change.relay.password === "string" ? change.relay.password.slice(0, CREDENTIAL_LENGTH) : "";
+					if (given) password = { set: given };
+				} else {
+					delete prefs.relay;
+					password = { set: undefined };
+				}
+				if (!options.cipher()) throw new Error(NO_KEYCHAIN);
+			}
 			// Set every time it is asked: the owner may have taken the item out in the system's settings.
 			if (typeof change.openAtLogin === "boolean") {
 				options.loginItem(change.openAtLogin);
 				prefs.openAtLogin = change.openAtLogin;
 			}
-			options.prefs.write(prefs);
 			await serial(async () => {
+				// A new relay means a new host, with the new servers; the devices stay as they are.
+				if (change.relay !== undefined) {
+					if (host) await down();
+					try {
+						if ("set" in password) await keepPassword(password.set);
+					} catch (e) {
+						// Nothing was changed: the host comes back as it was.
+						await up(options.prefs.read());
+						throw new Error(`The relay's password could not be kept, so nothing was changed: ${e instanceof Error && e.message === NO_KEYCHAIN ? NO_KEYCHAIN : "its file could not be written. Try again."}`);
+					}
+				}
+				options.prefs.write(prefs);
 				if (host && (!prefs.enabled || moved)) await down();
 				await up(prefs);
 			});
+			// Not waited for: a relay that is down for a moment is kept all the same, and the try says so.
+			if (change.relay !== undefined) void tryKept(prefs);
 			emit();
 			return state();
 		},
