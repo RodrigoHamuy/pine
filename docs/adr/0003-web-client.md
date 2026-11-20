@@ -87,20 +87,20 @@ fails when a deployed configuration sets it.
 
 ## Amended by ADR 0004
 
-Browser access adds a second kind of machine, a Mac paired with the Pine app, reached peer to
+Browser access adds a second kind of machine, a computer paired with the Pine app, reached peer to
 peer. Two sentences above no longer hold as written:
 
 - **"A host key is trusted only as the owner confirmed it."** There is now a second way: a
   pairing link (`#pair=<machine id>.<code>`, in the fragment, which no server sees) names the
-  fingerprint of the Mac's host key, which the owner scanned at the Mac. It is accepted once, for
+  fingerprint of that computer's host key, which the owner scanned at that computer. It is accepted once, for
   the machine that link names alone, and never over a key kept for it already. Machines added as
   `user@host` keep the owner's confirmation, and a changed key is refused for both.
 - **"The relay carries SSH and nothing else."** The same Worker carries SSH for the relay, which
   a configuration switches off (`RELAY`; off on the official service), and, for the meeting
   service, small opaque messages that set up a direct connection (at most 64 of 16 KiB each, for
-  30 seconds). It keeps no storage and logs nothing: a Durable Object per Mac holds that
+  30 seconds). It keeps no storage and logs nothing: a Durable Object per paired computer holds that
   meeting's open sockets and nothing else. The conversation never passes through it.
 
 The daemon is still reached through a direct-tcpip channel to a loopback and nowhere else; for
-a paired Mac that channel is opened by the Pine app's access server, which answers the remote
+a paired computer that channel is opened by the Pine app's access server, which answers the remote
 command itself. The bridge, the page in its iframe and the policies are unchanged.
