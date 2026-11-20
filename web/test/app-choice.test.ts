@@ -5,6 +5,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { ServiceState } from "../../desktop/src/bridge.ts";
+import { readPairLink } from "../../desktop/src/machines.ts";
 import { appAddress, chooseApp, onIosDevice, type ChoiceView } from "../src/app-choice.ts";
 import { frameBridge } from "../src/frame-bridge.ts";
 import { webBridge, type Store } from "../src/host.ts";
@@ -105,8 +106,13 @@ test("the app's address carries the service's origin, the machine id and the cod
 	assert.equal(u.searchParams.get("id"), ID);
 	assert.match(u.searchParams.get("code")!, /^[A-Za-z0-9_-]{22}$/);
 	assert.equal(u.searchParams.get("code"), CODE);
+	// The page's own parser, which the apps' parsers replay (mobile/cases/pair-links.json), reads the
+	// same three: the web client and the apps cannot drift on this string.
+	assert.deepEqual(readPairLink(address), { service: "https://pine.example.workers.dev", id: ID, code: CODE });
 	// A deployment of the owner's own, on a port of its own.
-	assert.equal(new URL(appAddress("https://pine.mine.example:8443/", LINK)).searchParams.get("service"), "https://pine.mine.example:8443");
+	const own = appAddress("https://pine.mine.example:8443/", LINK);
+	assert.equal(new URL(own).searchParams.get("service"), "https://pine.mine.example:8443");
+	assert.deepEqual(readPairLink(own), { service: "https://pine.mine.example:8443", id: ID, code: CODE });
 });
 
 test("on an iPhone the code is not used before the owner chose: no session to the computer, its pairing still open", async () => {

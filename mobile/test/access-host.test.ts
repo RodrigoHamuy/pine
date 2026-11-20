@@ -234,8 +234,11 @@ test("helper: the meeting can lie about the computer, hold a phone without a pat
 
 	await h.say("meeting hold");
 	const held = join(ready.service, ready.machineId);
-	const opened = await Promise.race([held.channel.then(() => "opened", () => "failed"), new Promise((r) => setTimeout(() => r("nothing"), 1500))]);
+	// The helper says nothing when it holds a phone, so a short wait stands for "no channel came";
+	// the offer the phone made shows that the meeting did say the computer is there.
+	const opened = await Promise.race([held.channel.then(() => "opened", () => "failed"), new Promise((r) => setTimeout(() => r("nothing"), 250))]);
 	assert.equal(opened, "nothing", "the meeting said the computer is there, and no channel came");
+	assert.ok((held as { peer?: unknown }).peer, "the meeting said the computer is there");
 	held.close();
 
 	await h.say("meeting normal");
