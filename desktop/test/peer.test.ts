@@ -8,14 +8,26 @@ import type { Duplex } from "node:stream";
 import { test } from "node:test";
 import { answer, offer, pathOf, type Peer, type Signal } from "../electron/access/peer.ts";
 
-/** Two peers whose signals go to each other as JSON, as they would cross the meeting service. */
-function pair(): { mac: Peer; browser: Peer } {
+/** Whether a candidate's address is one of the same network (`pathOf` says "lan" for it with itself). */
+const nearbyCandidate = (d: Signal) => {
+	if (!("ice" in d)) return true;
+	const address = d.ice.candidate.replace(/^a=/, "").split(" ")[4] ?? "";
+	return pathOf(address, address) === "lan";
+};
+
+/**
+ * Two peers whose signals go to each other as JSON, as they would cross the meeting service. With
+ * `nearby`, only candidates of the same network cross: on a Mac with a VPN interface (Tailscale's
+ * 100.64.0.0/10, a tunnel and not the same network) the library may otherwise pick that one.
+ */
+function pair({ nearby = false } = {}): { mac: Peer; browser: Peer } {
 	let mac: Peer | undefined;
 	let browser: Peer | undefined;
 	const early: Signal[] = [];
 	const cross = (d: Signal) => JSON.parse(JSON.stringify(d)) as Signal;
-	browser = offer({ ice: [], send: (d) => (mac ? mac.signal(cross(d)) : early.push(cross(d))) });
-	mac = answer({ ice: [], send: (d) => browser.signal(cross(d)) });
+	const passes = (d: Signal) => !nearby || nearbyCandidate(d);
+	browser = offer({ ice: [], send: (d) => passes(d) && (mac ? mac.signal(cross(d)) : early.push(cross(d))) });
+	mac = answer({ ice: [], send: (d) => passes(d) && browser.signal(cross(d)) });
 	for (const d of early.splice(0)) mac.signal(d);
 	return { mac, browser };
 }
@@ -135,7 +147,7 @@ test("ending the stream closes the connection on both sides", async () => {
 });
 
 test("the path a connection took can be read from the peer: on this computer, the same network", async () => {
-	const { mac, browser } = pair();
+	const { mac, browser } = pair({ nearby: true });
 	try {
 		assert.equal(mac.path(), undefined);
 		await Promise.all([mac.channel, browser.channel]);
@@ -154,6 +166,8 @@ test("a path is named from the addresses of the pair the connection chose", () =
 	assert.equal(pathOf("203.0.113.7", "192.168.1.10"), "ipv4");
 	assert.equal(pathOf("2001:db8::7", "2001:db8:1::9"), "ipv6");
 	assert.equal(pathOf("::ffff:198.51.100.1", "10.0.0.2"), "ipv4");
+	// A VPN's shared address space (Tailscale's) is a tunnel, not the same network.
+	assert.equal(pathOf("100.113.99.2", "100.101.5.7"), "ipv4");
 });
 
 test("a process whose connections all closed ends by itself: nothing is left holding it", async () => {
