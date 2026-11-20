@@ -627,6 +627,8 @@ test("without a sandbox, a command that names pine's own files, program or contr
 
 	// pine's home, however it is written: in full, from the owner's home, or from where the shell starts.
 	for (const c of [`cat ${home}/.env`, "cat ~/.pine/pine.json", `ls "$HOME/.pine/data"`, `grep -r token ${home}`, "ls ..", "cat ../agent.json", "cd ../.. && ls", `cp ${home}/data/http-token /tmp/t`]) no(c, /is part of pine itself, which is closed to every agent in every mode/);
+	// Windows does not tell paths apart by case: neither does the check.
+	if (process.platform === "win32") no(`cat ${home.toUpperCase()}/.env`, /is part of pine itself, which is closed to every agent in every mode/);
 	// The agent's own folders in it are its own, and a path with ".." after a cd is somewhere else.
 	for (const c of ["cat notes.txt", `ls ${workspace}/sub`, `echo x | tee ${home}/sandbox/main/tmp.txt`, "cd /somewhere/else && cat ../x", "ls ~ && ls ~/dev"]) yes(c);
 

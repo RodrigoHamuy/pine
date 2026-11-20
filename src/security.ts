@@ -15,7 +15,8 @@ export function realish(p: string): string {
 	const rest: string[] = [];
 	for (;;) {
 		try {
-			return path.join(fs.realpathSync(cur), ...rest.reverse());
+			// (On Windows the system's own resolution, which also turns a short name like RUNNER~1 into the long one.)
+			return path.join(process.platform === "win32" ? fs.realpathSync.native(cur) : fs.realpathSync(cur), ...rest.reverse());
 		} catch {
 			const parent = path.dirname(cur);
 			if (parent === cur) return path.resolve(p);
@@ -25,7 +26,14 @@ export function realish(p: string): string {
 	}
 }
 
-export const isInside = (root: string, p: string) => p === root || p.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
+export const isInside = (root: string, p: string) => {
+	// Windows: a path is the same whatever its case and its separators (C:\\Users\\Me, c:/users/me).
+	if (process.platform === "win32") {
+		const [r, q] = [path.resolve(root).toLowerCase(), path.resolve(p).toLowerCase()];
+		return q === r || q.startsWith(r.endsWith(path.sep) ? r : r + path.sep);
+	}
+	return p === root || p.startsWith(root.endsWith(path.sep) ? root : root + path.sep);
+};
 
 /** Files that steer an agent or the daemon. A run that has seen outside content must not change them. */
 const INSTRUCTION_FILES = ["AGENTS.md", "AGENTS.override.md", "CLAUDE.md", "SYSTEM.md"];

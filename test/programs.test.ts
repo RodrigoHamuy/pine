@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { after, test } from "node:test";
-import { elapsed, grouped } from "../src/programs.ts";
+import { elapsed, grouped, msysRows, windowsGroups } from "../src/programs.ts";
 import { sandboxAvailable } from "../src/security.ts";
 import { PineTui } from "../src/tui/app.ts";
 import { Client } from "../src/tui/client.ts";
@@ -40,6 +40,27 @@ test("programs: on Windows a program belongs to the shell it descends from, also
 	const rows = grouped([row(20, 10, 100), row(21, 20, 90), row(30, 1, 50), row(31, 30, 40), row(60, 1, 5), row(50, 60, 30), row(70, 1, 1000)], new Set([10, 30, 60]));
 	const groups = Object.fromEntries(rows.map((r) => [r.pid, r.group]));
 	assert.deepEqual(groups, { 20: 10, 21: 10, 30: 30, 31: 30, 60: 60, 50: 0, 70: 0 });
+});
+
+test("programs: on Windows a command's programs are its group among Git's processes, and what they started outside them", () => {
+	// Git's ps: the shell 2803 (Windows 9060) led group 2803 and has gone; its sleep is still in it; 4000 is another group.
+	const ps = ["      PID    PPID    PGID     WINPID   TTY         UID    STIME COMMAND", "     2810       1    2803      7100  ?         197121 02:43:01 /usr/bin/sleep", "I    4000       1    4000      7200  pty0      197121   Nov 19 /usr/bin/bash", "     2811       1    2803      7300  ?         197121 02:43:02 /c/Program Files/nodejs/node"].join("\n");
+	const msys = msysRows(ps);
+	assert.deepEqual(msys, [{ pid: 2810, pgid: 2803, win: 7100 }, { pid: 4000, pgid: 4000, win: 7200 }, { pid: 2811, pgid: 2803, win: 7300 }]);
+	// CIM: the same processes by their Windows ids, and one that node started (7400), and one of nobody's (7500).
+	const row = (pid: number, parent: number, seconds: number, command: string) => ({ pid, parent, seconds, command, group: 0 });
+	const cim = [row(7100, 9060, 30, "sleep 301"), row(7200, 1, 9000, "bash"), row(7300, 9060, 30, "node -e server"), row(7400, 7300, 20, "node worker"), row(7500, 1, 5, "other")];
+	// The group was noted by the shell's own number: the shell has gone, and what it left is found, with what that started.
+	const left = windowsGroups(msys, cim, new Set([2803]));
+	assert.deepEqual(left.map((r) => [r.pid, r.group]).sort(), [[7100, 2803], [7300, 2803], [7400, 2803]]);
+	assert.equal(left.find((r) => r.pid === 7300)!.command, "node -e server", "named by CIM's command line");
+	assert.deepEqual(windowsGroups(msys, cim, new Set([4100])), [], "a group nobody is in");
+	// While the shell is there, the group is found, the shell by its noted number, the rest by Windows' ids.
+	const live = windowsGroups([...msys, { pid: 2803, pgid: 2803, win: 9060 }], [...cim, row(9060, 1, 31, "bash -c server")], new Set([2803]));
+	assert.deepEqual(live.map((r) => [r.pid, r.group]).sort(), [[2803, 2803], [7100, 2803], [7300, 2803], [7400, 2803]]);
+	// A background command's shell is noted by its Windows id, which the daemon got when it started it.
+	const job = windowsGroups([...msys, { pid: 2803, pgid: 2803, win: 9060 }], [...cim, row(9060, 1, 31, "bash -c WATCH")], new Set([9060]));
+	assert.deepEqual(job.map((r) => [r.pid, r.group]).sort(), [[7100, 9060], [7300, 9060], [7400, 9060], [9060, 9060]]);
 });
 
 test("programs: what a command leaves running is listed for its conversation, the agent is told, and the owner or the agent stops it", everywhere, async (t) => {

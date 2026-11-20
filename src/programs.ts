@@ -8,10 +8,11 @@
 // Then the daemon starts it itself, in the sandbox of its conversation, keeps a record of it in
 // pine's home and sees it end, so that its conversation can be told how. See `start`.
 //
-// Windows has no process groups. There a command's shell notes its own process id, and a
-// program belongs to it when following each process's parent leads to that id: a process whose
-// parent has gone still names it. A parent that started after its child is another process that
-// got the same number, and the chain ends there. A stop ends each such tree (taskkill /T).
+// Windows has no process groups, but Git's bash, which runs an agent's commands there, keeps
+// POSIX ones among its own processes, and its ps says them with each one's Windows process id. So
+// a command's shell notes its group as on the other systems; its members are found with Git's ps,
+// what they started outside Git's programs by following Windows' parent ids, and CIM says each
+// one's command line and age. A stop ends each member's tree (taskkill /T).
 import { execFileSync, spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -130,8 +131,8 @@ const forShell = (p: string) => (WINDOWS ? p.replace(/\\/g, "/") : p);
 
 const powershell = () => path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 
-/** Windows: every process with its parent, through CIM, which the system answers without a program of pine's. */
-function windowsProcesses(ids: Set<number>): Row[] {
+/** Windows: every process with its parent, its age and its command line, through CIM, which the system answers without a program of pine's. */
+function cimProcesses(): Row[] {
 	let out = "";
 	try {
 		// Double quotes in PowerShell, where `t is a tab.
@@ -145,7 +146,73 @@ function windowsProcesses(ids: Set<number>): Row[] {
 		const [pid, parent, seconds, ...command] = line.split("\t");
 		if (/^\d+$/.test(pid ?? "")) rows.push({ pid: Number(pid), parent: Number(parent), seconds: Number(seconds) || 0, command: command.join("\t").trim(), group: 0 });
 	}
-	return grouped(rows, ids);
+	return rows;
+}
+
+/** One process as Git's ps on Windows says it: its own number, its group, and Windows' process id. */
+export interface MsysRow {
+	pid: number;
+	pgid: number;
+	win: number;
+}
+
+/** Git's ps ("PID PPID PGID WINPID TTY UID STIME COMMAND", a letter for its state in front). */
+export function msysRows(text: string): MsysRow[] {
+	const rows: MsysRow[] = [];
+	for (const line of text.split(/\r?\n/)) {
+		const m = /^\s*(?:[A-Za-z]\s+)?(\d+)\s+(\d+)\s+(\d+)\s+(\d+)\s/.exec(line);
+		if (m) rows.push({ pid: Number(m[1]), pgid: Number(m[3]), win: Number(m[4]) });
+	}
+	return rows;
+}
+
+/**
+ * Windows: the processes of the noted groups. `ids` are what was noted: the group of a command's
+ * shell (Git's number for it), or the Windows process id of a background command's shell, which
+ * the daemon started itself. A row's group is the id it was noted by; the shell that leads a group
+ * has that id as its number, so that "is the leader still there" reads as on the other systems.
+ */
+export function windowsGroups(msys: MsysRow[], cim: Row[], ids: Set<number>): Row[] {
+	const byWin = new Map(cim.map((r) => [r.pid, r]));
+	// Which of Git's groups each noted id stands for.
+	const noted = new Map<number, number>();
+	for (const id of ids) {
+		// A group by Git's number goes on after its shell has gone; one noted by a Windows id is found by its shell.
+		if (msys.some((m) => m.pgid === id)) noted.set(id, id);
+		else {
+			const shell = msys.find((m) => m.win === id && m.pid === m.pgid);
+			if (shell) noted.set(shell.pgid, id);
+		}
+	}
+	const rows: Row[] = [];
+	const member = new Map<number, number>();
+	for (const m of msys) {
+		const id = noted.get(m.pgid);
+		if (id === undefined) continue;
+		const c = byWin.get(m.win);
+		member.set(m.win, id);
+		rows.push({ pid: m.pid === m.pgid ? id : m.win, group: id, seconds: c?.seconds ?? 0, command: c?.command ?? "", parent: c?.parent });
+	}
+	// What a member started that is not one of Git's programs (node, python) is found by its parents.
+	const extra = grouped(
+		cim.filter((c) => !member.has(c.pid)).map((c) => ({ ...c, group: 0 })),
+		new Set(member.keys()),
+	);
+	for (const c of extra) if (c.group && member.has(c.group)) rows.push({ ...c, group: member.get(c.group)! });
+	return rows;
+}
+
+/** Windows: the processes of the noted groups, from Git's ps and CIM. Empty when either cannot be asked. */
+function windowsProcesses(ids: Set<number>): Row[] {
+	let text = "";
+	try {
+		text = execFileSync(bin("ps"), ["-a"], { encoding: "utf8", timeout: 10_000, maxBuffer: 16 * 1024 * 1024, stdio: ["ignore", "pipe", "ignore"], windowsHide: true });
+	} catch {
+		return [];
+	}
+	const cim = cimProcesses();
+	if (!cim.length) return [];
+	return windowsGroups(msysRows(text), cim, ids);
 }
 
 /** Give each row the nearest of `ids` it descends from. A parent younger than its child is not its parent. */
@@ -433,8 +500,8 @@ export class Programs {
 	 * shell notes its own process group. It runs with the daemon's rights, so it is fixed text.
 	 */
 	note(conversation: string): string {
-		// Windows: the shell's own number is the system's process id, which Git's bash keeps under /proc.
-		return WINDOWS ? `cat /proc/$$/winpid >> ${shq(forShell(this.file(conversation)))}; ` : `echo "$$" >> ${shq(this.file(conversation))}; `;
+		// (On Windows Git's bash's own number, which leads its group of Git's processes.)
+		return `echo "$$" >> ${shq(forShell(this.file(conversation)))}; `;
 	}
 
 	private groups(conversation: string): number[] {

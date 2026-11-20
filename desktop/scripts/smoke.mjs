@@ -174,8 +174,14 @@ try {
 	child.kill("SIGTERM");
 	await new Promise((r) => child.once("close", r));
 	await mock.close?.();
-	fs.rmSync(home, { recursive: true, force: true });
-	fs.rmSync(away, { recursive: true, force: true });
+	// (Windows keeps the files of a program that just ended locked for a moment: tried again, and a folder it still holds is left.)
+	for (const dir of [home, away]) {
+		try {
+			fs.rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 300 });
+		} catch (e) {
+			console.log(`left ${dir} (${e.code})`);
+		}
+	}
 }
 if (failed) {
 	console.error(`failed: ${failed.message}`);
