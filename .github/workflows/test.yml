@@ -110,6 +110,9 @@ jobs:
       - run: npm ci
       - run: npm ci
         working-directory: desktop
+      # The app runs pine on the owner's Node, found by the login shell's PATH: on a runner that is an
+      # older one than the job's. PINE_NODE names the job's.
+      - run: echo "PINE_NODE=$(command -v node)" >> "$GITHUB_ENV"
       - run: npm run check
         working-directory: desktop
       - name: The app's tests
