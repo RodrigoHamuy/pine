@@ -296,9 +296,10 @@ test("after outside content an agent keeps its own memory and instructions, and 
 					{ name: "write", args: { path: "MEMORY.md", content: "LEARNED\n" } },
 					{ name: "write", args: { path: ".pi/extensions/x.ts", content: "EVIL" } },
 					{ name: "write", args: { path: "sub/CLAUDE.md", content: "EVIL" } },
-					{ name: "bash", args: { command: "echo MORE | tee -a MEMORY.md; echo EVIL | tee CLAUDE.md; echo fine | tee notes.md" } },
 				],
 			},
+			// A step of its own: the calls of one step run side by side, and this one appends to what a write above puts there.
+			{ tools: [{ name: "bash", args: { command: "echo MORE | tee -a MEMORY.md; echo EVIL | tee CLAUDE.md; echo fine | tee notes.md" } }] },
 		]),
 		...owner,
 	});
