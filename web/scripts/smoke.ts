@@ -226,7 +226,7 @@ try {
 		assert.equal(await frame.getByPlaceholder("you@server").count(), 0);
 		assert.equal(await frame.locator("[data-slot=device-key]").count(), 0);
 		assert.equal(await frame.locator("[data-slot=back-to-pairing]").count(), 0);
-		assert.equal(await frame.locator("[data-slot=meeting-line]").innerText(), `Found through 127.0.0.1:${relayPort}, then connected directly.`);
+		assert.equal(await frame.locator("[data-slot=meeting-line]").innerText(), `Found through 127.0.0.1:${relayPort}. The connection is then made between the two devices, directly or through a relay server the computer's owner named.`);
 	});
 
 	await check("the link to SSH shows the SSH view, and its back control returns to pairing", async () => {
