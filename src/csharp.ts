@@ -67,7 +67,7 @@ export function buildCsharp(source: string, prefix: string, what: string, refs: 
 	const about = `${file}.${process.pid}.about.cs`;
 	try {
 		fs.writeFileSync(about, aboutSource(source));
-		execFileSync(compiler, ["/nologo", "/optimize+", "/platform:anycpu", ...refs.map((r) => `/reference:${r}`), `/out:${tmp}`, source, about], { stdio: ["ignore", "pipe", "pipe"], timeout: 120_000, windowsHide: true });
+		execFileSync(compiler, ["/nologo", "/optimize+", "/platform:anycpu", ...refs.map((r) => `/reference:${r}`), `/out:${tmp}`, about, source], { stdio: ["ignore", "pipe", "pipe"], timeout: 120_000, windowsHide: true });
 		// Whole or not at all: another conversation may be starting the same program at this moment.
 		fs.renameSync(tmp, file);
 	} catch (e) {

@@ -31,6 +31,7 @@
 import { build as packApp } from "electron-builder";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -248,6 +249,23 @@ const PACKAGES = { darwin: ["dmg"], linux: ["AppImage", "deb"], win32: ["nsis"] 
 // From a folder packed before, only the packages: the app itself is that folder.
 const targets = prepackaged ? PACKAGES : dist ? [...PACKAGES, "dir"] : ["dir"];
 const forArch = (list) => list.map((target) => ({ target, arch: [arch] }));
+/**
+ * Pine.exe says the release's version as the installer and pine's helpers do ("0.41.0"): the
+ * packer writes its product version through resedit, which always makes it "0.41.0.0". A release's
+ * code signing checks that every file it signs says the same version (desktop/signpath/).
+ */
+function sayVersion(exe) {
+	const { NtExecutable, NtExecutableResource, Resource } = createRequire(import.meta.url)("resedit");
+	const executable = NtExecutable.from(fs.readFileSync(exe));
+	const res = NtExecutableResource.from(executable);
+	const [info] = Resource.VersionInfo.fromEntries(res.entries);
+	if (!info) throw new Error(`${exe} has no version information`);
+	for (const lang of info.getAllLanguagesForStringValues()) info.setStringValues(lang, { ProductVersion: pineVersion });
+	info.outputToResourceEntries(res.entries);
+	res.outputResource(executable);
+	fs.writeFileSync(exe, Buffer.from(executable.generate()));
+}
+
 /** Where the packer put the app's folder (afterPack says it); with --prepackaged, that folder. */
 let appOutDir = prepackaged;
 
@@ -261,10 +279,8 @@ const made = await packApp({
 		copyright: "pine contributors",
 		directories: { output: path.relative(root, out), buildResources: "assets" },
 		// The app has the version of the pine it carries: they are made and handed out together.
-		// (A Linux package names where it comes from.) On Windows Pine.exe says the version as the
-		// installer does ("0.41.0", not the packer's "0.41.0.0"): the release's code signing checks
-		// that each file it signs says the release's version (desktop/signpath/).
-		extraMetadata: { version: pineVersion, homepage: "https://github.com/pmndre/pine", ...(system === "win32" ? { shortVersionWindows: pineVersion.split("-")[0] } : {}) },
+		// (A Linux package names where it comes from.)
+		extraMetadata: { version: pineVersion, homepage: "https://github.com/pmndre/pine" },
 		// Everything the app runs is in the two built folders: the page and the main process are bundles.
 		// The one exception is node-pty, the terminal's pseudo-terminal (a dependency of the app's,
 		// which the packer adds by itself): native, so it lies outside the archive.
@@ -295,6 +311,7 @@ const made = await packApp({
 		},
 		// After the app is signed and before a disk image is made of it: the image then holds the app with its ticket.
 		afterSign: async (context) => {
+			if (context.electronPlatformName === "win32") return sayVersion(path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`));
 			if (!notariseHere || context.electronPlatformName !== "darwin") return;
 			await notarise(path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`));
 		},
