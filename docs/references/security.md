@@ -284,7 +284,9 @@ pine puts the question to you itself. It arrives like any approval, under the na
 A yes is the grant `request_access` gives: it holds for that conversation and its sub-agents
 until the conversation is reset or pine restarts. A no is kept for the conversation too: pine
 does not ask for the same thing again there. The agent can still call `request_access` itself,
-with a reason.
+with a reason. To turn this question off, set `security.askAccess` to `false` in `pine.json`
+([configuration.md](configuration.md)): you are then asked only when the agent calls
+`request_access`.
 
 What is never asked: pine's home, pine's code and other agents' workspaces. No answer of yours
 opens them, so the agent is told that they are closed and not to look for another way. What a

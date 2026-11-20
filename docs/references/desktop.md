@@ -300,6 +300,59 @@ What is this computer's stays this computer's. With another machine's pine:
 | The browser | The Browser aside shows the browser on that machine; an address you type there (`localhost:3000`) is one of that machine |
 | Settings > App | About the app and this computer's pine (home folder, Keep pine running, the browser build). It says which machine's pine is in use |
 
+## Browser access: a browser with no SSH to set up
+
+Browser access lets a phone, a tablet or another computer use this Mac's pine from its web
+browser, with no SSH to set up: you scan a QR code on the Mac with the phone's camera, press
+Allow on the Mac, and the phone is in your conversations. From then on that browser opens the
+web client's address and connects by itself. The browser and the Mac talk directly, peer to
+peer; the service in between only introduces them. What the browser side looks like is in
+[web.md](web.md#a-mac-paired-by-qr-code-a-browser-with-no-ssh-to-set-up), and why it is built so in
+[ADR 0004](../adr/0004-browser-access.md).
+
+### From a phone without SSH
+
+The mobile app needs SSH to a machine ([mobile.md](mobile.md)). To use this Mac's pine from a
+phone with no SSH at all, pair the phone's browser here.
+
+### Pairing a device
+
+It is in Settings > Browser access, shown only while the app uses this Mac's own pine. Until you
+switch it on, the app contacts no service and lets nobody in.
+
+| What | How |
+|---|---|
+| `Browser access` | The switch. On, the app waits at the service for the browsers you paired, while Pine is open. Switched back, it contacts no service and accepts nobody; your devices are kept, so switching it on again needs no new scan. The badge beside it says waiting, off, or that the service cannot be reached (the app then tries again by itself, and nothing else stops) |
+| `Open Pine at login` | Offered, checked, when you switch browser access on, and changed here later: so that this Mac can be reached after a restart with no need to open the app. The Mac has to be awake and Pine open |
+| `Service address` | Where browsers open the web client and find this Mac. By default the project's own service, `https://pine.drcmda.workers.dev`. Write the address of a deployment of your own instead (see "Deploying it" in [web.md](web.md#deploying-it)). Only `https://` and `http://` addresses are kept. Changing it makes the browsers paired at the old address pair again: a browser's key and its machines belong to the address it opened |
+| `Add a device` | Shows a QR code, and Copy link for a computer that has no camera (send yourself the link and open it in that browser). The code works once, for two minutes, and stops when you close the dialog; New code makes another. Five wrong codes close it. Only one is open at a time, and only at the Mac: nobody pairs a browser from afar |
+| `Allow` and `Refuse` | When a browser uses the code, the Mac names it ("Chrome on Android") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
+| `Devices` | Each paired browser by its name, the day it was paired and its last connection; "connected now" and how (same network, direct IPv4, direct IPv6) while it is connected. No notification for a reconnection |
+| `Remove` | Removes a paired phone, tablet or computer: it can no longer reach this Mac, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
+
+### What a paired browser can do
+
+| | |
+|---|---|
+| This Mac's pine | Its conversations, tabs, settings and theme, as in the window. The app's own daemon serves it, started if needed, also while the window uses another machine's pine. A browser that leaves ends nothing: work started from the phone goes on when the phone is locked |
+| Nothing else | No shell, no file transfer, no other command, no way to another port or machine: the Mac's SSH access to other machines is not the browser's |
+| Pictures, video and sound | As in the window |
+| The Mac's identity | The QR code carries the fingerprint of this Mac's key: the browser refuses any Mac whose key differs, so there is no fingerprint to compare by hand. The key is kept encrypted by the keychain in the app's data folder (`access.bin`), so a copy of that folder does not carry this Mac's identity. Where the keychain cannot be used, the switch stays off and the section says why |
+
+What is kept: the switch, the service address and Open Pine at login in the app's
+`prefs.json` (`access`); this Mac's key and the paired devices in `access.bin` beside it. Nothing
+is written into pine's home.
+
+### When a paired device does not connect
+
+| It says | What to do |
+|---|---|
+| The phone says "Your Mac does not answer" | The Mac is asleep or shut down, Pine is closed, or the switch of browser access is not on. The phone keeps trying and connects when the Mac is back |
+| The phone says "no direct connection could be made from this network" | Some networks (often a phone's data) do not let two devices connect directly, and there is no relay in between. Try another Wi-Fi, or the phone's data instead of the Wi-Fi |
+| The phone says "This browser is no longer known to your Mac" | Its device was removed here, or the browser's data was cleared there. Add it again |
+| The section says the service cannot be reached | The Mac is offline, or the service address is wrong. Everything else in the app works |
+| A browser on a Mac asks about the local network | macOS may ask whether that browser may find devices on the local network. Allow it for a direct connection on the same Wi-Fi |
+
 ## The window
 
 ```
@@ -619,6 +672,7 @@ of pine's: the app is your own hand, like a `pine` command.
 | Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: each schedule said as When and Then (whom it wakes, with what task); New schedule opens a form in the same words: When (at set times, every so often, once at a time, once after a while), Then which agent (or every agent) and the task, then a name; remove. **Routes**: first when you need one at all (an agent that reacts to a source is subscribed to it, a time is a schedule); each route said as When and Then; New route opens a form in the same words: When (the topic, an optional condition, how often), Then one of wake an agent, set shared state, publish an event, ask a model once and publish its answer, with only that one's fields shown and sent; remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
 | Environments | This computer and the machines whose pine the app can use, over SSH: add one by its host, use one, forget one. See "Environments: the pine of another machine" | `ssh` to the machine and `pine` there |
+| Browser access | Devices paired by a QR code, and the switch that lets them in. Its section follows Environments | None: it is the app's own, not pine's |
 | App | The app's own settings (the theme, notifications, whether there is a newer app and whether that is asked at the start), and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this Mac, with Fetch it when it is not | `pine browser-install` |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
@@ -656,7 +710,8 @@ the agent to write. So:
 | A code block's Run button | Only your click types a block into your terminal, and only a block whose every character shows as itself: an answer cannot run anything by itself, nor hide a part of what it runs. What the agent hears back is that block's output, quoted, and nothing you typed |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
-| What the app itself asks the web | One thing: GitHub, for pine's last release (see "A newer version"). The question carries nothing about this Mac, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered |
+| Browser access | Off until you turn it on. Then the app's SSH server of its own (not the Mac's Remote Login) accepts only the keys you allowed at the Mac, by key and never by password, and gives them this Mac's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
+| What the app itself asks the web | GitHub, for pine's last release (see "A newer version"). The question carries nothing about this Mac, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: the Mac waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
 itself. What it knows, the daemon told it.
@@ -713,6 +768,15 @@ desktop/
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
     updates.ts     whether there is a newer app: GitHub asked for the last release, the link to its page
+    access/        browser access, without Electron (they run under plain Node in tests and in the
+                   web client's smoke): server.ts the access server (ssh2 on any duplex stream: the
+                   remote command answered with this Mac's service line, direct-tcpip to that loopback
+                   port, nothing else), store.ts this Mac's host key and the paired devices,
+                   pairing.ts the one-time code and the four digits, peer.ts the WebRTC data channel
+                   (node-datachannel), host.ts what waits at the meeting service and hands each
+                   channel to the server, control.ts the switch, the address and what the page reads
+                   (`OFFICIAL_SERVICE`), stand-in.ts a host without network for the app's tests
+                   (PINE_DESKTOP_ACCESS_STAND_IN)
   src/             the page (React)
     model.ts       what the page knows: tabs, what each conversation shows, the daemon's live events
     api.ts         the control API, typed
@@ -724,6 +788,8 @@ desktop/
     CodePanel.tsx  changes, files and the editor, output, what is running
     Browser.tsx    the agent's browser in its aside: its page as a picture, and what is done in it handed back
     Settings.tsx   the settings pages
+    BrowserAccess.tsx, machines.ts  Settings > Browser access (with its QR code, components/qr-code.tsx);
+                   how the page names a machine and draws a pairing on the first screen
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
     components/    only what stock components cannot express when composed in place (printed.tsx:
