@@ -21,6 +21,9 @@ interface Page {
 	fun connection(up: Boolean)
 }
 
+/** How long to wait before the attempt after the `n`th failed one to connect again: doubling from a second, at most half a minute (web/src/host.ts `backoff`). */
+fun backoff(n: Int): Long = minOf(1000L shl n.coerceIn(0, 5), 30_000L)
+
 /** How many machines the list holds at most, as on the desktop. */
 const val MAX_HOSTS = 20
 
@@ -36,8 +39,14 @@ class Pines(
 	private val page: Page,
 	private val retryMs: Long = 1_000,
 	private val batchMs: Long = 24,
+	/** How long to wait before the attempt after the `n`th failed one to reach a paired computer again. */
+	private val backoffMs: (Int) -> Long = ::backoff,
 ) : AutoCloseable {
 	private val lock = Object()
+	/** The pairing under way, if there is one. */
+	private var pairing: Pairing? = null
+	/** Paired computers whose last trouble only the owner can fix (the phone is no longer known there): not tried again by `check()`. */
+	private val stuck = mutableSetOf<String>()
 	private val held = mutableMapOf<String, HeldRemote>()
 	/** Host keys seen and not known yet, by machine: what the owner's yes may trust. */
 	private val unknown = mutableMapOf<String, HostKeyError>()
@@ -114,6 +123,62 @@ class Pines(
 		val entry = pairedEntries().optJSONObject(host)?.takeIf { host in hosts } ?: return null
 		val service = entry.optString("service").takeIf { httpsOrigin(it)?.first == it } ?: return null
 		return PairedComputer(id, service, entry.optString("name").ifEmpty { null })
+	}
+
+	/**
+	 * Pairs with the computer a pairing link names (either form `pairLink` reads), after the owner's
+	 * yes in the page, as the phone called `name` (`deviceName`). The page is told
+	 * `{status: "starting", pairing: {name}}`, then the same with `code` once the computer shows the
+	 * four digits. A yes keeps the computer (`addPaired`), makes it the machine in use and connects to
+	 * it; anything else is told as `{status: "error", kind: "ssh", message}` with no host, and nothing
+	 * is kept. A link that cannot be read, or a pairing under way already, is refused here.
+	 */
+	fun pair(link: String, name: String) {
+		val read = pairLink(link) ?: throw RemoteError("ssh", PairWords.NOT_A_LINK)
+		val mine = synchronized(lock) {
+			if (pairing != null) throw RemoteError("ssh", PairWords.BUSY)
+			if (closed) return
+			++round
+		}
+		show(mine, asking(name, null), null)
+		val started = remote.pair(read, name) { state -> paired(mine, read, name, state) }
+		val gone = synchronized(lock) {
+			if (round == mine && !closed && ended != mine) {
+				pairing = started
+				false
+			} else true
+		}
+		// Ended already, or something else was started meanwhile: nothing is kept open.
+		if (gone) started.cancel()
+	}
+
+	/** The round of the last pairing that came to its end. */
+	private var ended = 0
+
+	/** What the pairing `mine` reported. */
+	private fun paired(mine: Int, link: PairLink, name: String, state: PairingState) {
+		if (state is PairingState.Pairing) return show(mine, asking(name, state.code), null)
+		synchronized(lock) {
+			ended = mine
+			if (round != mine || closed) return
+			pairing = null
+		}
+		val words = PairWords.of(state) ?: run {
+			try {
+				addPaired(link.id, link.service, (state as PairingState.Allowed).name)
+			} catch (e: RemoteError) {
+				return show(mine, JSONObject().put("status", "error").put("kind", "ssh").put("message", e.message ?: ""), null)
+			}
+			shelf.set(USE, PAIRED + link.id)
+			return start(PAIRED + link.id)
+		}
+		show(mine, JSONObject().put("status", "error").put("kind", "ssh").put("message", words), null)
+	}
+
+	/** Ends the pairing under way, keeping nothing: the machine in use is shown again, as before it began. */
+	fun cancelPairing() {
+		if (synchronized(lock) { pairing } == null) return
+		start(use)
 	}
 
 	/** The names the owner sees for machines, by machine: those paired computers gave (`Prefs.names` of the page). */
@@ -197,7 +262,7 @@ class Pines(
 		val (host, mine, service) = synchronized(lock) {
 			val host = shown ?: return
 			val status = state.optString("status")
-			val again = status == "error" && host == use && state.optString("kind") in listOf("ssh", "failed") && !state.has("fingerprint")
+			val again = status == "error" && host == use && state.optString("kind") in listOf("ssh", "failed") && !state.has("fingerprint") && host !in stuck
 			if (status != "ready" && !again) return
 			Triple(host, round, if (status == "ready") held[host]?.service else null)
 		}
@@ -211,21 +276,41 @@ class Pines(
 	}
 
 	private fun start(host: String?) {
-		val mine = synchronized(lock) { ++round }
+		val (mine, open) = synchronized(lock) { ++round to pairing.also { pairing = null } }
+		// Whatever is started now ends a pairing under way, which keeps nothing.
+		open?.cancel()
 		if (host == null) return show(mine, nobody(), null)
 		show(mine, starting(host), host)
 		thread(isDaemon = true, name = "pine-connect") { connect(host, mine) }
 	}
 
-	private fun connect(host: String, mine: Int) {
+	/** Connects to `host` for the connection `mine`; `tries` is how many attempts failed before, for a paired computer tried again. */
+	private fun connect(host: String, mine: Int, tries: Int = 0) {
 		try {
 			val h = synchronized(lock) {
 				if (closed) return
 				held.getOrPut(host) { HeldRemote(remote, host, follow(host), failed = { e -> lost(host, e) }, retryMs, batchMs, computer = { paired(host) }) }
 			}
-			show(mine, ready(h.ensure()), host)
+			val s = h.ensure()
+			synchronized(lock) { stuck.remove(host) }
+			show(mine, ready(s), host)
 		} catch (e: Exception) {
 			show(mine, failure(host, e), host)
+			later(host, mine, tries, e)
+		}
+	}
+
+	/**
+	 * A paired computer that could not be reached for a reason that may pass is tried again after a
+	 * growing wait, for as long as that connection is the latest asked for: the web client's
+	 * `reconnect`. One that only the owner can fix (the phone is no longer known there, its host key
+	 * is not its machine id) is not. A machine reached over SSH is not tried again by itself, as before.
+	 */
+	private fun later(host: String, mine: Int, tries: Int, e: Exception) {
+		if (!host.startsWith(PAIRED) || !(e is RemoteError && e.passing)) return
+		thread(isDaemon = true, name = "pine-reconnect") {
+			Thread.sleep(backoffMs(tries))
+			if (synchronized(lock) { round == mine && !closed }) connect(host, mine, tries + 1)
 		}
 	}
 
@@ -264,9 +349,11 @@ class Pines(
 	private fun lost(host: String, e: Exception) {
 		val mine = synchronized(lock) { if (shown != host) return else round }
 		show(mine, failure(host, e), host)
+		later(host, mine, 0, e)
 	}
 
 	private fun failure(host: String, e: Exception): JSONObject {
+		if (host.startsWith(PAIRED)) synchronized(lock) { if (e is RemoteError && e.passing) stuck.remove(host) else stuck.add(host) }
 		val out = JSONObject().put("status", "error").put("host", host)
 		when (e) {
 			// A paired computer's key is its machine id: another one is refused for good, in the words of Remote.
@@ -292,10 +379,11 @@ class Pines(
 	)
 
 	override fun close() {
-		val all = synchronized(lock) {
+		val (all, open) = synchronized(lock) {
 			closed = true
-			held.values.toList().also { held.clear() }
+			held.values.toList().also { held.clear() } to pairing.also { pairing = null }
 		}
+		open?.cancel()
 		all.forEach { it.stop() }
 	}
 
@@ -307,6 +395,9 @@ class Pines(
 		const val PAIRED_ENTRIES = "paired"
 
 		fun starting(host: String) = JSONObject().put("status", "starting").put("host", host)
+
+		/** A pairing under way, as the page shows it: the phone's name, and the four digits once the computer shows them. */
+		fun asking(name: String, code: String?) = JSONObject().put("status", "starting").put("pairing", JSONObject().put("name", name).apply { code?.let { put("code", it) } })
 
 		fun ready(s: RemoteService) = JSONObject().put("status", "ready").put("mode", "on ${s.label}").put("started", s.started).put("home", "${s.label}:${s.home}").apply { s.version?.let { put("version", it) } }.put("from", if (s.paired) "paired ${s.label}" else "ssh ${s.host}").put("host", s.host).put("label", s.label)
 	}

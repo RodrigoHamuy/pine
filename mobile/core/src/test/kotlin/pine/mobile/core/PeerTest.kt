@@ -41,10 +41,13 @@ class PeerTest {
 	private val open = mutableListOf<AutoCloseable>()
 	private val hold = CountDownLatch(1)
 
-	private fun remote(openMs: Long = 20_000) = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = openMs, native = LibDataChannelArchDetect::initialize)
+	/** Where the test's https names of meeting services are reached: the helper's meeting is http on the loopback, which no link and no stored machine may name. */
+	private val routes = mutableMapOf(SERVICE to computer.service)
 
-	/** The computer as the phone keeps it once paired. The helper's meeting is http on the loopback, which only `Remote` takes, and only from a test. */
-	private fun paired(name: String? = "Test Mac", id: String = computer.machineId, service: String = computer.service) = PairedComputer(id, service, name)
+	private fun remote(openMs: Long = 20_000) = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = openMs, native = LibDataChannelArchDetect::initialize, route = { routes[it] ?: it })
+
+	/** The computer as the phone keeps it once paired, under the https name the test routes to the helper's meeting. */
+	private fun paired(name: String? = "Test Mac", id: String = computer.machineId, service: String = SERVICE) = PairedComputer(id, service, name)
 
 	/** The phone's device id at the computer, once it was added there. */
 	private var device = ""
@@ -170,10 +173,11 @@ class PeerTest {
 	@Test
 	fun `no meeting service, no computer waiting, no path and the limits each say why`() {
 		val nobody = ServerSocket(0, 1, InetAddress.getByName("127.0.0.1")).use { it.localPort }
+		routes["https://nobody.test"] = "http://127.0.0.1:$nobody"
 		val elsewhere = Base64.getUrlEncoder().withoutPadding().encodeToString(ByteArray(32).also { SecureRandom().nextBytes(it) })
 		computer.pair(key)
 		val failures = listOf(
-			assertFailsWith<RemoteError> { remote.connect(host, paired(name = null, service = "http://127.0.0.1:$nobody")) } to
+			assertFailsWith<RemoteError> { remote.connect(host, paired(name = null, service = "https://nobody.test")) } to
 				"Could not connect to your computer. The meeting service could not be reached. Check the network, then try again.",
 			assertFailsWith<RemoteError> { remote.connect(PAIRED + elsewhere, paired(id = elsewhere)) } to
 				"Test Mac does not answer: it is off, asleep, or Pine is closed. This phone keeps trying, and connects when Test Mac is back.",
@@ -207,4 +211,20 @@ class PeerTest {
 		assertNull(Pines(remote, KnownHosts(vault), shelf, SeenPage()).paired(host))
 		assertTrue(daemon.seen.isEmpty())
 	}
+
+	@Test
+	fun `without the test's seam, the helper's http meeting service is not reached, on the loopback or anywhere`() {
+		computer.pair(key)
+		// The app's Remote: no route but the service itself.
+		val app = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = 2_000, native = LibDataChannelArchDetect::initialize)
+		for (service in listOf(computer.service, "http://127.0.0.1:1", "http://pine.example")) {
+			assertNull(meetingService(service), service)
+			assertContains(assertFailsWith<RemoteError> { app.connect(host, paired(service = service)) }.message!!, "https", message = service)
+		}
+		assertFalse(computer.command("devices").getJSONArray("devices").getJSONObject(0).getBoolean("connected"))
+		assertTrue(daemon.seen.isEmpty())
+	}
 }
+
+/** The https name under which the tests reach the access host's meeting (`route` of `Remote`). */
+const val SERVICE = "https://meet.test"

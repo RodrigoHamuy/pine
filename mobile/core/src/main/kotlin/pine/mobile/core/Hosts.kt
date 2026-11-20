@@ -3,7 +3,15 @@
 package pine.mobile.core
 
 /** Why a connection did not come about. `kind` is "ssh" (not reached, or pine is not there) or "failed" (its pine said why it did not start), as `RemoteError` in src/remote.ts. */
-open class RemoteError(val kind: String, message: String) : Exception(message)
+open class RemoteError(
+	val kind: String,
+	message: String,
+	/**
+	 * A trouble that may pass by itself (the network, a computer that sleeps): a paired computer is
+	 * tried again after it, with a growing wait. One only the owner can fix is not.
+	 */
+	val passing: Boolean = false,
+) : Exception(message)
 
 /**
  * The machine's host key is not the one the owner confirmed, or none was confirmed yet. `fingerprint`
