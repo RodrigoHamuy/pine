@@ -24,7 +24,7 @@ to change the code.
 | `npm run test:core` (in `mobile/`) | The native plugin's Kotlin core on the JVM: an SSH server in the test (Apache MINA sshd) and a stand-in daemon. Run it when you change `mobile/core/`, `mobile/cases/` or `src/remote.ts`. |
 | `swift test` (in `mobile/ios-core/`) | The iOS plugin's Swift core on the Mac: a real OpenSSH `sshd` started by the test on a loopback port and a stand-in daemon, and the same cases as the Kotlin core (`mobile/cases/`). Run it when you change `mobile/ios-core/`, `mobile/cases/` or `src/remote.ts`. The `ios` job of the Release workflow runs it. |
 | `npm run ipa`, `npm run smoke:ios`, `npm run ios:run` (in `mobile/`) | The IPA of a release or a preview, not signed (`scripts/ipa.ts`: `npm run ipa -- <version>`, a preview's `X.Y.Z-next.N` too, written to `ios/App/output/Pine-<version>.ipa` with the full version in its name, checked unsigned and arm64; the signed build for TestFlight is `npm run testflight`'s, below); the iOS app from end to end on a simulator of its own without a window, against the Android smoke run's test SSH server; and the app opened in the Simulator app, by hand. The smoke test is the test of the web view's hardening in `PineViewController.swift` and `PinePlugin.swift`, of the return from the background and of the key kept in the Keychain: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. They need Xcode 27 with an iOS simulator runtime, and the smoke run a JDK as `npm run smoke` does. |
-| `npm run testflight` (in `mobile/`) | The iOS app signed by the maintainer's Apple team and put on TestFlight (`scripts/upload.ts`): `npm run testflight -- --version <X.Y.Z or X.Y.Z-next.N> --key <AuthKey.p8> --key-id <id> --issuer-id <uuid>`. It archives with automatic signing and the App Store Connect API key, uploads, and puts the build into its TestFlight group (`distribute()` of `scripts/testflight.ts`). The Release workflow's job `testflight` runs it; the maintainer can run it on a Mac of their own. Without any part of the key it uploads nothing and says so; with only some it fails. The key needs the Admin role. See Releases. |
+| `npm run testflight` (in `mobile/`) | The iOS app signed by the maintainer's Apple team and put on TestFlight (`scripts/upload.ts`): `npm run testflight -- --version <X.Y.Z or X.Y.Z-next.N> --key <AuthKey.p8> --key-id <id> --issuer-id <uuid> --team <team id> [--bundle-id <id>]` (or `IOS_TEAM_ID` and `IOS_BUNDLE_ID` in the environment; the bundle id is `dev.pmndre.pine` by default). It archives with automatic signing and the App Store Connect API key, the team and the bundle id on the command line only, uploads, and puts the build into its TestFlight group (`distribute()` of `scripts/testflight.ts`). The Release workflow's job `testflight` runs it; the maintainer can run it on a Mac of their own. Without any part of the key and no team it uploads nothing and says so; with only some of the four it fails. The key needs the Admin role. See Releases. |
 | `npm run apk`, `npm run apk:release`, `npm run smoke` (in `mobile/`) | A debug APK; a release APK (signed when `ANDROID_KEYSTORE_FILE` and the three other variables of the release job name a key, versioned by `PINE_VERSION` and `PINE_VERSION_CODE`); and the app from end to end on an emulator without a window, against a test SSH server of its own running the real `pine service`. The smoke test is the test of the WebView's hardening in `PinePlugin.kt` and of the back button and the app's return from the background: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. The Gradle commands need the Android SDK (`ANDROID_HOME`, default `~/Library/Android/sdk`) and a JDK of 21 or later: `JAVA_HOME`, default Android Studio's (`/Applications/Android Studio.app/Contents/jbr/Contents/Home`), since a Mac has no `java` on its PATH by default. |
 | `npm test`, `npm run check`, `npm run build` (in `web/`) | The web client: the web bridge as the page calls it, in Node with a stand-in for SSH, and its SSH core in headless Chrome for Testing against a `sshd` of the test's own on a loopback port, and peer to peer with the Pine app's real access host (`desktop/electron/access/`), so it needs `npm install` in `desktop/` too; its type check; and its build into `web/dist` (the bridge's document, and the desktop page built for the browser under `page/`). `npm install` in `web/` once. Run them when you change `web/`, `desktop/electron/access/`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. |
 | `npm test`, `npm run check` (in `web/relay/`) | The relay Worker's fetch handler with a stand-in TCP server on a loopback port, the meeting module and its routes, and its type check. `npm install` in `web/relay/` once. Besides the default configuration the Worker has one environment, `official` (the project's service: relay and meeting service side by side), deployed with `npx wrangler deploy --env official`; a deployment of one's own with the meeting service uses it under a name of its own (`--name`). `npm run dev` there serves the deployment (relay and `web/dist`) under `wrangler dev`; `npx wrangler deploy` there deploys it, by hand only: no workflow changes the live version. A pull request that changes one of the paths listed in `.github/workflows/web-preview.yml` (`web/` and every input of the page's build) runs `.github/workflows/web-preview.yml`: the gates of `web/` and `web/relay/` and the build, then `wrangler versions upload --preview-alias pr-<number>`, whose address it posts on the pull request in one comment that each push updates. A push to `next` or `main` that changes one of those paths runs it too and uploads under the alias `next` or `main` (`https://next-pine-relay.<account>.workers.dev`), its address in the run's summary. The secrets (`CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`) are in the environment `web-preview`, which a fork's pull request never reaches, and are given to the upload step alone; without them the job passes and says nothing was deployed. Those aliases are previews like a pull request's: the live version is never changed by a workflow. |
@@ -803,13 +803,17 @@ the iOS build number (below), and a failure unless the app inside the IPA is uns
 Uploaded with `--clobber`, and rebuilt from the tag by `workflow_dispatch` like the other apps.
 The smoke test is not run there (`npm run smoke:ios`, on a Mac of your own).
 
-The iOS app also goes to TestFlight, signed by the maintainer's individual Apple team
-`Z9273KN92X` (docs/adr/0005-ios-testflight.md), bundle id `dev.pmndre.pine`: the job
+The iOS app also goes to TestFlight, signed by the maintainer's Apple team
+(docs/adr/0005-ios-testflight.md). Whose team and which bundle id are no part of the code: they
+are the repository variables `IOS_TEAM_ID` and `IOS_BUNDLE_ID` (`dev.pmndre.pine` when it is not
+set), so another maintainer's team takes over by changing those two variables and the three
+secrets below, with no commit. The sideloaded IPA and the Android app stay `dev.pmndre.pine`. The job
 `testflight` in `release.yml`, for every push to `main` and to `next` and for
 `workflow_dispatch`, runs `npm run testflight` in `mobile/` (`mobile/scripts/upload.ts`). The same
 script runs on the maintainer's Mac: `npm run testflight -- --version <X.Y.Z or X.Y.Z-next.N>
---key <AuthKey.p8> --key-id <id> --issuer-id <uuid>`. It archives the same app with automatic
-signing and the API key (`-allowProvisioningUpdates`, `DEVELOPMENT_TEAM` on the command line only,
+--key <AuthKey.p8> --key-id <id> --issuer-id <uuid> --team <team id>`. It archives the same app with automatic
+signing and the API key (`-allowProvisioningUpdates`, `DEVELOPMENT_TEAM` and
+`PRODUCT_BUNDLE_IDENTIFIER` on the command line only,
 never in the project, so the unsigned and simulator builds are unchanged) and Apple's
 cloud-managed certificate: no `.p12`, no profile, no fastlane. It exports for App Store Connect
 with destination `upload` and keeps the build number (`manageAppVersionAndBuildNumber` false), so
@@ -821,13 +825,14 @@ subject, and puts a release from `main` into the external group `Public` (the on
 link) and submits it to Beta App Review, a preview from `next` into the internal group
 `Maintainers`, with no review. A build already in its group or already submitted is no error.
 `testflight.ts` keeps a command line of its own, to distribute a build that was uploaded already
-by hand. Without any part of the key `upload.ts` uploads nothing and says so; with only some it
-fails. The job runs in the environment `testflight`, whose deployment branches are `main` and
+by hand. Signing takes four values, the key's three and the team: without any of them
+`upload.ts` uploads nothing and says so; with only some it fails. The job runs in the environment `testflight`, whose deployment branches are `main` and
 `next`, with three secrets: `ASC_KEY` (the content of the App Store Connect API key's `.p8` file,
 role Admin, which cloud-managed signing needs; App Manager is not enough), `ASC_KEY_ID` and
-`ASC_ISSUER_ID`. Its first step only looks whether the three exist; only the upload step is given
-them, and the key is written into a temporary folder that a last step removes whatever happened.
-Without any of them the job passes and says that nothing was uploaded; with only some it fails.
+`ASC_ISSUER_ID`, and is given the variables `IOS_TEAM_ID` and `IOS_BUNDLE_ID`. Its first step only
+looks whether the three secrets and `IOS_TEAM_ID` exist; only the upload step is given them, and
+the key is written into a temporary folder that a last step removes whatever happened. Without
+any of the four the job passes and says that nothing was uploaded; with only some it fails.
 npm, the Mac app and the Android app never wait for it. For a preview the job runs `npm run
 check` and `npm test` in `mobile/` and `swift test` first; a release has the job `ios` for that.
 The environment `release` stays restricted to `main`. The public link is the repository variable

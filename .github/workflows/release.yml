@@ -49,8 +49,12 @@ name: Release
 #   ASC_KEY        an App Store Connect API key with the Admin role (cloud-managed signing needs it): the text of its .p8 file
 #   ASC_KEY_ID     that key's ID
 #   ASC_ISSUER_ID  the issuer ID shown above the keys
-# Without them nothing is uploaded, the job passes and its summary says so; with only some it
-# fails. No other job waits for it. A repository variable TESTFLIGHT_LINK (the public link, not a
+# and two variables (Settings > Secrets and variables > Actions > Variables), which say whose app it is:
+#   IOS_TEAM_ID    the Apple Developer team that signs it (ten capitals and digits, under Membership details)
+#   IOS_BUNDLE_ID  the app's bundle id on that team; when it is not set, the project's own, dev.pmndre.pine
+# Another maintainer's team takes over by changing those two variables and the three secrets, with
+# no commit. Without the three secrets and IOS_TEAM_ID nothing is uploaded, the job passes and its
+# summary says so; with only some of them it fails. No other job waits for it. A repository variable TESTFLIGHT_LINK (the public link, not a
 # secret), when set, is written into the notes of each release from main.
 #
 # The apps of a release (the disk images, the APK, the IPA and the TestFlight build) can be built again by hand, without publishing
@@ -366,26 +370,27 @@ jobs:
       VERSION: ${{ inputs.version || needs.release.outputs.version }}
     steps:
       - id: key
-        # Only whether each secret is there: their values go to the upload step alone.
+        # Only whether each secret and the team variable is there: their values go to the upload step alone.
         env:
           HAS_ASC_KEY: ${{ secrets.ASC_KEY != '' }}
           HAS_ASC_KEY_ID: ${{ secrets.ASC_KEY_ID != '' }}
           HAS_ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID != '' }}
+          HAS_IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID != '' }}
         run: |
           if ! printf '%s' "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+(-next\.[0-9]+)?$'; then
             echo "::error::\"$VERSION\" is not the version of a release (like 0.38.0) or of a preview (like 0.38.0-next.4)."
             exit 1
           fi
           missing=""
-          for name in ASC_KEY ASC_KEY_ID ASC_ISSUER_ID; do
+          for name in ASC_KEY ASC_KEY_ID ASC_ISSUER_ID IOS_TEAM_ID; do
             if [ "$(printenv "HAS_$name")" != "true" ]; then missing="$missing $name"; fi
           done
-          if [ "$(echo $missing | wc -w)" -eq 3 ]; then
-            echo "::notice::The iOS app was not uploaded to TestFlight: the environment \"testflight\" has no App Store Connect key yet (see the top of release.yml)."
-            echo "Nothing was uploaded to TestFlight: the environment \"testflight\" has no App Store Connect key (ASC_KEY, ASC_KEY_ID, ASC_ISSUER_ID)." >> "$GITHUB_STEP_SUMMARY"
+          if [ "$(echo $missing | wc -w)" -eq 4 ]; then
+            echo "::notice::The iOS app was not uploaded to TestFlight: there is no App Store Connect key and no signing team yet (see the top of release.yml)."
+            echo "Nothing was uploaded to TestFlight: the environment \"testflight\" has no App Store Connect key (ASC_KEY, ASC_KEY_ID, ASC_ISSUER_ID) and the repository no variable IOS_TEAM_ID." >> "$GITHUB_STEP_SUMMARY"
             echo "ready=false" >> "$GITHUB_OUTPUT"
           elif [ -n "$missing" ]; then
-            echo "::error::The iOS app cannot be signed for TestFlight: these secrets are missing in the environment \"testflight\":$missing"
+            echo "::error::The iOS app cannot be signed for TestFlight: these are missing (secrets of the environment \"testflight\", or the variable IOS_TEAM_ID):$missing"
             exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -428,5 +433,7 @@ jobs:
           ASC_KEY: ${{ secrets.ASC_KEY }}
           ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
           ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          IOS_TEAM_ID: ${{ vars.IOS_TEAM_ID }}
+          IOS_BUNDLE_ID: ${{ vars.IOS_BUNDLE_ID }}
       - if: always()
         run: rm -rf "$RUNNER_TEMP"/pine-asc-*

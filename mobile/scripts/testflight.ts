@@ -8,7 +8,8 @@
 //   node scripts/testflight.ts --key AuthKey_ABC123DEFG.p8 --key-id ABC123DEFG --issuer-id <uuid> \
 //     --version 0.39.0 --build 39999 --channel latest --notes "feat: ..."
 // The key may be given as content in ASC_KEY instead of --key (the Release workflow's secret), and
-// the ids as ASC_KEY_ID and ASC_ISSUER_ID. Node's own modules only; the key is never printed.
+// the ids as ASC_KEY_ID and ASC_ISSUER_ID; the bundle id is --bundle-id, or IOS_BUNDLE_ID (the
+// workflow's repository variable), or else BUNDLE_ID. Node's own modules only; the key is never printed.
 // The API's shapes are Apple's OpenAPI spec of App Store Connect (developer.apple.com, "App Store
 // Connect API"); test/testflight.test.ts runs this against a stand-in that answers in them.
 import crypto from "node:crypto";
@@ -18,7 +19,7 @@ import { parseArgs } from "node:util";
 export type Key = { pem: string; keyId: string; issuerId: string };
 export type Channel = "latest" | "next";
 
-/** The app's bundle id, as in ios/App/App.xcodeproj. */
+/** The app's bundle id, as in ios/App/App.xcodeproj: the default, which --bundle-id or IOS_BUNDLE_ID replaces. */
 export const BUNDLE_ID = "dev.pmndre.pine";
 /** The external TestFlight group with the public link: every release from `main`. */
 export const EXTERNAL_GROUP = "Public";
@@ -200,8 +201,9 @@ export async function distribute(options: Options): Promise<void> {
 }
 
 const USAGE = `Usage: node scripts/testflight.ts --key <AuthKey.p8> --key-id <id> --issuer-id <uuid>
-  --version <X.Y.Z> --build <number> --channel <latest|next> --notes <What to Test> [--bundle-id dev.pmndre.pine]
-The key's content may be in ASC_KEY instead of --key, the ids in ASC_KEY_ID and ASC_ISSUER_ID.`;
+  --version <X.Y.Z> --build <number> --channel <latest|next> --notes <What to Test> [--bundle-id <id>]
+The key's content may be in ASC_KEY instead of --key, the ids in ASC_KEY_ID and ASC_ISSUER_ID,
+the bundle id in IOS_BUNDLE_ID (default ${BUNDLE_ID}).`;
 
 async function main() {
 	const { values } = parseArgs({
@@ -209,7 +211,7 @@ async function main() {
 			key: { type: "string" },
 			"key-id": { type: "string" },
 			"issuer-id": { type: "string" },
-			"bundle-id": { type: "string", default: BUNDLE_ID },
+			"bundle-id": { type: "string" },
 			version: { type: "string" },
 			build: { type: "string" },
 			channel: { type: "string" },
@@ -220,6 +222,7 @@ async function main() {
 	});
 	const keyId = values["key-id"] ?? process.env.ASC_KEY_ID;
 	const issuerId = values["issuer-id"] ?? process.env.ASC_ISSUER_ID;
+	const bundleId = values["bundle-id"] || process.env.IOS_BUNDLE_ID || BUNDLE_ID;
 	const { version, build, channel, notes } = values;
 	const pem = values.key ? fs.readFileSync(values.key, "utf8") : process.env.ASC_KEY;
 	const missing = Object.entries({ "--key or ASC_KEY": pem, "--key-id": keyId, "--issuer-id": issuerId, "--version": version, "--build": build, "--channel": channel, "--notes": notes }).filter(([, v]) => !v).map(([k]) => k);
@@ -228,7 +231,7 @@ async function main() {
 	if (!/^\d+\.\d+\.\d+$/.test(version!)) throw new Error(`--version is X.Y.Z (CFBundleShortVersionString), not "${version}".`);
 	if (!/^\d+$/.test(build!)) throw new Error(`--build is a number (CFBundleVersion), not "${build}".`);
 	privateKey(pem!);
-	await distribute({ key: { pem: pem!, keyId: keyId!, issuerId: issuerId! }, bundleId: values["bundle-id"]!, version: version!, build: build!, channel, notes: notes!, base: values.api });
+	await distribute({ key: { pem: pem!, keyId: keyId!, issuerId: issuerId! }, bundleId, version: version!, build: build!, channel, notes: notes!, base: values.api });
 }
 
 if (import.meta.main) {

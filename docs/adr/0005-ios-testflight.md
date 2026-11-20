@@ -13,14 +13,14 @@ That path asks a lot of an owner: a computer, a cable or the same Wi-Fi, trustin
 certificate, Developer Mode, and with a free Apple ID a renewal every seven days. Most owners
 who want pine on an iPhone stop there.
 
-The maintainer now has a paid Apple Developer Program membership of his own: an individual team,
-`Z9273KN92X`. TestFlight's external testing with a public link gives an install from the iPhone
+The maintainer now has a paid Apple Developer Program membership of his own: an individual team.
+TestFlight's external testing with a public link gives an install from the iPhone
 alone, kept for 90 days per build, with every later build arriving as an update.
 
 ## Decision
 
-**TestFlight beside sideloading.** Every release from `main` is also built signed by the team
-`Z9273KN92X`, uploaded to App Store Connect, added to the external group `Public`, whose public
+**TestFlight beside sideloading.** Every release from `main` is also built signed by the
+maintainer's team, uploaded to App Store Connect, added to the external group `Public`, whose public
 link the README and the release page give, and submitted to Beta App Review. Every preview from
 `next` goes to the internal group `Maintainers` (the maintainer's own devices), with no review, so
 that a preview is tried on a real iPhone before `next` is moved to `main`. The unsigned IPA stays
@@ -29,8 +29,8 @@ attached to every release, and its job `ios` keeps no secret and no environment.
 **One App Store Connect API key, cloud-managed signing.** The key (role Admin: cloud-managed
 signing needs it, App Manager is not enough) is the only Apple secret. `xcodebuild` signs automatically with it (`-allowProvisioningUpdates`), with Apple's
 cloud-managed distribution certificate: no `.p12`, no provisioning profile, no fastlane, nothing
-to rotate by hand. The team is given on the command line of the signed build only
-(`DEVELOPMENT_TEAM`), never committed into the project, so the unsigned and simulator builds are
+to rotate by hand. The team and the bundle id are given on the command line of the signed
+build only (`DEVELOPMENT_TEAM`, `PRODUCT_BUNDLE_IDENTIFIER`), never committed into the project, so the unsigned and simulator builds are
 unchanged. The archive is exported for App Store Connect with destination `upload`. A small Node
 script with no dependency then talks to the App Store Connect API: it waits for processing, sets
 "What to Test" to the release's commit subject, and adds the build to its group (and, from
@@ -43,8 +43,13 @@ deployment branches are `main` and `next`, as three secrets: `ASC_KEY` (the `.p8
 to `main`. Without the three secrets the job passes and says that nothing was uploaded, so a fork
 or a fresh setup does not fail, and a failed upload holds back neither npm nor the other apps.
 
-**Bundle id `dev.pmndre.pine`, unchanged,** registered on the team, for iPhone and iPad. The
-public link is kept in the repository variable `TESTFLIGHT_LINK`, not in the code.
+**The team and the bundle id are configuration.** The signing team is the repository variable
+`IOS_TEAM_ID`, the bundle id of the TestFlight build the variable `IOS_BUNDLE_ID`, by default
+`dev.pmndre.pine`, the project's own, registered on the team for iPhone and iPad. Neither is in
+the code, so another maintainer's team takes over by changing those two variables and the three
+secrets, with no commit. Without the secrets and the team the job uploads nothing; with only some
+of them it fails. The sideloaded IPA and the Android app stay `dev.pmndre.pine`. The public link is
+kept in the repository variable `TESTFLIGHT_LINK`, not in the code.
 
 **Build numbers that order previews and releases.** `CFBundleShortVersionString` is always
 `X.Y.Z`. `CFBundleVersion` is Android's `versionCode(X.Y.Z)` × 1000 + N, where N is the `N` of a
@@ -96,12 +101,11 @@ decision did once and costs the owners the same as a transfer (a new link, a new
    the Admin role, register the bundle id, create the app record and the groups `Public` (public
    link on) and `Maintainers`, and fill the beta review information.
 2. The bundle id `dev.pmndre.pine` stays registered on the old team while its app record exists.
-   Either the old team removes the app record and the bundle id first, or the new team takes
-   another bundle id (then `appId` in `capacitor.config.json`, `PRODUCT_BUNDLE_IDENTIFIER` in the
-   project, the Keychain service and `BUNDLE_ID` in `mobile/scripts/testflight.ts` change with it).
-3. In the code: `TEAM` in `mobile/scripts/upload.ts`.
-4. In GitHub: the three secrets of the environment `testflight` and the variable `TESTFLIGHT_LINK`.
-5. The old team's public link is turned off, and the README and the release notes give the new one.
+   Either the old team removes the app record and the bundle id first, or the new team registers
+   another bundle id and sets it as `IOS_BUNDLE_ID`.
+3. In GitHub: the variables `IOS_TEAM_ID` and `IOS_BUNDLE_ID`, the three secrets of the
+   environment `testflight` and the variable `TESTFLIGHT_LINK`. No commit.
+4. The old team's public link is turned off, and the README and the release notes give the new one.
 
 ## Consequences
 
@@ -110,8 +114,8 @@ decision did once and costs the owners the same as a transfer (a new link, a new
 - The phone's key is kept in the Keychain under the team that signed the app. A TestFlight install
   and a sideloaded one hold different keys: switching from one to the other means adding the new
   public key to `authorized_keys` on every machine. The manual says so.
-- The repository has Apple signing secrets, in the environment `testflight` only. Nothing about
-  them is in the code or the project file.
+- The repository has Apple signing secrets, in the environment `testflight` only, and whose team
+  signs is a variable. Nothing about them is in the code or the project file.
 - A release reaches TestFlight's public group after Apple's review of its build, which can take
   a day; a preview reaches the internal group minutes after its push.
 - Each TestFlight build expires 90 days after its upload: a project without a release in 90 days

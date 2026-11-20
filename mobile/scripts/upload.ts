@@ -2,16 +2,19 @@
 // Store Connect and put on TestFlight. One command, for the maintainer's Mac and for the Release
 // workflow's `testflight` job:
 //   node scripts/upload.ts --version 0.39.0 --key ~/Downloads/AuthKey_ABC123DEFG.p8 \
-//     --key-id ABC123DEFG --issuer-id <uuid>          (npm run testflight -- --version ...)
+//     --key-id ABC123DEFG --issuer-id <uuid> --team <team id>   (npm run testflight -- --version ...)
 // The key's content may be in ASC_KEY instead of --key (the workflow's secret), the ids in
-// ASC_KEY_ID and ASC_ISSUER_ID. Without any of the three it builds nothing and says so.
+// ASC_KEY_ID and ASC_ISSUER_ID, the signing team in IOS_TEAM_ID. Those four are what signing
+// takes: without any of them it builds nothing and says so, with only some it fails. The bundle id
+// is --bundle-id or IOS_BUNDLE_ID, by default the project's (dev.pmndre.pine). Team and bundle id
+// are the workflow's repository variables, so another maintainer's team takes over without a commit.
 // A release X.Y.Z goes to the channel `latest` (the external group and Beta App Review), a preview
 // X.Y.Z-next.N to `next` (the internal group); --channel, if given, must agree. "What to Test" is
 // --notes, or else the subject of the commit checked out (the release's).
 //
 // Signing is xcodebuild's automatic signing with the API key: Apple's cloud-managed distribution
-// certificate, a profile made on the spot, nothing stored. The team is given here, on the command
-// line, and nowhere in the project, so the unsigned IPA (scripts/ipa.ts) and the simulator builds
+// certificate, a profile made on the spot, nothing stored. The team and the bundle id are given
+// here, on the command line, and nowhere in the project, so the unsigned IPA (scripts/ipa.ts) and the simulator builds
 // are unchanged. The archive is exported with destination `upload`, which uploads it; a build App
 // Store Connect already has is reported as such and the distribution goes on (a rebuild of a tag).
 // Then `distribute` of scripts/testflight.ts, called here, waits for the build and distributes it.
@@ -26,9 +29,6 @@ import { parseArgs } from "node:util";
 import { BUNDLE_ID, type Channel, distribute, type Key, privateKey } from "./testflight.ts";
 import { iosVersion } from "./version-code.ts";
 
-/** The maintainer's Apple Developer team (individual), which signs the TestFlight builds. */
-export const TEAM = "Z9273KN92X";
-
 /** The App Store Connect API key, as a file xcodebuild can be given. */
 export type KeyFile = { path: string; keyId: string; issuerId: string };
 
@@ -42,13 +42,18 @@ export type Inputs =
 			/** CFBundleVersion. */
 			build: number;
 			notes: string;
+			/** The Apple Developer team that signs the build. */
+			team: string;
+			/** The app's bundle id on that team. */
+			bundleId: string;
 			/** A file of the Mac's, or the content (ASC_KEY) that is written to one for the run. */
 			key: { path: string; keyId: string; issuerId: string } | { pem: string; keyId: string; issuerId: string };
 	  };
 
 const USAGE = `Usage: node scripts/upload.ts --version <X.Y.Z or X.Y.Z-next.N> [--channel latest|next] [--notes <What to Test>]
-  [--key <AuthKey.p8>] [--key-id <id>] [--issuer-id <uuid>]
-The key's content may be in ASC_KEY instead of --key, the ids in ASC_KEY_ID and ASC_ISSUER_ID.`;
+  [--key <AuthKey.p8>] [--key-id <id>] [--issuer-id <uuid>] [--team <team id>] [--bundle-id <id>]
+The key's content may be in ASC_KEY instead of --key, the ids in ASC_KEY_ID and ASC_ISSUER_ID,
+the team in IOS_TEAM_ID, the bundle id in IOS_BUNDLE_ID (default ${BUNDLE_ID}).`;
 
 /** What a run is asked to do, from its arguments, its environment and the commit's subject. */
 export function inputsOf(argv: string[], env: Record<string, string | undefined>, subject: string): Inputs {
@@ -61,19 +66,27 @@ export function inputsOf(argv: string[], env: Record<string, string | undefined>
 			key: { type: "string" },
 			"key-id": { type: "string" },
 			"issuer-id": { type: "string" },
+			team: { type: "string" },
+			"bundle-id": { type: "string" },
 		},
 	});
 	const keyPath = values.key || undefined;
 	const pem = env.ASC_KEY || undefined;
 	const keyId = values["key-id"] || env.ASC_KEY_ID || undefined;
 	const issuerId = values["issuer-id"] || env.ASC_ISSUER_ID || undefined;
-	const parts = { "ASC_KEY (or --key)": keyPath ?? pem, "ASC_KEY_ID (or --key-id)": keyId, "ASC_ISSUER_ID (or --issuer-id)": issuerId };
+	const team = values.team || env.IOS_TEAM_ID || undefined;
+	const bundleId = values["bundle-id"] || env.IOS_BUNDLE_ID || BUNDLE_ID;
+	// Signing takes all four: none is a repository not set up for TestFlight, some is a mistake.
+	const parts = { "ASC_KEY (or --key)": keyPath ?? pem, "ASC_KEY_ID (or --key-id)": keyId, "ASC_ISSUER_ID (or --issuer-id)": issuerId, "IOS_TEAM_ID (or --team)": team };
 	const missing = Object.entries(parts).filter(([, v]) => !v).map(([k]) => k);
-	if (missing.length === 3) {
-		return { kind: "skip", message: "The iOS app was not built for TestFlight and nothing was uploaded: there is no App Store Connect API key (ASC_KEY, ASC_KEY_ID, ASC_ISSUER_ID in the environment \"testflight\")." };
+	if (missing.length === Object.keys(parts).length) {
+		return { kind: "skip", message: "The iOS app was not built for TestFlight and nothing was uploaded: there is no App Store Connect API key (ASC_KEY, ASC_KEY_ID, ASC_ISSUER_ID in the environment \"testflight\") and no signing team (the repository variable IOS_TEAM_ID)." };
 	}
-	if (missing.length > 0) throw new Error(`The App Store Connect API key is incomplete: ${missing.join(", ")} missing.\n${USAGE}`);
+	if (missing.length > 0) throw new Error(`What signing for TestFlight takes is incomplete: ${missing.join(", ")} missing.\n${USAGE}`);
 
+	// Apple's forms: ten capitals and digits; letters, digits, dots and hyphens.
+	if (!/^[A-Z0-9]{10}$/.test(team!)) throw new Error(`IOS_TEAM_ID (or --team) is "${team}", not a team id: ten capitals and digits, as Membership details at developer.apple.com shows it.`);
+	if (!/^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$/.test(bundleId)) throw new Error(`IOS_BUNDLE_ID (or --bundle-id) is "${bundleId}", not a bundle id like ${BUNDLE_ID}.`);
 	if (!values.version) throw new Error(`--version is missing.\n${USAGE}`);
 	const { short, build } = iosVersion(values.version);
 	const channel: Channel = values.version.includes("-next.") ? "next" : "latest";
@@ -83,7 +96,7 @@ export function inputsOf(argv: string[], env: Record<string, string | undefined>
 	const notes = (values.notes ?? subject).trim();
 	if (!notes) throw new Error(`--notes is missing, and there is no commit subject to use.\n${USAGE}`);
 	const ids = { keyId: keyId!, issuerId: issuerId! };
-	return { kind: "run", channel, short, build, notes, key: keyPath ? { path: keyPath, ...ids } : { pem: pem!, ...ids } };
+	return { kind: "run", channel, short, build, notes, team: team!, bundleId, key: keyPath ? { path: keyPath, ...ids } : { pem: pem!, ...ids } };
 }
 
 /** The export options: App Store Connect distribution, uploaded, signed automatically for `team`. */
@@ -112,7 +125,7 @@ export function exportOptions(team: string): string {
 const authArgs = (key: KeyFile) => ["-allowProvisioningUpdates", "-authenticationKeyPath", key.path, "-authenticationKeyID", key.keyId, "-authenticationKeyIssuerID", key.issuerId];
 
 /** xcodebuild's arguments for the signed archive. */
-export function archiveArgs(o: { archive: string; derivedData: string; short: string; build: number; key: KeyFile }): string[] {
+export function archiveArgs(o: { archive: string; derivedData: string; short: string; build: number; team: string; bundleId: string; key: KeyFile }): string[] {
 	return [
 		"-project", "ios/App/App.xcodeproj",
 		"-scheme", "App",
@@ -124,7 +137,8 @@ export function archiveArgs(o: { archive: string; derivedData: string; short: st
 		"-onlyUsePackageVersionsFromResolvedFile",
 		...authArgs(o.key),
 		"archive",
-		`DEVELOPMENT_TEAM=${TEAM}`,
+		`DEVELOPMENT_TEAM=${o.team}`,
+		`PRODUCT_BUNDLE_IDENTIFIER=${o.bundleId}`,
 		"CODE_SIGN_STYLE=Automatic",
 		`MARKETING_VERSION=${o.short}`,
 		`CURRENT_PROJECT_VERSION=${o.build}`,
@@ -174,7 +188,7 @@ async function main() {
 		summary(inputs.message);
 		return;
 	}
-	const { channel, short, build, notes } = inputs;
+	const { channel, short, build, notes, team, bundleId } = inputs;
 
 	// The key is read once, here, and checked before anything is built with it.
 	let pem: string;
@@ -232,24 +246,24 @@ async function main() {
 
 	const work = path.join(mobile, "ios", "App", "build", "testflight");
 	const archive = path.join(work, "App.xcarchive");
-	console.log(`Pine ${short} (${build}) for TestFlight, channel ${channel}, signed by team ${TEAM}`);
+	console.log(`Pine ${short} (${build}) for TestFlight, channel ${channel}, bundle id ${bundleId}, signed by team ${team}`);
 	run("npm run sync:ios", "npm", ["run", "sync:ios"]);
 	fs.rmSync(work, { recursive: true, force: true });
 	fs.mkdirSync(work, { recursive: true });
-	run("xcodebuild archive", "xcodebuild", archiveArgs({ archive, derivedData: path.join(work, "DerivedData"), short, build, key }));
+	run("xcodebuild archive", "xcodebuild", archiveArgs({ archive, derivedData: path.join(work, "DerivedData"), short, build, team, bundleId, key }));
 
 	const options = path.join(work, "ExportOptions.plist");
-	fs.writeFileSync(options, exportOptions(TEAM));
+	fs.writeFileSync(options, exportOptions(team));
 	const exported = await runKept("xcodebuild", exportArgs({ archive, exportPath: path.join(work, "export"), options, key }));
 	if (exported.status !== 0) {
 		if (!alreadyUploaded(exported.output)) throw new Error(`The build was not uploaded. ${failed("xcodebuild -exportArchive (the upload)", exported.status)}`);
 		console.log(`App Store Connect already has Pine ${short} (${build}): it was uploaded before, and is distributed as it is.`);
 		summary(`Pine ${short} (${build}) was already on App Store Connect; it was not uploaded again.`);
 	} else {
-		summary(`Pine ${short} (${build}) was signed by team ${TEAM} and uploaded to App Store Connect.`);
+		summary(`Pine ${short} (${build}) was signed by team ${team} and uploaded to App Store Connect.`);
 	}
 
-	await distribute({ key: ascKey, bundleId: BUNDLE_ID, version: short, build: String(build), channel, notes });
+	await distribute({ key: ascKey, bundleId, version: short, build: String(build), channel, notes });
 	summary(`Pine ${short} (${build}) is on TestFlight, in the ${channel === "latest" ? "external group and submitted to Beta App Review" : "internal group"}.`);
 }
 

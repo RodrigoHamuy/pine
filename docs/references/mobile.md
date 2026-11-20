@@ -264,11 +264,16 @@ signed by the maintainer's Apple team and uploads it to App Store Connect, for e
 | A preview from `next` | The internal group `Maintainers`, the maintainer's own devices, with no review |
 
 Its "What to Test" is the release's commit subject. It takes the App Store Connect API key from
-the environment `testflight` (a key with the Admin role, which cloud-managed signing needs);
-without it the job uploads nothing and says so, and the rest of the release is unaffected. After
+the environment `testflight` (a key with the Admin role, which cloud-managed signing needs), and
+the signing team and the bundle id from the repository variables `IOS_TEAM_ID` and
+`IOS_BUNDLE_ID` (`dev.pmndre.pine` when it is not set): neither is in the code, so another
+maintainer's team takes over by changing those two variables and the three secrets, with no
+commit. The sideloaded IPA and the Android app stay `dev.pmndre.pine`. Without the key and the
+team the job uploads nothing and says so (with only some of them it fails), and the rest of the release is unaffected. After
 the upload, in the same run, `scripts/testflight.ts` puts the build into its group through the App
 Store Connect API. The maintainer can run the same on a Mac: `npm run testflight -- --version
-<X.Y.Z or X.Y.Z-next.N> --key <AuthKey.p8> --key-id <id> --issuer-id <uuid>`. It needs, once, in App Store Connect: an external group named
+<X.Y.Z or X.Y.Z-next.N> --key <AuthKey.p8> --key-id <id> --issuer-id <uuid> --team <team id>`
+(`--bundle-id` for another bundle id). It needs, once, in App Store Connect: an external group named
 exactly `Public` with its public link on, an internal group named exactly `Maintainers`, and the
 beta agreement accepted (without it a review submission fails with `BETA_CONTRACT_MISSING`).
 
