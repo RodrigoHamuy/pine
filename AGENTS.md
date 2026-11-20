@@ -779,8 +779,10 @@ own line of commits (`git log --first-parent` in `scripts/build.mjs`), and a mer
 there would stand in for all the commits it brought.
 
 A release from `main` also gets the Pine app, attached to its GitHub release as a disk image
-for each kind of Mac (the job `app` in `release.yml`: `desktop/scripts/pack.mjs --dmg`, then
-Apple's own check of the signed app, then the upload). The job does not start the app:
+for each kind of Mac, with what the app updates itself from: the app zipped after notarisation
+(`Pine-<version>-<arch>.zip`) and its Squirrel.Mac feed (`Pine-<arch>.json`, made by
+`desktop/scripts/update-feed.ts`, tested in `desktop/test/update-feed.test.ts`). The job `app` in
+`release.yml`: `desktop/scripts/pack.mjs --dmg`, then Apple's own check of the signed app, then the upload. The job does not start the app:
 `smoke.mjs` drives its window, and a test that drives the window does not belong in a release,
 where a renamed part of the page holds back the disk images of an app that runs. Run it on a
 Mac of your own before a release that changed how the app is packed or its page is built
