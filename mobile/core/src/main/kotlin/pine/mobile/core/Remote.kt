@@ -84,7 +84,7 @@ class RemoteService internal constructor(
  * be reached, from the join of its meeting to the open channel. `native` loads the WebRTC library:
  * the Android app's by default, the JVM's in the tests.
  */
-class Remote(
+class Remote internal constructor(
 	private val key: DeviceKey,
 	private val known: KnownHosts,
 	private val answerMs: Long = 60_000,
@@ -96,7 +96,27 @@ class Remote(
 	private val readMs: Int = 60_000,
 	private val openMs: Long = 20_000,
 	private val native: () -> Unit = LibDataChannel::initialize,
+	/**
+	 * Where a meeting service is reached, by its https origin: the origin itself. Only a test hands
+	 * in another (the access host's helper answers on http on the loopback, which no link may name):
+	 * this constructor is internal to the core, and the app has the one below, which has no such value.
+	 */
+	private val route: (String) -> String,
 ) {
+	constructor(
+		key: DeviceKey,
+		known: KnownHosts,
+		answerMs: Long = 60_000,
+		connectMs: Int = 15_000,
+		readMs: Int = 60_000,
+		openMs: Long = 20_000,
+		native: () -> Unit = LibDataChannel::initialize,
+	) : this(key, known, answerMs, connectMs, readMs, openMs, native, { it })
+
+	/** Where the meeting service `service` is reached: checked to be an https origin before anything is routed or reached. */
+	private fun meeting(service: String): String =
+		route(meetingService(service) ?: throw RemoteError("ssh", "The meeting service of this computer is not an https address: pair it again from the Pine app."))
+
 	private val http: OkHttpClient by lazy {
 		OkHttpClient.Builder()
 			.connectTimeout(connectMs.toLong(), TimeUnit.MILLISECONDS)
@@ -105,7 +125,7 @@ class Remote(
 			.build()
 	}
 
-	private fun client(): SSHClient {
+	private fun client(readMs: Int = this.readMs): SSHClient {
 		val config = DefaultConfig().apply {
 			keepAliveProvider = KeepAliveProvider.KEEP_ALIVE
 			channelReadTimeoutMs = readMs
@@ -170,9 +190,9 @@ class Remote(
 		val words = PairedWords(label)
 		val expected = pairedFingerprint(id)!!
 		val stream = try {
-			openPeer(computer.service, id, http, native, openMs)
+			openPeer(meeting(computer.service), id, http, native, openMs)
 		} catch (e: PeerClosed) {
-			throw RemoteError("ssh", words.peer(e.reason))
+			throw RemoteError("ssh", words.peer(e.reason), passing = true)
 		}
 		val ssh = client()
 		// What the computer may send before the phone says it took it in. libdatachannel's ICE on the
@@ -195,14 +215,14 @@ class Remote(
 				ssh.connectVia(stream.input, stream.output)
 			} catch (e: IOException) {
 				seen?.let { throw HostKeyError(words.changed(expected, it), value, 0, it, changed = true) }
-				throw RemoteError("ssh", words.cut)
+				throw RemoteError("ssh", words.cut, passing = true)
 			}
 			try {
 				ssh.authPublickey(PAIRED_USER, key.provider())
 			} catch (e: UserAuthException) {
 				throw RemoteError("ssh", words.notKnown)
 			} catch (e: IOException) {
-				throw RemoteError("ssh", words.cut)
+				throw RemoteError("ssh", words.cut, passing = true)
 			}
 			return serve(ssh, value, label, stream)
 		} catch (e: Exception) {
@@ -211,6 +231,17 @@ class Remote(
 			throw e
 		}
 	}
+
+	/**
+	 * Pairs with the computer `link` names, as the phone called `name` ("Pine on Pixel 9"): `on`
+	 * hears what the pairing reports (`PairingState`, Pairing.kt). Nothing is kept here: on
+	 * `Allowed` the caller keeps the computer (`Pines.addPaired`) and connects to it as a paired phone.
+	 */
+	fun pair(link: PairLink, name: String, on: (PairingState) -> Unit): Pairing =
+		startPairing(link, name, on, key, open = { openPeer(meeting(link.service), link.id, http, native, openMs) }, client = {
+			// The owner may take the computer's two minutes to answer: a read waits as long as the pairing does.
+			client(readMs = PAIR_WAIT_MS.toInt())
+		})
 
 	/** Runs `pine service` in a session of `ssh`, which is signed in, and holds the daemon it names. */
 	private fun serve(ssh: SSHClient, given: String, label: String, transport: ChannelStream?): RemoteService {
@@ -244,7 +275,7 @@ class Remote(
 			if (ended) runCatching { command.join(5, TimeUnit.SECONDS) }
 			reader.join(if (ended) 2_000 else 200)
 			val stderr = synchronized(err) { err.toString() }
-			if (transport != null && !transport.isOpen) throw RemoteError("ssh", PairedWords(label).lost)
+			if (transport != null && !transport.isOpen) throw RemoteError("ssh", PairedWords(label).lost, passing = true)
 			if (Regex("unknown command \"service\"").containsMatchIn(stderr)) throw RemoteError("ssh", "The pine on $shown is too old to be reached this way: it has no \"service\" command. Update it there with \"pine update\", then try again.")
 			throw RemoteError("ssh", trouble(shown, if (ended) "exit" else "timeout", command.exitStatus?.toString() ?: "", stderr))
 		}
