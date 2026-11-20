@@ -622,6 +622,18 @@ test("an empty composer is drawn at full strength, and its send button says ther
 	await page.fill("[data-slot=composer] textarea", "");
 });
 
+test("the send button sends what was typed with a click, as Enter does", async () => {
+	// A toast left by an earlier test lies over the button for a few seconds.
+	await page.waitForSelector("[data-slot=toast]", { state: "detached", timeout: 15_000 });
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ text: "sent by the button" }], "click to send "));
+	await page.locator("[data-slot=composer] [data-slot=input-group]").getByRole("button", { name: "Send", exact: true }).click();
+	await sees("[data-slot=markdown] >> text=sent by the button");
+	assert.equal(await page.inputValue("[data-slot=composer] textarea"), "");
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ text: "sent by Enter" }], "enter to send "));
+	await page.press("[data-slot=composer] textarea", "Enter");
+	await sees("[data-slot=markdown] >> text=sent by Enter");
+});
+
 test("a click into the composer draws no ring and no brighter border: it looks as it did before", async () => {
 	const look = () =>
 		page.$eval("[data-slot=composer] [data-slot=input-group]", (el: Element) => {

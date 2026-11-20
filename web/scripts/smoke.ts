@@ -194,6 +194,11 @@ try {
 	});
 	const errors: string[] = [];
 	page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+	// The page's frame may not submit a form (no allow-forms, rule 10): a button that relied on
+	// one would do nothing, and the browser says so on the console. Kept for the whole run.
+	const blocked: string[] = [];
+	const watchForms = (m: { text(): string }) => /Blocked form submission/i.test(m.text()) && blocked.push(m.text());
+	page.on("console", watchForms);
 	await page.goto(`${origin}/`);
 	const frame = page.frameLocator("iframe");
 	explain = async () => {
@@ -263,6 +268,26 @@ try {
 		await frame.locator(`[data-environment="${host}"] [data-slot=trust-host-key]`).first().click();
 		await frame.locator("textarea").first().waitFor({ timeout: 60_000 });
 		assert.match(machine.log(), /Accepted publickey for \S+ from 127\.0\.0\.1 port \d+ ssh2: ED25519/);
+	});
+
+	// The mouse's checks come before the window opened by the next ones: once that window was open and
+	// closed, headless Chrome hands a click over the sandboxed frame to the bridge's document instead.
+	await check("the Send button sends with a click of the mouse, not only with Enter", async () => {
+		const box = frame.locator("textarea").first();
+		await box.fill('Click it. <<MOCK {"steps":[{"text":"The button sent it."}]}>>');
+		await frame.locator("[data-slot=composer]").getByRole("button", { name: "Send", exact: true }).click();
+		await frame.getByText("The button sent it.", { exact: true }).first().waitFor({ timeout: 60_000 });
+	});
+
+	await check("an event is published from its form with a click on Publish", async () => {
+		const box = frame.locator("textarea").first();
+		await box.fill("/emit");
+		await box.press("Enter");
+		await frame.locator("[data-slot=publish-form]").waitFor({ timeout: 10_000 });
+		await frame.locator("#publish-topic").fill("smoke/clicked");
+		await frame.getByRole("button", { name: /^Publish/ }).click();
+		await frame.locator("[data-slot=publish-form]").waitFor({ state: "detached", timeout: 10_000 });
+		await frame.locator("[data-slot=toast]", { hasText: "on smoke/clicked" }).first().waitFor({ timeout: 10_000 });
 	});
 
 	await check("the page cannot read the bridge's IndexedDB or the daemon's token", async () => {
@@ -488,6 +513,7 @@ try {
 	const phoneErrors: string[] = [];
 	const phoneSaid: string[] = [];
 	phone.page.on("console", (m) => (phoneSaid.push(`${m.type()}: ${m.text()}`), m.type() === "error" && phoneErrors.push(m.text())));
+	phone.page.on("console", watchForms);
 	const screen = phone.page.frameLocator("iframe");
 	const paired = `mac:${mac.machineId}`;
 	shownCode = async () => (await screen.locator("[data-slot=pairing-code]").innerText({ timeout: 20_000 })).trim();
@@ -576,6 +602,10 @@ try {
 		assert.equal(await other.locator("iframe").count(), 0);
 		assert.deepEqual(tries, []);
 		await other.close();
+	});
+
+	await check("no form submission was blocked in the sandboxed frame during the whole run", async () => {
+		assert.deepEqual(blocked, []);
 	});
 
 	assert.deepEqual(errors.filter((e) => /Content Security Policy|Refused/.test(e)), [], "the page broke no policy");

@@ -49,14 +49,9 @@ export function PublishDialog({ topic: firstTopic = "", payload: firstPayload = 
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
 			<DialogContent className="sm:max-w-lg">
-				<form
-					data-slot="publish-form"
-					className="contents"
-					onSubmit={(e) => {
-						e.preventDefault();
-						void send();
-					}}
-				>
+				{/* Not a form: the web client's page runs in a frame that may not submit one (no `allow-forms`,
+				    AGENTS.md rule 10). Publish sends by its click, Enter in the topic and ⌘↩ in the payload by their keys. */}
+				<div data-slot="publish-form" className="contents">
 					<DialogHeader>
 						<DialogTitle>Publish an event</DialogTitle>
 						<DialogDescription>It is published as yours, as the owner: routes and agents subscribed to its topic get it.</DialogDescription>
@@ -64,7 +59,7 @@ export function PublishDialog({ topic: firstTopic = "", payload: firstPayload = 
 					<FieldGroup>
 						<Field data-invalid={showTopic ? true : undefined}>
 							<FieldLabel htmlFor="publish-topic">Topic</FieldLabel>
-							<Input id="publish-topic" autoFocus className="font-mono" placeholder="house/mode" spellCheck={false} autoComplete="off" value={topic} aria-invalid={showTopic ? true : undefined} onChange={(e) => setTopic(e.target.value)} onBlur={() => topic && setLeft((l) => ({ ...l, topic: true }))} />
+							<Input id="publish-topic" autoFocus className="font-mono" placeholder="house/mode" spellCheck={false} autoComplete="off" value={topic} aria-invalid={showTopic ? true : undefined} onChange={(e) => setTopic(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && (e.preventDefault(), void send())} onBlur={() => topic && setLeft((l) => ({ ...l, topic: true }))} />
 							{showTopic ? <FieldError>{wrong.topic}</FieldError> : null}
 						</Field>
 						<Field data-invalid={showPayload ? true : undefined}>
@@ -87,9 +82,9 @@ export function PublishDialog({ topic: firstTopic = "", payload: firstPayload = 
 					</FieldGroup>
 					<DialogFooter>
 						<Button type="button" variant="outline" onClick={close}>Cancel</Button>
-						<Button type="submit" disabled={sending}>{sending ? <Pulse label="Loading" data-icon="inline-start" /> : null}Publish <Kbd>⌘↩</Kbd></Button>
+						<Button disabled={sending} onClick={() => void send()}>{sending ? <Pulse label="Loading" data-icon="inline-start" /> : null}Publish <Kbd>⌘↩</Kbd></Button>
 					</DialogFooter>
-				</form>
+				</div>
 			</DialogContent>
 		</Dialog>
 	);
