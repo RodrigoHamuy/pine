@@ -37,7 +37,7 @@ jobs:
       - run: npm ci
         if: env.CHROMATIC_PROJECT_TOKEN != ''
         working-directory: desktop
-      - uses: chromaui/action@latest
+      - uses: chromaui/action@9cb4d65a86fe1c4c67a76a8d90f35a51a118e55f # v18.15.1
         if: env.CHROMATIC_PROJECT_TOKEN != ''
         with:
           workingDir: desktop
