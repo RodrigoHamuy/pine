@@ -119,6 +119,21 @@ struct PinesPairingTests {
 		}
 	}
 
+	@Test("using another machine ends an open pairing: its connection is closed and a new pairing is accepted at once")
+	func endedByUse() async throws {
+		try await withPairedPines { rig, pines, page in
+			pines.ready()
+			try pines.pair(try await rig.openedLink(), name: "Pine on a test")
+			try await eventually("the four digits") { (page.last?["pairing"] as? [String: String])?["code"] != nil }
+			_ = try pines.addHost("me@127.0.0.1:1")
+			try pines.use("me@127.0.0.1:1")
+			try await eventually("the first pairing's connection closed") { rig.host.events("left").contains { ($0["id"] as? String)?.hasPrefix("pairing:") == true } }
+			try pines.pair(try await rig.openedLink(), name: "Pine on a test")
+			try await eventually("the second pairing's four digits") { (page.last?["pairing"] as? [String: String])?["code"] != nil }
+			pines.cancelPairing()
+		}
+	}
+
 	@Test("a cut connection is made again by itself; once the computer removed the phone, it stops and says to pair again")
 	func reconnectsThenRemoved() async throws {
 		try await withPairedPines { rig, pines, page in

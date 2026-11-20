@@ -263,10 +263,13 @@ public final class Pines: @unchecked Sendable {
 	}
 
 	private func start(_ host: String?) {
-		let mine = lock.withLock {
+		let (mine, open) = lock.withLock { () -> (Int, Pairing?) in
 			round += 1
-			return round
+			defer { pairingNow = nil }
+			return (round, pairingNow)
 		}
+		// Whatever is started now ends a pairing under way, which keeps nothing.
+		open?.cancel()
 		guard let host else { return show(mine, nobody(), nil) }
 		show(mine, Self.starting(host), host)
 		Task.detached { await self.connect(host, mine) }
@@ -366,12 +369,7 @@ public final class Pines: @unchecked Sendable {
 	 * again (or that there is none), as before the pairing.
 	 */
 	public func cancelPairing() {
-		let pairing = lock.withLock { () -> Pairing? in
-			defer { pairingNow = nil }
-			return pairingNow
-		}
-		guard let pairing else { return }
-		pairing.cancel()
+		guard lock.withLock({ pairingNow != nil }) else { return }
 		start(inUse)
 	}
 
