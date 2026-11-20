@@ -6,6 +6,7 @@ import { after, before, test } from "node:test";
 import type { ServiceState } from "../../desktop/src/bridge.ts";
 import { frameBridge } from "../src/frame-bridge.ts";
 import { webBridge, type Store, type WebBridgeDeps } from "../src/host.ts";
+import { firstScreen, machineName, pairingEnded } from "../../desktop/src/machines.ts";
 import { macFingerprint, type PairLink } from "../src/pairing.ts";
 import { REMOTE_COMMAND } from "../src/remote-command.ts";
 import { serve } from "../src/serve.ts";
@@ -264,4 +265,38 @@ test("a paired Mac is connected to again by a new page, under its name", async (
 	await becomes(again, (x) => x.status === "ready");
 	assert.deepEqual(c.machine.connects.at(-1)?.user, "pine");
 	again.stop();
+});
+
+test("the page reads a pairing from the states it is told: the four digits on the first screen, then paired; a refusal ends it as failed", async () => {
+	for (const decision of ["allow", "refuse"] as const) {
+		const machine = mac();
+		const c = client(machine, { pairLink: { id: ID, code: CODE } });
+		const first = await c.page.state();
+		assert.equal(firstScreen(first.state)?.title, "Pairing with your Mac");
+		c.page.ready();
+		const asked = await becomes(c, (s) => s.status === "starting" && s.pairing?.code === DIGITS);
+		assert.equal(firstScreen(asked)?.code, DIGITS);
+		assert.equal(firstScreen(asked)?.title, "Confirm on your Mac");
+		machine.answer(decision);
+		await becomes(c, (s) => (decision === "allow" ? s.status === "ready" : s.status === "error"));
+		const ends = c.states.map((s, i) => (i ? pairingEnded(c.states[i - 1], s) : undefined)).filter(Boolean);
+		assert.deepEqual(ends, [decision === "allow" ? "paired" : "failed"], decision);
+		// What the page lists after the yes: the Mac under its computer's name, never its id.
+		const { prefs } = await c.page.state();
+		if (decision === "allow") assert.deepEqual(prefs.hosts.map((h) => machineName(h, prefs.names)), ["Studio Mac"]);
+		else assert.deepEqual(prefs.hosts, []);
+		c.stop();
+	}
+});
+
+test("where user@host machines cannot be added, the first screen is told to pair a Mac, not to add user@host", async () => {
+	const off = client(mac(), { config: async () => ({ ice: [], relay: false }) });
+	const s = await off.page.state();
+	assert.equal(s.state.status, "error");
+	assert.doesNotMatch(message(s.state), /user@host|authorized_keys/);
+	assert.match(message(s.state), /Pine on your Mac.*Browser access/);
+	off.stop();
+	const on = client(mac());
+	assert.match(message((await on.page.state()).state), /user@host/);
+	on.stop();
 });
