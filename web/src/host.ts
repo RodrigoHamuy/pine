@@ -414,8 +414,28 @@ export function webBridge(deps: WebBridgeDeps) {
 		setState({ status: "starting", pairing: { name } });
 		let connection: Connection;
 		try {
-			if (!deps.peer) throw new Error(NO_PEER);
-			connection = await deps.connect({ open: deps.peer(link.id), user: pairUser(link.code), key: await key(), hostFingerprint: pairedFingerprint(link.id) });
+			const peer = deps.peer;
+			if (!peer) throw new Error(NO_PEER);
+			// Whether the channel opened, and whether the computer sent a byte over it. One that ended
+			// before the computer said anything (it can let go of a channel that is slow to reach it)
+			// never got to authentication: the link's one-time code is unused, and one more session may try it.
+			let opened = false;
+			let heard = false;
+			const open: OpenStream = async () => {
+				const transport = await peer(link.id)();
+				opened = true;
+				return { ...transport, onData: (next) => transport.onData((bytes) => ((heard = true), next(bytes))) };
+			};
+			const attempt = async () => {
+				opened = heard = false;
+				return deps.connect({ open, user: pairUser(link.code), key: await key(), hostFingerprint: pairedFingerprint(link.id) });
+			};
+			try {
+				connection = await attempt();
+			} catch (e) {
+				if (!opened || heard || e instanceof SshRefused || mine !== round) throw e;
+				connection = await attempt();
+			}
 		} catch (e) {
 			if (e instanceof SshRefused && e.reason === "host-key") return stop("The computer that answered is not the one this pairing link names: nothing was trusted. Open Pine on your computer and add this device again.");
 			if (e instanceof SshRefused) return stop(PAIR_EXPIRED);

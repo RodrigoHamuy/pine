@@ -168,6 +168,8 @@ export async function startAccessHost(options: AccessHostOptions): Promise<Acces
 	const meeting = new Map<string, Peer>();
 	/** Every peer connection there is, set up or connected. */
 	const peers = new Set<Peer>();
+	/** The peers that were handed the browser's offer. */
+	const offered = new WeakSet<Peer>();
 
 	const again = () => {
 		if (stopped) return;
@@ -252,12 +254,19 @@ export async function startAccessHost(options: AccessHostOptions): Promise<Acces
 			);
 			return;
 		}
-		if (message.t === "signal") return meeting.get(s)?.signal(message.d);
+		if (message.t === "signal") {
+			const peer = meeting.get(s);
+			if (peer && message.d && typeof message.d === "object" && "sdp" in message.d) offered.add(peer);
+			return peer?.signal(message.d);
+		}
 		if (message.t === "close") {
-			// The browser left before its channel opened.
+			// The browser left the meeting before its channel reached this side. With its offer here,
+			// the connection may be up already and the channel on its way (the browser leaves once
+			// its own end is open): the peer's own state and its time limit (`peerTimeoutMs`) decide.
+			// Without one, nothing will come.
 			const peer = meeting.get(s);
 			meeting.delete(s);
-			peer?.close();
+			if (peer && !offered.has(peer)) peer.close();
 		}
 	}
 
