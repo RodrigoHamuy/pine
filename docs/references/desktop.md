@@ -33,7 +33,7 @@ carries on every system
 |---|---|
 | pine | The same package that goes to npm, with what it depends on. The app and the pine inside it have one version |
 | Node | The Node that pine runs on, as nodejs.org hands it out. The pine of the app runs on it, whatever Node the Mac has or lacks |
-| pine's helpers | On a Mac, the small programs for dictating, app control and the `system` event source, built for both kinds of Mac. Elsewhere pine builds them on first use, which needs Apple's command line developer tools. They are Mac programs: the Linux and Windows app has none |
+| pine's helpers | The small programs for dictating, app control and the `system` event source. On a Mac they are Swift programs, built for both kinds of Mac. On Windows they are C# programs, built with the compiler every Windows carries; the app carries them built. On Linux they are pine's own code (Node and Python) and use what the system has (D-Bus, AT-SPI, whisper.cpp): nothing is built |
 | `pine` for a terminal | See below |
 
 An Android phone has an app of its own in the same release, for the pine of another machine
@@ -665,12 +665,16 @@ pine and restart it.
 
 ## Dictating a message
 
-On a Mac the microphone in the bar under the input (or `⌃R`, or `/voice [language]`) dictates
-the message, with the helper the terminal UI uses: the words are recognised on the Mac itself,
-and what is heard is text in the input until you send it. `↩` ends the listening, `esc` throws
-away what was heard, and a key that types ends it too. Everything under "Dictating a message"
-in [tui.md](tui.md) holds here, also what the first use asks for and what to do when it does
-not work. On another system there is no microphone in the bar.
+The microphone in the bar under the input (or `⌃R`, `Ctrl+R` on Windows and Linux, or
+`/voice [language]`) dictates the message, with the helper the terminal UI uses: the words are
+recognised on this computer itself (macOS's speech recognition, Windows' desktop recogniser,
+whisper.cpp on Linux), and what is heard is text in the input until you send it. `↩` ends the
+listening, `esc` throws away what was heard, and a key that types ends it too. It listens on
+the computer the app runs on, also while the app uses the pine of another machine or of WSL.
+Everything under "Dictating a message" in [tui.md](tui.md) holds here, also what each system
+needs, what the first use asks for and what to do when it does not work: where a piece is
+missing (whisper.cpp on Linux, a recogniser for the language on Windows), the microphone says
+what to install. The phone apps have no microphone in the bar.
 
 ## What the app is careful about
 
@@ -753,6 +757,8 @@ desktop/
                    in batches, the page's content security policy
     preload.ts     the bridge: the short list of things the page may ask the main process for
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
+    fds.ts         what a program the app starts gets of the app's own open files: on Linux, where
+                   Chromium leaves them open across a start, nothing but its stdio (`sealed`)
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed (on
                    Windows only looked for: the installer puts it there)
     terminal.ts, shell-hooks.ts  the owner's terminal beside a conversation, and the hooks of zsh,

@@ -6,10 +6,11 @@ import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
+import { csc } from "../../src/csharp.ts";
+import { buildVoice, buildVoiceWindows, Listening, NO_CSC, NOT_HERE, voiceTools } from "../../src/tui/voice.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
-import { connect, connectSsh, findPine, hostOf, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError } from "./service.ts";
+import { connect, connectSsh, findPine, hostOf, type Launch, loginEnv, onPath, pineRoot, readHosts, runPine, type Service, ServiceError } from "./service.ts";
 import { fromWsl, install as installIntoWsl, toWsl } from "./wsl.ts";
 import { wslDistros } from "../../src/remote.ts";
 import { shellKeeps, Terminals } from "./terminal.ts";
@@ -471,7 +472,7 @@ function buildMenu(): void {
 				...(isMac ? [] : [{ type: "separator" as const }, item("Settings…", "settings", "Ctrl+,"), { role: "quit" as const }]),
 			],
 		},
-		{ label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "pasteAndMatchStyle" }, { role: "selectAll" }, { type: "separator" }, item("Find in Conversation", "find", "CmdOrCtrl+F"), item("Copy Last Answer", "copy", "CmdOrCtrl+Shift+C"), ...(isMac ? [item("Dictate Message", "voice", "Ctrl+R")] : [])] },
+		{ label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "pasteAndMatchStyle" }, { role: "selectAll" }, { type: "separator" }, item("Find in Conversation", "find", "CmdOrCtrl+F"), item("Copy Last Answer", "copy", "CmdOrCtrl+Shift+C"), ...(isMac || !voiceTools().unavailable ? [item("Dictate Message", "voice", "Ctrl+R")] : [])] },
 		{
 			label: "View",
 			submenu: [
@@ -662,21 +663,42 @@ function wire(): void {
 		else if (isWindows) win?.setOverlayIcon(n > 0 ? waiting() : null, n > 0 ? `${n} waiting for you` : "");
 		else app.setBadgeCount(n);
 	});
-	// Dictating a message. The words are recognised on this Mac by the helper the terminal UI
-	// uses too (src/tui/voice.ts): nothing is sent anywhere, and what is heard is text for the
-	// input and nothing more. The page puts it there; nothing here sends a message.
+	// Dictating a message. The words are recognised on this computer by the helper the terminal UI
+	// uses too (src/tui/voice.ts): voice.swift on a Mac, voice.cs on Windows, whisper.cpp on Linux.
+	// Nothing is sent anywhere, and what is heard is text for the input and nothing more. The page
+	// puts it there; nothing here sends a message.
 	handle("pine:voice-start", async (language?: string) => {
 		listening?.cancel();
 		listening = undefined;
 		const lang = typeof language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(language) ? language : undefined;
 		let command: string[];
-		if (process.env.PINE_DESKTOP_VOICE) command = [process.env.PINE_DESKTOP_VOICE]; // a stand-in, for tests
+		// A stand-in, for tests: a program, or a command line as a JSON array (the real helper told to read a recording).
+		if (process.env.PINE_DESKTOP_VOICE) command = process.env.PINE_DESKTOP_VOICE.startsWith("[") ? (JSON.parse(process.env.PINE_DESKTOP_VOICE) as string[]).map(String) : [process.env.PINE_DESKTOP_VOICE];
 		else {
-			if (!isMac) throw new Error(NOT_HERE);
-			launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
-			const source = path.join(pineRoot(launch) ?? "", "src", "tui", "voice.swift");
-			if (!fs.existsSync(source)) throw new Error("this pine has no voice input: its helper's source was not found. Update pine.");
-			command = [await buildVoice(path.join(app.getPath("userData"), "voice"), source)];
+			if (!isMac && !isWindows && process.platform !== "linux") throw new Error(NOT_HERE);
+			if (isWindows) {
+				// The pine of this app on Windows runs in WSL; the helper listens on Windows, from the source the app carries.
+				const source = [...(app.isPackaged ? [path.join(process.resourcesPath, "pine")] : []), path.join(APP_ROOT, "..")].map((root) => path.join(root, "src", "tui", "voice.cs")).find((f) => fs.existsSync(f));
+				if (!source) throw new Error("this app has no voice input on Windows: its helper's source was not found. Update the app.");
+				if (!csc()) throw new Error(NO_CSC);
+				command = [buildVoiceWindows(path.join(app.getPath("userData"), "voice"), { source })];
+			} else if (isMac) {
+				launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
+				const source = path.join(pineRoot(launch) ?? "", "src", "tui", "voice.swift");
+				if (!fs.existsSync(source)) throw new Error("this pine has no voice input: its helper's source was not found. Update pine.");
+				command = [await buildVoice(path.join(app.getPath("userData"), "voice"), source)];
+			} else {
+				launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
+				const root = pineRoot(launch) ?? "";
+				// The helper runs on Node: the one pine runs on, which the app's own Electron is not.
+				const helper = [".js", ".ts"].map((ext) => path.join(root, "src", "tui", `voice-whisper${ext}`)).find((f) => fs.existsSync(f));
+				if (!helper) throw new Error("this pine has no voice input on Linux: its helper was not found. Update pine.");
+				const node = launch.argv.length > 1 ? launch.argv[0] : onPath("node", launch.env);
+				if (!node) throw new Error("voice input on Linux runs on Node, and no node was found on this computer. Install Node 24 or newer from https://nodejs.org, then try again.");
+				const tools = voiceTools("linux", undefined, { node, helper });
+				if (tools.unavailable) throw new Error(tools.unavailable);
+				command = await tools.program();
+			}
 		}
 		const mine: Listening = new Listening(command, lang, {
 			ready: () => listening === mine && send("pine:voice", { type: "ready" }),
