@@ -350,7 +350,14 @@ private final class Meeting: NSObject, URLSessionWebSocketDelegate, @unchecked S
 						break
 					}
 				}
-				lock.withLock { link = made }
+				// The time limit or the socket's end may have settled the attempt while the link was made:
+				// finish() closed no link then, so this one is closed here, or it stays registered for good.
+				let kept = lock.withLock { () -> Bool in
+					if settled { return false }
+					link = made
+					return true
+				}
+				if !kept { made.close() }
 			} catch {
 				finish(.failure(error))
 			}
