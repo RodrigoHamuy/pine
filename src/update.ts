@@ -107,12 +107,23 @@ export function installed(root = PINE_ROOT): { name: string; version: string; ki
 	return { name: pkg.name, version: pkg.version, kind: kind === "local" ? installKind(root, capture("npm", ["root", "-g"])) : kind, root };
 }
 
+// npm is npm.cmd on Windows, which Node starts only through cmd.exe. The arguments are pine's own
+// (its package name, a version npm gave), never text from anywhere else.
+const viaShell = (cmd: string) => process.platform === "win32" && cmd === "npm";
+
+/** The command and its arguments as spawnSync takes them: one line for cmd.exe where it has to read them. */
+const line = (cmd: string, args: string[]): [string, string[]] => (viaShell(cmd) ? [[cmd, ...args].join(" "), []] : [cmd, args]);
+
 function capture(cmd: string, args: string[], cwd?: string): string | undefined {
-	const r = spawnSync(cmd, args, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+	const [c, a] = line(cmd, args);
+	const r = spawnSync(c, a, { cwd, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], shell: viaShell(cmd), windowsHide: true });
 	return r.status === 0 ? r.stdout.trim() : undefined;
 }
 
-const show = (cmd: string, args: string[], cwd?: string) => spawnSync(cmd, args, { cwd, stdio: "inherit" }).status ?? 1;
+const show = (cmd: string, args: string[], cwd?: string) => {
+	const [c, a] = line(cmd, args);
+	return spawnSync(c, a, { cwd, stdio: "inherit", shell: viaShell(cmd) }).status ?? 1;
+};
 
 const RESTART = "A pine that is running keeps the old version until it is restarted: quit the terminal UI and open it again, or restart the daemon.";
 

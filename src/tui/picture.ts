@@ -316,7 +316,20 @@ export class Slot implements Component {
 // file to the system's player for the real thing. Decoding is ffmpeg's job; without ffmpeg there is
 // a still from Quick Look and the player.
 
-const findTool = (name: string) => [...(process.env.PATH ?? "").split(":"), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].map((d) => path.join(d, name)).find((f) => d_exists(f));
+/** Linux: every process below `pid`, from what /proc says each one's children are. */
+function descendants(pid: number, depth = 0): number[] {
+	if (depth > 8) return [];
+	let kids: number[] = [];
+	try {
+		for (const task of fs.readdirSync(`/proc/${pid}/task`)) kids.push(...fs.readFileSync(`/proc/${pid}/task/${task}/children`, "utf8").trim().split(/\s+/).filter(Boolean).map(Number));
+	} catch {
+		return [];
+	}
+	kids = [...new Set(kids)];
+	return [...kids, ...kids.flatMap((k) => descendants(k, depth + 1))];
+}
+
+const findTool = (name: string) => [...(process.env.PATH ?? process.env.Path ?? "").split(path.delimiter), "/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"].filter(Boolean).map((d) => path.join(d, process.platform === "win32" ? `${name}.exe` : name)).find((f) => d_exists(f));
 function d_exists(f: string): boolean {
 	try {
 		return fs.statSync(f).isFile();
@@ -784,6 +797,17 @@ export class Sound implements Component {
 			if (child.pid) process.kill(-child.pid, signal);
 		} catch {
 			child.kill(signal);
+		}
+		// On Linux the sandbox starts the player in a session of its own (bwrap --new-session), which a
+		// signal to the group does not reach: each process under it is told by itself.
+		if (process.platform === "linux" && child.pid) {
+			for (const pid of descendants(child.pid)) {
+				try {
+					process.kill(pid, signal);
+				} catch {
+					// gone already
+				}
+			}
 		}
 	}
 

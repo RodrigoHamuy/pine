@@ -93,6 +93,7 @@ function standIn(): Bridge {
 		termRun: async () => ({ reports: false }),
 		termResize: async () => {},
 		termClose: async () => {},
+		termFocus: () => undefined,
 		onTermData: never,
 		onTermExit: never,
 		onTermRun: never,

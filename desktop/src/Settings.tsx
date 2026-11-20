@@ -20,7 +20,7 @@ import { type AgentDetail, api, type LoginState, type Route, type Setting, type 
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, useModel } from "./model.ts";
-import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
+import { ago, errText, MODES, newApp, plural, REASONING, short, tilde } from "./text.ts";
 import type { DialogRootActions } from "@base-ui/react/dialog";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
@@ -2170,7 +2170,7 @@ function AppPage() {
 	const service = s.service.status === "ready" ? s.service : undefined;
 	const newer = s.update?.status === "newer" ? s.update : undefined;
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
-	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
+	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; managed?: boolean; text: string }>();
 	// Under a bridge with no local machine (`s.local`), what only this computer has is neither asked nor shown:
 	// its home folder, Keep running, Restart, the pine command, the browser build, the Electron version.
 	const local = s.local;
@@ -2193,7 +2193,7 @@ function AppPage() {
 									Pine {s.versions.app}
 									{newer ? <Badge variant="outline">{newer.version} is available</Badge> : s.update?.status === "latest" ? <Badge>the latest version</Badge> : null}
 								</FieldTitle>
-								<FieldDescription>{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</FieldDescription>
+								<FieldDescription>{newer ? `The new app is ${newApp().what} on the release's page on GitHub: ${newApp().how}. Your pine home stays as it is.` : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
 								{newer ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
@@ -2205,7 +2205,7 @@ function AppPage() {
 						<Field orientation="horizontal">
 							<FieldContent>
 								<FieldLabel htmlFor={`${field}-updates`}>Look for a newer version at the start</FieldLabel>
-								<FieldDescription>One question to GitHub each time the app starts. It says nothing about this Mac or your pine.</FieldDescription>
+								<FieldDescription>One question to GitHub each time the app starts. It says nothing about {s.platform === "darwin" ? "this Mac" : "this computer"} or your pine.</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
 								<Switch id={`${field}-updates`} checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} />
@@ -2260,7 +2260,7 @@ function AppPage() {
 								</FieldTitle>
 								<FieldDescription>{command.text}</FieldDescription>
 							</FieldContent>
-							{command.state === "none" || command.state === "here" ? (
+							{(command.state === "none" || command.state === "here") && !command.managed ? (
 								<div className="flex items-center gap-1.5">
 									{command.state === "none" ? <Button variant="outline" size="xs" onClick={() => void bridge.command("install").then(setCommand)}>Set up</Button> : <Button variant="outline" size="xs" onClick={() => void bridge.command("remove").then(setCommand)}>Remove</Button>}
 								</div>
@@ -2272,7 +2272,7 @@ function AppPage() {
 							<FieldContent>
 								<FieldTitle>
 									Browser for the web tools
-									<Badge variant={s.browser ? "default" : "outline"}>{s.browser ? "on this Mac" : "not on this Mac"}</Badge>
+									<Badge variant={s.browser ? "default" : "outline"}>{`${s.browser ? "on" : "not on"} ${s.platform === "darwin" ? "this Mac" : "this computer"}`}</Badge>
 								</FieldTitle>
 								<FieldDescription>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</FieldDescription>
 								{!s.browser && s.initLines.length ? (

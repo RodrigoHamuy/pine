@@ -6,19 +6,23 @@ import path from "node:path";
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 export function expandHome(p: string): string {
-	return p === "~" || p.startsWith("~/") ? path.join(os.homedir(), p.slice(1)) : p;
+	return p === "~" || p.startsWith("~/") || (process.platform === "win32" && p.startsWith("~\\")) ? path.join(os.homedir(), p.slice(1)) : p;
 }
 
 /** Where a command lies on the PATH, as a shell would find it; nothing where there is none. */
 export function onPath(name: string, env: NodeJS.ProcessEnv = process.env): string | undefined {
-	for (const dir of (env.PATH ?? "").split(path.delimiter)) {
+	// Windows finds "npm" as npm.cmd: a program is named without the ending its PATHEXT lists.
+	const endings = process.platform === "win32" && !path.extname(name) ? (env.PATHEXT ?? ".COM;.EXE;.BAT;.CMD").split(";").filter(Boolean) : [""];
+	for (const dir of (env.PATH ?? env.Path ?? "").split(path.delimiter)) {
 		if (!dir) continue;
-		const file = path.join(dir, name);
-		try {
-			fs.accessSync(file, fs.constants.X_OK);
-			if (fs.statSync(file).isFile()) return file;
-		} catch {
-			// Not in this folder.
+		for (const ending of endings) {
+			const file = path.join(dir, name + ending.toLowerCase());
+			try {
+				fs.accessSync(file, fs.constants.X_OK);
+				if (fs.statSync(file).isFile()) return file;
+			} catch {
+				// Not in this folder.
+			}
 		}
 	}
 	return undefined;
@@ -137,7 +141,8 @@ export const errText = (e: unknown) => (e instanceof Error ? e.message : String(
 
 /** Hand a file or a web address to the system: the program the owner set for it opens it. Only ever on the owner's click. */
 export function openInSystem(target: string): void {
-	spawn(process.platform === "darwin" ? "open" : "xdg-open", [target], { stdio: "ignore", detached: true })
+	// On Windows explorer.exe, which takes the target as one argument: no shell reads it (cmd's start would).
+	spawn(process.platform === "darwin" ? "open" : process.platform === "win32" ? "explorer.exe" : "xdg-open", [target], { stdio: "ignore", detached: true, windowsHide: true })
 		.on("error", () => {})
 		.unref();
 }

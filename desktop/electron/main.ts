@@ -1,7 +1,8 @@
 // The app's main process. It owns three things the page must not: the daemon's token, the
 // operating system (windows, menus, dialogs, notifications), and the child that is the daemon
 // when this app had to start one. The page gets a narrow bridge (preload.ts) and nothing else.
-import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, session, shell } from "electron";
+import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeImage, nativeTheme, Notification, protocol, session, shell } from "electron";
+import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -9,9 +10,18 @@ import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
 import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
-import { Terminals } from "./terminal.ts";
+import { shellKeeps, Terminals } from "./terminal.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanLook, type Look } from "../src/theme.ts";
+
+// `pine` in a terminal, from an AppImage (command.ts): the link in the PATH leads to the AppImage
+// itself, whose folder under /tmp is another one at every start, and its runtime says by which name
+// it was started. Started as `pine`, this is not the app but the launcher it carries: the app's pine
+// on the app's Node, with the terminal's arguments, its input and its output.
+if (process.platform === "linux" && process.env.APPIMAGE && path.basename(process.env.ARGV0 ?? "") === "pine") {
+	const done = spawnSync(path.join(process.resourcesPath, "bin", "pine"), process.argv.slice(1).filter((a) => a !== "--no-sandbox"), { stdio: "inherit" });
+	process.exit(done.status ?? 1);
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const APP_ROOT = path.resolve(HERE, "..");
@@ -27,6 +37,7 @@ const originOf = (url: string) => {
 };
 const ORIGIN = DEV_URL ? originOf(DEV_URL) : "app://pine";
 const isMac = process.platform === "darwin";
+const isWindows = process.platform === "win32";
 /** Tests only: the window opens behind the owner's windows and the app never takes the focus or a place in the Dock. */
 const BACKGROUND = Boolean(process.env.PINE_DESKTOP_BACKGROUND);
 if (BACKGROUND && isMac) app.setActivationPolicy("accessory");
@@ -34,6 +45,8 @@ if (BACKGROUND && isMac) app.setActivationPolicy("accessory");
 // A second set of windows and data for tests and for trying things out beside the real app.
 if (process.env.PINE_DESKTOP_DATA) app.setPath("userData", path.resolve(process.env.PINE_DESKTOP_DATA));
 app.setName("Pine");
+// Its notifications, its taskbar button and its installer's shortcut are one app on Windows: the appId pack.mjs gives it.
+if (isWindows) app.setAppUserModelId("dev.pine.desktop");
 
 protocol.registerSchemesAsPrivileged([
 	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
@@ -98,9 +111,23 @@ function windowBackground(): string {
 	return (prefs.look?.colors.bg ?? "#1b1e28").slice(0, 7);
 }
 
-/** Repaints the window's background for the current theme; a no-op before the window exists. */
+/**
+ * How tall the bar along the top of the page is (h-11 at the page's 15px, index.css): off a Mac the
+ * system draws its window controls over the page at its top right (titleBarOverlay), as tall as it.
+ */
+const TITLE_BAR = 41;
+
+/** The system's window controls off a Mac, in the theme's colors: on the bar's background (the page's `sunk`), drawn in its quieter text. */
+function windowControls(): { color: string; symbolColor: string; height: number } {
+	const colors = prefs.look?.colors;
+	return { color: (colors?.sunk ?? "#171922").slice(0, 7), symbolColor: (colors?.["text-muted"] ?? colors?.text ?? "#a6accd").slice(0, 7), height: TITLE_BAR };
+}
+
+/** Repaints the window's background (and off a Mac its controls) for the current theme; a no-op before the window exists. */
 function refreshBackground(): void {
-	if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
+	if (!win || win.isDestroyed()) return;
+	win.setBackgroundColor(windowBackground());
+	if (!isMac) win.setTitleBarOverlay(windowControls());
 }
 
 function savePrefs(): void {
@@ -129,6 +156,8 @@ let connected = false;
 let round = 0;
 let quitting = false;
 let listening: Listening | undefined;
+/** Whether the owner's terminal has the keyboard, as the page says (`pine:term-focus`). */
+let terminalFocused = false;
 
 const send = (channel: string, ...args: unknown[]) => {
 	if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
@@ -275,10 +304,12 @@ function createWindow(): void {
 		minHeight: 480,
 		show: false,
 		title: "Pine",
-		titleBarStyle: isMac ? "hiddenInset" : "default",
+		// Off a Mac the page reaches the top too, and the system draws its window controls over its top right
+		// (in the theme's colors, refreshBackground). Its menus are then not shown, and their keys still work.
+		titleBarStyle: isMac ? "hiddenInset" : "hidden",
 		trafficLightPosition: { x: 16, y: 16 },
-		// Gives the page where the window buttons end (env(titlebar-area-x), 0 in full screen), so the bars make room for them by themselves.
-		titleBarOverlay: isMac,
+		// Gives the page where the window buttons are (env(titlebar-area-x) and -width, 0 in full screen), so the bars make room for them by themselves.
+		titleBarOverlay: isMac ? true : windowControls(),
 		vibrancy: isMac ? "sidebar" : undefined,
 		visualEffectState: "followWindow",
 		// So that the window does not flash another color before the page draws.
@@ -303,6 +334,9 @@ function createWindow(): void {
 		}
 	});
 	win.webContents.on("will-attach-webview", (e) => e.preventDefault());
+	// Off a Mac the shell's own Ctrl keys reach the shell while the terminal has the keyboard, not the menu (shellKeeps).
+	if (!isMac) win.webContents.on("before-input-event", (_e, input) => win?.webContents.setIgnoreMenuShortcuts(terminalFocused && shellKeeps(input)));
+	win.webContents.on("did-start-loading", () => (terminalFocused = false));
 	const keep = () => {
 		if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
 		prefs.bounds = win.getBounds();
@@ -583,8 +617,11 @@ function wire(): void {
 		n.show();
 	});
 	handle("pine:badge", (count: number) => {
-		if (isMac) app.dock?.setBadge(count > 0 ? String(count) : "");
-		else app.setBadgeCount(Math.max(0, Number(count) || 0));
+		const n = Math.max(0, Number(count) || 0);
+		if (isMac) app.dock?.setBadge(n > 0 ? String(n) : "");
+		// Windows has no number on a taskbar button: a dot over its icon says that something waits.
+		else if (isWindows) win?.setOverlayIcon(n > 0 ? waiting() : null, n > 0 ? `${n} waiting for you` : "");
+		else app.setBadgeCount(n);
 	});
 	// Dictating a message. The words are recognised on this Mac by the helper the terminal UI
 	// uses too (src/tui/voice.ts): nothing is sent anywhere, and what is heard is text for the
@@ -635,7 +672,29 @@ function wire(): void {
 	});
 }
 
+/** A dot for the taskbar button on Windows, drawn here: 16 pixels, in the theme's color for what is wrong or waits. */
+function waiting(): Electron.NativeImage {
+	const hex = (prefs.look?.colors.bad ?? "#d0679d").slice(1, 7);
+	const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16));
+	const size = 16;
+	const pixels = Buffer.alloc(size * size * 4);
+	for (let y = 0; y < size; y++) {
+		for (let x = 0; x < size; x++) {
+			// Covered by a circle of radius 7, with a soft edge one pixel wide; premultiplied, in the order Windows keeps (BGRA).
+			const a = Math.max(0, Math.min(1, 7.5 - Math.hypot(x + 0.5 - size / 2, y + 0.5 - size / 2)));
+			pixels.set([Math.round(b * a), Math.round(g * a), Math.round(r * a), Math.round(255 * a)], (y * size + x) * 4);
+		}
+	}
+	return nativeImage.createFromBitmap(pixels, { width: size, height: size });
+}
+
 // ---- life of the app ---------------------------------------------------------------------------
+
+/**
+ * A folder among the arguments the app was started with: on Windows and Linux a folder dropped on its
+ * icon, or `Pine <folder>`, comes so. (Started from a checkout, the app's own folder is one of them.)
+ */
+const folderIn = (argv: string[]) => argv.slice(1).find((a) => !a.startsWith("-") && path.isAbsolute(a) && path.resolve(a) !== app.getAppPath());
 
 /** A folder the app was opened with (dropped on its icon, or `open -a Pine <folder>`): a conversation that works there. */
 const pendingFolders: string[] = [];
@@ -654,7 +713,7 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
 	app.on("second-instance", (_e, argv) => {
 		show();
-		const dir = argv.slice(1).find((a) => !a.startsWith("-") && path.isAbsolute(a));
+		const dir = folderIn(argv);
 		if (dir) openFolder(dir);
 	});
 	app.on("open-file", (e, file) => {
@@ -671,6 +730,9 @@ else {
 		protocol.handle("pine-media", media);
 		session.defaultSession.setPermissionRequestHandler((_wc, _permission, done) => done(false));
 		wire();
+		ipcMain.on("pine:term-focus", (e, focused) => {
+			if (fromPage(e)) terminalFocused = focused === true;
+		});
 		ipcMain.on("pine:ready", (e) => {
 			if (!fromPage(e)) return;
 			pageReady = true;
@@ -687,6 +749,9 @@ else {
 		}
 		buildMenu();
 		createWindow();
+		// Off a Mac a folder the app was started with comes as an argument of this first start, not as an event.
+		const dir = isMac ? undefined : folderIn(process.argv);
+		if (dir) openFolder(dir);
 		void startService();
 		void firstCommand();
 		app.on("activate", show);

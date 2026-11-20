@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, within } from "storybook/test";
 import { SidebarFooter, SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
-import { Machines } from "./App.tsx";
+import { Machines, TitleBar } from "./App.tsx";
 import { store } from "./model.ts";
 
 // The foot of the side bar, open on its list of machines, without a daemon: the store is set as
@@ -72,3 +72,45 @@ export const MachinesWithoutLocal: Story = {
 		await meta.play(context);
 	},
 };
+
+/**
+ * The page as it is drawn on a system: what the bridge's `state()` says (`store.platform`, and
+ * `data-platform` on the root element, which the shortcuts are written by). Put back after the story.
+ */
+const onSystem = (platform: string) => () => {
+	const was = { store: store.platform, root: document.documentElement.dataset.platform };
+	store.platform = platform;
+	document.documentElement.dataset.platform = platform;
+	return () => {
+		store.platform = was.store;
+		if (was.root === undefined) delete document.documentElement.dataset.platform;
+		else document.documentElement.dataset.platform = was.root;
+	};
+};
+
+/** The bar along the top, without tabs: its buttons, and the tooltip of the one that starts a conversation, with its key. */
+const bar = (key: string): Story => ({
+	args: { local: true },
+	parameters: { layout: "fullscreen" },
+	render: () => (
+		<SidebarProvider className="min-h-0 w-full" open={false}>
+			<div className="flex w-full flex-col bg-sunk">
+				<TitleBar />
+			</div>
+		</SidebarProvider>
+	),
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.hover(canvas.getByRole("button", { name: /^New conversation/ }));
+		await expect(await within(document.body).findByText(key)).toBeVisible();
+	},
+});
+
+/** On a Mac: the keys as the Mac writes them. */
+export const TitleBarOnMac: Story = { ...bar("⌘T"), beforeEach: onSystem("darwin") };
+
+/**
+ * Off a Mac (Windows here; Linux is drawn the same): the keys are Ctrl chords, and the bar keeps room at its right for
+ * the system's window controls, which the window draws over it there (`pr-window-controls`; in an ordinary browser,
+ * which has no such controls, the room is the bar's own).
+ */
+export const TitleBarOffMac: Story = { ...bar("Ctrl+T"), beforeEach: onSystem("win32") };

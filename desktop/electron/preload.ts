@@ -45,6 +45,8 @@ const bridge = {
 	termRun: (id: string, code: string) => ipcRenderer.invoke("pine:term-run", id, code) as Promise<{ reports: boolean }>,
 	termResize: (id: string, cols: number, rows: number) => ipcRenderer.invoke("pine:term-resize", id, cols, rows),
 	termClose: (id: string) => ipcRenderer.invoke("pine:term-close", id),
+	/** Whether a terminal has the keyboard: off a Mac, Ctrl and a letter are then the shell's and not the menu's. */
+	termFocus: (focused: boolean) => ipcRenderer.send("pine:term-focus", focused === true),
 	onTermData: on("pine:term-data"),
 	onTermExit: on("pine:term-exit"),
 	/** A block run with a Run button is still running, or has ended (`RunReport` of terminal.ts). */

@@ -18,7 +18,7 @@ import { api } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
 import { type Attachment, REASONING_ABOUT, store, type Tab, useModel, useSignal } from "./model.ts";
-import { baseName, MODES, size, tilde } from "./text.ts";
+import { baseName, MODES, shortcut, size, tilde } from "./text.ts";
 
 const MAX_FILE = 20 * 1024 * 1024;
 const MAX_FILES = 10;
@@ -483,10 +483,10 @@ export function Composer({ tab }: { tab: Tab }) {
 							<HoverTooltip>
 								{/* Said as disabled, not disabled: a disabled button inside an InputGroup dims the whole
 								    composer (`has-disabled:`). With nothing to send, `send` does nothing. */}
-								<TooltipTrigger render={<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
+								<TooltipTrigger render={<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? `Give it to the agent while it works · ${shortcut("⌥↩")} waits its turn` : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
 								<TooltipContent>
-									{tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"}
-									<Kbd>↩</Kbd>
+									{tab.busy ? `Give it to the agent while it works · ${shortcut("⌥↩")} waits its turn` : "Send"}
+									<Kbd>{shortcut("↩")}</Kbd>
 								</TooltipContent>
 							</HoverTooltip>
 						)}

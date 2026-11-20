@@ -5,7 +5,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
-import { audit, globMatch, matchesToolPattern, sandboxAvailable } from "../src/security.ts";
+import { audit, globMatch, matchesToolPattern, sandboxAvailable, sandboxKind } from "../src/security.ts";
 import { harness, MCP_STUB, mockMsg, notesOf, sleep, textOf, until, refused, toolRefused } from "./support/harness.ts";
 
 const owner = { trust: "owner" as const };
@@ -296,9 +296,10 @@ test("after outside content an agent keeps its own memory and instructions, and 
 					{ name: "write", args: { path: "MEMORY.md", content: "LEARNED\n" } },
 					{ name: "write", args: { path: ".pi/extensions/x.ts", content: "EVIL" } },
 					{ name: "write", args: { path: "sub/CLAUDE.md", content: "EVIL" } },
-					{ name: "bash", args: { command: "echo MORE | tee -a MEMORY.md; echo EVIL | tee CLAUDE.md; echo fine | tee notes.md" } },
 				],
 			},
+			// A step of its own: calls of one step run side by side, and this one appends to what the write above made.
+			{ tools: [{ name: "bash", args: { command: "echo MORE | tee -a MEMORY.md; echo EVIL | tee CLAUDE.md; echo fine | tee notes.md" } }] },
 		]),
 		...owner,
 	});
@@ -308,7 +309,8 @@ test("after outside content an agent keeps its own memory and instructions, and 
 	assert.equal(asked.length, 0);
 	// What somebody else would read as instructions is not written: the file tools refuse it, and the sandbox refuses the command.
 	assert.ok(/holds agent instructions/.test(out[2]) && /holds agent instructions/.test(out[3]), out.join(" | "));
-	assert.ok(refused.test(out[4]) && out[4].includes("fine"), out[4]);
+	// (On Linux a file that did not exist cannot be forbidden, only taken away again after the command: see the check below.)
+	assert.ok((sandboxKind() === "linux" || refused.test(out[4])) && out[4].includes("fine"), out[4]);
 	assert.ok(!fs.existsSync(path.join(ws, "CLAUDE.md")) && !fs.existsSync(path.join(ws, ".pi")) && !fs.existsSync(path.join(ws, "sub", "CLAUDE.md")));
 	// A run that an event from outside started writes none of them, although its profile has the tool.
 	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "write", args: { path: "MEMORY.md", content: "EVIL" } }, { name: "write", args: { path: "AGENTS.md", content: "EVIL" } }, { name: "write", args: { path: "TOOLS.md", content: "EVIL" } }] }]), trust: "untrusted" } as any);
