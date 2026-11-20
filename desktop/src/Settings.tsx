@@ -1,7 +1,7 @@
 // Settings: everything about pine that is otherwise a command in a shell or a sentence to the
 // main agent. Each page asks the daemon what there is and tells it what to change; the daemon
 // checks every change as it checks the main agent's, and nothing here writes a file itself.
-import { AudioLinesIcon, BookIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
+import { AudioLinesIcon, BookIcon, LaptopIcon, ServerIcon, TerminalSquareIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -2063,6 +2063,33 @@ export function MachineList() {
 	const state = s.service;
 	const key = s.keyToTrust;
 	const here = s.platform === "darwin" ? "This Mac" : "This computer";
+	// WSL on Windows: the distributions this computer has, and what the app says when it brings pine into one.
+	const [distros, setDistros] = useState<string[]>([]);
+	const [installed, setInstalled] = useState<{ distro: string; sandbox: string }>();
+	const [installing, setInstalling] = useState<string>();
+	useEffect(() => void (s.local && bridge.wslDistros?.().then(setDistros, () => setDistros([]))), [s.local]);
+	const addWsl = async (d: string) => {
+		setError(undefined);
+		try {
+			s.prefs = await bridge.addHost(`wsl:${d}`);
+			s.touch();
+		} catch (e) {
+			setError(errText(e));
+		}
+	};
+	const install = async (d: string) => {
+		setError(undefined);
+		setInstalling(d);
+		try {
+			const r = await bridge.wslInstall!(d);
+			setInstalled({ distro: d, sandbox: r.sandbox });
+			void bridge.retry();
+		} catch (e) {
+			setError(errText(e));
+		} finally {
+			setInstalling(undefined);
+		}
+	};
 	const add = async () => {
 		setError(undefined);
 		try {
@@ -2089,21 +2116,26 @@ export function MachineList() {
 	};
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
-			<ItemMedia variant="icon">{h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
+			<ItemMedia variant="icon">{h?.startsWith("wsl:") ? <TerminalSquareIcon /> : h ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
 			{/* The text asks for 20rem before it shares its line: where the buttons would leave it less (a phone, the Gate, the four of a machine in error), the Item wraps them onto a line of their own. */}
 			<ItemContent className="min-w-0 flex-[1_1_20rem]">
 				{/* A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`. */}
 				<ItemTitle className="name line-clamp-none flex w-full min-w-0 flex-wrap">
-					<span className={cn("min-w-0 wrap-anywhere", h && "font-mono")}>{h ? <Breakable host={h} /> : here}</span>
+					<span className={cn("min-w-0 wrap-anywhere", h && !h.startsWith("wsl:") && "font-mono")}>{h?.startsWith("wsl:") ? `${h.slice(4)} (WSL)` : h ? <Breakable host={h} /> : here}</span>
 					{status(h)}
 				</ItemTitle>
 				<ItemDescription className="line-clamp-none wrap-anywhere">
-					{state.host === h && state.status === "error" ? state.message : h ? <>The pine on <Breakable host={h} />, over SSH.</> : "The pine on this computer: the one that runs, or one this app starts."}
+					{state.host === h && state.status === "error" ? state.message : h?.startsWith("wsl:") ? `The pine in ${h.slice(4)}, a Linux of WSL on this computer, where pine has its sandbox.` : h ? <>The pine on <Breakable host={h} />, over SSH.</> : "The pine on this computer: the one that runs, or one this app starts."}
 				</ItemDescription>
 				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
 				{key && key.host === h ? <Button size="xs" data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
+				{h?.startsWith("wsl:") && state.host === h && state.status === "error" && /is not installed in/.test(state.message ?? "") && bridge.wslInstall ? (
+					<Button size="xs" data-slot="wsl-install" disabled={installing === h.slice(4)} onClick={() => void install(h.slice(4))}>
+						{installing === h.slice(4) ? <Pulse label="Installing" data-icon="inline-start" /> : null}Bring pine in
+					</Button>
+				) : null}
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
 				{state.host === h && s.canDisconnect ? <Button variant="outline" size="xs" data-slot="disconnect" onClick={() => void s.disconnect()}>Disconnect</Button> : null}
@@ -2118,6 +2150,32 @@ export function MachineList() {
 				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
+			{installed ? (
+				<Alert data-slot="wsl-installed">
+					<InfoIcon />
+					<AlertDescription>
+						<p>pine is in {installed.distro}, with a home. Its sandbox needs bubblewrap there, which takes the password of your user in {installed.distro}: run this once in a terminal of Windows, and answer its question.</p>
+						<p className="font-mono text-xs select-text">{installed.sandbox}</p>
+					</AlertDescription>
+				</Alert>
+			) : null}
+			{distros.filter((d) => !s.prefs.hosts.includes(`wsl:${d}`)).length ? (
+				<FieldSet data-slot="wsl-distros">
+					<FieldLegend>WSL on this computer</FieldLegend>
+					<FieldDescription>A Linux of WSL runs pine with its sandbox, which pine on Windows itself does not have yet.</FieldDescription>
+					<ItemGroup>
+						{distros
+							.filter((d) => !s.prefs.hosts.includes(`wsl:${d}`))
+							.map((d) => (
+								<Item key={d} variant="outline" data-environment={`wsl:${d}`}>
+									<ItemMedia variant="icon"><TerminalSquareIcon /></ItemMedia>
+									<ItemContent><ItemTitle>{d}</ItemTitle></ItemContent>
+									<ItemActions><Button variant="outline" size="xs" onClick={() => void addWsl(d)}><PlusIcon data-icon="inline-start" />Add</Button></ItemActions>
+								</Item>
+							))}
+					</ItemGroup>
+				</FieldSet>
+			) : null}
 			{s.local ? null : <DeviceKey />}
 			<FieldSet>
 				<FieldLegend>Add a machine</FieldLegend>

@@ -135,8 +135,32 @@ async function carriedNode() {
 	return dir;
 }
 
+/**
+ * Windows: Node for Linux, as nodejs.org hands it out, for the pine the app brings into a WSL
+ * distribution (electron/wsl.ts). The archive goes in as it is, checked against nodejs.org's sums.
+ */
+async function nodeForWsl() {
+	const file = `node-${process.version}-linux-${arch}.tar.xz`;
+	const kept = path.join(root, ".stage", "node", file);
+	if (fs.existsSync(kept)) return kept;
+	const from = `https://nodejs.org/dist/${process.version}`;
+	const get = async (name) => {
+		const res = await fetch(`${from}/${name}`);
+		if (!res.ok) throw new Error(`${from}/${name} answered ${res.status}`);
+		return Buffer.from(await res.arrayBuffer());
+	};
+	console.log(`fetching ${file} for WSL ...`);
+	const wanted = new RegExp(`^([0-9a-f]{64})\\s+${file.replaceAll(".", "\\.")}$`, "m").exec((await get("SHASUMS256.txt")).toString("utf8"))?.[1];
+	const archive = await get(file);
+	if (!wanted || createHash("sha256").update(archive).digest("hex") !== wanted) throw new Error(`${file} is not the file nodejs.org lists`);
+	fs.mkdirSync(path.dirname(kept), { recursive: true });
+	fs.writeFileSync(kept, archive);
+	return kept;
+}
+
 const pineVersion = process.env.PINE_VERSION ?? JSON.parse(fs.readFileSync(path.join(repo, "package.json"), "utf8")).version;
 let node;
+let wslNode;
 if (carries && !prepackaged) {
 	run(process.execPath, [path.join(repo, "scripts", "build.mjs")], repo);
 	fs.rmSync(stage, { recursive: true, force: true });
@@ -150,6 +174,7 @@ if (carries && !prepackaged) {
 	// Its helpers, built: a Mac without Apple's developer tools could not build them itself. They are Mac programs only.
 	if (system === "darwin") run(process.execPath, [path.join(repo, "scripts", "helpers.mjs"), stage], repo);
 	node = await carriedNode();
+	if (system === "win32") wslNode = await nodeForWsl();
 }
 
 // What the signed programs may do under the hardened runtime. Electron and Node make machine code
@@ -252,7 +277,14 @@ const made = await packApp({
 			if (!node) return;
 			fs.cpSync(node, path.join(resources, "node"), { recursive: true });
 			fs.mkdirSync(path.join(resources, "bin"), { recursive: true });
-			if (context.electronPlatformName === "win32") fs.copyFileSync(path.join(root, "scripts", "pine.cmd"), path.join(resources, "bin", "pine.cmd"));
+			if (context.electronPlatformName === "win32") {
+				fs.copyFileSync(path.join(root, "scripts", "pine.cmd"), path.join(resources, "bin", "pine.cmd"));
+				// What the app brings into WSL beside the pine above (electron/wsl.ts).
+				if (wslNode) {
+					fs.mkdirSync(path.join(resources, "wsl"), { recursive: true });
+					fs.copyFileSync(wslNode, path.join(resources, "wsl", "node-linux.tar.xz"));
+				}
+			}
 			else {
 				fs.copyFileSync(path.join(root, "scripts", "pine.sh"), path.join(resources, "bin", "pine"));
 				fs.chmodSync(path.join(resources, "bin", "pine"), 0o755);

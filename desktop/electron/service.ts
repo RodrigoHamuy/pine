@@ -8,7 +8,7 @@ import { type ChildProcess, execFile, spawn } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { connectRemote, RemoteError, sshHost } from "../../src/remote.ts";
+import { connectRemote, connectWsl, RemoteError, sshHost, wslDistro } from "../../src/remote.ts";
 
 export interface Service {
 	base: string;
@@ -278,6 +278,11 @@ export function connect(launch: Launch, opts: { home?: string; keep?: boolean } 
  */
 export async function connectSsh(host: string, env: NodeJS.ProcessEnv): Promise<Service> {
 	try {
+		// "wsl:<distribution>": the pine of a Linux distribution on this Windows computer (src/remote.ts).
+		if (host.startsWith("wsl:")) {
+			const w = await connectWsl(host.slice(4), { env, wsl: process.env.PINE_DESKTOP_WSL });
+			return { base: w.base, token: w.token, mode: `in WSL (${w.label})`, started: w.started, home: `${w.label}:${w.home}`, version: w.version, host: w.host, label: w.label, stop: w.stop };
+		}
 		const r = await connectRemote(host, { env, ssh: process.env.PINE_DESKTOP_SSH });
 		return { base: r.base, token: r.token, mode: `on ${r.label}`, started: r.started, home: `${r.label}:${r.home}`, version: r.version, host: r.host, label: r.label, stop: r.stop };
 	} catch (e) {
@@ -292,13 +297,23 @@ export function readHosts(raw: unknown): string[] {
 	if (!Array.isArray(raw)) return out;
 	for (const value of raw) {
 		try {
-			const host = typeof value === "string" ? sshHost(value)?.host : undefined;
+			const host = typeof value === "string" ? hostOf(value) : undefined;
 			if (host && !out.includes(host)) out.push(host);
 		} catch {
 			// not a host for ssh: not kept
 		}
 	}
 	return out.slice(0, 20);
+}
+
+/** A machine as the app keeps it: a host for ssh, or "wsl:<distribution>" for one of this Windows computer's. */
+export function hostOf(value: string): string | undefined {
+	const v = value.trim();
+	if (v.toLowerCase().startsWith("wsl:")) {
+		const d = wslDistro(v.slice(4))?.distro;
+		return d ? `wsl:${d}` : undefined;
+	}
+	return sshHost(v)?.host;
 }
 
 export { sshHost };

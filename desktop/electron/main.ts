@@ -2,14 +2,16 @@
 // operating system (windows, menus, dialogs, notifications), and the child that is the daemon
 // when this app had to start one. The page gets a narrow bridge (preload.ts) and nothing else.
 import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeImage, nativeTheme, Notification, protocol, session, shell } from "electron";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
-import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
+import { connect, connectSsh, findPine, hostOf, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError } from "./service.ts";
+import { fromWsl, install as installIntoWsl, toWsl } from "./wsl.ts";
+import { wslDistros } from "../../src/remote.ts";
 import { shellKeeps, Terminals } from "./terminal.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanLook, type Look } from "../src/theme.ts";
@@ -201,7 +203,7 @@ async function startService(): Promise<void> {
 		// Another machine was picked while this one connected: it stays held, and the other is shown.
 		if (mine !== round) return;
 		service = s;
-		setState({ status: "ready", mode: s.mode, started: s.started, home: s.home, version: s.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: s.host, label: s.label });
+		setState({ status: "ready", mode: s.mode, started: s.started, home: s.home, version: s.version, from: host ? (host.startsWith("wsl:") ? `wsl ${host.slice(4)}` : `ssh ${host}`) : (launch?.from ?? ""), host: s.host, label: s.label });
 		follow(s);
 	} catch (e) {
 		if (mine !== round) return;
@@ -215,6 +217,15 @@ async function startService(): Promise<void> {
  * while another is shown. They are let go of when the app quits.
  */
 const held = new Map<string, Service>();
+
+/** The WSL distribution whose pine the app uses now, if it uses one. */
+const wslNow = () => (prefs.use?.startsWith("wsl:") ? prefs.use.slice(4) : undefined);
+
+/** A path of this computer as the daemon in use knows it: the same, or under /mnt in WSL (undefined where WSL cannot reach it). */
+const forDaemon = (p: string) => {
+	const d = wslNow();
+	return d ? toWsl(p, d) : p;
+};
 
 /** Whether a pine still answers: one on another machine may have lost its connection meanwhile. */
 const answers = (s: Service) => fetch(`${s.base}/health`, { signal: AbortSignal.timeout(2500) }).then((r) => r.ok, () => false);
@@ -553,8 +564,9 @@ function wire(): void {
 	handle("pine:use", (host?: string) => use(typeof host === "string" ? host : undefined));
 	// A machine is added by its name alone; it is connected to when it is picked.
 	handle("pine:hosts-add", (value: string) => {
-		const host = sshHost(String(value ?? ""))?.host;
+		const host = hostOf(String(value ?? ""));
 		if (!host) throw new Error("Write the machine as you would after ssh: host or user@host.");
+		if (host.startsWith("wsl:") && process.platform !== "win32") throw new Error("WSL is Windows': this computer has none.");
 		if (!prefs.hosts.includes(host)) {
 			if (prefs.hosts.length >= 20) throw new Error("There are 20 machines in the list already: forget one first.");
 			prefs.hosts.push(host);
@@ -597,7 +609,32 @@ function wire(): void {
 	});
 	handle("pine:pick-folder", async (title?: string) => {
 		const r = await dialog.showOpenDialog(win!, { title: typeof title === "string" ? title.slice(0, 80) : "Choose a folder", properties: ["openDirectory", "createDirectory"] });
-		return r.canceled ? undefined : r.filePaths[0];
+		if (r.canceled) return undefined;
+		const p = forDaemon(r.filePaths[0]);
+		if (!p) throw new Error(`${r.filePaths[0]} cannot be reached from ${wslNow()}: pick a folder on a drive of this computer, or one in the distribution.`);
+		return p;
+	});
+	// A file dropped on the page, by the path the daemon knows it under.
+	ipcMain.on("pine:daemon-path", (e, p: unknown) => {
+		e.returnValue = typeof p === "string" && p ? (forDaemon(p) ?? "") : "";
+	});
+	// WSL on this Windows computer: its distributions, and the pine this app carries brought into one.
+	handle("pine:wsl-distros", async () => (process.platform === "win32" ? await wslDistros() : []));
+	handle("pine:wsl-install", async (distro: string) => {
+		if (process.platform !== "win32" || !app.isPackaged) throw new Error("Only the Pine app for Windows brings pine into WSL.");
+		const d = hostOf(`wsl:${String(distro)}`)?.slice(4);
+		if (!d) throw new Error("There is no such distribution.");
+		await installIntoWsl(d, app.getVersion(), process.resourcesPath);
+		// A home there, as pine init makes it. Its sandbox needs the password of the distribution's
+		// user (bubblewrap is installed with sudo): that part is the owner's, in a terminal.
+		await new Promise<void>((resolve, reject) => {
+			const c = spawn("wsl.exe", ["--distribution", d, "--exec", "/bin/sh", "-c", '"$HOME/.local/share/pine-app/bin/pine" init'], { stdio: ["ignore", "ignore", "pipe"], windowsHide: true });
+			let err = "";
+			c.stderr!.on("data", (b: Buffer) => (err += b.toString("utf8")));
+			c.on("error", reject);
+			c.on("close", (code) => (code === 0 || /sandbox/i.test(err) ? resolve() : reject(new Error(err.trim().slice(-400) || `pine init ended with ${code}`))));
+		});
+		return { sandbox: `wsl --distribution ${d} --exec ~/.local/share/pine-app/bin/pine init` };
 	});
 	handle("pine:save-text", async (name: string, text: string) => {
 		const r = await dialog.showSaveDialog(win!, { defaultPath: path.join(app.getPath("documents"), path.basename(String(name))) });
@@ -607,8 +644,10 @@ function wire(): void {
 	});
 	handle("pine:open", (url: string) => openOutside(String(url)));
 	handle("pine:reveal", (file: string) => {
-		// Shown in the Finder, never opened: opening would start whatever the file is.
-		if (typeof file === "string" && path.isAbsolute(file) && fs.existsSync(file)) shell.showItemInFolder(file);
+		// Shown in the Finder, never opened: opening would start whatever the file is. A path of WSL's is Windows' first.
+		const d = wslNow();
+		const here = typeof file === "string" && d && file.startsWith("/") ? fromWsl(file, d) : file;
+		if (typeof here === "string" && path.isAbsolute(here) && fs.existsSync(here)) shell.showItemInFolder(here);
 	});
 	handle("pine:notify", (title: string, body: string, tab?: string) => {
 		if (!prefs.notify || !Notification.isSupported() || win?.isFocused()) return;

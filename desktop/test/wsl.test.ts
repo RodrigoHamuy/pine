@@ -6,6 +6,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { test } from "node:test";
+import { hostOf, readHosts } from "../electron/service.ts";
 import { fromWsl, INSTALL_SCRIPT, toWsl } from "../electron/wsl.ts";
 
 test("wsl: a folder of Windows is under /mnt there, one of the distribution under \\\\wsl.localhost here", () => {
@@ -49,4 +50,12 @@ test("wsl: pine is brought into the distribution whole, and pine there runs it",
 	} finally {
 		fs.rmSync(dir, { recursive: true, force: true });
 	}
+});
+
+test("wsl: a distribution is kept among the machines as wsl:<name>, and nothing that is an option", () => {
+	assert.equal(hostOf("wsl:Ubuntu-24.04"), "wsl:Ubuntu-24.04");
+	assert.equal(hostOf("WSL:Debian"), "wsl:Debian");
+	assert.equal(hostOf("you@server"), "you@server");
+	assert.throws(() => hostOf("wsl:--exec"));
+	assert.deepEqual(readHosts(["wsl:Ubuntu", "wsl:-d", "you@server", "wsl:Ubuntu"]), ["wsl:Ubuntu", "you@server"]);
 });
