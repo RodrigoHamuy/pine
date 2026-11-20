@@ -14,6 +14,7 @@ desktop app, in pictures of the real one (see below).
 | `story-front.js` | a third: half a minute for the top of the repository's README (`--story front`) |
 | `film.html`, `film.js` | another kind of film and its engine: one take through a 3D space (see "The film about code") |
 | `film-code.js` | such a film: what pine adds for working on code (`--film code`) |
+| `film-view.html`, `film-view.js` | a film with a page of its own: the app's view, with pine's own office view running in it (`--film view`) |
 | `app-shots.mjs` | takes the pictures of the desktop app that `story-front.js` shows |
 | `bill/` | the made-up letters the films show, and what draws them |
 | `render.mjs` | draws the film frame by frame in a headless browser and hands the frames to ffmpeg |
@@ -38,7 +39,7 @@ node reel/render.mjs --from 20 --to 30
 node reel/render.mjs --at 3.2,12,40
 ```
 
-What the render writes (`*.mp4`, `*.webp`, `sfx.wav`, `sfx.json`, `frames/`) is not kept in the
+What the render writes (`*.mp4`, `*.webp`, `sfx.wav`, `sfx.json`, `frames/`, `view-code.js`) is not kept in the
 repository.
 
 ## The film about code
@@ -82,6 +83,46 @@ It is drawn differently from the other films, by an engine of its own (`film.js`
   (`shutterTimes`); `render.mjs` draws each one and has ffmpeg average them.
 - Everything is still a function of the time, so opened in a browser (`reel/film.html`) the film
   plays: space stops it, the arrow keys step, a click on the bar at the bottom jumps.
+
+## The film about the view
+
+`film-view.js` is a minute without a word over the picture. It opens on the main agent's robot by
+itself on white, glad, in confetti, pmndre's P in its bubble; the desk comes up around it, and Pine's
+window rises over it. Somebody opens Pine on a Mac, sees
+the agents in the side bar, opens the view and watches them work: an event from the inbox, a
+schedule that is due, a skill, an MCP server. Then they pick the slack agent and ask it to
+summarize the day's tasks. In the view slack hands the work on: to dev, which starts three copies
+to look for pull requests, and to plan, which asks the calendar. The answers fly back, and the
+summary arrives in the conversation. At the end the day is wound on over the house: the agents in
+fast motion, the sun down, and the night with the moon, in which only the one that watches the
+cameras is woken. There it fades out.
+
+```bash
+node reel/render.mjs --film view
+```
+
+writes `reel/pine-reel-view.mp4`. `--at`, `--from`/`--to` and `--scale 1` work as for the other films.
+
+- The desk (a wallpaper, a menu bar and a dock of its own) and the app's window are drawn by the
+  film, in the app's dark colours. The camera goes close to whoever works (`CAMERA`), and once the
+  window is up it never leaves it: its edges are held inside the window.
+- The house in the view is not drawn by the film. It is pine's own view,
+  `examples/home/views/office.ts`, run as the app runs it: `render.mjs` takes its types away and
+  writes it with the module it imports into `reel/view-code.js` (not kept in the repository), and
+  the film tells it a made-up pine, second by second (`JOBS`, `HAPPENS` in `film-view.js`).
+- The view remembers from frame to frame (robots walk, letters fly, its own camera zooms), so the
+  film is drawn in order: a frame at second 30 is made by playing the view from its start up to
+  there, on the film's clock, with chance that is the same every time.
+- The robot of the opening is the view's own too (`drawPortrait` in `office.ts`); the story's clock
+  starts when the desk is there (`INTRO`).
+- The view has two clocks in the film: its own, by which the robots move (the film's, and nine times
+  as fast in the wound-on day: `simOf`), and the sky's hour, which the film sets (`skyOf`). For that
+  day the view is told to show all of the house, with its own button: its camera goes to whoever
+  works, which at nine times the speed is a jump each time.
+- The conversations are full when they are opened (`MAIN_SAID`, `SLACK_SAID`), what is said stands in
+  a column of one width, and an answer has its whole height from its first word on, so that nothing
+  jumps when the view's panel comes in or a line is added.
+- Opened in a browser after one render (`reel/film-view.html`), the film plays like the others.
 
 ## The film in the README
 
