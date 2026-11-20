@@ -1,9 +1,10 @@
 // What the page draws of machines, read from the states and preferences the bridges hand it
 // (desktop/src/machines.ts): a paired computer by its name, never its id; a pairing under way on the
-// first screen; how a pairing ended; and where the home-screen suggestion is offered.
+// first screen; how a pairing ended; where the home-screen suggestion is offered; and which view of
+// the screen that asks which pine to use is shown, with which controls.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { firstScreen, homeScreenKeeps, isPaired, machineName, pairingEnded } from "../../desktop/src/machines.ts";
+import { firstScreen, homeScreenKeeps, isPaired, machineName, machinesView, meetingLine, pairingEnded, reachedThrough, relayLine } from "../../desktop/src/machines.ts";
 
 const PAIRED = "paired:q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x-_";
 const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36";
@@ -59,4 +60,44 @@ test("the home-screen suggestion is offered only where an installed web app keep
 	assert.equal(homeScreenKeeps(IPAD, 5), false);
 	assert.equal(homeScreenKeeps(DESKTOP), false);
 	assert.equal(homeScreenKeeps(""), false);
+});
+
+test("the screen that asks which pine to use: how to pair first, with a link to SSH where the service offers both, and a back control in the SSH view", () => {
+	const both = { canPair: true, canAddHost: true, hosts: [] };
+	assert.deepEqual(machinesView(both), { view: "pair", toSsh: true, back: false });
+	assert.deepEqual(machinesView({ ...both, chosen: "ssh" }), { view: "ssh", toSsh: false, back: true });
+	assert.deepEqual(machinesView({ ...both, chosen: "pair" }), { view: "pair", toSsh: true, back: false });
+});
+
+test("where the service has no meeting service there is nothing to pair with: the SSH view, with no back control; the desktop and mobile apps' bridges say neither and get it too", () => {
+	for (const chosen of [undefined, "pair", "ssh"] as const) {
+		assert.deepEqual(machinesView({ canPair: false, canAddHost: true, hosts: [], chosen }), { view: "ssh", toSsh: false, back: false }, String(chosen));
+	}
+});
+
+test("where the relay is off the pairing view has no link to SSH", () => {
+	for (const chosen of [undefined, "pair", "ssh"] as const) {
+		assert.deepEqual(machinesView({ canPair: true, canAddHost: false, hosts: [], chosen }), { view: "pair", toSsh: false, back: false }, String(chosen));
+	}
+	assert.deepEqual(machinesView({ canPair: false, canAddHost: false, hosts: [] }), { view: "pair", toSsh: false, back: false });
+});
+
+test("a browser that already has machines lands where it did: the SSH view when it has a user@host machine, the pairing view when it has only paired computers", () => {
+	const both = { canPair: true, canAddHost: true };
+	assert.equal(machinesView({ ...both, hosts: ["me@box.example"] }).view, "ssh");
+	assert.equal(machinesView({ ...both, hosts: [PAIRED, "me@box.example"] }).view, "ssh");
+	assert.equal(machinesView({ ...both, hosts: [PAIRED] }).view, "pair");
+	// The owner's choice wins over that.
+	assert.equal(machinesView({ ...both, hosts: ["me@box.example"], chosen: "pair" }).view, "pair");
+});
+
+test("the relay and the meeting service are said by the deployment's host: SSH through the relay, which cannot read it; a paired computer found there, then reached directly", () => {
+	const host = "pine.drcmda.workers.dev";
+	assert.equal(relayLine(host), "Connections go through the relay at pine.drcmda.workers.dev. It carries SSH only and cannot read it.");
+	assert.equal(meetingLine(host), "Found through pine.drcmda.workers.dev, then connected directly.");
+	assert.equal(reachedThrough("me@box.example", host), "Through the relay at pine.drcmda.workers.dev.");
+	assert.equal(reachedThrough(PAIRED, host), meetingLine(host));
+	// A bridge that names no service (the desktop and mobile apps) gets no such line.
+	assert.equal(reachedThrough("me@box.example"), undefined);
+	assert.doesNotMatch(`${relayLine(host)} ${meetingLine(host)}`, /\bMac\b/);
 });

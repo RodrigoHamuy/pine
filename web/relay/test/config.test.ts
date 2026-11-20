@@ -2,8 +2,9 @@
 // - the default one (today's deployment and every preview of .github/workflows/web-preview.yml):
 //   the relay on, and no meeting service, since a Worker that holds a Durable Object can be
 //   neither uploaded as a version with a new class nor given version addresses;
-// - `official`, the project's service: the meeting service on, the relay off, on workers.dev;
-// - `full`, an owner's own deployment with both.
+// - `official`, the project's service and the one environment with the meeting service: the
+//   meeting service and the relay, on workers.dev. A deployment of one's own uses the same
+//   environment under a name of its own.
 // None of them has any logs.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
@@ -18,7 +19,7 @@ const config = JSON.parse(
 		.filter((line) => !/^\s*\/\//.test(line))
 		.join("\n"),
 );
-const { official, full } = config.env;
+const { official } = config.env;
 
 test("the default configuration declares no Durable Object, so that the preview workflow can still upload versions with addresses", () => {
 	assert.equal(config.durable_objects, undefined);
@@ -28,31 +29,30 @@ test("the default configuration declares no Durable Object, so that the preview 
 	assert.equal(config.name, "pine-relay");
 });
 
-test("the relay is on by default and in full, and off in the official service", () => {
-	assert.equal(config.vars.RELAY, "on");
-	assert.equal(full.vars.RELAY, "on");
-	assert.equal(official.vars.RELAY, "off");
+test("official is the one environment: a deployment of one's own with the meeting service uses it under a name of its own", () => {
+	assert.deepEqual(Object.keys(config.env), ["official"]);
 });
 
-test("the official service has an address of its own on workers.dev; full keeps none", () => {
+test("the relay is on by default and in the official service", () => {
+	assert.equal(config.vars.RELAY, "on");
+	assert.equal(official.vars.RELAY, "on");
+});
+
+test("the official service has an address of its own on workers.dev", () => {
 	assert.equal(official.name, "pine");
 	assert.equal(official.workers_dev, true);
-	assert.equal(full.name, "pine-full");
-	assert.equal(full.workers_dev, false);
 });
 
-test("official and full declare the meeting's Durable Object backed by SQLite, as the free plan requires, and ask for no version addresses", () => {
-	for (const [name, c] of [["official", official], ["full", full]]) {
-		assert.deepEqual(c.durable_objects.bindings, [{ name: "MEET", class_name: "Meeting" }], name);
-		assert.ok(c.migrations.some((m: any) => m.new_sqlite_classes?.includes("Meeting")), name);
-		assert.ok(!c.migrations.some((m: any) => m.new_classes?.includes("Meeting")), `${name}: a key-value class is not on the free plan`);
-		assert.equal(c.preview_urls, false, name);
-		assert.ok(c.vars.ICE.every((s: any) => /^stun:/.test(s.urls)), name);
-	}
+test("official declares the meeting's Durable Object backed by SQLite, as the free plan requires, and asks for no version addresses", () => {
+	assert.deepEqual(official.durable_objects.bindings, [{ name: "MEET", class_name: "Meeting" }]);
+	assert.ok(official.migrations.some((m: any) => m.new_sqlite_classes?.includes("Meeting")));
+	assert.ok(!official.migrations.some((m: any) => m.new_classes?.includes("Meeting")), "a key-value class is not on the free plan");
+	assert.equal(official.preview_urls, false);
+	assert.ok(official.vars.ICE.every((s: any) => /^stun:/.test(s.urls)));
 });
 
 test("every configuration has the rate limit and the web client's files", () => {
-	for (const [name, c] of [["default", config], ["official", official], ["full", full]]) {
+	for (const [name, c] of [["default", config], ["official", official]]) {
 		assert.ok(c.ratelimits.some((r: any) => r.name === "LIMITER"), name);
 		assert.equal(c.assets.binding, "ASSETS", name);
 	}

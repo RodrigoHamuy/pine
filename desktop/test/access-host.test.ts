@@ -14,6 +14,7 @@ import { after, before, test } from "node:test";
 import { remoteCommand } from "../../src/remote.ts";
 import { ACCESS_FILE, type AccessHost, fileVault, type HostStatus, startAccessHost } from "../electron/access/host.ts";
 import { createPairing, type Pairing, type PairingRequest } from "../electron/access/pairing.ts";
+import { offer, type Peer, type Signal } from "../electron/access/peer.ts";
 import { pairedKeys } from "../electron/access/server.ts";
 import { AccessStore, newEd25519Key } from "../electron/access/store.ts";
 import { exec, firstLine, join, type Meeting, serveMeeting, sshOver, tunnel, until } from "./support/meeting.ts";
@@ -189,6 +190,62 @@ test("access host: at most eight browsers at a time; the ninth is turned away by
 	const tenth = join(m.url, host.machineId);
 	await tenth.channel;
 	tenth.close();
+});
+
+/**
+ * A browser that ends its meeting as soon as the two peers have each other's offer, answer and a
+ * candidate: the meeting's close reaches the computer before the data channel does, as it can on a
+ * slow network. `andLeave`: the browser's own peer goes with the meeting, so no channel ever comes.
+ */
+function joinAndLeave(service: string, id: string, andLeave = false) {
+	const ws = new WebSocket(`${service.replace(/^http/, "ws")}/meet/join?id=${id}`);
+	let peer: Peer | undefined;
+	let answered = false;
+	let heard = false;
+	let said = false;
+	const leave = () => {
+		if (!answered || !heard || !said || ws.readyState !== WebSocket.OPEN) return;
+		ws.close();
+		if (andLeave) peer?.close();
+	};
+	const send = (d: Signal) => {
+		ws.send(JSON.stringify({ t: "signal", d }));
+		if ("ice" in d) said = true;
+		leave();
+	};
+	ws.addEventListener("message", (e) => {
+		const message = JSON.parse(String(e.data));
+		if (message.t === "ready") peer = offer({ ice: [], send });
+		else if (message.t === "signal") {
+			peer?.signal(message.d);
+			if ("sdp" in message.d) answered = true;
+			if ("ice" in message.d) heard = true;
+			leave();
+		}
+	});
+	const closed = new Promise<void>((resolve) => ws.addEventListener("close", () => resolve()));
+	return { closed, peer: () => peer! };
+}
+
+test("access host: a browser whose meeting ends before its data channel reaches the computer is still connected", async () => {
+	const m = await meeting();
+	const { host, phone } = await setup(m.url);
+	await until(() => host.status() === "waiting", "the host waits");
+	const browser = joinAndLeave(m.url, host.machineId);
+	await browser.closed;
+	const client = await sshOver(await browser.peer().channel, host.machineId, phone.private).ready;
+	assert.equal(await firstLine(await exec(client, remoteCommand())), serviceLine());
+	client.end();
+	browser.peer().close();
+});
+
+test("access host: a browser that leaves after signalling and never opens its channel is let go of when its time is up", async () => {
+	const m = await meeting();
+	const { host } = await setup(m.url, { peerTimeoutMs: 300 });
+	await until(() => host.status() === "waiting", "the host waits");
+	const browser = joinAndLeave(m.url, host.machineId, true);
+	await browser.closed;
+	await until(() => host.peers() === 0, "the computer let go of the peer", 3000);
 });
 
 test("access host: each connected device is listed with the kind of path its connection took", async () => {

@@ -79,7 +79,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["how do I reach the computer at home from my mobile when I am out", /^mobile#making-a-machine-reachable/],
 		["where do I download the mac app, and do I have to install node first", /^desktop#getting-it/],
 		["I only installed the app, how do I get the pine command in my shell", /^desktop#pine-in-a-terminal/],
-		["how do I log out of the machine I'm connected to in the browser without forgetting it", /^desktop#environments-the-pine-of-another-machine$/],
+		["how do I log out of the machine I'm connected to in the browser without forgetting it", /^(desktop#environments-the-pine-of-another-machine|web#using-it)$/],
 		["the app says it could not load the agents of my server, what now", /^desktop#environments-the-pine-of-another-machine$/],
 		["does the mac app tell me when there is a newer version, or do I have to look myself", /^desktop#a-newer-version/],
 		["check for updates", /^desktop#a-newer-version/],
@@ -307,6 +307,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["try the browser version of a pull request before it is merged", /^web#(previews|web-preview)/],
 		["use the web client with a machine on my tailscale network", /^web#a-machine-on-a-tailnet/],
 		["the browser cannot reach my mac that is only on tailscale", /^web#a-machine-on-a-tailnet/],
+		["the web page only shows a qr code, where do I type my server's user@host", /^web#/],
+		["does the official web address relay my ssh connection and can it read it", /^web#/],
 		// Browser access to the Pine app's pine, asked for by somebody who does not know its name.
 		["use pine from my phone without ssh", /^(desktop#(browser-access|from-a-phone-without-ssh)|web#a-computer-paired-by-qr-code)/],
 		["scan a qr code on the mac to open my conversations on my phone", /^(desktop#browser-access|web#a-computer-paired-by-qr-code)/],

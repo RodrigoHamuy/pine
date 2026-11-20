@@ -76,10 +76,22 @@ export interface AppState {
 	local?: boolean;
 	/**
 	 * Whether machines can be added as user@host. The web client's bridge sets it from its
-	 * deployment's configuration: false where the deployment carries no SSH to such machines (the
-	 * official service), and only a computer paired by its link can be used. The others leave it out, which means they can.
+	 * deployment's configuration: false where the deployment carries no SSH to such machines (its
+	 * relay is off), and only a computer paired by its link can be used. The others leave it out, which means they can.
 	 */
 	canAddHost?: boolean;
+	/**
+	 * Whether a computer can be paired with by its link: the deployment has the meeting service. The
+	 * web client's bridge sets it from its deployment's configuration (`/meet/config` answers). The
+	 * others leave it out, which means there is nothing to pair with, and the page offers no pairing.
+	 */
+	canPair?: boolean;
+	/**
+	 * The host of the service a machine is reached through (the web client's deployment, its
+	 * document's address: "pine.drcmda.workers.dev"), which the page names so that the relay and the
+	 * meeting service are never forgotten. The others leave it out: they reach machines without one.
+	 */
+	serviceHost?: string;
 }
 
 export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../electron/access/control.ts";

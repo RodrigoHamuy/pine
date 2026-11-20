@@ -42,7 +42,7 @@ function computer(): Machine {
 	return m;
 }
 
-function client(machine: Machine, options: { store?: ReturnType<typeof memoryStore>; pairLink?: PairLink; config?: WebBridgeDeps["config"]; waitMs?: number } = {}) {
+function client(machine: Machine, options: { store?: ReturnType<typeof memoryStore>; pairLink?: PairLink; config?: WebBridgeDeps["config"]; serviceHost?: string; waitMs?: number } = {}) {
 	const w = windows();
 	const store = options.store ?? memoryStore();
 	const waits: number[] = [];
@@ -55,6 +55,7 @@ function client(machine: Machine, options: { store?: ReturnType<typeof memorySto
 		pairLink: options.pairLink,
 		userAgent: ANDROID,
 		config: options.config,
+		serviceHost: options.serviceHost,
 		clipboard: async () => {},
 		version: "9.9.9",
 		wait,
@@ -163,6 +164,59 @@ test("Refuse, or a pairing that expired or was used, is said and keeps nothing",
 	c.stop();
 });
 
+/**
+ * The first sessions end as the SSH library's does when the channel closed under it: "silent",
+ * before the computer sent a byte; "heard", after it did. Returns how many sessions were tried.
+ */
+function endsEarly(machine: Machine, firsts: Array<"silent" | "heard">) {
+	const { connect, peer } = machine;
+	let current: "silent" | "heard" | undefined;
+	let tries = 0;
+	machine.peer = (id) => async () => {
+		const transport = await peer(id)();
+		return { ...transport, onData: (next) => void (current === "heard" && next(new TextEncoder().encode("SSH-2.0-"))) };
+	};
+	machine.connect = async (options) => {
+		tries++;
+		current = firsts.shift();
+		if (!current) return connect(options);
+		const transport = await options.open();
+		transport.onData(() => {});
+		throw new Error("Failed to read the protocol version");
+	};
+	return () => tries;
+}
+
+test("pairing: a channel that ended before the computer said a byte is tried once more, since the code was not used", async () => {
+	const machine = computer();
+	const tries = endsEarly(machine, ["silent"]);
+	const c = client(machine, { pairLink: { id: ID, code: CODE } });
+	await c.page.state();
+	c.page.ready();
+	await becomes(c, (s) => s.status === "starting" && s.pairing?.code === DIGITS);
+	assert.equal(tries(), 2);
+	machine.answer("allow");
+	await becomes(c, (s) => s.status === "ready");
+	c.stop();
+});
+
+test("pairing: only once more; and never after the computer said anything", async () => {
+	for (const [firsts, attempts] of [
+		[["silent", "silent"], 2],
+		[["heard"], 1],
+	] as const) {
+		const machine = computer();
+		const tries = endsEarly(machine, [...firsts]);
+		const c = client(machine, { pairLink: { id: ID, code: CODE } });
+		await c.page.state();
+		c.page.ready();
+		const s = await becomes(c, (x) => x.status === "error");
+		assert.match(message(s), /^Could not reach your computer to pair with it\. Failed to read the protocol version$/);
+		assert.equal(tries(), attempts, firsts.join());
+		c.stop();
+	}
+});
+
 test("a key already kept for the computer is never replaced by the link's; a computer that shows another one is refused for good", async () => {
 	const store = memoryStore({ hostKeys: { [PAIRED]: fp("q") } });
 	const machine = computer();
@@ -224,6 +278,33 @@ test("whether user@host machines can be added comes from the service's configura
 		await c.page.addHost("me@box.example");
 		c.stop();
 	}
+});
+
+test("whether pairing is offered comes from the service's configuration too: a deployment that answers /meet/config has the meeting service", async () => {
+	const cases: [string, WebBridgeDeps["config"], { canPair: boolean; canAddHost: boolean }][] = [
+		["meeting and relay", async () => ({ ice: [], relay: true }), { canPair: true, canAddHost: true }],
+		["meeting only", async () => ({ ice: [], relay: false }), { canPair: true, canAddHost: false }],
+		// The default configuration answers /meet/config with 404, which bridge-main.ts reads as nothing.
+		["relay only", async () => undefined, { canPair: false, canAddHost: true }],
+		["a failed read", async () => Promise.reject(new Error("offline")), { canPair: false, canAddHost: true }],
+		["an answer that is no configuration", async () => "nonsense", { canPair: false, canAddHost: true }],
+		["no configuration", undefined, { canPair: false, canAddHost: true }],
+	];
+	for (const [name, config, said] of cases) {
+		const c = client(computer(), { config });
+		const s = await c.page.state();
+		assert.deepEqual({ canPair: s.canPair, canAddHost: s.canAddHost }, said, name);
+		c.stop();
+	}
+});
+
+test("the page is told the deployment's host, which it names as the relay's and the meeting service's; none is invented", async () => {
+	const named = client(computer(), { serviceHost: "pine.drcmda.workers.dev" });
+	assert.equal((await named.page.state()).serviceHost, "pine.drcmda.workers.dev");
+	named.stop();
+	const none = client(computer());
+	assert.equal("serviceHost" in (await none.page.state()), false);
+	none.stop();
 });
 
 test("a paired computer that does not answer, or no direct way from this network, is said and tried again with a growing wait", async () => {
