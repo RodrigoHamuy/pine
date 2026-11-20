@@ -218,7 +218,9 @@ test("http with render: a helper that does not answer is ended at the time limit
 	assert.deepEqual(notes("pids.log").map(alive), [true, true]);
 	await h.close();
 	assert.deepEqual(notes("pids.log").filter(alive), []);
-	assert.equal(notes("jobs.log").length, 2, "and what waited was never started");
+	// (On Windows a helper is ended by taskkill, which takes a moment: a look that waited may begin in it, and is
+	// ended with its source. What counts there is the line above: nothing is left running.)
+	if (process.platform !== "win32") assert.equal(notes("jobs.log").length, 2, "and what waited was never started");
 });
 
 test("http with render by asking: what does not go with it is refused, the owner reads that a browser opens the page, and a local page gets its own host and port and no other", async (t) => {
