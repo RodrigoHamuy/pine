@@ -225,12 +225,12 @@ struct PairedPinesTests {
 			#expect(pines.names == [computer: "Studio Mac"], "the name the page shows, cleaned")
 			#expect(pines.paired("me@server") == nil)
 			// Paired again: one entry, the service and the name it gave this time.
-			#expect(try pines.addPaired(id: id, service: OFFICIAL_SERVICE, name: "") == ["me@server", computer])
-			#expect(pines.paired(computer) == PairedComputer(id: id, service: OFFICIAL_SERVICE, name: nil))
+			#expect(try pines.addPaired(id: id, service: TEST_SERVICE, name: "") == ["me@server", computer])
+			#expect(pines.paired(computer) == PairedComputer(id: id, service: TEST_SERVICE, name: nil))
 			#expect(pines.names.isEmpty, "no name given: the page says \"your computer\"")
 			let again = Pines(remote: rig.remote, shelf: shelf, page: SeenPage())
 			#expect(again.hosts == ["me@server", computer], "kept on the shelf")
-			#expect(again.paired(computer) == PairedComputer(id: id, service: OFFICIAL_SERVICE, name: nil))
+			#expect(again.paired(computer) == PairedComputer(id: id, service: TEST_SERVICE, name: nil))
 		}
 	}
 
@@ -241,7 +241,7 @@ struct PairedPinesTests {
 			#expect(throws: RemoteError.self) { try pines.addHost("paired:22") }
 			#expect(throws: RemoteError.self) { try pines.addPaired(id: id, service: "http://pine.example.com", name: nil) }
 			#expect(throws: RemoteError.self) { try pines.addPaired(id: id, service: "https://pine.example.com/x", name: nil) }
-			#expect(throws: RemoteError.self) { try pines.addPaired(id: String(id.dropFirst()), service: OFFICIAL_SERVICE, name: nil) }
+			#expect(throws: RemoteError.self) { try pines.addPaired(id: String(id.dropFirst()), service: TEST_SERVICE, name: nil) }
 			#expect(pines.hosts.isEmpty)
 			#expect(shelf.get("paired") == nil)
 		}
@@ -251,8 +251,8 @@ struct PairedPinesTests {
 	func twenty() async throws {
 		try await withPines { _, pines, _, _ in
 			for n in 1...19 { try pines.addHost("me@host\(n)") }
-			try pines.addPaired(id: id, service: OFFICIAL_SERVICE, name: nil)
-			#expect(throws: RemoteError.self) { try pines.addPaired(id: "B5IL6HvjP-x66mzgtrtt447XrwHKB2n5qq7O5jRB8oE", service: OFFICIAL_SERVICE, name: nil) }
+			try pines.addPaired(id: id, service: TEST_SERVICE, name: nil)
+			#expect(throws: RemoteError.self) { try pines.addPaired(id: "B5IL6HvjP-x66mzgtrtt447XrwHKB2n5qq7O5jRB8oE", service: TEST_SERVICE, name: nil) }
 			#expect(throws: RemoteError.self) { try pines.addHost("me@one-too-many") }
 			#expect(pines.hosts.count == 20)
 		}
@@ -262,7 +262,7 @@ struct PairedPinesTests {
 	func selectedAndForgotten() async throws {
 		try await withPines { _, pines, page, _ in
 			try pines.addHost("me@server")
-			try pines.addPaired(id: id, service: OFFICIAL_SERVICE, name: "Studio")
+			try pines.addPaired(id: id, service: TEST_SERVICE, name: "Studio")
 			try pines.use(computer)
 			#expect(pines.inUse == computer)
 			// Nothing reaches a paired computer yet: the page is told so, and the machine can go.
@@ -284,7 +284,7 @@ struct PairedPinesTests {
 			#expect(old.hosts == ["me@server", "you@other:2222"])
 			#expect(old.inUse == "you@other:2222")
 			#expect(old.names.isEmpty)
-			let added = try old.addPaired(id: id, service: OFFICIAL_SERVICE, name: nil)
+			let added = try old.addPaired(id: id, service: TEST_SERVICE, name: nil)
 			#expect(added == ["me@server", "you@other:2222", computer])
 		}
 	}
