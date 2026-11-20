@@ -11,7 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
-import { computerWord, homeScreenKeeps, machineName, pairingEnded } from "./machines.ts";
+import { computerWord, homeScreenKeeps, machineName, machinesView, pairingEnded, type MachinesViewName } from "./machines.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
@@ -225,6 +225,12 @@ export class Store extends Model {
 	local = true;
 	/** Whether machines can be added as user@host: not where the bridge reaches only computers paired by their code (`AppState.canAddHost`). */
 	canAddHost = true;
+	/** Whether a computer can be paired with by its link: only where the bridge says so, the web client on a deployment with the meeting service (`AppState.canPair`). */
+	canPair = false;
+	/** The host of the service machines are reached through, named beside them (`AppState.serviceHost`): the web client's deployment only. */
+	serviceHost?: string;
+	/** The view of the machines the owner chose with the link to SSH or the back control (`machinesView`): for this visit only, never kept. */
+	machinesChosen?: MachinesViewName;
 	/** The last pairing with a computer ended without one: the first screen says so above the bridge's reason. */
 	pairFailed = false;
 	/** The suggestion to add the web client to the home screen, shown once after a first pairing where that keeps the browser's key. */
@@ -365,6 +371,8 @@ export class Store extends Model {
 		this.platform = first.platform;
 		this.local = first.local !== false;
 		this.canAddHost = first.canAddHost !== false;
+		this.canPair = first.canPair === true;
+		this.serviceHost = typeof first.serviceHost === "string" && first.serviceHost ? first.serviceHost : undefined;
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;
@@ -593,6 +601,17 @@ export class Store extends Model {
 	/** The owner's yes to the host key the page showed: exactly that fingerprint, which the bridge then connects with. */
 	async trustHostKey(key: { host: string; fingerprint: string }): Promise<void> {
 		await this.attempt(() => bridge.trustHostKey!(key.host, key.fingerprint));
+	}
+
+	/** Which view of the machines is shown, and with which controls (`machinesView`): for the first screen and Settings > Environments alike. */
+	get machinesShown(): ReturnType<typeof machinesView> {
+		return machinesView({ canPair: this.canPair, canAddHost: this.canAddHost, hosts: this.prefs.hosts, chosen: this.machinesChosen });
+	}
+
+	/** The owner's choice of a view of the machines, by the link to SSH or the back control. */
+	showMachines(view: MachinesViewName): void {
+		this.machinesChosen = view;
+		this.touch();
 	}
 
 	/**

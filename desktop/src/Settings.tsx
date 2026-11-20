@@ -1,7 +1,7 @@
 // Settings: everything about pine that is otherwise a command in a shell or a sentence to the
 // main agent. Each page asks the daemon what there is and tells it what to change; the daemon
 // checks every change as it checks the main agent's, and nothing here writes a file itself.
-import { AudioLinesIcon, BookIcon, MonitorSmartphoneIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowLeftIcon, AudioLinesIcon, BookIcon, MonitorSmartphoneIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -31,7 +31,7 @@ import { HoverTooltip } from "@/components/hover-tooltip";
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
-import { APP_DOWNLOAD, computerWord, isPaired } from "./machines.ts";
+import { APP_DOWNLOAD, computerWord, isPaired, meetingLine, reachedThrough, relayLine } from "./machines.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -2084,6 +2084,8 @@ export function MachineList() {
 	const state = s.service;
 	const key = s.keyToTrust;
 	const here = `This ${computerWord(s.platform)}`;
+	// How to pair, or the user@host machines over SSH: never both at once (`machinesView`).
+	const shown = s.machinesShown;
 	const add = async () => {
 		setError(undefined);
 		try {
@@ -2124,6 +2126,7 @@ export function MachineList() {
 				<ItemDescription className="line-clamp-none wrap-anywhere">
 					{state.host === h && state.status === "error" ? state.message : h ? about(h) : "The pine on this computer: the one that runs, or one this app starts."}
 				</ItemDescription>
+				{h && reachedThrough(h, s.serviceHost) ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="reached-through">{reachedThrough(h, s.serviceHost)}</ItemDescription> : null}
 				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
@@ -2139,13 +2142,23 @@ export function MachineList() {
 	);
 	return (
 		<>
+			{shown.back ? (
+				<Button variant="ghost" size="icon-sm" className="self-start" data-slot="back-to-pairing" aria-label="Back to pairing" onClick={() => s.showMachines("pair")}>
+					<ArrowLeftIcon />
+				</Button>
+			) : null}
 			<ItemGroup>
 				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
-			{/* Where only a computer paired by its code can be used (the official service), there is no user@host to add, nor a key for one. */}
-			{!s.canAddHost ? <PairHowTo /> : s.local ? null : <DeviceKey />}
-			{s.canAddHost ? <FieldSet>
+			{/* The pairing view has no user@host to add, nor a key for one. */}
+			{shown.view === "pair" ? <PairHowTo /> : s.local ? null : <DeviceKey />}
+			{shown.toSsh ? (
+				<Button variant="link" size="sm" className="self-start px-0" data-slot="ssh-instead" onClick={() => s.showMachines("ssh")}>
+					Or connect to a server over SSH
+				</Button>
+			) : null}
+			{shown.view === "ssh" ? <FieldSet>
 				<FieldLegend>Add a machine</FieldLegend>
 				<FieldGroup>
 					<Field>
@@ -2157,6 +2170,8 @@ export function MachineList() {
 						<FieldDescription>{s.local ? "As you would write it after ssh: host, user@host, or a name from ~/.ssh/config. It is connected to when you pick it." : "As you would write it after ssh: user@host, or user@host:port. It is connected to when you pick it."}</FieldDescription>
 					</Field>
 					{error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{error}</AlertDescription></Alert> : null}
+					{/* Where a relay is in play (the web client), it is said plainly, so that nobody forgets it. */}
+					{s.serviceHost ? <FieldDescription data-slot="relay-line">{relayLine(s.serviceHost)}</FieldDescription> : null}
 				</FieldGroup>
 			</FieldSet> : null}
 		</>
@@ -2165,6 +2180,7 @@ export function MachineList() {
 
 /** How a browser is paired with a computer, in three lines, and where the Pine app is for a computer without it: opened like every other link. */
 function PairHowTo() {
+	const s = useModel(store);
 	return (
 		<Item variant="outline" data-slot="pair-how-to">
 			<ItemContent className="min-w-0 basis-full">
@@ -2174,6 +2190,7 @@ function PairHowTo() {
 					<li>Go to Settings &gt; Browser access and press Add a device.</li>
 					<li>Scan the code with this device's camera, or open the link it gives in this browser.</li>
 				</ol>
+				{s.serviceHost ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="meeting-line">{meetingLine(s.serviceHost)}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
 				<Button variant="outline" size="xs" data-slot="get-the-app" onClick={() => void store.attempt(() => bridge.open(APP_DOWNLOAD))}><ExternalLinkIcon data-icon="inline-start" />Get the Pine app</Button>
@@ -2184,11 +2201,12 @@ function PairHowTo() {
 
 function Environments() {
 	const s = useModel(store);
+	const pairing = s.machinesShown.view === "pair";
 	return (
-		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : !s.canAddHost ? "The pine this browser uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : pairing ? "The pine this browser uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
 			<MachineList />
-			{/* Where only paired computers can be used, the list's how-to is all there is to say. */}
-			{s.canAddHost ? <Alert>
+			{/* In the pairing view, the list's how-to is all there is to say. */}
+			{!pairing ? <Alert>
 				<InfoIcon />
 				<AlertDescription>
 					{/* A port of this computer and its terminal are not said where there is no local machine. */}

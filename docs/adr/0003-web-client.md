@@ -96,7 +96,7 @@ peer. Two sentences above no longer hold as written:
   the machine that link names alone, and never over a key kept for it already. Machines added as
   `user@host` keep the owner's confirmation, and a changed key is refused for both.
 - **"The relay carries SSH and nothing else."** The same Worker carries SSH for the relay, which
-  a configuration switches off (`RELAY`; off on the official service), and, for the meeting
+  a configuration switches off (`RELAY`; on in every configuration of the repository, the official service included), and, for the meeting
   service, small opaque messages that set up a direct connection (at most 64 of 16 KiB each, for
   30 seconds). It keeps no storage and logs nothing: a Durable Object per paired computer holds that
   meeting's open sockets and nothing else. The conversation never passes through it.

@@ -91,7 +91,7 @@ export function Gate() {
 	];
 	// A pairing link being paired with (the web client's): the four digits the computer shows too, once it showed them.
 	const pairing = firstScreen(state);
-	const pairFirst = state.status === "error" && state.kind === "ssh" && !host && !s.pairFailed && !s.canAddHost && !s.prefs.hosts.length;
+	const pairFirst = state.status === "error" && state.kind === "ssh" && !host && !s.pairFailed && s.machinesShown.view === "pair" && !s.prefs.hosts.length;
 	const [title, about, actions]: Screen = pairing
 		? [
 				pairing.title,

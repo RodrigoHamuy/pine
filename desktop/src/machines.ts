@@ -31,6 +31,40 @@ export function machineName(host: string, names?: Record<string, string>): strin
 /** Where the Pine app is downloaded, for a browser that is to pair with a computer that does not have it yet. */
 export const APP_DOWNLOAD = "https://github.com/pmndre/pine/releases/latest";
 
+/** The two views of the machines' screen: how to pair with a computer, or the user@host machines reached over SSH. */
+export type MachinesViewName = "pair" | "ssh";
+
+/**
+ * Which view of the machines (the first screen, Settings > Environments) is shown, and with which
+ * controls: `toSsh`, the link from the pairing view to the SSH view; `back`, the control from the
+ * SSH view back to pairing. Both views are offered only where the bridge can pair (`canPair`) and
+ * add user@host machines (`canAddHost`); then the owner's choice for the visit (`chosen`) wins, and
+ * without one a browser with a user@host machine lands on the SSH view, any other on pairing.
+ * Nothing to pair with (the desktop and mobile apps, a deployment without the meeting service):
+ * the SSH view alone. No user@host machines (the relay is off): the pairing view alone.
+ */
+export function machinesView(o: { canPair: boolean; canAddHost: boolean; hosts: string[]; chosen?: MachinesViewName }): { view: MachinesViewName; toSsh: boolean; back: boolean } {
+	if (!o.canAddHost) return { view: "pair", toSsh: false, back: false };
+	if (!o.canPair) return { view: "ssh", toSsh: false, back: false };
+	const view = o.chosen ?? (o.hosts.some((h) => !isPaired(h)) ? "ssh" : "pair");
+	return { view, toSsh: view === "pair", back: view === "ssh" };
+}
+
+/**
+ * What the SSH view says under the field that adds a user@host machine, where the bridge names its
+ * service (`AppState.serviceHost`): the relay carries the SSH bytes, which are encrypted end to end.
+ */
+export const relayLine = (serviceHost: string) => `Connections go through the relay at ${serviceHost}. It carries SSH only and cannot read it.`;
+
+/** What the pairing view says: the meeting service passes the few messages that set up a direct connection, and carries nothing after. */
+export const meetingLine = (serviceHost: string) => `Found through ${serviceHost}, then connected directly.`;
+
+/** How a machine of the list is reached, as plain secondary text on its row; none where the bridge names no service (the desktop and mobile apps). */
+export function reachedThrough(host: string, serviceHost?: string): string | undefined {
+	if (!serviceHost) return undefined;
+	return isPaired(host) ? meetingLine(serviceHost) : `Through the relay at ${serviceHost}.`;
+}
+
 /** The first screen during a pairing: what it says, and the four digits once the computer showed them. None: no pairing under way. Its name is not known yet. */
 export function firstScreen(state: ServiceState): { title: string; about: string; code?: string } | undefined {
 	if (state.status !== "starting" || !state.pairing) return undefined;
