@@ -36,25 +36,26 @@ jobs:
           Set-Content "$outside\secret.txt" "SECRET"
           $bash = "C:\Program Files\Git\usr\bin\bash.exe"
           $node = (Get-Command node).Source
-          function Try($label, [string[]]$argv) {
-            $out = & $box box --name pine.ci.probe --write $work --read (Split-Path $node) --cwd $work -- @argv 2>&1
-            "{0,-44} exit {1,4}  {2}" -f $label, $LASTEXITCODE, (($out | Out-String).Trim() -replace "\r?\n", " | ").Substring(0, [Math]::Min(220, (($out | Out-String).Trim()).Length))
+          function Probe($label, [string[]]$argv) {
+            $out = (& $box box --name pine.ci.probe --write $work --read (Split-Path $node) --cwd $work -- @argv 2>&1 | Out-String).Trim() -replace "\r?\n", " | "
+            if ($out.Length -gt 240) { $out = $out.Substring(0, 240) }
+            "{0,-30} exit {1,11}  {2}" -f $label, $LASTEXITCODE, $out
           }
           $env:TMP = $work; $env:TEMP = $work; $env:HOME = $work.FullName
-          Try "cmd echo" @("cmd.exe", "/c", "echo hello")
-          Try "whoami /user" @("whoami.exe", "/user")
-          Try "node prints" @($node, "-e", "console.log('node ok')")
-          Try "node writes in its folder" @($node, "-e", "require('fs').writeFileSync('made.txt','x');console.log('wrote')")
-          Try "node reads outside" @($node, "-e", "console.log(require('fs').readFileSync(process.argv[1],'utf8'))", "$outside\secret.txt")
-          Try "node reaches the internet" @($node, "-e", "fetch('https://example.com').then(r=>console.log(r.status),e=>console.log('refused',e.cause?.code))")
-          Try "git --version" @("C:\Program Files\Git\cmd\git.exe", "--version")
-          Try "bash --version" @($bash, "--version")
-          Try "bash -c true" @($bash, "-c", "true")
-          Try "bash -c echo" @($bash, "-c", "echo bash ok; echo `$HOME `$TMP")
-          Try "bash -c ls" @($bash, "-c", "ls /usr/bin | head -3")
-          Try "sh -c echo" @("C:\Program Files\Git\usr\bin\sh.exe", "-c", "echo sh ok")
-          Try "Git bin\bash -c echo" @("C:\Program Files\Git\bin\bash.exe", "-c", "echo launcher ok")
-          Try "cat.exe a file" @("C:\Program Files\Git\usr\bin\cat.exe", "$work\made.txt")
+          Probe "cmd echo" @("cmd.exe", "/c", "echo hello")
+          Probe "whoami /user" @("whoami.exe", "/user")
+          Probe "node prints" @($node, "-e", "console.log('node ok')")
+          Probe "node writes in its folder" @($node, "-e", "require('fs').writeFileSync('made.txt','x');console.log('wrote')")
+          Probe "node reads outside" @($node, "-e", "console.log(require('fs').readFileSync(process.argv[1],'utf8'))", "$outside\secret.txt")
+          Probe "node reaches the internet" @($node, "-e", "fetch('https://example.com').then(r=>console.log(r.status),e=>console.log('refused',e.cause?.code))")
+          Probe "git --version" @("C:\Program Files\Git\cmd\git.exe", "--version")
+          Probe "bash --version" @($bash, "--version")
+          Probe "bash -c true" @($bash, "-c", "true")
+          Probe "bash -c echo" @($bash, "-c", "echo bash ok; echo `$HOME `$TMP")
+          Probe "bash -c ls" @($bash, "-c", "ls /usr/bin | head -3")
+          Probe "sh -c echo" @("C:\Program Files\Git\usr\bin\sh.exe", "-c", "echo sh ok")
+          Probe "Git bin\bash -c echo" @("C:\Program Files\Git\bin\bash.exe", "-c", "echo launcher ok")
+          Probe "cat.exe a file" @("C:\Program Files\Git\usr\bin\cat.exe", "$work\made.txt")
           Write-Output "--- ACL of Git's folders"
           icacls "C:\Program Files\Git\usr\bin\bash.exe"
           icacls "C:\Program Files\Git\usr\bin\msys-2.0.dll"
