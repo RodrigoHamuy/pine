@@ -271,7 +271,7 @@ public final class Pines: @unchecked Sendable {
 		let h = lock.withLock { () -> HeldRemote? in
 			if closed { return nil }
 			if let h = held[host] { return h }
-			let h = HeldRemote(remote: remote, host: host, on: Follow(self, host), failed: { [weak self] e in self?.lost(host, e) }, retry: retryEvery, batch: batch)
+			let h = HeldRemote(remote: remote, host: host, on: Follow(self, host), failed: { [weak self] e in self?.lost(host, e) }, retry: retryEvery, batch: batch, paired: { [weak self] in self?.paired(host) })
 			held[host] = h
 			return h
 		}
@@ -328,7 +328,13 @@ public final class Pines: @unchecked Sendable {
 		var out: [String: Any] = ["status": "error", "host": host]
 		switch e {
 		case let e as RemoteError:
-			if let key = e.hostKey {
+			if let key = e.hostKey, host.hasPrefix(PAIRED) {
+				// A paired computer's key is its machine id: another one is refused for good, in the core's words.
+				out["kind"] = "ssh"
+				out["fingerprint"] = key.fingerprint
+				out["changed"] = true
+				out["message"] = e.message
+			} else if let key = e.hostKey {
 				if !key.changed { lock.withLock { unknown[host] = key } }
 				out["kind"] = "ssh"
 				out["fingerprint"] = key.fingerprint
@@ -380,7 +386,7 @@ public final class Pines: @unchecked Sendable {
 	private static func starting(_ host: String) -> [String: Any] { ["status": "starting", "host": host] }
 
 	private static func ready(_ s: RemoteService) -> [String: Any] {
-		var out: [String: Any] = ["status": "ready", "mode": "on \(s.label)", "started": s.started, "home": "\(s.label):\(s.home)", "from": "ssh \(s.host)", "host": s.host, "label": s.label]
+		var out: [String: Any] = ["status": "ready", "mode": "on \(s.label)", "started": s.started, "home": "\(s.label):\(s.home)", "from": s.paired ? "paired \(s.label)" : "ssh \(s.host)","host": s.host, "label": s.label]
 		if let v = s.version { out["version"] = v }
 		return out
 	}
