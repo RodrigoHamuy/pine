@@ -129,7 +129,7 @@ QR code, and the system decides what the link opens.
 | `Forget` | On the computer's line in Settings > Environments. It removes the computer from this phone's list, with its name and its service, and nothing else: the computer still lets this phone in until you press Remove in the Pine app (Settings > Browser access). The app says so before it forgets |
 | Removed at the computer | Remove in the Pine app cuts the phone's connection at once, and the app says "This phone is no longer known to" the computer: pair again to use it |
 | Pictures, video and sound | As over SSH |
-| A relay server | The app uses the servers the meeting service names for finding a way (STUN, and TURN where a service names one). A relay the computer's owner names in the Pine app (`Relay server (TURN)` in [desktop.md](desktop.md#a-relay-server-of-your-own-for-a-phone-that-cannot-connect-from-mobile-data)) is used by the computer's side and needs nothing of the phone. The app has no relay setting of its own |
+| A relay server | The app uses the STUN servers the meeting service names for finding a way. A TURN server a service names cannot be used, by the app or by any client today: only each server's address is carried, never a user name or a credential. A relay the computer's owner names in the Pine app (`Relay server (TURN)` in [desktop.md](desktop.md#a-relay-server-of-your-own-for-a-phone-that-cannot-connect-from-mobile-data)) is used by the computer's side and needs nothing of the phone. The app has no relay setting of its own |
 
 ### When a paired computer does not answer
 
