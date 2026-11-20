@@ -1,0 +1,60 @@
+name: Windows sandbox
+
+# What runs inside pine's AppContainer on Windows (src/pine-box.cs), tried one program at a time,
+# so that a change to the sandbox helper shows at once what starts in it and what it can reach.
+# The whole suite runs in the Test workflow; this is the quick look.
+
+on:
+  pull_request:
+    paths: ["src/pine-box.cs", "src/sandbox-windows.ts", ".github/workflows/windows-sandbox.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Build pine-box with the compiler Windows carries
+        shell: pwsh
+        run: |
+          $csc = "$env:WINDIR\Microsoft.NET\Framework64\v4.0.30319\csc.exe"
+          & $csc /nologo /optimize+ /out:pine-box.exe src\pine-box.cs
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+      - name: What starts in an AppContainer, and what it reaches
+        shell: pwsh
+        run: |
+          $box = (Resolve-Path .\pine-box.exe).Path
+          $work = New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\boxwork"
+          $outside = New-Item -ItemType Directory -Force "$env:RUNNER_TEMP\outside"
+          Set-Content "$outside\secret.txt" "SECRET"
+          $bash = "C:\Program Files\Git\usr\bin\bash.exe"
+          $node = (Get-Command node).Source
+          function Try($label, [string[]]$argv) {
+            $out = & $box box --name pine.ci.probe --write $work --read (Split-Path $node) --cwd $work -- @argv 2>&1
+            "{0,-44} exit {1,4}  {2}" -f $label, $LASTEXITCODE, (($out | Out-String).Trim() -replace "\r?\n", " | ").Substring(0, [Math]::Min(220, (($out | Out-String).Trim()).Length))
+          }
+          $env:TMP = $work; $env:TEMP = $work; $env:HOME = $work.FullName
+          Try "cmd echo" @("cmd.exe", "/c", "echo hello")
+          Try "whoami /user" @("whoami.exe", "/user")
+          Try "node prints" @($node, "-e", "console.log('node ok')")
+          Try "node writes in its folder" @($node, "-e", "require('fs').writeFileSync('made.txt','x');console.log('wrote')")
+          Try "node reads outside" @($node, "-e", "console.log(require('fs').readFileSync(process.argv[1],'utf8'))", "$outside\secret.txt")
+          Try "node reaches the internet" @($node, "-e", "fetch('https://example.com').then(r=>console.log(r.status),e=>console.log('refused',e.cause?.code))")
+          Try "git --version" @("C:\Program Files\Git\cmd\git.exe", "--version")
+          Try "bash --version" @($bash, "--version")
+          Try "bash -c true" @($bash, "-c", "true")
+          Try "bash -c echo" @($bash, "-c", "echo bash ok; echo `$HOME `$TMP")
+          Try "bash -c ls" @($bash, "-c", "ls /usr/bin | head -3")
+          Try "sh -c echo" @("C:\Program Files\Git\usr\bin\sh.exe", "-c", "echo sh ok")
+          Try "Git bin\bash -c echo" @("C:\Program Files\Git\bin\bash.exe", "-c", "echo launcher ok")
+          Try "cat.exe a file" @("C:\Program Files\Git\usr\bin\cat.exe", "$work\made.txt")
+          Write-Output "--- ACL of Git's folders"
+          icacls "C:\Program Files\Git\usr\bin\bash.exe"
+          icacls "C:\Program Files\Git\usr\bin\msys-2.0.dll"
