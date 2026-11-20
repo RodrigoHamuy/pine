@@ -62,7 +62,8 @@ messages passed both ways (at most 64, of 16 KiB each, within 30 seconds), and t
 of it. It logs nothing. The meeting logic (`web/relay/src/meet.ts`) has no Cloudflare in it; the
 Durable Object is one adapter.
 
-**No relay fallback.** No TURN server and no carrying of the bytes by the Worker. Where two
+**No relay fallback.** *(Superseded in part by the amendment below: a computer's owner may now name a
+relay of their own, and that took no release of the web client.)* No TURN server and no carrying of the bytes by the Worker. Where two
 devices cannot connect directly (some cellular networks behind carrier NAT), the owner is told so
 and advised to try another network. The STUN servers that help a connection (`ICE`) are the service's
 configuration, read by both sides. A relay (TURN) is not carried today: the app keeps only `stun:`
@@ -105,7 +106,10 @@ daemon on the loopback, and a port of the network reaches nobody away from home.
 
 **A relay that carries the bytes (TURN, or the Worker).** Left out, not rejected: it would cost
 per byte on a free plan that has no such allowance, and adding it takes a release of both clients
-besides the service's configuration. Its absence is the accepted risk below.
+besides the service's configuration. Its absence is the accepted risk below. *(Superseded in part
+by the amendment to "No relay fallback": the project still runs none, but a relay the computer's
+owner names in the Pine app is used by the computer's side alone, which needed no release of the
+web client.)*
 
 **`werift` (pure TypeScript) for the app's data channel.** Kept as the fallback behind the same
 small interface; not needed once `node-datachannel` loaded in the packed, signed app.

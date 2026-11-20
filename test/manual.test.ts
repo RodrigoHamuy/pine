@@ -307,8 +307,10 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["try the browser version of a pull request before it is merged", /^web#(previews|web-preview)/],
 		["use the web client with a machine on my tailscale network", /^web#a-machine-on-a-tailnet/],
 		["the browser cannot reach my mac that is only on tailscale", /^web#a-machine-on-a-tailnet/],
-		["the web page only shows a qr code, where do I type my server's user@host", /^web#/],
-		["does the official web address relay my ssh connection and can it read it", /^web#/],
+		// The first screen's link to the SSH view: in "The first screen" (Using it), and the official service's row of the paired section.
+		["the web page only shows a qr code, where do I type my server's user@host", /^web#(using-it|a-computer-paired-by-qr-code)/],
+		// "The relay" row (How it works: SSH end to end, neither key nor token), or the first screen's relay line (Using it).
+		["does the official web address relay my ssh connection and can it read it", /^web#(how-it-works|using-it)/],
 		// Browser access to the Pine app's pine, asked for by somebody who does not know its name.
 		["use pine from my phone without ssh", /^(desktop#(browser-access|from-a-phone-without-ssh)|web#a-computer-paired-by-qr-code)/],
 		["scan a qr code on the mac to open my conversations on my phone", /^(desktop#browser-access|web#a-computer-paired-by-qr-code)/],
