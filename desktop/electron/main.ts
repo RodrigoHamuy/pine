@@ -14,7 +14,7 @@ import { callDaemon, followEvents, mediaFromDaemon, pageCsp, VIEW_CSP } from "./
 import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, pineVersion, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
 import { Terminals } from "./terminal.ts";
 import { makeUpdater } from "./updater.ts";
-import { ahead, LATEST, lookForUpdate, type Update } from "./updates.ts";
+import { ahead, DOWNLOADS, LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanLook, type Look } from "../src/theme.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -476,6 +476,12 @@ async function commandFromMenu(): Promise<void> {
  * owner gets leads to GitHub.
  */
 const RELEASE_API = process.env.PINE_DESKTOP_RELEASES !== undefined ? process.env.PINE_DESKTOP_RELEASES || undefined : app.isPackaged ? LATEST : undefined;
+/**
+ * Where a release's update feed is downloaded from: pine's own releases. PINE_DESKTOP_DOWNLOADS is
+ * for tests, which name a stand-in for them beside the stand-in for GitHub (a real update of a
+ * signed app, from N to N+1, tried on this Mac without publishing anything).
+ */
+const RELEASE_DOWNLOADS = process.env.PINE_DESKTOP_DOWNLOADS || DOWNLOADS;
 
 /** The last answer that said something, for a page that is opened again. */
 let known: Update | undefined;
@@ -507,7 +513,7 @@ function downloadUpdate(): void {
 }
 
 async function askForUpdate(): Promise<Update> {
-	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API);
+	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API, RELEASE_DOWNLOADS);
 	if (said.status !== "unknown") known = said;
 	downloadUpdate();
 	return withUpdater(said) as Update;

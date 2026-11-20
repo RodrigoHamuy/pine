@@ -47,6 +47,12 @@ test("updates: a newer release is said with a link to its page on GitHub and its
 	assert.equal((await lookForUpdate("0.41.0-next.1", "arm64", at)).status, "latest");
 });
 
+test("updates: a test's stand-in for the downloads moves the feed, which is still made from the version and the arch", async () => {
+	release("v0.40.0");
+	const said = (await lookForUpdate("0.39.1", "arm64", at, "http://127.0.0.1:9/download")) as { feed?: string };
+	assert.equal(said.feed, "http://127.0.0.1:9/download/v0.40.0/Pine-arm64.json");
+});
+
 test("updates: the question says who asks and nothing about this computer", async () => {
 	release("v0.40.0");
 	asked.length = 0;

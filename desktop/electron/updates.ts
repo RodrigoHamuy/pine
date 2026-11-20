@@ -31,8 +31,11 @@ export type UpdaterState = { state: "idle" } | { state: "downloading"; version: 
 export const DOWNLOADS = `${RELEASES}/download`;
 /** The name of a release's update feed for a kind of Mac, among its assets. */
 export const feedName = (arch: string) => `Pine-${arch}.json`;
-/** Where a release's update feed for a kind of Mac is: made from the version and the arch, never taken from an answer. */
-export const feedOf = (version: string, arch: string) => `${DOWNLOADS}/v${version}/${feedName(arch)}`;
+/**
+ * Where a release's update feed for a kind of Mac is: made from the version and the arch, never taken from an answer.
+ * `downloads` is pine's own releases but in a test, which names a stand-in (PINE_DESKTOP_DOWNLOADS in the main process).
+ */
+export const feedOf = (version: string, arch: string, downloads: string = DOWNLOADS) => `${downloads}/v${version}/${feedName(arch)}`;
 
 /**
  * Whether a release is ahead of the version `mine`. A preview ("0.40.0-next.3") comes before
@@ -49,9 +52,9 @@ export function ahead(release: string, mine: string): boolean {
  * only when it is one: the link and the feed's address are made here, to GitHub, never taken from
  * what was answered. A release counts once its disk image and its update feed for this kind of Mac
  * (`arch`) are attached, which is some minutes after pine itself is published, and never when that
- * app could not be built.
+ * app could not be built. `downloads` is where the feed is made on (feedOf).
  */
-export async function lookForUpdate(mine: string, arch: string = process.arch, from: string = LATEST): Promise<Update> {
+export async function lookForUpdate(mine: string, arch: string = process.arch, from: string = LATEST, downloads: string = DOWNLOADS): Promise<Update> {
 	try {
 		const res = await fetch(from, { headers: { accept: "application/vnd.github+json", "user-agent": "Pine" }, signal: AbortSignal.timeout(15_000) });
 		if (!res.ok) return { status: "unknown", mine };
@@ -60,7 +63,7 @@ export async function lookForUpdate(mine: string, arch: string = process.arch, f
 		if (!version) return { status: "unknown", mine };
 		const names = Array.isArray(said.assets) ? said.assets.map((a) => (a as { name?: unknown } | null)?.name) : [];
 		const attached = names.includes(`Pine-${version}-${arch}.dmg`) && names.includes(feedName(arch));
-		return attached && ahead(version, mine) ? { status: "newer", mine, version, url: `${RELEASES}/tag/v${version}`, feed: feedOf(version, arch) } : { status: "latest", mine };
+		return attached && ahead(version, mine) ? { status: "newer", mine, version, url: `${RELEASES}/tag/v${version}`, feed: feedOf(version, arch, downloads) } : { status: "latest", mine };
 	} catch {
 		return { status: "unknown", mine };
 	}

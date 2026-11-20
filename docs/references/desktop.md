@@ -858,7 +858,8 @@ desktop/
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
     updates.ts     whether there is a newer app: GitHub asked for the last release, the link to its page
-                   and the address of its update feed
+                   and the address of its update feed (stand-ins for tests: PINE_DESKTOP_RELEASES,
+                   PINE_DESKTOP_DOWNLOADS)
     updater.ts     the app's own update: Electron's autoUpdater (Squirrel.Mac) on that feed, downloaded
                    in the background, installed at Restart to update or at quit; a stand-in for tests
                    (PINE_DESKTOP_UPDATER)

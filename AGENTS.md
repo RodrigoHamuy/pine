@@ -891,7 +891,9 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   No test reaches GitHub, and what would open in a browser is noted instead (`shell.openExternal`).
   The app's own update (`desktop/electron/updater.ts`) runs on a stand-in for macOS's updater in
   `desktop/test/self-update.test.ts` (`PINE_DESKTOP_UPDATER`, for tests only: a folder with what it
-  is to do and the calls it was given); a real install is tried by hand, from release N to N+1.
+  is to do and the calls it was given); a real install is tried by hand, from release N to N+1,
+  with the feed and the zip on a stand-in for the release's downloads (`PINE_DESKTOP_DOWNLOADS`,
+  for tests only, beside `PINE_DESKTOP_RELEASES`).
 - The browser in the app's panel is tested without a browser: the relay on its stand-in for
   Playwright's server (`FAKE_BROWSER` in `test/browser.test.ts`, which also plays the owner's
   hand), the control API and the app on a stand-in for the browser's door (a file in the test
