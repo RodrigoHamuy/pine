@@ -28,6 +28,12 @@ export type SiteEnv = Env & {
 	RELAY?: string;
 	/** The servers that help a connection (STUN), as `RTCIceServer`s; a public STUN server when none are given. */
 	ICE?: unknown;
+	/**
+	 * The SHA-256 fingerprint of the key the Android app's releases are signed with (`AA:BB:...`, as
+	 * `keytool -list` or `apksigner verify --print-certs` writes it). With it the service serves the
+	 * statement App Links read, and its pairing links open that app; without it they open the browser.
+	 */
+	ANDROID_CERT_SHA256?: string;
 };
 
 export type SiteDeps = {
@@ -37,6 +43,9 @@ export type SiteDeps = {
 };
 
 const PAGE = "/page/";
+/** The Android app's package name (mobile/android/app/build.gradle's applicationId). */
+const ANDROID_APP = "dev.pmndre.pine";
+const FINGERPRINT = /^[0-9A-F]{2}(:[0-9A-F]{2}){31}$/;
 
 export function site(deps: SiteDeps) {
 	const limited = async (request: Request, env: SiteEnv) => {
@@ -69,6 +78,7 @@ export function site(deps: SiteDeps) {
 			}
 			return env.MEET!.get(env.MEET!.idFromName(where.id)).fetch(request);
 		}
+		if (url.pathname === "/.well-known/assetlinks.json") return appLinks(env.ANDROID_CERT_SHA256);
 		const served = await env.ASSETS.fetch(request);
 		const response = new Response(served.body, served);
 		response.headers.set("X-Content-Type-Options", "nosniff");
@@ -78,6 +88,18 @@ export function site(deps: SiteDeps) {
 		if ((response.headers.get("content-type") ?? "").startsWith("text/html")) response.headers.set("Content-Security-Policy", page ? "frame-ancestors 'self'" : "frame-ancestors 'none'");
 		return response;
 	};
+}
+
+/**
+ * The statement Android reads before it lets the Pine app open this service's links (App Links): the
+ * app, signed with the release key the configuration names. Nothing where no such key is named, or
+ * where the value is not a fingerprint: a phone then opens the link in its browser.
+ */
+function appLinks(value: unknown): Response {
+	const fingerprint = typeof value === "string" ? value.trim().toUpperCase() : "";
+	if (!FINGERPRINT.test(fingerprint)) return text(404, "This service names no Android app.");
+	const statement = [{ relation: ["delegate_permission/common.handle_all_urls"], target: { namespace: "android_app", package_name: ANDROID_APP, sha256_cert_fingerprints: [fingerprint] } }];
+	return new Response(JSON.stringify(statement), { headers: { "Content-Type": "application/json", "X-Content-Type-Options": "nosniff" } });
 }
 
 function text(status: number, message: string) {
