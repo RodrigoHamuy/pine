@@ -1,7 +1,7 @@
 // Settings: everything about pine that is otherwise a command in a shell or a sentence to the
 // main agent. Each page asks the daemon what there is and tells it what to change; the daemon
 // checks every change as it checks the main agent's, and nothing here writes a file itself.
-import { AudioLinesIcon, BookIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
+import { AudioLinesIcon, BookIcon, MonitorSmartphoneIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -36,6 +36,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
+import { BrowserAccess } from "./BrowserAccess.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -46,8 +47,24 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "events", label: "Events", icon: ZapIcon },
 	{ id: "instructions", label: "Instructions", icon: PencilIcon },
 	{ id: "environments", label: "Environments", icon: ServerIcon },
+	{ id: "access", label: "Browser access", icon: MonitorSmartphoneIcon },
 	{ id: "app", label: "App", icon: SettingsIcon },
 ];
+
+/**
+ * Whether Settings > Browser access is offered: only by the desktop app's bridge, which has its calls,
+ * and only while the app uses this computer's pine. Browser access is this Mac's door: the web client,
+ * the mobile apps and another machine's pine have none to show.
+ */
+const offersAccess = (s: { local: boolean; remote?: string }) => s.local && !s.remote && typeof bridge.access === "function";
+
+function Access() {
+	return (
+		<Page title="Browser access" lead="Your conversations in a browser on your phone or another computer, with this Mac's pine. A device is let in once by scanning a code here, and connects by itself from then on.">
+			<BrowserAccess />
+		</Page>
+	);
+}
 
 // Every page is made of stock Item, Field, Badge and Alert, written out where they are used. Some
 // carry a class the desktop tests look for (set-group, item, name, ctl, form, log, tag, notice,
@@ -2362,7 +2379,7 @@ export function Settings() {
 					</SidebarRoot>
 				</SidebarProvider>
 				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={s.section}>
-					{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "environments" ? <Environments /> : s.section === "app" ? <AppPage /> : <General />}
+					{s.section === "agents" ? <Agents /> : s.section === "models" ? <Models /> : s.section === "mcp" ? <Mcp /> : s.section === "skills" ? <Skills /> : s.section === "events" ? <EventsPage /> : s.section === "instructions" ? <Instructions /> : s.section === "environments" ? <Environments /> : s.section === "access" && offersAccess(s) ? <Access /> : s.section === "app" ? <AppPage /> : <General />}
 				</ScrollArea>
 			</div>
 		</div>
