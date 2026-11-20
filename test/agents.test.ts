@@ -191,8 +191,12 @@ test("sub-agents run in parallel with fresh contexts, even when only one model s
 			assert.ok(h.system(c).includes("WS-MAIN"), "a sub-agent is the same agent");
 			// (A sub-agent is declared what its conversation is declared, and refused when it calls what is not its to do: test/catalogue.test.ts.)
 		}
-		if (maxConcurrentRuns === 1) assert.ok(ms >= 450, `one slot: sequential (${ms} ms)`);
-		else assert.ok(ms < 400, `three slots: parallel (${ms} ms)`);
+		// Counted at the model server, not timed: the turn's own work around the sub-agents (the
+		// folder recorded for undo before its first tool call and after it) is no part of this.
+		if (maxConcurrentRuns === 1) {
+			assert.equal(h.mock.state.maxInflight, 1, "one slot: one request at a time");
+			assert.ok(ms >= 450, `one slot: sequential (${ms} ms)`);
+		} else assert.equal(h.mock.state.maxInflight, 3, `three slots: the three sub-agents at once (${ms} ms)`);
 		assert.equal(h.pine.agents.limiter.stats.active, 0);
 		await h.close();
 	}
