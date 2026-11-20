@@ -10,7 +10,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
-import { startMock } from "../../baseline/tests/mock.mjs";
+import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { browserPlaces } from "../../src/browser-build.ts";
 import { launchApp } from "./support/app.ts";
 import { daemonGone, freePort, ours, waitForDaemon } from "./support/daemon.ts";
@@ -139,4 +139,60 @@ test("with Update automatically off the release page is offered and nothing is d
 	// Nothing was ready, so a quit installs nothing.
 	await app.close();
 	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download"]);
+});
+
+const WORKING = "[data-slot=sidebar] [data-slot=pulse]";
+const WARNING = "[data-slot=alert-dialog-content]";
+const choose = (page: any, label: string) => page.click(`${WARNING} [data-slot=command-item]:has-text('${label}')`);
+/** The main agent set to work for a while in a conversation of its own: the model takes `ms` before it answers. */
+async function setToWork(page: any, ms: number, words: string) {
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ delayMs: ms, text: words }], "Take your time. "));
+	await page.keyboard.press("Enter");
+	await page.waitForSelector(WORKING, { timeout: 20_000 });
+}
+
+test("Restart to update while an agent works warns how many are at work: Cancel does nothing, and a wait for the end can be called off", async () => {
+	const t = await setUp({});
+	const { app, page } = await t.launch();
+	await page.waitForSelector(RESTART, { timeout: 20_000 });
+	await setToWork(page, 4000, "First done.");
+	await page.click(RESTART);
+	await page.waitForSelector(`${WARNING} >> text=1 conversation`);
+	await choose(page, "Cancel");
+	await page.waitForSelector(WARNING, { state: "detached" });
+	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download"]);
+	// Waiting for the end shows in the footer, and the footer calls it off.
+	await page.click(RESTART);
+	await choose(page, "Restart when they are done");
+	const PENDING = "[data-slot=sidebar-footer] [data-sidebar=menu-button]:has-text('Restarts when the work is done')";
+	await page.waitForSelector(PENDING);
+	await page.click(PENDING);
+	await page.waitForSelector(PENDING, { state: "detached" });
+	await page.waitForSelector(RESTART);
+	// The work ends, and nothing is installed: the wait was called off.
+	await page.waitForSelector("[data-slot=markdown] >> text=First done.", { timeout: 20_000 });
+	await page.waitForSelector(WORKING, { state: "detached" });
+	await new Promise((r) => setTimeout(r, 300));
+	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download"]);
+	// Asked again on more work, it waits for the end this time, and installs then.
+	await setToWork(page, 2500, "Second done.");
+	await page.click(RESTART);
+	await choose(page, "Restart when they are done");
+	await page.waitForSelector(PENDING);
+	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download"]);
+	const exit = t.closed(app);
+	await exit;
+	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download", "install"]);
+});
+
+test("Restart now in the warning installs at once, with the agent still at work", async () => {
+	const t = await setUp({});
+	const { app, page } = await t.launch();
+	await page.waitForSelector(RESTART, { timeout: 20_000 });
+	await setToWork(page, 15_000, "Never said.");
+	await page.click(RESTART);
+	const exit = t.closed(app);
+	await choose(page, "Restart now");
+	await exit;
+	assert.deepEqual(t.calls().map((c: { call: string }) => c.call), ["download", "install"]);
 });

@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, DownloadIcon, RotateCwIcon, CheckIcon, RadarIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, DownloadIcon, HourglassIcon, RotateCwIcon, CheckIcon, RadarIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
@@ -494,9 +494,13 @@ function Sidebar() {
 			</SidebarContent>
 			<SidebarFooter className="gap-0">
 				<SidebarMenu>
-					{newer?.updater?.state === "ready" ? (
+					{newer?.updater?.state === "ready" && s.updateWhenDone ? (
 						<SidebarMenuItem className="app-no-drag">
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void s.installUpdate()} />}><RotateCwIcon /><span className="grow min-w-0 flex-1 truncate">Restart to update</span></TooltipTrigger><TooltipContent>{`Pine ${newer.version} is downloaded. Pine quits, puts the new app in place of this one (${newer.mine}) and opens again, with the pine it started.`}</TooltipContent></HoverTooltip>
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.cancelUpdateWait()} />}><HourglassIcon /><span className="grow min-w-0 flex-1 truncate">Restarts when the work is done</span><XIcon /></TooltipTrigger><TooltipContent>{`Pine ${newer.version} is installed once no conversation is at work. Click to call it off: the update stays ready for a restart or a quit.`}</TooltipContent></HoverTooltip>
+						</SidebarMenuItem>
+					) : newer?.updater?.state === "ready" ? (
+						<SidebarMenuItem className="app-no-drag">
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void s.restartToUpdate()} />}><RotateCwIcon /><span className="grow min-w-0 flex-1 truncate">Restart to update</span></TooltipTrigger><TooltipContent>{`Pine ${newer.version} is downloaded. Pine quits, puts the new app in place of this one (${newer.mine}) and opens again, with the pine it started.`}</TooltipContent></HoverTooltip>
 						</SidebarMenuItem>
 					) : newer?.updater?.state === "downloading" ? (
 						<SidebarMenuItem className="app-no-drag">
@@ -782,7 +786,7 @@ function UpdateAsk() {
 					<p className="text-muted-foreground select-text">{ready ? `This is Pine ${u.mine}. Restart to update: Pine quits, puts the new app in place of this one and opens again, with the pine it started. Or quit when you like: the update is installed then.` : `This is Pine ${u.mine}. The new app is downloaded in the background; "Restart to update" appears at the foot of the side bar when it is ready.`} Your pine home, with your agents, conversations and settings, stays as it is.</p>
 					<DialogFooter>
 						<Button variant="outline" onClick={close}>{ready ? "Not now" : "Close"}</Button>
-						{ready ? <Button onClick={() => void s.installUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
+						{ready ? <Button onClick={() => void s.restartToUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
 					</DialogFooter>
 				</DialogContent>
 			</Dialog>

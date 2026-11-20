@@ -249,6 +249,8 @@ export class Store extends Model {
 	updateLooking = false;
 	/** Whether this app updates itself (`AppState.selfUpdate`): it then offers "Restart to update" once an update is ready. */
 	selfUpdate = false;
+	/** "Restart when they are done" was chosen: the update is installed once no conversation is at work. */
+	updateWhenDone = false;
 	/** The pine home the app was told to use, when it is not the usual one. */
 	home?: string;
 
@@ -509,8 +511,50 @@ export class Store extends Model {
 	/** The update the app downloaded, installed: the app quits and comes back on the new version, with the pine it started. */
 	async installUpdate(): Promise<void> {
 		this.updateAsk = false;
+		this.updateWhenDone = false;
 		this.touch();
 		await this.attempt(() => bridge.installUpdate!());
+	}
+
+	/** How many conversations are at work, as the side bar shows them: sub-agents and delegated tasks are part of the work of their conversation. */
+	get working(): number {
+		let n = 0;
+		for (const tasks of this.busy.values()) if (tasks.size) n++;
+		return n;
+	}
+
+	/**
+	 * "Restart to update": at once when nothing is at work. Otherwise the owner is told how much
+	 * would be cut off, and chooses to restart now, once the work is done, or not at all.
+	 */
+	async restartToUpdate(): Promise<void> {
+		const n = this.working;
+		if (!n) return this.installUpdate();
+		this.updateAsk = false;
+		const how = await this.pick({
+			title: `Agents are at work in ${plural(n, "conversation")}`,
+			items: [
+				{ value: "done", label: "Restart when they are done", about: "the update is installed once nothing is at work" },
+				{ value: "now", label: "Restart now", about: "what they are doing is cut off", tone: "bad" },
+				{ value: "no", label: "Cancel" },
+			],
+		});
+		if (how === "now") return this.installUpdate();
+		if (how !== "done") return;
+		this.updateWhenDone = true;
+		this.touch();
+		this.installWhenDone();
+	}
+
+	/** The wait for the end of the work called off: the update stays ready for a restart or a quit. */
+	cancelUpdateWait(): void {
+		this.updateWhenDone = false;
+		this.touch();
+	}
+
+	/** Installs the update the owner said to install once the work is done, when nothing is at work any more. */
+	private installWhenDone(): void {
+		if (this.updateWhenDone && !this.working) void this.installUpdate();
 	}
 
 	async lookForUpdate(asked = false): Promise<void> {
@@ -1519,6 +1563,7 @@ export class Store extends Model {
 				if (!this.busy.has(key)) this.busy.set(key, new Set());
 				this.busy.get(key)!.add(r.task);
 			}
+			this.installWhenDone();
 			for (const x of s.sessions) {
 				const open = this.tabs.find((t) => t.kind === "chat" && t.agent === x.agent && t.session === x.session);
 				if (open && x.context?.percent !== undefined) open.context = x.context.percent;
@@ -2191,6 +2236,7 @@ export class Store extends Model {
 			} else if (kind === "done" || kind === "failed") {
 				this.busy.get(key)?.delete(p.task);
 				this.dirty.add(this);
+				this.installWhenDone();
 				// What an agent just did may have been making, changing or removing an agent.
 				void this.refreshAgents();
 				void this.refreshSaid();
