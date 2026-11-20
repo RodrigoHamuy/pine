@@ -484,6 +484,54 @@ test("tui: bypass in a conversation that has read outside content is a choice, a
 	await t.close();
 });
 
+test("tui: a bottom bar without room gives up its figures and then the names, never the mode or the mark of outside content", async () => {
+	const feed = { command: process.execPath, args: [MCP_STUB], env: { MCP_LABEL: "feed" }, taints: true };
+	const t = await open({ agents: { main: { agent: { mcp: { feed } } } } }, [140, 30]);
+	await t.sees("type a message");
+	// A server that takes a moment over the prompt, so that there is a speed to show.
+	await t.send(mockMsg([{ delayMs: 60, tools: [{ name: "mcp__feed__echo", args: { text: "x" } }] }, { delayMs: 60, text: "It is read: forty-two." }]));
+	await t.sees(/^ It is read: forty-two\.$/m);
+	const rate = String.raw`[\d.]+k? t\/s`;
+	// Room for all of it: the names, the mode, the figures, the mark, the hint.
+	await t.sees(new RegExp(`^ main · main · no folder · mock/m · reasoning off · \\w+ · context \\d+% · ↑ ${rate}( ↓ ${rate})? · outside content +/help *$`, "m"));
+	const mode = / · reasoning off · (\w+) · /.exec(t.app.screen().at(-1)!)![1];
+
+	// The same conversation in narrower terminals.
+	const at = async (width: number) => {
+		const term = new FakeTerminal(width, 30);
+		const app = new PineTui({ client: t.app.client, terminal: term });
+		apps.push(app);
+		await app.start();
+		const bar = () => app.screen().at(-1)!.trimEnd();
+		await until(() => /outside content/.test(bar()), 2000, `the mark at ${width} columns: ${bar()}`);
+		return { term, app, bar };
+	};
+	const names = " main · main · no folder · mock/m · reasoning off";
+	const seen: string[] = [];
+	for (const width of [112, 100, 90, 76, 60, 44]) {
+		const narrow = await at(width);
+		// The figures arrive a moment after the mark. From 90 columns on there is room for the first of them.
+		await until(() => width < 90 || /context/.test(narrow.bar()), 2000, `the figures at ${width} columns: ${narrow.bar()}`);
+		const bar = narrow.bar();
+		seen.push(bar);
+		assert.ok([...bar].length <= width, `no wider than the terminal: ${bar}`);
+		assert.match(bar, new RegExp(` · ${mode} · (.* · )?outside content( +/help)?$`), `the mode and the mark, whole, at ${width} columns`);
+		assert.ok(!/t\/s/.test(bar) || /context \d+%/.test(bar), `the speed goes before the context figure: ${bar}`);
+		assert.ok(!/context|t\/s/.test(bar) || bar.startsWith(names), `the figures go before the names are cut: ${bar}`);
+		if (width === 76) assert.equal(bar, `${names} · ${mode} · outside content`, "no figure and no hint, and nothing cut");
+		if (width < 76) assert.ok(bar.startsWith(" main · ") && !bar.startsWith(names) && !/context|t\/s|help/.test(bar), `the names are what is cut: ${bar}`);
+		// A click still lands on what it shows: the mode opens its list.
+		if (width === 60) {
+			narrow.term.click(bar.indexOf(` · ${mode} · `) + 4, narrow.app.screen().length - 1);
+			await until(() => narrow.app.screen().some((l) => l.includes("Mode for main")), 2000, "the list of modes");
+			narrow.term.type([KEY.esc]);
+		}
+		await narrow.app.stop();
+	}
+	assert.ok(seen.some((b) => /context \d+% · outside content/.test(b)), `at some width the context figure is left without the speed:\n${seen.join("\n")}`);
+	await t.close();
+});
+
 test("tui: list search finds text anywhere in a name, ranks sensible matches first, and forgives a typo", () => {
 	const models = ["anthropic/claude-haiku-5-5", "opencode-go/deepseek-v4-pro", "opencode-go/deepseek-v4.1-flash", "opencode-go/kimi-k3", "opencode/deepseek-v4.1-flash-free", "deepseek/deepseek-chat"].map((m) => ({ value: m, label: m }));
 	const find = (q: string) => searchItems(models, q).map((m) => m.value);

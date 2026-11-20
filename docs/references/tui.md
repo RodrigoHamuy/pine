@@ -105,6 +105,9 @@ prompt cache instead of reading it again; it appears once the server reports the
 are shown from the first answer on, and from the last one when you reopen a conversation.
 A yellow `outside content` at the end of the bar means that the conversation has read something
 from outside (a web page, an event): see [security.md](security.md) for what changes then.
+In a terminal too narrow for the whole bar, `/help` goes first, then the figures (the speed,
+then `cache`, then `context`), then the end of the names before the mode. The mode and
+`outside content` are the last to go.
 The wheel scrolls the conversation.
 
 Web addresses are always printed in full, also for a link an agent wrote as "[click here](...)":
