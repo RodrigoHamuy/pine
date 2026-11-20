@@ -299,7 +299,7 @@ export const PairOrSsh: Story = {
 		await expect(canvas.getByText("Pair this browser with your computer")).toBeInTheDocument();
 		await expect(canvasElement).not.toHaveTextContent(/\bMac\b/);
 		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).not.toBeNull();
-		await expect(canvasElement.querySelector('[data-slot="meeting-line"]')).toHaveTextContent(`Found through ${SERVICE}, then connected directly.`);
+		await expect(canvasElement.querySelector('[data-slot="meeting-line"]')).toHaveTextContent(`Found through ${SERVICE}. The connection is then made between the two devices, directly or through a relay server the computer's owner named.`);
 		await expect(canvasElement.querySelector("input")).toBeNull();
 		await expect(canvasElement.querySelector('[data-slot="device-key"]')).toBeNull();
 		await expect(canvasElement.querySelector('[data-slot="back-to-pairing"]')).toBeNull();
@@ -326,6 +326,24 @@ export const ThroughTheService: Story = {
 		const { canvasElement } = context;
 		await expect(canvasElement.querySelector('[data-slot="back-to-pairing"]')).not.toBeNull();
 		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="reached-through"]')).toHaveTextContent(`Through the relay at ${SERVICE}.`);
-		await expect(canvasElement.querySelector(`[data-environment="${PAIRED}"] [data-slot="reached-through"]`)).toHaveTextContent(`Found through ${SERVICE}, then connected directly.`);
+		await expect(canvasElement.querySelector(`[data-environment="${PAIRED}"] [data-slot="reached-through"]`)).toHaveTextContent(`Found through ${SERVICE}. The connection is then made between the two devices, directly or through a relay server the computer's owner named.`);
+	},
+};
+
+/**
+ * A browser with one paired computer and no user@host machine, none in use (it let go of it): the
+ * pairing view, so the bridge's sentence for the SSH view (add user@host, authorized_keys) is not
+ * drawn above the pairing how-to, where no user@host field is on screen.
+ */
+export const PairedNoneInUse: Story = {
+	args: { hosts: [PAIRED], canPair: true, serviceHost: SERVICE, names: { [PAIRED]: "Studio" }, state: { status: "error", kind: "ssh", message: "Add the machine whose pine this browser is to use, as user@host or user@host:port. Put this browser's key into ~/.ssh/authorized_keys there first." } },
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement } = context;
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText("Choose a machine")).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).not.toBeNull();
+		await expect(canvasElement.querySelector("input")).toBeNull();
+		await expect(canvasElement).not.toHaveTextContent(/user@host|authorized_keys/);
 	},
 };

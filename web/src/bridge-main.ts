@@ -19,10 +19,16 @@ function relay(host: string, port: number) {
 	return relayStream(url.toString());
 }
 
-/** The deployment's configuration: the servers that help a peer connection, and whether the relay carries SSH. */
+/**
+ * The deployment's configuration: the servers that help a peer connection, and whether the relay
+ * carries SSH. `null` for a 404, which a deployment without the meeting service answers; any other
+ * failure (a 429 of the rate limiter, a 5xx, the network) throws, so that it is read again.
+ */
 async function config(): Promise<unknown> {
 	const answer = await fetch(new URL("meet/config", location.href));
-	return answer.ok ? answer.json() : undefined;
+	if (answer.status === 404) return null;
+	if (!answer.ok) throw new Error(`The service's configuration could not be read (${answer.status}).`);
+	return answer.json();
 }
 
 async function main() {

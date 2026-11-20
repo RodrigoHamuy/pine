@@ -25,7 +25,7 @@ import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
 import { Breakable, MachineList, Settings } from "./Settings.tsx";
-import { computerWord, firstScreen, isPaired } from "./machines.ts";
+import { computerWord, firstScreen, isPaired, noMachineSaid } from "./machines.ts";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
@@ -91,7 +91,9 @@ export function Gate() {
 	];
 	// A pairing link being paired with (the web client's): the four digits the computer shows too, once it showed them.
 	const pairing = firstScreen(state);
-	const pairFirst = state.status === "error" && state.kind === "ssh" && !host && !s.pairFailed && s.machinesShown.view === "pair" && !s.prefs.hosts.length;
+	// The sentence under the title follows the view shown, never the emptiness of the list (machines.ts).
+	const said = state.status === "error" ? noMachineSaid(state, s.machinesShown.view, s.pairFailed) : undefined;
+	const pairFirst = state.status === "error" && said === undefined && !s.prefs.hosts.length;
 	const [title, about, actions]: Screen = pairing
 		? [
 				pairing.title,
@@ -103,7 +105,7 @@ export function Gate() {
 			]
 		: state.status === "starting"
 			? host
-				? connecting(paired ? `Reaching ${s.nameOf(host)} directly, then its pine…` : "Reaching its pine over SSH, or starting one there…")
+				? connecting(paired ? `Reaching ${s.nameOf(host)}, then its pine…` : "Reaching its pine over SSH, or starting one there…")
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Pulse label="Loading" key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
@@ -120,8 +122,8 @@ export function Gate() {
 				: state.status === "error"
 					? [
 							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? paired ? <>{named} is not reached</> : <>{named} is not reached over SSH</> : s.pairFailed ? "The pairing did not go through" : pairFirst ? "Pair this browser with your computer" : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
-							// Nothing paired yet where only a paired computer can be used: the list's three lines say how, once.
-							pairFirst ? "" : state.message,
+							// No machine in use in the pairing view: the list's three lines say how, once.
+							said ?? "",
 							<div key="b" className="flex w-full flex-col items-center gap-4">
 								{/* A host key met for the first time: its fingerprint, and the owner's yes to exactly that one. */}
 								{key ? <span className="font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</span> : null}

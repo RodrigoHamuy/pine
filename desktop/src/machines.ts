@@ -56,8 +56,22 @@ export function machinesView(o: { canPair: boolean; canAddHost: boolean; hosts: 
  */
 export const relayLine = (serviceHost: string) => `Connections go through the relay at ${serviceHost}. It carries SSH only and cannot read it.`;
 
-/** What the pairing view says: the meeting service passes the few messages that set up a direct connection, and carries nothing after. */
-export const meetingLine = (serviceHost: string) => `Found through ${serviceHost}, then connected directly.`;
+/**
+ * What the pairing view says: the meeting service passes the few messages that set up the
+ * connection, and carries nothing after. The connection is direct, or goes through a relay server
+ * (TURN) that the computer's owner named in the Pine app: true of every paired computer, connected or not.
+ */
+export const meetingLine = (serviceHost: string) => `Found through ${serviceHost}. The connection is then made between the two devices, directly or through a relay server the computer's owner named.`;
+
+/**
+ * The sentence the first screen draws under its title for an SSH trouble. The bridge's state with
+ * no machine in use (one that names no machine, no pairing that failed) says what to do in the SSH
+ * view (add user@host); in the pairing view its how-to is on screen and says it instead: none.
+ */
+export function noMachineSaid(state: ServiceState & { status: "error" }, view: MachinesViewName, pairFailed: boolean): string | undefined {
+	if (state.kind === "ssh" && !state.host && !pairFailed && view === "pair") return undefined;
+	return state.message;
+}
 
 /** How a machine of the list is reached, as plain secondary text on its row; none where the bridge names no service (the desktop and mobile apps). */
 export function reachedThrough(host: string, serviceHost?: string): string | undefined {
