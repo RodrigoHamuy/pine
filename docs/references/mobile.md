@@ -188,7 +188,7 @@ is careful about"). On the phone:
 
 ## Privacy
 
-The app collects nothing. It sends nothing to pine's maintainer, to Apple beyond what iOS itself
+The app collects no data about you. It sends nothing to pine's maintainer, to Apple beyond what iOS itself
 does for any app, or to anybody else: no analytics, no crash reports, no account, no advertising
 identifier. What it keeps stays on the phone: the machines you added and their host keys, and the
 phone's SSH key. What it shows comes from the pine of the machine you added, over SSH, and goes
@@ -225,7 +225,7 @@ Components).
 | `npm run sync:ios` | Builds the page for iOS (WebKit, media on `pine-media:`) and copies it into `ios/` |
 | `npm run ios` | A debug build for the simulator, in `ios/DerivedData` |
 | `npm run ios:run` | Builds the app and opens it in the Simulator app |
-| `npm run ipa` | The IPA of a release, not signed, in `ios/App/output/Pine-<version>.ipa` (`npm run ipa -- 0.38.0`; 0.0.0 without a version). It fails unless the app inside is unsigned and arm64. The TestFlight build is the same archive, signed and uploaded by the Release workflow (see "In a release") |
+| `npm run ipa` | The IPA of a release or a preview, not signed, in `ios/App/output/Pine-<version>.ipa` (`npm run ipa -- 0.38.0`, or a preview's `0.38.0-next.4`, whose file keeps the full version; 0.0.0 without a version). It fails unless the app inside is unsigned and arm64. The TestFlight build is the same archive, signed and uploaded by the Release workflow (see "In a release") |
 | `npm run smoke:ios` | Builds the app and a test that runs inside it, starts a simulator of its own without a window, and drives the page against a test machine on the Mac's loopback. It is the test of the web view's hardening (the page's policy, no camera, microphone or motion sensors, no file access, the media scheme's rules and ranges, no window, no navigation away), of the page inside the safe area with and without the keyboard, of a host key's fingerprint within the screen's width, of the return from the background, of the status bar in a dark theme and a light one, and of the key kept across a relaunch. Run it before a release that changes `mobile/` or upgrades Capacitor |
 | `swift test` (in `ios-core/`) | The iOS app's Swift core on the Mac, against an OpenSSH `sshd` of the test's own and a stand-in daemon |
 
@@ -235,6 +235,13 @@ Environments) to your `~/.ssh/authorized_keys`, and add the machine as `you@127.
 simulator shares the Mac's network, so its loopback is the Mac's, and iOS does not ask about the
 local network for it. A simulator build is signed to run locally (Xcode does it, without an
 account): the Keychain refuses an app that is not signed at all.
+
+What App Store Connect reads from the app is in `ios/App/App/`: `Info.plist` says that it uses
+only exempt encryption (`ITSAppUsesNonExemptEncryption`, false: SSH and TLS with standard
+algorithms) and needs arm64, which every device with iOS 17 has; `PrivacyInfo.xcprivacy`, its
+privacy manifest, declares UserDefaults (reason `CA92.1`), no tracking and no data types (see "Privacy"). A
+change that makes the app use another API of Apple's required-reason list declares it there too,
+or App Store Connect refuses the upload.
 
 ## In a release
 
@@ -257,7 +264,10 @@ App Store Connect, for every release from `main` and every preview from `next`:
 
 Its "What to Test" is the release's commit subject. It takes the App Store Connect API key from
 the environment `testflight`; without it the job uploads nothing and says so, and the rest of
-the release is unaffected.
+the release is unaffected. After the upload, `scripts/testflight.ts` puts the build into its group
+through the App Store Connect API. It needs, once, in App Store Connect: an external group named
+exactly `Public` with its public link on, an internal group named exactly `Maintainers`, and the
+beta agreement accepted (without it a review submission fails with `BETA_CONTRACT_MISSING`).
 
 Both IPAs carry the release's version as `CFBundleShortVersionString` (`X.Y.Z`) and the same
 build number (`CFBundleVersion`): Android's `versionCode` × 1000, plus `N` for a preview
