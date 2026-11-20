@@ -178,7 +178,7 @@ test("sub-agents run on the model and at the reasoning level their conversation 
 test("sub-agents run in parallel with fresh contexts, even when only one model slot exists", async () => {
 	for (const maxConcurrentRuns of [1, 3]) {
 		const h = await harness({ pine: { limits: { maxConcurrentRuns } }, agents: { main: { files: { "AGENTS.md": "WS-MAIN\n" } } } });
-		for (const n of [1, 2, 3]) h.mock.state.scripts[`s${n}`] = [{ delayMs: 150, text: `answer ${n}` }];
+		for (const n of [1, 2, 3]) h.mock.state.scripts[`s${n}`] = [{ delayMs: 300, text: `answer ${n}` }];
 		const t0 = Date.now();
 		const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "subagent", args: { tasks: ["@@REF:s1@@", "@@REF:s2@@", "@@REF:s3@@"] } }] }], "PARENT-CONTEXT "), ...owner });
 		const ms = Date.now() - t0;
@@ -191,8 +191,9 @@ test("sub-agents run in parallel with fresh contexts, even when only one model s
 			assert.ok(h.system(c).includes("WS-MAIN"), "a sub-agent is the same agent");
 			// (A sub-agent is declared what its conversation is declared, and refused when it calls what is not its to do: test/catalogue.test.ts.)
 		}
-		if (maxConcurrentRuns === 1) assert.ok(ms >= 450, `one slot: sequential (${ms} ms)`);
-		else assert.ok(ms < 400, `three slots: parallel (${ms} ms)`);
+		// Three answers of 300 ms each: 900 ms one after the other, about 300 side by side (a busy machine takes longer).
+		if (maxConcurrentRuns === 1) assert.ok(ms >= 900, `one slot: sequential (${ms} ms)`);
+		else assert.ok(ms < 800, `three slots: parallel (${ms} ms)`);
 		assert.equal(h.pine.agents.limiter.stats.active, 0);
 		await h.close();
 	}

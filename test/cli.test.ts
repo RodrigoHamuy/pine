@@ -30,7 +30,8 @@ test("pine init creates a private home that passes pine check", async (t) => {
 	for (const f of ["pine.json", "models.json", ".env", "USER.md", "AGENTS.md", "TOOLS.md", "agents/main/workspace/AGENTS.md", "agents/main/workspace/SOUL.md", "agents/main/workspace/TOOLS.md", "agents/main/workspace/MEMORY.md"]) assertPrivate(path.join(dir, f), 0o600, f);
 	assert.ok(!fs.existsSync(path.join(dir, "agents", "main", "AGENTS.md")), "an agent's instructions are in its workspace, where it can change them");
 	const check = await run(process.execPath, [CLI, "check", "--home", dir]);
-	for (const part of ["agent main (main)", "mcp        web, browser", "model      dev/claude-haiku", "No security notes."]) assert.ok(check.stdout.includes(part), `${part}\n${check.stdout}`);
+	// (Windows has no sandbox of pine's yet, and pine check says so: the one note there.)
+	for (const part of ["agent main (main)", "mcp        web, browser", "model      dev/claude-haiku", process.platform === "win32" ? "no sandbox on this machine" : "No security notes."]) assert.ok(check.stdout.includes(part), `${part}\n${check.stdout}`);
 	assert.equal(fs.readdirSync(path.join(dir, "agents")).join(), "main", "the example starts with one agent");
 	const again = await run(process.execPath, [CLI, "init", dir]);
 	assert.match(again.stdout, /nothing changed/);

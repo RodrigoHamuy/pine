@@ -2,6 +2,7 @@
 // server at all. Shared by the gate in agents.ts, which asks the owner once per app in a
 // conversation, by classify() in actions.ts, and by the server itself. It is a file of its own
 // so that the server, a separate process, does not load the daemon's code with it.
+import path from "node:path";
 import type { Level } from "./config.ts";
 
 /** The tools that only look. Everything else the server offers acts in an app. */
@@ -33,5 +34,5 @@ export function appTarget(tool: string, input: unknown): { key: string; name: st
 export function computerSession(o: { owner: boolean; level: Level; dataDir: string; platform?: string; standIn?: boolean }): { helperDir: string } | undefined {
 	if (!o.owner || (o.level !== "auto" && o.level !== "bypass")) return undefined;
 	if ((o.platform ?? process.platform) !== "darwin" && !o.standIn) return undefined;
-	return { helperDir: `${o.dataDir}/computer` };
+	return { helperDir: path.join(o.dataDir, "computer") };
 }

@@ -7,6 +7,7 @@ import { after } from "node:test";
 // The scripted model server of the baseline suite: replies follow directives embedded in the prompt.
 import { mockMsg, startMock, textOf as rawTextOf } from "../../baseline/tests/mock.mjs";
 import { type Pine, startPine } from "../../src/pine.ts";
+import { sandboxAvailable } from "../../src/security.ts";
 import { createLogger } from "../../src/util.ts";
 
 /** The notes pine puts in front of a message when the mode, the state or the day has changed. */
@@ -120,7 +121,11 @@ export async function harness(spec: { pine?: Record<string, unknown>; agents: Re
 	);
 	// Tests script the model, and a scripted command must not reach the account of whoever runs
 	// them: every agent works in safe mode, in its sandbox, unless a test asks for another by name.
-	const defaults = { model: "mock/m", mode: "safe", ...((spec.pine?.defaults as Record<string, unknown> | undefined) ?? {}) };
+	// Windows has no sandbox of pine's yet (docs/adr/0004-three-systems.md): there the tests' commands
+	// run in auto mode, as an agent's would whose mode nobody chose. They are the tests' own (echo,
+	// sleep, a small server), and nothing from outside.
+	const mode = process.platform === "win32" && !sandboxAvailable() ? "auto" : "safe";
+	const defaults = { model: "mock/m", mode, ...((spec.pine?.defaults as Record<string, unknown> | undefined) ?? {}) };
 	// For the question pine asks itself when a call needs something outside the sandbox: a
 	// test that is not about it gets the plain refusal, which is what it is about (test/access.test.ts asks for it).
 	const security = { askAccess: false, ...((spec.pine?.security as Record<string, unknown> | undefined) ?? {}) };

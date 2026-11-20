@@ -461,7 +461,8 @@ test("tui: bypass in a conversation that has read outside content is a choice, a
 	// Bypass from the configuration: it applies until the conversation reads outside content, then says so.
 	await t.send(mockMsg([{ tools: [{ name: "mcp__feed__echo", args: { text: "x" } }] }]));
 	await t.sees("bypass is paused in this conversation");
-	await t.sees(/bypass \(paused\).* · outside content/);
+	// (The bar may cut its end short: how fast the model was can come before it.)
+	await t.sees(/bypass \(paused\).* · outside con/);
 	await t.send("and now?");
 	await t.sees("ECHO[and now?]");
 	assert.ok(notesOf(t.h.mock.state.requests.at(-1)).at(-1)!.includes("it is paused in this conversation"), "the agent knows too, and can say why something is refused");
@@ -1204,6 +1205,8 @@ test("tui: what a model thinks is a few lines while it thinks and one line after
 	// The third thought's own line, once it is drawn: until then the last one may still be the second's.
 	const lastThought = () => rows().flatMap((l, y) => (/▸ thought for/.test(l) ? [y] : [])).at(-1) ?? -1;
 	await until(() => lastThought() > rowOf("Second answer."), 2000, "the third thought to be one line");
+	// A click goes by what was drawn last: wait until the screen holds still, or it lands on what was there before.
+	for (let last = "", i = 0; i < 30 && t.text() !== last; i++) (last = t.text()), await new Promise((r) => setTimeout(r, 100));
 	const closed = lastThought();
 	t.term.click(6, closed);
 	await until(() => rows().some((l) => l.startsWith(" │ long-1 ")), 5000, "the long thought to open").catch((e) => {

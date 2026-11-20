@@ -234,7 +234,8 @@ export async function startGuardProxy(o: GuardOptions, log: (line: string) => vo
  */
 export function inlineFiles(text: string, scratch: string, limit = 24_000): string {
 	const root = fs.realpathSync(scratch);
-	return text.replace(/\[([^\]\n]+)\]\((\/[^)\s#]+)(#[^)\s]*)?\)/g, (whole, label, file) => {
+	// A file's path, as Playwright writes it: /… or, on Windows, C:\….
+	return text.replace(/\[([^\]\n]+)\]\(((?:\/|[A-Za-z]:\\)[^)\s#]+)(#[^)\s]*)?\)/g, (whole, label, file) => {
 		try {
 			const real = fs.realpathSync(file);
 			if (!real.startsWith(root + path.sep)) return whole;

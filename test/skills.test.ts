@@ -44,7 +44,7 @@ test("skills: an agent writes one down for a conversation, for itself, or (the m
 	assert.equal(asked.length, 0);
 	assert.equal(fs.readFileSync(path.join(dirs.local, "invoices", "SKILL.md"), "utf8"), `---\nname: invoices\ndescription: "File an invoice: where it goes and what to note. Use when a PDF invoice arrives."\n---\n\n1. Read the total.\n2. Move it to \`books/2026/\`.\n`);
 	assert.deepEqual(await look("books", "april"), ["invoices", "tone"]);
-	assert.match(h.system(h.mock.state.requests.at(-1)), /<description>File an invoice: where it goes and what to note\. Use when a PDF invoice arrives\.<\/description>\s*<location>[^<]*conversations\/april\/skills\/invoices\/SKILL\.md<\/location>/);
+	assert.match(h.system(h.mock.state.requests.at(-1)), /<description>File an invoice: where it goes and what to note\. Use when a PDF invoice arrives\.<\/description>\s*<location>[^<]*conversations[\\/]april[\\/]skills[\\/]invoices[\\/]SKILL\.md<\/location>/);
 	assert.deepEqual(await look("books", "may"), ["tone"], "another conversation of the same agent does not have it");
 	assert.deepEqual(await look("books"), ["tone"]);
 	assert.deepEqual(await look("main"), ["tone"]);

@@ -452,7 +452,7 @@ test("tool patterns and the configuration audit", async () => {
 	});
 	const { loadConfig } = await import("../src/config.ts");
 	const notes = audit(loadConfig(h.home)).join("\n");
-	for (const expected of ["agent main: trustWorkspace is on", "untrusted events may use bash", "agent net: shell has network access", "http listens on 0.0.0.0", 'hook "open" has no secret', 'route "route0" treats events on mqtt/# as coming from you', "pine.json is readable by other users"]) assert.ok(notes.includes(expected), `missing: ${expected}\n${notes}`);
+	for (const expected of ["agent main: trustWorkspace is on", "untrusted events may use bash", "agent net: shell has network access", "http listens on 0.0.0.0", 'hook "open" has no secret', 'route "route0" treats events on mqtt/# as coming from you', ...(process.platform === "win32" ? [] : ["pine.json is readable by other users"])]) assert.ok(notes.includes(expected), `missing: ${expected}\n${notes}`);
 	await sleep(1);
 	await h.close();
 });

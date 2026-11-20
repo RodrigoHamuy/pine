@@ -85,7 +85,7 @@ export function readOnlyCommand(command: string): boolean {
 export function criticalCommand(command: string): string | undefined {
 	const c = command;
 	if (/\b(curl|wget|fetch)\b[^|;&\n]*\|\s*(sudo\s+)?(ba|z|da|k)?sh\b|\b(curl|wget)\b[^|;&\n]*\|\s*(sudo\s+)?(python\d?|node|perl|ruby)\b/.test(c)) return "downloads a program and runs it in one step";
-	if (/\brm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*\s+(-[a-zA-Z]*\s+)*["']?(\/|~|\$HOME|\/Users\/[^/\s"']+|\/home\/[^/\s"']+)\/?["']?(\s|$)/.test(c)) return "deletes a home folder or the whole disk";
+	if (/\brm\s+(-[a-zA-Z]*\s+)*-[a-zA-Z]*[rR][a-zA-Z]*\s+(-[a-zA-Z]*\s+)*["']?(\/|~|\$HOME|\/Users\/[^/\s"']+|\/home\/[^/\s"']+|[A-Za-z]:[\\/]?|[A-Za-z]:[\\/]Users[\\/][^\\/\s"']+|\/[a-z]\/Users\/[^/\s"']+|\/[a-z])[\\/]?["']?(\s|$)/i.test(c)) return "deletes a home folder or the whole disk";
 	if (/\bgit\s+push\b[^\n;&|]*(\s--force\b|\s-f\b|\s--force-with-lease\b|\s\+\S)/.test(c)) return "rewrites what was pushed (force push)";
 	if (/\bgit\s+(reset\s+--hard|clean\s+-[a-zA-Z]*f|checkout\s+--\s+\.|restore\s+\.)/.test(c)) return "throws away changes that were not committed";
 	if (/\bsudo\b/.test(c)) return "runs with administrator rights";

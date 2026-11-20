@@ -880,7 +880,7 @@ export function audit(cfg: PineConfig): string[] {
 		if (level === "bypass") out.push(`agent ${a.id}: bypass mode. It never asks, and its shell reaches your whole account and the network${cfg.security.bypassWhenTainted ? ", even after it has read outside content (security.bypassWhenTainted)" : " (it asks again once a session has read outside content)"}`);
 		// The main agent works in auto mode unless told otherwise; that is how pine comes, and not a note. Another agent does by somebody's choice.
 		if (level === "auto" && a.level === "auto" && a.id !== mainAgentId(cfg) && tools.includes("bash")) out.push(`agent ${a.id}: auto mode. Its shell and file tools reach your whole account and the network in your own conversations, without a sandbox; what is critical is checked, and after outside content what reaches out, sends or changes its memory`);
-		if (a.trustWorkspace) out.push(`agent ${a.id}: trustWorkspace is on; code in ${a.workspace}/.pi/extensions runs inside the daemon`);
+		if (a.trustWorkspace) out.push(`agent ${a.id}: trustWorkspace is on; code in ${path.join(a.workspace, ".pi", "extensions")} runs inside the daemon`);
 		if (isInside(realish(a.workspace), realish(cfg.home))) out.push(`agent ${a.id}: the workspace contains pine's home directory`);
 		if (a.untrusted && a.untrusted.tools.some((t) => ["bash", "write", "edit"].includes(t))) out.push(`agent ${a.id}: runs triggered by untrusted events may use ${a.untrusted.tools.filter((t) => ["bash", "write", "edit"].includes(t)).join(", ")}`);
 	}

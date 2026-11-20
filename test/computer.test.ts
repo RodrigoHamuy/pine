@@ -123,7 +123,7 @@ test("computer: on a system that is not macOS nothing is offered, and a call is 
 	await until(() => lines.length === 3, 5000, "the server's answers");
 	assert.match(lines[0].result.instructions, /not available on this system/);
 	assert.deepEqual(lines[1].result.tools, []);
-	assert.ok(lines[2].result.isError && /App control is not available on this system \(Linux\)/.test(lines[2].result.content[0].text), JSON.stringify(lines[2]));
+	assert.ok(lines[2].result.isError && /App control is not available on this system \((Linux|Windows)\)/.test(lines[2].result.content[0].text), JSON.stringify(lines[2]));
 });
 
 test("computer: a model that cannot see gets no tools that need eyes; the owner can leave tools out", () => {
