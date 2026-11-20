@@ -11,7 +11,7 @@ import { after, before, test } from "node:test";
 import { mockMsg, startMock } from "../../baseline/tests/mock.mjs";
 import { launchApp } from "./support/app.ts";
 
-// PINE_DESKTOP_SHOTS=<folder> also saves pictures there.
+// PINE_DESKTOP_SHOTS=<folder> also saves pictures there, and PINE_DESKTOP_THEME=<theme> runs it in that theme of pine's (github-light, nord ...).
 const shots = process.env.PINE_DESKTOP_SHOTS;
 const shoot = async (name: string) => shots && (await page.screenshot({ path: path.join(shots, `view-${name}.png`) }));
 
@@ -54,7 +54,7 @@ before(async () => {
 	mock = await startMock({});
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-view-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
-	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false }, ui: { view: "office" } }));
+	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false }, ui: { view: "office", ...(process.env.PINE_DESKTOP_THEME ? { theme: process.env.PINE_DESKTOP_THEME } : {}) } }));
 	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ mode: "safe" }));
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 	write(path.join(home, "agents", "books", "agent.json"), JSON.stringify({ mode: "bypass", color: "#e0805a" }));

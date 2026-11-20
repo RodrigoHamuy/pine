@@ -780,18 +780,18 @@ a sleigh across it, elves on skis and a polar bear with its cub go by, and floes
 ### The overview
 
 `overview` is all of pine on one board, in words. There is nothing to learn first: three columns, and
-everything in them says what it is. It is drawn the way a circuit board is: every box is a part with a
-border and pins, and the lines between them are traces.
+everything in them says what it is. It looks like the app around it: the same font, cards and badges, each
+agent with its avatar, on the panel's own ground in whatever theme you use.
 
 | On the board | What it is |
 |---|---|
-| The left column, "Triggers" | What starts an agent's work: you, every event source, every schedule and every webhook, each with whom it triggers ("inbox, triggers books") and, for a schedule, when it is due. A source that is down is red and says so. A question for you is said at "You" |
+| The left column, "Triggers" | What starts an agent's work: you, every event source, every schedule and every webhook, each with whom it triggers ("inbox, triggers books") and, for a schedule, when it is due. A source that is down says so, in the color of what failed. A question for you is said at "You" |
 | The middle column, "Agents" | Every agent, those that work on top and the idle ones below them (when one starts or stops, the boxes glide to their new places). Under its name what it is doing right now ("Running a command", "Using web: search", "Waiting for scout", "Needs your answer", "Idle"), under that why ("for you", "delegated by main", "triggered by inbox") and how far ("step 2 of 5"). Each of its sub-agents is a line of its own under it, and a sub-agent that one of them started stands in under that one. Its mode stands beside its name |
 | The right column, "Tools" | Every MCP server and every skill |
-| The lamp beside an agent's name | In the agent's own color: lit while it works, a ring while it is idle, red and blinking while it waits for your answer. Its mode is printed at the right of its name |
-| A colored border and a tinted body | Something happens there right now. Everything else has a plain border |
-| A line between two things | Something happens between them right now, in the color of the agent it happens to: from a trigger to the agent it started, from an agent to the MCP server or skill it is using, beside the agents from one to the agent it delegated a task to, and in red from an agent to you while it waits for your answer. A line runs from pin to pin, starts with a ring and ends with an arrowhead, and a dot runs along it the way things go. Every line has a lane of its own and turns at 45 degrees, so no two lie on top of each other |
-| A line at the right of the agents | The answer to a delegated task on its way back: when the task ends, a line runs for a few seconds from the agent that did it to the agent that delegated it, red if it failed. The task went out at the left of the agents, its answer comes back at their right. What you asked an agent for comes back to "You" the same way |
+| An agent's card | Its avatar and name, and its mode as a badge at the right (`bypass` in the color of what warns). While it works, a small dot beside its name fades out and in, as it does on its tab |
+| A colored border and a tint | Something happens there right now, in the agent's color. A question for you is in the theme's color for a question, a source that is down in its color for what failed. Everything else has a plain border |
+| A line between two things | Something happens between them right now, in the color of the agent it happens to: from a trigger to the agent it started, from an agent to the MCP server or skill it is using, beside the agents from one to the agent it delegated a task to, and in the color of a question from an agent to you while it waits for your answer. A line starts with a dot and ends with an arrowhead, and a dot runs along it the way things go. Every line has a lane of its own and turns at 45 degrees, so no two lie on top of each other |
+| A line at the right of the agents | The answer to a delegated task on its way back: when the task ends, a line runs for a few seconds from the agent that did it to the agent that delegated it, in the color of what failed if it did. The task went out at the left of the agents, its answer comes back at their right. What you asked an agent for comes back to "You" the same way |
 | The pointer over something | Thin lines to all it is wired to (for an agent its sources, schedules, MCP servers and skills; for a source or a server, everybody who has it), and the rest fades. The line on top of the panel says what it is |
 | A click on an agent | Unfolds it: a line for each of its conversations, a branch set in under what it was branched from, with "in a worktree" and its goal where it has one. The agent is shown under the view; a double click opens it |
 | The eye, at the top right | Follow activity, on at first: the camera keeps everything that something happens at in view and moves there softly; with nothing happening it shows the board from its top, as wide as the panel. A double click on the empty board turns it on again |

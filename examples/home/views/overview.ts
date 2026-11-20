@@ -13,17 +13,18 @@
 //                       standing in under that one
 //   Tools               what agents use: every MCP server, every skill
 //
-// It is drawn the way a circuit board is, without pretending to be one: every box is a part with a border and pins,
-// an agent has a lamp in its own color (lit while it works, a ring while it is idle, red and blinking while it
-// waits for you), and the lines are traces that turn at 45 degrees. A trace joins two parts only while something
-// happens between them, in the color of the agent it happens to: from a trigger to the agent it started, from an
-// agent to the tool it is using, at the left of the agents from one to the agent it delegated a task to, and in
-// red from an agent to you while it waits for your answer. When a delegated task ends, its answer goes back at the
-// right of the agents, from the one that did it to the one that asked, for a few seconds (red if it failed); and
-// what you asked for comes back to you the same way. A trace starts with a ring, ends with an arrowhead, and one
-// dot runs along it the way things go. Every trace has a lane of its own, so that no two run on top of each other.
-// What is on the board at any moment reads as a sentence: you asked main, main delegated to scout, scout is
-// using the web.
+// It looks like the app it is shown in: the app's font, its cards with their thin borders and round corners, an
+// agent's avatar as the side bar draws it, its mode as a small badge, and the app's own colors for a question and
+// for what failed. It has no ground of its own: the panel's shows through, in any theme. The lines are what it has
+// from a circuit board: traces that turn at 45 degrees. A trace joins two cards only while something happens
+// between them, in the color of the agent it happens to: from a trigger to the agent it started, from an agent to
+// the tool it is using, at the left of the agents from one to the agent it delegated a task to, and in the color
+// of a question from an agent to you while it waits for your answer. When a delegated task ends, its answer goes
+// back at the right of the agents, from the one that did it to the one that asked, for a few seconds (in the color
+// of what failed, if it did); and what you asked for comes back to you the same way. A trace starts with a dot,
+// ends with an arrowhead, and one dot runs along it the way things go. Every trace has a lane of its own, so that
+// no two run on top of each other. What is on the board at any moment reads as a sentence: you asked main, main
+// delegated to scout, scout is using the web. While an agent works, a small dot beside its name fades out and in.
 //
 // The board is larger than the panel may be, and a camera looks at it. While the eye at the top right is pressed
 // it follows what happens: it keeps every part that something happens at in view, and moves there softly. Drag
@@ -37,7 +38,7 @@
 //
 // There is no timeline: what happened, in order, is what the panel lists under every view.
 
-import { defineView, ease, frame, mix, type Box as Rect, type Cam, type ViewAgent, type ViewConversation, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
+import { defineView, ease, frame, mix, rgb, type Box as Rect, type Cam, type ViewAgent, type ViewConversation, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
 
 // ---- what is said ---------------------------------------------------------------------------------------------------------
 
@@ -205,14 +206,16 @@ export interface Link {
 const ANSWER_MS = 3500;
 
 /** The board's measures: a narrow column at each side, the agents between them, and a gap for the lines. */
-const SIDE = 116;
+const SIDE = 128;
 const MID = 236;
-const GAP = 52;
+const GAP = 46;
 /** The room on top of a column for what it is called. */
 const TITLE = 26;
-/** How far a pin stands out of its box: a line ends at a pin's tip. */
-export const PIN = 4;
-const ASK = "#ff5d73";
+/** How far from a box a line begins and ends: the room for the dot it starts with and the arrowhead it ends with. */
+export const PIN = 3;
+/** The color of a line that is a question for you, and of an answer that failed: names, which the drawing turns into the theme's own colors. */
+export const ASK = "ask";
+export const FAILED = "failed";
 
 /** Everything on the board. `open` are the agents whose boxes are unfolded. */
 export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: Recent): Layout {
@@ -236,21 +239,21 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 
 	// On the left: you, the event sources, the schedules, and any other way in.
 	const asks = s.work.filter((w) => !ended(w) && w.asking);
-	put(0, { id: "you", kind: "you", title: "You", sub: asks.length ? `${plural(asks.length, "question")} for you` : undefined, bad: asks.length > 0 }, asks.length ? 40 : 26);
+	put(0, { id: "you", kind: "you", title: "You", sub: asks.length ? `${plural(asks.length, "question")} for you` : undefined, bad: asks.length > 0 }, asks.length ? 44 : 30);
 	const sources = s.inputs.filter((i) => i.kind === "source").sort((a, b) => a.name.localeCompare(b.name));
 	if (sources.length) head(0, "Events");
 	const listeners = (i: ViewInput) => [...new Set([...i.agents, ...s.agents.filter((a) => a.sources.includes(i.name)).map((a) => a.id)])];
 	for (const i of sources) {
 		const who = listeners(i);
-		put(0, { id: i.id, kind: "source", title: i.name, sub: i.failing ? "down" : who.length ? `triggers ${listOf(who, 2)}` : "no listeners", bad: i.failing }, 40);
+		put(0, { id: i.id, kind: "source", title: i.name, sub: i.failing ? "down" : who.length ? `triggers ${listOf(who, 2)}` : "no listeners", bad: i.failing }, 44);
 	}
 	const scheds: ViewSchedule[] = [];
 	for (const x of [...s.schedules].sort((a, b) => (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name))) if (!scheds.some((k) => k.name === x.name)) scheds.push(x);
 	if (scheds.length) head(0, "Schedules");
-	for (const x of scheds) put(0, { id: `sched:${x.name}`, kind: "sched", title: x.name, right: x.next !== undefined && x.next > now - 1000 ? `in ${span(x.next - now)}` : undefined, sub: x.agent ? `triggers ${x.agent}` : "triggers all agents" }, 40);
+	for (const x of scheds) put(0, { id: `sched:${x.name}`, kind: "sched", title: x.name, right: x.next !== undefined && x.next > now - 1000 ? `in ${span(x.next - now)}` : undefined, sub: x.agent ? `triggers ${x.agent}` : "triggers all agents" }, 44);
 	const others = s.inputs.filter((i) => i.kind === "outside");
 	if (others.length) head(0, "Webhooks");
-	for (const i of others) put(0, { id: i.id, kind: "outside", title: i.name }, 26);
+	for (const i of others) put(0, { id: i.id, kind: "outside", title: i.name }, 30);
 
 	// In the middle: the agents, each with what it does as a sentence.
 	// Those that work stand on top, the idle ones below them, each group in pine's own order. One whose work has just
@@ -288,7 +291,7 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 		const said = recent?.notes.get(a.id);
 		if (said && now - said.at < 4000) lines.push({ text: said.text, tone: "note" });
 		if (open.has(a.id)) for (const [i, c] of a.conversations.entries()) lines.push({ text: convText(c, a, i), tone: "dim", indent: c.branchOf !== undefined ? 1 : undefined });
-		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, lines, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, 36 + lines.length * 17);
+		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, lines, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, 40 + lines.length * 18);
 	}
 
 	// On the right: the MCP servers and the skills, those that most agents have first.
@@ -300,9 +303,9 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 	const servers = ranked((a) => a.mcp);
 	const skills = ranked((a) => a.skills);
 	if (servers.length) head(2, "MCP servers");
-	for (const name of servers) put(2, { id: `mcp:${name}`, kind: "mcp", title: name }, 26);
+	for (const name of servers) put(2, { id: `mcp:${name}`, kind: "mcp", title: name }, 30);
 	if (skills.length) head(2, "Skills");
-	for (const name of skills) put(2, { id: `skill:${name}`, kind: "skill", title: name }, 26);
+	for (const name of skills) put(2, { id: `skill:${name}`, kind: "skill", title: name }, 30);
 
 	return { w: cols[2].x + cols[2].w, h: Math.max(...y) - 6, cols, heads, boxes, byId: new Map(boxes.map((b) => [b.id, b])) };
 }
@@ -343,7 +346,7 @@ export function linksOf(s: ViewState, l: Layout, now: number = s.at): Link[] {
 	for (const w of s.work) {
 		if (!ended(w) || w.copy || w.finished === undefined || now - w.finished > ANSWER_MS || now < w.finished) continue;
 		const me = `agent:${w.agent}`;
-		const color = w.doing === "failed" ? ASK : colorOf(w.agent);
+		const color = w.doing === "failed" ? FAILED : colorOf(w.agent);
 		const f = w.from;
 		if (f.k === "agent" && f.id !== w.agent) add({ from: me, to: `agent:${f.id}`, color, live: true, side: true, back: true });
 		else if (f.k === "you" && w.doing !== "cancelled") add({ from: me, to: "you", color, live: true });
@@ -403,7 +406,7 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number): string[] {
 // ---- the camera ------------------------------------------------------------------------------------------------------------
 
 /** The room around the board that the camera may show, and the line on top of the panel, under which the board lies. */
-const MARGIN = 16;
+const MARGIN = 12;
 const BAR = 32;
 const Z_MAX = 1.4;
 type Size = { w: number; h: number };
@@ -449,19 +452,33 @@ export function held(cam: Cam, l: Layout): Cam {
 // ---- drawing ---------------------------------------------------------------------------------------------------------------
 
 type Ctx = CanvasRenderingContext2D;
+/**
+ * The colors of the Pine app, as far as a view can know them: it is told whether the app is dark, not its theme.
+ * So the board has no ground of its own (the panel's shows through), and every surface and line is the text's
+ * color, thinned: the way pine's own themes make theirs. Only what warns is a color of its own.
+ */
 interface Theme {
-	bg: string;
-	chip: string;
-	rule: string;
-	pin: string;
-	dot: string;
 	text: string;
-	dim: string;
+	muted: string;
+	faint: string;
+	/** A question for you, and what is down or failed. */
+	warn: string;
+	bad: string;
 }
-const DARK: Theme = { bg: "#1b1e28", chip: "#232735", rule: "#3b4057", pin: "#565d7a", dot: "#31364a", text: "#e4f0fb", dim: "#8d93b0" };
-const LIGHT: Theme = { bg: "#fbfaf7", chip: "#ffffff", rule: "#d2cfc5", pin: "#b4b1a6", dot: "#dcd9cf", text: "#22242b", dim: "#6d7280" };
-const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
-const MONO = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
+const DARK: Theme = { text: "#e4f0fb", muted: "#a6accd", faint: "#767c9d", warn: "#fffac2", bad: "#d0679d" };
+const LIGHT: Theme = { text: "#1f2328", muted: "#59636e", faint: "#818b98", warn: "#9a6700", bad: "#cf222e" };
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif';
+/** A color, thinned: what lies under it shows through. */
+const veil = (hex: string, alpha: number) => `rgba(${rgb(hex).join(", ")}, ${alpha})`;
+/** White or a near-black, whichever reads better on a color: as the app writes an agent's initial on its avatar. */
+function onColor(hex: string): string {
+	const lum = (c: string) => {
+		const [r, g, b] = rgb(c).map((v) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4));
+		return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+	};
+	const l = lum(hex);
+	return 1.05 / (l + 0.05) >= (l + 0.05) / (lum("#141414") + 0.05) ? "#ffffff" : "#141414";
+}
 
 const WIDTHS = new Map<string, number>();
 function widthOf(g: Ctx, text: string): number {
@@ -509,23 +526,21 @@ function chamfer(pts: Array<[number, number]>, r: number): Array<[number, number
 	return out;
 }
 
-/** How far apart an agent's pins are, down each of its sides. */
-const PITCH = 8;
-/** Where `n` lines meet one side of a box: an agent's at its pins from the top down, anything else's around its one pin in the middle. */
+/** Where `n` lines meet one side of a box: an agent's beside its name and down from there, anything else's around its middle. */
 function pinsOf(b: Box, n: number): number[] {
 	if (b.kind === "agent") {
-		const pitch = n > 1 ? Math.min(PITCH, (b.h - 18) / (n - 1)) : 0;
-		return Array.from({ length: n }, (_, i) => b.y + 9 + i * pitch);
+		const pitch = n > 1 ? Math.min(8, (b.h - 30) / (n - 1)) : 0;
+		return Array.from({ length: n }, (_, i) => b.y + 17 + i * pitch);
 	}
-	const pitch = n > 1 ? Math.min(7, (b.h - 10) / (n - 1)) : 0;
+	const pitch = n > 1 ? Math.min(7, (b.h - 14) / (n - 1)) : 0;
 	return Array.from({ length: n }, (_, i) => b.y + b.h / 2 + (i - (n - 1) / 2) * pitch);
 }
 
 /**
- * The way of every line across the board, as a board's traces run. A line leaves a box at the tip of a pin, runs
- * straight across, turns into a lane of its own between the columns, and turns once more into a pin of the box it
- * goes to; every turn is cut at 45 degrees. No two lines share a lane, and several at one side of a box take pins
- * next to each other. A task delegated from agent to agent runs in a lane close beside the agents at their left,
+ * The way of every line across the board, as a board's traces run. A line leaves a box at its side, runs
+ * straight across, turns into a lane of its own between the columns, and turns once more into the box it goes
+ * to; every turn is cut at 45 degrees. No two lines share a lane, and several at one side of a box meet it a
+ * little apart. A task delegated from agent to agent runs in a lane close beside the agents at their left,
  * its answer at their right.
  */
 export function routesOf(links: Link[], l: Layout): Array<Array<[number, number]> | undefined> {
@@ -596,32 +611,35 @@ export interface Shown {
 	view: Size;
 }
 
-/** The whole board as the camera sees it, into a canvas whose units are the panel's own pixels. */
+/** The whole board as the camera sees it, into a canvas whose units are the panel's own pixels. The canvas is left clear where nothing is drawn. */
 export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): void {
 	const th = s.dark ? DARK : LIGHT;
-	const deep = (c: string) => (s.dark ? c : mix(c, "#15171d", 0.25));
+	const deep = (c: string) => (c === ASK ? th.warn : c === FAILED ? th.bad : s.dark ? c : mix(c, "#15171d", 0.25));
 	const z = o.cam.z;
 	// Where the board's corner is on the panel.
 	const ox = o.view.w / 2 - o.cam.x * z;
 	const oy = BAR + (o.view.h - BAR) / 2 - o.cam.y * z;
 	g.globalAlpha = 1;
-	g.fillStyle = th.bg;
-	g.fillRect(0, 0, o.view.w, o.view.h);
+	g.clearRect(0, 0, o.view.w, o.view.h);
+	g.save();
+	// The line on top of the panel is not drawn under.
+	g.beginPath();
+	g.rect(0, BAR, o.view.w, o.view.h - BAR);
+	g.clip();
 
-	// The board: a grid of small dots, as far as the panel reaches.
-	let grid = 12;
-	while (grid * z < 9) grid *= 2;
+	// The ground: a grid of faint dots, as far as the panel reaches.
+	let grid = 16;
+	while (grid * z < 12) grid *= 2;
 	const step = grid * z;
-	g.fillStyle = th.dot;
+	g.fillStyle = veil(th.text, s.dark ? 0.07 : 0.1);
 	g.beginPath();
 	for (let x = ((ox % step) + step) % step; x < o.view.w; x += step) for (let y = ((oy % step) + step) % step; y < o.view.h; y += step) g.rect(Math.round(x), Math.round(y), 1, 1);
 	g.fill();
 
-	g.save();
 	g.translate(ox, oy);
 	g.scale(z, z);
 	g.textBaseline = "middle";
-	g.lineCap = "butt";
+	g.lineCap = "round";
 	g.lineJoin = "round";
 	const seen = (b: { y: number; h: number }) => (b.y + b.h) * z + oy > BAR - 8 && b.y * z + oy < o.view.h + 8;
 
@@ -637,137 +655,110 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 	const faded = (id: string) => focus !== undefined && !near.has(id);
 	const lit = (k: Link) => !focus || k.from === focus || k.to === focus;
 
-	// The edge of the board, and a hole in each of its corners.
-	const whole = wholeOf(l);
-	g.globalAlpha = focus ? 0.5 : 1;
-	g.strokeStyle = th.rule;
-	g.lineWidth = 1;
-	rounded(g, whole.x + 4.5, whole.y + 4.5, whole.w - 9, whole.h - 9, 7);
-	g.stroke();
-	for (const [cx, cy] of [[whole.x + 12, whole.y + 12], [whole.x + whole.w - 12, whole.y + 12], [whole.x + 12, whole.y + whole.h - 12], [whole.x + whole.w - 12, whole.y + whole.h - 12]]) {
-		g.beginPath();
-		g.arc(cx, cy, 2.5, 0, Math.PI * 2);
-		g.stroke();
-	}
-
-	// What each column is, printed on the board; and under it what each group in it is.
+	// What each column is, and under it what each group in it is: as the app's side bar names its groups.
 	g.textAlign = "left";
-	for (const c of l.cols) {
-		g.font = `700 10px ${MONO}`;
-		g.letterSpacing = "1.6px";
-		g.fillStyle = th.text;
-		g.fillText(c.title.toUpperCase(), c.x + 1, 8);
-		g.fillStyle = th.rule;
-		g.fillRect(c.x, 17, c.w, 1);
-	}
-	for (const head of l.heads) {
-		if (!seen({ y: head.y, h: 18 })) continue;
-		const c = l.cols[head.col];
-		g.font = `600 8px ${MONO}`;
-		g.letterSpacing = "1.2px";
-		g.fillStyle = th.dim;
-		const text = head.text.toUpperCase();
-		g.fillText(text, c.x + 1, head.y + 10);
-		g.fillStyle = th.rule;
-		const from = c.x + widthOf(g, text) + 8;
-		g.fillRect(from, head.y + 10, Math.max(0, c.x + c.w - from), 1);
-	}
-	g.letterSpacing = "0px";
+	g.globalAlpha = focus ? 0.5 : 1;
+	g.font = `500 12px ${FONT}`;
+	g.fillStyle = th.muted;
+	for (const c of l.cols) g.fillText(c.title, c.x + 2, 9);
+	g.font = `11px ${FONT}`;
+	g.fillStyle = th.faint;
+	for (const head of l.heads) if (seen({ y: head.y, h: 18 })) g.fillText(head.text, l.cols[head.col].x + 2, head.y + 10);
 
-	// Every box is a part on the board: a body with a border, and pins where lines meet it.
+	// Every box is a card of the app: a surface a little lighter than the ground, a thin border, round corners.
 	for (const b of l.boxes) {
 		if (!seen(b)) continue;
 		const mine = live.filter((k) => k.from === b.id || k.to === b.id);
 		const hot = now - (o.recent.hot.get(b.id) ?? -1e9) < 1400;
 		// An agent whose answer is still on its way back is part of what happens, though its work is over.
 		const active = Boolean(b.busy) || mine.length > 0 || hot;
-		const color = b.bad ? ASK : (b.agent?.color ?? mine[0]?.color ?? th.dim);
-		g.globalAlpha = faded(b.id) ? 0.3 : 1;
-		g.fillStyle = th.pin;
-		if (b.kind === "agent") {
-			for (let py = b.y + 9; py <= b.y + b.h - 8.5; py += PITCH) {
-				g.fillRect(b.x - PIN, py - 1, PIN, 2);
-				g.fillRect(b.x + b.w, py - 1, PIN, 2);
-			}
-		} else g.fillRect(b.col === 0 ? b.x + b.w : b.x - PIN, b.y + b.h / 2 - 1, PIN, 2);
-		rounded(g, b.x, b.y, b.w, b.h, 3);
-		g.fillStyle = mix(th.chip, color, hot ? 0.3 : active || b.bad ? (s.dark ? 0.15 : 0.1) : 0);
+		// What warns: a source that is down in the color of what failed, a question for you in the color of a question.
+		const alarm = b.bad ? (b.kind === "source" ? th.bad : th.warn) : undefined;
+		const color = alarm ?? deep(b.agent?.color ?? mine[0]?.color ?? th.muted);
+		const fade = faded(b.id) ? 0.3 : 1;
+		const r = b.kind === "agent" ? 10 : 8;
+		g.globalAlpha = fade;
+		rounded(g, b.x, b.y, b.w, b.h, r);
+		g.fillStyle = veil(th.text, s.dark ? 0.035 : 0.03);
 		g.fill();
+		if (active || alarm) {
+			g.fillStyle = veil(color, hot ? 0.2 : s.dark ? 0.08 : 0.07);
+			g.fill();
+		}
 		g.lineWidth = 1;
-		g.strokeStyle = b.id === focus ? mix(th.dim, th.text, 0.5) : b.bad ? ASK : active ? mix(th.rule, deep(color), 0.75) : th.rule;
-		rounded(g, b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 3);
+		g.strokeStyle = b.id === focus ? veil(th.text, 0.45) : active || alarm ? veil(color, 0.55) : veil(th.text, s.dark ? 0.1 : 0.14);
+		rounded(g, b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, r);
 		g.stroke();
 
 		g.textAlign = "left";
 		if (b.agent) {
-			// An agent's lamp, in its own color: lit while it works, a ring while it is idle, red and blinking while it waits for you.
-			const c = deep(b.agent.color);
-			const lx = b.x + 12;
-			const ly = b.y + 13;
-			if (b.bad || b.busy) {
-				const on = !b.bad || now % 900 < 560;
-				g.fillStyle = b.bad ? ASK : c;
-				g.globalAlpha *= on ? 0.22 : 0.08;
-				g.beginPath();
-				g.arc(lx, ly, 6, 0, Math.PI * 2);
-				g.fill();
-				g.globalAlpha = (faded(b.id) ? 0.3 : 1) * (on ? 1 : 0.3);
-				g.beginPath();
-				g.arc(lx, ly, 3, 0, Math.PI * 2);
-				g.fill();
-				g.globalAlpha = faded(b.id) ? 0.3 : 1;
-			} else {
-				g.strokeStyle = mix(th.chip, c, 0.6);
-				g.lineWidth = 1.2;
-				g.beginPath();
-				g.arc(lx, ly, 2.6, 0, Math.PI * 2);
+			// The agent's avatar, as the app draws it everywhere: its initial on its own color.
+			const ax = b.x + 19;
+			const ay = b.y + 18;
+			g.fillStyle = b.agent.color;
+			g.beginPath();
+			g.arc(ax, ay, 9, 0, Math.PI * 2);
+			g.fill();
+			g.font = `600 10px ${FONT}`;
+			g.textAlign = "center";
+			g.fillStyle = onColor(b.agent.color);
+			g.fillText(b.title.slice(0, 1).toUpperCase(), ax, ay + 0.5);
+			// Its mode, as a small badge at the right; the one that asks nothing in the color of what warns.
+			g.font = `500 10.5px ${FONT}`;
+			const mode = b.right ?? "";
+			const badge = mode ? widthOf(g, mode) + 12 : 0;
+			if (mode) {
+				const bx = b.x + b.w - 10 - badge;
+				rounded(g, bx + 0.5, ay - 8.5, badge, 17, 8.5);
+				g.strokeStyle = veil(th.text, s.dark ? 0.12 : 0.16);
 				g.stroke();
+				g.fillStyle = mode === "bypass" ? th.bad : th.muted;
+				g.fillText(mode, bx + badge / 2 + 0.5, ay + 0.5);
 			}
-			// Its mode, printed small at the right; and a line under its name.
-			g.font = `600 8px ${MONO}`;
-			g.letterSpacing = "1px";
-			g.textAlign = "right";
-			g.fillStyle = th.dim;
-			const mode = (b.right ?? "").toUpperCase();
-			g.fillText(mode, b.x + b.w - 9, b.y + 13.5);
-			const modeW = mode ? widthOf(g, mode) + 16 : 0;
-			g.letterSpacing = "0px";
 			g.textAlign = "left";
-			g.font = `600 12.5px ${MONO}`;
-			g.fillStyle = active || b.bad ? th.text : mix(th.text, th.dim, 0.5);
-			g.fillText(fit(g, b.title, b.w - 30 - modeW), b.x + 22, b.y + 13.5);
-			g.fillStyle = th.rule;
-			g.fillRect(b.x + 1, b.y + 26, b.w - 2, 1);
+			g.font = `600 13px ${FONT}`;
+			g.fillStyle = active || alarm ? th.text : th.muted;
+			const name = fit(g, b.title, b.w - 34 - 16 - badge - (b.busy ? 14 : 0));
+			g.fillText(name, b.x + 34, ay + 0.5);
+			if (b.busy) {
+				// While it works, the app's own sign of something going on: a small dot that fades out and in, in steps.
+				g.globalAlpha = fade * [1, 0.75, 0.5, 0.75][Math.floor(now / 300) % 4];
+				g.fillStyle = alarm ?? th.muted;
+				g.beginPath();
+				g.arc(b.x + 34 + widthOf(g, name) + 9, ay + 0.5, 3, 0, Math.PI * 2);
+				g.fill();
+				g.globalAlpha = fade;
+			}
 		} else {
-			g.font = `9px ${MONO}`;
-			const rightW = b.right ? widthOf(g, b.right) + 12 : 0;
+			g.font = `11px ${FONT}`;
+			const rightW = b.right ? widthOf(g, b.right) + 10 : 0;
 			if (b.right) {
 				g.textAlign = "right";
-				g.fillStyle = th.dim;
-				g.fillText(b.right, b.x + b.w - 7, b.y + 13.5);
+				g.fillStyle = th.faint;
+				g.fillText(b.right, b.x + b.w - 10, b.y + 15.5);
 				g.textAlign = "left";
 			}
-			g.font = `600 11.5px ${MONO}`;
-			g.fillStyle = active || b.bad ? th.text : mix(th.text, th.dim, 0.3);
-			g.fillText(fit(g, b.title, b.w - 16 - rightW), b.x + 9, b.y + 13.5);
+			g.font = `500 12.5px ${FONT}`;
+			g.fillStyle = active || alarm ? th.text : mix(th.text, th.muted, 0.6);
+			g.fillText(fit(g, b.title, b.w - 20 - rightW), b.x + 10, b.y + 15.5);
 			if (b.sub) {
-				g.font = `10.5px ${FONT}`;
-				g.fillStyle = b.bad ? ASK : th.dim;
-				g.fillText(fit(g, b.sub, b.w - 16), b.x + 9, b.y + 28);
+				g.font = `11px ${FONT}`;
+				g.fillStyle = alarm ?? th.faint;
+				g.fillText(fit(g, b.sub, b.w - 20), b.x + 10, b.y + 31);
 			}
 		}
 		(b.lines ?? []).forEach((line, i) => {
-			const ly = b.y + 38.5 + i * 17;
+			const ly = b.y + 43 + i * 18;
 			const dx = (line.indent ?? 0) * 12;
 			if (line.indent) {
 				// What stands under something: a small corner in front of it, as deep in as it is under.
-				g.fillStyle = th.dim;
-				g.fillRect(b.x + 12 + dx - 10, ly - 7, 1, 7);
-				g.fillRect(b.x + 12 + dx - 10, ly, 6, 1);
+				g.fillStyle = veil(th.text, 0.3);
+				g.fillRect(b.x + 14 + dx - 10, ly - 8, 1, 8);
+				g.fillRect(b.x + 14 + dx - 10, ly, 6, 1);
 			}
-			g.font = `${line.tone === "ask" ? "600 " : line.tone === "now" ? "500 " : ""}12px ${FONT}`;
-			g.fillStyle = line.tone === "ask" ? ASK : line.tone === "now" ? th.text : line.tone === "sub" ? mix(th.text, th.dim, 0.3) : line.tone === "note" ? deep(b.agent?.color ?? th.dim) : th.dim;
-			g.fillText(fit(g, line.text, b.w - 20 - dx), b.x + 12 + dx, ly);
+			g.font = `${line.tone === "ask" ? "600 " : line.tone === "now" ? "500 " : ""}12.5px ${FONT}`;
+			g.fillStyle = line.tone === "ask" ? th.warn : line.tone === "now" ? th.text : line.tone === "sub" ? th.muted : line.tone === "note" ? deep(b.agent?.color ?? th.muted) : th.faint;
+			g.fillText(fit(g, line.text, b.w - 26 - dx), b.x + 14 + dx, ly);
 		});
 	}
 
@@ -777,54 +768,36 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 		pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
 		g.stroke();
 	};
-	/** The pin a line ends at, lit: from the line's end to the box. */
-	const pin = (p: [number, number], id: string) => {
-		const b = l.byId.get(id)!;
-		g.fillRect(p[0] < b.x ? p[0] : b.x + b.w, p[1] - 1.25, PIN, 2.5);
-	};
 	routesOf(wires, l).forEach((pts, i) => {
 		if (!pts) return;
-		g.globalAlpha = 0.55;
-		g.strokeStyle = g.fillStyle = deep(wires[i].color);
+		g.globalAlpha = 0.5;
+		g.strokeStyle = deep(wires[i].color);
 		g.lineWidth = 1;
 		stroke(pts);
-		pin(pts[0], wires[i].from);
-		pin(pts[pts.length - 1], wires[i].to);
 	});
 	const ways = routesOf(live, l).map((pts, i) => ({ k: live[i], pts }));
 	for (const { k, pts } of ways) {
 		if (!pts) continue;
-		const c = deep(k.color);
-		const a = lit(k) ? 1 : 0.14;
-		g.strokeStyle = g.fillStyle = c;
-		// A soft glow under it, then the trace itself.
-		g.globalAlpha = a * (s.dark ? 0.2 : 0.12);
-		g.lineWidth = 5;
+		g.globalAlpha = lit(k) ? 1 : 0.14;
+		g.strokeStyle = g.fillStyle = deep(k.color);
+		g.lineWidth = 1.5;
 		stroke(pts);
-		g.globalAlpha = a;
-		g.lineWidth = 1.6;
-		stroke(pts);
+		// Where it comes from, a dot; where it goes, an arrowhead that touches the box.
 		const first = pts[0];
 		const last = pts[pts.length - 1];
-		pin(first, k.from);
-		pin(last, k.to);
-		// Where it comes from, a ring; where it goes, an arrowhead.
 		const dir = last[0] >= pts[pts.length - 2][0] ? 1 : -1;
 		g.beginPath();
-		g.moveTo(last[0] + dir * 1.5, last[1]);
-		g.lineTo(last[0] - dir * 4.5, last[1] - 3.6);
-		g.lineTo(last[0] - dir * 4.5, last[1] + 3.6);
+		g.arc(first[0], first[1], 2.5, 0, Math.PI * 2);
+		g.fill();
+		g.beginPath();
+		g.moveTo(last[0] + dir * PIN, last[1]);
+		g.lineTo(last[0] - dir * 3.5, last[1] - 3.6);
+		g.lineTo(last[0] - dir * 3.5, last[1] + 3.6);
 		g.closePath();
 		g.fill();
-		g.fillStyle = th.bg;
-		g.beginPath();
-		g.arc(first[0], first[1], 2.6, 0, Math.PI * 2);
-		g.fill();
-		g.lineWidth = 1.4;
-		g.stroke();
 	}
 
-	// One dot runs along each line of what happens, the way it goes.
+	// One dot runs along each line of what happens, the way it goes: lighter than its line, so that it shows on it.
 	for (const { k, pts } of ways) {
 		if (!pts || !lit(k)) continue;
 		const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
@@ -841,13 +814,9 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 			at -= lens[i];
 		}
 		g.globalAlpha = 1;
-		g.fillStyle = th.bg;
+		g.fillStyle = mix(deep(k.color), s.dark ? "#ffffff" : "#000000", 0.45);
 		g.beginPath();
-		g.arc(p[0], p[1], 4, 0, Math.PI * 2);
-		g.fill();
-		g.fillStyle = deep(k.color);
-		g.beginPath();
-		g.arc(p[0], p[1], 2.6, 0, Math.PI * 2);
+		g.arc(p[0], p[1], 3, 0, Math.PI * 2);
 		g.fill();
 	}
 	g.restore();
@@ -857,18 +826,19 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 // ---- the view: the board in the panel ---------------------------------------------------------------------------------------
 
 const STYLE = `
-.overview { position: absolute; inset: 0; overflow: hidden; font: 11px ${FONT}; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
+.overview { position: absolute; inset: 0; overflow: hidden; font: 12.5px ${FONT}; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
 .overview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
 .overview canvas.over { cursor: pointer; }
 .overview canvas.drag { cursor: grabbing; }
-.overview-bar { position: absolute; left: 0; right: 0; top: 0; height: ${BAR}px; box-sizing: border-box; padding: 0 8px 0 12px; display: flex; align-items: center; gap: 6px; background: var(--bg); border-bottom: 1px solid var(--rule); }
-.overview-sum { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); font-size: 12px; }
-.overview-sum b { color: var(--text); font-weight: 600; }
-.overview-sum .ask { color: ${ASK}; font-weight: 600; }
-.overview-bar button { flex: none; width: 26px; height: 22px; padding: 0; display: grid; place-items: center; border: 1px solid var(--rule); border-radius: 4px; background: var(--box); color: var(--dim); cursor: pointer; }
-.overview-bar button:hover { color: var(--text); }
-.overview-bar button[aria-pressed="true"] { color: var(--bg); background: var(--text); border-color: var(--text); }
-.overview-bar svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.overview-bar { position: absolute; left: 0; right: 0; top: 0; height: ${BAR}px; box-sizing: border-box; padding: 0 6px 0 12px; display: flex; align-items: center; gap: 2px; }
+.overview-sum { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--faint); }
+.overview-sum b { color: var(--text); font-weight: 500; }
+.overview-sum .ask { color: var(--warn); }
+.overview-sum .bad { color: var(--bad); }
+.overview-bar button { flex: none; width: 26px; height: 26px; padding: 0; display: grid; place-items: center; border: 0; border-radius: 8px; background: transparent; color: var(--faint); cursor: pointer; }
+.overview-bar button:hover { color: var(--text); background: var(--hover); }
+.overview-bar button[aria-pressed="true"] { color: var(--text); background: var(--press); }
+.overview-bar svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .overview-words { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 `;
 const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg>';
@@ -1059,7 +1029,9 @@ export default defineView((host: ViewHost) => {
 				canvas.height = Math.round(view.h * dpr);
 			}
 			const th = s.dark ? DARK : LIGHT;
-			for (const [k, v] of Object.entries({ "--text": th.text, "--dim": th.dim, "--rule": th.rule, "--box": th.chip, "--bg": th.bg })) box.style.setProperty(k, v);
+			for (const [k, v] of Object.entries({ "--text": th.text, "--faint": th.faint, "--warn": th.warn, "--bad": th.bad, "--hover": veil(th.text, 0.07), "--press": veil(th.text, 0.12) })) box.style.setProperty(k, v);
+			// The frame is see-through only while it is dark where the app is dark: then the panel's own ground is the board's.
+			root.ownerDocument.documentElement.style.colorScheme = s.dark ? "dark" : "light";
 			for (const id of open) if (!s.agents.some((a) => a.id === id)) open.delete(id);
 			layout = layoutOf(s, open, now, recent);
 			const live = linksOf(s, layout, now);
@@ -1116,7 +1088,7 @@ export default defineView((host: ViewHost) => {
 					: [
 							part("b", running.length ? `${new Set(running.map((x) => x.agent)).size} of ${s.agents.length} agents working` : `All ${s.agents.length} agents idle`),
 							asks ? part("ask", `  ·  ${plural(asks, "question")} for you`) : "",
-							bad.length ? part("ask", `  ·  ${bad.join(", ")} ${bad.length === 1 ? "is" : "are"} down`) : "",
+							bad.length ? part("bad", `  ·  ${bad.join(", ")} ${bad.length === 1 ? "is" : "are"} down`) : "",
 							next ? `  ·  next: ${next.name} in ${span(next.next! - now)}` : "",
 						].filter(Boolean)),
 			);

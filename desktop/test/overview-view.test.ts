@@ -131,13 +131,13 @@ test("a line joins two boxes only while something happens between them", () => {
 	// Each is in the color of the agent it happens to; a task handed on in the color of who gave it.
 	const colors = Object.fromEntries(AGENTS.map((a) => [a.id, a.color]));
 	assert.equal(linksOf(s, l).find((k: any) => k.to === "agent:books")!.color, colors.books);
-	// A question goes from the agent to you, in red, and stands for the line that once woke it.
+	// A question goes from the agent to you, in the color of a question, and stands for the line that once woke it.
 	const works = STORY(T0);
 	Object.assign(works[0], { asking: true, doing: "tool", tool: "send" });
 	const asked = linksOf(state(works), l).filter((k: any) => k.from === "you" || k.to === "you").map((k: any) => [k.from, k.to, k.color]);
-	assert.deepEqual(asked, [["agent:main", "you", "#ff5d73"]]);
+	assert.deepEqual(asked, [["agent:main", "you", "ask"]], "a name for a color: the drawing makes it the theme's color for a question");
 	// When a delegated task ends, its answer goes back: for a few seconds a line from the one that did it to the one that
-	// asked, at the right of the agents where the task went out at their left. Red if it failed. Then it is gone.
+	// asked, at the right of the agents where the task went out at their left. In the color of what failed if it did. Then it is gone.
 	const over = STORY(T0);
 	Object.assign(over[1], { doing: "done", finished: T0 - 1000, tool: undefined, mcp: undefined });
 	over.splice(2, 2);
@@ -146,7 +146,7 @@ test("a line joins two boxes only while something happens between them", () => {
 		return linksOf(state(over), l, now).filter((k: any) => k.back);
 	};
 	assert.deepEqual(back(T0).map((k: any) => [k.from, k.to, k.color, k.side]), [["agent:scout", "agent:main", colors.scout, true]]);
-	assert.equal(back(T0, "failed")[0].color, "#ff5d73");
+	assert.equal(back(T0, "failed")[0].color, "failed");
 	assert.deepEqual(back(T0 + 5000), [], "a few seconds later it is gone");
 	const answer = routesOf(back(T0), l)[0]!;
 	const [mainBox, scoutBox, webBox] = ["agent:main", "agent:scout", "mcp:web"].map((id) => l.byId.get(id)!);
