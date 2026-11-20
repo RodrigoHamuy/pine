@@ -125,7 +125,7 @@ class Remote internal constructor(
 			.build()
 	}
 
-	private fun client(): SSHClient {
+	private fun client(readMs: Int = this.readMs): SSHClient {
 		val config = DefaultConfig().apply {
 			keepAliveProvider = KeepAliveProvider.KEEP_ALIVE
 			channelReadTimeoutMs = readMs
@@ -231,6 +231,17 @@ class Remote internal constructor(
 			throw e
 		}
 	}
+
+	/**
+	 * Pairs with the computer `link` names, as the phone called `name` ("Pine on Pixel 9"): `on`
+	 * hears what the pairing reports (`PairingState`, Pairing.kt). Nothing is kept here: on
+	 * `Allowed` the caller keeps the computer (`Pines.addPaired`) and connects to it as a paired phone.
+	 */
+	fun pair(link: PairLink, name: String, on: (PairingState) -> Unit): Pairing =
+		startPairing(link, name, on, key, open = { openPeer(meeting(link.service), link.id, http, native, openMs) }, client = {
+			// The owner may take the computer's two minutes to answer: a read waits as long as the pairing does.
+			client(readMs = PAIR_WAIT_MS.toInt())
+		})
 
 	/** Runs `pine service` in a session of `ssh`, which is signed in, and holds the daemon it names. */
 	private fun serve(ssh: SSHClient, given: String, label: String, transport: ChannelStream?): RemoteService {
