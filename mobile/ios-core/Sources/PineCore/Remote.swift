@@ -271,6 +271,9 @@ final class SignIn: NIOSSHClientUserAuthenticationDelegate, @unchecked Sendable 
 
 	var refused: Bool { lock.withLock { _refused } }
 
+	/** Whether the phone's key was offered (the host key was taken first). */
+	var offeredKey: Bool { lock.withLock { offered } }
+
 	func nextAuthenticationType(availableMethods: NIOSSHAvailableUserAuthenticationMethods, nextChallengePromise: EventLoopPromise<NIOSSHUserAuthenticationOffer?>) {
 		let first = lock.withLock {
 			defer { offered = true }

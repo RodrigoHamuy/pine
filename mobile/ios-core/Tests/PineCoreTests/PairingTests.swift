@@ -48,6 +48,8 @@ struct PairingTests {
 			try await rig.host.command("allow")
 			let (end, told) = await rig.pair(link)
 			#expect(end == .allowed(name: "Test Mac"))
+			// The helper's line may come after the phone heard the answer.
+			try await eventually("the owner asked") { !rig.host.events("asked").isEmpty }
 			let asked = try #require(rig.host.events("asked").first)
 			#expect(asked["name"] as? String == "Pine on iPhone 17 Pro")
 			#expect(told.states == [.pairing(code: asked["code"] as! String), .allowed(name: "Test Mac")])

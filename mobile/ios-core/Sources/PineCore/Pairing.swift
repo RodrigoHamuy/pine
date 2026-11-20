@@ -143,17 +143,40 @@ extension Remote {
 		} catch {
 			return .failed(message: "\(error)")
 		}
+		// A session that closed before the phone's key was offered never used the code (the computer
+		// can let go of a channel that is slow to reach it): one more is tried, as the web client does.
+		let first = await attempt(link, name: name, trusted: trusted, privateKey, pairing, tell: tell)
+		guard case .unused = first else { return first.state }
+		if pairing.isCancelled { return .expired }
+		return await attempt(link, name: name, trusted: trusted, privateKey, pairing, tell: tell).state
+	}
+
+	private enum Attempt {
+		case end(PairingState)
+		/** Closed before the code was offered. */
+		case unused
+
+		var state: PairingState {
+			switch self {
+			case let .end(state): state
+			case .unused: .failed(message: PairWords.cut)
+			}
+		}
+	}
+
+	/** One data channel and one pairing session over it. */
+	private func attempt(_ link: PairLink, name: String, trusted: String, _ privateKey: NIOSSHPrivateKey, _ pairing: Pairing, tell: @Sendable (PairingState) -> Void) async -> Attempt {
 		let peer: PeerLink
 		do {
 			peer = try await openPeer(service: link.service, id: link.id, within: meet, route: route)
 		} catch let e as PeerClosed {
-			return .failed(message: PairWords.trouble(e.reason))
+			return .end(.failed(message: PairWords.trouble(e.reason)))
 		} catch {
-			return .failed(message: PairWords.cut)
+			return .end(.failed(message: PairWords.cut))
 		}
 		guard pairing.hold(link: peer) else {
 			peer.close()
-			return .expired
+			return .end(.expired)
 		}
 		let signIn = SignIn(user: PAIR_USER + link.code, key: privateKey)
 		let hostKey = MachineIdCheck(trusted: trusted, words: PairedWords(label: YOUR_COMPUTER), host: PAIRED + link.id)
@@ -166,11 +189,11 @@ extension Remote {
 				}
 			}
 		} catch {
-			return .failed(message: PairWords.cut)
+			return .unused
 		}
 		// Whatever the end, the pairing session is closed with it: a yes is followed by a session as `pine`.
 		defer { session.close(promise: nil) }
-		guard pairing.hold(session: session) else { return .expired }
+		guard pairing.hold(session: session) else { return .end(.expired) }
 		let limit = session.eventLoop.scheduleTask(in: connectLimit) { session.close(promise: nil) }
 		let exec: Channel
 		do {
@@ -178,17 +201,18 @@ extension Remote {
 			limit.cancel()
 		} catch {
 			limit.cancel()
-			if hostKey.refused != nil { return .failed(message: PairWords.impostor) }
-			// The computer takes no key under a code that is wrong, used or closed.
-			if signIn.refused { return .expired }
-			return .failed(message: PairWords.cut)
+			if hostKey.refused != nil { return .end(.failed(message: PairWords.impostor)) }
+			// The computer takes no key under a code that is wrong, used or closed: it says no, or
+			// closes the connection once the key was offered.
+			if signIn.refused || signIn.offeredKey { return .end(.expired) }
+			return .unused
 		}
 		do {
 			let command = try await ChannelDuplex.of(exec, limit: read)
 			try await exec.triggerUserOutboundEvent(SSHChannelRequestEvent.ExecRequest(command: pairCommand(name), wantReply: false)).get()
-			return await answer(command, pairing, tell: tell)
+			return .end(await answer(command, pairing, tell: tell))
 		} catch {
-			return .expired
+			return .end(.expired)
 		}
 	}
 

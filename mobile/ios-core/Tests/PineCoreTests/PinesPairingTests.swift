@@ -177,8 +177,9 @@ struct PinesPairingTests {
 			#expect(rig.connections(device) == 1, "one that answers is kept")
 			rig.daemon[route: "/health"] = { x in x.head(503, length: -1) }
 			await pines.check()
-			#expect(page.status == "ready")
-			#expect(rig.connections(device) == 2)
+			// Made again whole; a first attempt that a loaded machine lets go of is tried again by itself.
+			try await eventually("ready again") { page.status == "ready" }
+			#expect(rig.connections(device) >= 2)
 		}
 	}
 }
