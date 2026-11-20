@@ -11,7 +11,7 @@ import ssh2 from "ssh2";
 import type { Client, ClientChannel, ConnectConfig } from "ssh2";
 import { remoteCommand } from "../../src/remote.ts";
 import { type AccessServer, type AccessServerOptions, createAccessServer, pairedKeys, type SessionEvent } from "../electron/access/server.ts";
-import { AccessStore, memoryVault } from "../electron/access/store.ts";
+import { AccessStore, memoryVault, newEd25519Key } from "../electron/access/store.ts";
 
 /** The stand-in daemon: echoes what it is sent, after a word of its own. */
 let daemon: net.Server;
@@ -74,6 +74,12 @@ function duplexPair(): [Duplex, Duplex] {
 
 const serviceLine = () => JSON.stringify({ base: `http://127.0.0.1:${daemonPort}`, token: "the-token", mode: "safe", started: true, home: "/nowhere", version: "0.0.0" });
 
+/** A key pair as OpenSSH writes it (not ssh2's generator, which gets one Ed25519 key in 128 wrong). */
+const ed25519 = () => {
+	const made = newEd25519Key();
+	return { private: made.private, public: `ssh-ed25519 ${made.public.toString("base64")}` };
+};
+
 const blobOf = (publicKey: string) => {
 	const key = ssh2.utils.parseKey(publicKey);
 	if (key instanceof Error) throw key;
@@ -99,7 +105,7 @@ after(() => {
 
 async function setup(options: Partial<AccessServerOptions> = {}): Promise<Setup> {
 	const store = await AccessStore.open(memoryVault());
-	const phone = ssh2.utils.generateKeyPairSync("ed25519");
+	const phone = ed25519();
 	await store.add({ key: blobOf(phone.public), name: "phone" });
 	let asked = 0;
 	const events: SessionEvent[] = [];
@@ -247,7 +253,7 @@ test("access server: no channel to the daemon before its service line is known",
 
 test("access server: an unknown key is refused, and so is the paired key under another user name", async () => {
 	const s = await setup();
-	const stranger = ssh2.utils.generateKeyPairSync("ed25519");
+	const stranger = ed25519();
 	await assert.rejects(s.connect({ privateKey: stranger.private }));
 	await assert.rejects(s.connect({ username: "root" }));
 });
@@ -265,7 +271,7 @@ test("access server: keyboard-interactive is refused", async () => {
 
 test("access server: a client that names a paired key but cannot sign with it is refused", async () => {
 	const s = await setup();
-	const stranger = ssh2.utils.parseKey(ssh2.utils.generateKeyPairSync("ed25519").private) as ssh2.ParsedKey;
+	const stranger = ssh2.utils.parseKey(ed25519().private) as ssh2.ParsedKey;
 	const named = ssh2.utils.parseKey(s.phone.public) as ssh2.ParsedKey;
 	// An agent that offers the paired public key and signs with another key.
 	class Liar extends ssh2.BaseAgent {

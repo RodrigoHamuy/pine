@@ -2,7 +2,7 @@
 // It is one JSON text handed to a vault the caller gives: the app's vault encrypts it with the
 // system's keychain and writes it into the app's own data folder; a test's keeps it in memory.
 // No Electron here, so that it runs under plain Node.
-import { createHash } from "node:crypto";
+import { createHash, generateKeyPairSync, randomBytes } from "node:crypto";
 import ssh2 from "ssh2";
 
 /** Where the kept text lies. Encryption is the vault's business. */
@@ -50,6 +50,38 @@ export const cleanName = (name: string) => [...name.replace(/\u001b\[[0-9;?]*[ -
 
 const ED25519 = "ssh-ed25519";
 
+const sshString = (data: Buffer | string) => {
+	const bytes = typeof data === "string" ? Buffer.from(data, "latin1") : data;
+	const length = Buffer.alloc(4);
+	length.writeUInt32BE(bytes.length);
+	return Buffer.concat([length, bytes]);
+};
+const uint32 = (n: number) => {
+	const out = Buffer.alloc(4);
+	out.writeUInt32BE(n);
+	return out;
+};
+
+/**
+ * A new Ed25519 key: the private key in OpenSSH's format, as ssh2 reads it, and the public key
+ * blob. Made with Node's crypto and written out here, because ssh2's own generator drops a
+ * leading zero byte of the public key (about one key in 128 comes out unreadable), and ssh2 does
+ * not read Node's PKCS#8 export of an Ed25519 key.
+ */
+export function newEd25519Key(): { private: string; public: Buffer } {
+	const jwk = generateKeyPairSync("ed25519").privateKey.export({ format: "jwk" });
+	const seed = Buffer.from(jwk.d!, "base64url");
+	const pub = Buffer.from(jwk.x!, "base64url");
+	const blob = Buffer.concat([sshString(ED25519), sshString(pub)]);
+	const check = randomBytes(4);
+	let secret = Buffer.concat([check, check, sshString(ED25519), sshString(pub), sshString(Buffer.concat([seed, pub])), sshString("")]);
+	const padding = (8 - (secret.length % 8)) % 8;
+	secret = Buffer.concat([secret, Buffer.from(Array.from({ length: padding }, (_, i) => i + 1))]);
+	const body = Buffer.concat([Buffer.from("openssh-key-v1\0", "latin1"), sshString("none"), sshString("none"), sshString(""), uint32(1), sshString(blob), sshString(secret)]);
+	const lines = body.toString("base64").match(/.{1,70}/g)!.join("\n");
+	return { private: `-----BEGIN OPENSSH PRIVATE KEY-----\n${lines}\n-----END OPENSSH PRIVATE KEY-----\n`, public: blob };
+}
+
 /** The algorithm named at the start of a public key blob. */
 function algorithmOf(blob: Buffer): string | undefined {
 	if (blob.length < 4) return undefined;
@@ -79,7 +111,7 @@ export class AccessStore {
 			const kept = JSON.parse(text) as Kept;
 			return new AccessStore(vault, { hostKey: kept.hostKey, devices: Array.isArray(kept.devices) ? kept.devices : [] });
 		}
-		const store = new AccessStore(vault, { hostKey: ssh2.utils.generateKeyPairSync("ed25519").private, devices: [] });
+		const store = new AccessStore(vault, { hostKey: newEd25519Key().private, devices: [] });
 		await store.write();
 		return store;
 	}
