@@ -400,11 +400,13 @@ private func meetConfig(_ service: URL) async -> Any? {
 }
 
 /**
- * Opens the way to the paired computer `id` through the meeting service at `service` (an origin),
- * within `limit` from the join to the open channel. Throws `PeerClosed`.
+ * Opens the way to the paired computer `id` through the meeting service at `service` (an https
+ * origin, and nothing else), within `limit` from the join to the open channel. Throws `PeerClosed`.
+ * `route` is where that origin is reached: itself, except in a test (`Remote.route`).
  */
-func openPeer(service: String, id: String, within limit: Duration) async throws -> PeerLink {
-	guard let base = URL(string: service + "/"), var join = URLComponents(url: base.appendingPathComponent("meet/join"), resolvingAgainstBaseURL: false) else {
+func openPeer(service: String, id: String, within limit: Duration, route: (String) -> String = { $0 }) async throws -> PeerLink {
+	guard httpsOrigin(service)?.origin == service else { throw PeerClosed(.noService, "A meeting service is an https address.") }
+	guard let base = URL(string: route(service) + "/"), var join = URLComponents(url: base.appendingPathComponent("meet/join"), resolvingAgainstBaseURL: false) else {
 		throw PeerClosed(.noService)
 	}
 	let ice = iceServers(await meetConfig(base))

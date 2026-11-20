@@ -113,7 +113,9 @@ public final class HeldRemote: @unchecked Sendable {
 		}
 		let f = followEvents(s, Relay(on) { [weak self] times in
 			// An SSH connection that broke does not come back by waiting: it is made again.
-			guard times == 5 else { return false }
+			// A data channel that ended took its session with it: nothing comes back by waiting there
+			// (that path has no TCP keepalive to say so later), so it is made again at the first loss.
+			guard times == 5 || (s.paired && !s.isOpen) else { return false }
 			Task.detached { await self?.again(s) }
 			return true
 		}, retry: retry, batch: batch)
@@ -166,5 +168,5 @@ private final class Relay: EventHandlers, @unchecked Sendable {
 
 	func batch(_ events: [Any]) { to.batch(events) }
 	func connection(_ up: Bool) { to.connection(up) }
-	func lost(_ times: Int) -> Bool { times == 5 ? onLoss(times) : to.lost(times) }
+	func lost(_ times: Int) -> Bool { onLoss(times) || to.lost(times) }
 }

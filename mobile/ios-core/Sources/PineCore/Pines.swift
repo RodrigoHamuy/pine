@@ -55,6 +55,10 @@ public final class Pines: @unchecked Sendable {
 	/** Whether each held machine's event stream is up, by machine: what the page is told when it is shown again. */
 	private var streams: [String: Bool] = [:]
 	private var up = false
+	/** The pairing under way, if any: only one at a time. */
+	private var pairingNow: Pairing?
+	/** Paired computers whose last trouble only the owner can fix: neither tried again nor checked on return. */
+	private var finals: Set<String> = []
 
 	public init(remote: Remote, shelf: Shelf, page: Page, retry: Duration = .seconds(1), batch: Duration = .milliseconds(24)) {
 		self.remote = remote
@@ -95,7 +99,7 @@ public final class Pines: @unchecked Sendable {
 			defer { begun = true }
 			return !begun
 		}
-		if first { start(inUse) } else { page.service(state()) }
+		if first && lock.withLock({ pairingNow == nil }) { start(inUse) } else { page.service(state()) }
 	}
 
 	/** Add a machine: host, user@host or user@host:port, with a user, since a phone has no user name of its own. */
@@ -175,6 +179,7 @@ public final class Pines: @unchecked Sendable {
 			if entries.removeValue(forKey: host) != nil { shelf.set(Self.PAIRED_ENTRIES, Self.text(entries)) }
 			unknown[host] = nil
 			streams[host] = nil
+			finals.remove(host)
 			return (held.removeValue(forKey: host), wasInUse)
 		}
 		if let stop { Task.detached { await stop.stop() } }
@@ -241,7 +246,7 @@ public final class Pines: @unchecked Sendable {
 			guard let host = shown else { return nil }
 			let status = current["status"] as? String
 			let kind = current["kind"] as? String ?? ""
-			let again = status == "error" && host == inUse && ["ssh", "failed"].contains(kind) && current["fingerprint"] == nil
+			let again = status == "error" && host == inUse && ["ssh", "failed"].contains(kind) && current["fingerprint"] == nil && !finals.contains(host)
 			if status != "ready" && !again { return nil }
 			return (host, round, status == "ready" ? held[host]?.service : nil)
 		}
@@ -267,7 +272,8 @@ public final class Pines: @unchecked Sendable {
 		Task.detached { await self.connect(host, mine) }
 	}
 
-	private func connect(_ host: String, _ mine: Int) async {
+	/** `tries`: attempts in a row that failed for a trouble that may pass, before this one. */
+	private func connect(_ host: String, _ mine: Int, tries: Int = 0) async {
 		let h = lock.withLock { () -> HeldRemote? in
 			if closed { return nil }
 			if let h = held[host] { return h }
@@ -277,10 +283,96 @@ public final class Pines: @unchecked Sendable {
 		}
 		guard let h else { return }
 		do {
-			show(mine, Self.ready(try await h.ensure()), host)
+			let s = try await h.ensure()
+			lock.withLock { _ = finals.remove(host) }
+			show(mine, Self.ready(s), host)
 		} catch {
-			show(mine, failure(host, error), host)
+			fault(host, mine, error, tries: tries)
 		}
+	}
+
+	/**
+	 * The page is told what went wrong. A paired computer is tried again after a trouble that may
+	 * pass (it sleeps, the network, the meeting service's limits), with a wait that doubles from
+	 * `retry` up to thirty times it, until it is reached, the owner does something else, or a trouble
+	 * only the owner can fix comes (the computer no longer knows the phone, another key): that one
+	 * is final. A user@host machine waits for the owner or the app's return to the front, as before.
+	 */
+	private func fault(_ host: String, _ mine: Int, _ e: Error, tries: Int) {
+		show(mine, failure(host, e), host)
+		guard host.hasPrefix(PAIRED) else { return }
+		let passing = (e as? RemoteError)?.passing == true
+		lock.withLock {
+			if passing { finals.remove(host) } else { finals.insert(host) }
+		}
+		guard passing else { return }
+		let wait = min(retryEvery * (1 << min(tries, 5)), retryEvery * 30)
+		Task.detached { [weak self] in
+			try? await Task.sleep(for: wait)
+			guard let self, self.lock.withLock({ mine == self.round && !self.closed && self.shown == host }) else { return }
+			await self.connect(host, mine, tries: tries + 1)
+		}
+	}
+
+	/**
+	 * Pairs with the computer a pairing link names (either form `pairLink` reads: an https service
+	 * only), as the phone called `name` ("Pine on iPhone 17 Pro"). Only one pairing at a time. The
+	 * page is told, in the web client's words (web/src/host.ts `pairWith`): `starting` with
+	 * `pairing: {name}`, then `pairing: {code, name}` once the computer shows the four digits; on the
+	 * owner's yes the computer is kept as `paired:<machine id>` with the link's service and the name
+	 * it gave, made the machine in use, and connected to (`starting` with its `host`, then `ready`);
+	 * otherwise `error` without a `host`, and nothing kept. Throws for a link it cannot read.
+	 */
+	public func pair(_ value: String, name: String) throws {
+		guard let link = pairLink(value) else { throw RemoteError("ssh", "That is not a pairing link this phone can read. Open Pine on your computer and add this device again.") }
+		let phone = cleanName(name).isEmpty ? deviceName(nil) : cleanName(name)
+		let host = PAIRED + link.id
+		let (mine, pairing) = try lock.withLock { () throws -> (Int, Pairing) in
+			if closed { throw RemoteError("failed", "The app is closing.") }
+			if pairingNow != nil { throw RemoteError("ssh", "A pairing is open already: cancel it first.") }
+			round += 1
+			let mine = round
+			show(mine, ["status": "starting", "pairing": ["name": phone]], nil)
+			let pairing = remote.pair(link, name: phone) { [weak self] state in
+				guard case let .pairing(code) = state else { return }
+				self?.show(mine, ["status": "starting", "pairing": ["code": code, "name": phone]], nil)
+			}
+			pairingNow = pairing
+			return (mine, pairing)
+		}
+		Task.detached { [weak self] in
+			let end = await pairing.result()
+			guard let self else { return }
+			let still = self.lock.withLock { () -> Bool in
+				guard self.pairingNow === pairing else { return false }
+				self.pairingNow = nil
+				return mine == self.round
+			}
+			guard still, let end else { return }
+			let fail = { (message: String) in self.show(mine, ["status": "error", "kind": "ssh", "message": message], nil) }
+			guard case let .allowed(computer) = end else { return fail(PairWords.of(end) ?? PairWords.expired) }
+			do {
+				try self.addPaired(id: link.id, service: link.service, name: computer == YOUR_COMPUTER ? nil : computer)
+				self.lock.withLock { _ = self.finals.remove(host) }
+				try self.use(host)
+			} catch {
+				fail("There are \(MAX_HOSTS) machines already: forget one first, then add this device again at your computer.")
+			}
+		}
+	}
+
+	/**
+	 * Ends the pairing under way, if any: nothing is kept, and the page is told the machine in use
+	 * again (or that there is none), as before the pairing.
+	 */
+	public func cancelPairing() {
+		let pairing = lock.withLock { () -> Pairing? in
+			defer { pairingNow = nil }
+			return pairingNow
+		}
+		guard let pairing else { return }
+		pairing.cancel()
+		start(inUse)
 	}
 
 	/**
@@ -321,7 +413,7 @@ public final class Pines: @unchecked Sendable {
 	/** A held machine whose session could not be made again after its stream was lost. */
 	private func lost(_ host: String, _ e: Error) {
 		guard let mine = lock.withLock({ shown == host ? round : nil }) else { return }
-		show(mine, failure(host, e), host)
+		fault(host, mine, e, tries: 0)
 	}
 
 	private func failure(_ host: String, _ e: Error) -> [String: Any] {
@@ -365,11 +457,15 @@ public final class Pines: @unchecked Sendable {
 
 	/** Lets go of every machine: a pine the app started there stops. */
 	public func close() async {
-		let all = lock.withLock {
+		let (all, pairing) = lock.withLock {
 			closed = true
-			defer { held.removeAll() }
-			return Array(held.values)
+			defer {
+				held.removeAll()
+				pairingNow = nil
+			}
+			return (Array(held.values), pairingNow)
 		}
+		pairing?.cancel()
 		for h in all { await h.stop() }
 	}
 

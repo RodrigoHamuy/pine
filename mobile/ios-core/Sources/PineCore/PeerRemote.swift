@@ -53,9 +53,9 @@ extension Remote {
 		let hostKey = MachineIdCheck(trusted: trusted, words: words, host: host)
 		let link: PeerLink
 		do {
-			link = try await openPeer(service: computer.service, id: computer.id, within: meet)
+			link = try await openPeer(service: computer.service, id: computer.id, within: meet, route: route)
 		} catch let e as PeerClosed {
-			throw RemoteError("ssh", words.peer(e.reason))
+			throw RemoteError("ssh", words.peer(e.reason), passing: true)
 		}
 		let session: Channel
 		do {
@@ -66,14 +66,14 @@ extension Remote {
 				}
 			}
 		} catch {
-			throw RemoteError("ssh", words.cut)
+			throw RemoteError("ssh", words.cut, passing: true)
 		}
 		// Only for the words of what `pine service` says: the machine is the computer's label there.
 		let named = SshHost(given: label, user: PAIRED_USER, host: label, port: 0, label: label)
 		return try await serve(session, host: host, label: label, paired: true, named: named) { _ in
 			if let refused = hostKey.refused { return refused }
 			if signIn.refused { return RemoteError("ssh", words.notKnown) }
-			return RemoteError("ssh", words.cut)
+			return RemoteError("ssh", words.cut, passing: true)
 		}
 	}
 }
@@ -83,7 +83,7 @@ extension Remote {
  * key exchange, before the phone's key is offered, and for good (`changed`, so that no one is asked
  * to trust it).
  */
-private final class MachineIdCheck: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
+final class MachineIdCheck: NIOSSHClientServerAuthenticationDelegate, @unchecked Sendable {
 	private let trusted: String
 	private let words: PairedWords
 	private let host: String
