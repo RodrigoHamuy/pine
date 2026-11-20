@@ -58,6 +58,8 @@ const SYNONYMS: string[][] = [
 	["android", "mobile", "apk", "smartphone", "tablet", "cellphone"],
 	["iphone", "ios", "ipa", "altstore", "sideloadly", "sideload", "mobile"],
 	["vpn", "tailscale", "tailnet", "funnel", "zerotier", "wireguard", "tunnel", "reachable"],
+	// Browser access: what an owner calls pairing a device by the Mac's QR code.
+	["pair", "pairing", "paired", "qr", "qrcode", "barcode", "scan"],
 	["fingerprint", "hostkey", "known_hosts", "knownhosts"],
 	["rss", "atom", "podcast", "blog", "newsletter", "release", "changelog", "syndication"],
 	["calendar", "ical", "ics", "icalendar", "webcal", "caldav", "appointment", "meeting", "agenda"],

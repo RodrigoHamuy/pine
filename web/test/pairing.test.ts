@@ -19,6 +19,14 @@ test("a pairing link's fragment is read and taken out of the address", () => {
 	assert.deepEqual(a.replaced, ["https://pine.example.workers.dev/"]);
 });
 
+test("a pairing link is read from a live address, whose fragment is gone once it is replaced", () => {
+	// As `location` is: replacing the address (history.replaceState) changes what it says at once.
+	const live = { href: `https://pine.example.workers.dev/#pair=${ID}.${CODE}`, hash: `#pair=${ID}.${CODE}` };
+	const replace = (url: string) => Object.assign(live, { href: url, hash: "" });
+	assert.deepEqual(takePairLink(live, replace), { link: { id: ID, code: CODE } });
+	assert.equal(live.href, "https://pine.example.workers.dev/");
+});
+
 test("a malformed pairing link is taken out all the same, and ignored with a message", () => {
 	for (const bad of [`#pair=${ID}`, `#pair=${ID}.short`, `#pair=${ID.slice(1)}.${CODE}`, `#pair=${ID}.${CODE}.x`, `#pair=${ID}.${CODE.slice(0, 21)}!`, "#pair="]) {
 		const a = address(`https://pine.example/web/${bad}`);

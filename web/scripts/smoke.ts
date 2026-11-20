@@ -12,6 +12,14 @@
 // sent and the answer comes back; a picture in an answer shows; a link in an answer opens in a new
 // tab with no hold on the client; after the relay restarts the bridge connects again by itself; a
 // frame that navigates itself away makes the client start anew.
+//
+// Then a Mac paired by link, on the same deployment (`--env full`, the meeting service beside the
+// relay): the Pine app's access host under Node beside the same home's real `pine service`, and a
+// second browser that opens the pairing link. Named checks again: the meeting routes answer;
+// pairing completes when the owner allows the four digits the browser shows; the Mac is listed
+// under its name; a conversation answers over a data channel and nothing goes through /ssh; the
+// page's policy and the iframe's sandbox are unchanged; after the access host restarts the browser
+// connects again by itself. No STUN server outside this computer is asked.
 import assert from "node:assert/strict";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { spawn, type ChildProcess } from "node:child_process";
@@ -109,13 +117,33 @@ try {
 	// the loopback, with the one switch that lets the relay reach this computer's sshd
 	// (RELAY_ALLOW_LOOPBACK, which no deployed configuration sets). The relay is stopped and
 	// started again on the same port, as a deploy restarts a Worker.
+	//
+	// It is the configuration `full` (`--env full`): the relay and the meeting service side by side,
+	// so that a machine added as user@host and a Mac paired by link are both tried on one deployment.
+	// Two changes are made to it, in a copy in the smoke's folder: the servers that help a connection
+	// (ICE) are a closed port of the loopback, so that no public STUN server is asked. An empty list
+	// would not do: the service falls back to a public one. And the limit per client address is
+	// raised (below), since every client here has the one loopback address.
 	const relayPort = await freePort();
 	const inspectorPort = await freePort();
 	const wranglerState = path.join(dir, "wrangler");
+	const relayDir = path.join(web, "relay");
+	const config = JSON.parse(readFileSync(path.join(relayDir, "wrangler.jsonc"), "utf8").split("\n").filter((line) => !line.trim().startsWith("//")).join("\n"));
+	assert.ok(config.env?.full?.durable_objects, "the configuration `full` has the meeting service");
+	config.main = path.join(relayDir, config.main);
+	// Paths are read from the copy's folder: the ones that point out of web/relay are made whole.
+	for (const where of [config, ...Object.values(config.env as Record<string, { assets?: { directory: string } }>)]) if (where.assets) where.assets = { ...where.assets, directory: dist };
+	config.env.full.vars = { ...config.env.full.vars, ICE: [{ urls: "stun:127.0.0.1:9" }] };
+	// And the limit per client address: every browser, the access host and the relay's connections
+	// here come from the one loopback address, which a minute of reconnecting takes past 20.
+	for (const limit of config.env.full.ratelimits) limit.simple = { ...limit.simple, limit: 1000 };
+	delete config.$schema;
+	const configFile = path.join(wranglerState, "wrangler.json");
+	write(configFile, JSON.stringify(config, null, 2));
 	let wrangler: ChildProcess | null = null;
 	let wranglerLog = "";
 	const startRelay = async () => {
-		const running = spawn(path.join(web, "relay", "node_modules", ".bin", "wrangler"), ["dev", "--ip", "127.0.0.1", "--port", String(relayPort), "--inspector-port", String(inspectorPort), "--var", "RELAY_ALLOW_LOOPBACK:1", "--persist-to", path.join(wranglerState, "state"), "--show-interactive-dev-session=false", "--log-level", "warn"], {
+		const running = spawn(path.join(relayDir, "node_modules", ".bin", "wrangler"), ["dev", "--config", configFile, "--env", "full", "--ip", "127.0.0.1", "--port", String(relayPort), "--inspector-port", String(inspectorPort), "--var", "RELAY_ALLOW_LOOPBACK:1", "--persist-to", path.join(wranglerState, "state"), "--show-interactive-dev-session=false", "--log-level", "warn"], {
 			cwd: path.join(web, "relay"),
 			// Wrangler's own files (its settings, its logs) go into the smoke's folder, never the owner's; no metrics are sent.
 			env: { ...process.env, XDG_CONFIG_HOME: path.join(wranglerState, "config"), WRANGLER_LOG_PATH: path.join(wranglerState, "logs"), WRANGLER_SEND_METRICS: "false", CI: "1" },
@@ -398,6 +426,140 @@ try {
 		assert.deepEqual(told.filter((m) => m.pine !== "reply"), [], "the document the frame went to was told nothing unasked");
 		const token = readFileSync(path.join(home, "data", "http-token"), "utf8").trim();
 		assert.ok(!heard.some((h) => h.includes(token)), "nor the daemon's token");
+	});
+
+	// ---- A Mac paired by link, peer to peer ----------------------------------------------------
+	// The Pine app's access host (desktop/electron/access/host.ts) under Node beside the same
+	// home's real `pine service`, waiting at the meeting service of the deployment, with pairing as
+	// the app wires it and an owner who answers by what the browser shows. A second browser, on a
+	// profile of its own, opens the pairing link as a phone would after scanning the QR code.
+	await check("the meeting routes answer: the configuration, with the relay on and the loopback's servers, and the two sockets", async () => {
+		const said = await fetch(`${origin}/meet/config`).then((r) => r.json());
+		assert.deepEqual(said, { ice: [{ urls: "stun:127.0.0.1:9" }], relay: true });
+		// A browser that asks for a Mac nobody waits for is told so by its close code.
+		const code = await new Promise<number>((resolve, reject) => {
+			const ws = new WebSocket(`ws://127.0.0.1:${relayPort}/meet/join?id=${"n".repeat(43)}`);
+			ws.addEventListener("close", (e) => resolve(e.code));
+			ws.addEventListener("error", () => {});
+			setTimeout(() => reject(new Error("the join socket was not closed")), 10_000);
+		});
+		assert.equal(code, 4404);
+	});
+
+	const { connect: connectService } = await import(new URL("../../desktop/electron/service.ts", import.meta.url).href);
+	const service = await connectService({ argv: [process.execPath, path.join(repo, "src", "cli.ts")], env: { ...process.env, PINE_HOME: home }, from: "the smoke" }, { home });
+	cleanups.push(() => service.stop());
+	type AccessHost = { machineId: string; status(): string; store: { devices(): { id: string; name: string }[] }; stop(): Promise<void> };
+	const { startAccessHost } = (await import(new URL("../../desktop/electron/access/host.ts", import.meta.url).href)) as { startAccessHost(options: Record<string, unknown>): Promise<AccessHost> };
+	const { createPairing } = (await import(new URL("../../desktop/electron/access/pairing.ts", import.meta.url).href)) as { createPairing(options: Record<string, unknown>): { open(): { link: string }; admit: unknown } };
+	const accessFolder = path.join(dir, "access");
+	const COMPUTER = "Smoke Mac";
+	/** What the owner was asked, and what the browser showed when they answered. */
+	const asked: { name: string; code: string; shown: string }[] = [];
+	let shownCode: () => Promise<string> = async () => "";
+	let pairing: ReturnType<typeof createPairing> | undefined;
+	const startHost = async () => {
+		const started = await startAccessHost({
+			service: origin,
+			folder: accessFolder,
+			daemon: async () => JSON.stringify({ base: service.base, token: service.token, mode: service.mode, started: service.started, home: service.home, version: service.version }),
+			// The owner allows only when the four digits on the Mac are the ones the browser shows.
+			admit: (context: Record<string, unknown>) => (pairing = createPairing({ ...context, computerName: () => COMPUTER, ask: async (request: { name: string; code: string }) => {
+				const shown = await shownCode();
+				asked.push({ ...request, shown });
+				return shown === request.code;
+			} })).admit,
+			retry: { firstMs: 200, maxMs: 2000 },
+		});
+		const end = Date.now() + 20_000;
+		while (started.status() !== "waiting") {
+			if (Date.now() > end) throw new Error(`the access host never waited at the meeting service (${started.status()})`);
+			await new Promise((r) => setTimeout(r, 50));
+		}
+		return started;
+	};
+	let mac = await startHost();
+	cleanups.push(() => mac.stop());
+
+	const phone = await headless();
+	cleanups.push(() => phone.stop());
+	const opened: string[] = [];
+	phone.page.on("websocket", (ws) => opened.push(new URL(ws.url()).pathname + new URL(ws.url()).search));
+	const phoneErrors: string[] = [];
+	const phoneSaid: string[] = [];
+	phone.page.on("console", (m) => (phoneSaid.push(`${m.type()}: ${m.text()}`), m.type() === "error" && phoneErrors.push(m.text())));
+	const screen = phone.page.frameLocator("iframe");
+	const paired = `mac:${mac.machineId}`;
+	shownCode = async () => (await screen.locator("[data-slot=pairing-code]").innerText({ timeout: 20_000 })).trim();
+	explain = async () => {
+		const shown = await screen.locator("body").innerText({ timeout: 2000 }).catch((e) => String(e));
+		return `--- the paired browser shows:\n${shown.slice(0, 3000)}\n--- it opened: ${opened.join(", ")}\n--- its console: ${phoneSaid.slice(-30).join("\n")}\n--- the owner was asked: ${JSON.stringify(asked)}\n--- the relay (wrangler dev) said:\n${wranglerLog.slice(-3000)}`;
+	};
+
+	await check("pairing by link completes when the owner allows the four digits the browser shows", async () => {
+		const { link } = pairing!.open();
+		assert.ok(link.startsWith(`${origin}/#pair=${mac.machineId}.`), link);
+		await phone.page.goto(link);
+		await screen.locator("textarea").first().waitFor({ timeout: 90_000 });
+		assert.equal(asked.length, 1, "the owner was asked once");
+		assert.match(asked[0].code, /^\d{4}$/);
+		assert.equal(asked[0].shown, asked[0].code);
+		assert.deepEqual(mac.store.devices().map((d) => d.name), [asked[0].name]);
+		// The link's fragment is gone from the address at once: it carried the code.
+		assert.equal(phone.page.url(), `${origin}/`);
+	});
+
+	await check("the paired Mac is listed under its computer's name, never its id", async () => {
+		const foot = screen.locator("[data-slot=service-status]");
+		await foot.and(screen.locator(`[aria-label*="${COMPUTER}"]`)).waitFor({ timeout: 30_000 });
+		await foot.click();
+		const item = screen.locator(`[data-host="${paired}"]`);
+		await item.waitFor({ timeout: 10_000 });
+		assert.equal((await item.innerText()).trim(), COMPUTER);
+		await phone.page.keyboard.press("Escape");
+	});
+
+	await check("a conversation answers over a data channel, and no /ssh socket was opened for it", async () => {
+		const box = screen.locator("textarea").first();
+		await box.fill('Say it. <<MOCK {"steps":[{"text":"The answer came back peer to peer."}]}>>');
+		await box.press("Enter");
+		await screen.getByText("The answer came back peer to peer.", { exact: true }).first().waitFor({ timeout: 60_000 });
+		assert.ok(opened.includes(`/meet/join?id=${mac.machineId}`), opened.join(", "));
+		assert.deepEqual(opened.filter((u) => u.startsWith("/ssh")), [], "nothing went through the relay");
+		assert.ok(opened.every((u) => u.startsWith("/meet/join?")), opened.join(", "));
+	});
+
+	await check("the page's policy still equals the desktop page's, and the iframe's sandbox is still scripts only", async () => {
+		assert.equal(await phone.page.locator("iframe").getAttribute("sandbox"), "allow-scripts");
+		const served = await fetch(`${origin}/page/`).then((r) => r.text());
+		assert.equal(metaCsp(served), pageCsp({ media: [] }));
+		const origins = await (async () => {
+			for (;;) {
+				const f = phone.page.frames().find((x) => x.parentFrame() === phone.page.mainFrame() && x.url().includes("/page/"));
+				if (f) return f.evaluate(() => window.origin);
+				await new Promise((r) => setTimeout(r, 50));
+			}
+		})();
+		assert.equal(origins, "null");
+	});
+
+	await check("after the access host restarts, the browser connects again by itself and the conversation goes on", async () => {
+		const joins = opened.length;
+		const foot = screen.locator("[data-slot=service-status]");
+		// As the app does when it quits and opens again: the same key, from the same folder.
+		await mac.stop();
+		await foot.and(screen.locator(`[aria-label*="${COMPUTER} not reached"], [aria-label*="connecting to ${COMPUTER}"], [aria-label*="pine does not answer"]`)).waitFor({ timeout: 30_000 });
+		mac = await startHost();
+		assert.equal(`mac:${mac.machineId}`, paired, "the same Mac");
+		await foot.and(screen.locator(`[aria-label*="· ${COMPUTER}"]`)).waitFor({ timeout: 90_000 });
+		assert.ok(opened.length > joins, "a new meeting was joined");
+		const box = screen.locator("textarea").first();
+		await box.fill('Again. <<MOCK {"steps":[{"text":"Still here after the Mac came back."}]}>>');
+		await box.press("Enter");
+		await screen.getByText("Still here after the Mac came back.", { exact: true }).first().waitFor({ timeout: 60_000 });
+		assert.deepEqual(opened.filter((u) => u.startsWith("/ssh")), []);
+		assert.equal(asked.length, 1, "nobody was asked again");
+		assert.deepEqual(phoneErrors.filter((e) => /Content Security Policy|Refused/.test(e)), [], "the paired browser's page broke no policy");
 	});
 
 	await check("a browser without Ed25519 in WebCrypto is told which browsers work, and nothing else starts", async () => {

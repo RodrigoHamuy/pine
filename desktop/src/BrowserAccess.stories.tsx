@@ -44,7 +44,7 @@ export const TurningOn: Story = {
 	},
 };
 
-/** A fresh app with no service address yet: the problem is said under the switch. */
+/** No service address (a build that names no official one): the problem is said under the switch. */
 export const NeedsAnAddress: Story = {
 	args: { state: { ...off, service: "", problem: { kind: "address", message: "Browser access needs the address of the service a browser opens: write the address of your own deployment of pine's web client." } } },
 };
