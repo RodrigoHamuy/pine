@@ -17,6 +17,10 @@ class CasesTest {
 		"fingerprints" to "KeysTest",
 		"service-lines" to "ServiceTest",
 		"failures" to "ServiceTest",
+		"pair-links" to "PairedTest",
+		"machine-ids" to "PairedTest",
+		"device-names" to "PairedTest",
+		"paired-machines" to "PairedTest",
 	)
 
 	@Test
