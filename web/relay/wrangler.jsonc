@@ -1,5 +1,6 @@
 // The relay of pine's web client. `npm run dev` serves it locally. A pull request that touches the
-// web client gets a version of its own under a preview alias (.github/workflows/web-preview.yml);
+// web client, and every push to next and main that does, gets a version of its own under a preview
+// alias (pr-<number>, next, main: .github/workflows/web-preview.yml);
 // the Worker's live version is changed only by hand (`npx wrangler deploy` in web/relay).
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -7,7 +8,7 @@
   "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
   // No live address on workers.dev: only the preview addresses of uploaded versions
-  // (pr-<number>-pine-relay.<account>.workers.dev), which a workflow posts on its pull request.
+  // (pr-<number>-, next- and main-pine-relay.<account>.workers.dev), which a workflow posts.
   "workers_dev": false,
   "preview_urls": true,
   // The web client's build (`npm run build` in web/), served by the same Worker: every request
