@@ -891,6 +891,18 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	assert.equal(await page.locator("[data-slot=spinner]").count(), 0);
 	const beats = await page.$$eval("[data-slot=pulse]", (els: Element[]) => els.map((e) => (e as HTMLElement).getAnimations()[0]?.currentTime));
 	assert.ok(beats.every((t) => t === beats[0]), `every dot at the same point of the beat: ${beats.join(", ")}`);
+	// Whatever goes on for as long as an agent works changes in steps, a few times a second: an animation
+	// that runs smoothly forever makes the system draw the whole window at the screen's rate the whole time
+	// (it cost a fifth of a core while agents worked; desktop/test/view-perf.test.ts measures it).
+	const smooth = await page.evaluate(() =>
+		document
+			.getAnimations()
+			.filter((a) => a.effect?.getComputedTiming().iterations === Infinity && a.playState === "running")
+			.map((a) => (a.effect as KeyframeEffect).target as HTMLElement)
+			.filter((el) => el && !getComputedStyle(el).animationTimingFunction.startsWith("steps("))
+			.map((el) => el.getAttribute("data-slot") ?? el.className.toString().slice(0, 40)),
+	);
+	assert.deepEqual(smooth, [], "no animation runs smoothly forever");
 	await page.locator("[data-slot=dialog-content][data-tone=warn]").getByRole("button", { name: /^Allow/ }).click();
 	await sees('[data-item="approval"][data-state="allowed"]');
 	// Then the agent asks something: the answers it offers, the recommended one first.
