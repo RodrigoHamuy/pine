@@ -289,7 +289,7 @@ struct PeerTests {
 			#expect(e.hostKey == nil)
 			let link = try #require(try await rig.host.command("open")["link"] as? String)
 			let code = String(link.split(separator: ".").last!)
-			let end = await remote.pair(PairLink(service: rig.host.service, host: "127.0.0.1", id: rig.host.machineId, code: code), name: "Pine on a test") { _ in }.result()
+			let end = await remote.pair(PairLink(service: rig.host.service, id: rig.host.machineId, code: code), name: "Pine on a test") { _ in }.result()
 			#expect(end != nil && end != .allowed(name: "Test Mac") && end != .expired)
 			#expect(rig.host.events("connected").isEmpty, "no session reached the computer")
 			#expect(rig.host.events("asked").isEmpty)
@@ -302,7 +302,7 @@ struct PeerTests {
 		let id = String(repeating: "B", count: 43)
 		let e = try await #require(throws: RemoteError.self) { try await remote.connect("paired:\(id)") }
 		#expect(e.message.contains("pair it again"))
-		let other = PairedComputer(id: String(repeating: "C", count: 43), service: OFFICIAL_SERVICE, name: nil)
+		let other = PairedComputer(id: String(repeating: "C", count: 43), service: TEST_SERVICE, name: nil)
 		#expect(try await #require(throws: RemoteError.self) { try await remote.connect("paired:\(id)", paired: other) }.message.contains("pair it again"))
 	}
 
