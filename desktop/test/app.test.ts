@@ -1687,6 +1687,8 @@ test("conversations are kept in groups: one made from the agent's menu is filled
 	await page.keyboard.press("Enter");
 	await sees("[data-slot=dialog-content] [role=option] >> text=Okapi");
 	await page.keyboard.type("Okapi");
+	// Enter once the list has followed what was typed: on a slow machine it is a moment behind the keys.
+	await sees("[data-slot=dialog-content] [role=option][aria-selected=true] >> text=Okapi");
 	await page.keyboard.press("Enter");
 	await group("Okapi").locator("[role=option]", { hasText: /okapi-web$/ }).waitFor();
 	assert.equal(await groupOf("okapi-web"), "Okapi");
