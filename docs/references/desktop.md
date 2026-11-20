@@ -354,9 +354,9 @@ if you have none.
 
 | What | How |
 |---|---|
-| `Relay server (TURN)` | A relay server of your own, used when no direct connection can be made, for example from mobile data on some mobile networks: its address (`turn:host:port` or `turns:host:port`, with `?transport=udp` or `tcp` if needed; `turns:` is TLS), a user name and a password. This computer reserves an address on it and offers it beside its direct ones; a direct path is still preferred, and the browser needs nothing. A device connected through it is listed as relayed |
+| `Relay server (TURN)` | A relay server of your own, used when no direct connection can be made, for example from mobile data on some mobile networks: its address (`turn:host:port`, over UDP; TURN over TCP or TLS, `turns:` or `?transport=tcp`, is refused, since the app cannot use it today), a user name and a password. This computer reserves an address on it and offers it beside its direct ones; a direct path is still preferred, and the browser needs nothing. A device connected through it is listed as relayed |
 | The line under it | Saved, the relay is tried at once: it works, or why not (it did not answer, it refused the user name or password, or its name was not found). A relay that fails the try is kept, since its server may be down for a moment |
-| What is kept | The address and user name in `prefs.json`, the password in `access.bin`, encrypted by the keychain. The password is never shown again: the field says one is kept, and a new one replaces it. Saving the fields empty removes the relay and its password. Devices stay paired |
+| What is kept | The address and user name in `prefs.json`, the password in `access.bin`, encrypted by the keychain. The password is never shown again: the field says one is kept, and a new one replaces it. It is the password of that address and user name only: saved with another host, port or user name and no password, the relay is kept without one, and the field says so. Saving the fields empty removes the relay and its password. Devices stay paired |
 
 ### When a paired device does not connect
 

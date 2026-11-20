@@ -6,7 +6,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import type { Duplex } from "node:stream";
 import { test } from "node:test";
-import { answer, iceServerOf, offer, pathOf, type Peer, type RelayServer, type Signal, tryRelay } from "../electron/access/peer.ts";
+import { answer, iceServerOf, iceServersOf, offer, pathOf, type Peer, type RelayServer, type Signal, tryRelay } from "../electron/access/peer.ts";
 import { freeUdpPort, silentUdpPort, startTurn, TURN_PASSWORD, TURN_USER } from "./support/turn.ts";
 
 const until = async (what: string, ok: () => boolean, ms = 5000) => {
@@ -211,7 +211,7 @@ test("a process whose connections all closed ends by itself: nothing is left hol
 
 // ---- the owner's relay (TURN) server ----------------------------------------------------------
 
-const relayOn = (port: number, more: Partial<RelayServer> = {}): RelayServer => ({ hostname: "127.0.0.1", port, transport: "udp", username: TURN_USER, password: TURN_PASSWORD, ...more });
+const relayOn = (port: number, more: Partial<RelayServer> = {}): RelayServer => ({ hostname: "127.0.0.1", port, username: TURN_USER, password: TURN_PASSWORD, ...more });
 const isRelay = (d: Signal) => "ice" in d && / typ relay\b/.test(d.ice.candidate);
 
 test("with a relay, the computer offers an address on it among its candidates; the browser is given none", async () => {
@@ -237,17 +237,12 @@ test("with a relay, the computer offers an address on it among its candidates; t
 	}
 });
 
-test("a TURN server named by the meeting service is not used: only the owner's own relay is", async () => {
-	const turn = await startTurn();
-	const sent: Signal[] = [];
-	const lone = offer({ ice: [{ urls: `turn:${TURN_USER}:${TURN_PASSWORD}@127.0.0.1:${turn.port}` }], send: (d) => sent.push(d) });
-	try {
-		await new Promise((r) => setTimeout(r, 1500));
-		assert.ok(!sent.some(isRelay), "no relay candidate from the service's list");
-	} finally {
-		lone.close();
-		await turn.close();
-	}
+test("a TURN server named by the meeting service is not used: only the owner's own relay is", () => {
+	// What the library is handed: the service's STUN servers, and a TURN entry from the owner's setting alone.
+	const service = [{ urls: `turn:${TURN_USER}:${TURN_PASSWORD}@127.0.0.1:3478` }, { urls: ["turns:127.0.0.1:5349", "stun:stun.example:3478"] }, { urls: "stuns:stun.example:5349" }];
+	assert.deepEqual(iceServersOf(service), ["stun:stun.example:3478", "stuns:stun.example:5349"]);
+	const relay = relayOn(3478);
+	assert.deepEqual(iceServersOf(service, relay), ["stun:stun.example:3478", "stuns:stun.example:5349", iceServerOf(relay)]);
 });
 
 test("two peers that offer nothing but addresses on the relay exchange bytes through it, and the path reads relay", async () => {
@@ -260,7 +255,7 @@ test("two peers that offer nothing but addresses on the relay exchange bytes thr
 		import { answer, offer } from ${JSON.stringify(new URL("../electron/access/peer.ts", import.meta.url).href)};
 		import { startTurn, TURN_PASSWORD, TURN_USER } from ${JSON.stringify(new URL("./support/turn.ts", import.meta.url).href)};
 		const turn = await startTurn();
-		const relay = { hostname: "127.0.0.1", port: turn.port, transport: "udp", username: TURN_USER, password: TURN_PASSWORD };
+		const relay = { hostname: "127.0.0.1", port: turn.port, username: TURN_USER, password: TURN_PASSWORD };
 		let computer;
 		const early = [];
 		const browser = offer({ ice: [], relay, onlyRelay: true, send: (d) => (computer ? computer.signal(d) : early.push(d)) });
@@ -305,11 +300,26 @@ test("a try of a relay: usable when it gives an address, refused for a wrong pas
 	}
 });
 
-test("the relay is handed to the library as an object: transport by type, and no credentials in a URL", () => {
-	assert.deepEqual(iceServerOf({ hostname: "relay.example", port: 3478, transport: "udp", username: "u", password: "p" }), { hostname: "relay.example", port: 3478, relayType: "TurnUdp", username: "u", password: "p" });
-	assert.equal(iceServerOf({ hostname: "relay.example", port: 3478, transport: "tcp", username: "u", password: "p" }).relayType, "TurnTcp");
-	assert.equal(iceServerOf({ hostname: "relay.example", port: 5349, transport: "tls", username: "", password: "" }).relayType, "TurnTls");
-	assert.deepEqual(iceServerOf({ hostname: "::1", port: 5349, transport: "tls", username: "", password: "" }), { hostname: "::1", port: 5349, relayType: "TurnTls" });
+test("the relay is handed to the library as an object over UDP, with no credentials in a URL, and a user name and password always written, empty or not", () => {
+	assert.deepEqual(iceServerOf({ hostname: "relay.example", port: 3478, username: "u", password: "p" }), { hostname: "relay.example", port: 3478, relayType: "TurnUdp", username: "u", password: "p" });
+	// The library refuses a relay without both (it throws "username AND password is needed").
+	assert.deepEqual(iceServerOf({ hostname: "::1", port: 3478, username: "", password: "" }), { hostname: "::1", port: 3478, relayType: "TurnUdp", username: "", password: "" });
+});
+
+test("a relay without a user name or without a password does not keep a connection from being made", async () => {
+	for (const credentials of [{ username: "", password: "" }, { username: TURN_USER, password: "" }, { username: "", password: TURN_PASSWORD }]) {
+		let computer: Peer | undefined;
+		const early: Signal[] = [];
+		const browser = offer({ ice: [], send: (d) => (computer ? computer.signal(d) : early.push(d)) });
+		computer = answer({ ice: [], relay: relayOn(await freeUdpPort(), credentials), send: (d) => browser.signal(d) });
+		for (const d of early.splice(0)) computer.signal(d);
+		try {
+			await Promise.all([computer.channel, browser.channel]);
+		} finally {
+			computer.close();
+			browser.close();
+		}
+	}
 });
 
 test("a channel with another label is not the one handed back, and is closed", async () => {

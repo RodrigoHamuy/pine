@@ -109,6 +109,18 @@ export const RelayUsable: Story = {
 	},
 };
 
+/** Another address typed over a relay whose password is kept: the field says that password is not kept for it. */
+export const RelayMoved: Story = {
+	args: { state: { ...waiting, relay: { ...RELAY, password: true } } },
+	play: async ({ canvasElement }) => {
+		const canvas = within(canvasElement);
+		const address = canvas.getByLabelText("Address");
+		await userEvent.clear(address);
+		await userEvent.type(address, "turn:other.example.com:3478");
+		await expect(canvas.getByLabelText("Password")).toHaveAttribute("placeholder", expect.stringMatching(/^Not kept for another address/));
+	},
+};
+
 /** A relay that refused the user name or password: it is kept, and the line under it says what to check. */
 export const RelayRefused: Story = {
 	args: {

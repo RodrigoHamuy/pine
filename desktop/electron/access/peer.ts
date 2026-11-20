@@ -23,13 +23,13 @@ export interface IceServer {
 export type PeerPath = "lan" | "ipv4" | "ipv6" | "relay";
 
 /**
- * A relay (TURN) server of the owner's own: where it is, how it is reached (`udp`, `tcp`, or TLS
- * over TCP for `turns:`), and the user name and password it takes. Only the computer's side has one.
+ * A relay (TURN) server of the owner's own: where it is, and the user name and password it takes.
+ * It is reached over UDP: the library is built on libjuice, which has no TURN over TCP or TLS. Only
+ * the computer's side has one.
  */
 export interface RelayServer {
 	hostname: string;
 	port: number;
-	transport: "udp" | "tcp" | "tls";
 	username: string;
 	password: string;
 }
@@ -115,10 +115,7 @@ function release(ndc: Module) {
 
 function start(options: PeerOptions, label: string | undefined): Peer {
 	const ndc = datachannel();
-	// A TURN entry is taken from the owner's own setting alone (`relay`), never from the service's list.
-	const servers: Array<string | IceServerConfig> = options.ice.flatMap((s) => (Array.isArray(s.urls) ? s.urls : [s.urls])).filter((u) => /^stuns?:/.test(u));
-	if (options.relay) servers.push(iceServerOf(options.relay));
-	const pc: PeerConnection = new ndc.PeerConnection(`pine-${++count}`, { iceServers: servers, ...(options.onlyRelay ? { iceTransportPolicy: "relay" as const } : {}) });
+	const pc: PeerConnection = new ndc.PeerConnection(`pine-${++count}`, { iceServers: iceServersOf(options.ice, options.relay), ...(options.onlyRelay ? { iceTransportPolicy: "relay" as const } : {}) });
 	live++;
 	let done = false;
 	let stream: ChannelStream | undefined;
@@ -204,10 +201,22 @@ function start(options: PeerOptions, label: string | undefined): Peer {
 	};
 }
 
-/** The relay as node-datachannel takes it: an object, so that no user name or password is written into a URL. */
+/**
+ * The servers a connection is handed: the STUN servers of the service's list, and a TURN entry from
+ * the owner's own setting alone (`relay`), never from the service's list.
+ */
+export function iceServersOf(ice: IceServer[], relay?: RelayServer): Array<string | IceServerConfig> {
+	const servers: Array<string | IceServerConfig> = ice.flatMap((s) => (Array.isArray(s.urls) ? s.urls : [s.urls])).filter((u) => /^stuns?:/.test(u));
+	if (relay) servers.push(iceServerOf(relay));
+	return servers;
+}
+
+/**
+ * The relay as node-datachannel takes it: an object, so that no user name or password is written
+ * into a URL. Both are always strings, empty or not: the library throws for a relay without both.
+ */
 export function iceServerOf(relay: RelayServer): IceServerConfig {
-	const relayType = relay.transport === "tls" ? "TurnTls" : relay.transport === "tcp" ? "TurnTcp" : "TurnUdp";
-	return { hostname: relay.hostname, port: relay.port, relayType, ...(relay.username ? { username: relay.username } : {}), ...(relay.password ? { password: relay.password } : {}) };
+	return { hostname: relay.hostname, port: relay.port, relayType: "TurnUdp", username: relay.username, password: relay.password };
 }
 
 /**

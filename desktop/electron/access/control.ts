@@ -37,15 +37,16 @@ const ADDRESS_LENGTH = 200;
 /** The longest user name and password of a relay taken. */
 const CREDENTIAL_LENGTH = 200;
 
-const RELAY_FORM = "Write the relay's address as turn:host:port or turns:host:port, for example turn:relay.example.com:3478. The user name and password go in their own fields.";
+const RELAY_FORM = "Write the relay's address as turn:host:port, for example turn:relay.example.com:3478. The user name and password go in their own fields.";
 
 /**
- * A relay server's address as the owner wrote it, checked: `turn:` or `turns:`, a host name or an
- * IP address (IPv6 in brackets), a port (3478, or 5349 for `turns:`, when none is written), and
- * `?transport=udp` or `tcp` and nothing else. `turns:` is TLS, over TCP. The address as it is kept,
+ * A relay server's address as the owner wrote it, checked: `turn:`, a host name or an IP address
+ * (IPv6 in brackets), a port (3478 when none is written), and `?transport=udp` and nothing else.
+ * TURN over TCP or TLS (`turns:`, `?transport=tcp`) is refused: the library pine connects with
+ * (node-datachannel on libjuice) skips such a server without a word. The address as it is kept,
  * and what the library is handed.
  */
-export function relayAddress(value: string): { address: string; hostname: string; port: number; transport: RelayServer["transport"] } {
+export function relayAddress(value: string): { address: string; hostname: string; port: number } {
 	const text = value.trim();
 	const match = text.length <= ADDRESS_LENGTH ? /^(turns?):(\[[0-9a-fA-F:.]+\]|[A-Za-z0-9.-]+)(?::(\d{1,5}))?(?:\?transport=(udp|tcp))?$/.exec(text) : null;
 	if (!match) throw new Error(RELAY_FORM);
@@ -53,11 +54,10 @@ export function relayAddress(value: string): { address: string; hostname: string
 	const hostname = host.startsWith("[") ? host.slice(1, -1) : host;
 	if (host.startsWith("[") && !net.isIPv6(hostname)) throw new Error(RELAY_FORM);
 	if (!host.startsWith("[") && (!/[A-Za-z0-9]/.test(hostname) || hostname.startsWith(".") || hostname.startsWith("-"))) throw new Error(RELAY_FORM);
-	const port = portText ? Number(portText) : scheme === "turns" ? 5349 : 3478;
+	const port = portText ? Number(portText) : 3478;
 	if (port < 1 || port > 65535) throw new Error(RELAY_FORM);
-	if (scheme === "turns" && transport === "udp") throw new Error("A turns: address is TLS, which runs over TCP: leave out ?transport=udp, or write turn: for UDP.");
-	const kind: RelayServer["transport"] = scheme === "turns" ? "tls" : transport === "tcp" ? "tcp" : "udp";
-	return { address: `${scheme}:${host}:${port}${transport ? `?transport=${transport}` : ""}`, hostname, port, transport: kind };
+	if (scheme === "turns" || transport === "tcp") throw new Error(`Browser access can only use turn: over UDP today, not TCP or TLS: write the relay's UDP address instead, for example turn:${host}:3478, without ?transport=tcp.`);
+	return { address: `turn:${host}:${port}${transport ? `?transport=${transport}` : ""}`, hostname, port };
 }
 
 /** A relay's user name as kept: plain text, short. */
@@ -148,7 +148,8 @@ export interface AccessRelay {
 /**
  * A change the page asks for. `service`: an address, or empty for the official one. `relay`: an
  * address, a user name and a password; an empty address removes the relay and its password, and an
- * empty password keeps the one that is kept.
+ * empty password keeps the one that is kept for the same address and user name, and forgets it for
+ * another.
  */
 export interface AccessChange {
 	enabled?: boolean;
@@ -218,8 +219,8 @@ const TRIED: Record<RelayTry | "trying", { result: "trying" | "usable" | "failed
 /** The relay of the preferences as the host is handed it, without its password. */
 const relayOf = (prefs: AccessPrefs): Omit<RelayServer, "password"> | undefined => {
 	if (!prefs.relay) return undefined;
-	const { hostname, port, transport } = relayAddress(prefs.relay.address);
-	return { hostname, port, transport, username: prefs.relay.username };
+	const { hostname, port } = relayAddress(prefs.relay.address);
+	return { hostname, port, username: prefs.relay.username };
 };
 
 export function createAccessControl(options: AccessControlOptions): AccessControl {
@@ -412,7 +413,13 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 				if (address) {
 					prefs.relay = { address: relayAddress(address).address, username: relayUser(change.relay.username) };
 					const given = typeof change.relay.password === "string" ? change.relay.password.slice(0, CREDENTIAL_LENGTH) : "";
+					const before = relayOf(options.prefs.read());
+					const now = relayOf(prefs)!;
+					const same = before !== undefined && before.hostname === now.hostname && before.port === now.port && before.username === now.username;
+					// A kept password is the one relay's it was given for: another server, port or user
+					// name saved without one is saved without a password, never with the old one.
 					if (given) password = { set: given };
+					else if (!same) password = { set: undefined };
 				} else {
 					delete prefs.relay;
 					password = { set: undefined };
