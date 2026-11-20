@@ -95,7 +95,7 @@ test("access host: with pairing as its admission, a browser pairs over the data 
 	let pairing: Pairing | undefined;
 	const asked: PairingRequest[] = [];
 	const { host } = await setup(m.url, {
-		admit: ({ store, service, cut }) => (pairing = createPairing({ store, service, cut, ask: async (request) => (asked.push(request), true), computerName: () => "The Mac" })).admit,
+		admit: ({ store, service, cut }) => (pairing = createPairing({ store, service, cut, ask: async (request) => (asked.push(request), true), computerName: () => "Studio Mac" })).admit,
 	});
 	await until(() => host.status() === "waiting", "the host waits");
 	const { link } = pairing!.open();
@@ -111,7 +111,7 @@ test("access host: with pairing as its admission, a browser pairs over the data 
 	const [digits, answer] = said.trim().split("\n").map((l) => JSON.parse(l));
 	assert.match(digits.code, /^\d{4}$/);
 	assert.deepEqual(asked, [{ name: "Chrome on Android", code: digits.code }]);
-	assert.deepEqual(answer, { ok: true, name: "The Mac" });
+	assert.deepEqual(answer, { ok: true, name: "Studio Mac" });
 	pairingSession.end();
 	first.close();
 
@@ -122,8 +122,8 @@ test("access host: with pairing as its admission, a browser pairs over the data 
 	second.close();
 });
 
-test("access host: a meeting service that puts the browser through to another Mac is caught by the pinned host key, before the browser's key is offered", async () => {
-	// Two Macs wait, each proven under its own id; the service sends a browser that asks for the
+test("access host: a meeting service that puts the browser through to another computer is caught by the pinned host key, before the browser's key is offered", async () => {
+	// Two computers wait, each proven under its own id; the service sends a browser that asks for the
 	// first to the second.
 	let other = "";
 	const m = await meeting({ swap: () => other });
@@ -136,9 +136,9 @@ test("access host: a meeting service that puts the browser through to another Ma
 	const browser = join(m.url, mine.machineId);
 	const ssh = sshOver(await browser.channel, mine.machineId, newEd25519Key().private);
 	await assert.rejects(ssh.ready);
-	assert.deepEqual(ssh.seen, [theirs.machineId], "the host key the browser was shown is the other Mac's");
+	assert.deepEqual(ssh.seen, [theirs.machineId], "the host key the browser was shown is the other computer's");
 	assert.equal(ssh.offered(), 0, "the browser offered no key");
-	assert.deepEqual(asked, [], "the other Mac was asked about nobody");
+	assert.deepEqual(asked, [], "the other computer was asked about nobody");
 	browser.close();
 });
 
@@ -173,14 +173,14 @@ test("access host: a service that is not there at the start is waited for", asyn
 	await until(() => host.status() === "waiting", "the host waits once the service is there", 5000);
 });
 
-test("access host: at most eight browsers at a time; the ninth is turned away by the Mac", async () => {
+test("access host: at most eight browsers at a time; the ninth is turned away by the computer", async () => {
 	const m = await meeting();
 	const { host } = await setup(m.url);
 	await until(() => host.status() === "waiting", "the host waits");
 	const browsers = Array.from({ length: 8 }, () => join(m.url, host.machineId));
 	await Promise.all(browsers.map((b) => b.channel));
 	const ninth = join(m.url, host.machineId);
-	assert.equal(await ninth.closed, 1000, "the Mac ended the ninth's meeting");
+	assert.equal(await ninth.closed, 1000, "the computer ended the ninth's meeting");
 	await assert.rejects(ninth.channel);
 	for (const b of browsers) b.close();
 	// Once they left, there is room again.
@@ -232,7 +232,7 @@ test("access host: stopping it closes the meeting socket and every connection", 
 	await host.stop();
 	await gone;
 	await browser.peer.closed;
-	// No Mac waits there any more.
+	// No computer waits there any more.
 	assert.equal(await join(m.url, host.machineId).closed, 4404);
 });
 

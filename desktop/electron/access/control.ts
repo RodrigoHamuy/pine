@@ -5,6 +5,7 @@
 // the app's main process hands it the keychain as the cipher, its notifications, the login item
 // and the daemon of this computer.
 import path from "node:path";
+import { computerWord } from "../../src/machines.ts";
 import { ACCESS_FILE, type AccessHost, type AccessHostOptions, type Cipher, fileVault, type HostStatus, startAccessHost } from "./host.ts";
 import { createPairing, type Pairing, type PairingRequest } from "./pairing.ts";
 import type { PeerPath } from "./peer.ts";
@@ -13,7 +14,7 @@ import { AccessStore, type Device } from "./store.ts";
 /**
  * The address of the project's own service (the web client and the meeting service), which the
  * app uses unless the owner names another: the Worker `pine` of web/relay (`--env official`) on
- * the project's workers.dev account. A browser's key and its paired Macs belong to this address, so
+ * the project's workers.dev account. A browser's key and its paired computers belong to this address, so
  * changing it makes every owner pair again.
  */
 export const OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev";
@@ -65,7 +66,7 @@ export interface AccessDevice {
 
 /**
  * Why browser access cannot be on: `keychain`, the system's keychain cannot encrypt the host key
- * here; `address`, no service address is known; `replaced`, another copy of this Mac's key waits
+ * here; `address`, no service address is known; `replaced`, another copy of this computer's key waits
  * at the service; `failed`, the host could not start (`message` says why).
  */
 export interface AccessProblem {
@@ -115,7 +116,7 @@ export interface AccessControlOptions {
 	paired: (device: Device) => void;
 	/** The state changed. */
 	changed: (state: AccessState) => void;
-	/** The name a paired browser stores for this Mac. */
+	/** The name a paired browser stores for this computer. */
 	computerName?: () => string;
 	/** Starts the access host (`startAccessHost`; a test's stand-in). */
 	start?: (options: AccessHostOptions) => Promise<Host>;
@@ -136,9 +137,11 @@ export interface AccessControl {
 	stop(): Promise<void>;
 }
 
-const NO_KEYCHAIN = "This Mac's keychain cannot be used here, and browser access keeps this Mac's key encrypted by it: browser access cannot be turned on.";
+// The page shows these as they are: they name this computer as the page does ("this Mac" on macOS).
+const COMPUTER = computerWord(process.platform);
+const NO_KEYCHAIN = `This ${COMPUTER}'s keychain cannot be used here, and browser access keeps this ${COMPUTER}'s key encrypted by it: browser access cannot be turned on.`;
 const NO_ADDRESS = "Browser access needs the address of the service a browser opens: write the address of your own deployment of pine's web client.";
-const REPLACED = "Another copy of Pine with this Mac's key waits at the service now, so this one stopped. Turn browser access off and on again to wait here.";
+const REPLACED = `Another copy of Pine with this ${COMPUTER}'s key waits at the service now, so this one stopped. Turn browser access off and on again to wait here.`;
 
 export function createAccessControl(options: AccessControlOptions): AccessControl {
 	const official = options.official ?? OFFICIAL_SERVICE;

@@ -1,4 +1,4 @@
-// The meeting service: a Mac waits under its machine id after it proved it owns the key, a
+// The meeting service: a computer waits under its machine id after it proved it owns the key, a
 // browser that names the id is put through, and a few small messages cross both ways (the
 // WebRTC offer, answer and candidates) until the two talk directly. The service never carries
 // the conversation, keeps nothing and logs nothing.
@@ -10,16 +10,16 @@
 // lost everything else, carries on: timers are a convenience, and every limit is checked again
 // when a message comes.
 
-/** The text a Mac signs, before the challenge and the service's address. */
+/** The text a computer signs, before the challenge and the service's address. */
 export const PROOF_PREFIX = "pine-meet-v1";
 
-/** WebSocket close codes the Mac and the browser read. */
+/** WebSocket close codes the computer and the browser read. */
 export const CLOSE = {
 	/** A message that is not one the service expects. */
 	bad: 4400,
-	/** The Mac's proof was refused, or came too late. */
+	/** The computer's proof was refused, or came too late. */
 	proof: 4401,
-	/** No Mac waits under that id, or it left. */
+	/** No computer waits under that id, or it left. */
 	absent: 4404,
 	/** The session ran out of time. */
 	timeout: 4408,
@@ -36,7 +36,7 @@ export type Limits = {
 	maxMessages: number;
 	/** How long a session lasts. */
 	sessionMs: number;
-	/** How long a Mac has to prove its key. */
+	/** How long a computer has to prove its key. */
 	proofMs: number;
 };
 
@@ -65,7 +65,7 @@ export function isMachineId(id: unknown): id is string {
 	return typeof id === "string" && /^[A-Za-z0-9_-]{43}$/.test(id);
 }
 
-/** The route of a meeting request: `/meet/host?id=` for a Mac, `/meet/join?id=` for a browser. */
+/** The route of a meeting request: `/meet/host?id=` for a computer, `/meet/join?id=` for a browser. */
 export function route(url: URL): { kind: "host" | "join"; id: string } | null {
 	const kind = url.pathname === "/meet/host" ? "host" : url.pathname === "/meet/join" ? "join" : null;
 	const id = url.searchParams.get("id");
@@ -149,7 +149,7 @@ export function meeting(room: Room, options: Options = {}) {
 
 	const live = () => room.peers().filter((p) => p.note() && !p.note()!.gone);
 	const byKey = (k: string) => live().find((p) => p.note()!.k === k);
-	const mac = () => live().find((p) => { const n = p.note()!; return n.role === "host" && n.proven; });
+	const waiting = () => live().find((p) => { const n = p.note()!; return n.role === "host" && n.proven; });
 	const browser = (s: unknown) => live().find((p) => { const n = p.note()!; return n.role === "join" && n.s === s; });
 
 	const leave = (peer: Peer, code: number, reason: string) => {
@@ -160,11 +160,11 @@ export function meeting(room: Room, options: Options = {}) {
 		} catch {}
 	};
 
-	/** Ends a browser's session, and tells the Mac unless it ended it itself. */
+	/** Ends a browser's session, and tells the computer unless it ended it itself. */
 	const end = (peer: Peer, code: number, reason: string, tell = true) => {
 		const note = peer.note();
 		leave(peer, code, reason);
-		const host = mac();
+		const host = waiting();
 		if (tell && host && note?.role === "join") host.send(JSON.stringify({ t: "close", s: note.s }));
 	};
 
@@ -196,8 +196,8 @@ export function meeting(room: Room, options: Options = {}) {
 			for (const other of live()) {
 				const n = other.note()!;
 				if (other === peer || n.k === note.k) continue;
-				if (n.role === "join") leave(other, CLOSE.absent, "The Mac connected again; try again.");
-				else if (n.proven) leave(other, CLOSE.replaced, "A newer connection for this Mac took this one's place.");
+				if (n.role === "join") leave(other, CLOSE.absent, "The computer connected again; try again.");
+				else if (n.proven) leave(other, CLOSE.replaced, "A newer connection for this computer took this one's place.");
 			}
 			peer.keep({ ...note, proven: true });
 			peer.send(JSON.stringify({ t: "waiting" }));
@@ -205,9 +205,9 @@ export function meeting(room: Room, options: Options = {}) {
 		}
 		if (!message || typeof message.s !== "string" || (message.t !== "signal" && message.t !== "close")) return leave(peer, CLOSE.bad, "Not a message of the meeting.");
 		const other = browser(message.s);
-		// A session that ended meanwhile: the Mac learns it from the close it was sent.
+		// A session that ended meanwhile: the computer learns it from the close it was sent.
 		if (!other) return;
-		if (message.t === "close") return end(other, 1000, "The Mac ended the meeting.", false);
+		if (message.t === "close") return end(other, 1000, "The computer ended the meeting.", false);
 		if (!("d" in message) || !admit(other, bytes(data as string))) return;
 		other.send(JSON.stringify({ t: "signal", d: message.d }));
 	}
@@ -216,15 +216,15 @@ export function meeting(room: Room, options: Options = {}) {
 		const message = parse(data);
 		if (!message || message.t !== "signal" || !("d" in message)) return leave(peer, CLOSE.bad, "Not a message of the meeting.");
 		if (!admit(peer, bytes(data as string))) return;
-		const host = mac();
-		if (!host) return leave(peer, CLOSE.absent, "The Mac left.");
+		const host = waiting();
+		if (!host) return leave(peer, CLOSE.absent, "The computer left.");
 		host.send(JSON.stringify({ t: "signal", s: (peer.note() as Extract<Note, { role: "join" }>).s, d: message.d }));
 	}
 
 	return {
-		/** Whether a Mac waits: a browser has someone to meet. */
-		present: () => Boolean(mac()),
-		/** A Mac's socket: it is challenged, and waits once it proved its key. */
+		/** Whether a computer waits: a browser has someone to meet. */
+		present: () => Boolean(waiting()),
+		/** A computer's socket: it is challenged, and waits once it proved its key. */
 		host(peer: Peer, id: string, origin: string) {
 			const nonce = random(32);
 			const k = random(12);
@@ -236,10 +236,10 @@ export function meeting(room: Room, options: Options = {}) {
 				if (p && n?.role === "host" && !n.proven) leave(p, CLOSE.proof, "No proof in time.");
 			});
 		},
-		/** A browser's socket: put through to the Mac, or told there is none. */
+		/** A browser's socket: put through to the computer, or told there is none. */
 		join(peer: Peer) {
-			const host = mac();
-			if (!host) return leave(peer, CLOSE.absent, "No Mac waits under this id.");
+			const host = waiting();
+			if (!host) return leave(peer, CLOSE.absent, "No computer waits under this id.");
 			const s = random(16);
 			const k = random(12);
 			peer.keep({ k, role: "join", at: now(), s, n: 0 });
@@ -267,8 +267,8 @@ export function meeting(room: Room, options: Options = {}) {
 				others.find((p) => { const n = p.note()!; return n.role === "host" && n.proven; })?.send(JSON.stringify({ t: "close", s: note.s }));
 				return;
 			}
-			// The Mac that left was the one browsers met: their sessions have nobody at the other end.
-			if (note.proven) for (const other of others) if (other.note()!.role === "join") leave(other, CLOSE.absent, "The Mac left.");
+			// The computer that left was the one browsers met: their sessions have nobody at the other end.
+			if (note.proven) for (const other of others) if (other.note()!.role === "join") leave(other, CLOSE.absent, "The computer left.");
 		},
 	};
 }

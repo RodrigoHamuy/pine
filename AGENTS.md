@@ -138,7 +138,7 @@ baseline/           pi SDK behaviour checks and their results; the mock model se
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
                     main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app;
-                    electron/access/ is browser access, without Electron: the access server on ssh2, this Mac's host key and
+                    electron/access/ is browser access, without Electron: the access server on ssh2, this computer's host key and
                     the paired devices, pairing, the WebRTC data channel on node-datachannel, the host that waits at the
                     meeting service, and the control the page's Settings > Browser access reads), src/ the
                     page (React, Tailwind v4, shadcn on Base UI, shadcn's core chat components composed per shadcn's AI Elements
@@ -176,13 +176,13 @@ mobile/             the Android and iOS app (Capacitor; a package of its own, no
                     drives the emulator (`smoke.mjs`) and the simulator (`smoke-ios.mjs`), and makes the IPA (`ipa.ts`).
                     docs/references/mobile.md describes it; docs/adr/0001-mobile-app.md and 0002-ios-app.md say why it is so
 web/                the web client (a package of its own, not part of what goes to npm): the desktop page in a
-                    browser, for the owner's own pine over SSH, or the Pine app's pine on a Mac paired by QR code, no daemon in
+                    browser, for the owner's own pine over SSH, or the Pine app's pine on a computer paired by QR code, no daemon in
                     the browser. src/ is the web bridge,
                     the top-level document (`bridge-main.ts`, `host.ts`: the browser's key, machines, trusted host
                     keys, the SSH connection and the daemon's token), its door for the page's messages (`serve.ts`,
                     the fixed list in `protocol.ts`), SSH in the browser (`ssh.ts`: @microsoft/dev-tunnels-ssh with
                     Ed25519 on WebCrypto), what runs over it (`tunnel.ts`, `remote-command.ts`), and what the page
-                    carries inside its sandboxed iframe (`frame-bridge.ts`, `page-*.ts`); a paired Mac's link and
+                    carries inside its sandboxed iframe (`frame-bridge.ts`, `page-*.ts`); a paired computer's link and
                     pairing request (`pairing.ts`) and the data channel that carries SSH to it (`peer.ts`). scripts/
                     builds it and runs the smoke. relay/ is the relay, a Cloudflare Worker of its own package that
                     carries SSH (while `RELAY` is on) and serves the build beside it, and the meeting service
@@ -605,27 +605,27 @@ These are invariants. A change that breaks one needs a test that shows why it is
    suite of `npm test` reaches (the opaque origin, a message from another window, the token kept
    from the page, a frame that navigates itself making the whole client start anew) `npm run smoke` in `web/` proves as named checks.
    Browser access (`desktop/electron/access/`, `docs/adr/0004-browser-access.md`) lets a browser
-   paired at the Mac reach the Pine app's own pine, peer to peer. The access server in the app's
+   paired at the computer that runs the Pine app reach that app's own pine, peer to peer. The access server in the app's
    main process is an SSH server with two permissions and no third: it answers the exact string of
-   `remoteCommand()` (compared, never run) with the service line of this Mac's own daemon (its
+   `remoteCommand()` (compared, never run) with the service line of this computer's own daemon (its
    token included, handed to a client that signed in, as `sshd` would hand it), and
    opens direct-tcpip channels to exactly that line's loopback host and port. Every other request
    (a shell, a pty, a subsystem, another command, another destination, a password,
-   keyboard-interactive) is refused, it accepts only Ed25519 keys paired at the Mac, at most 8
+   keyboard-interactive) is refused, it accepts only Ed25519 keys paired at that computer, at most 8
    connections at a time and 20 seconds to authenticate; do not widen it without a test that
-   shows why it is still safe. A key is paired only by the owner's Allow at the Mac, after a
+   shows why it is still safe. A key is paired only by the owner's Allow at the computer, after a
    one-time code from the QR code (compared in constant time, consumed on first use) and four
    digits shown on both sides; refused or expired, nothing is stored, and a removed device's
    sessions are cut at once. The host key is kept encrypted with the keychain (Electron's safe
    storage), and a device's name is plain text of 60 characters at most. The pairing link
    (`#pair=<machine id>.<code>`, in the fragment, which no server sees) is the second way a host
    key is trusted in the web client, beside the owner's press on "Trust this key": the machine id
-   is the fingerprint of the Mac's host key, accepted once, for the machine that link names alone,
+   is the fingerprint of that computer's host key, accepted once, for the machine that link names alone,
    never over a key kept for it already; the bridge takes it out of the address before anything
    else (`takePairLink`). The data channel lives in the web bridge, never in the page's iframe,
    and carries SSH end to end. The Worker carries SSH for the relay (while `RELAY` is on: off on
    the official service) and, for meetings, small opaque messages (`web/relay/src/meet.ts`: at
-   most 64 of 16 KiB each, for 30 seconds), and keeps no storage: a Mac waits under a machine id
+   most 64 of 16 KiB each, for 30 seconds), and keeps no storage: a computer waits under a machine id
    only after it signed the service's challenge with that key, and the Durable Object's state is
    its open sockets. The smoke proves pairing from end to end, and that the page's policy and its
    iframe's sandbox are unchanged on that path.

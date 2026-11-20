@@ -38,7 +38,7 @@ export interface Meeting {
 }
 
 export interface MeetingOptions {
-	/** Where a browser that joins `id` is sent instead: a service that lies about who is the Mac. */
+	/** Where a browser that joins `id` is sent instead: a service that lies about who is the computer. */
 	swap?: (id: string) => string;
 	/** What `/meet/config` answers. No STUN server by default: a test reaches no network. */
 	config?: unknown;
@@ -127,7 +127,7 @@ export function join(service: string, id: string): Browser {
 			for (const text of early.splice(0)) ws.send(text);
 		} else if (message.t === "signal") peer?.signal(message.d);
 	});
-	// The offer is made once the Mac is there, as the web client does.
+	// The offer is made once the computer is there, as the web client does.
 	const opened = new Promise<Peer>((resolve, reject) => {
 		ws.addEventListener("message", (e) => {
 			if (JSON.parse(String(e.data)).t !== "ready") return;

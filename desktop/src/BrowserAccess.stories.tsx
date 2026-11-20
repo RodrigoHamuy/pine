@@ -22,7 +22,7 @@ const meta = {
 	// No docs page: it would open every story's dialog at once, one over the other.
 	tags: ["!autodocs"],
 	parameters: { layout: "fullscreen" },
-	args: { state: off, now: NOW, actions: { set: fn(async () => {}), add: fn(), close: fn(), answer: fn(), remove: fn(), copy: fn() } },
+	args: { state: off, now: NOW, platform: "darwin", actions: { set: fn(async () => {}), add: fn(), close: fn(), answer: fn(), remove: fn(), copy: fn() } },
 	render: (args) => (
 		<div className="@container/settings mx-auto flex max-w-3xl flex-col gap-6 px-4 pt-6 pb-16">
 			<BrowserAccessView {...args} />
@@ -32,8 +32,21 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** Off, as a fresh app has it: nothing contacted, no device. */
-export const Off: Story = {};
+/** Off, as a fresh app has it: nothing contacted, no device. On a Mac the section is about "This Mac". */
+export const Off: Story = {
+	play: async ({ canvasElement }) => {
+		await expect(within(canvasElement).getByText("This Mac")).toBeInTheDocument();
+	},
+};
+
+/** The app on another system than macOS: the section is about "This computer", and no text says Mac. */
+export const NotAMac: Story = {
+	args: { state: waiting, platform: "linux" },
+	play: async ({ canvasElement }) => {
+		await expect(within(canvasElement).getByText("This computer")).toBeInTheDocument();
+		await expect(canvasElement).not.toHaveTextContent(/\bMac\b/);
+	},
+};
 
 /** Turned on the first time: "Open Pine at login" is offered, checked. */
 export const TurningOn: Story = {

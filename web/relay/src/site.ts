@@ -47,7 +47,7 @@ export function site(deps: SiteDeps) {
 	return async function fetch(request: Request, env: SiteEnv): Promise<Response> {
 		const url = new URL(request.url);
 		if (url.pathname === "/ssh") {
-			if (env.RELAY !== "on") return text(404, "The SSH relay is off on this service. Pair a Mac from the Pine app instead.");
+			if (env.RELAY !== "on") return text(404, "The SSH relay is off on this service. Pair a computer from the Pine app instead.");
 			return deps.relay(request, env);
 		}
 		const meets = url.pathname === "/meet/config" || url.pathname === "/meet/host" || url.pathname === "/meet/join";

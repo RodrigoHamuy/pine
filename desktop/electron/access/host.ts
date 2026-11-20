@@ -13,16 +13,16 @@ import { answer, type IceServer, type Peer, type PeerPath, type Signal } from ".
 import { type AccessServer, type Admit, createAccessServer, MAX_CONNECTIONS, pairedKeys, type SessionEvent } from "./server.ts";
 import { AccessStore, type Vault } from "./store.ts";
 
-/** The text the Mac signs before the challenge and the service's address (the meeting's `PROOF_PREFIX`). */
+/** The text the computer signs before the challenge and the service's address (the meeting's `PROOF_PREFIX`). */
 const PROOF_PREFIX = "pine-meet-v1";
 
-/** The meeting's close code for "a newer proven socket for this Mac took this one's place". */
+/** The meeting's close code for "a newer proven socket for this computer took this one's place". */
 const REPLACED = 4409;
 
 /**
  * Where the host stands with the meeting service. `waiting`: proven and findable. `unreachable`:
  * the service cannot be reached, or refused, and the host tries again by itself. `replaced`:
- * another copy of this Mac's key waits there now, and this one stopped trying, so that two apps
+ * another copy of this computer's key waits there now, and this one stopped trying, so that two apps
  * do not take each other's place for ever.
  */
 export type HostStatus = "connecting" | "waiting" | "unreachable" | "replaced";
@@ -95,7 +95,7 @@ export interface AccessHostOptions {
 }
 
 export interface AccessHost {
-	/** The host key's fingerprint, under which the Mac waits and which a pairing link names. */
+	/** The host key's fingerprint, under which the computer waits and which a pairing link names. */
 	machineId: string;
 	/** The service's origin. */
 	service: string;

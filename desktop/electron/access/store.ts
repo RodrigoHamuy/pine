@@ -1,4 +1,4 @@
-// What the access server keeps: this Mac's SSH host key and the devices that were paired with it.
+// What the access server keeps: this computer's SSH host key and the devices that were paired with it.
 // It is one JSON text handed to a vault the caller gives: the app's vault encrypts it with the
 // system's keychain and writes it into the app's own data folder; a test's keeps it in memory.
 // No Electron here, so that it runs under plain Node.
@@ -90,7 +90,7 @@ function algorithmOf(blob: Buffer): string | undefined {
 	return blob.subarray(4, 4 + length).toString("latin1");
 }
 
-/** This Mac's host key and its paired devices, read once and written through the vault on every change. */
+/** This computer's host key and its paired devices, read once and written through the vault on every change. */
 export class AccessStore {
 	private kept: Kept;
 	private vault: Vault;

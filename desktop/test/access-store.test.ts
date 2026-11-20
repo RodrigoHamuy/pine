@@ -1,4 +1,4 @@
-// What the access server keeps (electron/access/store.ts): this Mac's host key and the paired
+// What the access server keeps (electron/access/store.ts): this computer's host key and the paired
 // devices, through a vault the caller hands in. The test's vault is memory; the app's encrypts.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";

@@ -31,7 +31,7 @@ import { HoverTooltip } from "@/components/hover-tooltip";
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
-import { APP_DOWNLOAD, isPaired } from "./machines.ts";
+import { APP_DOWNLOAD, computerWord, isPaired } from "./machines.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -53,7 +53,7 @@ const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 
 /**
  * Whether Settings > Browser access is offered: only by the desktop app's bridge, which has its calls,
- * and only while the app uses this computer's pine. Browser access is this Mac's door: the web client,
+ * and only while the app uses this computer's pine. Browser access is this computer's door: the web client,
  * the mobile apps and another machine's pine have none to show.
  */
 const offersAccess = (s: { local: boolean; remote?: string }) => s.local && !s.remote && typeof bridge.access === "function";
@@ -63,7 +63,7 @@ const offeredSections = (s: { local: boolean; remote?: string }) => SECTIONS.fil
 
 function Access() {
 	return (
-		<Page title="Browser access" lead="Your conversations in a browser on your phone or another computer, with this Mac's pine. A device is let in once by scanning a code here, and connects by itself from then on.">
+		<Page title="Browser access" lead={`Your conversations in a browser on your phone or another computer, with this ${computerWord(store.platform)}'s pine. A device is let in once by scanning a code here, and connects by itself from then on.`}>
 			<BrowserAccess />
 		</Page>
 	);
@@ -2083,7 +2083,7 @@ export function MachineList() {
 	const field = useId();
 	const state = s.service;
 	const key = s.keyToTrust;
-	const here = s.platform === "darwin" ? "This Mac" : "This computer";
+	const here = `This ${computerWord(s.platform)}`;
 	const add = async () => {
 		setError(undefined);
 		try {
@@ -2108,7 +2108,7 @@ export function MachineList() {
 		if (state.status === "error") return <Badge variant="destructive">not reached</Badge>;
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
-	/** What a row says of its machine when nothing is wrong: a paired Mac by its name (its id says nothing), user@host as written. */
+	/** What a row says of its machine when nothing is wrong: a paired computer by its name (its id says nothing), user@host as written. */
 	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this browser.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
@@ -2117,7 +2117,7 @@ export function MachineList() {
 			<ItemContent className="min-w-0 flex-[1_1_20rem]">
 				{/* A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`. */}
 				<ItemTitle className="name line-clamp-none flex w-full min-w-0 flex-wrap">
-					{/* A machine with a name (a paired Mac, one the owner renamed) is shown by it; user@host without one as written, in mono. */}
+					{/* A machine with a name (a paired computer, one the owner renamed) is shown by it; user@host without one as written, in mono. */}
 					<span className={cn("min-w-0 wrap-anywhere", h && !isPaired(h) && !s.prefs.names?.[h] && "font-mono")}>{h ? isPaired(h) || s.prefs.names?.[h] ? s.nameOf(h) : <Breakable host={h} /> : here}</span>
 					{status(h)}
 				</ItemTitle>
@@ -2143,7 +2143,7 @@ export function MachineList() {
 				{s.local ? row(undefined) : null}
 				{s.prefs.hosts.map(row)}
 			</ItemGroup>
-			{/* Where only a Mac paired by its code can be used (the official service), there is no user@host to add, nor a key for one. */}
+			{/* Where only a computer paired by its code can be used (the official service), there is no user@host to add, nor a key for one. */}
 			{!s.canAddHost ? <PairHowTo /> : s.local ? null : <DeviceKey />}
 			{s.canAddHost ? <FieldSet>
 				<FieldLegend>Add a machine</FieldLegend>
@@ -2163,14 +2163,14 @@ export function MachineList() {
 	);
 }
 
-/** How a browser is paired with a Mac, in three lines, and where the Pine app is for a Mac without it: opened like every other link. */
+/** How a browser is paired with a computer, in three lines, and where the Pine app is for a computer without it: opened like every other link. */
 function PairHowTo() {
 	return (
 		<Item variant="outline" data-slot="pair-how-to">
 			<ItemContent className="min-w-0 basis-full">
-				<ItemTitle>Pair a Mac</ItemTitle>
+				<ItemTitle>Pair with your computer</ItemTitle>
 				<ol className="list-decimal ps-5 text-sm text-muted-foreground">
-					<li>Open the Pine app on your Mac.</li>
+					<li>Open the Pine app on your computer.</li>
 					<li>Go to Settings &gt; Browser access and press Add a device.</li>
 					<li>Scan the code with this device's camera, or open the link it gives in this browser.</li>
 				</ol>
@@ -2185,9 +2185,9 @@ function PairHowTo() {
 function Environments() {
 	const s = useModel(store);
 	return (
-		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : !s.canAddHost ? "The pine this browser uses: the one of the Pine app on a Mac paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : !s.canAddHost ? "The pine this browser uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
 			<MachineList />
-			{/* Where only paired Macs can be used, the list's how-to is all there is to say. */}
+			{/* Where only paired computers can be used, the list's how-to is all there is to say. */}
 			{s.canAddHost ? <Alert>
 				<InfoIcon />
 				<AlertDescription>
@@ -2251,7 +2251,7 @@ function AppPage() {
 						<Field orientation="horizontal">
 							<FieldContent>
 								<FieldLabel htmlFor={`${field}-updates`}>Look for a newer version at the start</FieldLabel>
-								<FieldDescription>One question to GitHub each time the app starts. It says nothing about this Mac or your pine.</FieldDescription>
+								<FieldDescription>One question to GitHub each time the app starts. It says nothing about this {computerWord(s.platform)} or your pine.</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
 								<Switch id={`${field}-updates`} checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} />
@@ -2318,7 +2318,7 @@ function AppPage() {
 							<FieldContent>
 								<FieldTitle>
 									Browser for the web tools
-									<Badge variant={s.browser ? "default" : "outline"}>{s.browser ? "on this Mac" : "not on this Mac"}</Badge>
+									<Badge variant={s.browser ? "default" : "outline"}>{`${s.browser ? "on" : "not on"} this ${computerWord(s.platform)}`}</Badge>
 								</FieldTitle>
 								<FieldDescription>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</FieldDescription>
 								{!s.browser && s.initLines.length ? (

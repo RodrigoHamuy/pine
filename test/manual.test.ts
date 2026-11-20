@@ -308,11 +308,14 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["use the web client with a machine on my tailscale network", /^web#a-machine-on-a-tailnet/],
 		["the browser cannot reach my mac that is only on tailscale", /^web#a-machine-on-a-tailnet/],
 		// Browser access to the Pine app's pine, asked for by somebody who does not know its name.
-		["use pine from my phone without ssh", /^(desktop#(browser-access|from-a-phone-without-ssh)|web#a-mac-paired-by-qr-code)/],
-		["scan a qr code on the mac to open my conversations on my phone", /^(desktop#browser-access|web#a-mac-paired-by-qr-code)/],
-		["my phone says your mac does not answer", /^(web#when-a-paired-mac-is-not-reached|desktop#when-a-paired-device-does-not-connect)/],
+		["use pine from my phone without ssh", /^(desktop#(browser-access|from-a-phone-without-ssh)|web#a-computer-paired-by-qr-code)/],
+		["scan a qr code on the mac to open my conversations on my phone", /^(desktop#browser-access|web#a-computer-paired-by-qr-code)/],
+		["scan a qr code on my computer to open my conversations on my phone", /^(desktop#browser-access|web#a-computer-paired-by-qr-code)/],
+		["my phone says your mac does not answer", /^(web#when-a-paired-computer-does-not-answer|desktop#when-a-paired-device-does-not-connect)/],
+		["my phone says your computer does not answer", /^(web#when-a-paired-computer-does-not-answer|desktop#when-a-paired-device-does-not-connect)/],
 		["remove a phone that can reach my mac", /^desktop#(pairing-a-device|browser-access)/],
-		["link my phone to pine with a barcode", /^(web#a-mac-paired-by-qr-code|desktop#(pairing-a-device|browser-access))/],
+		["remove a phone that can reach my computer", /^desktop#(pairing-a-device|browser-access)/],
+		["link my phone to pine with a barcode", /^(web#a-computer-paired-by-qr-code|desktop#(pairing-a-device|browser-access))/],
 	];
 	const missed = cases.filter(([q, want]) => !top(q).some((id) => want.test(id))).map(([q]) => `${q} → ${top(q).join(", ")}`);
 	assert.deepEqual(missed, []);
