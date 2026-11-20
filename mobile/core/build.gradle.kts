@@ -22,6 +22,12 @@ dependencies {
 	implementation("org.bouncycastle:bcprov-jdk18on:1.84")
 	// Android has org.json built in; on the JVM it comes from Maven, with the same API.
 	compileOnly("org.json:json:20250517")
+	// WebRTC data channels for a paired computer: libdatachannel, the library the Pine app's access
+	// host runs on, through tel.schich's binding. This is its Java part alone; the native library
+	// comes from where the core runs: the Android app adds libdatachannel-java-android, the tests the
+	// desktop builds below.
+	implementation("tel.schich:libdatachannel-java:0.24.1.1")
+	testImplementation("tel.schich:libdatachannel-java-arch-detect:0.24.1.1")
 	testImplementation("org.json:json:20250517")
 
 	testImplementation(kotlin("test"))

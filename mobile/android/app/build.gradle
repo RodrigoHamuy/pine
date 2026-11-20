@@ -4,6 +4,7 @@ apply plugin: 'org.jetbrains.kotlin.android'
 android {
     namespace = "dev.pmndre.pine"
     compileSdk = rootProject.ext.compileSdkVersion
+    ndkVersion = rootProject.ext.ndkVersion
     defaultConfig {
         applicationId "dev.pmndre.pine"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -63,6 +64,10 @@ dependencies {
     implementation 'pine.mobile:pine-mobile-core'
     // The full BouncyCastle the core's SSH needs, put in place of Android's cut-down one (PinePlugin.load).
     implementation 'org.bouncycastle:bcprov-jdk18on:1.84'
+    // The native libdatachannel for each Android ABI, under the binding the core uses
+    // (tel.schich:libdatachannel-java in ../core). It is published with its debug symbols:
+    // the release build strips them (stripReleaseDebugSymbols, with the NDK).
+    implementation 'tel.schich:libdatachannel-java-android:0.24.1.1'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
