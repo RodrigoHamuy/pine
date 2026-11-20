@@ -6,6 +6,7 @@ import path from "node:path";
 import { type AgentConfig, agentSkillsDir, conversationsDir, globalSkillsDir, type Level, mainAgentId, PINE_ROOT, type PineConfig, sharedFiles, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import type { DenialTools } from "./access.ts";
 import { bwrapArgs, Guard, helperArgs, jailed, type Protected, protectedNow, SESSIONS } from "./sandbox-linux.ts";
+import { boxArgs, boxMissing, boxProgram, containerName } from "./sandbox-windows.ts";
 import type { Bus } from "./store.ts";
 import { type Logger, truncate } from "./util.ts";
 
@@ -228,7 +229,7 @@ export function shellRefuses(roots: Roots, kind: "read" | "write", p: string): b
  * cannot be mounted, so a file that is still to be made is asked for as the folder it goes into.
  */
 export function grantPath(p: string): string {
-	if (sandboxKind() !== "linux") return p;
+	if (sandboxKind() === "macos") return p;
 	let cur = p;
 	while (!present(cur) && path.dirname(cur) !== cur) cur = path.dirname(cur);
 	return cur;
@@ -421,7 +422,8 @@ function winBin(name: string): string {
 	return fs.existsSync(system) ? system : name;
 }
 
-let kind: "macos" | "linux" | null | undefined;
+export type SandboxKind = "macos" | "linux" | "windows";
+let kind: SandboxKind | null | undefined;
 let bwrap = "";
 let whyNot = "";
 let bwrapSaid = "";
@@ -453,7 +455,7 @@ export function inContainer(): boolean {
  * it is tried once, because bubblewrap can be installed and still not be allowed to work (a
  * system that has switched off user namespaces for ordinary users, some containers).
  */
-export function sandboxKind(): "macos" | "linux" | undefined {
+export function sandboxKind(): SandboxKind | undefined {
 	if (kind !== undefined) return kind ?? undefined;
 	kind = null;
 	if (process.platform === "darwin") {
@@ -482,6 +484,21 @@ export function sandboxKind(): "macos" | "linux" | undefined {
 						? 'AppArmor keeps it from creating user namespaces. Run "pine init": it adds the rule that allows it'
 						: "Ordinary users may not create user namespaces here (a system that has switched them off)";
 				whyNot = `bubblewrap is installed (${bwrap}) but cannot make a sandbox here ("${said}"). ${why}`;
+			}
+		}
+	} else if (process.platform === "win32") {
+		const exe = boxProgram();
+		const bash = bin("bash");
+		if (!exe) whyNot = boxMissing();
+		else if (!path.isAbsolute(bash)) whyNot = "Git for Windows is not installed: its bash is the shell pine gives an agent. Install it from https://git-scm.com/download/win";
+		else {
+			try {
+				// An AppContainer of its own for the try: Git's bash has to start in one, and write nowhere.
+				execFileSync(exe, ["box", "--name", "pine.probe", "--", bash, "-c", "true"], { stdio: ["ignore", "ignore", "pipe"], timeout: 30_000, windowsHide: true });
+				kind = "windows";
+			} catch (e) {
+				const said = String((e as { stderr?: unknown }).stderr ?? "").trim().split(/\r?\n/)[0] || (e instanceof Error ? e.message.split("\n")[0].slice(0, 160) : String(e));
+				whyNot = `pine's sandbox helper could not start Git's bash in an AppContainer here ("${said}")`;
 			}
 		}
 	} else whyNot = `no sandbox is implemented for ${process.platform}`;
@@ -533,9 +550,22 @@ const protectedOf = (roots: Roots): Protected => ({
  * every command, because on Linux what exists at that moment is part of it.
  */
 export function sandboxArgv(cfg: PineConfig, agent: AgentConfig, roots: Roots, variant: Boxed, network = false, tag?: string): string[] {
-	if (sandboxKind() !== "linux") return ["/usr/bin/sandbox-exec", "-p", sandboxProfile(cfg, agent, roots, variant, network, tag)];
+	const k = sandboxKind();
+	if (k === "macos" || k === undefined) return ["/usr/bin/sandbox-exec", "-p", sandboxProfile(cfg, agent, roots, variant, network, tag)];
 	const v = variant === true ? "restricted" : variant === false ? "normal" : variant;
 	const net = agent.sandbox.network || network;
+	if (k === "windows") {
+		// Whatever is closed (pine's home, secrets, other agents) is simply not named: an
+		// AppContainer reaches nothing of the owner's that was not given to it.
+		return boxArgs({
+			name: containerName(roots.home, agent.id, v === "restricted" ? "r" : "n"),
+			read: [...roots.read, ...roots.sources, path.dirname(process.execPath), ...windowsToolFolders()],
+			write: roots.write,
+			deny: v === "restricted" ? protectedNow(protectedOf(roots)).paths : [],
+			network: net,
+			ledger: boxLedger(cfg.dataDir, agent.id),
+		});
+	}
 	// Sockets between programs go with the network, as on macOS.
 	return jailed(
 		bwrap,
@@ -579,7 +609,17 @@ export function denialTools(): DenialTools {
  * not is removed again. On macOS the profile forbids it outright and there is nothing to do.
  */
 export function sandboxGuard(roots: Roots, variant: SandboxVariant | boolean): Guard | undefined {
-	return sandboxKind() === "linux" && (variant === true || variant === "restricted") ? new Guard(protectedOf(roots)) : undefined;
+	const k = sandboxKind();
+	return (k === "linux" || k === "windows") && (variant === true || variant === "restricted") ? new Guard(protectedOf(roots)) : undefined;
+}
+
+/** Where pine-box notes the permissions it gave an agent's commands on the owner's files, so that they can be taken back. */
+export const boxLedger = (dataDir: string, agent: string) => path.join(dataDir, "pine-box", `${encodeURIComponent(agent)}.ledger`);
+
+/** Windows: the folders of the tools an agent's commands run (Git's), which an AppContainer does not read by itself where they lie in the owner's profile. */
+function windowsToolFolders(): string[] {
+	const git = gitForWindows();
+	return git ? [git] : [];
 }
 
 /**
@@ -587,12 +627,25 @@ export function sandboxGuard(roots: Roots, variant: SandboxVariant | boolean): G
  * a picture converter): it may read, write only in `write`, and has no network. Undefined where
  * there is no sandbox.
  */
-export function helperArgv(write: string[] = []): string[] | undefined {
+export function helperArgv(write: string[] = [], read: string[] = []): string[] | undefined {
 	const k = sandboxKind();
 	if (k === "linux") return jailed(bwrap, helperArgs(write), false);
+	// An AppContainer reads only what it is given: the caller names what the helper looks at.
+	if (k === "windows") return boxArgs({ name: "pine.helper", read: [...read, ...windowsToolFolders()], write, network: false, ledger: path.join(os.tmpdir(), "pine-box-helper.ledger") });
 	if (k === "macos") return ["/usr/bin/sandbox-exec", "-p", `(version 1)(allow default)(deny network*)(deny file-write*)(allow file-write* ${subpaths(write)} (literal "/dev/null"))`];
 	return undefined;
 }
+
+/** The PATH a helper of pine's runs with: the system's own folders, and on Windows Git's (its sh and coreutils). */
+export function helperPath(): string {
+	if (process.platform !== "win32") return "/usr/bin:/bin";
+	const git = gitForWindows();
+	const system = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32");
+	return [...(git ? [path.join(git, "usr", "bin"), path.join(git, "cmd")] : []), system].join(";");
+}
+
+/** What else a program needs on Windows to start at all. Nothing elsewhere. */
+export const helperBase = (): NodeJS.ProcessEnv => (process.platform === "win32" ? { SystemRoot: process.env.SystemRoot, TEMP: os.tmpdir(), TMP: os.tmpdir() } : {});
 
 /** Names of environment variables that look like they hold a credential. The ssh agent's socket is an address, not one. */
 const SECRET_NAME = /KEY|TOKEN|SECRET|PASSWORD|PASSWD|CREDENTIAL|AUTH/i;
@@ -605,7 +658,7 @@ const secretName = (k: string) => SECRET_NAME.test(k) && k !== "SSH_AUTH_SOCK";
  * a credential by its name is still left out, and so is what belongs to the daemon.
  */
 export function shellEnv(agent: AgentConfig, roots: Roots, sessionEnv: NodeJS.ProcessEnv, wide = false): NodeJS.ProcessEnv {
-	const keep = ["PATH", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TZ", "USER", "LOGNAME", "SHELL"];
+	const keep = ["PATH", "LANG", "LC_ALL", "LC_CTYPE", "TERM", "TZ", "USER", "LOGNAME", "SHELL", ...(process.platform === "win32" ? ["SystemRoot", "windir", "PATHEXT", "ComSpec", "NUMBER_OF_PROCESSORS", "PROCESSOR_ARCHITECTURE", "OS", "USERNAME"] : [])];
 	const env: NodeJS.ProcessEnv = {};
 	if (wide) {
 		for (const [k, v] of Object.entries(process.env)) if (v !== undefined && !secretName(k) && !/^(PI|PINE)_/.test(k)) env[k] = v;
@@ -619,6 +672,14 @@ export function shellEnv(agent: AgentConfig, roots: Roots, sessionEnv: NodeJS.Pr
 	env.HOME = roots.sandboxHome;
 	env.TMPDIR = path.join(roots.sandboxHome, "tmp");
 	env.GIT_CONFIG_GLOBAL = path.join(roots.sandboxHome, ".gitconfig");
+	if (process.platform === "win32") {
+		// Windows' own programs and Git's bash look for temp here, not in TMPDIR.
+		env.TMP = env.TEMP = env.TMPDIR;
+		env.USERPROFILE = roots.sandboxHome;
+		// Git's bash turns arguments that look like its own paths into Windows' when it starts a
+		// program of Windows: not those it hands to pine-box, which takes this away again for the command.
+		env.MSYS2_ARG_CONV_EXCL = "*";
+	}
 	if (process.platform === "darwin") {
 		// Apple's libraries ask the system for the user's home, not the environment. Told this, they
 		// take the agent's, and their caches and settings land where it may write.

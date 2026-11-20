@@ -50,8 +50,9 @@ jobs:
       - name: Say which sandbox the tests get
         shell: bash
         run: |
-          node --input-type=module -e 'import { sandboxAvailable } from "./src/security.ts"; console.log(`sandbox: ${sandboxAvailable() ? "yes" : "none"} on ${process.platform}`)'
-      - run: npm test
+          node --input-type=module -e 'import { sandboxKind, sandboxMissing } from "./src/security.ts"; console.log(`sandbox: ${sandboxKind() ?? "none"} on ${process.platform} ${sandboxMissing()}`)'
+      # A test that hangs fails after three minutes, instead of holding the job until its own limit.
+      - run: node --test --test-force-exit --test-timeout=180000 "test/*.test.ts"
 
   desktop-changed:
     runs-on: ubuntu-latest

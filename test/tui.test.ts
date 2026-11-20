@@ -1201,7 +1201,10 @@ test("tui: what a model thinks is a few lines while it thinks and one line after
 	// A thought longer than the window, closed from far down in it: the line that is left is in view.
 	await t.send(mockMsg([{ reasoning: steps(90).replaceAll("step", "long"), text: "Third answer." }]));
 	await t.sees("Third answer.");
-	const closed = rows().flatMap((l, y) => (/▸ thought for/.test(l) ? [y] : [])).at(-1)!;
+	// The third thought's own line, once it is drawn: until then the last one may still be the second's.
+	const lastThought = () => rows().flatMap((l, y) => (/▸ thought for/.test(l) ? [y] : [])).at(-1) ?? -1;
+	await until(() => lastThought() > rowOf("Second answer."), 2000, "the third thought to be one line");
+	const closed = lastThought();
 	t.term.click(6, closed);
 	await until(() => rows().some((l) => l.startsWith(" │ long-1 ")), 2000, "the long thought to open");
 	assert.ok(rows().some((l) => l.includes("▾ thought for")), `its first line stays in view when it opens\n${t.text()}`);

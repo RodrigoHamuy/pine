@@ -11,7 +11,8 @@ import { type AgentConfig, isColor, loadConfig, mainAgentId, type Mode, MODES, P
 import { renameEnv, secretName, unsetEnv } from "./env-file.ts";
 import { DEFAULT_THEME, listThemes } from "./themes.ts";
 import { editJson } from "./mcp-config.ts";
-import { isInside, realish } from "./security.ts";
+import { boxLedger, isInside, realish } from "./security.ts";
+import { ungrant } from "./sandbox-windows.ts";
 import { placeOf } from "./snapshots.ts";
 import type { Kv, TaskStore } from "./store.ts";
 import { errText, matchesAny, parseDuration } from "./util.ts";
@@ -292,6 +293,12 @@ export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore },
 	}
 	for (const base of [path.join(cfg.dataDir, "programs"), path.join(cfg.dataDir, "browser-local"), path.join(cfg.dataDir, "browser-view")]) {
 		for (const name of fs.existsSync(base) ? fs.readdirSync(base) : []) if (decodeURIComponent(name).startsWith(`${id}:`)) fs.rmSync(path.join(base, name), { recursive: true, force: true });
+	}
+	// Windows: the permissions its sandbox was given on the owner's files and folders, taken back.
+	const ledger = boxLedger(cfg.dataDir, id);
+	if (fs.existsSync(ledger)) {
+		ungrant(ledger);
+		fs.rmSync(ledger, { force: true });
 	}
 	// What its event sources kept on disk ("name@agent").
 	const kept = path.join(cfg.dataDir, "sources");
