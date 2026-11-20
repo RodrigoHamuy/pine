@@ -3,21 +3,31 @@
 // the page, under an opaque origin, reaches none of them and asks by message (serve.ts).
 import { webBridge } from "./host.ts";
 import { idbStore } from "./idb-store.ts";
+import { takePairLink } from "./pairing.ts";
 import { serve } from "./serve.ts";
-import { connect } from "./ssh.ts";
+import { connect, relayStream } from "./ssh.ts";
 import { unsupported } from "./supported.ts";
 
 declare const __PINE_WEB_VERSION__: string;
 
 /** The relay of this deployment, for a host and port: the same host, at /ssh. */
-function relay(host: string, port: number): string {
+function relay(host: string, port: number) {
 	const url = new URL("ssh", location.href);
 	url.protocol = location.protocol === "https:" ? "wss:" : "ws:";
 	url.search = new URLSearchParams({ host, port: String(port) }).toString();
-	return url.toString();
+	return relayStream(url.toString());
+}
+
+/** The deployment's configuration: the servers that help a peer connection, and whether the relay carries SSH. */
+async function config(): Promise<unknown> {
+	const answer = await fetch(new URL("meet/config", location.href));
+	return answer.ok ? answer.json() : undefined;
 }
 
 async function main() {
+	// Before anything else: the pairing code leaves the address, so that no history entry, bookmark or reload keeps it.
+	const { link, problem } = takePairLink(location, (url) => history.replaceState(history.state, "", url));
+	if (problem) console.warn(problem);
 	const said = await unsupported(crypto.subtle);
 	if (said) {
 		const p = document.createElement("p");
@@ -30,6 +40,9 @@ async function main() {
 		connect,
 		store: idbStore(),
 		relay,
+		pairLink: link,
+		userAgent: navigator.userAgent,
+		config,
 		clipboard: (text) => navigator.clipboard.writeText(text),
 		share: typeof navigator.share === "function" ? (title, text) => navigator.share({ title, text }) : undefined,
 		version: __PINE_WEB_VERSION__,
