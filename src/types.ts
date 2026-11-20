@@ -1,3 +1,4 @@
+import type { Level } from "./config.ts";
 import type { CallTiming } from "./util.ts";
 /** Where a handler's answer should go: an event on `topic` whose payload is `payload` plus `text`. */
 export interface ReplyTarget {
@@ -77,6 +78,12 @@ export interface TaskMeta {
 	trust?: Trust;
 	/** The session that created this task had already seen outside content. */
 	tainted?: string;
+	/**
+	 * The most this run may do: a task handed on by `delegate` works at the stricter of its own
+	 * agent's level and the level its caller worked at, so that handing work on never reaches further
+	 * than the caller could. Set only where it is stricter than the agent's own.
+	 */
+	level?: Level;
 	/** The folder the owner opened for the conversation this task was handed on from. A one-off delegated run works there too. */
 	folder?: string;
 	/**

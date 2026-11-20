@@ -12,6 +12,8 @@ desktop app, in pictures of the real one (see below).
 | `story.js` | the script, scene by scene |
 | `story-scans.js` | a second script: an agent for its owner's bills (`--story scans`) |
 | `story-front.js` | a third: half a minute for the top of the repository's README (`--story front`) |
+| `film.html`, `film.js` | another kind of film and its engine: one take through a 3D space (see "The film about code") |
+| `film-code.js` | such a film: what pine adds for working on code (`--film code`) |
 | `app-shots.mjs` | takes the pictures of the desktop app that `story-front.js` shows |
 | `bill/` | the made-up letters the films show, and what draws them |
 | `render.mjs` | draws the film frame by frame in a headless browser and hands the frames to ffmpeg |
@@ -38,6 +40,48 @@ node reel/render.mjs --at 3.2,12,40
 
 What the render writes (`*.mp4`, `*.webp`, `sfx.wav`, `sfx.json`, `frames/`) is not kept in the
 repository.
+
+## The film about code
+
+`film-code.js` is a minute that says pine is not only events, automation and local models: you chat
+with it and write code with it. It shows, one after the other in the same window, a folder and a
+live diff beside the conversation, worktrees, sub-agents, branching a conversation, `/undo`, the
+modes, goal mode, what a conversation left running, and that an MCP server, a changed `AGENTS.md`
+and an event source take effect without a restart.
+
+```bash
+node reel/render.mjs --film code
+```
+
+writes `reel/pine-reel-code.mp4`. `--at` and `--from`/`--to` work as for the other films, and
+`--scale 1` is a quicker draft at 1920×1080. (Below 1 the browser draws what is out of focus wrongly.)
+On a Mac the film is drawn by the graphics chip, a tenth of a second a frame; elsewhere it takes
+seconds a frame.
+
+A piece of music can lie under the film's own sounds (the keys, the clicks). It is not kept in the
+repository: name a file of your own.
+
+```bash
+node reel/render.mjs --film code --music ~/Music/song.mp3 --music-from 5.75
+```
+
+`--music-from` is where in the piece the film begins, in seconds: with 5.75, a beat that comes in ten
+seconds into the piece comes in as the window is put together. The music fades in, and out with the
+film. With `--remix` only the sound is made again, under the film as it was rendered: a change of the
+music takes seconds, not a render.
+
+It is drawn differently from the other films, by an engine of its own (`film.js`):
+
+- The look is that of the films in which an interface comes apart into layers: a white room in
+  daylight, pine's window in its light colours, and every part of it a sheet with a thickness that
+  lifts off the one below, throws a soft shadow on it and leaves an outline where it lay
+  (`plate` and `ink` in `film-code.js`).
+- There is one camera with a place, a direction and a distance (`shot`, `look`), and it is close
+  and looks along the window at a low angle. What is not where it looks is out of focus (`LENS`).
+- Motion blur is real. Where the camera moves fast a frame is made of several moments
+  (`shutterTimes`); `render.mjs` draws each one and has ffmpeg average them.
+- Everything is still a function of the time, so opened in a browser (`reel/film.html`) the film
+  plays: space stops it, the arrow keys step, a click on the bar at the bottom jumps.
 
 ## The film in the README
 

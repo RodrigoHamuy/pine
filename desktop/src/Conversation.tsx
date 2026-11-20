@@ -46,6 +46,15 @@ const TONE_ICON: Record<Tone, LucideIcon> = { muted: InfoIcon, warn: TriangleAle
 type RunStatus = "run" | "ok" | "fail" | "done" | "failed" | "cancelled";
 
 /** What Trace calls the state of a line: running, failed, or nothing to say. */
+/**
+ * A step at work fades out and in, in steps, as the dots at work do, in place of the stock trace's
+ * shimmer: a shimmer moves a gradient through the text, which the page paints again every frame for
+ * as long as the step runs, a fifth of a core; a fade in steps is the system's to draw, and costs
+ * nearly nothing (desktop/test/view-perf.test.ts measures both). Important, since the stock trace sets
+ * the shimmer from its line, which outweighs a class of the title's.
+ */
+const STEPPED = "[background-image:none]! [-webkit-text-fill-color:currentColor]! in-data-[status=running]:[animation:pulse_2s_steps(4,jump-none)_infinite]! motion-reduce:[animation:none]!";
+
 const traceStatus = (status: RunStatus) => (status === "run" ? "running" : status === "fail" || status === "failed" ? "error" : undefined);
 
 /** The icon of a line that runs: the breathing dot while it does (an agent at work), then how it ended. */
@@ -66,7 +75,7 @@ function Thought({ text, title, description, live = false }: { text: string; tit
 			<TraceIcon>
 				<BrainIcon />
 			</TraceIcon>
-			<TraceTitle>{title}</TraceTitle>
+			<TraceTitle className={STEPPED}>{title}</TraceTitle>
 			{description ? <TraceDescription>{description}</TraceDescription> : null}
 		</TraceLine>
 	);
@@ -110,7 +119,7 @@ function Call({ tool, subject, status, ms, depth = 0, output, error, images }: {
 				<StatusIcon status={status} />
 			</TraceIcon>
 			{/* Font family only: a tool's name and its subject are code. */}
-			<TraceTitle className="font-mono" title={subject}>
+			<TraceTitle className={cn("font-mono", STEPPED)} title={subject}>
 				<span data-tool>{tool}</span>
 				{subject ? ` ${subject}` : null}
 			</TraceTitle>
@@ -157,7 +166,7 @@ function Child({ part }: { part: Extract<Part, { p: "child" }> }) {
 				<TraceIcon>
 					<StatusIcon status={part.status} />
 				</TraceIcon>
-				<TraceTitle>
+				<TraceTitle className={STEPPED}>
 					↳ {part.agent} · {childKind(part.kind)} #{part.task}
 					{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}
 					<span className="sr-only"> (opens in a tab of its own)</span>
@@ -226,7 +235,7 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 							<Pulse />
 						</TraceIcon>
 					)}
-					<TraceTitle title={head}>{head}</TraceTitle>
+					<TraceTitle className={STEPPED} title={head}>{head}</TraceTitle>
 					{description ? <TraceDescription>{description}</TraceDescription> : null}
 				</TraceLine>
 			</TraceCollapsibleTrigger>
@@ -554,7 +563,7 @@ function Welcome({ tab }: { tab: Tab }) {
 					<HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></TooltipTrigger><TooltipContent>The model it runs on</TooltipContent></HoverTooltip>
 					<HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</TooltipTrigger><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></HoverTooltip>
 					{info?.main ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>administers pine</TooltipTrigger><TooltipContent>It creates and changes the other agents and pine's settings when you ask it to</TooltipContent></HoverTooltip> : null}
-					{info?.delegates.length ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>hands work to <b>{info.delegates.includes("*") ? "every agent" : info.delegates.join(", ")}</b></TooltipTrigger><TooltipContent>Agents it can hand work to</TooltipContent></HoverTooltip> : null}
+					{info?.delegates.length ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>hands work to <b>{info.delegates.includes("*") ? (info.main ? "every other agent" : "every agent but main") : info.delegates.join(", ")}</b></TooltipTrigger><TooltipContent>Agents it can hand work to</TooltipContent></HoverTooltip> : null}
 					{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 				</div>
 				{info?.modelProblem ? (

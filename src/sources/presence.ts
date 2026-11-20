@@ -39,6 +39,8 @@ const PORTS = [7, 80, 62078];
 const DNSSD = "/usr/bin/dns-sd";
 /** How long one device is given to answer, and how long answers to a question about services are waited for. A test shortens them. */
 export const timing = { probeMs: 1500, listenMs: 1200 };
+/** What a test puts in place of asking an address: the network the test runs on is not one it can count on. */
+export const standIn: { answers?: (ip: string) => Promise<boolean> } = {};
 
 // ---- DNS, as much of it as asking who offers a service takes ---------------------------------
 
@@ -423,7 +425,7 @@ export default async function presence(source: SourceApi): Promise<void> {
 					}
 					if (!isPrivateAddress(ip)) throw new Error(`${h.name}: its name leads to an address that is not on your own network`);
 				}
-				return { h, ip, there: await answers(ip) };
+				return { h, ip, there: await (standIn.answers ?? answers)(ip) };
 			}),
 		);
 		if (sock) {

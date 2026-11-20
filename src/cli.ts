@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { ConfigError, defaultHome, effectiveMcp, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, purposeOf, unsandboxed } from "./config.ts";
+import { ConfigError, defaultHome, delegatesText, effectiveMcp, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, purposeOf, unsandboxed } from "./config.ts";
 import { audit, levelOf } from "./security.ts";
 import { pineManual, showRead, showSearch } from "./manual.ts";
 import { modelKeys } from "./models.ts";
@@ -663,7 +663,7 @@ async function main(): Promise<void> {
 				out(`  apps       ${process.platform !== "darwin" ? "not on this system: app control works on macOS only" : !unsandboxed(levelOf(a)) ? "no: app control is for an agent in auto or bypass mode, which works with your whole account" : "it can operate the apps on this Mac in your own conversations; you are asked once per app"}`);
 			}
 			out(`  skills     ${listSkills(cfg, a, "main").map((s) => s.name).join(", ") || "none"}`);
-			out(`  delegates  ${a.delegates.join(", ") || "none"}; sub-agents ${a.subagents.enabled ? `up to ${a.subagents.maxParallel}` : "off"}`);
+			out(`  delegates  ${delegatesText(cfg, a)}; sub-agents ${a.subagents.enabled ? `up to ${a.subagents.maxParallel}` : "off"}`);
 			out(`  mode       ${a.mode}`);
 			// What that means for this agent, so that nobody has to read code to know.
 			const open = unsandboxed(levelOf(a));

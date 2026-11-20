@@ -1200,7 +1200,7 @@ test("tui: what a model thinks is a few lines while it thinks and one line after
 
 	// A thought longer than the window, closed from far down in it: the line that is left is in view.
 	await t.send(mockMsg([{ reasoning: steps(90).replaceAll("step", "long"), text: "Third answer." }]));
-	await t.sees("Third answer.");
+	await t.sees(/^ Third answer\.$/m);
 	const closed = rows().flatMap((l, y) => (/▸ thought for/.test(l) ? [y] : [])).at(-1)!;
 	t.term.click(6, closed);
 	await until(() => rows().some((l) => l.startsWith(" │ long-1 ")), 2000, "the long thought to open");
@@ -1209,8 +1209,8 @@ test("tui: what a model thinks is a few lines while it thinks and one line after
 	await until(() => !rows().some((l) => l.includes("▾ thought for")) && rows().some((l) => /^ │ long-\d+ /.test(l)), 2000, "the window to be inside the thought");
 	t.term.click(30, rows().findIndex((l) => /^ │ long-\d+ /.test(l)) + 3);
 	await until(() => !rows().some((l) => /^ │ long-\d+ /.test(l)), 2000, "the long thought to close");
-	const left = rows().findIndex((l) => /▸ thought for/.test(l));
-	assert.ok(left >= 0 && rowOf("Third answer.") > left, `the one line that is left is in view, with the answer under it\n${t.text()}`);
+	const left = rows().findLastIndex((l) => /▸ thought for/.test(l));
+	assert.ok(left >= 0 && rows().findIndex((l) => l.startsWith(" Third answer.")) > left, `the one line that is left is in view, with the answer under it\n${t.text()}`);
 	await t.close();
 });
 

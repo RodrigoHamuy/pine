@@ -158,7 +158,7 @@ Which model the agent runs on is told to it with your message, so it needs no to
 | `remove_model_server` `name` | Main agent only. Takes one out again, with the key pine keeps for it. Refused while an agent, the default or the judge of goals (`defaults.judge`) uses one of its models. You are asked. |
 | **Not setup: the other tools pine gives an agent** | |
 | `request_access` [`path`] [`write`] [`network`] `reason` | Asks you for access the conversation does not have: a file or folder outside the workspace (`path`; with `write: true` also to change it), or the network from the shell (`network: true`). You decide; a yes holds for the conversation until it is reset or pine restarts. pine's home is never granted. An agent does not have to call it: when a file tool or a shell command needs something outside, pine asks you the same question itself. See "When a call needs something outside" and "Modes" in [security.md](security.md). |
-| `delegate` `agent` `task` [`wait`] [`thread`] | Hands a task to another agent and gets its answer. Only there when the agent's `delegates` list is not empty. See [agents.md](agents.md). |
+| `delegate` `agent` `task` [`wait`] [`thread`] | Hands a task to another agent and gets its answer. Only there when the agent's `delegates` list is not empty, which by default names every agent but the main one. The other agent works in its own mode or the caller's, whichever is stricter. See [agents.md](agents.md). |
 | `subagent` `tasks` [`model`] [`thinking`] | Runs several copies of the agent side by side, one task each, and returns their answers. With `model` the copies run on another model than the agent's, with `thinking` at another reasoning level. They never ask you anything. See [agents.md](agents.md), "Sub-agents". |
 | `models` | Lists the models that are set up, as `provider/model`, with what each can do (see pictures, reason) and which one is the agent's own. This is how an agent answers "which models are there", and where it finds what `subagent` takes as `model`. |
 | `download` `url` `path` | Fetches a file from a web address into the workspace, byte for byte. It is how an agent gets a file that a remote MCP server made: by the link in the tool's answer, never by a file path from it. See "Downloads" in [security.md](security.md) and "Files and pictures from a remote server" in [mcp.md](mcp.md). |
@@ -281,7 +281,7 @@ Tell the main agent what to change about another agent ("give the books agent an
 | `model`, `thinking` | Its model (`"default"` for pine's default) and how much it reasons |
 | `mode` | `auto` (no sandbox: its shell and file tools reach your whole account and the network), `safe` (in the sandbox: its own folders), `manual` (in the sandbox, every action waits), `bypass`, `plan`, or `default` for what pine gives an agent that names none. This is also how far its shell and file tools reach |
 | `tools` | Its built-in tools, all of them: `read`, `bash`, `edit`, `write`, `grep`, `find`, `ls` |
-| `delegates` | The agents it may hand work to, all of them; `*` is every agent |
+| `delegates` | The agents it may hand work to, all of them; `*` is every agent but the main one |
 | `network` | Whether its shell may use the network when it works in the sandbox |
 | `read`, `write`, `forget` | Folders outside its workspace that it may read, or read and change, from now on; and folders to take away again. This is how a folder is opened for an agent for good |
 

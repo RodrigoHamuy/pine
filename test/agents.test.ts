@@ -87,7 +87,10 @@ test("the main agent hands a task to a specialist and gets the answer back", asy
 	assert.ok(h.toolsOffered(mainReq).includes("delegate"));
 	// Who there is to hand work to is said in the note: the instructions are the same for every conversation.
 	assert.match(notesOf(mainReq).join("\n"), /Agents you can hand tasks to: gonzo \(German law[^)]*\); kevin \(house/);
-	assert.ok(!h.toolsOffered(childReqs[0]).includes("delegate"), "a specialist without delegates gets no delegate tool");
+	// By default every agent hands work to every other but the main one.
+	assert.ok(h.toolsOffered(childReqs[0]).includes("delegate"), "a specialist hands work on by default");
+	assert.match(notesOf(childReqs[0]).join("\n"), /Agents you can hand tasks to: kevin \(house/);
+	assert.doesNotMatch(notesOf(childReqs[0]).join("\n"), /hand tasks to:[^\n]*\bmain\b/, "but not to the main agent");
 	assert.ok(!JSON.stringify(childReqs[0].body.messages).includes("MAIN-PRIVATE-CONTEXT"), "the specialist sees only the task text");
 	assert.ok(users(childReqs[0])[0].startsWith("[task from agent main]"));
 
@@ -129,6 +132,27 @@ test("delegation loops and over-deep chains are refused with a message the model
 
 	const no = await h.pine.agents.run({ agent: "b", prompt: mockMsg([{ tools: [{ name: "delegate", args: { agent: "main", task: "x" } }] }]), ...owner });
 	assert.ok(/cannot delegate to "main"/.test(no.text), no.text);
+	await h.close();
+});
+
+test("by default every agent hands work to every other but the main one; naming main opens the way to it, and a run from outside hands nothing on", async () => {
+	const h = await harness({
+		pine: { main: "main", routes: [{ on: "hook/in", agent: "b" }] },
+		agents: { main: {}, a: { agent: { delegates: ["*", "main"] } }, b: {}, c: { agent: { delegates: [] } } },
+	});
+	const to = (agent: string) => ({ name: "delegate", args: { agent, task: `hello ${agent}` } });
+	const fromB = await h.pine.agents.run({ agent: "b", prompt: mockMsg([{ tools: [to("main"), to("a")] }]), ...owner });
+	assert.match(fromB.text, /cannot delegate to "main"\. Available: a, c/);
+	assert.ok(fromB.text.includes("[a] ECHO"), fromB.text);
+	const fromA = await h.pine.agents.run({ agent: "a", prompt: mockMsg([{ tools: [to("main")] }]), ...owner });
+	assert.ok(fromA.text.includes("[main] ECHO"), "named, the main agent takes work from it");
+	assert.match(notesOf(h.requestsFor("PERSONA-MAIN")[0]).join("\n"), /Agents you can hand tasks to: a [^\n]*; b [^\n]*; c /);
+	await h.pine.agents.run({ agent: "c", prompt: "hi", ...owner });
+	assert.ok(!h.toolsOffered(h.requestsFor("PERSONA-C").at(-1)).includes("delegate"), "an empty list: no delegate tool");
+
+	h.pine.bus.publish("hook/in", { text: "from outside" }, { source: "http" });
+	await until(() => h.pine.tasks.list({ agent: "b" }).some((t) => t.kind === "event" && t.status === "done"));
+	assert.ok(!h.toolsOffered(h.requestsFor("PERSONA-B").at(-1)).includes("delegate"), "a run from outside hands nothing on unless untrusted.delegates says so");
 	await h.close();
 });
 
@@ -191,8 +215,12 @@ test("sub-agents run in parallel with fresh contexts, even when only one model s
 			assert.ok(h.system(c).includes("WS-MAIN"), "a sub-agent is the same agent");
 			// (A sub-agent is declared what its conversation is declared, and refused when it calls what is not its to do: test/catalogue.test.ts.)
 		}
-		if (maxConcurrentRuns === 1) assert.ok(ms >= 450, `one slot: sequential (${ms} ms)`);
-		else assert.ok(ms < 400, `three slots: parallel (${ms} ms)`);
+		// Counted at the model server, not timed: the turn's own work around the sub-agents (the
+		// folder recorded for undo before its first tool call and after it) is no part of this.
+		if (maxConcurrentRuns === 1) {
+			assert.equal(h.mock.state.maxInflight, 1, "one slot: one request at a time");
+			assert.ok(ms >= 450, `one slot: sequential (${ms} ms)`);
+		} else assert.equal(h.mock.state.maxInflight, 3, `three slots: the three sub-agents at once (${ms} ms)`);
 		assert.equal(h.pine.agents.limiter.stats.active, 0);
 		await h.close();
 	}

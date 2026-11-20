@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { type AgentConfig, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpServerConfig, PINE_ROOT, purposeOf, RESERVED_TOPICS, SOURCE_TYPES, unsandboxed } from "./config.ts";
+import { type AgentConfig, delegatesText, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpServerConfig, PINE_ROOT, purposeOf, RESERVED_TOPICS, SOURCE_TYPES, unsandboxed } from "./config.ts";
 import { AGENT_TOOLS, checkNewAgent, createAgent } from "./agent-admin.ts";
 import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkAgentId, checkRoute, checkSetting, dropRoute, namedBy, routesText, SETTINGS, settingsText } from "./admin.ts";
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
@@ -141,6 +141,8 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						kind: "delegate",
 						parent: r.task,
 						tainted: live.tainted,
+						// Handing work on never reaches further than this run could itself.
+						level: manager.effectiveLevel(agent, live),
 						folder: live.folder,
 						worktree: tree,
 						notify: p.wait === false ? { agent: agent.id, session: r.task.session } : undefined,
@@ -1138,7 +1140,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						const text = readOwn(path.join(a.workspace, "AGENTS.md"), 6000);
 						const soul = readOwn(path.join(a.workspace, "SOUL.md"), 3000);
 						const tooling = readOwn(path.join(a.workspace, "TOOLS.md"), 3000);
-						return ok(`${about(a)}\n    workspace: ${a.workspace}\n    may hand work to: ${some(a.delegates)}\n\nIts instructions (AGENTS.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them):\n${text === undefined ? "(none, or not readable)" : text.trim() || "(empty)"}\n\nIts character and tone (SOUL.md in its workspace; update_agent "soul" replaces it):\n${soul === undefined ? "(none, or not readable)" : soul.trim() || "(empty)"}\n\nIts own defaults and preferences for tools (TOOLS.md in its workspace, on top of the TOOLS.md for all agents; update_agent "tooling" replaces it):\n${tooling === undefined ? "(none, or not readable)" : tooling.trim() || "(empty)"}`);
+						return ok(`${about(a)}\n    workspace: ${a.workspace}\n    may hand work to: ${delegatesText(cfg, a)}\n\nIts instructions (AGENTS.md in its workspace, which it also keeps itself; update_agent "instructions" replaces them):\n${text === undefined ? "(none, or not readable)" : text.trim() || "(empty)"}\n\nIts character and tone (SOUL.md in its workspace; update_agent "soul" replaces it):\n${soul === undefined ? "(none, or not readable)" : soul.trim() || "(empty)"}\n\nIts own defaults and preferences for tools (TOOLS.md in its workspace, on top of the TOOLS.md for all agents; update_agent "tooling" replaces it):\n${tooling === undefined ? "(none, or not readable)" : tooling.trim() || "(empty)"}`);
 					},
 				}),
 				defineTool({
@@ -1155,7 +1157,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						thinking: Type.Optional(Type.String({ description: "How much it reasons: off, minimal, low, medium, high, xhigh, max" })),
 						mode: Type.Optional(Type.String({ description: "auto (no sandbox: its shell and file tools reach your owner's whole account and the network), safe (in the sandbox: its own folders), manual (in the sandbox, every action waits for your owner), bypass (no sandbox, nothing waits), plan (nothing is done), or default" })),
 						tools: Type.Optional(Type.String({ description: `Its built-in tools, all of them, separated by commas, from: ${AGENT_TOOLS.join(", ")}` })),
-						delegates: Type.Optional(Type.String({ description: 'The agents it may hand work to, all of them, separated by commas. "*" is every agent' })),
+						delegates: Type.Optional(Type.String({ description: 'The agents it may hand work to, all of them, separated by commas. "*" is every agent but you, the main one' })),
 						network: Type.Optional(Type.Boolean({ description: "Whether its shell may use the network" })),
 						read: Type.Optional(Type.Array(Type.String(), { description: "Folders outside its workspace that it may read from now on, each as a full path" })),
 						write: Type.Optional(Type.Array(Type.String(), { description: "Folders outside its workspace that it may read and change from now on, each as a full path" })),
