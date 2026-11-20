@@ -2270,7 +2270,7 @@ function AppPage() {
 								</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
-								{newer?.updater?.state === "ready" ? <Button size="xs" onClick={() => void s.installUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : newer && newer.updater?.state !== "downloading" ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
+								{newer?.updater?.state === "ready" ? <Button size="xs" onClick={() => void s.restartToUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : newer && newer.updater?.state !== "downloading" ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
 								<Button variant="outline" size="xs" disabled={s.updateLooking} onClick={() => void s.lookForUpdate(true)}><RotateCwIcon data-icon="inline-start" />Check now</Button>
 							</div>
 						</Field>
