@@ -10,7 +10,8 @@ import { FUNNEL_PORTS, isFunnel } from "../relay/src/addresses.ts";
 import { CLOSE } from "../relay/src/relay.ts";
 import { daemonPath, type BridgeEvent } from "./protocol.ts";
 import { REMOTE_COMMAND } from "./remote-command.ts";
-import { generateKey, publicKeyLine, RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions, type OpenStream } from "./ssh.ts";
+import { askToPair, cleanName, deviceName, isMac, MAC, macFingerprint, PAIRED_USER, pairUser, type PairLink } from "./pairing.ts";
+import { generateKey, PeerClosed, publicKeyLine, RelayClosed, SshRefused, type Channel, type Connection, type ConnectOptions, type OpenStream } from "./ssh.ts";
 import { callDaemon, followEvents, loopbackEnd, mediaOf, runService, ServiceTrouble, type Daemon } from "./tunnel.ts";
 
 /** Where the bridge keeps what it remembers: IndexedDB in a browser (idb-store.ts), a map in the tests. Values are structured-cloned, CryptoKeys included. */
@@ -25,6 +26,18 @@ export type WebBridgeDeps = {
 	store: Store;
 	/** The transport to a host and port through the relay: its WebSocket (ssh.ts `relayStream`). */
 	relay(host: string, port: number): OpenStream;
+	/**
+	 * The transport to a paired Mac by its machine id: a data channel made through the meeting
+	 * service (peer.ts). Its opener throws `PeerClosed` when there is no way to the Mac. None: a
+	 * paired Mac cannot be reached from this browser, and saying so is all the bridge does.
+	 */
+	peer?(id: string): OpenStream;
+	/** The pairing link the address carried when the document loaded, already taken out of it (pairing.ts `takePairLink`). */
+	pairLink?: PairLink;
+	/** The browser's user agent, of which the Mac is told this browser's name ("Chrome on Android"). */
+	userAgent?: string;
+	/** Reads the deployment's configuration (`GET /meet/config`: `{ice, relay}`); none, or a failed read: user@host machines can be added. */
+	config?(): Promise<unknown>;
 	/** Puts a text on the clipboard. */
 	clipboard(text: string): Promise<void>;
 	/** Hands a text to the system's share sheet; none: the clipboard. */
@@ -91,7 +104,7 @@ function cleanStorage(value: unknown): PageStorage | undefined {
 	if (entries.length > STORAGE_KEYS) throw new Error(`The page asked to keep too much: at most ${STORAGE_KEYS} entries.`);
 	return Object.fromEntries(entries) as PageStorage;
 }
-type Kept = { prefs: PagePrefs; hosts: string[]; use?: string };
+type Kept = { prefs: PagePrefs; hosts: string[]; use?: string; names: Record<string, string> };
 
 const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false };
 const MAX_HOSTS = 20;
@@ -106,6 +119,22 @@ export function parseHost(value: string): { user: string; hostname: string; port
 	const label = /^[\d.]+$/.test(hostname) || hostname.includes(":") ? hostname : hostname.split(".")[0];
 	return { user: m[1], hostname, port, label };
 }
+
+/** What the owner is told when the way to a paired Mac cannot be opened. All three may pass by themselves, so the bridge keeps trying. */
+const PEER_TROUBLE: Record<PeerClosed["reason"], string> = {
+	absent: "Your Mac does not answer: it is off, asleep, or Pine is closed. This browser keeps trying, and connects when the Mac is back.",
+	"no-path": "Your Mac is there, but no direct connection could be made from this network. Try another network (another Wi-Fi, or your phone's data); this browser keeps trying meanwhile.",
+	limits: "The meeting service is over its limits for now. Try again later; this browser keeps trying meanwhile.",
+};
+/** The same, while pairing: nothing is tried again, since the link is for one use and two minutes. */
+const PAIR_TROUBLE: Record<PeerClosed["reason"], string> = {
+	absent: "Your Mac does not answer: it is off, asleep, or Pine is closed. Open Pine on the Mac and add this device again.",
+	"no-path": "Your Mac is there, but no direct connection could be made from this network. Try another network (another Wi-Fi, or your phone's data), then add this device again at the Mac.",
+	limits: "The meeting service is over its limits for now. Try again later: add this device again at the Mac.",
+};
+const NOT_KNOWN = "This browser is no longer known to your Mac. Open Pine on the Mac and add this device again.";
+const PAIR_EXPIRED = "This pairing link has expired or was used already. Open Pine on the Mac and add this device again.";
+const NO_PEER = "This browser cannot reach a paired Mac: this version of the web client has no way to it.";
 
 const NO_MACHINE: ServiceState = {
 	status: "error",
@@ -148,19 +177,47 @@ export function webBridge(deps: WebBridgeDeps) {
 	const listeners = new Map<BridgeEvent, Set<(value: unknown) => void>>();
 	const emit = (event: BridgeEvent, value: unknown) => listeners.get(event)?.forEach((fn) => fn(value));
 
-	let kept: Kept = { prefs: { ...DEFAULTS }, hosts: [] };
+	let kept: Kept = { prefs: { ...DEFAULTS }, hosts: [], names: {} };
 	let hostKeys: Record<string, string> = {};
+	// Whether user@host machines can be added: the deployment's configuration says, and a read that fails leaves them.
+	let canAddHost = true;
 	let loaded: Promise<void> | undefined;
 	const load = () =>
 		(loaded ??= (async () => {
-			const [stored, keys] = (await Promise.all([deps.store.get("prefs"), deps.store.get("hostKeys")])) as [Partial<Kept> | undefined, Record<string, string> | undefined];
-			kept = { prefs: { ...DEFAULTS, ...stored?.prefs }, hosts: Array.isArray(stored?.hosts) ? stored.hosts : [], ...(stored?.use ? { use: stored.use } : {}) };
+			const [stored, keys, config] = (await Promise.all([deps.store.get("prefs"), deps.store.get("hostKeys"), readConfig()])) as [Partial<Kept> | undefined, Record<string, string> | undefined, unknown];
+			const names = stored?.names && typeof stored.names === "object" ? stored.names : {};
+			kept = { prefs: { ...DEFAULTS, ...stored?.prefs }, hosts: Array.isArray(stored?.hosts) ? stored.hosts : [], names, ...(stored?.use ? { use: stored.use } : {}) };
 			hostKeys = keys ?? {};
-			if (!kept.use) state = NO_MACHINE;
+			canAddHost = !(config && typeof config === "object" && (config as { relay?: unknown }).relay === false);
+			if (deps.pairLink) state = { status: "starting", pairing: {} };
+			else if (!kept.use) state = NO_MACHINE;
 		})());
+	/** The configuration, or nothing when it cannot be read within a few seconds. */
+	const readConfig = async (): Promise<unknown> => {
+		if (!deps.config) return undefined;
+		let timer: Parameters<typeof clearTimeout>[0];
+		const late = new Promise<undefined>((resolve) => (timer = setTimeout(resolve, 5000)));
+		try {
+			return await Promise.race([deps.config(), late]);
+		} catch {
+			return undefined;
+		} finally {
+			clearTimeout(timer);
+		}
+	};
 	const save = () => deps.store.set("prefs", kept);
 	const saveKeys = () => deps.store.set("hostKeys", hostKeys);
-	const prefsOut = (): Prefs => ({ ...kept.prefs, hosts: [...kept.hosts], ...(kept.use ? { use: kept.use } : {}) });
+	const prefsOut = (): Prefs => ({ ...kept.prefs, hosts: [...kept.hosts], names: { ...kept.names }, ...(kept.use ? { use: kept.use } : {}) });
+	/** What the owner calls a machine: the name kept for it, else for user@host its host's first label, else "your Mac". */
+	const labelOf = (host: string) => kept.names[host] ?? (isMac(host) ? "your Mac" : parseHost(host).label);
+	const opener = (host: string): Pick<ConnectOptions, "open" | "user"> => {
+		if (isMac(host)) {
+			if (!deps.peer) throw new Error(NO_PEER);
+			return { open: deps.peer(host.slice(MAC.length)), user: PAIRED_USER };
+		}
+		const { user, hostname, port } = parseHost(host);
+		return { open: deps.relay(hostname, port), user };
+	};
 
 	// The browser's key: made once, kept in the store as CryptoKeys that WebCrypto will not hand out.
 	let pair: Promise<CryptoKeyPair> | undefined;
@@ -220,13 +277,22 @@ export function webBridge(deps: WebBridgeDeps) {
 		};
 		if (!again) setState({ status: "starting", host });
 		const known = hostKeys[host];
+		const mac = isMac(host);
 		let connection: Connection;
 		try {
-			const { user, hostname, port } = parseHost(host);
 			// With no key trusted yet, a fingerprint no key has: the core stops at the host key and says which it saw, before the browser's key is offered.
-			connection = await deps.connect({ open: deps.relay(hostname, port), user, key: await key(), hostFingerprint: known ?? "none" });
+			connection = await deps.connect({ ...opener(host), key: await key(), hostFingerprint: known ?? "none" });
 		} catch (e) {
 			if (mine !== round) return "superseded";
+			if (mac) {
+				// A paired Mac's key came from its link and is never asked about: another one is refused for good.
+				if (e instanceof SshRefused && e.reason === "host-key")
+					return final({ status: "error", kind: "ssh", host, fingerprint: e.hostFingerprint, changed: true, message: `The host key of ${labelOf(host)} changed: it was ${known ?? "none"}, it is now ${e.hostFingerprint ?? "unknown"}. Someone may stand between this browser and the Mac. Forget it here, then open Pine on the Mac and add this device again.` });
+				if (e instanceof SshRefused) return final({ status: "error", kind: "ssh", host, message: NOT_KNOWN });
+				if (e instanceof PeerClosed) return passing(PEER_TROUBLE[e.reason]);
+				if (e instanceof Error && e.message === NO_PEER) return final({ status: "error", kind: "ssh", host, message: NO_PEER });
+				return passing(`Could not connect to ${labelOf(host)}. ${e instanceof Error ? e.message : String(e)}`);
+			}
 			if (e instanceof SshRefused && e.reason === "host-key" && e.hostFingerprint) {
 				const seen = e.hostFingerprint;
 				if (known)
@@ -245,7 +311,7 @@ export function webBridge(deps: WebBridgeDeps) {
 		let dropped = false;
 		void connection.closed.then(() => (dropped = true));
 		const held: NonNullable<typeof current> = (current = { connection });
-		const { label } = parseHost(host);
+		const label = labelOf(host);
 		try {
 			const { said, channel } = await runService(connection, REMOTE_COMMAND, deps.serviceMs);
 			if (mine !== round) {
@@ -256,7 +322,7 @@ export function webBridge(deps: WebBridgeDeps) {
 			if (said.error) throw new Error(`The pine on ${label} did not start: ${said.error}`);
 			const far = loopbackEnd(said.base);
 			held.daemon = { connection, host: far.host, port: far.port, token: String(said.token) };
-			setState({ status: "ready", mode: `on ${label}`, started: said.started === true, home: `${label}:${String(said.home ?? "~/.pine")}`, version: typeof said.version === "string" ? said.version : undefined, from: `ssh ${host}`, host, label });
+			setState({ status: "ready", mode: `on ${label}`, started: said.started === true, home: `${label}:${String(said.home ?? "~/.pine")}`, version: typeof said.version === "string" ? said.version : undefined, from: mac ? `paired ${label}` : `ssh ${host}`, host, label });
 			const events = (held.events = new AbortController());
 			// Lost: the connection ended, or pine there stopped answering with SSH still up. Either way it is made again.
 			const lost = () => {
@@ -270,10 +336,10 @@ export function webBridge(deps: WebBridgeDeps) {
 			const cut = dropped;
 			await letGo();
 			if (mine !== round) return "superseded";
-			if (e instanceof ServiceTrouble && e.message === "timeout") return passing(serviceTrouble(host, e));
+			if (e instanceof ServiceTrouble && e.message === "timeout") return passing(serviceTrouble(mac ? label : host, e));
 			// The connection went while pine service was asked: the network, not the machine.
-			if (cut) return passing(`The connection to ${host} was lost while pine there was asked to start.`);
-			if (e instanceof ServiceTrouble) return final({ status: "error", kind: "ssh", host, message: serviceTrouble(host, e) });
+			if (cut) return passing(`The connection to ${mac ? label : host} was lost while pine there was asked to start.`);
+			if (e instanceof ServiceTrouble) return final({ status: "error", kind: "ssh", host, message: serviceTrouble(mac ? label : host, e) });
 			return final({ status: "error", kind: "failed", host, message: e instanceof Error ? e.message : String(e) });
 		}
 	};
@@ -308,6 +374,47 @@ export function webBridge(deps: WebBridgeDeps) {
 		setState(NO_MACHINE);
 	};
 
+	/**
+	 * Pairs with the Mac a pairing link names: a pairing session that expects exactly the host key
+	 * the link names (the core refuses any other before the browser's key is offered), the pairing
+	 * request, and the owner's answer at the Mac. Only a yes keeps anything: the Mac under its
+	 * computer's name, made the machine in use, and the link's fingerprint as its host key for that
+	 * machine alone, unless one is kept for it already. Then it is connected to as a paired browser.
+	 */
+	const pairWith = async (link: PairLink) => {
+		const mine = ++round;
+		await letGo();
+		const host = `${MAC}${link.id}`;
+		const name = deviceName(deps.userAgent ?? "");
+		const stop = (message: string) => mine === round && setState({ status: "error", kind: "ssh", message });
+		setState({ status: "starting", pairing: { name } });
+		let connection: Connection;
+		try {
+			if (!deps.peer) throw new Error(NO_PEER);
+			connection = await deps.connect({ open: deps.peer(link.id), user: pairUser(link.code), key: await key(), hostFingerprint: macFingerprint(link.id) });
+		} catch (e) {
+			if (e instanceof SshRefused && e.reason === "host-key") return stop("The Mac that answered is not the one this pairing link names: nothing was trusted. Open Pine on your Mac and add this device again.");
+			if (e instanceof SshRefused) return stop(PAIR_EXPIRED);
+			if (e instanceof PeerClosed) return stop(PAIR_TROUBLE[e.reason]);
+			return stop(`Could not reach your Mac to pair with it. ${e instanceof Error ? e.message : String(e)}`);
+		}
+		let answer: Awaited<ReturnType<typeof askToPair>>;
+		try {
+			answer = await askToPair(connection, name, (code) => mine === round && setState({ status: "starting", pairing: { code, name } }));
+		} catch (e) {
+			void connection.close().catch(() => {});
+			return stop(`The pairing with your Mac did not go through. ${e instanceof Error ? e.message : String(e)}`);
+		}
+		void connection.close().catch(() => {});
+		if (mine !== round) return;
+		if (!answer.ok) return stop(answer.reason === "refused" ? "Your Mac refused this browser: nothing was kept. To pair it after all, open Pine on the Mac and add this device again." : PAIR_EXPIRED);
+		if (!kept.hosts.includes(host) && kept.hosts.length >= MAX_HOSTS) return stop(`There are ${MAX_HOSTS} machines already: forget one first, then add this device again at the Mac.`);
+		kept = { ...kept, hosts: kept.hosts.includes(host) ? kept.hosts : [...kept.hosts, host], names: { ...kept.names, [host]: answer.name }, use: host };
+		hostKeys[host] ??= macFingerprint(link.id);
+		await Promise.all([save(), saveKeys()]);
+		if (mine === round) void connectTo(host);
+	};
+
 	let started = false;
 	const bridge = {
 		on(event: BridgeEvent, fn: (value: unknown) => void) {
@@ -317,15 +424,16 @@ export function webBridge(deps: WebBridgeDeps) {
 		},
 		async state(): Promise<AppState> {
 			await load();
-			return { state, connected, home: state.status === "ready" ? state.home : undefined, prefs: prefsOut(), platform: "web", focused: true, updates: false, versions: { app: deps.version, electron: "none" }, local: false };
+			return { state, connected, home: state.status === "ready" ? state.home : undefined, prefs: prefsOut(), platform: "web", focused: true, updates: false, versions: { app: deps.version, electron: "none" }, local: false, canAddHost };
 		},
-		/** The page has started: it is told the state as it is now, and the machine in use is connected to (once). */
+		/** The page has started: it is told the state as it is now, and the pairing link is paired with, or else the machine in use connected to (once). */
 		async ready() {
 			await load();
 			emit("service", state);
 			if (started) return;
 			started = true;
-			if (kept.use) void connectTo(kept.use);
+			if (deps.pairLink) void pairWith(deps.pairLink);
+			else if (kept.use) void connectTo(kept.use);
 		},
 		async retry() {
 			await load();
@@ -356,8 +464,10 @@ export function webBridge(deps: WebBridgeDeps) {
 			await save();
 			void connectTo(host);
 		},
+		/** A user@host machine; a paired Mac is added by its pairing link only. */
 		async addHost(host: string) {
 			await load();
+			if (!canAddHost) throw new Error("This address reaches no user@host machines: pair a Mac instead, from Settings > Browser access in the Pine app there.");
 			parseHost(host);
 			if (!kept.hosts.includes(host)) {
 				if (kept.hosts.length >= MAX_HOSTS) throw new Error(`There are ${MAX_HOSTS} machines already: forget one first.`);
@@ -366,13 +476,24 @@ export function webBridge(deps: WebBridgeDeps) {
 			}
 			return prefsOut();
 		},
-		/** A machine forgotten takes its host key along, and its connection when it is the one in use. */
+		/** A machine forgotten takes its name and its host key along, and its connection when it is the one in use. */
 		async forgetHost(host: string) {
 			await load();
-			kept = { ...kept, hosts: kept.hosts.filter((h) => h !== host) };
+			const { [host]: _name, ...names } = kept.names;
+			kept = { ...kept, hosts: kept.hosts.filter((h) => h !== host), names };
 			delete hostKeys[host];
 			if (kept.use === host) await leave();
 			await Promise.all([save(), saveKeys()]);
+			return prefsOut();
+		},
+		/** The name the owner sees for a machine of the list, as text: no control characters, at most 60 characters. */
+		async renameHost(host: string, name: string) {
+			await load();
+			if (!kept.hosts.includes(host)) throw new Error(`${host.slice(0, 80)} is not one of your machines: nothing was renamed.`);
+			const clean = cleanName(name);
+			if (!clean) throw new Error("A machine's name needs at least one letter: nothing was renamed.");
+			kept = { ...kept, names: { ...kept.names, [host]: clean } };
+			await save();
 			return prefsOut();
 		},
 		/** Back to the machines: the one in use is let go of, and kept with its host key for the next time. */
@@ -387,7 +508,8 @@ export function webBridge(deps: WebBridgeDeps) {
 		/** The owner's yes to exactly the fingerprint the page was shown for that host; never to a key that changed. */
 		async trustHostKey(host: string, fingerprint: string) {
 			const s = state;
-			if (s.status !== "error" || s.host !== host || s.fingerprint !== fingerprint || s.changed !== false) throw new Error(`That is not the key ${host} showed: nothing was trusted.`);
+			// A paired Mac's key comes from its pairing link alone, never from a press here.
+			if (isMac(host) || s.status !== "error" || s.host !== host || s.fingerprint !== fingerprint || s.changed !== false) throw new Error(`That is not the key ${host} showed: nothing was trusted.`);
 			hostKeys[host] = fingerprint;
 			await saveKeys();
 			void connectTo(host);

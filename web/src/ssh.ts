@@ -278,6 +278,21 @@ export class RelayClosed extends Error {
 	}
 }
 
+/**
+ * The way to a paired Mac could not be opened: no Mac waits at the meeting service under its id
+ * ("absent"), the Mac is there but no direct connection could be made from this network
+ * ("no-path"), or the meeting service is over its limits ("limits"). Thrown by the peer transport's
+ * opener (peer.ts); the bridge tells the owner each in words of its own.
+ */
+export class PeerClosed extends Error {
+	readonly reason: "absent" | "no-path" | "limits";
+	constructor(reason: "absent" | "no-path" | "limits", message?: string) {
+		super(message ?? `The way to the Mac could not be opened (${reason}).`);
+		this.name = "PeerClosed";
+		this.reason = reason;
+	}
+}
+
 /** Why a connection was refused: a host key other than the one confirmed, or a key not authorised. */
 export class SshRefused extends Error {
 	readonly reason: "host-key" | "not-authorized";
