@@ -57,8 +57,9 @@ A release counts as a newer app once its disk image and its update feed for your
 are attached to it, which is some minutes after pine itself is published. A preview of pine is
 not a release, and the app never points at one. The address of the update is made by the app
 from the release's version and your kind of Mac, on pine's GitHub releases, and macOS installs
-only an app signed by the same developer as the one you run. The question and the download
-send the user agent `Pine` and nothing else about your computer, your pine or the app. An app run from the disk image, or
+only an app signed by the same developer as the one you run. The question and the update's feed
+send the user agent `Pine` and nothing else; the zip itself is fetched by macOS's updater, whose
+user agent names the app's version and the version of macOS. An app run from the disk image, or
 from a folder it cannot write, cannot replace itself: it says so and links to the release's
 page (move it to Applications). When **Update automatically** is turned off after an update
 was downloaded, the app shows the release's link again, but macOS may still install that update
@@ -801,7 +802,7 @@ the agent to write. So:
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | Browser access | Off until you turn it on. Then the app's SSH server of its own (not the system's SSH server, Remote Login on macOS) accepts only the keys you allowed at this computer, by key and never by password, and gives them this computer's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
-| What the app itself asks the web | GitHub, for pine's last release and, when it is newer, its update (see "A newer version"). Both send the user agent `Pine` and nothing else about this computer, your pine or the app. Of the answer only the release's number is used, and the link and the update's address are made by the app and lead to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
+| What the app itself asks the web | GitHub, for pine's last release and, when it is newer, its update (see "A newer version"). The question and the update's feed send the user agent `Pine` and nothing else; the update's zip is fetched by macOS's updater, whose user agent names the app's version and the version of macOS. Of the answer only the release's number is used, and the link and the update's address are made by the app and lead to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
 itself. What it knows, the daemon told it.
