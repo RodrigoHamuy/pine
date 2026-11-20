@@ -82,8 +82,9 @@ export interface Attachment {
 
 export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running" | "terminal";
 
-/** What can be shown beside a conversation: the side panel and the browser's aside. */
-export type Beside = "code" | "aside";
+/** What can be shown beside a conversation: the side panel, the browser's aside, and the view of all of pine
+ *  (which needs no conversation). */
+export type Beside = "code" | "aside" | "view";
 
 /** Tailwind's `lg`: below it a conversation and the side panel beside it do not both fit, with the side bar as a column too.
  *  There the side panel (CodePanel.tsx) and the browser's aside (Browser.tsx) are sheets over the conversation, one at a time. */
@@ -94,6 +95,8 @@ export const ROOM = "(min-width: 64rem)";
  *  that none of the three is squeezed to its minimum. There only the one opened last is drawn; the other comes back
  *  by itself when there is room again. */
 export const BOTH = 1100;
+/** The same for all three: the conversation and three panels side by side. */
+export const THREE = 1500;
 
 const MEDIA_KIND = (name: string): "image" | "video" | "audio" | undefined => (/\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm|m4v)$/i.test(name) ? "video" : /\.(wav|mp3|m4a|ogg|flac|aiff?)$/i.test(name) ? "audio" : undefined);
 export const mediaKind = MEDIA_KIND;
@@ -290,8 +293,19 @@ export class Store extends Model {
 	codeView: CodeView = "agent";
 	/** Whether the browser's aside is open: a matter of this window alone, kept like the side bar. */
 	aside = localStorage.getItem("pine.aside") === "shown";
-	/** Of the side panel and the aside, the one opened last: where there is room for one only, it is the one shown. */
-	last: Beside = "code";
+	/** Whether the view's panel is open: kept like the aside. */
+	view_ = localStorage.getItem("pine.view") === "shown";
+	/** Whether this page can run a view at all (`AppState.views`): the desktop app's can, the others' cannot. */
+	viewsHere = false;
+	/** The view pine has in force (`ui.view`), the ones in its folder, and the one pine.json names; no view in force: no panel, no button. */
+	view: string | null = null;
+	views: Array<{ id: string; problem?: string }> = [];
+	viewChosen: string | null = null;
+	/** Who else reads the daemon's live events, batch by batch (the view's world). */
+	readonly taps = new Set<(batch: PineEvent[]) => void>();
+	/** The panels beside a conversation, the one opened last at the end: where there is room for fewer than are open,
+	 *  the ones opened last are drawn. */
+	order: Beside[] = ["view", "aside", "code"];
 	/** In a window with sheets, the sheet in front was put away while the other was open: that one stays open behind,
 	 *  and comes forward by its own toggle, or as a column once the window is wide. */
 	tucked = false;
@@ -301,17 +315,18 @@ export class Store extends Model {
 	}
 	/** The width of the room beside the side bar, as the window last measured it (`App.tsx`). */
 	room = Infinity;
-	/** Whether only one of the side panel and the aside is drawn at a time: as sheets, or as columns with less room than `BOTH`. */
-	get one(): boolean {
-		return this.sheets || this.room < BOTH;
+	/** How many of the panels beside a conversation are drawn at a time: one as sheets or with less room than `BOTH`,
+	 *  two with less than `THREE`. */
+	get fits(): number {
+		return this.sheets || this.room < BOTH ? 1 : this.room < THREE ? 2 : 3;
 	}
 	/** Called as the room beside the side bar changes size; the page is drawn again only when that changes what shows. */
 	measure(room: number): void {
-		const was = this.one;
+		const was = this.fits;
 		this.room = room;
 		// Once the window has room for columns, the one left behind has shown as one: a sheet is no longer held back.
 		if (!this.sheets) this.tucked = false;
-		if (this.one !== was) this.touch();
+		if (this.fits !== was) this.touch();
 	}
 	palette = false;
 	picker?: Picker;
@@ -365,6 +380,8 @@ export class Store extends Model {
 			this.focused = f;
 			if (f && this.active) this.seen(this.active);
 			if (f) void this.refreshAgents();
+			// Said at once: the view draws seldom while the window is behind, and often again when it comes to the front.
+			this.touch();
 		});
 		bridge.onInitLine((line: string) => {
 			this.initLines.push(line);
@@ -389,6 +406,7 @@ export class Store extends Model {
 				if (why) this.flash(why, "bad", 8000);
 			});
 		this.serviceHost = typeof first.serviceHost === "string" && first.serviceHost ? first.serviceHost : undefined;
+		this.viewsHere = first.views === true;
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;
@@ -405,7 +423,7 @@ export class Store extends Model {
 	 * conversation has no browser at all, the address goes to the owner's own browser.
 	 */
 	async showInBrowser(tab: Tab, url: string): Promise<void> {
-		const before = { aside: this.aside, last: this.last, tucked: this.tucked };
+		const before = { aside: this.aside, order: [...this.order], tucked: this.tucked };
 		this.open("aside");
 		this.touch();
 		const state = await api.browserOpen(tab.agent, tab.session, url).catch(() => undefined);
@@ -417,7 +435,7 @@ export class Store extends Model {
 		}
 		// Put back as it was: closed if it was, and the side panel in front again if it was.
 		if (!before.aside) this.close("aside");
-		this.last = before.last;
+		this.order = before.order;
 		this.tucked = before.tucked;
 		this.flash("This conversation has no browser, so the address was opened in your own.", "muted", 6000);
 		this.touch();
@@ -794,6 +812,7 @@ export class Store extends Model {
 		void this.refreshSaid(true);
 		void this.pending();
 		void this.refreshThemes();
+		void this.refreshViews();
 		this.touch();
 	}
 
@@ -810,6 +829,28 @@ export class Store extends Model {
 		applyLook(look);
 		if (look && JSON.stringify(look) !== JSON.stringify(this.prefs.look)) this.prefs = await bridge.prefs({ look }).catch(() => this.prefs);
 		this.touch();
+	}
+
+	/** Whether there is a view to show here: the page can run one, and pine has one in force. */
+	get hasView(): boolean {
+		return this.viewsHere && Boolean(this.view);
+	}
+
+	/** Asks pine which views there are and which one is in force. */
+	async refreshViews(): Promise<void> {
+		if (!this.viewsHere) return;
+		const got = await api.views().catch(() => undefined);
+		if (!got) return;
+		this.views = got.views;
+		this.view = got.view;
+		this.viewChosen = got.chosen;
+		this.touch();
+	}
+
+	/** The owner picks a view, or "off": `ui.view` in pine.json. */
+	async setView(id: string): Promise<void> {
+		const done = await this.attempt(() => api.setSetting("ui.view", id));
+		if (done) await this.refreshViews();
 	}
 
 	/** The owner picks a theme: `ui.theme` in pine.json, set through pine as any of its settings. */
@@ -1964,39 +2005,52 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/** Whether the side panel or the aside is open, and drawn: where there is room for one only (`one`), only the one opened last is. */
+	/** Whether the side panel, the aside or the view is open. */
+	isOpen(which: Beside): boolean {
+		return which === "code" ? this.code : which === "aside" ? this.aside : this.view_ && this.hasView;
+	}
+
+	/** The side panel and the browser belong to a conversation; the view is drawn beside any tab. */
+	private drawable(which: Beside): boolean {
+		return which === "view" || this.active?.kind === "chat";
+	}
+
+	/** Whether a panel is open, and drawn: where there is room for fewer than are open (`fits`), the ones opened last are. */
 	shown(which: Beside): boolean {
-		const open = which === "code" ? this.code : this.aside;
-		return open && !(this.sheets && this.tucked) && !(this.one && this.code && this.aside && this.last !== which);
+		if (!this.isOpen(which) || !this.drawable(which) || (this.sheets && this.tucked)) return false;
+		const open = this.order.filter((w) => this.isOpen(w) && this.drawable(w));
+		return open.slice(-this.fits).includes(which);
 	}
 
-	/** Open but not drawn: there is room for one only, and the other was opened last. */
+	/** Open but not drawn: there is no room for it, and others were opened after it. */
 	behind(which: Beside): boolean {
-		return (which === "code" ? this.code : this.aside) && !this.shown(which);
+		return this.isOpen(which) && this.drawable(which) && !this.shown(which);
 	}
 
-	/** Opens the side panel or the aside, in front of the other. */
+	/** Opens a panel, in front of the others. */
 	open(which: Beside): void {
-		this.last = which;
+		this.order = [...this.order.filter((w) => w !== which), which];
 		this.tucked = false;
 		if (which === "code") {
 			this.code = true;
 			this.saveTabs();
 		} else {
-			this.aside = true;
-			localStorage.setItem("pine.aside", "shown");
+			if (which === "view") this.view_ = true;
+			else this.aside = true;
+			localStorage.setItem(`pine.${which}`, "shown");
 		}
 	}
 
 	close(which: Beside): void {
-		// A sheet put away does not bring up the other one in its place: that one stays open, behind. (Columns do show it.)
-		if (this.sheets && this.shown(which) && (which === "code" ? this.aside : this.code)) this.tucked = true;
+		// A sheet put away does not bring up another in its place: that one stays open, behind. (Columns do show it.)
+		if (this.sheets && this.shown(which) && this.order.some((w) => w !== which && this.isOpen(w) && this.drawable(w))) this.tucked = true;
 		if (which === "code") {
 			this.code = false;
 			this.saveTabs();
 		} else {
-			this.aside = false;
-			localStorage.setItem("pine.aside", "hidden");
+			if (which === "view") this.view_ = false;
+			else this.aside = false;
+			localStorage.setItem(`pine.${which}`, "hidden");
 		}
 	}
 
@@ -2061,6 +2115,9 @@ export class Store extends Model {
 				return this.toggle("code");
 			case "browser":
 				return this.toggle("aside");
+			case "view":
+				if (!this.hasView) return this.flash(this.viewsHere ? "There is no view: put one into the views folder of pine's home, or choose one in Settings." : "Views are shown in the Pine app on your computer.", "muted", 6000);
+				return this.toggle("view");
 			case "events":
 				return this.openEvents();
 			case "updates":
@@ -2145,6 +2202,13 @@ export class Store extends Model {
 	private dirty = new Set<Model>();
 
 	onEvents(batch: PineEvent[]): void {
+		for (const tap of this.taps) {
+			try {
+				tap(batch);
+			} catch (err) {
+				console.error("tap", err);
+			}
+		}
 		for (const e of batch) {
 			try {
 				this.onEvent(e);
@@ -2192,7 +2256,7 @@ export class Store extends Model {
 		}
 		if (e.topic === "pine/conversation") return void this.followed(p);
 		// A theme chosen in another UI, or by the main agent: the window follows.
-		if (e.topic === "pine/settings") return void (p.key === "ui.theme" && this.refreshThemes());
+		if (e.topic === "pine/settings") return void (p.key === "ui.theme" ? this.refreshThemes() : p.key === "ui.view" && this.refreshViews());
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
 

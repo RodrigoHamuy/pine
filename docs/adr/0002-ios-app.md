@@ -118,7 +118,8 @@ build test covers what ships for each platform either way.
   cover (SSH, events, the state machine) is held by two suites that mirror each other.
 - Rule 10 has a third holder of the token: the Swift plugin, beside `main.ts` and `PinePlugin.kt`.
 - The release workflow gains a job `ios` on a macOS runner with an Xcode able to build the project.
-  It needs no secret, so a release always has its IPA.
+  It needs no secret, so a release always has its IPA. (Taken out again in 0.49.1: the core's
+  `swift test` did not pass on GitHub's Xcode 27 preview image. The IPA is built by hand meanwhile.)
 - The owner installs and renews the app with their own Apple ID; the manual says how, and that a
   free Apple ID means a renewal every 7 days.
 - A reinstall under another Apple ID means adding the new key to every machine again.

@@ -305,6 +305,9 @@ and where the log cannot be read pine has less to go on: the paths a command nam
 runs, and after it the words of a failed command ("Operation not permitted", "Read-only file
 system", "Could not resolve host").
 
+To turn these questions off, set `security.askAccess` to `false` (Settings > Security, "Ask when an
+agent needs more"): an agent in the sandbox then gets more only by asking for it with `request_access`.
+
 ### The whole account
 
 An agent that is to do real work on your machine needs what you have at your terminal: your

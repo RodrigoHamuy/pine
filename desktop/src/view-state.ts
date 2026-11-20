@@ -1,0 +1,188 @@
+// What a view of the owner's is told about pine (src/view-kit.ts): the page's picture of it (view-world.ts)
+// with everything that could be private taken out. This is the one place that decides it, field by field,
+// by building the view's state anew from an allow-list, never by copying the page's and deleting things.
+//
+// A view is told: the agents by name, color and mode, and the names of their MCP servers, skills,
+// sources and schedules; each piece of work's agent, where it came from (you, the clock, a source or
+// another agent, by name), what it does, the name of the tool it is in, whether it asks you, the mode
+// it runs in and whether its conversation read outside content; the ways in by name and type and who
+// listens to each; the schedules by name, when they run and whom they wake; each agent's conversations
+// as numbers (which is a branch of which, which works in a worktree, which has a goal), the skill a piece
+// of work reads if its agent has it, and how far its to-do list is.
+// Never: a prompt, a task's text, an answer, an error's text, a tool's arguments or subject (a path, a
+// command), a question's text, a conversation's name, a folder, a model, a secret, or what an event said.
+import type { ViewAgent, ViewConversation, ViewHappening, ViewInput, ViewSchedule, ViewState, ViewTarget, ViewWork } from "../../src/view-kit.ts";
+import { ENDED, type From, type Job, type TalkNews, type World } from "./view-world.ts";
+
+/** What an agent has, as the daemon's detail of it says (`holdings`): only the names are taken. */
+export interface Holdings {
+	servers: string[];
+	skills: string[];
+	sources: string[];
+	schedules: string[];
+}
+
+const NARROW_TO_WIDE = ["manual", "plan", "safe", "auto", "bypass"];
+const stricter = (a: string, b: string) => NARROW_TO_WIDE.indexOf(a) >= 0 && NARROW_TO_WIDE.indexOf(a) < NARROW_TO_WIDE.indexOf(b);
+const names = (list: unknown) => (Array.isArray(list) ? list.filter((x): x is string => typeof x === "string").slice(0, 200) : []);
+/** A tool's name as it is, if it looks like one: letters, digits, "_" and "-". */
+const toolName = (t: string | undefined) => (t && /^[A-Za-z0-9_-]{1,80}$/.test(t) ? t : undefined);
+/** The MCP server of a tool an MCP server provides (`mcp__<server>__<tool>`). */
+const mcpOf = (t: string | undefined) => /^mcp__([A-Za-z0-9_-]+?)__/.exec(t ?? "")?.[1];
+
+function from(f: From): ViewWork["from"] {
+	switch (f.k) {
+		case "you":
+			return { k: "you" };
+		case "clock":
+			return f.name ? { k: "clock", name: f.name } : { k: "clock" };
+		case "source":
+			return { k: "source", name: f.name };
+		case "outside":
+			return { k: "outside", name: f.name };
+		case "agent":
+			return { k: "agent", id: f.id };
+		case "copy":
+			return { k: "copy", id: f.id };
+		case "pine":
+			return { k: "pine" };
+	}
+}
+
+/** How a schedule was set, if it is one of the three forms pine words it in: a cron line, an interval, a time. Never free text. */
+const WHEN = [
+	// A cron line: five or six fields of numbers and signs, or names of three letters (MON-FRI).
+	/^(?:(?:[0-9*/,\-?LW#]+|[A-Za-z]{3}(?:[-,][A-Za-z]{3})*)(?: |$)){5,6}$/,
+	/^every \d+(?:\.\d+)? ?[a-z]{1,8}(?: \d+ ?[a-z]{1,8}){0,2}$/,
+	/^once, at [0-9][0-9: -]{7,20}$/,
+];
+const whenText = (w: string | undefined) => {
+	const t = /"([^"]{1,40})"/.exec(w ?? "")?.[1] ?? w;
+	return t && WHEN.some((re) => re.test(t)) ? t : undefined;
+};
+
+/** An agent's conversations as a view knows them: numbers and shape. At most forty. */
+function conversations(world: World, agent: string): ViewConversation[] {
+	return world.talksOf(agent).slice(0, 40).map((t) => {
+		const room = world.rooms.get(`${agent}:${t.session}`);
+		const goal = world.goals.get(`${agent}:${t.session}`)?.status;
+		return { id: t.n, main: t.main, ...(t.branchOf !== undefined ? { branchOf: world.talkId(agent, t.branchOf) } : {}), worktree: t.worktree, busy: Boolean(room?.busy), outside: Boolean(room?.outside), ...(goal ? { goal } : {}) };
+	});
+}
+
+function work(world: World, j: Job, holdings: Map<string, Holdings>): ViewWork {
+	const talk = world.talkOf(j);
+	const goal = talk ? world.goals.get(`${talk.agent}:${talk.session}`) : undefined;
+	const skill = j.skill && holdings.get(j.agent)?.skills.includes(j.skill) ? j.skill : undefined;
+	const mode = world.modeOf(j);
+	const own = world.places.get(j.agent)?.mode;
+	const tool = j.doing === "tool" ? toolName(j.tool) : undefined;
+	const page = (t: number) => t - world.skew;
+	return {
+		id: j.id,
+		agent: j.agent,
+		copy: j.kind === "subagent",
+		...(j.parent !== undefined ? { parent: j.parent } : {}),
+		depth: j.depth,
+		from: from(j.from),
+		doing: j.doing,
+		...(tool ? { tool } : {}),
+		...(mcpOf(tool) ? { mcp: mcpOf(tool) } : {}),
+		waitingOn: [...j.waitingOn],
+		started: page(j.started),
+		...(j.finished !== undefined ? { finished: page(j.finished) } : {}),
+		tools: j.tools,
+		asking: Boolean(j.ask) && !ENDED.includes(j.doing),
+		...(mode ? { mode } : {}),
+		held: Boolean(mode && own && stricter(mode, own)),
+		outside: Boolean(world.outside(j)),
+		...(talk ? { conversation: talk.n } : {}),
+		branch: Boolean(talk?.branchOf !== undefined),
+		worktree: Boolean(talk?.worktree),
+		...(skill ? { skill } : {}),
+		...(j.steps ? { steps: { done: j.steps.done, total: j.steps.total } } : {}),
+		...(goal && goal.status === "active" && j.depth === 0 && !ENDED.includes(j.doing) ? { round: goal.round } : {}),
+	};
+}
+
+/** pine as a view sees it. */
+export function viewStateOf(world: World, o: { colorOf: (agent: string) => string; holdings: Map<string, Holdings>; selected?: ViewTarget; dark: boolean; focused?: boolean }): ViewState {
+	const agents: ViewAgent[] = world.agents().map((a) => {
+		const h = o.holdings.get(a.id);
+		return { id: a.id, main: a.main, color: o.colorOf(a.id), mode: a.mode, mcp: names(h?.servers), skills: names(h?.skills), sources: names(h?.sources), schedules: names(h?.schedules), conversations: conversations(world, a.id) };
+	});
+	const inputs: ViewInput[] = world.inputs().map((s) => ({ id: s.id, kind: s.kind, name: s.name, ...(s.type ? { type: s.type } : {}), count: s.count, ...(s.last !== undefined ? { last: s.last - world.skew } : {}), agents: [...(world.sourceInfo.get(s.id)?.agents ?? [])], failing: Boolean(world.sourceInfo.get(s.id)?.failing) }));
+	const page = (t: number | undefined) => (t !== undefined ? t - world.skew : undefined);
+	const schedules: ViewSchedule[] = world.schedules
+		.slice(0, 200)
+		.map((s) => ({ name: s.name, ...(world.places.has(s.scope) ? { agent: s.scope } : {}), ...(whenText(s.when) ? { when: whenText(s.when) } : {}), ...(s.next !== undefined ? { next: page(s.next) } : {}), ...(s.last !== undefined ? { last: page(s.last) } : {}) }))
+		.sort((a, b) => (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name));
+	const selected = o.selected && ("agent" in o.selected ? { agent: o.selected.agent } : { work: o.selected.work });
+	return { at: Date.now(), agents, work: [...world.jobs.values()].map((j) => work(world, j, o.holdings)), inputs, schedules, ...(selected ? { selected } : {}), dark: o.dark, focused: o.focused !== false };
+}
+
+/** What a batch of the daemon's events means to a view, once the world has taken it: who started, ended, used what. */
+export function happeningsOf(batch: Array<{ topic: string; payload: any; source?: string }>, world: World, holdings: Map<string, Holdings>): ViewHappening[] {
+	const out: ViewHappening[] = [];
+	for (const e of batch) {
+		const p = e.payload ?? {};
+		const [ns, who, kind] = e.topic.split("/");
+		if (ns === "source" && who) out.push({ k: "event", input: `source:${who}` });
+		else if (e.source === "timer") {
+			const sc = typeof p.name === "string" ? world.schedules.find((x) => x.name === p.name) : undefined;
+			out.push({ k: "event", input: "clock" }, { k: "scheduled", ...(sc ? { name: sc.name } : {}), ...(sc && world.places.has(sc.scope) ? { agent: sc.scope } : {}) });
+		}
+		else if (e.topic === "approval/requested" && typeof p.task === "number") out.push({ k: "asked", work: p.task, agent: String(p.agent ?? "") });
+		else if (e.topic === "approval/decided") out.push({ k: "decided", allowed: p.allow === true });
+		if (ns === "agent" && kind === "goal" && typeof p.session === "string" && world.places.has(who)) {
+			const g = world.goals.get(`${who}:${p.session}`);
+			const t = world.talks.get(`${who}:${p.session}`);
+			if (g) out.push({ k: "goal", agent: who, ...(t ? { conversation: t.n } : {}), status: g.status });
+			continue;
+		}
+		if (ns !== "agent" || typeof p.task !== "number") continue;
+		const j = world.jobs.get(p.task);
+		if (!j) continue;
+		if (kind === "todos") {
+			if (j.steps) out.push({ k: "steps", work: j.id, agent: j.agent, done: j.steps.done, total: j.steps.total });
+			continue;
+		}
+		if (kind === "steered") {
+			out.push({ k: "said", work: j.id, agent: j.agent });
+			continue;
+		}
+		const parent = j.parent !== undefined ? world.jobs.get(j.parent) : undefined;
+		if (kind === "started") {
+			out.push({ k: "started", work: j.id, agent: j.agent });
+			if (j.kind === "subagent") out.push({ k: "copied", work: j.id, agent: j.agent });
+			else if (parent && parent.agent !== j.agent) out.push({ k: "handed", work: j.id, from: parent.agent, to: j.agent });
+		} else if (kind === "done" || kind === "failed") {
+			out.push({ k: "ended", work: j.id, agent: j.agent, failed: j.doing === "failed" });
+			if (parent && parent.agent !== j.agent && j.kind !== "subagent") out.push({ k: "answered", work: j.id, from: j.agent, to: parent.agent });
+		} else if (kind === "tool" && p.phase === "start") {
+			const tool = toolName(String(p.tool ?? ""));
+			if (!tool) continue;
+			// A skill is read from its SKILL.md: named only when it is one the agent has, so a path never leaks.
+			const skill = tool === "read" ? /\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/.exec(String(p.subject ?? ""))?.[1] : undefined;
+			if (skill && holdings.get(j.agent)?.skills.includes(skill)) out.push({ k: "skill", work: j.id, agent: j.agent, skill });
+			else out.push({ k: "tool", work: j.id, agent: j.agent, tool, ...(mcpOf(tool) ? { mcp: mcpOf(tool) } : {}) });
+			if (tool === "send" || tool === "publish_event") out.push({ k: "sent", work: j.id, agent: j.agent, tool });
+		} else if (kind === "tool" && p.phase === "end") {
+			const tool = toolName(String(p.tool ?? ""));
+			if (tool) out.push({ k: "toolEnded", work: j.id, agent: j.agent, tool, ok: p.ok !== false });
+		}
+	}
+	return out;
+}
+
+/** What changed about conversations between two looks at them (`World.setConversations`), as a view hears it. */
+export const talkHappenings = (news: TalkNews[]): ViewHappening[] => news.map((n) => (n.k === "branched" ? { k: "branched", agent: n.agent, conversation: n.conversation, ...(n.from !== undefined ? { from: n.from } : {}), worktree: n.worktree } : { k: "worktree", agent: n.agent, conversation: n.conversation, made: n.made }));
+
+/** Whether something a view asks the panel to show or open is one the panel knows: a target from the frame is checked, not trusted. */
+export function knownTarget(world: World, t: unknown): ViewTarget | undefined {
+	if (!t || typeof t !== "object") return undefined;
+	const x = t as Record<string, unknown>;
+	if (typeof x.agent === "string" && world.places.has(x.agent)) return { agent: x.agent };
+	if (typeof x.work === "number" && world.jobs.has(x.work)) return { work: x.work };
+	return undefined;
+}

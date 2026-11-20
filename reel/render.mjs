@@ -7,6 +7,8 @@
 //   node reel/render.mjs --story scans      another script: story-scans.js -> reel/pine-reel-scans.mp4
 //   node reel/render.mjs --film code        a film of the other kind, one take through a 3D world: film-code.js
 //                                           on film.html -> reel/pine-reel-code.mp4
+//   node reel/render.mjs --film view        a film with a page of its own (film-view.html): the app's view, with
+//                                           pine's own office view running in it -> reel/pine-reel-view.mp4
 //   node reel/render.mjs --film code --music song.mp3   a piece of music under the film's own sounds;
 //                                           --music-from 5.3 starts it that many seconds into the piece
 //   node reel/render.mjs --film code --music song.mp3 --remix   only the sound again, under the film as it is
@@ -16,6 +18,7 @@
 // The whole film also gets its sound: one small sound per key and click, made by sound.py.
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import { stripTypeScriptTypes } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { chromium } from "../node_modules/playwright-core/index.mjs";
@@ -36,7 +39,15 @@ const story = arg("story");
 // A film that is one take through a 3D world is another page with an engine of its own (film.html, film.js).
 const film = arg("film");
 const name = film ? `pine-reel-${film}` : story ? `pine-reel-${story}` : "pine-reel";
-await page.goto(film ? `file://${path.join(dir, "film.html")}?film=${film}` : `file://${path.join(dir, "reel.html")}${story ? `?story=${story}` : ""}`);
+// A film may have a page of its own (film-<name>.html) instead of the 3D one.
+const own = film && fs.existsSync(path.join(dir, `film-${film}.html`));
+// The film about the view runs pine's own office view: it is handed over as text, its types taken away, with the
+// module it imports, the way the app hands a view to its frame.
+if (film === "view") {
+	const strip = (file) => stripTypeScriptTypes(fs.readFileSync(path.join(dir, "..", file), "utf8"), { mode: "strip" });
+	fs.writeFileSync(path.join(dir, "view-code.js"), `window.KIT_SRC = ${JSON.stringify(strip("src/view-kit.ts"))};\nwindow.OFFICE_SRC = ${JSON.stringify(strip("examples/home/views/office.ts"))};\n`);
+}
+await page.goto(own ? `file://${path.join(dir, `film-${film}.html`)}` : film ? `file://${path.join(dir, "film.html")}?film=${film}` : `file://${path.join(dir, "reel.html")}${story ? `?story=${story}` : ""}`);
 // Everything a frame may show is loaded before the first one is drawn.
 // The frames of the scanner clip, when they are there (assets/scan/001.jpg on).
 const scanDir = path.join(dir, "assets", "scan");
@@ -52,6 +63,8 @@ await page.evaluate(async (scan) => {
 	await document.fonts.load('24px "JBM"');
 	await document.fonts.load('700 24px "JBM"');
 	await document.fonts.ready;
+	// A page that has to get something ready first says so.
+	if (typeof READY !== "undefined") await READY;
 	const names = ["meme.jpg", "cones.jpg", "kevin.jpg", "../bill/water-bill-page1.png", "../bill/water-bill-page2.png", "logo.svg", "wallpaper.jpg", ...Array.from({ length: 40 }, (_, i) => `spag-${String(i).padStart(2, "0")}.jpg`), ...scan];
 	window.keep = await Promise.all(names.map((n) => new Promise((done) => { const im = new Image(); im.onload = im.onerror = () => done(im); im.src = `assets/${n}`; })));
 }, scan);

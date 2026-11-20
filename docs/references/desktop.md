@@ -336,7 +336,7 @@ service and lets nobody in.
 | `Add a device` | Shows a QR code, and Copy link for a computer that has no camera (send yourself the link and open it in that browser). The code works once, for two minutes, and stops when you close the dialog; New code makes another. Five wrong codes close it. Only one is open at a time, and only at this computer: nobody pairs a browser from afar |
 | `Allow` and `Refuse` | When a browser or the mobile app uses the code, the app names it ("Chrome on Android", "Pine on Pixel 9") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
 | `Devices` | Each paired browser by its name, the day it was paired and its last connection; "connected now" and how (same network, direct IPv4, direct IPv6, or relayed through your relay server) while it is connected. No notification for a reconnection |
-| `Remove` | Removes a paired phone, tablet or computer: it can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
+| `Remove` | Removes a paired phone, tablet or computer, so that the phone can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
 
 ### What a paired browser can do
 
@@ -427,10 +427,11 @@ agent's:
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens (it stays open while the turn runs, with its last lines). A `↳ … ↗` line opens a sub-agent's or delegated task's work in a tab of its own. A request of the agent's waits in the conversation with its buttons until it is answered, then becomes a line. Above your last message a line offers to take it back (**Take back**, `/undo`). Scrolled up, the conversation holds still while the answer goes on, and a button at its foot brings you back to the end |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed) |
-| The top right of the title bar | Two buttons: the side panel (`⌥⌘B`) and the browser (`⇧⌘B`). Each is pressed while what it shows is open. A click opens what is closed, closes what is in front, and brings to the front one that is open but behind the other (in a window narrower than 1024 pixels the sheet covers these buttons: there `⌥⌘B` and `⇧⌘B` do it). On a tab that is not a conversation (Settings, Events) both stay in their place and cannot be pressed |
+| The top right of the title bar | Up to three buttons: the side panel (`⌥⌘B`), the browser (`⇧⌘B`) and the view (`⇧⌘O`, where there is one), each a panel of its own at the right. Each is pressed while what it shows is open. A click opens what is closed, closes what is in front, and brings to the front one that is open but behind the others (in a window narrower than 1024 pixels the sheet covers these buttons: there `⌥⌘B`, `⇧⌘B` and `⇧⌘O` do it). On a tab that is not a conversation (Settings, Events) the side panel's and the browser's stay in their place and cannot be pressed; the view needs no conversation |
 | The bar under the input | `+` attaches files (or drop them on the input; a dropped folder is opened for the conversation); then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours). The model and the folder open a list to search, the reasoning and the mode a menu right above the button. `outside content` appears when the conversation has read something from outside; each button says what it is in a tooltip |
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
-| Browser | At the far right of the window, after the side panel (`⇧⌘B`): the browser the agent of the conversation works in. Drag its left edge to make it wider or narrower; its width is its own, apart from the side panel's. Its `×` closes it. See "The browser" |
+| View | At the right of the window, after the browser (`⇧⌘O`): all agents and their work at a glance, drawn by a view of yours. See "The view" |
+| Browser | At the right of the window, after the side panel (`⇧⌘B`): the browser the agent of the conversation works in. Drag its left edge to make it wider or narrower; its width is its own, apart from the side panel's. Its `×` closes it. See "The browser" |
 | Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
 
 The window can be made as narrow as a phone (360 pixels). Where there is no room for columns,
@@ -441,13 +442,13 @@ for every conversation.
 
 | Window | Side bar | Side panel and browser |
 |---|---|---|
-| 1024 pixels and wider | A column | A column each. Both at once where the room beside the side bar is 1100 pixels or more; with less, only the one you opened last, the other open behind it |
+| 1024 pixels and wider | A column | A column each. Two at once where the room beside the side bar is 1100 pixels or more, all three (with the view) from 1500; with less, the ones you opened last, the others open behind them |
 | 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes it. With both open, only the one you opened last lies there, and the other stays open behind it. The sheet covers the buttons of the title bar, so its key (`⌥⌘B` or `⇧⌘B`) brings the other to the front. Closing the one in front does not bring the other up: it stays open behind, shown as a column when the window is wide again, or as a sheet by its key |
 | Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above: the whole width of a window narrower than 640 pixels, and at most 540 pixels wide from 640 to 767 |
 
-With both the side panel and the browser open and less room than they need side by side (a sheet each,
-or less than 1100 pixels beside the side bar), neither comes first: the one you opened last shows, and
-the other is open behind it. Its button is pressed more lightly. In a window 1024 pixels and wider a
+With more of the side panel, the browser and the view open than there is room for side by
+side (a sheet each, less than 1100 pixels beside the side bar for two, less than 1500 for three), none
+comes first: the ones you opened last show, and the others are open behind them. Its button is pressed more lightly. In a window 1024 pixels and wider a
 click on that button brings it to the front and puts the other behind, and a click on the button of
 the one in front closes it, which shows the other again. Below 1024 pixels each is a sheet over the
 conversation, which covers the buttons of the title bar: there only `⌥⌘B` and `⇧⌘B` switch, and
@@ -531,6 +532,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | A terminal | A shell of yours beside each conversation, and ▶ on an answer's shell code blocks to run them in it: see "The terminal" |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
+| `/view` | A command of the app's own: the view at the right of the window (`⇧⌘O`, View > Toggle View). See "The view" |
 
 ### A sound in an answer
 
@@ -672,6 +674,66 @@ to choose for an upload, no passkey or system dialog, no copying out of the page
 typed without an input method. For those, close the app's browser and ask the agent in
 the terminal UI to show the browser, or set `"headed": true` for the browser.
 
+## The view
+
+The view (`⇧⌘O`, View > Toggle View, the radar at the top right of the title bar, or "View" in the
+palette) shows all of pine at a glance, in a panel of its own at the right of the window: every agent,
+the work each one does right now, where that work came from, who handed what to whom, the copies
+(sub-agents) at work, and what waits for you. It needs no conversation: it opens with Settings or the
+event log in front too, and stays open beside the side panel and the browser where there is room (see
+the table above).
+
+What the panel draws is a view: a script of yours in the `views` folder of pine's home, chosen with
+the view's name at the top of the panel, which is a list of the views in the folder (`ui.view`). pine
+comes with `office`, pine as a little house full of robots. How to write
+one, and what a view is told, is in [views.md](views.md). With no view in the folder, or the setting
+`off`, there is no button and no panel. The mobile app and the web client show no view.
+
+| | |
+|---|---|
+| Needs you | On top, whatever the view: what an agent asks you right now, each with **Answer** |
+| The view | In the middle, in a frame of its own: it draws pine as it likes, and a click in it can show an agent or a piece of work below, or open it |
+| What happened | Below the view, newest first, in plain words: what woke whom, what was handed on, who answered, what you were asked and what you said |
+| Looking closer | An agent or a piece of work chosen in the view, or in what happened, is shown below the view instead: for an agent its mode, its work, the conversations pine has open and what it did lately; for a piece of work where it came from, what it does now, the mode it runs in, whether its conversation read outside content, the time, what it handed on, and what it asks you. **Open** opens the conversation, or the task by itself |
+
+The words below the view are the app's own, and say everything. The view is told only the shape of
+pine: it never sees a prompt, an answer, a path or what an event said, and it reaches neither the app,
+nor pine, nor the web ([views.md](views.md), "What a view cannot do").
+
+`office` draws pine as a little tower house, cut open, in pixels: the main agent lives under the
+roof, the others on the floors below, you sit at your desk in the hall. Each agent has a room and a
+robot of its own look, in its color, and a plate at the door with its name and a sign for its mode. A
+robot's bubble says what it does, in words: "thinking...", "reading a file", "running a command",
+"browser: navigate", "skill: invoices", "waits for scout", "asks you!". What it does also shows in
+where it stands:
+
+| In the house | What it is |
+|---|---|
+| A robot paces its room | It thinks |
+| A robot at its shelf with a book; a book with a star | It reads or searches files; it reads one of its skills. Each starred book on the shelf is a skill the agent has |
+| A robot at its desk, the screen full of lines | It runs a command, edits a file, or writes its answer |
+| A robot at the rack | It uses a tool of an MCP server. Each lit slot of the rack is an MCP server the agent has; the one in use blinks |
+| A robot on its chair, legs swinging, an hourglass | It waits for work it handed on or for its copies |
+| A robot jumps, a red "!" | It asks you. The bell on your desk in the hall rings, and the panel has the question on top |
+| Small robots beside it | Copies (sub-agents), for as long as they work |
+| A letter with wings flies from one robot to another | A task handed on (`delegate`). A dashed line joins the two rooms while the work lasts; the answer flies back with a tick, or a cross if it failed |
+| A capsule in the glass tube | An event: from your desk (what you asked; the answer comes back down), from the box of an event source in the hall, or down from the clock in the turret when a schedule is due |
+| Alarm clocks over a desk; the clock in the turret | The agent's schedules; the turret's clock shows your time, and above it the schedule that runs next. They ring when one is due |
+| The board on the wall | The agent's conversations: a line for the main one, a fork for each branch, a leaf on one that works in a worktree, a small flag on one with a goal |
+| Pips under a bubble; a flag on the desk | The steps of its to-do list that are done; a goal that pine calls it for again and again |
+| A letter flies up to the dish on the roof | The agent sent something out (`send`, `publish_event`) |
+| Shield, lock, bolt, warning sign, blueprint on a door plate | The agent's mode: `safe`, `manual`, `auto`, `bypass` (with hazard tape and a beacon in the room), `plan` |
+| An amber lamp in a room, amber eyes | The work read outside content: sending something out asks you from now on. A shield on a robot's chest is work held to a stricter mode |
+| A robot throws its arms up; a robot droops under a puff of smoke | Work is done; work failed |
+
+The `?` at the top right shows this key in the view itself, and the pointer over anything says what
+it is: over a rack the names of the MCP servers, over a shelf the skills, over the clocks the schedules
+and when each runs next, over the board how many conversations and branches, over a box in the hall
+which agents the source wakes. The sky follows your clock and the year: dawn, day, the golden hour,
+dusk and night with the moon in its phase, and the trees of the season. At night an agent at rest
+sleeps at its desk. A camera goes where agents work, in whole steps so that pixels stay whole; scroll,
+drag or pinch to look yourself, the eye follows again, and the frame beside it shows the whole house.
+
 ## Settings
 
 `⌘,` opens the settings panel in a tab of its own, beside the conversations (the same key puts
@@ -806,6 +868,10 @@ desktop/
                    in either opens larger in a stock Dialog of its own)
     CodePanel.tsx  changes, files and the editor, output, what is running
     Browser.tsx    the agent's browser in its aside: its page as a picture, and what is done in it handed back
+    View.tsx       the view's panel: what asks you, the view in its sandboxed frame, what happened, what is
+                   chosen. view-world.ts is pine as the page knows it, made from the live events; view-state.ts
+                   is what a view is told of it (names and states, no text); view-frame.ts (view.html) is the
+                   frame a view runs in, with "pine/view" (../src/view-kit.ts)
     Settings.tsx   the settings pages
     BrowserAccess.tsx, machines.ts  Settings > Browser access (with its QR code, components/qr-code.tsx);
                    how the page names a machine and draws a pairing on the first screen

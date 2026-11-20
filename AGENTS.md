@@ -20,9 +20,9 @@ to change the code.
 | `npm run dev:preview` (in `desktop/`) | The app's page in an ordinary browser on a throwaway pine; `dev:preview:home` on `~/.pine`, whose daemon it never stops. Each checkout has ports of its own, from its path (`desktop/scripts/launch-json.mjs`), and `.claude/launch.json` is written with them by `npm install` in `desktop/` (it is not in git). After pulling, or when the preview pane lists no `desktop-preview`, run `node desktop/scripts/launch-json.mjs` (or `npm install` in `desktop/`). A preview and `npm run dev` end with whatever started them (`desktop/scripts/leash.mjs`). |
 | `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request and every push to `next`, whose build is accepted as the baseline (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark at a phone's width (360) and the window's (1280) through its modes (`desktop/.storybook/modes.ts`), so no dark or phone twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts`, a native module of browser access (`ssh2`, `node-datachannel`) or `desktop/electron/service.ts`, and the smoke test also after a change to the page's markup that it finds the page by (`data-slot` names): no workflow runs it. |
-| `npm test`, `npm run check` (in `mobile/`) | The mobile app's bridge and both builds of its page (Android, iOS) under `node:test`, and its type check against the desktop page's `Bridge`. `npm install` in `mobile/` once. Run both when you change `mobile/src`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. The `android` and `ios` jobs of the Release workflow run both before they build the APK and the IPA. |
+| `npm test`, `npm run check` (in `mobile/`) | The mobile app's bridge and both builds of its page (Android, iOS) under `node:test`, and its type check against the desktop page's `Bridge`. `npm install` in `mobile/` once. Run both when you change `mobile/src`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. The `android` job of the Release workflow runs both before it builds the APK; run them yourself before you build the IPA by hand. |
 | `npm run test:core` (in `mobile/`) | The native plugin's Kotlin core on the JVM: an SSH server in the test (Apache MINA sshd) and a stand-in daemon, and for a paired computer the Pine app's real access host under Node (`mobile/test/support/access-host.ts`, so it needs Node and `npm install` in `desktop/`), with libdatachannel's JVM binding behind the core's `WebRtc` interface. Run it when you change `mobile/core/`, `mobile/cases/`, `src/remote.ts` or `desktop/electron/access/`. |
-| `swift test` (in `mobile/ios-core/`) | The iOS plugin's Swift core on the Mac: a real OpenSSH `sshd` started by the test on a loopback port and a stand-in daemon, the same cases as the Kotlin core (`mobile/cases/`), and for a paired computer the same access host helper (Node and `npm install` in `desktop/`). Apple silicon only: libdatachannel's xcframework has no Intel slice for macOS. Run it when you change `mobile/ios-core/`, `mobile/cases/`, `src/remote.ts` or `desktop/electron/access/`. The `ios` job of the Release workflow runs it. |
+| `swift test` (in `mobile/ios-core/`) | The iOS plugin's Swift core on the Mac: a real OpenSSH `sshd` started by the test on a loopback port and a stand-in daemon, the same cases as the Kotlin core (`mobile/cases/`), and for a paired computer the same access host helper (Node and `npm install` in `desktop/`). Apple silicon only: libdatachannel's xcframework has no Intel slice for macOS. Run it when you change `mobile/ios-core/`, `mobile/cases/`, `src/remote.ts` or `desktop/electron/access/`. No workflow runs it for now. |
 | `npm run ipa`, `npm run smoke:ios`, `npm run ios:run` (in `mobile/`) | The IPA of a release, not signed (`scripts/ipa.ts`: `npm run ipa -- <version>`, written to `ios/App/output/`, checked unsigned and arm64); the iOS app from end to end on a simulator of its own without a window, against the Android smoke run's test SSH server, and paired with the real access host behind a TLS front whose authority the run adds to that simulator (`--pairing-only` for that alone); and the app opened in the Simulator app, by hand. The smoke test is the test of the web view's hardening in `PineViewController.swift` and `PinePlugin.swift`, of pairing by a pasted link and by a `pine:` address, of the return from the background and of the key kept in the Keychain: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. They need Xcode 27 with an iOS simulator runtime, and the smoke run a JDK as `npm run smoke` does. |
 | `npm run apk`, `npm run apk:release`, `npm run smoke` (in `mobile/`) | A debug APK; a release APK (signed when `ANDROID_KEYSTORE_FILE` and the three other variables of the release job name a key, versioned by `PINE_VERSION` and `PINE_VERSION_CODE`); and the app from end to end on an emulator without a window, against a test SSH server of its own running the real `pine service`, and paired with the real access host behind a TLS front whose authority only the debug build trusts (`-PpineSmokeAuthority`; `--transport-only` for the libwebrtc check, `--pairing-only` for that and pairing). The smoke test is the test of the WebView's hardening in `PinePlugin.kt`, of libwebrtc (`LibWebRtcTest`, the only test of it), of pairing by a pasted link and by an App Link, and of the back button and the app's return from the background: run it before a release that changes `mobile/` or upgrades Capacitor. No workflow runs it. The Gradle commands need the Android SDK (`ANDROID_HOME`, default `~/Library/Android/sdk`) and a JDK of 21 or later: `JAVA_HOME`, default Android Studio's (`/Applications/Android Studio.app/Contents/jbr/Contents/Home`), since a Mac has no `java` on its PATH by default. |
 | `npm test`, `npm run check`, `npm run build` (in `web/`) | The web client: the web bridge as the page calls it, in Node with a stand-in for SSH, and its SSH core in headless Chrome for Testing against a `sshd` of the test's own on a loopback port, and peer to peer with the Pine app's real access host (`desktop/electron/access/`), so it needs `npm install` in `desktop/` too; its type check; and its build into `web/dist` (the bridge's document, and the desktop page built for the browser under `page/`). `npm install` in `web/` once. Run them when you change `web/`, `desktop/electron/access/`, the page's bridge (`desktop/src/bridge.ts`) or what the page reads from it. |
@@ -74,6 +74,13 @@ src/
   env-file.ts       sets and removes entries in .env (secrets of sources that agents set up)
   themes.ts         the themes of the owner's UIs: VS Code color theme files in <home>/themes (seeded once from
                     examples/home/themes), listed for `GET /themes`, the one `ui.theme` names
+  views.ts          the views of the Pine app's panel: scripts of the owner's in <home>/views, listed, handed over
+                    with their types stripped (never run by the daemon), `ui.view`; seeded once from examples/home/views,
+                    with the guide to writing one (`views/AGENTS.md`, for the owner or a coding agent opened there;
+                    no agent of pine's reads it), which is written anew when it or `view-kit.ts` changed (`seedGuide`).
+                    Keep that guide true to `view-kit.ts`: `test/views.test.ts` checks its names
+  view-kit.ts       `pine/view`, what a view imports: the types of what a view is told, `defineView`, helpers. No
+                    Node, no DOM: the app's view frame runs it, and pine copies it into <home>/views/.pine for editors
   theme-colors.ts   a VS Code color theme resolved into pine's color roles, as hex colors and nothing else (no
                     fs: Storybook uses it too); a theme's `pine` object overrides a role by name
   update.ts         `pine update`: brings pine up to date the way it was installed (git or npm) and fetches what the new version needs;
@@ -556,6 +563,19 @@ These are invariants. A change that breaks one needs a test that shows why it is
    its cleaning rules (`CLEAN`), its link component and its image component. On every upgrade
    of Streamdown read its defaults again and run `npm run desktop:test`.
    `desktop/test/app.test.ts` has a test for it; keep it failing without each of the three.
+   A view of the owner's (<home>/views, `src/views.ts`, docs/references/views.md) is the one script
+   the page runs that is not the app's, and it runs in the page's one frame (`desktop/view.html`,
+   `desktop/src/view-frame.ts`): sandboxed with `allow-scripts` and nothing else, so its origin is
+   nobody's, under a policy of its own that allows no address (`VIEW_CSP` in `desktop/electron/daemon.ts`;
+   the page's own policy allows that frame and no other). It is handed the state that
+   `desktop/src/view-state.ts` builds anew from an allow-list (names, modes, states, tool names: never a
+   prompt, an answer, a path, a tool's arguments, an event's text), and what it asks the panel to show or
+   open is checked against what the panel knows (`knownTarget`). Never add `allow-same-origin` or another
+   permission to the frame, never hand it the bridge, the token or text, and never let it import more
+   than `pine/view`. `desktop/test/view-app.test.ts` has a view that tries to reach the bridge, the top
+   window, storage and an address on this computer, and looks for a word from a prompt and a path; it
+   fails without the sandbox. Only the desktop app's bridge says it can run a view (`AppState.views`);
+   the mobile app and the web client build no frame and show no view.
    The terminal beside a conversation (`desktop/electron/terminal.ts`) is the owner's own shell,
    run by the main process; the page only types into it. What an answer holds reaches it only by
    the owner's press on a code block's Run button, and only a block whose every character shows
@@ -833,21 +853,19 @@ armeabi-v7a alone, stripped by the NDK `mobile/android/variables.gradle` pins, a
 when one still carries `.debug_info`. Before the APK is built the job runs `npm run check` and `npm test` in `mobile/`. The
 smoke test is not run there (`npm run smoke`, on a computer of your own, with an emulator).
 
-A release from `main` gets the iOS app as well (the job `ios` in `release.yml`, on GitHub's
-`xcode-27` image, a preview, since the images up to `macos-26` stop at Xcode 26): an IPA that
-is not signed, `Pine-<version>.ipa`, which whoever installs it signs with their own Apple ID
-(AltStore, Sideloadly; docs/adr/0002-ios-app.md). It takes no secret and no environment, and
-nothing about Apple signing is ever stored in the repository or its secrets. The job runs
-`npm run check` and `npm test` in `mobile/` and `swift test` in `mobile/ios-core/`, then
-`node mobile/scripts/ipa.ts <version>`: the page built for iOS, `xcodebuild archive` for devices
-with code signing off and the packages at their committed versions
-(`-onlyUsePackageVersionsFromResolvedFile`: swift-collections is held where it compiles on
-Xcode 27), `CFBundleShortVersionString` the release's version and `CFBundleVersion` Android's
-versionCode, and a failure unless nothing inside the IPA is signed (the vendor's signature on the
-embedded `OpenSSL.framework`, which libdatachannel needs, is taken off), the app binary is arm64,
-and libdatachannel and OpenSSL are inside. Uploaded with
-`--clobber`, and rebuilt from the tag by `workflow_dispatch` like the other apps. The smoke
-test is not run there (`npm run smoke:ios`, on a Mac of your own).
+A release from `main` does not get the iOS app for now: the job that built it was taken out of
+`release.yml` because the core's `swift test` did not pass on GitHub's `xcode-27` preview image.
+The IPA is made by hand on a Mac (`npm run ipa -- <version>` in `mobile/`): not signed,
+`Pine-<version>.ipa`, which whoever installs it signs with their own Apple ID (AltStore,
+Sideloadly; docs/adr/0002-ios-app.md). Nothing about Apple signing is ever stored in the
+repository or its secrets. Run `npm run check` and `npm test` in `mobile/` and `swift test` in
+`mobile/ios-core/` before building it. `scripts/ipa.ts` archives for devices with code signing
+off and the packages at their committed versions (`-onlyUsePackageVersionsFromResolvedFile`:
+swift-collections is held where it compiles on Xcode 27), sets `CFBundleShortVersionString` to
+the version and `CFBundleVersion` to Android's versionCode, and fails unless nothing inside the
+IPA is signed (the vendor's signature on the embedded `OpenSSL.framework`, which libdatachannel
+needs, is taken off), the app binary is arm64, and libdatachannel and OpenSSL are inside. The
+smoke test is `npm run smoke:ios`, on a Mac of your own.
 
 Publishing needs no stored secret: on npmjs.com the package names this repository and
 `release.yml` as a trusted publisher. A repository secret `NPM_TOKEN` is used instead if one exists.
@@ -914,6 +932,11 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   the title bar's drag area; the window's options in `electron/main.ts`: `titleBarStyle`,
   `trafficLightPosition`, `vibrancy`), look at it once in light and dark, with the side panel
   open in a window narrower than 1024 pixels too.
+- What the view costs is measured by `desktop/test/view-perf.test.ts`, skipped unless `PINE_PERF=1`: the app's
+  CPU as the system counts it (`top`, its own processes, not its pine) with the view's panel closed, open
+  at rest, open while three agents work and open with the window behind, and the frames the view draws.
+  The window has to be in front to measure the view as it draws in front. Run it after a change to how a
+  view is drawn or fed (`desktop/src/View.tsx`, `view-state.ts`, `examples/home/views/office.ts`).
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).
@@ -974,7 +997,7 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   alone (`src/debug/`, from `-PpineSmokeAuthority`); a release build has neither the config nor
   the file. Run it before a release that changes `mobile/` or upgrades Capacitor.
 - The iOS app's suites are in `mobile/` too. `npm test` there covers the iOS bridge and the iOS
-  page's policy. `swift test` in `mobile/ios-core/` (run by the `ios` job) drives the Swift core
+  page's policy. `swift test` in `mobile/ios-core/` (run by hand: no workflow runs it for now) drives the Swift core
   as the Kotlin tests drive theirs, against a real OpenSSH `sshd` the test starts on a loopback
   port with a forced command that checks the remote command, and a stand-in daemon; it replays
   the same JSON cases in `mobile/cases/` as `npm run test:core`, so a case added for one core is
