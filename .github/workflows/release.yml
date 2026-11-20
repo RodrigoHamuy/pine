@@ -286,6 +286,25 @@ jobs:
             fi
           done
       - if: steps.signing.outputs.ready == 'true'
+        name: What the APK asks of a phone
+        # The permissions of what was built, not of the manifest: a library added later can bring one
+        # of its own in when the manifests are merged. Exactly the network and its state, and the
+        # signature permission androidx.core declares under the package's name for its own receivers
+        # (DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION), which only this app holds and no owner grants.
+        run: |
+          aapt2="$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)/aapt2"
+          app=dev.pmndre.pine
+          printf '%s\n' \
+            "permission: $app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" \
+            "uses-permission: name='$app.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'" \
+            "uses-permission: name='android.permission.ACCESS_NETWORK_STATE'" \
+            "uses-permission: name='android.permission.INTERNET'" | LC_ALL=C sort > "$RUNNER_TEMP/permissions-wanted"
+          "$aapt2" dump permissions "Pine-$VERSION.apk" | grep -v '^package: ' | LC_ALL=C sort > "$RUNNER_TEMP/permissions-asked"
+          if ! diff -u "$RUNNER_TEMP/permissions-wanted" "$RUNNER_TEMP/permissions-asked"; then
+            echo "::error::The APK asks for other permissions than INTERNET and ACCESS_NETWORK_STATE (the lines with + above): find what brought them in (the merged manifest, app/build/intermediates/merged_manifests) and remove them, or change this check knowingly."
+            exit 1
+          fi
+      - if: steps.signing.outputs.ready == 'true'
         run: gh release upload "v$VERSION" "Pine-$VERSION.apk" --clobber
         env:
           GH_TOKEN: ${{ github.token }}

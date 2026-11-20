@@ -16,15 +16,10 @@ import pine.mobile.core.PairingState
 import pine.mobile.core.Remote
 import pine.mobile.core.Vault
 import pine.mobile.core.pairLink
-import java.security.KeyStore
 import java.security.SecureRandom
 import java.security.Security
-import java.security.cert.CertificateFactory
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import javax.net.ssl.SSLContext
-import javax.net.ssl.TrustManagerFactory
-import javax.net.ssl.X509TrustManager
 
 /**
  * The app's WebRTC library (LibWebRtc.kt) under the core, on the emulator, against the Pine app's
@@ -32,8 +27,10 @@ import javax.net.ssl.X509TrustManager
  * everything above the library on libdatachannel, this proves libwebrtc below it. Run by
  * `npm run smoke` in mobile/ (`-- --transport-only` for this alone), which starts the helper, puts
  * a TLS front of its own before its meeting service (a link names https only), opens a pairing,
- * answers yes, and hands this test the link and the front's authority as instrumentation arguments
- * (`link`, `ca`). Without them it has nothing to reach and says so.
+ * answers yes, and hands this test the link as an instrumentation argument (`link`). The front's
+ * authority is the one the debug build was made to trust (app/build.gradle's smokeAuthority, under
+ * debug-overrides), so the core's own TLS checks it as the app's does. Without a link it has nothing
+ * to reach and says so.
  */
 @RunWith(AndroidJUnit4::class)
 class LibWebRtcTest {
@@ -58,29 +55,17 @@ class LibWebRtcTest {
 		}
 	}
 
-	/** The certificates of the run's TLS front, and nothing else. */
-	private fun trust(pem: ByteArray): X509TrustManager {
-		val store = KeyStore.getInstance(KeyStore.getDefaultType()).apply {
-			load(null, null)
-			setCertificateEntry("smoke", CertificateFactory.getInstance("X.509").generateCertificate(pem.inputStream()))
-		}
-		val factory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm()).apply { init(store) }
-		return factory.trustManagers.filterIsInstance<X509TrustManager>().single()
-	}
-
 	@Test
 	fun pairsThenMovesMegabytesEachWayWholeAndInOrder() {
 		val given = args.getString("link") ?: throw AssertionError("No pairing link: run this through `npm run smoke -- --transport-only` in mobile/.")
 		val link = pairLink(given) ?: throw AssertionError("Not a pairing link: $given")
-		val ca = Base64.decode(args.getString("ca") ?: throw AssertionError("No authority for the TLS front."), Base64.DEFAULT)
 		// The run's TLS front answers this emulator first: a failure here is the run's setup, not the library.
-		val trusted = trust(ca)
-		val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trusted), null) }
-		val probe = OkHttpClient.Builder().sslSocketFactory(tls.socketFactory, trusted).build()
-		val config = runCatching { probe.newCall(Request.Builder().url("${link.service}/meet/config").build()).execute().use { it.code } }
+		// It is trusted as the app trusts it, by the debug build's network security configuration
+		// (debug-overrides, the authority -PpineSmokeAuthority names): no socket factory of this test's own.
+		val config = runCatching { OkHttpClient().newCall(Request.Builder().url("${link.service}/meet/config").build()).execute().use { it.code } }
 		assertEquals("the meeting service answers at ${link.service}: ${config.exceptionOrNull()}", 200, config.getOrNull())
 		val vault = MemoryVault()
-		val remote = Remote(DeviceKey(vault), KnownHosts(vault), LibWebRtc(context), answerMs = 20_000, trust = trust(ca))
+		val remote = Remote(DeviceKey(vault), KnownHosts(vault), LibWebRtc(context), answerMs = 20_000)
 
 		// Pairing: a first channel, SSH over it as pair.<code>, the computer's yes (the run answered it already).
 		val heard = mutableListOf<PairingState>()
