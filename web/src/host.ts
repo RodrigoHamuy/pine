@@ -35,6 +35,12 @@ export type WebBridgeDeps = {
 	peer?(id: string): OpenStream;
 	/** The pairing link the address carried when the document loaded, already taken out of it (pairing.ts `takePairLink`). */
 	pairLink?: PairLink;
+	/**
+	 * On an iPhone or iPad: asks the owner whether the Pine app pairs with the link instead
+	 * (app-choice.ts `chooseApp`), and resolves once this browser is to pair. Until then the link's
+	 * code is not used. None: this browser pairs at once.
+	 */
+	choose?(link: PairLink): Promise<void>;
 	/** The browser's user agent, of which the paired computer is told this browser's name ("Chrome on Android"). */
 	userAgent?: string;
 	/**
@@ -508,7 +514,8 @@ export function webBridge(deps: WebBridgeDeps) {
 			emit("service", state);
 			if (started) return;
 			started = true;
-			if (deps.pairLink) void pairWith(deps.pairLink);
+			const link = deps.pairLink;
+			if (link) void (deps.choose ? deps.choose(link) : Promise.resolve()).then(() => pairWith(link));
 			else if (kept.use) void connectTo(kept.use);
 		},
 		async retry() {
