@@ -49,7 +49,8 @@ jobs:
         run: node src/cli.ts init --yes
       - name: Say which sandbox the tests get
         shell: bash
-        run: node --input-type=module -e 'import { sandboxAvailable } from "./src/security.ts"; console.log(`sandbox: ${sandboxAvailable() ? "yes" : "none"} on ${process.platform}`)'
+        run: |
+          node --input-type=module -e 'import { sandboxAvailable } from "./src/security.ts"; console.log(`sandbox: ${sandboxAvailable() ? "yes" : "none"} on ${process.platform}`)'
       - run: npm test
 
   desktop-changed:
