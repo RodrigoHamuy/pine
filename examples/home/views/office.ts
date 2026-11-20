@@ -2095,7 +2095,8 @@ export class Office {
 		for (const w of this.workers.values()) {
 			if (!w.key.startsWith("j:") || w.goneAt !== undefined) continue;
 			const j = w.work !== undefined ? s.work.get(w.work) : undefined;
-			if (!j || ended(j)) w.goneAt = now;
+			// Its work is over; or the agent's own robot has taken it over, the work before it having ended.
+			if (!j || ended(j) || primary.get(w.agent)?.id === j.id) w.goneAt = now;
 		}
 		const you = this.ports.get("you");
 		for (const j of s.work.values()) {
