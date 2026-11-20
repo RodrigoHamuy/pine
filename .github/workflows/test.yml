@@ -79,7 +79,7 @@ jobs:
         run: |
           # A new branch or a forced push has no usable "before": then everything counts as changed.
           if [ -z "$BASE" ] || ! git cat-file -e "$BASE^{commit}" 2>/dev/null; then echo "changed=true" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if git diff --name-only "$BASE" HEAD | grep -Eq '^(desktop/|src/(http|owner|service|remote)\.ts$|\.github/workflows/test\.yml$)'; then
+          if git diff --name-only "$BASE" HEAD | grep -Eq '^(desktop/|src/(http|owner|service|remote|csharp)\.ts$|scripts/helpers\.mjs$|\.github/workflows/test\.yml$)'; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
@@ -166,9 +166,29 @@ jobs:
         shell: bash
       - name: Pack
         run: node desktop/scripts/pack.mjs --dir
+        env:
+          PINE_VERSION: "9.8.7"
       - name: Start it once (Linux)
         if: runner.os == 'Linux'
         run: xvfb-run -a node desktop/scripts/smoke.mjs
       - name: Start it once (Windows)
         if: runner.os == 'Windows'
         run: node desktop/scripts/smoke.mjs
+      # What a release's code signing checks on every file it signs (desktop/signpath/): the product's
+      # name and the release's version. And the installer made from a folder packed before, as the
+      # release makes it from the signed one.
+      - name: The installer, and what the files say they are (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        env:
+          PINE_VERSION: "9.8.7"
+        run: |
+          node desktop/scripts/pack.mjs --prepackaged desktop/release/win-unpacked --arch x64
+          if ($LASTEXITCODE -ne 0) { exit 1 }
+          $files = @("desktop\release\Pine-9.8.7-x64-setup.exe", "desktop\release\win-unpacked\Pine.exe") + (Get-ChildItem -Recurse -Path desktop\release\win-unpacked\resources\pine -Filter "pine-*.exe" | Where-Object { $_.FullName -match "\\prebuilt\\" } | ForEach-Object { $_.FullName })
+          if ($files.Count -ne 5) { "expected the installer, Pine.exe and three helpers, found: $files"; exit 1 }
+          foreach ($f in $files) {
+            $v = (Get-Item -LiteralPath $f).VersionInfo
+            "$f : $($v.ProductName) $($v.ProductVersion)"
+            if ($v.ProductName -ne "Pine" -or $v.ProductVersion -ne "9.8.7") { exit 1 }
+          }

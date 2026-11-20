@@ -331,6 +331,10 @@ test("system on Windows: the real helper is built and says how this computer is"
 	const source = path.join(import.meta.dirname, "..", "src", "sources", "system.cs");
 	const file = buildCsharp(source, "pine-system", "the system source", ["System.Core.dll", "System.Windows.Forms.dll"], { dir });
 	assert.equal(buildCsharp(source, "pine-system", "the system source", ["System.Core.dll", "System.Windows.Forms.dll"], { dir }), file, "built once");
+	// What a release's code signing checks on each file it signs: the product's name and the version.
+	const version = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "..", "package.json"), "utf8")).version;
+	const said = execFileSync("powershell.exe", ["-NoProfile", "-Command", `$v = (Get-Item -LiteralPath '${file.replace(/'/g, "''")}').VersionInfo; $v.ProductName + '|' + $v.ProductVersion`], { encoding: "utf8" }).trim();
+	assert.equal(said, `Pine|${version}`);
 	const child = spawn(file, ["sleep", "lock", "power", "network", "volumes", "apps"], { stdio: ["pipe", "pipe", "inherit"], env: helperBase(), windowsHide: true });
 	t.after(() => {
 		child.kill();

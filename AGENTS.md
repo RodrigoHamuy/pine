@@ -746,8 +746,11 @@ failed. The helpers need the macOS 26 SDK, so the job selects the newest Xcode o
 
 A release from `main` gets the Pine app for Linux (`app-linux`: an AppImage and a deb for x64 and
 arm64, started under a virtual screen, with checksums and GitHub's attestation) and for Windows
-(`app-windows`: an installer for x64 and arm64, signed through SignPath Foundation; four secrets in
-the environment `release`, listed above the job; without them nothing is uploaded). The Windows
+(`app-windows` packs and starts each, `app-windows-sign` has both folders and then both installers
+signed through SignPath Foundation: two approvals a release at signpath.io; four secrets in the
+environment `release`, listed above the job; without them nothing is built). Only pine's own
+programs are signed (`desktop/signpath/`, whose README says how it is set up), and each has to say
+"Pine" and the release's version: the `pack` job of `test.yml` checks that on Windows. The Windows
 app talks to pine in WSL as to another machine (`desktop/electron/wsl.ts`), and no runner of
 GitHub's has WSL: `desktop/test/wsl.test.ts` tests it on a stand-in, and a real round trip is by
 hand on a Windows computer.

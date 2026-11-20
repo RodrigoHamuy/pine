@@ -23,6 +23,28 @@ export function frameworkDir(): string | undefined {
 	return c ? path.dirname(c) : undefined;
 }
 
+/**
+ * What a helper says it is (the product name and version in its file's properties): pine, and the
+ * version of the pine whose source it was built from. A release's code signing checks both on every
+ * file it signs (the artifact configurations in desktop/signpath/). Found in the package.json of the
+ * nearest folder above the source; a version that is not plain text is left out.
+ */
+export function aboutSource(source: string): string {
+	let dir = path.dirname(path.resolve(source));
+	let version: string | undefined;
+	for (let i = 0; i < 4 && !version; i++, dir = path.dirname(dir)) {
+		try {
+			version = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8")).version;
+		} catch {}
+	}
+	const lines = ['[assembly: System.Reflection.AssemblyProduct("Pine")]', '[assembly: System.Reflection.AssemblyCopyright("pine contributors")]'];
+	if (typeof version === "string" && /^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$/.test(version)) {
+		const numbers = `${version.split("-")[0]}.0`;
+		lines.push(`[assembly: System.Reflection.AssemblyInformationalVersion("${version}")]`, `[assembly: System.Reflection.AssemblyFileVersion("${numbers}")]`, `[assembly: System.Reflection.AssemblyVersion("${numbers}")]`);
+	}
+	return `${lines.join("\n")}\n`;
+}
+
 /** The name a build of `source` gets: its prefix and the hash of the source, so that a changed source is built anew. */
 export const builtName = (source: string, prefix: string) => `${prefix}-${createHash("sha256").update(fs.readFileSync(source)).digest("hex").slice(0, 12)}.exe`;
 
@@ -42,12 +64,15 @@ export function buildCsharp(source: string, prefix: string, what: string, refs: 
 	if (!compiler) throw new Error(`pine could not build its helper for ${what}: this Windows has no C# compiler of .NET Framework 4 (csc.exe). It comes with Windows; "Turn Windows features on or off" lists .NET Framework 4.8 Advanced Services.`);
 	fs.mkdirSync(folder, { recursive: true });
 	const tmp = `${file}.${process.pid}.tmp.exe`;
+	const about = `${file}.${process.pid}.about.cs`;
 	try {
-		execFileSync(compiler, ["/nologo", "/optimize+", "/platform:anycpu", ...refs.map((r) => `/reference:${r}`), `/out:${tmp}`, source], { stdio: ["ignore", "pipe", "pipe"], timeout: 120_000, windowsHide: true });
+		fs.writeFileSync(about, aboutSource(source));
+		execFileSync(compiler, ["/nologo", "/optimize+", "/platform:anycpu", ...refs.map((r) => `/reference:${r}`), `/out:${tmp}`, source, about], { stdio: ["ignore", "pipe", "pipe"], timeout: 120_000, windowsHide: true });
 		// Whole or not at all: another conversation may be starting the same program at this moment.
 		fs.renameSync(tmp, file);
 	} catch (e) {
 		fs.rmSync(tmp, { force: true });
+		fs.rmSync(about, { force: true });
 		const said = String((e as { stdout?: unknown }).stdout ?? "")
 			.split(/\r?\n/)
 			.filter((l) => /error/i.test(l))
@@ -55,6 +80,7 @@ export function buildCsharp(source: string, prefix: string, what: string, refs: 
 			.join(" | ");
 		throw new Error(`pine could not build its helper for ${what} (${said.slice(0, 400) || (e instanceof Error ? e.message.slice(0, 200) : "the compiler gave no reason")}). Tell your owner.`);
 	}
-	for (const old of fs.readdirSync(folder)) if (old.startsWith(`${prefix}-`) && old !== name && !old.includes(".tmp")) fs.rmSync(path.join(folder, old), { force: true });
+	fs.rmSync(about, { force: true });
+	for (const old of fs.readdirSync(folder)) if (old.startsWith(`${prefix}-`) && old !== name && !old.includes(".tmp") && !old.includes(".about")) fs.rmSync(path.join(folder, old), { force: true });
 	return file;
 }

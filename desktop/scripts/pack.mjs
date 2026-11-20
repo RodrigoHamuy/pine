@@ -261,8 +261,10 @@ const made = await packApp({
 		copyright: "pine contributors",
 		directories: { output: path.relative(root, out), buildResources: "assets" },
 		// The app has the version of the pine it carries: they are made and handed out together.
-		// (A Linux package names where it comes from.)
-		extraMetadata: { version: pineVersion, homepage: "https://github.com/pmndre/pine" },
+		// (A Linux package names where it comes from.) On Windows Pine.exe says the version as the
+		// installer does ("0.41.0", not the packer's "0.41.0.0"): the release's code signing checks
+		// that each file it signs says the release's version (desktop/signpath/).
+		extraMetadata: { version: pineVersion, homepage: "https://github.com/pmndre/pine", ...(system === "win32" ? { shortVersionWindows: pineVersion.split("-")[0] } : {}) },
 		// Everything the app runs is in the two built folders: the page and the main process are bundles.
 		// The one exception is node-pty, the terminal's pseudo-terminal (a dependency of the app's,
 		// which the packer adds by itself): native, so it lies outside the archive.
