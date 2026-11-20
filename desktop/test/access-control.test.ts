@@ -8,7 +8,7 @@ import path from "node:path";
 import { after, test } from "node:test";
 import { type AccessControl, type AccessPrefs, type AccessState, createAccessControl, type Host, OFFICIAL_SERVICE, readAccessPrefs, relayAddress } from "../electron/access/control.ts";
 import type { AccessHostOptions, Cipher } from "../electron/access/host.ts";
-import { tryRelay } from "../electron/access/peer.ts";
+import { type RelayServer, type RelayTry, tryRelay } from "../electron/access/peer.ts";
 import { silentUdpPort, startTurn, TURN_PASSWORD, TURN_USER } from "./support/turn.ts";
 import { startStandIn } from "../electron/access/stand-in.ts";
 import type { Device } from "../electron/access/store.ts";
@@ -33,7 +33,8 @@ const SERVICE = "https://pine.example.workers.dev";
 const daemonLine = JSON.stringify({ base: "http://127.0.0.1:9", token: "t", mode: "attached", started: false, home: "/h" });
 
 /** `waitMs`: how long the stand-in phone waits before it uses a pairing link (its own default otherwise). */
-function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined; folder?: string; official?: string; waitMs?: number; tryMs?: number } = {}) {
+/** `tryRelay`: a stand-in for the try of a relay; the real one otherwise, with a short wait for a relay that does not answer. */
+function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined; folder?: string; official?: string; waitMs?: number; tryRelay?: (relay: RelayServer) => Promise<RelayTry> } = {}) {
 	const folder = more.folder ?? mkdtempSync(path.join(tmpdir(), "pine-access-control-"));
 	folders.push(folder);
 	let prefs: AccessPrefs = { enabled: false, openAtLogin: false, ...more.prefs };
@@ -56,8 +57,7 @@ function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined;
 			hosts.push(host);
 			return host;
 		},
-		// The real try, with a short wait for a relay that does not answer.
-		tryRelay: (relay) => tryRelay(relay, more.tryMs ?? 800),
+		tryRelay: more.tryRelay ?? ((relay) => tryRelay(relay, 800)),
 	});
 	controls.push(control);
 	return { control, folder, calls, hosts, prefs: () => prefs };
@@ -192,7 +192,7 @@ test("access control: a no, or a pairing cancelled, adds nothing and notifies no
 });
 
 async function paired() {
-	const made = make();
+	const made = make({ tryRelay: stubTry().tryRelay });
 	await made.control.set({ enabled: true });
 	await made.control.openPairing();
 	await until("the owner is asked", async () => (await made.control.state()).request !== undefined);
@@ -244,17 +244,24 @@ test("access control: left on, the host starts with the app, and stops with it",
 /** What the sealed file holds, opened with the test's cipher. */
 const sealed = (folder: string) => cipher.open(readFileSync(path.join(folder, "access.bin")));
 
-test("access control: a relay's address is turn: or turns:, a host and a port, and a transport of udp or tcp; nothing else is taken", () => {
-	assert.deepEqual(relayAddress(" turn:relay.example.com:3478 "), { address: "turn:relay.example.com:3478", hostname: "relay.example.com", port: 3478, transport: "udp" });
-	assert.equal(relayAddress("turn:relay.example.com:443?transport=tcp").transport, "tcp");
-	assert.deepEqual(relayAddress("turns:relay.example.com"), { address: "turns:relay.example.com:5349", hostname: "relay.example.com", port: 5349, transport: "tls" });
-	assert.equal(relayAddress("turns:relay.example.com:443?transport=tcp").transport, "tls");
-	assert.deepEqual(relayAddress("turn:[2001:db8::1]:3478"), { address: "turn:[2001:db8::1]:3478", hostname: "2001:db8::1", port: 3478, transport: "udp" });
+/** A try of a relay that answers at once, and notes what it was handed: no try outlives its test. */
+const stubTry = () => {
+	const tried: RelayServer[] = [];
+	return { tried, tryRelay: async (relay: RelayServer): Promise<RelayTry> => (tried.push(relay), "usable") };
+};
+
+test("access control: a relay's address is turn:, a host and a port, over UDP; nothing else is taken", () => {
+	assert.deepEqual(relayAddress(" turn:relay.example.com:3478 "), { address: "turn:relay.example.com:3478", hostname: "relay.example.com", port: 3478 });
+	assert.deepEqual(relayAddress("turn:relay.example.com:3478?transport=udp"), { address: "turn:relay.example.com:3478?transport=udp", hostname: "relay.example.com", port: 3478 });
+	assert.deepEqual(relayAddress("turn:[2001:db8::1]:3478"), { address: "turn:[2001:db8::1]:3478", hostname: "2001:db8::1", port: 3478 });
 	assert.equal(relayAddress("turn:203.0.113.5").address, "turn:203.0.113.5:3478");
+	// The library pine connects with reaches a relay over UDP only: TCP and TLS are refused with what to write instead.
+	for (const tcp of ["turns:relay.example.com", "turns:relay.example.com:443?transport=tcp", "turns:relay.example.com:5349?transport=udp", "turn:relay.example.com:443?transport=tcp"]) {
+		assert.throws(() => relayAddress(tcp), /only use turn: over UDP.*turn:relay\.example\.com:3478/, tcp);
+	}
 	for (const bad of ["stun:relay.example.com:3478", "https://relay.example.com", "turn:user:pw@relay.example.com:3478", "turn:relay.example.com:99999", "turn:relay.example.com:3478?transport=sctp", "turn:", "turn:[nothing]:3478", "turn:relay.example.com:3478 extra"]) {
 		assert.throws(() => relayAddress(bad), /turn:host:port/, bad);
 	}
-	assert.throws(() => relayAddress("turns:relay.example.com:5349?transport=udp"), /TLS/);
 	assert.deepEqual(readAccessPrefs({ relay: { address: "turn:relay.example.com:3478", username: "me", password: "never read" } }).relay, { address: "turn:relay.example.com:3478", username: "me" });
 	assert.equal(readAccessPrefs({ relay: { address: "file:///etc/passwd", username: "me" } }).relay, undefined);
 });
@@ -273,7 +280,7 @@ test("access control: a relay is kept with its address and user name in the pref
 		assert.equal(state.relay?.check?.result, "trying");
 		// The host was started again with the relay, and its password from its own store, not from the options.
 		assert.equal(calls.starts, 2);
-		assert.deepEqual(calls.hostOptions[1].relay, { hostname: "127.0.0.1", port: turn.port, transport: "udp", username: TURN_USER });
+		assert.deepEqual(calls.hostOptions[1].relay, { hostname: "127.0.0.1", port: turn.port, username: TURN_USER });
 		assert.ok(!JSON.stringify(calls.hostOptions[1].relay).includes(TURN_PASSWORD));
 		await until("the try is done", async () => (await control.state()).relay?.check?.result !== "trying");
 		const tried = await control.state();
@@ -283,13 +290,14 @@ test("access control: a relay is kept with its address and user name in the pref
 		await control.set({ relay: { address: `turn:127.0.0.1:${turn.port}`, username: TURN_USER, password: "" } });
 		assert.equal(JSON.parse(sealed(folder)).relayPassword, TURN_PASSWORD);
 		assert.equal((await control.state()).relay?.password, true);
+		await until("the second try is done", async () => (await control.state()).relay?.check?.result !== "trying");
 	} finally {
 		await turn.close();
 	}
 });
 
 test("access control: saving the relay's fields empty removes the relay and its password", async () => {
-	const { control, folder, prefs } = make();
+	const { control, folder, prefs } = make({ tryRelay: stubTry().tryRelay });
 	await control.set({ relay: { address: "turn:127.0.0.1:9", username: "me", password: "secret-of-the-relay" } });
 	assert.equal(JSON.parse(sealed(folder)).relayPassword, "secret-of-the-relay");
 	const state = await control.set({ relay: { address: "", username: "", password: "" } });
@@ -320,6 +328,24 @@ test("access control: the try says why a relay cannot be used, and the relay is 
 	}
 });
 
+test("access control: a relay whose address or user name changed, saved without a password, is not given the password of the one before", async () => {
+	const stub = stubTry();
+	const { control, folder } = make({ tryRelay: stub.tryRelay });
+	const password = async () => JSON.parse(sealed(folder)).relayPassword;
+	await control.set({ relay: { address: "turn:relay-a.example:3478", username: "me", password: "password-of-a" } });
+	// The same relay saved again without a password keeps its password.
+	await control.set({ relay: { address: "turn:relay-a.example:3478", username: "me", password: "" } });
+	assert.equal(await password(), "password-of-a");
+	for (const relay of [{ address: "turn:relay-b.example:3478", username: "me" }, { address: "turn:relay-a.example:3479", username: "me" }, { address: "turn:relay-a.example:3478", username: "someone-else" }]) {
+		await control.set({ relay: { address: "turn:relay-a.example:3478", username: "me", password: "password-of-a" } });
+		const state = await control.set({ relay: { ...relay, password: "" } });
+		assert.equal(await password(), undefined, `forgotten for ${JSON.stringify(relay)}`);
+		assert.equal(state.relay?.password, false, "the page is told no password is kept");
+		await until("the try is done", async () => (await control.state()).relay?.check?.result !== "trying");
+		assert.equal(stub.tried.at(-1)?.password, "", "the try was not handed the password of the one before");
+	}
+});
+
 test("access control: an address that is not a relay's is refused and nothing is written", async () => {
 	const { control, folder, prefs, calls } = make({ prefs: { enabled: true } });
 	await control.start();
@@ -332,9 +358,9 @@ test("access control: an address that is not a relay's is refused and nothing is
 test("access control: changing the relay starts the host again with it, and unpairs nobody; off and on again, the host has it still", async () => {
 	const { control, calls } = await paired();
 	const before = (await control.state()).devices;
-	await control.set({ relay: { address: "turns:relay.example.invalid:5349", username: "me", password: "pw" } });
+	await control.set({ relay: { address: "turn:relay.example.invalid:3478", username: "me", password: "pw" } });
 	assert.equal(calls.starts, 2);
-	assert.equal(calls.hostOptions[1].relay?.transport, "tls");
+	assert.equal(calls.hostOptions[1].relay?.port, 3478);
 	assert.deepEqual((await control.state()).devices.map((d) => d.id), before.map((d) => d.id));
 	await control.set({ enabled: false });
 	await control.set({ enabled: true });

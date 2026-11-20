@@ -240,7 +240,14 @@ export async function startAccessHost(options: AccessHostOptions): Promise<Acces
 		if (typeof s !== "string") return;
 		if (message.t === "open") {
 			if (peers.size >= maxPeers || meeting.has(s)) return send({ t: "close", s });
-			const peer = answer({ ice, relay, send: (d: Signal) => send({ t: "signal", s, d }), timeoutMs: options.peerTimeoutMs });
+			let peer: Peer;
+			try {
+				peer = answer({ ice, relay, send: (d: Signal) => send({ t: "signal", s, d }), timeoutMs: options.peerTimeoutMs });
+			} catch {
+				// The library refused the connection (its binary, a server it was handed): the browser is
+				// told at once, and nothing escapes this listener into the app's main process.
+				return send({ t: "close", s });
+			}
 			meeting.set(s, peer);
 			peers.add(peer);
 			peer.closed.then(() => {

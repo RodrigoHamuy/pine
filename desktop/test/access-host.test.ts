@@ -248,6 +248,27 @@ test("access host: a browser that leaves after signalling and never opens its ch
 	await until(() => host.peers() === 0, "the computer let go of the peer", 3000);
 });
 
+test("access host: a browser that joins and leaves without an offer is let go of at once, not when its time is up", async () => {
+	const m = await meeting();
+	const { host } = await setup(m.url, { peerTimeoutMs: 20_000 });
+	await until(() => host.status() === "waiting", "the host waits");
+	const ws = new WebSocket(`${m.url.replace(/^http/, "ws")}/meet/join?id=${host.machineId}`);
+	await until(() => host.peers() === 1, "the computer made a peer for the browser");
+	ws.close();
+	await until(() => host.peers() === 0, "the computer let go of the peer", 1000);
+});
+
+test("access host: with a relay saved without a user name or password, a browser still connects", async () => {
+	const m = await meeting();
+	const { host, phone } = await setup(m.url, { relay: { hostname: "127.0.0.1", port: 9, username: "" } });
+	await until(() => host.status() === "waiting", "the host waits");
+	const browser = join(m.url, host.machineId);
+	const client = await sshOver(await browser.channel, host.machineId, phone.private).ready;
+	assert.equal(await firstLine(await exec(client, remoteCommand())), serviceLine());
+	client.end();
+	browser.close();
+});
+
 test("access host: each connected device is listed with the kind of path its connection took", async () => {
 	const m = await meeting();
 	const events: Array<{ kind: string; tag?: any }> = [];
@@ -275,7 +296,7 @@ test("access host: with the owner's relay, the computer offers an address on it,
 		// The password is kept in the store's file, as the app keeps it; the host is told the rest.
 		const vault = fileVault(path.join(dir, ACCESS_FILE.plain));
 		await (await AccessStore.open(vault)).setRelayPassword(TURN_PASSWORD);
-		const { host, phone } = await setup(m.url, { folder: dir, relay: { hostname: "127.0.0.1", port: turn.port, transport: "udp", username: TURN_USER } });
+		const { host, phone } = await setup(m.url, { folder: dir, relay: { hostname: "127.0.0.1", port: turn.port, username: TURN_USER } });
 		await until(() => host.status() === "waiting", "the host waits");
 		const browser = join(m.url, host.machineId);
 		const client = await sshOver(await browser.channel, host.machineId, phone.private).ready;

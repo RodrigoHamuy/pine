@@ -83,7 +83,10 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 	const [relay, setRelay] = useState({ address: state.relay?.address ?? "", username: state.relay?.username ?? "", password: "" });
 	const [relayError, setRelayError] = useState<string>();
 	useEffect(() => setRelay({ address: state.relay?.address ?? "", username: state.relay?.username ?? "", password: "" }), [state.relay?.address, state.relay?.username]);
-	const relayChanged = relay.address.trim() !== (state.relay?.address ?? "") || relay.username.trim() !== (state.relay?.username ?? "") || relay.password !== "";
+	const relayMoved = relay.address.trim() !== (state.relay?.address ?? "") || relay.username.trim() !== (state.relay?.username ?? "");
+	const relayChanged = relayMoved || relay.password !== "";
+	// A kept password belongs to the relay it was given for: saved with another address or user name, it is forgotten.
+	const passwordHint = !state.relay?.password ? "" : relayMoved && relay.address.trim() ? "Not kept for another address or user name: write its password" : "Kept. Write a new one to change it";
 	const saveRelay = async () => {
 		setRelayError(undefined);
 		try {
@@ -171,7 +174,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-relay-password`}>Password</FieldLabel>
-						<Input id={`${field}-relay-password`} data-slot="relay-password" type="password" autoComplete="new-password" placeholder={state.relay?.password ? "Kept. Write a new one to change it" : ""} value={relay.password} onChange={(e) => setRelay({ ...relay, password: e.target.value })} onKeyDown={(e) => e.key === "Enter" && relayChanged && void saveRelay()} />
+						<Input id={`${field}-relay-password`} data-slot="relay-password" type="password" autoComplete="new-password" placeholder={passwordHint} value={relay.password} onChange={(e) => setRelay({ ...relay, password: e.target.value })} onKeyDown={(e) => e.key === "Enter" && relayChanged && void saveRelay()} />
 					</Field>
 					<div>
 						<Button variant="outline" disabled={!relayChanged} onClick={() => void saveRelay()}>Save</Button>
