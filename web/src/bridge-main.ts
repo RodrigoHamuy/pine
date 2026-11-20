@@ -1,6 +1,7 @@
 // The top-level document of the web client: the web bridge, and the page in an iframe sandboxed
 // with scripts only. The bridge holds the browser's key, the SSH connection and the daemon's token;
 // the page, under an opaque origin, reaches none of them and asks by message (serve.ts).
+import { chooseApp, choiceView, onIosDevice } from "./app-choice.ts";
 import { webBridge } from "./host.ts";
 import { idbStore } from "./idb-store.ts";
 import { takePairLink } from "./pairing.ts";
@@ -50,6 +51,8 @@ async function main() {
 		// A paired computer, peer to peer: the meeting service at this deployment's address, the peer connection in this document.
 		peer: (id) => peerStream(id, { service: location.href, config }),
 		pairLink: link,
+		// On an iPhone or iPad a link opens the browser, never the app: the owner chooses before the code is used.
+		choose: onIosDevice(navigator.userAgent, navigator.maxTouchPoints) ? (pairing) => chooseApp(pairing, location.href, choiceView(document), (url) => location.assign(url)) : undefined,
 		userAgent: navigator.userAgent,
 		config,
 		serviceHost: location.host,
