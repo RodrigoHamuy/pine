@@ -2257,10 +2257,20 @@ function AppPage() {
 									Pine {s.versions.app}
 									{newer ? <Badge variant="outline">{newer.version} is available</Badge> : s.update?.status === "latest" ? <Badge>the latest version</Badge> : null}
 								</FieldTitle>
-								<FieldDescription>{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</FieldDescription>
+								<FieldDescription>
+									{newer?.updater?.state === "ready"
+										? "The new app is downloaded. Restart to update, or it is installed when you next quit Pine. Your pine home stays as it is."
+										: newer?.updater?.state === "downloading"
+											? "The new app is being downloaded."
+											: newer
+												? `${newer.updater?.state === "failed" ? `${newer.updater.reason} ` : ""}The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is.`
+												: s.selfUpdate
+													? "The app asks GitHub for pine's last release, and when that is newer downloads it and installs it when you restart or quit."
+													: "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}
+								</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
-								{newer ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
+								{newer?.updater?.state === "ready" ? <Button size="xs" onClick={() => void s.installUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : newer && newer.updater?.state !== "downloading" ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
 								<Button variant="outline" size="xs" disabled={s.updateLooking} onClick={() => void s.lookForUpdate(true)}><RotateCwIcon data-icon="inline-start" />Check now</Button>
 							</div>
 						</Field>
@@ -2273,6 +2283,17 @@ function AppPage() {
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
 								<Switch id={`${field}-updates`} checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} />
+							</div>
+						</Field>
+					) : null}
+					{s.updates && s.selfUpdate ? (
+						<Field orientation="horizontal">
+							<FieldContent>
+								<FieldLabel htmlFor={`${field}-auto-update`}>Update automatically</FieldLabel>
+								<FieldDescription>A newer release is downloaded from GitHub in the background and installed when you restart or quit Pine, never by itself. Off: the app links to the release's page.</FieldDescription>
+							</FieldContent>
+							<div className="flex items-center gap-1.5">
+								<Switch id={`${field}-auto-update`} checked={s.prefs.autoUpdate !== false} onCheckedChange={(autoUpdate) => void set({ autoUpdate })} />
 							</div>
 						</Field>
 					) : null}

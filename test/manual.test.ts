@@ -83,6 +83,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["the app says it could not load the agents of my server, what now", /^desktop#environments-the-pine-of-another-machine$/],
 		["does the mac app tell me when there is a newer version, or do I have to look myself", /^desktop#a-newer-version/],
 		["check for updates", /^desktop#a-newer-version/],
+		["does the pine app install a new release by itself or do I drag it in place", /^desktop#a-newer-version/],
 		["the browser in the app is empty, how do I get back to the page my agent had open", /^desktop#the-browser/],
 		["can I watch the page the agent has open inside the app, and click in it myself", /^desktop#(the-browser|the-code-panel-and-the-editor)/],
 		["log in to a site for the agent in the mac app without a second window", /^(desktop#the-browser|mcp#)/],

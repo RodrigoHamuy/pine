@@ -37,22 +37,32 @@ An Android phone has an app of its own in the same release, for the pine of anot
 
 ### A newer version
 
-The app does not update itself: it says when there is a newer one and where it is. To get it,
-download the new image from the release's page, quit Pine and put the new app in place of the
-old one. Your pine home (`~/.pine`: agents, conversations, settings) is not in the app and
-stays as it is.
+The app updates itself. When there is a newer release, it downloads it in the background, from
+that release on GitHub, and installs it with macOS's own updater, only when you say so: press
+**Restart to update**, or quit Pine and the update is installed on the way out. It never
+restarts by itself. Your pine home (`~/.pine`: agents, conversations, settings) is not in the
+app and stays as it is.
 
 | | |
 |---|---|
-| At the start | The app asks GitHub once for pine's last release. When that is newer than the app, a line at the foot of the side bar says so (`Pine <version> is available`); a click opens the release's page on GitHub in your browser. Nothing is said when the app is the latest, or when nobody answers |
-| `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found, with the link to the release's page when there is a newer app |
-| Settings > App | The app's version and whether it is the latest, **Check now**, and the switch **Look for a newer version at the start** for the question at the start. The menu asks whatever the switch says |
+| At the start | The app asks GitHub once for pine's last release. When that is newer than the app, it is downloaded without a dialog; a line at the foot of the side bar says **Downloading Pine <version>…**, then **Restart to update**. Nothing is said when the app is the latest, or when nobody answers |
+| `Restart to update` | At the foot of the side bar, in Settings > App and in the dialog of **Check for Updates…**. Every pine this app started in this run is stopped first, also one kept with **Keep pine running**, so that it does not go on with the old version; the new app starts it again. A pine the app only attached to (started in a terminal or at login) is left alone: restart it yourself |
+| Quitting | With an update downloaded, quitting Pine installs it. What stops with the app is what stops at any quit |
+| `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found. A newer release is downloaded, or ready to install with a restart |
+| Settings > App | The app's version and whether it is the latest, **Check now**, the switch **Look for a newer version at the start** for the question at the start, and the switch **Update automatically** (on unless you turn it off). The menu asks whatever the first switch says |
+| `Pine <version> is available` | What the app says instead when it does not update itself: **Update automatically** is off, or the download or the install failed (one line says so, in the app's own words). A click opens the release's page on GitHub in your browser: download the disk image there, quit Pine and put the new app in place of the old one |
 
-A release counts as a newer app once its disk image for your kind of Mac is attached to it,
-which is some minutes after pine itself is published. A preview of pine is not a release, and
-the app never points at one. The app fetches and installs nothing. `pine update` in a pine that
-came with the app says the same in a terminal. An app started from a checkout is no release
-and asks nobody.
+A release counts as a newer app once its disk image and its update feed for your kind of Mac
+are attached to it, which is some minutes after pine itself is published. A preview of pine is
+not a release, and the app never points at one. The address of the update is made by the app
+from the release's version and your kind of Mac, on pine's GitHub releases, and macOS installs
+only an app signed by the same developer as the one you run. Neither the question nor the
+download says anything about your computer or your pine. An app run from the disk image, or
+from a folder it cannot write, cannot replace itself: it says so and links to the release's
+page (move it to Applications). An update already downloaded is installed at the next quit even
+after **Update automatically** is turned off. `pine update` in a pine that came with the app
+says where the new app is. An app started from a checkout is no release, asks nobody and
+installs nothing.
 
 ### The first start
 

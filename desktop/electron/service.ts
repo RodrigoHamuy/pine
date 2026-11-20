@@ -23,7 +23,8 @@ export interface Service {
 	host?: string;
 	/** A short name for that machine. */
 	label?: string;
-	stop(): Promise<void>;
+	/** Stops a daemon this app started (and ends the connection to another machine). `kept`: one that was to go on past the app is stopped too, as an update needs. */
+	stop(kept?: boolean): Promise<void>;
 }
 
 export class ServiceError extends Error {
@@ -208,8 +209,8 @@ export function connect(launch: Launch, opts: { home?: string; keep?: boolean } 
 				started: said.started === true,
 				home: String(said.home ?? opts.home ?? ""),
 				version: typeof said.version === "string" ? said.version : undefined,
-				stop: async () => {
-					if (gone || opts.keep) return;
+				stop: async (kept?: boolean) => {
+					if (gone || (opts.keep && !kept)) return;
 					child.kill("SIGTERM");
 					// It stops its agents and closes its database first; a daemon that hangs is ended.
 					const hard = setTimeout(() => child.kill("SIGKILL"), 12_000);

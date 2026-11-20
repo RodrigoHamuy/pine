@@ -247,6 +247,8 @@ export class Store extends Model {
 	/** The dialog that says there is a newer app, after the owner asked. */
 	updateAsk = false;
 	updateLooking = false;
+	/** Whether this app updates itself (`AppState.selfUpdate`): it then offers "Restart to update" once an update is ready. */
+	selfUpdate = false;
 	/** The pine home the app was told to use, when it is not the usual one. */
 	home?: string;
 
@@ -362,6 +364,11 @@ export class Store extends Model {
 			this.touch();
 		});
 		bridge.onMenu((command: string) => void this.command(command));
+		// The app's own download of a newer release moves on (only the desktop app's bridge says so).
+		bridge.onUpdate?.((said: Update | undefined) => {
+			if (said && said.status !== "unknown") this.update = said;
+			this.touch();
+		});
 		// How a block run with a Run button went: the conversation it came from is told, and goes on.
 		bridge.onTermRun((id: string, report: { command: string; state: "running" | "ended"; code?: number; seconds: number; output: string }) => {
 			const at = id.indexOf(":");
@@ -394,6 +401,7 @@ export class Store extends Model {
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;
+		this.selfUpdate = first.selfUpdate === true;
 		void this.lookForUpdate();
 		this.home = first.home;
 		document.documentElement.dataset.platform = this.platform;
@@ -498,6 +506,13 @@ export class Store extends Model {
 	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > App
 	 * show it); when the owner asked (the menu, the settings), the answer is said too.
 	 */
+	/** The update the app downloaded, installed: the app quits and comes back on the new version, with the pine it started. */
+	async installUpdate(): Promise<void> {
+		this.updateAsk = false;
+		this.touch();
+		await this.attempt(() => bridge.installUpdate!());
+	}
+
 	async lookForUpdate(asked = false): Promise<void> {
 		if (!this.updates) return asked ? this.flash("This Pine runs from a checkout and is no release: update the checkout.") : undefined;
 		if (this.updateLooking) return;

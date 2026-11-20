@@ -2,8 +2,8 @@
 // with a JSON feed), once for each kind of Mac: the app zipped, and a feed that points at that zip.
 // scripts/pack.mjs writes both beside the disk image, and the release workflow uploads them.
 
-/** Where a release's files are downloaded from: pine's own GitHub releases, by tag. */
-const DOWNLOADS = "https://github.com/pmndre/pine/releases/download";
+// The download path and the feed's name are the app's own (electron/updates.ts), which looks for this feed.
+import { DOWNLOADS, feedName } from "../electron/updates.ts";
 
 /**
  * The names of the zip and the feed for a release and a kind of Mac, and the feed's content.
@@ -16,7 +16,7 @@ export function updateFeed(version: string, arch: string, published: Date) {
 	if (arch !== "arm64" && arch !== "x64") throw new Error(`the kind of Mac is arm64 or x64, not "${arch}"`);
 	const zip = `Pine-${version}-${arch}.zip`;
 	return {
-		files: { zip, feed: `Pine-${arch}.json` },
+		files: { zip, feed: feedName(arch) },
 		json: { url: `${DOWNLOADS}/v${version}/${zip}`, name: version, pub_date: published.toISOString() },
 	};
 }

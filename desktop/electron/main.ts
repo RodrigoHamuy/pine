@@ -13,6 +13,7 @@ import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp, VIEW_CSP } from "./daemon.ts";
 import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
 import { Terminals } from "./terminal.ts";
+import { makeUpdater } from "./updater.ts";
 import { LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanLook, type Look } from "../src/theme.ts";
 
@@ -65,6 +66,8 @@ interface Prefs {
 	notify: boolean;
 	/** Whether GitHub is asked for a newer app when this one starts. */
 	updates: boolean;
+	/** Whether a newer app is downloaded and installed when the app restarts or quits; off: the owner gets the link to its page. */
+	autoUpdate: boolean;
 	/** `pine` for a terminal was looked after once (see firstCommand): a link the owner removed stays removed. */
 	commandTried: boolean;
 	/**
@@ -78,7 +81,7 @@ interface Prefs {
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, commandTried: false, access: readAccessPrefs(undefined) };
+let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, autoUpdate: true, commandTried: false, access: readAccessPrefs(undefined) };
 
 function loadPrefs(): void {
 	try {
@@ -90,6 +93,7 @@ function loadPrefs(): void {
 			use: undefined,
 			notify: raw.notify !== false,
 			updates: raw.updates !== false,
+			autoUpdate: raw.autoUpdate !== false,
 			commandTried: raw.commandTried === true,
 			look: cleanLook(raw.look),
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
@@ -467,10 +471,37 @@ let known: Update | undefined;
 /** The question of this start, asked once. */
 let atStart: Promise<Update> | undefined;
 
+/** The app's own updater (updater.ts): none in an app from a checkout, unless a test names its stand-in. It tells the page how its download goes. */
+const updater = makeUpdater(() => send("pine:update-state", withUpdater(known)));
+
+/** What is said of a newer release, with how the app's own update of it goes where there is one. */
+const withUpdater = (said: Update | undefined): Update | undefined => (said?.status === "newer" && updater ? { ...said, updater: updater.state() } : said);
+
+/** A newer release is downloaded when the owner lets the app update itself. */
+function downloadUpdate(): void {
+	if (known?.status === "newer" && updater && prefs.autoUpdate) updater.download(known.feed, known.version);
+}
+
 async function askForUpdate(): Promise<Update> {
 	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API);
 	if (said.status !== "unknown") known = said;
-	return said;
+	downloadUpdate();
+	return withUpdater(said) as Update;
+}
+
+/**
+ * "Restart to update": every pine this app started on this computer in this run is stopped first,
+ * one that was to be kept running too (it would go on with the old version), and none it only
+ * attached to. The connections to other machines end with the quit, as at any quit. Then the
+ * updater quits and installs.
+ */
+async function installUpdate(): Promise<void> {
+	if (!updater || updater.state().state !== "ready") throw new Error("There is no update ready to install.");
+	stream?.abort();
+	const ours = [...held.entries()].filter(([, s]) => s.started && !s.host);
+	for (const [key] of ours) held.delete(key);
+	await Promise.all(ours.map(([, s]) => s.stop(true)));
+	updater.install();
 }
 
 /**
@@ -481,7 +512,7 @@ async function update(again?: boolean): Promise<Update | undefined> {
 	if (!RELEASE_API) return undefined;
 	if (again) return askForUpdate();
 	if (prefs.updates) await (atStart ??= askForUpdate().then((said) => (said.status === "unknown" && (atStart = undefined), said)));
-	return known;
+	return withUpdater(known);
 }
 
 // ---- menus -------------------------------------------------------------------------------------
@@ -579,10 +610,11 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 }
 
 function wire(): void {
-	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron }, views: true }));
+	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron }, views: true, selfUpdate: Boolean(updater) }));
 	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
 	handle("pine:retry", () => startService());
 	handle("pine:update", (again?: boolean) => update(again === true));
+	handle("pine:install-update", () => installUpdate());
 	handle("pine:restart", async () => {
 		// Only a daemon of this app's own is its to restart; another one is somebody's terminal.
 		if (!service?.started) throw new Error("this pine was started somewhere else (a terminal, a service). Restart it there.");
@@ -630,6 +662,11 @@ function wire(): void {
 	handle("pine:prefs", (change: Partial<Prefs>) => {
 		if (typeof change.notify === "boolean") prefs.notify = change.notify;
 		if (typeof change.updates === "boolean") prefs.updates = change.updates;
+		if (typeof change.autoUpdate === "boolean") {
+			prefs.autoUpdate = change.autoUpdate;
+			// Turned on with a newer release known: it is downloaded now.
+			downloadUpdate();
+		}
 		if (typeof change.keepRunning === "boolean") prefs.keepRunning = change.keepRunning;
 		if ("home" in change) {
 			const home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
@@ -806,6 +843,7 @@ else {
 	app.on("before-quit", (e) => {
 		if (quitting) return;
 		savePrefs();
+		updater?.quitting();
 		terminals.closeAll();
 		// Browser access closes its sockets; its daemon is one of those held, and follows them.
 		void access?.stop();

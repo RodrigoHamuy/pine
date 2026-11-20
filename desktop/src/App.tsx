@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, RadarIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, DownloadIcon, RotateCwIcon, CheckIcon, RadarIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
@@ -494,9 +494,17 @@ function Sidebar() {
 			</SidebarContent>
 			<SidebarFooter className="gap-0">
 				<SidebarMenu>
-					{newer ? (
+					{newer?.updater?.state === "ready" ? (
 						<SidebarMenuItem className="app-no-drag">
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></HoverTooltip>
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void s.installUpdate()} />}><RotateCwIcon /><span className="grow min-w-0 flex-1 truncate">Restart to update</span></TooltipTrigger><TooltipContent>{`Pine ${newer.version} is downloaded. Pine quits, puts the new app in place of this one (${newer.mine}) and opens again, with the pine it started.`}</TooltipContent></HoverTooltip>
+						</SidebarMenuItem>
+					) : newer?.updater?.state === "downloading" ? (
+						<SidebarMenuItem className="app-no-drag">
+							<SidebarMenuButton disabled><DownloadIcon /><span className="grow min-w-0 flex-1 truncate">Downloading Pine {newer.version}…</span></SidebarMenuButton>
+						</SidebarMenuItem>
+					) : newer ? (
+						<SidebarMenuItem className="app-no-drag">
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`${newer.updater?.state === "failed" ? `${newer.updater.reason} ` : ""}This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></HoverTooltip>
 						</SidebarMenuItem>
 					) : null}
 					<SidebarMenuItem className="app-no-drag">
@@ -754,12 +762,32 @@ function Help({ close }: { close: () => void }) {
 	);
 }
 
-/** After "Check for Updates…" found a newer app: where it is. The app fetches and installs nothing itself. */
+/**
+ * After "Check for Updates…" found a newer app: ready to install with a restart, being downloaded, or
+ * where it is when the app does not update itself (the setting off, a checkout, a download that failed).
+ */
 function UpdateAsk() {
 	const s = useModel(store);
 	const u = s.update;
 	const close = () => ((s.updateAsk = false), s.touch());
 	if (u?.status !== "newer") return null;
+	if (u.updater?.state === "ready" || u.updater?.state === "downloading") {
+		const ready = u.updater.state === "ready";
+		return (
+			<Dialog open onOpenChange={(open) => open || close()}>
+				<DialogContent showCloseButton={false} className="sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle>{ready ? `Pine ${u.version} is ready` : `Pine ${u.version} is being downloaded`}</DialogTitle>
+					</DialogHeader>
+					<p className="text-muted-foreground select-text">{ready ? `This is Pine ${u.mine}. Restart to update: Pine quits, puts the new app in place of this one and opens again, with the pine it started. Or quit when you like: the update is installed then.` : `This is Pine ${u.mine}. The new app is downloaded in the background; "Restart to update" appears at the foot of the side bar when it is ready.`} Your pine home, with your agents, conversations and settings, stays as it is.</p>
+					<DialogFooter>
+						<Button variant="outline" onClick={close}>{ready ? "Not now" : "Close"}</Button>
+						{ready ? <Button onClick={() => void s.installUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		);
+	}
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
 			<DialogContent showCloseButton={false} className="sm:max-w-lg">
@@ -767,6 +795,7 @@ function UpdateAsk() {
 					<DialogTitle>Pine {u.version} is available</DialogTitle>
 				</DialogHeader>
 				<div className="select-text">
+					{u.updater?.state === "failed" ? <p className="mb-2.5 text-muted-foreground">{u.updater.reason}</p> : null}
 					<p className="text-muted-foreground">This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
 					<p className="mt-2.5 cursor-auto font-mono text-xs text-faint select-text">{u.url}</p>
 				</div>

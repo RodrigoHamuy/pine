@@ -45,6 +45,8 @@ export interface Prefs {
 	names?: Record<string, string>;
 	notify: boolean;
 	updates: boolean;
+	/** Whether the app downloads a newer release and installs it on a restart or a quit (the desktop app's own; the others leave it out). */
+	autoUpdate?: boolean;
 	/** The theme the window was last drawn in (theme.ts), so that it opens in it; none: pmndre. */
 	look?: Look;
 	/**
@@ -54,7 +56,7 @@ export interface Prefs {
 	storage?: Record<string, string>;
 }
 
-export type { Update } from "../electron/updates.ts";
+export type { Update, UpdaterState } from "../electron/updates.ts";
 
 /** What the bridge's `state()` answers when the page starts. */
 export interface AppState {
@@ -98,6 +100,11 @@ export interface AppState {
 	 * and their page then shows no button for the view.
 	 */
 	views?: boolean;
+	/**
+	 * Whether this app updates itself (a packaged app on a Mac): it downloads a newer release and installs
+	 * it on "Restart to update" or a quit. The other bridges, and an app from a checkout, leave it out.
+	 */
+	selfUpdate?: boolean;
 }
 
 export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../electron/access/control.ts";
@@ -108,11 +115,14 @@ export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../
  */
 export type AccessCalls = "access" | "setAccess" | "openPairing" | "copyPairingLink" | "cancelPairing" | "answerPairing" | "removeDevice" | "onAccess";
 
+/** The app's own update (`AppState.selfUpdate`): only the desktop app's bridge has these calls. */
+export type UpdateCalls = "installUpdate" | "onUpdate";
+
 /**
  * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the
  * preview's, the mobile app's, the web client's).
  */
-export type PageBridge = Omit<Bridge, "state" | AccessCalls> & Partial<Pick<Bridge, AccessCalls>> & {
+export type PageBridge = Omit<Bridge, "state" | AccessCalls | UpdateCalls> & Partial<Pick<Bridge, AccessCalls | UpdateCalls>> & {
 	state: () => Promise<AppState>;
 	/**
 	 * Where the daemon's pictures, video and sound are fetched from, set by a bridge whose page

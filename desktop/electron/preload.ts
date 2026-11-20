@@ -16,6 +16,10 @@ const bridge = {
 	retry: () => ipcRenderer.invoke("pine:retry"),
 	/** Whether there is a newer app: what the start found, or with `again` what GitHub says now. Nothing where nobody is asked. */
 	update: (again?: boolean) => ipcRenderer.invoke("pine:update", again),
+	/** Quits and installs the update the app downloaded ("Restart to update"); the pine this app started is stopped first. */
+	installUpdate: () => ipcRenderer.invoke("pine:install-update") as Promise<void>,
+	/** What is said of a newer app, each time the app's own download of it moves on. */
+	onUpdate: on("pine:update-state"),
 	restart: () => ipcRenderer.invoke("pine:restart"),
 	init: () => ipcRenderer.invoke("pine:init"),
 	/** Fetch the browser build this pine drives (`pine browser-install`); what it prints comes as init lines. */

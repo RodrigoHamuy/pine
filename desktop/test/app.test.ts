@@ -100,7 +100,7 @@ process.stdin.resume();
 	github = http.createServer((_req, res) => {
 		releases.asked++;
 		const version = releases.tag.slice(1);
-		res.writeHead(releases.status, { "content-type": "application/json" }).end(JSON.stringify({ tag_name: releases.tag, html_url: "https://example.invalid/elsewhere", assets: ["arm64", "x64"].map((arch) => ({ name: `Pine-${version}-${arch}.dmg` })) }));
+		res.writeHead(releases.status, { "content-type": "application/json" }).end(JSON.stringify({ tag_name: releases.tag, html_url: "https://example.invalid/elsewhere", assets: ["arm64", "x64"].flatMap((arch) => [{ name: `Pine-${version}-${arch}.dmg` }, { name: `Pine-${arch}.json` }]) }));
 	});
 	await new Promise<void>((r) => github.listen(0, "127.0.0.1", r));
 
@@ -236,6 +236,8 @@ test("starts a daemon of its own and shows the main agent", async () => {
 });
 
 test("a newer app is said at the start and when asked, with a link to its page on GitHub and nothing fetched", async () => {
+	// An app from a checkout updates nothing itself: macOS's updater was never pointed at a feed, and there is no switch for it.
+	assert.equal(await app.evaluate(({ autoUpdater }: any) => autoUpdater.getFeedURL()), "");
 	const mine = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 	const link = "https://github.com/pmndre/pine/releases/tag/v9.9.9";
 	// The start asked once, and the side bar says what it found.
@@ -286,6 +288,7 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	await page.locator("[data-setting=updates]").getByRole("button", { name: "Release page" }).click();
 	assert.deepEqual(await opened(), [link, link, link]);
 	const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
+	assert.equal(await page.$("[data-slot=field]:has-text('Update automatically')"), null);
 	await page.click("[data-slot=field]:has-text('Look for a newer version at the start') [data-slot=switch]");
 	for (let i = 0; i < 50 && prefs().updates !== false; i++) await new Promise((r) => setTimeout(r, 40));
 	assert.equal(prefs().updates, false);
