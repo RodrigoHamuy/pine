@@ -732,7 +732,7 @@ export class SourceHost {
 	private follow(key: string, command: string, onLine: (line: string) => void, signal: AbortSignal): Promise<{ code: number; error: string }> {
 		return new Promise((resolve, reject) => {
 			// Rule of the house: where the sandbox only cleans up after a command, a command without an end is not started.
-			if (sandboxKind() === "linux" || sandboxKind() === "windows") return reject(new Error(`a command cannot be followed on ${sandboxKind() === "linux" ? "Linux" : "Windows"}: its sandbox takes away what a command must not leave behind only after the command, and this one would not end. Run it again and again instead (without "follow")`));
+			if (sandboxKind() === "linux") return reject(new Error("a command cannot be followed on Linux: its sandbox takes away what a command must not leave behind only after the command, and this one would not end. Run it again and again instead (without \"follow\")"));
 			if (signal.aborted) return reject(new Error("stopped"));
 			let sh: ReturnType<SourceHost["shell"]>;
 			try {

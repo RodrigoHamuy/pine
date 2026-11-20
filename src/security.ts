@@ -6,7 +6,6 @@ import path from "node:path";
 import { type AgentConfig, agentSkillsDir, conversationsDir, globalSkillsDir, type Level, mainAgentId, PINE_ROOT, type PineConfig, sharedFiles, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import type { DenialTools } from "./access.ts";
 import { bwrapArgs, Guard, helperArgs, jailed, type Protected, protectedNow, SESSIONS } from "./sandbox-linux.ts";
-import { boxArgs, boxMissing, boxProgram, containerName } from "./sandbox-windows.ts";
 import type { Bus } from "./store.ts";
 import { type Logger, truncate } from "./util.ts";
 
@@ -229,7 +228,7 @@ export function shellRefuses(roots: Roots, kind: "read" | "write", p: string): b
  * cannot be mounted, so a file that is still to be made is asked for as the folder it goes into.
  */
 export function grantPath(p: string): string {
-	if (sandboxKind() === "macos") return p;
+	if (sandboxKind() !== "linux") return p;
 	let cur = p;
 	while (!present(cur) && path.dirname(cur) !== cur) cur = path.dirname(cur);
 	return cur;
@@ -422,7 +421,7 @@ function winBin(name: string): string {
 	return fs.existsSync(system) ? system : name;
 }
 
-export type SandboxKind = "macos" | "linux" | "windows";
+export type SandboxKind = "macos" | "linux";
 let kind: SandboxKind | null | undefined;
 let bwrap = "";
 let whyNot = "";
@@ -487,20 +486,9 @@ export function sandboxKind(): SandboxKind | undefined {
 			}
 		}
 	} else if (process.platform === "win32") {
-		const exe = boxProgram();
-		const bash = bin("bash");
-		if (!exe) whyNot = boxMissing();
-		else if (!path.isAbsolute(bash)) whyNot = "Git for Windows is not installed: its bash is the shell pine gives an agent. Install it from https://git-scm.com/download/win";
-		else {
-			try {
-				// An AppContainer of its own for the try: Git's bash has to start in one, and write nowhere.
-				execFileSync(exe, ["box", "--name", "pine.probe", "--", bash, "-c", "true"], { stdio: ["ignore", "ignore", "pipe"], timeout: 30_000, windowsHide: true });
-				kind = "windows";
-			} catch (e) {
-				const said = String((e as { stderr?: unknown }).stderr ?? "").trim().split(/\r?\n/)[0] || (e instanceof Error ? e.message.split("\n")[0].slice(0, 160) : String(e));
-				whyNot = `pine's sandbox helper could not start Git's bash in an AppContainer here ("${said}")`;
-			}
-		}
+		// What an AppContainer cannot run (Git's bash, git itself: docs/adr/0004-three-systems.md). On
+		// Windows the sandbox is pine in WSL, which the Pine app sets up.
+		whyNot = "pine has no sandbox on Windows itself. For safe mode use pine in WSL: the Pine app sets it up (Settings > Environments)";
 	} else whyNot = `no sandbox is implemented for ${process.platform}`;
 	return kind ?? undefined;
 }
@@ -554,18 +542,6 @@ export function sandboxArgv(cfg: PineConfig, agent: AgentConfig, roots: Roots, v
 	if (k === "macos" || k === undefined) return ["/usr/bin/sandbox-exec", "-p", sandboxProfile(cfg, agent, roots, variant, network, tag)];
 	const v = variant === true ? "restricted" : variant === false ? "normal" : variant;
 	const net = agent.sandbox.network || network;
-	if (k === "windows") {
-		// Whatever is closed (pine's home, secrets, other agents) is simply not named: an
-		// AppContainer reaches nothing of the owner's that was not given to it.
-		return boxArgs({
-			name: containerName(roots.home, agent.id, v === "restricted" ? "r" : "n"),
-			read: [...roots.read, ...roots.sources, path.dirname(process.execPath), ...windowsToolFolders()],
-			write: roots.write,
-			deny: v === "restricted" ? protectedNow(protectedOf(roots)).paths : [],
-			network: net,
-			ledger: boxLedger(cfg.dataDir, agent.id),
-		});
-	}
 	// Sockets between programs go with the network, as on macOS.
 	return jailed(
 		bwrap,
@@ -610,16 +586,7 @@ export function denialTools(): DenialTools {
  */
 export function sandboxGuard(roots: Roots, variant: SandboxVariant | boolean): Guard | undefined {
 	const k = sandboxKind();
-	return (k === "linux" || k === "windows") && (variant === true || variant === "restricted") ? new Guard(protectedOf(roots)) : undefined;
-}
-
-/** Where pine-box notes the permissions it gave an agent's commands on the owner's files, so that they can be taken back. */
-export const boxLedger = (dataDir: string, agent: string) => path.join(dataDir, "pine-box", `${encodeURIComponent(agent)}.ledger`);
-
-/** Windows: the folders of the tools an agent's commands run (Git's), which an AppContainer does not read by itself where they lie in the owner's profile. */
-function windowsToolFolders(): string[] {
-	const git = gitForWindows();
-	return git ? [git] : [];
+	return k === "linux" && (variant === true || variant === "restricted") ? new Guard(protectedOf(roots)) : undefined;
 }
 
 /**
@@ -627,11 +594,9 @@ function windowsToolFolders(): string[] {
  * a picture converter): it may read, write only in `write`, and has no network. Undefined where
  * there is no sandbox.
  */
-export function helperArgv(write: string[] = [], read: string[] = []): string[] | undefined {
+export function helperArgv(write: string[] = []): string[] | undefined {
 	const k = sandboxKind();
 	if (k === "linux") return jailed(bwrap, helperArgs(write), false);
-	// An AppContainer reads only what it is given: the caller names what the helper looks at.
-	if (k === "windows") return boxArgs({ name: "pine.helper", read: [...read, ...windowsToolFolders()], write, network: false, ledger: path.join(os.tmpdir(), "pine-box-helper.ledger") });
 	if (k === "macos") return ["/usr/bin/sandbox-exec", "-p", `(version 1)(allow default)(deny network*)(deny file-write*)(allow file-write* ${subpaths(write)} (literal "/dev/null"))`];
 	return undefined;
 }
@@ -676,9 +641,6 @@ export function shellEnv(agent: AgentConfig, roots: Roots, sessionEnv: NodeJS.Pr
 		// Windows' own programs and Git's bash look for temp here, not in TMPDIR.
 		env.TMP = env.TEMP = env.TMPDIR;
 		env.USERPROFILE = roots.sandboxHome;
-		// Git's bash turns arguments that look like its own paths into Windows' when it starts a
-		// program of Windows: not those it hands to pine-box, which takes this away again for the command.
-		env.MSYS2_ARG_CONV_EXCL = "*";
 	}
 	if (process.platform === "darwin") {
 		// Apple's libraries ask the system for the user's home, not the environment. Told this, they

@@ -28,7 +28,7 @@ const MAX_OUT = 2_000_000;
  */
 export function git(cwd: string, args: string[], opts: GitOptions = {}): Promise<{ code: number; out: string; raw: Buffer; err: string }> {
 	const none = { out: "", raw: Buffer.alloc(0) };
-	const jail = helperArgv(opts.write, [cwd]);
+	const jail = helperArgv(opts.write);
 	if (!jail) return Promise.resolve({ code: 127, ...none, err: "there is no sandbox on this system to run git in" });
 	const safe = ["--no-optional-locks", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-c", "core.pager=cat", "-c", "diff.external=", "-c", "safe.directory=*", "-c", "color.ui=false", "-c", "core.quotePath=false"];
 	const max = opts.maxBytes ?? MAX_OUT;

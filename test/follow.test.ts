@@ -12,7 +12,7 @@ const call = (name: string, args: any) => ({ name, args });
 const MARK = `pine-follow-test-${process.pid}`;
 // The file's name is what tells this test's command from any other: bash hands over to tail, and tail's arguments are all that is left.
 const running = () => spawnSync("/bin/ps", ["-axww", "-o", "command="]).stdout.toString().split("\n").filter((l) => l.includes(MARK)).length;
-const here = { skip: sandboxKind() !== "macos" };
+const here = { skip: !sandboxAvailable() || sandboxKind() === "linux" };
 
 test("command, followed: every line it prints is an event as it comes, in the agent's sandbox", here, async () => {
 	const h = await harness({

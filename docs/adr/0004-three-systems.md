@@ -1,6 +1,6 @@
 # 0004: pine on macOS, Linux and Windows
 
-Status: accepted for Linux and for Windows through WSL. Open for a sandbox on Windows itself.
+Status: accepted.
 
 ## Context
 
@@ -36,9 +36,9 @@ chain of parents leads there.
 
 ## What was tried for a sandbox on Windows itself
 
-An AppContainer, started by a helper of pine's (`src/pine-box.cs`, built with the C# compiler
-every Windows carries). What the probe (`.github/workflows/windows-sandbox.yml`) found on GitHub's
-Windows runner:
+An AppContainer, started by a helper of pine's written in C# and built with the compiler every
+Windows carries. A workflow ran programs in it on GitHub's Windows runner, one at a time (both are
+in the history of the pull request that brought this ADR). What it found:
 
 | | In the AppContainer |
 |---|---|
@@ -49,16 +49,18 @@ Windows runner:
 | the null device (`NUL`, `/dev/null`) | refused: git and every program that opens it fail |
 | Git's bash and its programs (MSYS) | do not start: the runtime makes a folder of named objects in the global namespace, which an AppContainer may not, and a folder made for it by pine-box was not enough |
 
-So an AppContainer cannot run the shell and the git that a coding agent needs. The way left is
-the one OpenAI took for Codex: a local account of pine's own for commands, made once with an
-administrator's yes (`pine init`), whose token is restricted further, with permissions on the
-owner's folders as the sandbox's roots and the Windows Filtering Platform for the network. That
-is open, and until it is decided `safe` mode on Windows means WSL.
+So an AppContainer cannot run the shell and the git that a coding agent needs, and the
+AppContainer was taken out again. The way left is the one OpenAI took for Codex: a local account
+of pine's own for commands, made once with an administrator's yes, whose token is restricted
+further, with permissions on the owner's folders as the sandbox's roots and the Windows Filtering
+Platform for the network. It would be a second sandbox on Windows beside WSL's, written and
+tested on Windows alone, for what WSL gives already. It is not built: `safe` mode on Windows
+means pine in WSL.
 
 ## Consequences
 
 - An owner on Windows who wants `safe` mode uses the pine in WSL, which the app sets up.
 - Agents in WSL run Linux's programs; Windows' folders are slower through `/mnt/c`, and app
   control of Windows' apps is not there.
-- App control, the `system` source and voice are macOS's until programs of their own exist for
-  Linux and Windows.
+- pine's helpers on Windows (the `system` source, voice, app control) are C# programs built with
+  the compiler every Windows carries (`src/csharp.ts`), as the Swift helpers are built on a Mac.
