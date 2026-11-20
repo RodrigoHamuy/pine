@@ -66,6 +66,8 @@ func wholeMatch(_ pattern: String, _ text: String) -> [String]? {
 public func sshHost(_ value: String?) throws -> SshHost? {
 	guard let given = value?.trimmingCharacters(in: .whitespacesAndNewlines), !given.isEmpty else { return nil }
 	let refused = RemoteError("ssh", "\"\(given.prefix(80))\" is not a host for ssh. Write it as host, user@host or user@host:port.")
+	// A paired computer (Paired.swift), never a host "paired" whose port follows the colon.
+	if given.hasPrefix(PAIRED) { throw refused }
 	let colon = given.lastIndex(of: ":")
 	let name = colon.map { String(given[..<$0]) } ?? given
 	var port = 22
