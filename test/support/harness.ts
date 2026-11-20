@@ -180,8 +180,14 @@ export async function harness(spec: { pine?: Record<string, unknown>; agents: Re
 }
 
 export const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/**
+ * How much longer than on a developer's computer a wait may take: GitHub's runners are slower
+ * (PINE_TEST_PATIENCE=4 there). Only how long is waited changes, never what is waited for.
+ */
+export const PATIENCE = Math.max(1, Number(process.env.PINE_TEST_PATIENCE) || 1);
+
 export async function until(fn: () => unknown, ms = 5000, what = "condition"): Promise<void> {
-	const end = Date.now() + ms;
+	const end = Date.now() + ms * PATIENCE;
 	while (Date.now() < end) {
 		if (await fn()) return;
 		await sleep(25);
