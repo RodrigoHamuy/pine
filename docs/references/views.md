@@ -8,18 +8,21 @@ in the `views` folder of pine's home, and the app shows it in a panel at the rig
 (`⇧⌘O`, View > Toggle View, the radar at the top right of the title bar). See "The view" in
 [desktop.md](desktop.md) for the panel itself.
 
-pine comes with two views. `office` is pine as a little tower house in pixels, a room and a robot for
+pine comes with three views. `office` is pine as a little tower house in pixels, a room and a robot for
 each agent, main under the roof. `workshop` is the same pine as Santa's workshop at the North Pole:
-the main agent is Santa, the others are elves, each in a workshop of another kind
-([desktop.md](desktop.md), "The view", says what is what in both). A home is given each of them once:
-both when pine starts without a `views` folder, and one that pine gets later at the next start of a
+the main agent is Santa, the others are elves, each in a workshop of another kind. `overview` is no
+picture but a page to read: what wakes agents, the agents with a sentence on what each does, and
+what they use, with a line between two of them while something happens there. It is the one the
+panel shows until you pick another ([desktop.md](desktop.md), "The view", says what is what in each). A
+home is given each of them once:
+all when pine starts without a `views` folder, and one that pine gets later at the next start of a
 pine that has it. Apart from that the folder is yours. Take a view out and it stays out; change one
 and it stays as you left it; put a file in and it can be chosen.
 
 | | |
 |---|---|
 | Where | `~/.pine/views/<name>.ts`: the view `<name>`. A name is lowercase letters, digits, `.`, `-` and `_` |
-| Which one is shown | The one picked with the view's name at the top of the panel: a list of the views in the folder, read again each time it opens. That choice is `ui.view` in pine.json, which the main agent's `set_setting` can set too. Not set: the view whose name comes first. `off` (in pine.json): no panel |
+| Which one is shown | The one picked with the view's name at the top of the panel: a list of the views in the folder, read again each time it opens. That choice is `ui.view` in pine.json, which the main agent's `set_setting` can set too. Not set: `overview`, and in a folder without it the view whose name comes first. `off` (in pine.json): no panel |
 | No view | With no view in the folder, or `ui.view` set to `off`, the app shows no button for the panel |
 | Where it runs | Only in the Pine app on a computer. The mobile app and the web client show no view |
 | A change to the file | Close and open the panel to run it again |

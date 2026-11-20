@@ -92,7 +92,7 @@ const SYNONYMS: string[][] = [
 	["model", "llm", "provider", "inference", "endpoint"],
 	["telegram", "messenger", "phone", "chat", "bot"],
 	["pair", "pairing", "link", "connect", "bind"],
-	["birdseye", "bird", "glance", "overview", "everything", "visualize", "visualise", "office", "building", "house", "pixel", "robot", "plugin", "views", "workshop", "santa", "elf", "elves", "christmas"],
+	["birdseye", "bird", "glance", "overview", "everything", "visualize", "visualise", "office", "house", "pixel", "robot", "plugin", "views", "workshop", "santa", "elf", "elves", "christmas", "diagram", "boxes"],
 	["webhook", "hook", "callback", "http", "post"],
 	["http", "url", "website", "web", "page", "site", "address", "poll", "scrape"],
 	["command", "shell", "bash", "script", "terminal", "cli"],

@@ -1,6 +1,6 @@
 // Views: scripts of the owner's in <home>/views that draw pine in the panel of the Pine app (`office.ts`
-// is the view "office"). `ui.view` in pine.json says which one the panel shows; the first there is when
-// it names none, and none at all when it says "off" or the folder holds no view: then the app shows no
+// is the view "office"). `ui.view` in pine.json says which one the panel shows; `overview` when it names
+// none (the first there is, in a folder without it), and none at all when it says "off" or the folder holds no view: then the app shows no
 // button for the panel. A home gets each of pine's own views once (`seedOwn`): all of them the first time
 // pine starts without the folder (and from `pine init`, which copies examples/home), and one that pine
 // comes with later at the next start. Apart from that the folder is the owner's.
@@ -167,11 +167,17 @@ export function listViews(home: string): ViewEntry[] {
 	return out.filter((v, i) => out.findIndex((w) => w.id === v.id) === i);
 }
 
-/** The view the panel shows: the one pine.json names, the first there is when it names none, none for "off". */
+/** The view the panel shows when the owner has chosen none: the one that says everything in words. */
+export const DEFAULT_VIEW = "overview";
+
+/**
+ * The view the panel shows: the one pine.json names; when it names none, or one that is gone, pine's default,
+ * and the first there is where that is not in the folder; none for "off".
+ */
 export function viewInForce(chosen: string | undefined, list: ViewEntry[]): string | undefined {
 	if (chosen === "off") return undefined;
 	const usable = list.filter((v) => !("problem" in v));
-	return (usable.find((v) => v.id === chosen) ?? usable[0])?.id;
+	return (usable.find((v) => v.id === chosen) ?? usable.find((v) => v.id === DEFAULT_VIEW) ?? usable[0])?.id;
 }
 
 /** A view's code as the app runs it: JavaScript, its types taken away. Only a view the folder lists. */

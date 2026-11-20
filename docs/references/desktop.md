@@ -695,7 +695,8 @@ the table above).
 
 What the panel draws is a view: a script of yours in the `views` folder of pine's home, chosen with
 the view's name at the top of the panel, which is a list of the views in the folder (`ui.view`). pine
-comes with two: `office`, pine as a little house full of robots, and `workshop`, pine as Santa's
+comes with three: `overview`, a page that says everything in words and is shown until you pick
+another, `office`, pine as a little house full of robots, and `workshop`, pine as Santa's
 workshop at the North Pole. How to write
 one, and what a view is told, is in [views.md](views.md). With no view in the folder, or the setting
 `off`, there is no button and no panel. The mobile app and the web client show no view.
@@ -775,6 +776,22 @@ words as in `office`; their signs are sweets, and the `?` shows what each stands
 
 It is winter there all year. The sky follows your clock, with northern lights at night; reindeer fly
 a sleigh across it, elves on skis and a polar bear with its cub go by, and floes drift on the sea.
+
+### The overview
+
+`overview` is all of pine on one page, in words. There is nothing to learn first: three columns of
+boxes, and every box says what it is.
+
+| On the page | What it is |
+|---|---|
+| The left column, "what wakes them" | You, every event source and every schedule, each with whom it wakes ("inbox, wakes books") and, for a schedule, when it is due. A source that is not running is red and says so. A question for you is said at your box |
+| The middle column, "agents" | Every agent. Under its name, as a sentence, what it does right now ("runs a command", "uses web: search", "waits for scout", "asks you", "resting"), and under that why and how far ("for you · step 2 of 5"). Each of its copies (sub-agents) is a line of its own in its box. Its mode stands beside its name |
+| The right column, "what they use" | Every MCP server and every skill |
+| A line between two boxes | Something happens between them right now, in the color of the agent it happens to: from what woke an agent to the agent, from an agent to the MCP server or skill it uses, beside the column from an agent to the agent it handed a task to, and in red from an agent to you while it waits for your answer. Dots run along it the way things go. Nothing happens: no line |
+| The pointer over a box | Thin lines to all it is wired to (for an agent its sources, schedules, MCP servers and skills; for a source or a server, everybody who has it), and the rest fades. The line on top of the page says what the box is |
+| A click on an agent | Opens its box: a line for each of its conversations, a branch set in under what it was branched from, with "in a worktree" and its goal where it has one. The agent is shown under the view; a double click opens it |
+
+It has no timeline: what happened, in order, is the list the panel shows under every view.
 
 ## Settings
 

@@ -16,7 +16,7 @@ test("a home gets pine's views once, the module views import, a tsconfig for the
 		seedViews(home);
 		const dir = path.join(home, "views");
 		assert.ok(fs.existsSync(path.join(dir, "office.ts")));
-		assert.ok(fs.existsSync(path.join(dir, "workshop.ts")), "every view pine comes with");
+		for (const name of ["workshop.ts", "overview.ts"]) assert.ok(fs.existsSync(path.join(dir, name)), `every view pine comes with: ${name}`);
 		assert.equal(fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8"), fs.readFileSync(path.resolve(import.meta.dirname, "..", "src", "view-kit.ts"), "utf8"));
 		assert.match(fs.readFileSync(path.join(dir, "tsconfig.json"), "utf8"), /"pine\/view": \["\.\/\.pine\/view\.ts"\]/);
 		// The guide for whoever writes a view, also a coding agent opened in the folder: it names what the module really has.
@@ -56,11 +56,10 @@ test("a home gets pine's views once, the module views import, a tsconfig for the
 		assert.equal(fs.readFileSync(path.join(own, "views", "AGENTS.md"), "utf8"), "my own notes");
 		fs.rmSync(own, { recursive: true, force: true });
 		// The owner takes pine's views out: they stay out. The kit is brought back up to date all the same.
-		fs.rmSync(path.join(dir, "office.ts"));
-		fs.rmSync(path.join(dir, "workshop.ts"));
+		for (const name of ["office.ts", "workshop.ts", "overview.ts"]) fs.rmSync(path.join(dir, name));
 		fs.writeFileSync(path.join(dir, ".pine", "view.ts"), "old");
 		seedViews(home);
-		assert.ok(!fs.existsSync(path.join(dir, "office.ts")) && !fs.existsSync(path.join(dir, "workshop.ts")));
+		for (const name of ["office.ts", "workshop.ts", "overview.ts"]) assert.ok(!fs.existsSync(path.join(dir, name)), name);
 		assert.notEqual(fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8"), "old");
 		assert.deepEqual(listViews(home), [], "the kit, the tsconfig and the guide are no views");
 		assert.equal(viewInForce(undefined, listViews(home)), undefined, "no view: the app shows no button");
@@ -79,9 +78,10 @@ test("a view pine comes with later reaches a home that is there already, once; t
 		seedViews(home);
 		assert.equal(fs.readFileSync(path.join(dir, "office.ts"), "utf8"), "// mine now\n", "the office is the owner's");
 		assert.equal(fs.readFileSync(path.join(dir, "workshop.ts"), "utf8"), fs.readFileSync(path.resolve(import.meta.dirname, "..", "examples", "home", "views", "workshop.ts"), "utf8"), "the view that is new to this home is there");
-		assert.deepEqual(listViews(home).map((v) => v.id), ["office", "workshop"]);
-		assert.equal(viewInForce(undefined, listViews(home)), "office", "and the one that was shown is still the one shown");
-		assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, ".pine", "seeded.json"), "utf8")), ["office.ts", "workshop.ts"]);
+		assert.deepEqual(listViews(home).map((v) => v.id), ["office", "overview", "workshop"]);
+		assert.equal(viewInForce(undefined, listViews(home)), "overview", "with no view chosen, pine's default is the one shown now");
+		assert.equal(viewInForce("office", listViews(home)), "office", "and a view the owner chose stays the one shown");
+		assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, ".pine", "seeded.json"), "utf8")), ["office.ts", "overview.ts", "workshop.ts"]);
 		// Taken out, it stays out; changed, it stays as it is.
 		fs.rmSync(path.join(dir, "workshop.ts"));
 		seedViews(home);
@@ -117,7 +117,10 @@ test("a view is handed over as JavaScript, its types taken away; one that cannot
 		assert.match(plain.code, /from "pine\/view"/, "the import is left for the frame to point at the kit");
 		assert.match(JSON.stringify(viewCode(home, "enum")), /cannot be read.*no enum/);
 		assert.match(JSON.stringify(viewCode(home, "../pine")), /there is no view/);
-		assert.equal(viewInForce(undefined, list), "enum", "the first view there is, when none is named");
+		assert.equal(viewInForce(undefined, list), "enum", "the first view there is, when none is named and the folder has no overview");
+		assert.equal(viewInForce(undefined, [...list, { id: "overview", file: path.join(dir, "overview.ts") }]), "overview", "pine's default, where it is there");
+		assert.equal(viewInForce("gone", [...list, { id: "overview", file: path.join(dir, "overview.ts") }]), "overview", "a view that was chosen and is gone gives way to the default");
+		assert.equal(viewInForce(undefined, [...list, { id: "overview", file: path.join(dir, "overview.ts"), problem: "too large for a view" }]), "enum", "a default that cannot be handed on is not shown");
 		assert.equal(viewInForce("plain", list), "plain");
 		assert.equal(viewInForce("off", list), undefined);
 	} finally {
@@ -133,8 +136,9 @@ test("the owner's UI lists the views and sets ui.view, or off; a view that is no
 		return { status: res.status, body: (await res.json()) as any };
 	};
 	const first = (await call("GET", "/views")).body;
-	assert.equal(first.view, "office");
+	assert.equal(first.view, "overview", "none chosen: pine's default");
 	assert.equal(first.chosen, null);
+	assert.deepEqual(first.views.map((v: any) => v.id), ["office", "overview", "workshop"]);
 	const code = (await call("GET", "/views/office")).body;
 	assert.match(code.code, /defineView/);
 	assert.equal((await call("POST", "/settings", { key: "ui.view", value: "nowhere" })).status >= 400, true);

@@ -54,7 +54,7 @@ before(async () => {
 	mock = await startMock({});
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-view-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
-	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false } }));
+	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe" }, security: { askAccess: false }, ui: { view: "office" } }));
 	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ mode: "safe" }));
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 	write(path.join(home, "agents", "books", "agent.json"), JSON.stringify({ mode: "bypass", color: "#e0805a" }));
@@ -76,7 +76,8 @@ after(async () => {
 	if (home) fs.rmSync(home, { recursive: true, force: true });
 });
 
-test("pine puts its own view into the home, and the panel runs it beside any tab, telling it every agent and its mode", async () => {
+// The home of these tests names the office in its pine.json: with none named, the panel shows the overview.
+test("pine puts its own views into the home, and the panel runs the one that is chosen beside any tab, telling it every agent and its mode", async () => {
 	assert.ok(fs.existsSync(path.join(home, "views", "office.ts")), "the office is in the views folder");
 	assert.ok(fs.existsSync(path.join(home, "views", ".pine", "view.ts")), "and the module views import, for the owner's editor");
 	assert.match(fs.readFileSync(path.join(home, "views", "tsconfig.json"), "utf8"), /"pine\/view": \["\.\/\.pine\/view\.ts"\]/);
@@ -195,5 +196,19 @@ test("the workshop, pine's other view, is in the home too and runs in the same f
 	await main.waitFor({ state: "attached", timeout: 10_000 });
 	assert.match((await main.textContent()) ?? "", /main, safe mode, the main agent, Santa, under the roof/);
 	await shoot("workshop");
+	await call("POST", "/settings", { key: "ui.view", value: "office" });
+});
+
+test("the overview, pine's third view, runs in the same frame and says in words what its board shows", async () => {
+	assert.ok(fs.existsSync(path.join(home, "views", "overview.ts")), "the overview is in the views folder");
+	await call("POST", "/settings", { key: "ui.view", value: "overview" });
+	await sees("[data-toggle=view]", "the view's button");
+	if (!(await page.$("[data-slot=view-aside]"))) await menu("view");
+	await sees("[data-slot=view-aside] [data-slot=view][data-view=overview] [data-slot=view-frame][data-ready]", "the overview, running in its frame");
+	const main = frame().locator("[data-slot=overview-words] > li[data-agent=main]");
+	await main.waitFor({ state: "attached", timeout: 10_000 });
+	assert.match((await main.textContent()) ?? "", /main, safe mode, the main agent: at rest/);
+	assert.match((await frame().locator("[data-slot=overview-words] > li[data-agent=books]").textContent()) ?? "", /books, bypass mode/);
+	await shoot("overview");
 	await call("POST", "/settings", { key: "ui.view", value: "office" });
 });
