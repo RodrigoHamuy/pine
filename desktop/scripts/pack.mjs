@@ -172,7 +172,8 @@ if (carries && !prepackaged) {
 	if (system === "win32") execFileSync(`npm ${install.join(" ")}`, { cwd: stage, stdio: "inherit", shell: true });
 	else run("npm", install, stage);
 	// Its helpers, built: a Mac without Apple's developer tools could not build them itself. They are Mac programs only.
-	if (system === "darwin") run(process.execPath, [path.join(repo, "scripts", "helpers.mjs"), stage], repo);
+	// (On Windows the C# ones, which the release then signs with the rest of the app.)
+	if (system === "darwin" || system === "win32") run(process.execPath, [path.join(repo, "scripts", "helpers.mjs"), stage], repo);
 	node = await carriedNode();
 	if (system === "win32") wslNode = await nodeForWsl();
 }

@@ -133,6 +133,9 @@ export async function buildHelper(dir: string, source = SWIFT, run: Run = runPro
 	return file;
 }
 
+/** The helper on Windows, built from system.cs into `dir` the first time (or the one the Pine app carries). */
+export const buildSystemWindows = (dir: string, source = CSHARP) => buildCsharp(source, "pine-system", "the system source", ["System.Core.dll", "System.Windows.Forms.dll"], { dir });
+
 /**
  * The helper of this system, as a program and its first arguments. Never an option of a source:
  * what the daemon runs is fixed here (a test puts its stand-in into `standIn`).
@@ -141,7 +144,7 @@ async function helperProgram(dataDir: string): Promise<string[]> {
 	if (standIn.program) return standIn.program;
 	const dir = path.join(dataDir, "helper");
 	if (process.platform === "linux") return [process.execPath, LINUX];
-	if (process.platform === "win32") return [buildCsharp(CSHARP, "pine-system", "the system source", ["System.Core.dll", "System.Windows.Forms.dll"], { dir })];
+	if (process.platform === "win32") return [buildSystemWindows(dir)];
 	return [await buildHelper(dir)];
 }
 
