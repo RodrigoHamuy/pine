@@ -22,6 +22,17 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
+            <!-- A pairing link of Pine's own meeting service (the QR code the Pine app shows, read by the
+                 phone's camera): opened by this app, once Android checked the statement the service serves
+                 (/.well-known/assetlinks.json, naming the release key). Otherwise it opens the browser. The
+                 plugin hands the link to the page, which asks the owner before anything is used. -->
+            <intent-filter android:autoVerify="true">
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="https" android:host="pine.drcmda.workers.dev" android:path="/" />
+            </intent-filter>
+
         </activity>
 
         <provider

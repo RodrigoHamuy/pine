@@ -1,8 +1,10 @@
 // The native plugin the mobile bridge talks to (mobile/src/plugin.ts, registered as `Pine`): what
 // Electron's main process is for the desktop page. It holds the SSH sessions and the daemons'
-// tokens and makes every call; the page never sees either. What it decides lives in the core
-// (../../../../../../../core, package pine.mobile.core, tested on the JVM): this file is the Android
-// glue around it (the Keystore, the shelf, the WebView, intents, the back button, the app's life).
+// tokens and makes every call; the page never sees either. A computer paired by its link is reached
+// the same way, SSH over a data channel the core opens (LibWebRtc.kt). What it decides lives in the
+// core (../../../../../../../core, package pine.mobile.core, tested on the JVM): this file is the
+// Android glue around it (the Keystore, the shelf, the WebView, intents, App Links, the back button,
+// the app's life).
 package dev.pmndre.pine
 
 import android.content.ClipData
@@ -41,6 +43,7 @@ import pine.mobile.core.Pines
 import pine.mobile.core.Remote
 import pine.mobile.core.SealedVault
 import pine.mobile.core.Shelf
+import pine.mobile.core.deviceName
 import pine.mobile.core.mediaRequest
 import pine.mobile.core.outside
 import pine.mobile.core.stays
@@ -59,6 +62,11 @@ class PinePlugin : Plugin() {
 	// The system bars' color and whether the page's theme is dark: pmndre's (index.css) until the page says.
 	private var barColor = Color.parseColor("#1b1e28")
 	private var barsDark = true
+	/**
+	 * What the computer is told this phone is called when it pairs, and what it lists in its Settings >
+	 * Browser access: "Pine on" and the phone's model ("Pine on Pixel 9").
+	 */
+	private val phone = deviceName(Build.MODEL)
 
 	override fun load() {
 		// Android carries a cut-down BouncyCastle under the name sshj asks for; the full one takes its place.
@@ -163,7 +171,36 @@ class PinePlugin : Plugin() {
 	@PluginMethod
 	fun state(call: PluginCall) {
 		val version = runCatching { context.packageManager.getPackageInfo(context.packageName, 0).versionName }.getOrNull() ?: ""
-		call.resolve(JSObject().put("state", pines.state()).put("connected", pines.connected).put("version", version))
+		// This build pairs with a computer by its link (the page then offers pairing first).
+		call.resolve(JSObject().put("state", pines.state()).put("connected", pines.connected).put("version", version).put("canPair", true))
+	}
+
+	/**
+	 * The owner's yes, in the page, to a pairing link: read again by the core (an https service only,
+	 * the machine id and code of their shape), which rejects anything else, or a second pairing.
+	 */
+	@PluginMethod
+	fun pair(call: PluginCall) = later(call) { pines.pair(call.getString("link") ?: "", phone).let { null } }
+
+	@PluginMethod
+	fun cancelPairing(call: PluginCall) = later(call) { pines.cancelPairing().let { null } }
+
+	/**
+	 * The app was opened with an address of the web: an App Link of Pine's meeting service (the
+	 * manifest's filter), or a view intent another app sent this activity by name. At its start
+	 * (BridgeActivity hands the plugins the intent it started with) or while it runs (singleTask). It
+	 * starts nothing: the page reads it as it reads a pasted link, says so when it is not one, and
+	 * otherwise asks the owner, naming a service that is not Pine's own; only their yes calls `pair`.
+	 * Kept until the page listens, for a link the app was started with. Only an address of the web
+	 * with a fragment (the service's own address without a pairing opens the app, and nothing more;
+	 * one on http is refused by the page in plain words), and nothing longer than any pairing link.
+	 */
+	override fun handleOnNewIntent(intent: Intent) {
+		super.handleOnNewIntent(intent)
+		if (intent.action != Intent.ACTION_VIEW) return
+		val link = intent.dataString ?: return
+		if (!outside(link) || '#' !in link || link.length > 1024) return
+		notifyListeners("link", JSObject().put("link", link), true)
 	}
 
 	@PluginMethod
@@ -193,6 +230,9 @@ class PinePlugin : Plugin() {
 		val out = JSObject().put("hosts", JSArray(pines.hosts))
 		pines.prefs?.let { text -> runCatching { JSONObject(text) }.getOrNull()?.let { out.put("prefs", it) } }
 		pines.use?.let { out.put("use", it) }
+		// The names paired computers gave, which the page shows in place of their machine ids.
+		val names = pines.names
+		if (names.isNotEmpty()) out.put("names", JSONObject(names))
 		out
 	}
 
