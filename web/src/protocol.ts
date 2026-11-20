@@ -2,7 +2,7 @@
 // list: a method that is not here is refused, and each one's arguments are checked here before
 // the bridge sees them, as desktop/electron/main.ts checks what comes through its IPC.
 
-/** A host as the page names it: user@host or user@host:port (`host.ts` reads it). */
+/** A machine as the page names it: user@host, user@host:port or mac:<machine id> (`host.ts` reads it). */
 const host = (v: unknown) => typeof v === "string" && v.length > 0 && v.length <= 300;
 const none = (args: unknown[]) => args.length === 0;
 /** A host key's fingerprint as OpenSSH prints it: SHA256 and 43 characters of unpadded base64. */
@@ -27,6 +27,8 @@ export const METHODS = {
 	use: (args: unknown[]) => args.length === 0 || (args.length === 1 && (args[0] === undefined || host(args[0]))),
 	addHost: (args: unknown[]) => args.length === 1 && host(args[0]),
 	forgetHost: (args: unknown[]) => args.length === 1 && host(args[0]),
+	/** A machine of the list and the name the owner gives it; the bridge cleans and cuts the name. */
+	renameHost: (args: unknown[]) => args.length === 2 && host(args[0]) && typeof args[1] === "string" && args[1].length <= 200,
 	/** Back to the machines: the one in use is let go of, and kept. */
 	disconnect: none,
 	trustHostKey: (args: unknown[]) => args.length === 2 && host(args[0]) && typeof args[1] === "string" && FINGERPRINT.test(args[1]),

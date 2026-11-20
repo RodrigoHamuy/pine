@@ -14,7 +14,7 @@
     "build": "node scripts/build.mjs",
     "start": "node scripts/build.mjs && electron .",
     "check": "tsc --noEmit",
-    "postinstall": "node scripts/launch-json.mjs",
+    "postinstall": "node scripts/ssh2-pure.mjs && node scripts/launch-json.mjs",
     "test": "PINE_DESKTOP_BACKGROUND=1 node scripts/test.mjs --test-force-exit --test-timeout=120000 --test-concurrency=2 'test/*.test.ts'",
     "pack": "node scripts/pack.mjs",
     "dist": "node scripts/pack.mjs --dmg",
@@ -47,6 +47,7 @@
     "@types/node": "^26.6.6",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "@types/ssh2": "^1.15.6",
     "@ui-sdk/core": "0.1.0-beta.7",
     "@ui-sdk/react": "0.1.0-beta.7",
     "@vitejs/plugin-react": "^6.3.0",
@@ -79,6 +80,7 @@
   },
   "dependencies": {
     "node-datachannel": "^0.33.6",
-    "node-pty": "^1.1.0"
+    "node-pty": "^1.1.0",
+    "ssh2": "^1.17.0"
   }
 }

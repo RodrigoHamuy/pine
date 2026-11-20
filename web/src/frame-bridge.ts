@@ -63,6 +63,7 @@ export function frameBridge(parent: Target, self: MessageSource): FrameBridge {
 		use: (host?: string) => ask("use", host),
 		addHost: (host: string) => ask("addHost", host),
 		forgetHost: (host: string) => ask("forgetHost", host),
+		renameHost: (host: string, name: string) => ask("renameHost", host, name),
 		trustHostKey: (host: string, fingerprint: string) => ask("trustHostKey", host, fingerprint),
 		disconnect: () => ask("disconnect"),
 		deviceKey: async () => {
