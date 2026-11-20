@@ -109,17 +109,11 @@ private fun whyClosed(code: Int): PeerClosed = PeerClosed(
 )
 
 /**
- * Where a meeting service answers: an https origin, or, for the tests' service on this computer,
- * http on the loopback (a pairing link never names one: `pairLink` and `Pines.addPaired` take https
- * alone). Null for anything else: the phone connects to nothing else.
+ * Where a meeting service answers: an https origin, and nothing else, the loopback included. Null
+ * for anything else: the phone connects to nothing else. (The tests reach the access host's helper,
+ * which answers on http on the loopback, through `route` of `Remote`, which only a test hands in.)
  */
-fun meetingService(service: String): String? {
-	httpsOrigin(service)?.let { return it.first.takeIf { origin -> origin == service } }
-	return service.takeIf { Regex("^http://127\\.0\\.0\\.1:[0-9]{1,5}$").matches(it) }
-}
-
-private fun meetingBase(service: String): String =
-	meetingService(service) ?: throw RemoteError("ssh", "The meeting service of this computer is not an https address: pair it again from the Pine app.")
+fun meetingService(service: String): String? = httpsOrigin(service)?.first?.takeIf { it == service }
 
 /**
  * The data channel, open, as SSH's byte stream: what arrives is read from `input` in order, bytes
@@ -239,14 +233,14 @@ class ChannelStream internal constructor(private val pc: PeerConnection, private
 }
 
 /**
- * Opens the way to the paired computer `id` through the meeting service `service`: its
+ * Opens the way to the paired computer `id` through the meeting service at `base` (an origin
+ * `Remote` checked to be https, then routed): its
  * configuration (the ICE servers), the join socket, the offer and the `ssh` channel, the computer's
  * answer and candidates (kept until its answer is set). Throws `PeerClosed` when there is no way to
  * it, and when no channel opened within `openMs`. `native` loads the library: it differs on
  * Android and on the JVM.
  */
-fun openPeer(service: String, id: String, http: OkHttpClient, native: () -> Unit, openMs: Long = 20_000): ChannelStream {
-	val base = meetingBase(service)
+internal fun openPeer(base: String, id: String, http: OkHttpClient, native: () -> Unit, openMs: Long = 20_000): ChannelStream {
 	native()
 	val config = runCatching {
 		http.newCall(Request.Builder().url("$base/meet/config").build()).execute().use { r -> if (r.isSuccessful) JSONObject(r.body.string()) else null }

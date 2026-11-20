@@ -84,7 +84,7 @@ class RemoteService internal constructor(
  * be reached, from the join of its meeting to the open channel. `native` loads the WebRTC library:
  * the Android app's by default, the JVM's in the tests.
  */
-class Remote(
+class Remote internal constructor(
 	private val key: DeviceKey,
 	private val known: KnownHosts,
 	private val answerMs: Long = 60_000,
@@ -96,7 +96,27 @@ class Remote(
 	private val readMs: Int = 60_000,
 	private val openMs: Long = 20_000,
 	private val native: () -> Unit = LibDataChannel::initialize,
+	/**
+	 * Where a meeting service is reached, by its https origin: the origin itself. Only a test hands
+	 * in another (the access host's helper answers on http on the loopback, which no link may name):
+	 * this constructor is internal to the core, and the app has the one below, which has no such value.
+	 */
+	private val route: (String) -> String,
 ) {
+	constructor(
+		key: DeviceKey,
+		known: KnownHosts,
+		answerMs: Long = 60_000,
+		connectMs: Int = 15_000,
+		readMs: Int = 60_000,
+		openMs: Long = 20_000,
+		native: () -> Unit = LibDataChannel::initialize,
+	) : this(key, known, answerMs, connectMs, readMs, openMs, native, { it })
+
+	/** Where the meeting service `service` is reached: checked to be an https origin before anything is routed or reached. */
+	private fun meeting(service: String): String =
+		route(meetingService(service) ?: throw RemoteError("ssh", "The meeting service of this computer is not an https address: pair it again from the Pine app."))
+
 	private val http: OkHttpClient by lazy {
 		OkHttpClient.Builder()
 			.connectTimeout(connectMs.toLong(), TimeUnit.MILLISECONDS)
@@ -170,7 +190,7 @@ class Remote(
 		val words = PairedWords(label)
 		val expected = pairedFingerprint(id)!!
 		val stream = try {
-			openPeer(computer.service, id, http, native, openMs)
+			openPeer(meeting(computer.service), id, http, native, openMs)
 		} catch (e: PeerClosed) {
 			throw RemoteError("ssh", words.peer(e.reason))
 		}
