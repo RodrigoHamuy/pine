@@ -88,6 +88,25 @@ public func pairLink(_ value: String?) -> PairLink? {
 	return PairLink(service: service.origin, id: id, code: code)
 }
 
+/** The longest address the app hands the page: more than any pairing link has. */
+private let OPENED_LENGTH = 1024
+
+/** The app's own address for a pairing, as the web client's "Open in the Pine app" writes it. */
+private let OPENED_PREFIX = "pine://pair?"
+
+/**
+ * An address the app was opened with (its own scheme, Info.plist's `CFBundleURLTypes`, which any
+ * app or page can open), as the plugin hands it to the page; nil when it drops it. Only what comes
+ * as the web client's address for the app comes: `pine://pair?` and something after it, printable
+ * ASCII, at most 1024 characters. Handing it on starts nothing: the page asks the owner, and `pair`
+ * reads the link again with `pairLink`. Android is opened with an address of the web instead (Paired.kt).
+ */
+public func openedLink(_ value: String?) -> String? {
+	guard let value, value.utf8.count <= OPENED_LENGTH, value.utf8.allSatisfy({ (0x21...0x7E).contains($0) }) else { return nil }
+	guard value.hasPrefix(OPENED_PREFIX), value.utf8.count > OPENED_PREFIX.utf8.count else { return nil }
+	return value
+}
+
 /** The host key fingerprint a machine id stands for, as OpenSSH prints it (`SHA256:` and base64); nil for what is not a machine id. */
 public func pairedFingerprint(_ id: String) -> String? {
 	guard wholeMatch(MACHINE_ID, id) != nil else { return nil }

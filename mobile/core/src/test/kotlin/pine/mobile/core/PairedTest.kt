@@ -9,8 +9,8 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertNull
 
 // A computer paired by its link: web/src/pairing.ts and desktop/electron/access/store.ts, on the
-// phone. The cases are mobile/cases/pair-links.json, machine-ids.json, device-names.json and
-// paired-machines.json.
+// phone. The cases are mobile/cases/pair-links.json, opened-links.json, machine-ids.json,
+// device-names.json and paired-machines.json.
 class PairedTest {
 	@TestFactory
 	fun `a pairing link is read in either form, and only with an https service`() = replay("pair-links") { case ->
@@ -20,6 +20,12 @@ class PairedTest {
 		expect as JSONObject
 		// `host` and `official` are what the page shows the owner of the service: the page's test reads them, the core keeps neither.
 		assertEquals(PairLink(expect.getString("service"), expect.getString("id"), expect.getString("code")), read)
+	}
+
+	@TestFactory
+	fun `an address the app is opened with reaches the page only as a pairing link comes`() = replay("opened-links") { case ->
+		val input = case.text("input")
+		assertEquals(if (android(case.get("expect")) as Boolean) input else null, openedLink(input))
 	}
 
 	@TestFactory

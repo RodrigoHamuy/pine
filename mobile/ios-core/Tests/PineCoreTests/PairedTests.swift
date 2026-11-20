@@ -3,8 +3,8 @@ import Testing
 import PineCore
 
 // A computer paired by its link: web/src/pairing.ts and desktop/electron/access/store.ts, on the
-// phone. The cases are mobile/cases/pair-links.json, machine-ids.json, device-names.json and
-// paired-machines.json.
+// phone. The cases are mobile/cases/pair-links.json, opened-links.json, machine-ids.json,
+// device-names.json and paired-machines.json.
 struct PairedTests {
 	@Test("a pairing link is read in either form, and only with an https service", arguments: try cases("pair-links"))
 	func link(_ c: Case) {
@@ -12,6 +12,12 @@ struct PairedTests {
 		guard let e = c.expect as? [String: Any] else { return #expect(read == nil) }
 		// `host` and `official` of the case are the page's to read (desktop/src/machines.ts); the phone needs neither.
 		#expect(read == PairLink(service: e["service"] as! String, id: e["id"] as! String, code: e["code"] as! String))
+	}
+
+	@Test("an address the app is opened with reaches the page only as a pairing link comes", arguments: try cases("opened-links"))
+	func opened(_ c: Case) {
+		let input = c.text("input")
+		#expect(openedLink(input) == (c.expect as! Bool ? input : nil))
 	}
 
 	@Test("a machine id is the fingerprint of the computer's host key", arguments: try cases("machine-ids"))

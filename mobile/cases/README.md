@@ -41,6 +41,7 @@ Where the platforms differ: the page's origin is `https://localhost` on Android 
 | `service-lines.json` | The line `pine service` writes, and why one is not taken |
 | `failures.json` | The words of a failure when no service line comes |
 | `pair-links.json` | A pairing link, the web client's and the app's own `pine:` address, and what is read from it |
+| `opened-links.json` | Which address the app was opened with is handed to the page (`openedLink`): an App Link on Android, the app's own `pine:` address on iOS |
 | `machine-ids.json` | A paired computer's machine id as the host key fingerprint it stands for |
 | `device-names.json` | The name the phone gives itself when it pairs |
 | `paired-machines.json` | A paired computer (`paired:<machine id>`) beside `user@host` in the list |

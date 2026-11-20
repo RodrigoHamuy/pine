@@ -45,6 +45,7 @@ import pine.mobile.core.SealedVault
 import pine.mobile.core.Shelf
 import pine.mobile.core.deviceName
 import pine.mobile.core.mediaRequest
+import pine.mobile.core.openedLink
 import pine.mobile.core.outside
 import pine.mobile.core.stays
 import java.security.KeyStore
@@ -191,15 +192,14 @@ class PinePlugin : Plugin() {
 	 * (BridgeActivity hands the plugins the intent it started with) or while it runs (singleTask). It
 	 * starts nothing: the page reads it as it reads a pasted link, says so when it is not one, and
 	 * otherwise asks the owner, naming a service that is not Pine's own; only their yes calls `pair`.
-	 * Kept until the page listens, for a link the app was started with. Only an address of the web
-	 * with a fragment (the service's own address without a pairing opens the app, and nothing more;
-	 * one on http is refused by the page in plain words), and nothing longer than any pairing link.
+	 * Kept until the page listens, for a link the app was started with. Only what comes as a pairing
+	 * link (the core's `openedLink`, mobile/cases/opened-links.json): the service's own address
+	 * without a pairing opens the app, and nothing more.
 	 */
 	override fun handleOnNewIntent(intent: Intent) {
 		super.handleOnNewIntent(intent)
 		if (intent.action != Intent.ACTION_VIEW) return
-		val link = intent.dataString ?: return
-		if (!outside(link) || '#' !in link || link.length > 1024) return
+		val link = openedLink(intent.dataString) ?: return
 		notifyListeners("link", JSObject().put("link", link), true)
 	}
 
