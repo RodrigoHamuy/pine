@@ -52,7 +52,7 @@ export const MachinesWithThisComputer: Story = {
 
 const disconnected = fn(async () => ({ ...store.prefs, use: undefined }));
 
-/** A bridge with no local machine: only the machines added, no "This Mac" to pick, and Disconnect, back to the list (the web client's). */
+/** A bridge with no local machine: only the machines added, no "This Mac" or "This computer" to pick, and Disconnect, back to the list (the web client's). */
 export const MachinesWithoutLocal: Story = {
 	args: { local: false },
 	beforeEach: () => {
@@ -65,7 +65,7 @@ export const MachinesWithoutLocal: Story = {
 		// The menu is drawn outside the story's root.
 		const items = await within(document.body).findAllByRole("menuitemradio");
 		await expect(items.map((item) => item.getAttribute("data-host"))).toEqual(["me@build-box", "studio"]);
-		await expect(within(document.body).queryAllByText(/This Mac|This computer/)).toHaveLength(0);
+		await expect(within(document.body).queryAllByText(/This (Mac|computer)/)).toHaveLength(0);
 		await context.userEvent.click(await within(document.body).findByRole("menuitem", { name: "Disconnect" }));
 		await expect(disconnected).toHaveBeenCalledTimes(1);
 		// Opened again for the snapshot.

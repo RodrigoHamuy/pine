@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { CLOSE, DEFAULT_ICE } from "../src/meet.ts";
 import { site, type SiteEnv } from "../src/site.ts";
 import { limiter, pairs } from "./support.ts";
-import { macKey } from "./meet-support.ts";
+import { computerKey } from "./meet-support.ts";
 
 const ASSETS = { fetch: async () => new Response("asset", { headers: { "content-type": "text/plain" } }) };
 
@@ -50,9 +50,9 @@ test("without helping servers in the configuration, or with ones that are not, a
 	}
 });
 
-test("a Mac and a browser that name the same id reach the same object", async () => {
+test("a computer and a browser that name the same id reach the same object", async () => {
 	const t = setup();
-	const { id } = macKey();
+	const { id } = computerKey();
 	assert.equal(await (await t.ws(`/meet/host?id=${id}`)).text(), "to the object");
 	assert.equal(await (await t.ws(`/meet/join?id=${id}`)).text(), "to the object");
 	assert.deepEqual(t.MEET.calls, [
@@ -63,7 +63,7 @@ test("a Mac and a browser that name the same id reach the same object", async ()
 
 test("a meeting route without an upgrade or without a machine id reaches no object", async () => {
 	const t = setup();
-	const { id } = macKey();
+	const { id } = computerKey();
 	assert.equal((await t.go(`/meet/host?id=${id}`)).status, 426);
 	for (const bad of ["", "?id=", "?id=short", `?id=${id}x`, `?id=${id.slice(0, 42)}+`]) assert.equal((await t.ws(`/meet/join${bad}`)).status, 400, bad);
 	assert.deepEqual(t.MEET.calls, []);
@@ -71,7 +71,7 @@ test("a meeting route without an upgrade or without a machine id reaches no obje
 
 test("over the per-address limit, a meeting socket is closed with the over-limits code, and another address still gets through", async () => {
 	const t = setup({}, 2);
-	const { id } = macKey();
+	const { id } = computerKey();
 	await t.ws(`/meet/join?id=${id}`, "203.0.113.9");
 	await t.go("/meet/config", {}, "203.0.113.9");
 	const over = await t.ws(`/meet/join?id=${id}`, "203.0.113.9");
@@ -84,7 +84,7 @@ test("over the per-address limit, a meeting socket is closed with the over-limit
 
 test("without the meeting's binding, the meeting routes are not there, and the rest is as before", async () => {
 	const t = setup({ MEET: undefined });
-	const { id } = macKey();
+	const { id } = computerKey();
 	for (const path of ["/meet/config", `/meet/host?id=${id}`, `/meet/join?id=${id}`]) {
 		assert.equal((await t.go(path)).status, 404, path);
 		assert.equal((await t.ws(path)).status, 404, path);

@@ -1,4 +1,4 @@
-// What the meeting's tests stand in for: a Mac with an Ed25519 key, and sockets that note what
+// What the meeting's tests stand in for: a computer with an Ed25519 key, and sockets that note what
 // they were sent and how they were closed.
 import { createHash, generateKeyPairSync, sign, type KeyObject } from "node:crypto";
 import type { Plain } from "../src/meet.ts";
@@ -16,8 +16,8 @@ function blobOf(raw: Buffer) {
 	return out;
 }
 
-/** A Mac's key: its blob, its machine id, and a way to sign the meeting's challenge. */
-export function macKey() {
+/** A computer's key: its blob, its machine id, and a way to sign the meeting's challenge. */
+export function computerKey() {
 	const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 	const raw = Buffer.from(publicKey.export({ format: "jwk" }).x!, "base64url");
 	const blob = blobOf(raw);

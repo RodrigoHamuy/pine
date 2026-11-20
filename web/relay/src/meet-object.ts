@@ -1,5 +1,5 @@
 // The Durable Object that holds one machine id's meeting (meet.ts), one object per id. Its
-// WebSockets hibernate, so that a Mac that waits all day costs no duration; an object that wakes
+// WebSockets hibernate, so that a computer that waits all day costs no duration; an object that wakes
 // has lost everything but its sockets, which is why the meeting keeps its notes as their
 // attachments. It keeps no storage, and logs nothing.
 //
@@ -66,7 +66,7 @@ export class Meeting {
 			// workerd never finishes the close of a hibernating socket closed before its upgrade
 			// was answered; a plain one is closed at once.
 			socket.accept();
-			socket.close(CLOSE.absent, "No Mac waits under this id.");
+			socket.close(CLOSE.absent, "No computer waits under this id.");
 			return response;
 		}
 		this.#state.acceptWebSocket(socket);

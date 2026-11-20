@@ -1,4 +1,4 @@
-// Settings > Browser access: the owner's side of reaching this Mac's pine from a browser. The
+// Settings > Browser access: the owner's side of reaching this computer's pine from a browser. The
 // switch, whether the app waits at the meeting service, "Add a device" with the QR code of a pairing
 // link, the question when a device asks, and the paired devices. The state is the main process's
 // (electron/access/control.ts), read through the bridge and told again each time it changes.
@@ -17,6 +17,7 @@ import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, 
 import { Switch } from "@/components/ui/switch";
 import { QrCode } from "@/components/qr-code";
 import { type AccessChange, type AccessDevice, type AccessState, bridge } from "./bridge.ts";
+import { computerWord } from "./machines.ts";
 import { store } from "./model.ts";
 import { ago, errText } from "./text.ts";
 
@@ -67,8 +68,10 @@ function deviceLine(d: AccessDevice, now: number): string {
 /**
  * The section as it is drawn from a state: the page's own state stays in the dialogs (the address
  * being written, the checkbox of the first turn on). `now` is the clock the time left is counted on.
+ * `platform` names this computer: "This Mac" on macOS, "This computer" elsewhere.
  */
-export function BrowserAccessView({ state, opened, now, actions }: { state: AccessState; opened?: Opened; now: number; actions: AccessActions }) {
+export function BrowserAccessView({ state, opened, now, platform, actions }: { state: AccessState; opened?: Opened; now: number; platform: string; actions: AccessActions }) {
+	const computer = computerWord(platform);
 	const field = useId();
 	const [service, setService] = useState(state.service);
 	const [serviceError, setServiceError] = useState<string>();
@@ -97,7 +100,7 @@ export function BrowserAccessView({ state, opened, now, actions }: { state: Acce
 	return (
 		<>
 			<FieldSet>
-				<FieldLegend>This Mac</FieldLegend>
+				<FieldLegend>This {computer}</FieldLegend>
 				<FieldGroup>
 					<Field orientation="horizontal" data-setting="access">
 						<FieldContent>
@@ -107,7 +110,7 @@ export function BrowserAccessView({ state, opened, now, actions }: { state: Acce
 							</FieldLabel>
 							<FieldDescription>
 								{state.status === "unreachable"
-									? "The app cannot reach the service where browsers find this Mac. It tries again by itself; the rest of the app works as before."
+									? `The app cannot reach the service where browsers find this ${computer}. It tries again by itself; the rest of the app works as before.`
 									: "A browser you paired opens your conversations from anywhere, peer to peer. Turned off, the app contacts no service and lets nobody in; your devices are kept."}
 							</FieldDescription>
 						</FieldContent>
@@ -122,7 +125,7 @@ export function BrowserAccessView({ state, opened, now, actions }: { state: Acce
 					<Field orientation="horizontal" data-setting="access-login">
 						<FieldContent>
 							<FieldLabel htmlFor={`${field}-login`}>Open Pine at login</FieldLabel>
-							<FieldDescription>So that this Mac can be reached after a restart without your opening the app.</FieldDescription>
+							<FieldDescription>So that this {computer} can be reached after a restart without your opening the app.</FieldDescription>
 						</FieldContent>
 						<Switch id={`${field}-login`} data-slot="access-login" checked={state.openAtLogin} onCheckedChange={(openAtLogin) => change({ openAtLogin })} />
 					</Field>
@@ -132,7 +135,7 @@ export function BrowserAccessView({ state, opened, now, actions }: { state: Acce
 							<Input id={`${field}-service`} className="font-mono" placeholder="https://" value={service} aria-invalid={serviceError ? true : undefined} onChange={(e) => setService(e.target.value)} onKeyDown={(e) => e.key === "Enter" && void saveService()} />
 							<Button variant="outline" disabled={service.trim() === state.service} onClick={() => void saveService()}>Save</Button>
 						</div>
-						<FieldDescription>Where browsers open the web client and find this Mac. Changing it makes the paired browsers that use the old address pair again.</FieldDescription>
+						<FieldDescription>Where browsers open the web client and find this {computer}. Changing it makes the paired browsers that use the old address pair again.</FieldDescription>
 						{serviceError ? <FieldError>{serviceError}</FieldError> : null}
 					</Field>
 				</FieldGroup>
@@ -185,7 +188,7 @@ export function BrowserAccessView({ state, opened, now, actions }: { state: Acce
 					<div data-slot="access-turn-on" className="contents">
 						<AlertDialogHeader>
 							<AlertDialogTitle>Turn on browser access?</AlertDialogTitle>
-							<AlertDialogDescription>This Mac waits at the service for the browsers you pair. It can be reached while Pine is open.</AlertDialogDescription>
+							<AlertDialogDescription>This {computer} waits at the service for the browsers you pair. It can be reached while Pine is open.</AlertDialogDescription>
 						</AlertDialogHeader>
 						<Field orientation="horizontal">
 							<Checkbox id={`${field}-login-first`} checked={login} onCheckedChange={setLogin} />
@@ -283,5 +286,5 @@ export function BrowserAccess() {
 		remove: (id) => void store.attempt(() => bridge.removeDevice!(id)),
 		copy: () => void bridge.copyPairingLink!().then(() => store.flash("The link is on the clipboard.", "good", 3000), (e: unknown) => store.flash(errText(e), "bad")),
 	};
-	return <BrowserAccessView state={state} opened={opened} now={now} actions={actions} />;
+	return <BrowserAccessView state={state} opened={opened} now={now} platform={store.platform} actions={actions} />;
 }

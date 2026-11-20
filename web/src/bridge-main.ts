@@ -41,7 +41,7 @@ async function main() {
 		connect,
 		store: idbStore(),
 		relay,
-		// A paired Mac, peer to peer: the meeting service at this deployment's address, the peer connection in this document.
+		// A paired computer, peer to peer: the meeting service at this deployment's address, the peer connection in this document.
 		peer: (id) => peerStream(id, { service: location.href, config }),
 		pairLink: link,
 		userAgent: navigator.userAgent,

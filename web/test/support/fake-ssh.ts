@@ -102,21 +102,21 @@ export type Machine = {
 	/** Cuts every open connection, as a relay that restarts or a network that drops does. */
 	drop(): void;
 	connect(options: ConnectOptions): Promise<Connection>;
-	/** As a paired Mac: the pairing open at the Mac (its code, taken by the first session that names it), and none after. */
+	/** As a paired computer: the pairing open at the computer (its code, taken by the first session that names it), and none after. */
 	pairCode?: string;
-	/** As a paired Mac: how many times a session got past the host key and offered the browser's key. */
+	/** As a paired computer: how many times a session got past the host key and offered the browser's key. */
 	keysOffered: number;
-	/** As a paired Mac: the names that pairing requests carried. */
+	/** As a paired computer: the names that pairing requests carried. */
 	pairings: string[];
-	/** As a paired Mac: the owner's answer at the Mac to the pairing request waiting, with the computer's name on a yes. */
+	/** As a paired computer: the owner's answer at the computer to the pairing request waiting, with the computer's name on a yes. */
 	answer(decision: "allow" | "refuse" | "expired", computerName?: string): void;
-	/** As a paired Mac: what the meeting service makes of a browser that asks for it. */
+	/** As a paired computer: what the meeting service makes of a browser that asks for it. */
 	meeting: "ok" | PeerClosed["reason"];
-	/** As a paired Mac: the stand-in for the peer transport's opener (web/src/peer.ts). */
+	/** As a paired computer: the stand-in for the peer transport's opener (web/src/peer.ts). */
 	peer(id: string): OpenStream;
 };
 
-/** The four digits the stand-in Mac shows. */
+/** The four digits the stand-in computer shows. */
 export const DIGITS = "4821";
 
 /** The pairing request's channel: the digits first, then the owner's answer when it comes. */

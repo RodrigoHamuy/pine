@@ -1,5 +1,5 @@
 // A WebRTC peer connection for browser access, and its one data channel as a byte stream: the
-// browser makes the offer and the channel labelled `ssh`, the Mac answers (`answer`), and SSH runs
+// browser makes the offer and the channel labelled `ssh`, the computer answers (`answer`), and SSH runs
 // over the stream as over a socket. No Electron here, so that it runs under plain Node in tests.
 // The signals are the meeting service's `d` values ({sdp} or {ice}), passed through as they are.
 import { createRequire } from "node:module";
@@ -42,7 +42,7 @@ export interface PeerOptions {
 	timeoutMs?: number;
 }
 
-/** The channel the browser opens and the Mac takes. */
+/** The channel the browser opens and the computer takes. */
 export const LABEL = "ssh";
 /** Messages are cut to this: the size every browser's data channel carries without trouble. */
 export const PIECE = 16 * 1024;
@@ -69,7 +69,7 @@ function datachannel(): Module {
 	}
 }
 
-/** The Mac's side: waits for the browser's offer and its `ssh` channel. */
+/** The computer's side: waits for the browser's offer and its `ssh` channel. */
 export function answer(options: PeerOptions): Peer {
 	return start(options, undefined);
 }

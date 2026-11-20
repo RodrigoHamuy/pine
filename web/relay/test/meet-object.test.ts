@@ -5,7 +5,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { CLOSE } from "../src/meet.ts";
 import { Meeting, type HibernatingSocket } from "../src/meet-object.ts";
-import { macKey, ORIGIN } from "./meet-support.ts";
+import { computerKey, ORIGIN } from "./meet-support.ts";
 
 class Ws implements HibernatingSocket {
 	sent: any[] = [];
@@ -58,7 +58,7 @@ function object(ctx: ReturnType<typeof state>, options = {}) {
 	return { meeting, open };
 }
 
-async function waiting(ctx: ReturnType<typeof state>, key = macKey()) {
+async function waiting(ctx: ReturnType<typeof state>, key = computerKey()) {
 	const o = object(ctx);
 	const { ws } = await o.open("/meet/host", key.id);
 	const { nonce } = ws.sent[0];
@@ -67,70 +67,71 @@ async function waiting(ctx: ReturnType<typeof state>, key = macKey()) {
 	return { ws, key, o };
 }
 
-test("a Mac proves its key over the object's socket, and a browser is put through", async () => {
+test("a computer proves its key over the object's socket, and a browser is put through", async () => {
 	const ctx = state();
-	const mac = await waiting(ctx);
-	const { response, ws: browser } = await mac.o.open("/meet/join", mac.key.id);
+	const computer = await waiting(ctx);
+	const { response, ws: browser } = await computer.o.open("/meet/join", computer.key.id);
 	assert.equal(response.headers.get("x-upgraded"), "1");
 	assert.deepEqual(browser.sent, [{ t: "ready" }]);
-	const { s } = mac.ws.sent.at(-1);
-	await mac.o.meeting.webSocketMessage(browser, JSON.stringify({ t: "signal", d: { sdp: { type: "offer", sdp: "o" } } }));
-	assert.deepEqual(mac.ws.sent.at(-1), { t: "signal", s, d: { sdp: { type: "offer", sdp: "o" } } });
+	const { s } = computer.ws.sent.at(-1);
+	await computer.o.meeting.webSocketMessage(browser, JSON.stringify({ t: "signal", d: { sdp: { type: "offer", sdp: "o" } } }));
+	assert.deepEqual(computer.ws.sent.at(-1), { t: "signal", s, d: { sdp: { type: "offer", sdp: "o" } } });
 });
 
-test("a Mac keeps waiting across hibernation: a woken object finds it from its socket alone", async () => {
+test("a computer keeps waiting across hibernation: a woken object finds it from its socket alone", async () => {
 	const ctx = state();
-	const mac = await waiting(ctx);
+	const computer = await waiting(ctx);
 	const woken = object(ctx);
-	const { ws: browser } = await woken.open("/meet/join", mac.key.id);
+	const { ws: browser } = await woken.open("/meet/join", computer.key.id);
 	assert.deepEqual(browser.sent, [{ t: "ready" }]);
-	const { s } = mac.ws.sent.at(-1);
-	// And an answer from the Mac reaches the browser through yet another waking.
+	const { s } = computer.ws.sent.at(-1);
+	// And an answer from the computer reaches the browser through yet another waking.
 	const again = object(ctx);
-	await again.meeting.webSocketMessage(mac.ws, JSON.stringify({ t: "signal", s, d: { sdp: { type: "answer", sdp: "a" } } }));
+	await again.meeting.webSocketMessage(computer.ws, JSON.stringify({ t: "signal", s, d: { sdp: { type: "answer", sdp: "a" } } }));
 	assert.deepEqual(browser.sent.at(-1), { t: "signal", d: { sdp: { type: "answer", sdp: "a" } } });
 });
 
 test("a session's time limit holds after hibernation, when no timer is left to end it", async () => {
 	const ctx = state();
-	const mac = await waiting(ctx);
+	const computer = await waiting(ctx);
 	const before = object(ctx);
-	const { ws: browser } = await before.open("/meet/join", mac.key.id);
+	const { ws: browser } = await before.open("/meet/join", computer.key.id);
 	const later = Date.now() + 31_000;
 	const woken = object(ctx, { now: () => later });
 	await woken.meeting.webSocketMessage(browser, JSON.stringify({ t: "signal", d: { ice: { candidate: "c", sdpMid: "0", sdpMLineIndex: 0 } } }));
 	assert.equal(browser.closed?.code, CLOSE.timeout);
 });
 
-test("a browser that closes is told to the Mac, and the object answers the close", async () => {
+test("a browser that closes is told to the computer, and the object answers the close", async () => {
 	const ctx = state();
-	const mac = await waiting(ctx);
-	const { ws: browser } = await mac.o.open("/meet/join", mac.key.id);
-	const { s } = mac.ws.sent.at(-1);
-	await mac.o.meeting.webSocketClose(browser, 1001, "gone", true);
-	assert.deepEqual(mac.ws.sent.at(-1), { t: "close", s });
+	const computer = await waiting(ctx);
+	const { ws: browser } = await computer.o.open("/meet/join", computer.key.id);
+	const { s } = computer.ws.sent.at(-1);
+	await computer.o.meeting.webSocketClose(browser, 1001, "gone", true);
+	assert.deepEqual(computer.ws.sent.at(-1), { t: "close", s });
 });
 
 test("the object keeps no storage: everything it knows is on its sockets", async () => {
 	const ctx = state();
 	const storage = new Proxy({}, { get: () => assert.fail("storage was used") });
 	(ctx as any).storage = storage;
-	const mac = await waiting(ctx);
-	await mac.o.open("/meet/join", mac.key.id);
+	const computer = await waiting(ctx);
+	await computer.o.open("/meet/join", computer.key.id);
 });
 
-test("a browser with no Mac waiting is refused on a socket that is not kept for hibernation", async () => {
+test("a browser with no computer waiting is refused on a socket that is not kept for hibernation", async () => {
 	const ctx = state();
 	const o = object(ctx);
-	const { ws } = await o.open("/meet/join", macKey().id);
+	const { ws } = await o.open("/meet/join", computerKey().id);
 	assert.equal(ws.closed?.code, CLOSE.absent);
+	assert.equal(ws.closed?.reason, "No computer waits under this id.");
 	assert.equal(ws.accepted, "plain");
 	assert.equal(ctx.sockets.length, 0);
 });
 
 test("a request that is not a WebSocket upgrade to a meeting route is refused", async () => {
 	const o = object(state());
-	const key = macKey();
+	const key = computerKey();
 	assert.equal((await o.meeting.fetch(new Request(`${ORIGIN}/meet/host?id=${key.id}`))).status, 426);
 	assert.equal((await o.meeting.fetch(new Request(`${ORIGIN}/meet/host?id=short`, { headers: { Upgrade: "websocket" } }))).status, 400);
 });

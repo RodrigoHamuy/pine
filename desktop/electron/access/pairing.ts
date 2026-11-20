@@ -1,6 +1,6 @@
-// Pairing: how a new key gets onto the access server's list. The owner opens a pairing at the Mac
-// and gets a link that carries this Mac's machine id and a one-time code. A browser that connects
-// with that code under the user name `pair.<code>` may run one command, the pairing request, which
+// Pairing: how a new key gets onto the access server's list. The owner opens a pairing at the
+// computer and gets a link that carries this computer's machine id and a one-time code. A browser
+// that connects with that code under the user name `pair.<code>` may run one command, the pairing request, which
 // names the device. It is shown four digits, the owner is asked with the device's name and the same
 // digits, and only the owner's yes stores the key. No Electron here: the owner's question is a
 // function the caller hands in (a dialog in the app, a direct answer in the tests).
@@ -47,7 +47,7 @@ export interface PairingOptions {
 	ask: Ask;
 	/** Ends the access server's sessions of an id (`AccessServer.cut`): closes a pairing's session when it is cancelled. */
 	cut: (id: string) => void;
-	/** The name the browser stores for this Mac. */
+	/** The name the browser stores for this computer. */
 	computerName?: () => string;
 	/** A device was paired (the app's notification). */
 	paired?: (device: Device) => void;

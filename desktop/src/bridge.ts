@@ -15,9 +15,9 @@ export type ServiceState = {
 			status: "starting";
 			host?: string;
 			/**
-			 * A pairing with a Mac under way, from a pairing link (the web client's): `code` is the four
-			 * digits the Mac shows beside `name`, this browser's name, while the owner decides there. Before
-			 * the Mac answered, neither. The other bridges leave it out.
+			 * A pairing with a computer under way, from a pairing link (the web client's): `code` is the four
+			 * digits the computer shows beside `name`, this browser's name, while the owner decides there.
+			 * Before the computer answered, neither. The other bridges leave it out.
 			 */
 			pairing?: { code?: string; name?: string };
 	  } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | {
@@ -39,7 +39,7 @@ export interface Prefs {
 	/** The one the app uses; none: this computer's pine. */
 	use?: string;
 	/**
-	 * The names the owner sees for machines, by machine: a paired Mac's computer name, or what the
+	 * The names the owner sees for machines, by machine: the name a paired computer gave, or what the
 	 * owner renamed a machine to (`renameHost`). Kept by the web client's bridge; the others leave it out.
 	 */
 	names?: Record<string, string>;
@@ -77,7 +77,7 @@ export interface AppState {
 	/**
 	 * Whether machines can be added as user@host. The web client's bridge sets it from its
 	 * deployment's configuration: false where the deployment carries no SSH to such machines (the
-	 * official service), and only a Mac paired by its link can be used. The others leave it out, which means they can.
+	 * official service), and only a computer paired by its link can be used. The others leave it out, which means they can.
 	 */
 	canAddHost?: boolean;
 }
@@ -85,7 +85,7 @@ export interface AppState {
 export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../electron/access/control.ts";
 
 /**
- * Browser access to this Mac's pine (Settings > Browser access): only the desktop app's bridge
+ * Browser access to this computer's pine (Settings > Browser access): only the desktop app's bridge
  * has these calls, and a page shows the section only where they are there.
  */
 export type AccessCalls = "access" | "setAccess" | "openPairing" | "copyPairingLink" | "cancelPairing" | "answerPairing" | "removeDevice" | "onAccess";

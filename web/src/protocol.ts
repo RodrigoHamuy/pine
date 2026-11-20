@@ -2,7 +2,7 @@
 // list: a method that is not here is refused, and each one's arguments are checked here before
 // the bridge sees them, as desktop/electron/main.ts checks what comes through its IPC.
 
-/** A machine as the page names it: user@host, user@host:port or mac:<machine id> (`host.ts` reads it). */
+/** A machine as the page names it: user@host, user@host:port or paired:<machine id> (`host.ts` reads it). */
 const host = (v: unknown) => typeof v === "string" && v.length > 0 && v.length <= 300;
 const none = (args: unknown[]) => args.length === 0;
 /** A host key's fingerprint as OpenSSH prints it: SHA256 and 43 characters of unpadded base64. */
