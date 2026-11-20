@@ -172,15 +172,16 @@ export function sshOver(stream: Duplex, id: string, privateKey: string, config: 
 	});
 	ready.catch(() => {});
 	let offered = 0;
+	const username = config.username ?? "pine";
 	client.connect({
 		sock: stream as any,
-		username: "pine",
+		username,
 		privateKey,
 		readyTimeout: 10_000,
 		hostVerifier: (key: Buffer) => (seen.push(keyId(key)), keyId(key) === id),
 		authHandler: (_methods: unknown, _partial: unknown, next: (m: unknown) => void) => {
 			offered++;
-			next(offered === 1 ? { type: "publickey", username: "pine", key: privateKey } : false);
+			next(offered === 1 ? { type: "publickey", username, key: privateKey } : false);
 		},
 		...config,
 	} as ConnectConfig);

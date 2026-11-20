@@ -58,6 +58,15 @@ export function fileVault(file: string, cipher?: Cipher): Vault {
 /** The name of the file in the data folder: one name for each form, so that one is never read as the other. */
 export const ACCESS_FILE = { plain: "access.json", sealed: "access.bin" };
 
+/** What a decision of who may authenticate is made from. */
+export interface AdmitContext {
+	store: AccessStore;
+	/** The service's origin, which a pairing link starts with. */
+	service: string;
+	/** Ends every live session of an id (`AccessServer.cut`). */
+	cut(id: string): number;
+}
+
 export interface AccessHostOptions {
 	/** The meeting service's address (`http(s)`); its origin is used. */
 	service: string;
@@ -69,8 +78,11 @@ export interface AccessHostOptions {
 	vault?: Vault;
 	/** This computer's daemon: `pine service`'s one line of JSON. */
 	daemon: () => Promise<string>;
-	/** Who may authenticate, made from the store: paired keys by default; paired keys and pairing in the app. */
-	admit?: (store: AccessStore) => Admit;
+	/**
+	 * Who may authenticate: paired keys by default (`pairedKeys`); paired keys and pairing in the
+	 * app (`createPairing(...).admit`, which is handed the same store, the service's origin and `cut`).
+	 */
+	admit?: (host: AdmitContext) => Admit;
 	onStatus?: (status: HostStatus) => void;
 	/** Sessions that began or ended (the access server's events); `tag` is `{ path }` of the connection. */
 	report?: (event: SessionEvent) => void;
@@ -129,9 +141,10 @@ export async function startAccessHost(options: AccessHostOptions): Promise<Acces
 	const firstMs = options.retry?.firstMs ?? 1000;
 	const maxMs = options.retry?.maxMs ?? 60_000;
 
-	const server = createAccessServer({
+	const admit = options.admit ? options.admit({ store, service: origin, cut: (id) => server.cut(id) }) : pairedKeys(store);
+	const server: AccessServer = createAccessServer({
 		hostKey: store.hostKey(),
-		admit: (options.admit ?? pairedKeys)(store),
+		admit,
 		daemon: options.daemon,
 		maxConnections: maxPeers,
 		report: (event) => {

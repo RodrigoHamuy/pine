@@ -13,6 +13,7 @@ import path from "node:path";
 import { after, before, test } from "node:test";
 import { remoteCommand } from "../../src/remote.ts";
 import { type AccessHost, type HostStatus, startAccessHost } from "../electron/access/host.ts";
+import { createPairing, type Pairing, type PairingRequest } from "../electron/access/pairing.ts";
 import { pairedKeys } from "../electron/access/server.ts";
 import { newEd25519Key } from "../electron/access/store.ts";
 import { exec, firstLine, join, type Meeting, serveMeeting, sshOver, tunnel, until } from "./support/meeting.ts";
@@ -89,6 +90,38 @@ test("access host: a browser that joins by machine id runs the remote command ov
 	browser.close();
 });
 
+test("access host: with pairing as its admission, a browser pairs over the data channel and then connects as a paired device", async () => {
+	const m = await meeting();
+	let pairing: Pairing | undefined;
+	const asked: PairingRequest[] = [];
+	const { host } = await setup(m.url, {
+		admit: ({ store, service, cut }) => (pairing = createPairing({ store, service, cut, ask: async (request) => (asked.push(request), true), computerName: () => "The Mac" })).admit,
+	});
+	await until(() => host.status() === "waiting", "the host waits");
+	const { link } = pairing!.open();
+	assert.ok(link.startsWith(`${m.url}/#pair=${host.machineId}.`), link);
+	const code = link.slice(link.lastIndexOf(".") + 1);
+
+	const browserKey = newEd25519Key();
+	const first = join(m.url, host.machineId);
+	const pairingSession = await sshOver(await first.channel, host.machineId, browserKey.private, { username: `pair.${code}` }).ready;
+	const request = await exec(pairingSession, `pine-pair ${Buffer.from(JSON.stringify({ name: "Chrome on Android" })).toString("base64url")}`);
+	let said = "";
+	await new Promise<void>((resolve) => request.on("data", (d: Buffer) => ((said += d), said.includes('"ok"') && resolve())));
+	const [digits, answer] = said.trim().split("\n").map((l) => JSON.parse(l));
+	assert.match(digits.code, /^\d{4}$/);
+	assert.deepEqual(asked, [{ name: "Chrome on Android", code: digits.code }]);
+	assert.deepEqual(answer, { ok: true, name: "The Mac" });
+	pairingSession.end();
+	first.close();
+
+	const second = join(m.url, host.machineId);
+	const client = await sshOver(await second.channel, host.machineId, browserKey.private).ready;
+	assert.equal(await firstLine(await exec(client, remoteCommand())), serviceLine());
+	client.end();
+	second.close();
+});
+
 test("access host: a meeting service that puts the browser through to another Mac is caught by the pinned host key, before the browser's key is offered", async () => {
 	// Two Macs wait, each proven under its own id; the service sends a browser that asks for the
 	// first to the second.
@@ -96,7 +129,7 @@ test("access host: a meeting service that puts the browser through to another Ma
 	const m = await meeting({ swap: () => other });
 	const asked: string[] = [];
 	const { host: mine } = await setup(m.url);
-	const { host: theirs } = await setup(m.url, { admit: (store) => (user, key) => (asked.push(user), pairedKeys(store)(user, key)) });
+	const { host: theirs } = await setup(m.url, { admit: ({ store }) => (user, key) => (asked.push(user), pairedKeys(store)(user, key)) });
 	other = theirs.machineId;
 	await until(() => mine.status() === "waiting" && theirs.status() === "waiting", "both hosts wait");
 
