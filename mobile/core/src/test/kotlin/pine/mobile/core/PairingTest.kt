@@ -91,6 +91,41 @@ class PairingTest {
 		nothingKept()
 	}
 
+	/**
+	 * The pairing entry itself, with an `open` that hands back the first `cut` channels already closed,
+	 * as a computer that let go of a channel slow to reach it would: the helper has no command that
+	 * cuts only the first channel. Returns the end and how many channels were opened.
+	 */
+	private fun pairedThroughCut(cut: Int): Pair<PairingState?, Int> {
+		val link = link()
+		computer.command("allow")
+		val http = okhttp3.OkHttpClient()
+		var opened = 0
+		val open = {
+			val stream = openPeer(computer.service, link.id, http, LibDataChannelRtc, 20_000)
+			if (++opened <= cut) stream.close()
+			stream
+		}
+		val pairing = startPairing(link, "Pine on Pixel 9", { told.add(it) }, key, open, client = { net.schmizz.sshj.SSHClient(net.schmizz.sshj.DefaultConfig()) })
+		return pairing.result(30_000) to opened
+	}
+
+	@Test
+	fun `a channel that closed before the code was offered is tried once more, and the pairing goes through`() {
+		val (end, opened) = pairedThroughCut(1)
+		assertEquals(PairingState.Allowed("Test Mac"), end)
+		assertEquals(2, opened, "one retry")
+		assertEquals(1, computer.command("devices").getJSONArray("devices").length())
+	}
+
+	@Test
+	fun `two channels that closed before the code was offered end the pairing, with no third try`() {
+		val (end, opened) = pairedThroughCut(2)
+		assertEquals(PairingState.Failed(PairWords.CUT), end)
+		assertEquals(2, opened, "never a second retry")
+		nothingKept()
+	}
+
 	@Test
 	fun `an open pairing can be cancelled, tells nothing more and leaves no connection behind`() {
 		val link = link()

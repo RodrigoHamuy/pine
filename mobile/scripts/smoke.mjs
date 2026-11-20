@@ -13,7 +13,9 @@
 // (mobile/test/support/access-host.ts) on this computer and moves several megabytes each way through
 // the data channel, bursts of more than 1 MiB from the computer included. The emulator reaches it at
 // 10.0.2.2, through a TLS front of the run's own (a pairing link names https only) whose authority
-// the test is handed. `--transport-only` runs that alone.
+// the debug build trusts, as the app does (debug-overrides). `--transport-only` runs that alone.
+// Before it, a named check reads the built APK's permissions (aapt2): INTERNET and
+// ACCESS_NETWORK_STATE, and nothing else an owner grants.
 //
 // The app is driven as a person would, through adb (uiautomator for what is on screen, input for
 // taps and keys): it reads the phone's key from the page and shares it (the system's chooser comes
@@ -85,8 +87,9 @@ const adb = (...args) => execFileSync(ADB, args, { env, maxBuffer: 64 * 1024 * 1
 
 /**
  * A certificate authority of the run's own and a certificate it signed for 10.0.2.2, the address the
- * emulator reaches this computer's loopback at, in `dir`. Only the instrumented test is told to trust
- * that authority (Remote's `trust`): nothing of this computer's or the emulator's own trust changes.
+ * emulator reaches this computer's loopback at, in `dir`. Only the debug build is made to trust that
+ * authority (app/build.gradle's smokeAuthority, under debug-overrides), the instrumented test with it:
+ * nothing of this computer's or the emulator's own trust changes.
  */
 function certificates(dir) {
 	const at = (name) => path.join(dir, name);
@@ -171,6 +174,22 @@ try {
 	run(path.join(mobile, "android", "gradlew"), ["assembleDebug", ":app:assembleDebugAndroidTest", `-PpineSmokeAuthority=${path.join(work, "tls", "ca.pem")}`, "--console=plain", "-q"], path.join(mobile, "android"));
 	const apk = path.join(mobile, "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
 	const testApk = path.join(mobile, "android", "app", "build", "outputs", "apk", "androidTest", "debug", "app-debug-androidTest.apk");
+
+	// ---- what the APK asks of a phone ----------------------------------------------------------
+	// The permissions of what was built, after the manifests were merged (a library can bring one in):
+	// the network and its state, and nothing else an owner grants. androidx.core declares a signature
+	// permission of its own under the package's name for its receivers, which only this app holds:
+	// that one exactly is allowed. The Release workflow's android job checks the release APK the same way.
+	{
+		const buildTools = fs.readdirSync(path.join(sdk, "build-tools")).sort((a, b) => a.localeCompare(b, undefined, { numeric: true })).at(-1);
+		const dump = execFileSync(path.join(sdk, "build-tools", buildTools, "aapt2"), ["dump", "permissions", apk], { env }).toString();
+		const asked = dump.split("\n").filter((l) => l && !l.startsWith("package: ")).sort();
+		const own = `${APP}.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`;
+		const wanted = [`permission: ${own}`, `uses-permission: name='${own}'`, "uses-permission: name='android.permission.ACCESS_NETWORK_STATE'", "uses-permission: name='android.permission.INTERNET'"].sort();
+		const ok = JSON.stringify(asked) === JSON.stringify(wanted);
+		console.log(`  ${ok ? "ok" : "NOT OK"}  permissions: the APK asks for INTERNET and ACCESS_NETWORK_STATE and nothing else${ok ? "" : ` (asked: ${asked.join(" | ")})`}`);
+		if (!ok) throw new Error("the APK asks for other permissions than INTERNET and ACCESS_NETWORK_STATE: find what brought them in (app/build/intermediates/merged_manifests)");
+	}
 
 	// ---- the emulator -----------------------------------------------------------------------------
 	const running = () => adb("devices").split("\n").some((l) => /^emulator-\d+\s+device/.test(l));
@@ -272,11 +291,11 @@ try {
 	await computer.ask("allow");
 	const link = opened.link.replace(computer.service, computer.https);
 	step(`computer at ${computer.https} (in front of ${computer.service})`);
-	const ca = fs.readFileSync(path.join(work, "tls", "ca.pem")).toString("base64");
 	// am's arguments go through the emulator's shell: each is quoted there.
 	const quoted = (text) => `'${text.replace(/'/g, "'\\''")}'`;
 	// Not with execFileSync: the TLS front lives in this process, and has to answer while the test runs.
-	const instrument = spawn(ADB, ["shell", `am instrument -w -r -e class dev.pmndre.pine.LibWebRtcTest -e link ${quoted(link)} -e ca ${quoted(ca)} ${APP}.test/androidx.test.runner.AndroidJUnitRunner`], { env, stdio: ["ignore", "pipe", "inherit"] });
+	// No authority is handed to the test: the debug build trusts the run's (debug-overrides), as the app does.
+	const instrument = spawn(ADB, ["shell", `am instrument -w -r -e class dev.pmndre.pine.LibWebRtcTest -e link ${quoted(link)} ${APP}.test/androidx.test.runner.AndroidJUnitRunner`], { env, stdio: ["ignore", "pipe", "inherit"] });
 	let report = "";
 	instrument.stdout.on("data", (d) => (report += d));
 	await new Promise((resolve) => instrument.on("close", resolve));

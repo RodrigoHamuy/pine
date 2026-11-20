@@ -22,8 +22,6 @@ import java.net.SocketTimeoutException
 import java.security.PublicKey
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
-import javax.net.ssl.SSLContext
-import javax.net.ssl.X509TrustManager
 import kotlin.concurrent.thread
 
 /** What runs on the other machine: src/remote.ts's `remoteCommand()`, character for character. */
@@ -84,9 +82,10 @@ class RemoteService internal constructor(
  * machine has to answer at all (ssh's ConnectTimeout); `openMs` how long a paired computer has to
  * be reached, from the join of its meeting to the open channel. `webrtc` is the WebRTC library a
  * paired computer is reached with (WebRtc.kt): libwebrtc in the Android app, libdatachannel in the
- * tests. `trust` is what a meeting service's certificate is checked against, the system's when it is
- * null: only the app's emulator check hands in an authority of its own. (A meeting service is trusted
- * with signals and nothing more: the computer is checked by its host key, whatever the service says.)
+ * tests. A meeting service's certificate is checked against the system's authorities, and nothing
+ * else: no caller can hand in one of its own (the emulator check relies on the debug build's network
+ * security configuration instead). (A meeting service is trusted with signals and nothing more: the
+ * computer is checked by its host key, whatever the service says.)
  */
 class Remote internal constructor(
 	private val key: DeviceKey,
@@ -100,7 +99,6 @@ class Remote internal constructor(
 	private val readMs: Int = 60_000,
 	private val openMs: Long = 20_000,
 	private val webrtc: WebRtc,
-	private val trust: X509TrustManager? = null,
 	/**
 	 * Where a meeting service is reached, by its https origin: the origin itself. Only a test hands
 	 * in another (the access host's helper answers on http on the loopback, which no link may name):
@@ -116,8 +114,7 @@ class Remote internal constructor(
 		connectMs: Int = 15_000,
 		readMs: Int = 60_000,
 		openMs: Long = 20_000,
-		trust: X509TrustManager? = null,
-	) : this(key, known, answerMs, connectMs, readMs, openMs, webrtc, trust, { it })
+	) : this(key, known, answerMs, connectMs, readMs, openMs, webrtc, { it })
 
 	/** Where the meeting service `service` is reached: checked to be an https origin before anything is routed or reached. */
 	private fun meeting(service: String): String =
@@ -128,12 +125,6 @@ class Remote internal constructor(
 			.connectTimeout(connectMs.toLong(), TimeUnit.MILLISECONDS)
 			.readTimeout(connectMs.toLong(), TimeUnit.MILLISECONDS)
 			.followRedirects(false)
-			.apply {
-				trust?.let { trusted ->
-					val tls = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trusted), null) }
-					sslSocketFactory(tls.socketFactory, trusted)
-				}
-			}
 			.build()
 	}
 
@@ -210,21 +201,13 @@ class Remote internal constructor(
 		// What the computer may send before the phone says it took it in: sshj's own, unless the library
 		// cannot take such a burst at once (`WebRtc.sshWindow`).
 		webrtc.sshWindow?.let { ssh.connection.windowSize = it }
-		var seen: String? = null
-		ssh.addHostKeyVerifier(object : HostKeyVerifier {
-			override fun verify(hostname: String, port: Int, key: PublicKey): Boolean {
-				val presented = fingerprint(key)
-				if (presented == expected) return true
-				seen = presented
-				return false
-			}
-			override fun findExistingAlgorithms(hostname: String, port: Int): List<String> = emptyList()
-		})
+		val pinned = PinnedKey(expected)
+		ssh.addHostKeyVerifier(pinned)
 		try {
 			try {
 				ssh.connectVia(stream.input, stream.output)
 			} catch (e: IOException) {
-				seen?.let { throw HostKeyError(words.changed(expected, it), value, 0, it, changed = true) }
+				pinned.seen?.let { throw HostKeyError(words.changed(expected, it), value, 0, it, changed = true) }
 				throw RemoteError("ssh", words.cut, passing = true)
 			}
 			try {

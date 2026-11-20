@@ -1,6 +1,7 @@
 package pine.mobile.core
 
 import org.json.JSONObject
+import java.util.Collections
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import kotlin.test.AfterTest
@@ -23,7 +24,9 @@ class PairedPinesTest {
 	private val remote = Remote(key, KnownHosts(vault), answerMs = 5_000, openMs = 3_000, webrtc = LibDataChannelRtc, route = { if (it == SERVICE) computer.service else it })
 	private val shelf = MemoryShelf()
 	private val page = SeenPage()
-	private val pines = Pines(remote, KnownHosts(vault), shelf, page, retryMs = 50, backoffMs = { 100 })
+	/** The waits between attempts that Pines asked for, as `backoff` gives them: each is slept a twentieth of. */
+	private val waits = Collections.synchronizedList(mutableListOf<Long>())
+	private val pines = Pines(remote, KnownHosts(vault), shelf, page, retryMs = 50, backoffMs = { n -> backoff(n).also { waits.add(it) } / 20 })
 	private val hold = CountDownLatch(1)
 
 	init {
@@ -106,7 +109,7 @@ class PairedPinesTest {
 		assertEquals(PairWords.NOT_A_LINK, assertFailsWith<RemoteError> { pines.pair(link.replace(SERVICE, computer.service), "Pine on Pixel 9") }.message)
 		assertEquals(PairWords.NOT_A_LINK, assertFailsWith<RemoteError> { pines.pair("https://pine.example/#pair=nope", "Pine on Pixel 9") }.message)
 		pines.pair(link, "Pine on Pixel 9")
-		assertEquals(PairWords.BUSY, assertFailsWith<RemoteError> { pines.pair(link, "Pine on Pixel 9") }.message)
+		assertEquals("A pairing is open already: cancel it first.", assertFailsWith<RemoteError> { pines.pair(link, "Pine on Pixel 9") }.message)
 	}
 
 	@Test
@@ -149,6 +152,71 @@ class PairedPinesTest {
 		Thread.sleep(300)
 		assertEquals(count, page.states.size, "nothing tried again: ${page.states.takeLast(3)}")
 		assertContains(page.last!!.getString("message"), "add this device again")
+	}
+
+	/** The phone's device id at the computer, once paired. */
+	private fun device(): String = computer.command("devices").getJSONArray("devices").getJSONObject(0).getString("id")
+
+	@Test
+	fun `a trouble that may pass is tried again with a growing wait until the computer is reached`() {
+		paired()
+		val device = device()
+		within(5_000, "the event stream is up") { pines.connected }
+		computer.command("meeting limits")
+		waits.clear()
+		computer.command("cut $device")
+		sees("the limits said") { it.optString("status") == "error" }
+		within(10_000, "three waits asked for: $waits") { waits.size >= 3 }
+		assertEquals(listOf(backoff(0), backoff(1), backoff(2)), waits.take(3))
+		assertTrue(backoff(0) < backoff(1) && backoff(1) < backoff(2), "each wait longer than the one before")
+		assertEquals("The meeting service is over its limits for now. Try again later; this phone keeps trying meanwhile.", page.last!!.getString("message"))
+		computer.command("meeting normal")
+		sees("reached again without the owner") { it.optString("status") == "ready" }
+		assertEquals(2, computer.connections(device))
+	}
+
+	@Test
+	fun `a paired computer that shows another host key is refused for good and not tried again`() {
+		val host = paired()
+		val device = device()
+		within(5_000, "the event stream is up") { pines.connected }
+		val other = computer.command("meeting swap").getString("impostor")
+		waits.clear()
+		computer.command("cut $device")
+		val refused = sees("refused") { it.optString("status") == "error" }
+		assertEquals(host, refused.getString("host"))
+		assertEquals(true, refused.getBoolean("changed"))
+		assertEquals(pairedFingerprint(other), refused.getString("fingerprint"))
+		computer.command("meeting normal")
+		pines.check()
+		Thread.sleep(500)
+		assertEquals("error", page.last!!.optString("status"), "never tried again")
+		assertEquals(emptyList(), waits.toList(), "no wait asked for: nothing to try again")
+		assertEquals(1, computer.connections(device))
+	}
+
+	@Test
+	fun `the check on return to the front connects a paired computer again when it no longer answers`() {
+		paired()
+		val device = device()
+		pines.check()
+		assertEquals(1, computer.connections(device), "one that answers is kept")
+		daemon.routes["/health"] = { x -> x.sendResponseHeaders(503, -1) }
+		pines.check()
+		sees("ready again") { it.optString("status") == "ready" }
+		assertTrue(computer.connections(device) >= 2, "made again whole")
+	}
+
+	@Test
+	fun `a yes for a computer the list has no room for says so in the iOS core's words, and keeps nothing`() {
+		pines.ready()
+		(1..MAX_HOSTS).forEach { pines.addHost("me@host$it") }
+		computer.command("allow")
+		pines.pair(link(), "Pine on Pixel 9")
+		val told = sees("the full list") { it.optString("status") == "error" }
+		assertEquals("There are 20 machines already: forget one first, then add this device again at your computer.", told.getString("message"))
+		assertEquals(MAX_HOSTS, pines.hosts.size)
+		assertTrue(pines.hosts.none { it.startsWith(PAIRED) })
 	}
 
 	/** A state as text, its keys in order, so that it is compared whole. */

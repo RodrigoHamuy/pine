@@ -227,3 +227,24 @@ class PeerTest {
 
 /** The https name under which the tests reach the access host's meeting (`route` of `Remote`). */
 const val SERVICE = "https://meet.test"
+
+// The servers that help a connection, as a meeting service's configuration names them: a table of
+// what `iceOf` keeps and what it leaves out, with no computer and no network.
+class IceTest {
+	private fun ice(text: String?): List<String> = iceOf(text?.let { JSONObject(it) }).map { it.toString() }
+
+	@Test
+	fun `one address, a list of them, a bad server left out with the others kept, and nothing`() {
+		val table = listOf(
+			"""{"ice":[{"urls":"stun:stun.example.com:3478"}]}""" to listOf("stun:stun.example.com:3478"),
+			"""{"ice":[{"urls":["turn:turn.example.com:3478","turns:turn.example.com:5349"]}]}""" to listOf("turn:turn.example.com:3478", "turns:turn.example.com:5349"),
+			// A server with an address that is not STUN or TURN is left out whole; the others stay.
+			"""{"ice":[{"urls":"stun:a.example.com"},{"urls":["stun:b.example.com","https://b.example.com"]},{"urls":42},{"urls":"stuns:c.example.com"}]}""" to listOf("stun:a.example.com", "stuns:c.example.com"),
+			"""{"ice":[{"urls":[]}]}""" to emptyList(),
+			"""{"ice":[]}""" to emptyList(),
+			"""{}""" to emptyList(),
+			null to emptyList(),
+		)
+		for ((config, expected) in table) assertEquals(expected, ice(config), "for $config")
+	}
+}
