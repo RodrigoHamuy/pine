@@ -8,9 +8,13 @@ in the `views` folder of pine's home, and the app shows it in a panel at the rig
 (`⇧⌘O`, View > Toggle View, the radar at the top right of the title bar). See "The view" in
 [desktop.md](desktop.md) for the panel itself.
 
-pine comes with one view, `office`: pine as a little tower house in pixels, a room and a robot for each
-agent, main under the roof ([desktop.md](desktop.md), "The view", says what is what in it). A home gets it when pine starts without a `views` folder; after that the
-folder is yours. Take it out and it stays out; put a file in and it can be chosen.
+pine comes with two views. `office` is pine as a little tower house in pixels, a room and a robot for
+each agent, main under the roof. `workshop` is the same pine as Santa's workshop at the North Pole:
+the main agent is Santa, the others are elves, each in a workshop of another kind
+([desktop.md](desktop.md), "The view", says what is what in both). A home is given each of them once:
+both when pine starts without a `views` folder, and one that pine gets later at the next start of a
+pine that has it. Apart from that the folder is yours. Take a view out and it stays out; change one
+and it stays as you left it; put a file in and it can be chosen.
 
 | | |
 |---|---|

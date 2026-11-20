@@ -42,6 +42,8 @@ export interface Job {
 	waitingOn: number[];
 	started: number;
 	finished?: number;
+	/** When the daemon last said anything of it: its clock. */
+	heard: number;
 	tools: number;
 	/** What the owner is asked on its behalf, while it waits for the answer. */
 	ask?: { id: string; tool: string; summary: string };
@@ -364,6 +366,7 @@ export class World {
 				doing,
 				waitingOn: [],
 				started: t.started ?? t.created,
+				heard: Date.now() + this.skew,
 				finished: doing === "thinking" ? undefined : (t.finished ?? t.started ?? t.created),
 				tools: t.meta.stats?.tools.length ?? 0,
 				error: t.error,
@@ -514,6 +517,7 @@ export class World {
 				doing: "thinking",
 				waitingOn: [],
 				started: at,
+				heard: at,
 				tools: 0,
 			};
 			this.jobs.set(job.id, job);
@@ -536,6 +540,7 @@ export class World {
 
 		const job = this.jobs.get(p.task);
 		if (!job) return false;
+		job.heard = at;
 		if (kind === "steered") {
 			this.pulse("you", `agent:${agent}`, "said", at, job.id);
 			return true;
@@ -589,6 +594,39 @@ export class World {
 			return true;
 		}
 		return false;
+	}
+
+	/**
+	 * The work this world takes for running that the daemon does not run (`running`: the ids of what it runs, asked
+	 * at `asked` on the page's clock). The end of work can go unheard: the daemon was restarted and ended what it
+	 * had interrupted before anybody listened again, the event stream was down for a moment, or the work ended
+	 * while the view was being told what there is. Without this such work would be at work here for ever.
+	 * Work the daemon said something of in the seconds before it was asked is not named: its beginning, or its
+	 * end, may be on its way.
+	 */
+	unheard(running: number[], asked: number): number[] {
+		const ids = new Set(running);
+		return [...this.jobs.values()].filter((j) => !ENDED.includes(j.doing) && !ids.has(j.id) && j.heard - this.skew < asked - 4000).map((j) => j.id);
+	}
+
+	/**
+	 * How a piece of work ended, as the daemon's record of it says (none: it is gone): for work whose end no event
+	 * told. It is no news: nothing travels for it and nothing is said of it.
+	 */
+	settle(id: number, record?: { status: string; finished?: number; error?: string }): void {
+		const job = this.jobs.get(id);
+		if (!job || ENDED.includes(job.doing) || record?.status === "running" || record?.status === "pending") return;
+		job.doing = record?.status === "done" ? "done" : record?.status === "failed" ? "failed" : "cancelled";
+		job.finished = record?.finished ?? job.heard;
+		job.ask = undefined;
+		job.tool = undefined;
+		job.subject = undefined;
+		job.skill = undefined;
+		job.error = record?.error ? label(String(record.error), 160) : undefined;
+		const parent = job.parent !== undefined ? this.jobs.get(job.parent) : undefined;
+		if (parent && parent.doing === "waiting" && !parent.waitingOn.some((c) => !ENDED.includes(this.jobs.get(c)?.doing ?? "done"))) parent.doing = "thinking";
+		this.prune();
+		this.touch();
 	}
 
 	/** Forgets what is old: ended work after half an hour, pulses after a few seconds. */

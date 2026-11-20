@@ -38,22 +38,35 @@ machine, this computer's included: it pairs as a browser does (see "Browser acce
 
 ### A newer version
 
-The app does not update itself: it says when there is a newer one and where it is. To get it,
-download the new image from the release's page, quit Pine and put the new app in place of the
-old one. Your pine home (`~/.pine`: agents, conversations, settings) is not in the app and
-stays as it is.
+The app updates itself. When there is a newer release, it downloads it in the background, from
+that release on GitHub, and installs it with macOS's own updater, only when you say so: press
+**Restart to update**, or quit Pine and the update is installed on the way out. It never
+restarts by itself. Your pine home (`~/.pine`: agents, conversations, settings) is not in the
+app and stays as it is.
 
 | | |
 |---|---|
-| At the start | The app asks GitHub once for pine's last release. When that is newer than the app, a line at the foot of the side bar says so (`Pine <version> is available`); a click opens the release's page on GitHub in your browser. Nothing is said when the app is the latest, or when nobody answers |
-| `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found, with the link to the release's page when there is a newer app |
-| Settings > App | The app's version and whether it is the latest, **Check now**, and the switch **Look for a newer version at the start** for the question at the start. The menu asks whatever the switch says |
+| At the start | The app asks GitHub once for pine's last release. When that is newer than the app, it is downloaded without a dialog; a line at the foot of the side bar says **Downloading Pine <version>…**, then **Restart to update**. Nothing is said when the app is the latest, or when nobody answers |
+| `Restart to update` | At the foot of the side bar, in Settings > App and in the dialog of **Check for Updates…**. Every pine this app started in this run is stopped first, also one kept with **Keep pine running**, so that it does not go on with the old version; the new app starts it again. A pine the app only attached to (started in a terminal or at login) is left alone: restart it yourself. While agents are working it first warns how many conversations would be cut off |
+| `Restart when they are done` | The warning's choice beside **Restart now** and **Cancel**: **Restarts when the work is done** stays at the foot of the side bar until then. Click it there to call it off |
+| Quitting | With an update downloaded, quitting Pine installs it. What stops with the app is what stops at any quit |
+| `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found. A newer release is downloaded, or ready to install with a restart |
+| Settings > App | The app's version and whether it is the latest, **Check now**, the switch **Look for a newer version at the start** for the question at the start, and the switch **Update automatically** (on unless you turn it off). The menu asks whatever the first switch says |
+| `Pine <version> is available` | What the app says instead when it does not update itself: **Update automatically** is off, or the download or the install failed (one line says so, in the app's own words). A click opens the release's page on GitHub in your browser: download the disk image there, quit Pine and put the new app in place of the old one |
 
-A release counts as a newer app once its disk image for your kind of Mac is attached to it,
-which is some minutes after pine itself is published. A preview of pine is not a release, and
-the app never points at one. The app fetches and installs nothing. `pine update` in a pine that
-came with the app says the same in a terminal. An app started from a checkout is no release
-and asks nobody.
+A release counts as a newer app once its disk image and its update feed for your kind of Mac
+are attached to it, which is some minutes after pine itself is published. A preview of pine is
+not a release, and the app never points at one. The address of the update is made by the app
+from the release's version and your kind of Mac, on pine's GitHub releases, and macOS installs
+only an app signed by the same developer as the one you run. The question and the update's feed
+send the user agent `Pine` and nothing else; the zip itself is fetched by macOS's updater, whose
+user agent names the app's version and the version of macOS. An app run from the disk image, or
+from a folder it cannot write, cannot replace itself: it says so and links to the release's
+page (move it to Applications). When **Update automatically** is turned off after an update
+was downloaded, the app shows the release's link again, but macOS may still install that update
+at the next quit. `pine update` in a pine that came with the app says that the app updates
+itself, and links to the release's page. An app started from a checkout is no release, asks nobody and
+installs nothing.
 
 ### The first start
 
@@ -170,12 +183,13 @@ pine, setting pine up. To open a folder for a conversation you type its path.
 
 ## The daemon: started or reused
 
-When the app opens it asks `pine service` ([operations.md](operations.md), "A UI of its own")
-for the daemon of your home:
+When the app starts it asks `pine service` ([operations.md](operations.md), "A UI of its own")
+for the daemon of your home, so you never have to start pine first:
 
 | What it finds | What happens |
 |---|---|
 | A pine is running for this home (started in a terminal, at login, by the terminal UI) | The app attaches to it. The side bar says `attached`. Quitting the app leaves it running |
+| `An older pine runs` | The pine the app attached to is older than the pine the app carries. Said at the foot of the side bar and in Settings > App, with both versions. Restart that pine on the newer version yourself, or stop it and let the app start its own. Never said of a pine the app started |
 | Nothing runs | The app starts one, as the terminal UI does, logging to `data/pine.log`. The side bar says `started here`. Quitting the app stops it, cleanly |
 | There is no pine home yet | A first screen offers to set pine up (`pine init`): the example home and the browser its web tools drive |
 | No Node, or no pine | A screen that says what to install |
@@ -685,7 +699,8 @@ the table above).
 
 What the panel draws is a view: a script of yours in the `views` folder of pine's home, chosen with
 the view's name at the top of the panel, which is a list of the views in the folder (`ui.view`). pine
-comes with `office`, pine as a little house full of robots. How to write
+comes with two: `office`, pine as a little house full of robots, and `workshop`, pine as Santa's
+workshop at the North Pole. How to write
 one, and what a view is told, is in [views.md](views.md). With no view in the folder, or the setting
 `off`, there is no button and no panel. The mobile app and the web client show no view.
 
@@ -733,6 +748,37 @@ which agents the source wakes. The sky follows your clock and the year: dawn, da
 dusk and night with the moon in its phase, and the trees of the season. At night an agent at rest
 sleeps at its desk. A camera goes where agents work, in whole steps so that pixels stay whole; scroll,
 drag or pinch to look yourself, the eye follows again, and the frame beside it shows the whole house.
+
+### The workshop
+
+`workshop` draws the same as Santa's workshop at the North Pole. The main agent is Santa, under the
+roof; every other agent is an elf of its own look, its pointed cap in the agent's color, in a bay that
+is a workshop of another kind each. You stand at the counter of the mail room. The bubbles say the same
+words as in `office`; their signs are sweets, and the `?` shows what each stands for.
+
+| In the workshop | What it is |
+|---|---|
+| Santa checks a long list | The main agent is at rest. At night he sleeps in his chair |
+| An elf paces; a plan on blue paper on its bench | It thinks |
+| An elf at its shelf with a book | It reads or searches. A starred book is a skill: on an elf's shelf, on Santa's mantel |
+| An elf at its bench with a hammer, a brush or a wrench | It runs a command or edits a file |
+| An elf ties a ribbon round a parcel | It writes its answer |
+| An elf at the machine full of gumballs; Santa at his tree | A tool of an MCP server. Each gumball, each bauble on the tree, is an MCP server; the one in use lights up |
+| A glass of sand on the bench | It waits for others |
+| A jack-in-the-box with a red "!" | It asks you; the bell on your counter rings |
+| Small elves | Copies (sub-agents) |
+| A present flies from one to another | A task handed on; the answer flies back with a tick or a cross |
+| A sweet in the glass chute | An event, from your counter, a letter box of the mail room, or the clock in the tower |
+| Bells on a wall | The agent's schedules |
+| A little tree with a star on the bench | A goal |
+| A present flies up to the sleigh on the roof | The agent sent something out |
+| Snow globe, cookie jar, wind-up key, sparkler, gingerbread house | The modes `safe`, `manual`, `auto`, `bypass`, `plan` |
+| An amber lantern, a cap's bobble glowing amber | The work read outside content |
+| A stocking for each agent in Santa's room, where it is wide | It glows while that agent works, red while it asks |
+| Presents under Santa's tree; the big wheel on the wall | More presents the more work was done in the last half hour; the wheel turns faster while anybody works |
+
+It is winter there all year. The sky follows your clock, with northern lights at night; reindeer fly
+a sleigh across it, elves on skis and a polar bear with its cub go by, and floes drift on the sea.
 
 ## Settings
 
@@ -792,7 +838,7 @@ the agent to write. So:
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | Browser access | Off until you turn it on. Then the app's SSH server of its own (not the system's SSH server, Remote Login on macOS) accepts only the keys you allowed at this computer, by key and never by password, and gives them this computer's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
-| What the app itself asks the web | GitHub, for pine's last release (see "A newer version"). The question carries nothing about this computer, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
+| What the app itself asks the web | GitHub, for pine's last release and, when it is newer, its update (see "A newer version"). The question and the update's feed send the user agent `Pine` and nothing else; the update's zip is fetched by macOS's updater, whose user agent names the app's version and the version of macOS. Of the answer only the release's number is used, and the link and the update's address are made by the app and lead to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
 itself. What it knows, the daemon told it.
@@ -803,7 +849,7 @@ itself. What it knows, the daemon told it.
 
 | Flag | What it does |
 |---|---|
-| `--dmg` | Also a disk image, `release/Pine-<version>-<arch>.dmg` |
+| `--dmg` | Also a disk image, `release/Pine-<version>-<arch>.dmg`; the app zipped after its ticket is stapled, `Pine-<version>-<arch>.zip`; and the update feed that points at the zip, `Pine-<arch>.json` |
 | `--arch` | `arm64` or `x64`: the kind of Mac the app is for. Without it, the kind it is packed on. The helpers are built for both either way |
 | `--no-pine` | Without pine, Node and the helpers: the app then uses the `pine` of the owner's shell |
 | `--out` | Into another folder than `release/`, for a build beside one that is open |
@@ -828,12 +874,12 @@ built on is what is shipped. Whom it is signed for is set in the environment:
 | `PINE_VERSION` | The version of the app and of the pine inside it. Without it, the version in the checkout's `package.json` |
 
 The Release workflow (`.github/workflows/release.yml`) does this for every release from
-`main`, on a runner for each kind of Mac, and attaches the two disk images to the GitHub
-release. It takes the five values from secrets of an environment named `release`. Without
+`main`, on a runner for each kind of Mac, and attaches the disk images, the zips and the
+update feeds to the GitHub release. It takes the five values from secrets of an environment named `release`. Without
 them it builds no app and says so. To build the app of a release again (after a job that
 failed), run the workflow by hand from `main` with that release's version:
-`gh workflow run release.yml -f version=0.38.0`. Nothing is published; the disk images are
-attached to that release. Building the helpers takes the macOS 26 SDK or a newer one.
+`gh workflow run release.yml -f version=0.38.0`. Nothing is published; the disk images, zips and
+feeds are attached to that release. Building the helpers takes the macOS 26 SDK or a newer one.
 
 ## For changing the app
 
@@ -849,6 +895,11 @@ desktop/
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
     updates.ts     whether there is a newer app: GitHub asked for the last release, the link to its page
+                   and the address of its update feed (stand-ins for tests: PINE_DESKTOP_RELEASES,
+                   PINE_DESKTOP_DOWNLOADS)
+    updater.ts     the app's own update: Electron's autoUpdater (Squirrel.Mac) on that feed, downloaded
+                   in the background, installed at Restart to update or at quit; a stand-in for tests
+                   (PINE_DESKTOP_UPDATER)
     access/        browser access, without Electron (they run under plain Node in tests and in the
                    web client's smoke): server.ts the access server (ssh2 on any duplex stream: the
                    remote command answered with this computer's service line, direct-tcpip to that loopback
@@ -904,7 +955,8 @@ desktop/
                    browser, `npm run dev:preview`: Vite's server makes every call for the page,
                    on a throwaway pine or the home `--home` names), test.mjs (`npm test`: the
                    app built once for the run), launch-json.mjs (the checkout's ports and
-                   .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter)
+                   .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter),
+                   update-feed.ts (the names of a release's zip and update feed, and the feed)
   test/            the app from end to end, driven through its real window; command.test.ts,
                    updates.test.ts, daemon.test.ts and preview.test.ts need no window.
                    support/: the build a test starts (app.ts), and a daemon of the test's own

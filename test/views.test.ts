@@ -16,6 +16,7 @@ test("a home gets pine's views once, the module views import, a tsconfig for the
 		seedViews(home);
 		const dir = path.join(home, "views");
 		assert.ok(fs.existsSync(path.join(dir, "office.ts")));
+		assert.ok(fs.existsSync(path.join(dir, "workshop.ts")), "every view pine comes with");
 		assert.equal(fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8"), fs.readFileSync(path.resolve(import.meta.dirname, "..", "src", "view-kit.ts"), "utf8"));
 		assert.match(fs.readFileSync(path.join(dir, "tsconfig.json"), "utf8"), /"pine\/view": \["\.\/\.pine\/view\.ts"\]/);
 		// The guide for whoever writes a view, also a coding agent opened in the folder: it names what the module really has.
@@ -54,14 +55,45 @@ test("a home gets pine's views once, the module views import, a tsconfig for the
 		seedViews(own);
 		assert.equal(fs.readFileSync(path.join(own, "views", "AGENTS.md"), "utf8"), "my own notes");
 		fs.rmSync(own, { recursive: true, force: true });
-		// The owner takes the office out: it stays out. The kit is brought back up to date all the same.
+		// The owner takes pine's views out: they stay out. The kit is brought back up to date all the same.
 		fs.rmSync(path.join(dir, "office.ts"));
+		fs.rmSync(path.join(dir, "workshop.ts"));
 		fs.writeFileSync(path.join(dir, ".pine", "view.ts"), "old");
 		seedViews(home);
-		assert.ok(!fs.existsSync(path.join(dir, "office.ts")));
+		assert.ok(!fs.existsSync(path.join(dir, "office.ts")) && !fs.existsSync(path.join(dir, "workshop.ts")));
 		assert.notEqual(fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8"), "old");
 		assert.deepEqual(listViews(home), [], "the kit, the tsconfig and the guide are no views");
 		assert.equal(viewInForce(undefined, listViews(home)), undefined, "no view: the app shows no button");
+	} finally {
+		fs.rmSync(home, { recursive: true, force: true });
+	}
+});
+
+test("a view pine comes with later reaches a home that is there already, once; the owner's files are left alone", () => {
+	const home = tmp();
+	try {
+		// A home of an older pine: it was given the office, which its owner changed, and there was no list of what it was given.
+		const dir = path.join(home, "views");
+		fs.mkdirSync(dir);
+		fs.writeFileSync(path.join(dir, "office.ts"), "// mine now\n");
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "office.ts"), "utf8"), "// mine now\n", "the office is the owner's");
+		assert.equal(fs.readFileSync(path.join(dir, "workshop.ts"), "utf8"), fs.readFileSync(path.resolve(import.meta.dirname, "..", "examples", "home", "views", "workshop.ts"), "utf8"), "the view that is new to this home is there");
+		assert.deepEqual(listViews(home).map((v) => v.id), ["office", "workshop"]);
+		assert.equal(viewInForce(undefined, listViews(home)), "office", "and the one that was shown is still the one shown");
+		assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, ".pine", "seeded.json"), "utf8")), ["office.ts", "workshop.ts"]);
+		// Taken out, it stays out; changed, it stays as it is.
+		fs.rmSync(path.join(dir, "workshop.ts"));
+		seedViews(home);
+		assert.ok(!fs.existsSync(path.join(dir, "workshop.ts")));
+		// A home that never had the office and whose owner wrote a workshop of their own: nothing is written over.
+		const own = tmp();
+		fs.mkdirSync(path.join(own, "views"));
+		fs.writeFileSync(path.join(own, "views", "workshop.ts"), "// my own workshop\n");
+		seedViews(own);
+		assert.equal(fs.readFileSync(path.join(own, "views", "workshop.ts"), "utf8"), "// my own workshop\n");
+		assert.ok(!fs.existsSync(path.join(own, "views", "office.ts")), "an older home was given the office already: it is not brought back");
+		fs.rmSync(own, { recursive: true, force: true });
 	} finally {
 		fs.rmSync(home, { recursive: true, force: true });
 	}

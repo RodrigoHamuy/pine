@@ -107,7 +107,7 @@ jobs:
     runs-on: ${{ matrix.runner }}
     environment: release
     permissions:
-      contents: write # the disk image goes to the release
+      contents: write # the disk image, the zip and the feed go to the release
     env:
       VERSION: ${{ inputs.version || needs.release.outputs.version }}
     steps:
@@ -181,7 +181,13 @@ jobs:
           spctl --assess --type execute --verbose=2 "$app"
           xcrun stapler validate "$app"
       - if: steps.signing.outputs.ready == 'true'
-        run: gh release upload "v$VERSION" "desktop/release/Pine-$VERSION-${{ matrix.arch }}.dmg" --clobber
+        # The disk image, and what the apps in the field update from: the app zipped after its ticket was
+        # attached, and the feed that points at that zip on this release's tag (desktop/scripts/update-feed.ts).
+        run: |
+          gh release upload "v$VERSION" --clobber \
+            "desktop/release/Pine-$VERSION-${{ matrix.arch }}.dmg" \
+            "desktop/release/Pine-$VERSION-${{ matrix.arch }}.zip" \
+            "desktop/release/Pine-${{ matrix.arch }}.json"
         env:
           GH_TOKEN: ${{ github.token }}
       - if: always()

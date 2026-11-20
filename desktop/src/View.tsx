@@ -135,10 +135,17 @@ function useSeed(): void {
 		let asked = 0;
 		let known = "";
 		const rooms = async () => {
-			asked = Date.now();
+			const at = (asked = Date.now());
 			const st = await api.status().catch(() => undefined);
 			if (gone || !st) return;
 			const read = world.setRooms(st.sessions.map((r) => ({ agent: r.agent, session: r.session, busy: r.busy, outside: r.tainted, mode: r.mode, trust: r.trust })));
+			// Work whose end went unheard (the daemon was restarted, the stream was down for a moment) is not at work for
+			// ever: what the daemon no longer runs is ended here as its record of it says.
+			for (const id of world.unheard(st.running.map((r) => r.task), at))
+				void api.taskRecord(id).then(
+					(t) => !gone && world.settle(id, t),
+					() => !gone && world.settle(id),
+				);
 			announce(read.map((r) => ({ k: "outside" as const, agent: r.agent, ...(world.talks.has(`${r.agent}:${r.session}`) ? { conversation: world.talkId(r.agent, r.session) } : {}) })));
 		};
 		void rooms();

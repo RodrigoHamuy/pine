@@ -19,7 +19,7 @@ import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "re
 import { type AgentDetail, api, type LoginState, type Route, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
-import { store, useModel } from "./model.ts";
+import { store, type UpdatePhase, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
 import type { DialogRootActions } from "@base-ui/react/dialog";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -2229,6 +2229,14 @@ function Environments() {
 	);
 }
 
+/** What Settings > App says of a newer app, by where its update stands (`Store.updatePhase`). */
+const UPDATE_TEXT: Record<UpdatePhase["phase"], (u: UpdatePhase) => string> = {
+	waiting: () => "The new app is downloaded, and Pine restarts to update once no conversation is at work. Call off the wait to restart or quit when you like. Your pine home stays as it is.",
+	ready: () => "The new app is downloaded. Restart to update, or it is installed when you next quit Pine. Your pine home stays as it is.",
+	downloading: () => "The new app is being downloaded.",
+	link: (u) => `${u.reason ? `${u.reason} ` : ""}The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is.`,
+};
+
 function AppPage() {
 	const s = useModel(store);
 	const set = async (change: Record<string, unknown>) => {
@@ -2236,7 +2244,7 @@ function AppPage() {
 		s.touch();
 	};
 	const service = s.service.status === "ready" ? s.service : undefined;
-	const newer = s.update?.status === "newer" ? s.update : undefined;
+	const update = s.updatePhase;
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
 	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
 	// Under a bridge with no local machine (`s.local`), what only this computer has is neither asked nor shown:
@@ -2259,12 +2267,16 @@ function AppPage() {
 							<FieldContent>
 								<FieldTitle>
 									Pine {s.versions.app}
-									{newer ? <Badge variant="outline">{newer.version} is available</Badge> : s.update?.status === "latest" ? <Badge>the latest version</Badge> : null}
+									{update ? <Badge variant="outline">{update.version} is available</Badge> : s.update?.status === "latest" ? <Badge>the latest version</Badge> : null}
 								</FieldTitle>
-								<FieldDescription>{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</FieldDescription>
+								<FieldDescription>
+									{update ? UPDATE_TEXT[update.phase](update) : s.selfUpdate ? "The app asks GitHub for pine's last release, and when that is newer downloads it and installs it when you restart or quit." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}
+								</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
-								{newer ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
+								{update?.phase === "waiting" ? <Button variant="outline" size="xs" onClick={() => s.cancelUpdateWait()}><XIcon data-icon="inline-start" />Call off the wait</Button> : null}
+								{update?.phase === "ready" ? <Button size="xs" onClick={() => void s.restartToUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
+								{update?.phase === "link" ? <Button variant="outline" size="xs" onClick={() => void bridge.open(update.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
 								<Button variant="outline" size="xs" disabled={s.updateLooking} onClick={() => void s.lookForUpdate(true)}><RotateCwIcon data-icon="inline-start" />Check now</Button>
 							</div>
 						</Field>
@@ -2277,6 +2289,17 @@ function AppPage() {
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
 								<Switch id={`${field}-updates`} checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} />
+							</div>
+						</Field>
+					) : null}
+					{s.updates && s.selfUpdate ? (
+						<Field orientation="horizontal">
+							<FieldContent>
+								<FieldLabel htmlFor={`${field}-auto-update`}>Update automatically</FieldLabel>
+								<FieldDescription>A newer release is downloaded from GitHub in the background and installed when you restart or quit Pine, never by itself. Off: the app links to the release's page.</FieldDescription>
+							</FieldContent>
+							<div className="flex items-center gap-1.5">
+								<Switch id={`${field}-auto-update`} checked={s.prefs.autoUpdate !== false} onCheckedChange={(autoUpdate) => void set({ autoUpdate })} />
 							</div>
 						</Field>
 					) : null}
@@ -2308,6 +2331,12 @@ function AppPage() {
 							</div>
 						) : null}
 					</Field>
+					{service?.olderThan ? (
+						<Alert data-notice="older-pine">
+							<TriangleAlertIcon />
+							<AlertDescription>{`This pine is ${service.version}, older than the pine of this app (${service.olderThan}). The app did not start it, so it leaves it as it is: restart that pine on ${service.olderThan} (update it with "pine update" if it is an install of its own), or stop it and the app starts its own.`}</AlertDescription>
+						</Alert>
+					) : null}
 					{local ? (
 						<Field orientation="horizontal">
 							<FieldContent>

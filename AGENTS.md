@@ -75,7 +75,7 @@ src/
   themes.ts         the themes of the owner's UIs: VS Code color theme files in <home>/themes (seeded once from
                     examples/home/themes), listed for `GET /themes`, the one `ui.theme` names
   views.ts          the views of the Pine app's panel: scripts of the owner's in <home>/views, listed, handed over
-                    with their types stripped (never run by the daemon), `ui.view`; seeded once from examples/home/views,
+                    with their types stripped (never run by the daemon), `ui.view`; each of pine's own (examples/home/views: office, workshop) given to a home once (`seedOwn`),
                     with the guide to writing one (`views/AGENTS.md`, for the owner or a coding agent opened there;
                     no agent of pine's reads it), which is written anew when it or `view-kit.ts` changed (`seedGuide`).
                     Keep that guide true to `view-kit.ts`: `test/views.test.ts` checks its names
@@ -144,7 +144,7 @@ test/               node:test files; support/harness.ts builds a temp home and a
 baseline/           pi SDK behaviour checks and their results; the mock model server lives here
 docs/               SKILL.md index and references/
 desktop/            the desktop app (Electron; a package of its own, not part of what goes to npm): electron/ is the
-                    main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app;
+                    main process (the window, the daemon's token, `pine service`, `pine` for a terminal, the look for a newer app and its own update;
                     electron/access/ is browser access, without Electron: the access server on ssh2, this computer's host key and
                     the paired devices, pairing, the WebRTC data channel on node-datachannel, the host that waits at the
                     meeting service, and the control the page's Settings > Browser access reads), src/ the
@@ -825,8 +825,10 @@ own line of commits (`git log --first-parent` in `scripts/build.mjs`), and a mer
 there would stand in for all the commits it brought.
 
 A release from `main` also gets the Pine app, attached to its GitHub release as a disk image
-for each kind of Mac (the job `app` in `release.yml`: `desktop/scripts/pack.mjs --dmg`, then
-Apple's own check of the signed app, then the upload). The job does not start the app:
+for each kind of Mac, with what the app updates itself from: the app zipped after notarisation
+(`Pine-<version>-<arch>.zip`) and its Squirrel.Mac feed (`Pine-<arch>.json`, made by
+`desktop/scripts/update-feed.ts`, tested in `desktop/test/update-feed.test.ts`). The job `app` in
+`release.yml`: `desktop/scripts/pack.mjs --dmg`, then Apple's own check of the signed app, then the upload. The job does not start the app:
 `smoke.mjs` drives its window, and a test that drives the window does not belong in a release,
 where a renamed part of the page holds back the disk images of an app that runs. Run it on a
 Mac of your own before a release that changed how the app is packed or its page is built
@@ -936,11 +938,16 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   CPU as the system counts it (`top`, its own processes, not its pine) with the view's panel closed, open
   at rest, open while three agents work and open with the window behind, and the frames the view draws.
   The window has to be in front to measure the view as it draws in front. Run it after a change to how a
-  view is drawn or fed (`desktop/src/View.tsx`, `view-state.ts`, `examples/home/views/office.ts`).
+  view is drawn or fed (`desktop/src/View.tsx`, `view-state.ts`, `examples/home/views/office.ts`, `workshop.ts`).
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).
   No test reaches GitHub, and what would open in a browser is noted instead (`shell.openExternal`).
+  The app's own update (`desktop/electron/updater.ts`) runs on a stand-in for macOS's updater in
+  `desktop/test/self-update.test.ts` (`PINE_DESKTOP_UPDATER`, for tests only: a folder with what it
+  is to do and the calls it was given); a real install is tried by hand, from release N to N+1,
+  with the feed and the zip on a stand-in for the release's downloads (`PINE_DESKTOP_DOWNLOADS`,
+  for tests only, beside `PINE_DESKTOP_RELEASES`).
 - The browser in the app's panel is tested without a browser: the relay on its stand-in for
   Playwright's server (`FAKE_BROWSER` in `test/browser.test.ts`, which also plays the owner's
   hand), the control API and the app on a stand-in for the browser's door (a file in the test

@@ -154,6 +154,16 @@ test("a task handed on is a winged letter and a line between the rooms; a copy i
 	assert.equal(office.links(told(world)).length, 0);
 });
 
+test("two pieces of an agent's own work are two robots; when the first ends, its own robot takes the second and the other goes", () => {
+	const { world, office } = building(3);
+	world.take([began(0, 1, "a01", { session: "main" }), began(200, 2, "a01", { session: "side" })]);
+	run(world, office, 0, 1000);
+	assert.deepEqual(office.robots().map((r: any) => r.work).sort(), [1, 2, undefined, undefined].sort(), "the agent's own robot at the first, another at the second, and the two other agents'");
+	world.take([ended(1100, 1, "a01")]);
+	run(world, office, 1100, 2500);
+	assert.deepEqual(office.robots().filter((r: any) => r.agent === "a01").map((r: any) => r.work), [2], "one robot for the one piece of work that is left");
+});
+
 test("an event comes up the tube in a capsule to the room it is for", () => {
 	const { world, office } = building(3);
 	const camera = ev(0, "source/camera/motion", { text: "at the door" }, "source:camera");

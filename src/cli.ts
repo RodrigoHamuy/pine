@@ -517,8 +517,8 @@ async function main(): Promise<void> {
 			const cfg = loadConfig(home);
 			const { ensureDaemon } = await import("./service.ts");
 			service = await ensureDaemon(cfg);
-			const version = String(JSON.parse(fs.readFileSync(path.join(PINE_ROOT, "package.json"), "utf8")).version);
-			say({ base: service.base, token: service.token, mode: service.mode, started: service.started, home: cfg.home, version });
+			// The version of the daemon handed on, which is this pine's only when it started it here.
+			say({ base: service.base, token: service.token, mode: service.mode, started: service.started, home: cfg.home, version: service.version });
 		} catch (e) {
 			say({ error: e instanceof Error ? e.message : String(e) });
 			process.exit(1);

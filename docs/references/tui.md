@@ -224,7 +224,7 @@ Type `/` and the list appears; keep typing to narrow it, `enter` runs the comman
 | `/pin`, `/unpin` | Keep this conversation however long it is unused, or let it go again |
 | `/reset` | Forget this conversation and start fresh (also clears "has seen outside content") |
 | `/undo` | Take back your last message: what it started is stopped, the files it changed in the conversation's folder are restored, the conversation forgets it and what followed, and its text is in the input again to change and send. Again for the message before it. See [coding.md](coding.md) for what is and is not restored |
-| `/redo` | Redo: bring back what the last `/undo` took, files and conversation. Works until you send a new message |
+| `/redo` | Redo: bring back what the last `/undo` took, files and conversation. After several undos, `/redo` again brings back the next message, one at a time. Works until you send a new message |
 | `/compact` | Shorten this conversation: its earlier part becomes a summary the model writes, the most recent part stays as it is. Frees the model's context without forgetting what was agreed; useful with a small local model. It waits its turn like a message. pi also does this by itself when the context fills up |
 | `/notify [on\|off]` | A bell and a notification when the agent is done, stops with an error, needs your approval or asks you something while the terminal's window is not in front. On by default; the setting is remembered. The notification goes through the terminal (Ghostty, iTerm, Kitty and others show it as a system notification; Terminal.app only rings the bell). Its text is pine's own ("pine: main is done"), never the agent's |
 | `/copy` | Copy the agent's last answer to the clipboard, as it wrote it (Markdown) |
