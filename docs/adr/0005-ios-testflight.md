@@ -1,0 +1,106 @@
+# 0005: The iOS app on TestFlight, signed by the maintainer's Apple team
+
+Status: accepted. Supersedes in part ADR 0002: what it says about Apple signing, secrets and
+TestFlight. The rest of ADR 0002 stands.
+
+## Context
+
+ADR 0002 made the iOS app sideload only: every release attaches an unsigned
+`Pine-<version>.ipa`, which an owner signs with their own Apple ID through AltStore or Sideloadly.
+It said so because "the only paid account is somebody else's".
+
+That path asks a lot of an owner: a computer, a cable or the same Wi-Fi, trusting a developer
+certificate, Developer Mode, and with a free Apple ID a renewal every seven days. Most owners
+who want pine on an iPhone stop there.
+
+The maintainer now has a paid Apple Developer Program membership of his own: an individual team,
+`Z9273KN92X`. TestFlight's external testing with a public link gives an install from the iPhone
+alone, kept for 90 days per build, with every later build arriving as an update.
+
+## Decision
+
+**TestFlight beside sideloading.** Every release from `main` is also built signed by the team
+`Z9273KN92X`, uploaded to App Store Connect, added to the external group `Public`, whose public
+link the README and the release page give, and submitted to Beta App Review. Every preview from
+`next` goes to the internal group `Maintainers` (the maintainer's own devices), with no review, so
+that a preview is tried on a real iPhone before `next` is moved to `main`. The unsigned IPA stays
+attached to every release, and its job `ios` keeps no secret and no environment.
+
+**One App Store Connect API key, cloud-managed signing.** The key (role App Manager) is the only
+Apple secret. `xcodebuild` signs automatically with it (`-allowProvisioningUpdates`), with Apple's
+cloud-managed distribution certificate: no `.p12`, no provisioning profile, no fastlane, nothing
+to rotate by hand. The team is given on the command line of the signed build only
+(`DEVELOPMENT_TEAM`), never committed into the project, so the unsigned and simulator builds are
+unchanged. The archive is exported for App Store Connect with destination `upload`. A small Node
+script with no dependency then talks to the App Store Connect API: it waits for processing, sets
+"What to Test" to the release's commit subject, and adds the build to its group (and, from
+`main`, submits it for review). A build already in its group or already submitted is no error.
+
+**A GitHub environment of its own.** The key lives in the environment `testflight`, whose
+deployment branches are `main` and `next`, as three secrets: `ASC_KEY` (the `.p8` file's content),
+`ASC_KEY_ID` and `ASC_ISSUER_ID`. The release job `testflight` runs in it for both channels and for
+`workflow_dispatch`. The environment `release` (the Mac and Android signing keys) stays restricted
+to `main`. Without the three secrets the job passes and says that nothing was uploaded, so a fork
+or a fresh setup does not fail, and a failed upload holds back neither npm nor the other apps.
+
+**Bundle id `dev.pmndre.pine`, unchanged,** registered on the team, for iPhone and iPad. The
+public link is kept in the repository variable `TESTFLIGHT_LINK`, not in the code.
+
+**Build numbers that order previews and releases.** `CFBundleShortVersionString` is always
+`X.Y.Z`. `CFBundleVersion` is Android's `versionCode(X.Y.Z)` × 1000 + N, where N is the `N` of a
+preview `X.Y.Z-next.N` (1 to 998) and 999 for the release `X.Y.Z`: a release sorts after all its
+previews, and a rebuild of a tag gives the same number, which App Store Connect recognises as
+uploaded already. The unsigned IPA carries the same number. Android's `versionCode` is unchanged.
+
+**Exempt encryption.** The app uses encryption only through standard algorithms for
+authentication and for securing its own connections (SSH on Apple's swift-nio-ssh and
+swift-crypto, HTTPS through the system), in a mass-market app: the kind of use that export rules
+exempt. The app declares `ITSAppUsesNonExemptEncryption = NO`, so that App Store Connect does not
+hold each build on the export compliance question. This is the project's reading of those rules,
+not legal advice.
+
+**Nothing collected.** App Privacy is "Data Not Collected", and the privacy policy is
+[docs/privacy.md](../privacy.md), whose GitHub address is the one App Store Connect gives. The
+app carries a privacy manifest (UserDefaults, reason `CA92.1`; no tracking, no collected data)
+and arm64 as its required device capability.
+
+**Two Apple teams.** The Mac app stays signed and notarised by the team it is signed by now; iOS
+is signed by the maintainer's individual team. The two are separate on purpose, and nothing in
+either build depends on the other.
+
+## Alternatives considered
+
+**Sideloading only (ADR 0002).** Kept as a way, no longer the only one: it loses most owners at
+the first step.
+
+**The App Store.** Left for a later decision: a listing, screenshots and a full review, for an
+app that shows a machine of the owner's own. TestFlight's public link reaches owners now, and the
+same signed archive can go to the App Store later.
+
+**fastlane, or a certificate and profile kept as secrets.** Rejected: cloud-managed signing with
+one API key needs neither, and keeps one secret to rotate instead of three that expire.
+
+**Ad Hoc distribution, or the EU's alternative distribution.** Rejected: Ad Hoc needs every
+device's identifier in advance, and alternative distribution reaches the EU only.
+
+**An organisation's team now.** Not needed for TestFlight. A later move is an App Transfer of the
+app record to that organisation: TestFlight testers and builds do not carry over, so owners on the
+public link open the new team's link once, and since the Keychain's access group follows the
+team, the app makes a new key there too.
+
+## Consequences
+
+- An owner with an iPhone or an iPad installs Pine from a link and gets every release as an
+  update, with no computer and no renewal by hand.
+- The phone's key is kept in the Keychain under the team that signed the app. A TestFlight install
+  and a sideloaded one hold different keys: switching from one to the other means adding the new
+  public key to `authorized_keys` on every machine. The manual says so.
+- The repository has Apple signing secrets, in the environment `testflight` only. Nothing about
+  them is in the code or the project file.
+- A release reaches TestFlight's public group after Apple's review of its build, which can take
+  a day; a preview reaches the internal group minutes after its push.
+- Each TestFlight build expires 90 days after its upload: a project without a release in 90 days
+  leaves owners on TestFlight with an app that does not open until the next one.
+- Signing and upload have no automated test: they are verified on the maintainer's Mac with the
+  real key, then by the first push to `next`. The distribution script and the build numbers are
+  tested on their own.
