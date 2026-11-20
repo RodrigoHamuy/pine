@@ -44,6 +44,34 @@ android {
     }
 }
 
+// The authority a debug build trusts besides the system's, for the smoke run alone: its meeting
+// service is https on this computer, with a certificate of the run's own (scripts/smoke.mjs passes
+// -PpineSmokeAuthority=<its CA, PEM>). Written as the raw resource that src/debug's network security
+// config names under debug-overrides, which Android applies to a debuggable app only; a release
+// build has neither. Without the property it is smoke-authority-nobody.pem, an authority whose
+// private key was thrown away when it was made: a debug build then trusts the system's alone.
+abstract class SmokeAuthority extends DefaultTask {
+    @InputFile abstract RegularFileProperty getAuthority()
+    @OutputDirectory abstract DirectoryProperty getOutputDir()
+
+    @TaskAction
+    void write() {
+        def raw = outputDir.get().dir("raw").asFile
+        raw.mkdirs()
+        new File(raw, "smoke_authority.pem").bytes = authority.get().asFile.bytes
+    }
+}
+
+def smokeAuthority = tasks.register("smokeAuthority", SmokeAuthority) {
+    authority = file(project.findProperty("pineSmokeAuthority") ?: "smoke-authority-nobody.pem")
+}
+
+androidComponents {
+    onVariants(selector().withBuildType("debug")) { variant ->
+        variant.sources.res.addGeneratedSourceDirectory(smokeAuthority, SmokeAuthority::getOutputDir)
+    }
+}
+
 kotlin {
     compilerOptions {
         // As Capacitor's Java (capacitor.build.gradle): 21.

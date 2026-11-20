@@ -374,7 +374,7 @@ class Pines(
 
 	private fun nobody(): JSONObject = JSONObject().put("status", "error").put("kind", "ssh").put(
 		"message",
-		if (hosts.isEmpty()) "Add the machine whose pine this phone is to use, as you would write it after ssh: user@host, or user@host:port. Put this phone's key into ~/.ssh/authorized_keys there first."
+		if (hosts.isEmpty()) "Pair this phone with your computer: in the Pine app there, go to Settings > Browser access, press Add a device, and open its link on this phone. Or add a machine as you would write it after ssh (user@host, or user@host:port), with this phone's key in ~/.ssh/authorized_keys there."
 		else "Choose the machine whose pine this phone is to use.",
 	)
 

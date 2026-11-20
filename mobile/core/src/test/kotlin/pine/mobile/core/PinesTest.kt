@@ -71,7 +71,10 @@ class PinesTest {
 	fun `with no machine the page is told to add one, and a machine not yet known asks the owner for its host key`() {
 		pines.ready()
 		assertEquals("error", page.status())
-		assertTrue(page.last!!.optString("message").contains("Add the machine"))
+		// Both ways to a pine: pairing with a computer by its link, and user@host over SSH.
+		val none = page.last!!.optString("message")
+		assertTrue(none.contains("Pair this phone with your computer"), none)
+		assertTrue(none.contains("user@host"), none)
 		assertTrue(!page.last!!.has("host"))
 		rig.known.forget("127.0.0.1", rig.machine.port)
 		pines.addHost(rig.host)
