@@ -25,6 +25,7 @@ import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
 import { Breakable, MachineList, Settings } from "./Settings.tsx";
+import { firstScreen, isPaired } from "./machines.ts";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
 import { PickDialog } from "./PickDialog.tsx";
@@ -74,7 +75,9 @@ export function Gate() {
 		</div>
 	);
 	type Screen = [React.ReactNode, React.ReactNode, React.ReactNode];
-	const named = host ? <span className="font-mono"><Breakable host={host} /></span> : null;
+	// A machine by the name the owner sees: a paired Mac by its computer's name, never its id; user@host as written, in mono.
+	const paired = host ? isPaired(host) : false;
+	const named = host ? paired || s.prefs.names?.[host] ? <span>{s.nameOf(host)}</span> : <span className="font-mono"><Breakable host={host} /></span> : null;
 	// Reaching another machine's pine and loading its agents are one wait: one screen, only what it says changes.
 	const connecting = (about: string): Screen => [
 		<>Connecting to {named}</>,
@@ -84,10 +87,21 @@ export function Gate() {
 			{machines}
 		</div>,
 	];
-	const [title, about, actions]: Screen =
-		state.status === "starting"
+	// A pairing link being paired with (the web client's): the four digits the Mac shows too, once it showed them.
+	const pairing = firstScreen(state);
+	const pairFirst = state.status === "error" && state.kind === "ssh" && !host && !s.pairFailed && !s.canAddHost && !s.prefs.hosts.length;
+	const [title, about, actions]: Screen = pairing
+		? [
+				pairing.title,
+				pairing.about,
+				<div key="p" className="flex w-full flex-col items-center gap-4">
+					{pairing.code ? <span className="font-mono text-4xl font-semibold tracking-widest select-text" data-slot="pairing-code">{pairing.code}</span> : null}
+					<Pulse label="Loading" />
+				</div>,
+			]
+		: state.status === "starting"
 			? host
-				? connecting("Reaching its pine over SSH, or starting one there…")
+				? connecting(paired ? "Reaching your Mac directly, then its pine…" : "Reaching its pine over SSH, or starting one there…")
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Pulse label="Loading" key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
@@ -103,8 +117,9 @@ export function Gate() {
 					]
 				: state.status === "error"
 					? [
-							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? <>{named} is not reached over SSH</> : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
-							state.message,
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? paired ? <>{named} is not reached</> : <>{named} is not reached over SSH</> : s.pairFailed ? "The pairing did not go through" : pairFirst ? "Pair this browser with your Mac" : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
+							// Nothing paired yet where only a paired Mac can be used: the list's three lines say how, once.
+							pairFirst ? "" : state.message,
 							<div key="b" className="flex w-full flex-col items-center gap-4">
 								{/* A host key met for the first time: its fingerprint, and the owner's yes to exactly that one. */}
 								{key ? <span className="font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</span> : null}
@@ -503,17 +518,19 @@ export function Machines() {
 	const state = s.service;
 	const here = s.platform === "darwin" ? "This Mac" : "This computer";
 	const on = state.status === "ready" ? state.label : state.host;
+	// A paired Mac by its name, never its id.
+	const reached = state.host && s.nameOf(state.host);
 	const text =
 		state.status !== "ready"
-			? state.host
+			? reached
 				? state.status === "error"
-					? `${state.host} not reached`
-					: `connecting to ${state.host}`
+					? `${reached} not reached`
+					: `connecting to ${reached}`
 				: "starting"
 			: !s.connected
 				? "pine does not answer"
 				: `pine${state.version ? ` ${state.version}` : ""} · ${on ?? (state.started ? "started here" : "attached")}`;
-	const about = state.status === "ready" ? `${state.home} · ${state.host ? `over SSH (${state.host})` : state.started ? "started by this app" : "a pine that was already running"}` : "";
+	const about = state.status === "ready" ? `${state.home} · ${state.host ? (isPaired(state.host) ? "paired with this browser" : `over SSH (${state.host})`) : state.started ? "started by this app" : "a pine that was already running"}` : "";
 	return (
 		<SidebarMenuItem className="app-no-drag">
 			<DropdownMenu>
@@ -529,7 +546,7 @@ export function Machines() {
 						<DropdownMenuRadioGroup value={state.host ?? ""} onValueChange={(host: string) => void s.useMachine(host || undefined)}>
 							{s.local ? <DropdownMenuRadioItem value="" closeOnClick><LaptopIcon />{here}</DropdownMenuRadioItem> : null}
 							{s.prefs.hosts.map((host) => (
-								<DropdownMenuRadioItem key={host} value={host} closeOnClick data-host={host}><ServerIcon /><span className="truncate">{host}</span></DropdownMenuRadioItem>
+								<DropdownMenuRadioItem key={host} value={host} closeOnClick data-host={host}>{isPaired(host) ? <LaptopIcon /> : <ServerIcon />}<span className="truncate">{s.nameOf(host)}</span></DropdownMenuRadioItem>
 							))}
 						</DropdownMenuRadioGroup>
 					</DropdownMenuGroup>
@@ -756,6 +773,28 @@ function UpdateAsk() {
 }
 
 /**
+ * After the first pairing, where a web app on the home screen keeps this browser's key (machines.ts
+ * `homeScreenKeeps`): the suggestion to put it there. Made once; closing it closes it for good.
+ */
+function HomeScreenTip() {
+	const s = useModel(store);
+	const close = () => ((s.homeScreen = false), s.touch());
+	return (
+		<Dialog open onOpenChange={(open) => open || close()}>
+			<DialogContent showCloseButton={false} className="sm:max-w-lg" data-slot="home-screen-tip">
+				<DialogHeader>
+					<DialogTitle>Add Pine to your home screen</DialogTitle>
+				</DialogHeader>
+				<p className="text-muted-foreground select-text">In your browser's menu, choose Add to Home screen. Pine then opens like an app and connects to your Mac by itself: it keeps this browser's key, so there is nothing to pair again.</p>
+				<DialogFooter>
+					<Button onClick={close}>Got it</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+/**
  * The browser the web tools drive is not on this Mac in the build this pine needs: asked at the
  * start, once for a version of pine. Settings > App offers the same at any time. While it is
  * fetched, the dialog stays.
@@ -859,6 +898,7 @@ export function App() {
 			)}
 			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.updateAsk ? <UpdateAsk /> : null}
+			{s.homeScreen ? <HomeScreenTip /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
 			{s.publishing ? <PublishDialog /> : null}
 			{s.palette ? <Palette /> : null}

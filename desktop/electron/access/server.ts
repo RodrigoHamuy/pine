@@ -51,9 +51,10 @@ export interface Admission {
 /**
  * The one decision: may this key, under this user name, authenticate, and as what. It is asked
  * once per connection, after the client proved it holds the key, so that a single-use secret in
- * the user name (pairing) can be consumed there. Undefined refuses.
+ * the user name (pairing) can be consumed there. Undefined refuses; false refuses and closes the
+ * connection, so that a client gets one guess at a secret per connection.
  */
-export type Admit = (user: string, key: Key) => Admission | undefined | Promise<Admission | undefined>;
+export type Admit = (user: string, key: Key) => Admission | undefined | false | Promise<Admission | undefined | false>;
 
 /** Paired devices: user `pine` and a key on the store's list. */
 export const pairedKeys =
@@ -99,6 +100,8 @@ interface Live {
 	client?: Connection;
 	admission?: Admission;
 	tag?: unknown;
+	/** The decision said no and close: nothing more is asked on this connection. */
+	shut?: boolean;
 }
 
 /** Where the daemon answers, taken from its service line, and the line as it is passed on. */
@@ -160,11 +163,18 @@ export function createAccessServer(options: AccessServerOptions): AccessServer {
 			// Without a signature the client only asks whether the key would do: say yes, and it signs.
 			if (!ctx.signature || !ctx.blob) return ctx.accept();
 			if (key.verify(ctx.blob, ctx.signature, ctx.hashAlgo) !== true) return ctx.reject(["publickey"]);
+			// A connection that was refused for good asks nothing more, even what it sent before it heard.
+			if (entry.shut) return ctx.reject(["publickey"]);
 			const proved = { algo: ED25519, data: Buffer.from(ctx.key.data) };
 			Promise.resolve()
 				.then(() => options.admit(ctx.username, proved))
 				.then(
 					(admission) => {
+						if (admission === false) {
+							entry.shut = true;
+							ctx.reject(["publickey"]);
+							return end(entry);
+						}
 						if (!admission || !live.has(entry)) return ctx.reject(["publickey"]);
 						entry.admission = admission;
 						ctx.accept();
