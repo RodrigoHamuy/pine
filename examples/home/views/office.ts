@@ -81,43 +81,43 @@ const TOOLS: Record<string, [Sign, string, string?]> = {
 	read: ["read", "reading a file", HUE.read],
 	grep: ["find", "searching files", HUE.read],
 	find: ["find", "looking for files", HUE.read],
-	ls: ["folder", "looking in a folder", HUE.read],
-	manual: ["read", "reading pine's manual", HUE.read],
+	ls: ["folder", "listing a folder", HUE.read],
+	manual: ["read", "reading the manual", HUE.read],
 	bash: ["term", "running a command"],
 	edit: ["write", "editing a file", HUE.write],
 	write: ["write", "writing a file", HUE.write],
-	download: ["down", "downloading", HUE.mcp],
-	todo: ["list", "planning its steps", HUE.think],
-	question: ["ask", "has a question", HUE.ask],
-	delegate: ["hand", "handing work on", HUE.hand],
-	subagent: ["copy", "starting copies", HUE.hand],
+	download: ["down", "downloading a file", HUE.mcp],
+	todo: ["list", "planning next steps", HUE.think],
+	question: ["ask", "asking a question", HUE.ask],
+	delegate: ["hand", "delegating a task", HUE.hand],
+	subagent: ["copy", "starting sub-agents", HUE.hand],
 	send: ["send", "sending a message", HUE.hand],
 	publish_event: ["send", "publishing an event", HUE.hand],
-	read_source: ["mail", "reading a source", HUE.read],
-	request_access: ["lock", "asking for access", HUE.ask],
+	read_source: ["mail", "reading from a source", HUE.read],
+	request_access: ["lock", "requesting access", HUE.ask],
 	stop_program: ["term", "stopping a program"],
 	state_get: ["eye", "reading shared state", HUE.read],
 	state_set: ["write", "writing shared state", HUE.write],
 	subscribe: ["mail", "subscribing to events", HUE.setup],
 	unsubscribe: ["mail", "unsubscribing", HUE.setup],
-	add_source: ["dish", "setting up a source", HUE.setup],
+	add_source: ["dish", "adding a source", HUE.setup],
 	remove_source: ["dish", "removing a source", HUE.setup],
-	add_schedule: ["clock", "setting a schedule", HUE.setup],
+	add_schedule: ["clock", "adding a schedule", HUE.setup],
 	remove_schedule: ["clock", "removing a schedule", HUE.setup],
 	add_mcp_server: ["plug", "adding an MCP server", HUE.setup],
 	remove_mcp_server: ["plug", "removing an MCP server", HUE.setup],
-	add_skill: ["star", "writing down a skill", HUE.skill],
+	add_skill: ["star", "adding a skill", HUE.skill],
 	remove_skill: ["star", "removing a skill", HUE.skill],
 	create_agent: ["heart", "creating an agent", HUE.setup],
-	update_agent: ["gear", "changing an agent", HUE.setup],
+	update_agent: ["gear", "updating an agent", HUE.setup],
 	rename_agent: ["gear", "renaming an agent", HUE.setup],
 	remove_agent: ["gear", "removing an agent", HUE.setup],
 	set_setting: ["gear", "changing a setting", HUE.setup],
 	add_route: ["gear", "adding a route", HUE.setup],
 	remove_route: ["gear", "removing a route", HUE.setup],
-	find_tools: ["find", "looking up a tool", HUE.read],
+	find_tools: ["find", "finding a tool", HUE.read],
 	read_conversation: ["read", "reading a conversation", HUE.read],
-	set_conversation: ["gear", "changing a conversation", HUE.setup],
+	set_conversation: ["gear", "updating a conversation", HUE.setup],
 	sources: ["list", "listing sources", HUE.read],
 	schedules: ["list", "listing schedules", HUE.read],
 	mcp_servers: ["list", "listing MCP servers", HUE.read],
@@ -126,7 +126,7 @@ const TOOLS: Record<string, [Sign, string, string?]> = {
 	settings: ["list", "listing settings", HUE.read],
 	conversations: ["list", "listing conversations", HUE.read],
 	models: ["list", "listing models", HUE.read],
-	pine_list: ["list", "looking up what it has", HUE.read],
+	pine_list: ["list", "checking its setup", HUE.read],
 };
 
 /** What a tool's name says it does, for a bubble and a tip. */
@@ -145,28 +145,28 @@ export function toolSay(tool: string | undefined, mcp?: string): { sign: Sign; t
 
 /** What a piece of work is doing, for its bubble: no words of its own, only what the state says. */
 export function sayOf(w: ViewWork, s: Now, now: number): Say {
-	const note = w.from.k === "agent" && !w.copy ? `for ${w.from.id}` : w.round ? `goal, round ${w.round}` : w.held && w.mode ? `held to ${w.mode}` : undefined;
+	const note = w.from.k === "agent" && !w.copy ? `for ${w.from.id}` : w.round ? `goal, round ${w.round}` : w.held && w.mode ? `limited to ${w.mode} mode` : undefined;
 	const more = { note, steps: w.steps };
-	if (w.asking) return { sign: "ask", text: "asks you!", color: HUE.ask, loud: true, ...more };
+	if (w.asking) return { sign: "ask", text: "needs your answer", color: HUE.ask, loud: true, ...more };
 	if (w.doing === "tool" && w.skill) return { sign: "star", text: `skill: ${w.skill}`.slice(0, 34), color: HUE.skill, ...more };
 	if (w.doing === "tool") return { ...toolSay(w.tool, w.mcp), ...more };
-	if (w.doing === "writing") return { sign: "write", text: "writing its answer", color: HUE.write, ...more };
+	if (w.doing === "writing") return { sign: "write", text: "writing an answer", color: HUE.write, ...more };
 	if (w.doing === "waiting") {
 		const on = w.waitingOn.map((id) => s.work.get(id)).filter((x): x is ViewWork => Boolean(x && !ended(x)));
 		const copies = on.filter((x) => x.copy).length;
 		const others = [...new Set(on.filter((x) => !x.copy).map((x) => x.agent))];
-		const who = [...others, ...(copies ? [copies === 1 ? "a copy" : `${copies} copies`] : [])];
-		return { sign: "wait", text: who.length ? `waits for ${who.join(", ")}`.slice(0, 36) : "waits", color: HUE.wait, ...more };
+		const who = [...others, ...(copies ? [copies === 1 ? "a sub-agent" : `${copies} sub-agents`] : [])];
+		return { sign: "wait", text: who.length ? `waiting for ${who.join(", ")}`.slice(0, 38) : "waiting", color: HUE.wait, ...more };
 	}
 	return { sign: "think", text: `thinking${".".repeat(1 + (Math.floor(now / 400) % 3))}`, color: HUE.think, ...more };
 }
 
 /** The same in plain words, for a tip and for the words a screen reader reads. */
 export function doingOf(w: ViewWork): string {
-	if (w.asking) return "asks you";
-	if (w.doing === "tool") return w.skill ? `reads the skill ${w.skill}` : toolSay(w.tool, w.mcp).text;
-	if (w.doing === "waiting") return "waits for others";
-	if (w.doing === "writing") return "writes its answer";
+	if (w.asking) return "needs your answer";
+	if (w.doing === "tool") return w.skill ? `reading the skill ${w.skill}` : toolSay(w.tool, w.mcp).text;
+	if (w.doing === "waiting") return "waiting for others";
+	if (w.doing === "writing") return "writing an answer";
 	return w.doing;
 }
 
@@ -2185,13 +2185,13 @@ export class Office {
 			case "branched": {
 				this.hotAt.set(`board:${h.agent}`, now);
 				const r = this.rooms.get(h.agent);
-				if (r) say({ x: r.board.x + 11, y: r.board.y - 2 }, h.worktree ? "a branch in a worktree" : "a new branch", "branch", "#2fa868"), this.pops.push({ x: r.board.x + 11, y: r.board.y + 7, at: now, color: "#7ee0a0", kind: "spark" });
+				if (r) say({ x: r.board.x + 11, y: r.board.y - 2 }, h.worktree ? "new branch in a worktree" : "new branch", "branch", "#2fa868"), this.pops.push({ x: r.board.x + 11, y: r.board.y + 7, at: now, color: "#7ee0a0", kind: "spark" });
 				break;
 			}
 			case "worktree": {
 				this.hotAt.set(`board:${h.agent}`, now);
 				const r = this.rooms.get(h.agent);
-				if (r) say({ x: r.board.x + 11, y: r.board.y - 2 }, h.made ? "a worktree" : "worktree gone", "leaf", "#2fa868");
+				if (r) say({ x: r.board.x + 11, y: r.board.y - 2 }, h.made ? "new worktree" : "worktree removed", "leaf", "#2fa868");
 				break;
 			}
 			case "goal": {
@@ -3587,26 +3587,26 @@ const STYLE = `
 
 /** What the signs and the things in a room stand for: the key the ? shows. */
 const KEY: Array<[Sign, string, string]> = [
-	["shield", "safe: works in its sandbox", "#3b8fd8"],
+	["shield", "safe: runs in a sandbox", "#3b8fd8"],
 	["lock", "manual: asks before each step", "#3b8fd8"],
-	["bolt", "auto: your account, no sandbox", "#d9822b"],
-	["warn", "bypass: asks nothing", "#e5484d"],
-	["plan", "plan: looks, changes nothing", "#3b74e0"],
-	["think", "thinks: paces the room", HUE.think],
-	["read", "reads and searches: at the shelf", HUE.read],
-	["term", "runs a tool: at its desk", HUE.tool],
-	["plug", "MCP server: a slot of the rack", HUE.mcp],
+	["bolt", "auto: runs as you, no sandbox", "#d9822b"],
+	["warn", "bypass: never asks", "#e5484d"],
+	["plan", "plan: read-only", "#3b74e0"],
+	["think", "thinking: pacing the room", HUE.think],
+	["read", "reading or searching: at the shelf", HUE.read],
+	["term", "running a tool: at the desk", HUE.tool],
+	["plug", "MCP server: a slot in the rack", HUE.mcp],
 	["star", "skill: a starred book", HUE.skill],
-	["wait", "waits for others", HUE.wait],
-	["ask", "asks you: answer above", HUE.ask],
-	["hand", "hands work on: a winged letter", HUE.hand],
-	["copy", "a copy (sub-agent): a small robot", HUE.hand],
-	["mail", "an event: a capsule in the tube", "#3b8fd8"],
-	["clock", "a schedule: clocks, the turret", "#9b59c7"],
+	["wait", "waiting for others", HUE.wait],
+	["ask", "needs your answer: see above", HUE.ask],
+	["hand", "delegated task: a winged letter", HUE.hand],
+	["copy", "sub-agent: a small robot", HUE.hand],
+	["mail", "event: a capsule in the tube", "#3b8fd8"],
+	["clock", "schedule: clocks, the turret", "#9b59c7"],
 	["branch", "branches: forks on the board", "#8a6ad0"],
-	["leaf", "a worktree: a leaf on a fork", "#2fa868"],
-	["flag", "a goal: a flag on the desk", "#e5484d"],
-	["send", "sent out: up to the dish", HUE.hand],
+	["leaf", "worktree: a leaf on a fork", "#2fa868"],
+	["flag", "goal: a flag on the desk", "#e5484d"],
+	["send", "outgoing message: up to the dish", HUE.hand],
 	["warn", "amber lamp: read outside content", "#d9822b"],
 ];
 
@@ -3641,7 +3641,7 @@ export default defineView((host: ViewHost) => {
 	style.textContent = STYLE;
 	const canvas = document.createElement("canvas");
 	canvas.className = "office-canvas";
-	canvas.setAttribute("aria-label", "The house: a room for each agent, its robot at work");
+	canvas.setAttribute("aria-label", "A house with a room for each agent, and a robot at work in each");
 	const bar = document.createElement("div");
 	bar.className = "office-bar";
 	const button = (title: string, paint: () => void) => {
@@ -3655,13 +3655,13 @@ export default defineView((host: ViewHost) => {
 		b.append(c);
 		return b;
 	};
-	const followButton = button("Follow what happens: the camera goes where agents work. Scroll, drag or pinch to look yourself", () => sign("eye", 0, 0, INK));
-	const allButton = button("Show all of it", () => {
+	const followButton = button("Follow activity: the camera moves to where agents are working. Scroll, drag or pinch to look around yourself", () => sign("eye", 0, 0, INK));
+	const allButton = button("Show everything", () => {
 		for (const [x, y] of [[0, 0], [6, 0], [0, 6], [6, 6]]) R(x, y, 3, 3, INK);
 		R(1, 1, 7, 7, PAPER);
 		R(3, 3, 3, 3, INK);
 	});
-	const keyButton = button("What is what: the key to the signs and the things in a room", () => write("?", 2, 1, INK));
+	const keyButton = button("Legend: what the signs and the things in a room mean", () => write("?", 2, 1, INK));
 	bar.append(followButton, allButton, keyButton);
 	// What the drawing shows, in words: for a screen reader, and for whoever cannot tell the pixels apart.
 	const words = document.createElement("ul");
@@ -3764,13 +3764,13 @@ export default defineView((host: ViewHost) => {
 				const li = document.createElement("li");
 				li.dataset.agent = a.id;
 				const mine = s.running.filter((w) => w.agent === a.id);
-				const has = [a.mcp.length ? `MCP servers ${a.mcp.join(", ")}` : "", a.skills.length ? `skills ${a.skills.join(", ")}` : "", a.schedules.length ? `schedules ${a.schedules.join(", ")}` : "", a.conversations?.length > 1 ? `${a.conversations.length} conversations, ${a.conversations.filter((c) => c.branchOf !== undefined).length} of them branches` : ""].filter(Boolean).join("; ");
-				li.textContent = `${a.id}, ${a.mode} mode${a.main ? ", the main agent, under the roof" : ""}: ${mine.length ? `${mine.length} at work` : "at rest"}${has ? `. It has ${has}` : ""}`;
+				const has = [a.mcp.length ? `MCP servers: ${a.mcp.join(", ")}` : "", a.skills.length ? `skills: ${a.skills.join(", ")}` : "", a.schedules.length ? `schedules: ${a.schedules.join(", ")}` : "", a.conversations?.length > 1 ? `${a.conversations.length} conversations, ${a.conversations.filter((c) => c.branchOf !== undefined).length} of them branches` : ""].filter(Boolean).join("; ");
+				li.textContent = `${a.id}, ${a.mode} mode${a.main ? ", the main agent, under the roof" : ""}: ${mine.length ? `${mine.length} task${mine.length === 1 ? "" : "s"} running` : "idle"}${has ? `. ${has}` : ""}`;
 				const ul = document.createElement("ul");
 				for (const w of mine) {
 					const item = document.createElement("li");
 					item.dataset.work = String(w.id);
-					item.textContent = `${w.copy ? "a copy, " : ""}from ${w.from.k === "agent" ? w.from.id : w.from.k === "source" ? w.from.name : w.from.k}, ${doingOf(w)}${w.steps ? `, step ${w.steps.done} of ${w.steps.total}` : ""}${w.branch ? ", in a branch" : ""}${w.worktree ? ", in a worktree" : ""}${w.held && w.mode ? `, held to ${w.mode} mode` : ""}${w.outside ? ", read outside content" : ""}`;
+					item.textContent = `${w.copy ? "sub-agent, " : ""}from ${w.from.k === "agent" ? w.from.id : w.from.k === "source" ? w.from.name : w.from.k}, ${doingOf(w)}${w.steps ? `, step ${w.steps.done} of ${w.steps.total}` : ""}${w.branch ? ", in a branch" : ""}${w.worktree ? ", in a worktree" : ""}${w.held && w.mode ? `, limited to ${w.mode} mode` : ""}${w.outside ? ", read outside content" : ""}`;
 					ul.append(item);
 				}
 				li.append(ul);
@@ -3788,24 +3788,24 @@ export default defineView((host: ViewHost) => {
 		if (hover.k === "work") {
 			const w = s.work.get(hover.id);
 			if (!w) return [];
-			const more = [w.from.k === "agent" ? `for ${w.from.id}` : w.from.k === "source" ? `woken by ${w.from.name}` : w.from.k === "clock" ? `woken by ${w.from.name ?? "a schedule"}` : w.from.k === "you" ? "for you" : "", w.steps ? `step ${w.steps.done} of ${w.steps.total}` : "", w.round ? `goal, round ${w.round}` : "", w.branch ? "in a branch" : "", w.worktree ? "in a worktree" : "", w.held && w.mode ? `held to ${w.mode} mode` : "", w.outside ? "read outside content" : "", `${Math.max(0, Math.round((now - w.started) / 1000))}s`, w.tools ? `${w.tools} tool call${w.tools === 1 ? "" : "s"}` : ""].filter(Boolean);
-			return [`${w.agent}${w.copy ? " (a copy)" : ""}: ${doingOf(w)}`, ...wrap(more.join(" · "), 190)];
+			const more = [w.from.k === "agent" ? `for ${w.from.id}` : w.from.k === "source" ? `triggered by ${w.from.name}` : w.from.k === "clock" ? `triggered by ${w.from.name ?? "a schedule"}` : w.from.k === "you" ? "for you" : "", w.steps ? `step ${w.steps.done} of ${w.steps.total}` : "", w.round ? `goal, round ${w.round}` : "", w.branch ? "in a branch" : "", w.worktree ? "in a worktree" : "", w.held && w.mode ? `limited to ${w.mode} mode` : "", w.outside ? "read outside content" : "", `${Math.max(0, Math.round((now - w.started) / 1000))}s`, w.tools ? `${w.tools} tool call${w.tools === 1 ? "" : "s"}` : ""].filter(Boolean);
+			return [`${w.agent}${w.copy ? " (sub-agent)" : ""}: ${doingOf(w)}`, ...wrap(more.join(" · "), 190)];
 		}
 		if (hover.k === "port") {
 			const p = s.input.get(hover.id);
 			if (!p) return [];
-			if (p.kind === "you") return ["you: what you ask goes up the tube", "from here, and the answers come back"];
+			if (p.kind === "you") return ["you: your messages go up the tube,", "and the answers come back down"];
 			if (p.kind === "clock") {
 				const next = s.schedules.filter((x) => x.next !== undefined).slice(0, 3);
-				return [`the clock: ${s.schedules.length} schedule${s.schedules.length === 1 ? "" : "s"}`, ...next.map((x) => `${x.name}${x.agent ? ` wakes ${x.agent}` : ""} ${untilText(x.next! - now)}`)];
+				return [`${s.schedules.length} schedule${s.schedules.length === 1 ? "" : "s"}`, ...next.map((x) => `${x.name}${x.agent ? ` triggers ${x.agent}` : ""} ${untilText(x.next! - now)}`)];
 			}
-			return [`${p.name}${p.type ? ` (${p.type})` : ""}: ${p.count} event${p.count === 1 ? "" : "s"}${p.failing ? " · not running" : ""}`, ...(p.agents?.length ? wrap(`wakes ${p.agents.join(", ")}`, 190) : [])];
+			return [`${p.name}${p.type ? ` (${p.type})` : ""}: ${p.count} event${p.count === 1 ? "" : "s"}${p.failing ? " · not running" : ""}`, ...(p.agents?.length ? wrap(`triggers ${p.agents.join(", ")}`, 190) : [])];
 		}
 		const a = s.agent.get(hover.id);
 		if (!a) return [];
 		const list = (title: string, names: string[], none: string) => (names.length ? wrap(`${title}: ${names.join(", ")}`, 190) : [none]);
-		if (hover.part === "rack") return list("MCP servers", a.mcp, "the rack: no MCP servers yet");
-		if (hover.part === "shelf") return list("skills", a.skills, "the shelf: no skills yet");
+		if (hover.part === "rack") return list("MCP servers", a.mcp, "no MCP servers yet");
+		if (hover.part === "shelf") return list("skills", a.skills, "no skills yet");
 		if (hover.part === "clocks") return list("schedules", a.schedules.map((n) => {
 			const sc = s.schedules.find((x) => x.name === n && x.agent === a.id);
 			return sc?.next !== undefined ? `${n} (${untilText(sc.next - now)})` : n;
@@ -3815,10 +3815,10 @@ export default defineView((host: ViewHost) => {
 			const br = c.filter((x) => x.branchOf !== undefined).length;
 			const wt = c.filter((x) => x.worktree).length;
 			const goal = c.filter((x) => x.goal === "active").length;
-			return wrap(`the board: ${c.length} conversation${c.length === 1 ? "" : "s"}${br ? `, ${br} branch${br === 1 ? "" : "es"}` : ""}${wt ? `, ${wt} in a worktree` : ""}${goal ? `, ${goal} with a goal` : ""}`, 190);
+			return wrap(`${c.length} conversation${c.length === 1 ? "" : "s"}${br ? `, ${br} branch${br === 1 ? "" : "es"}` : ""}${wt ? `, ${wt} in a worktree` : ""}${goal ? `, ${goal} with a goal` : ""}`, 190);
 		}
 		const mine = s.running.filter((x) => x.agent === a.id).length;
-		return [`${a.id} · ${a.mode} mode${a.main ? " · the main agent" : ""}`, mine ? `${mine} at work` : "at rest", ...(a.sources.length ? wrap(`listens to ${a.sources.join(", ")}`, 190) : [])];
+		return [`${a.id} · ${a.mode} mode${a.main ? " · the main agent" : ""}`, mine ? `${mine} task${mine === 1 ? "" : "s"} running` : "idle", ...(a.sources.length ? wrap(`listens to ${a.sources.join(", ")}`, 190) : [])];
 	};
 
 	let id = 0;
@@ -4006,13 +4006,13 @@ export default defineView((host: ViewHost) => {
 		const time = clock();
 		const asks = s.running.filter((j) => j.asking).length;
 		const atWork = new Set(s.running.map((j) => j.agent)).size;
-		const hud = `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}  ${atWork ? `${atWork} at work` : "all at rest"}`;
+		const hud = `${String(time.getHours()).padStart(2, "0")}:${String(time.getMinutes()).padStart(2, "0")}  ${atWork ? `${atWork} working` : "all idle"}`;
 		const hw = widthOf(hud) + 8;
 		slab(3, 3, hw + 2, 13, INK, 3);
 		slab(4, 4, hw, 11, back, 2);
 		write(hud, 8, 6, fore);
 		if (asks) {
-			const at = `${asks} ask${asks === 1 ? "s" : ""} you`;
+			const at = `${asks} waiting for you`;
 			const aw = widthOf(at) + 18;
 			const hop = Math.floor(now / 300) % 2;
 			slab(hw + 8, 3 - hop, aw + 2, 13, INK, 3);

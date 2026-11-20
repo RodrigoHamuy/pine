@@ -1,28 +1,43 @@
-// overview: all of pine on one page, in words. A view for the panel of the Pine app
+// overview: all of pine on one board, in words. A view for the panel of the Pine app
 // (docs/references/views.md); it draws what "pine/view" tells it and nothing else.
 //
-// Nothing here has to be learned first. There are three columns of boxes, and every box says in words what it is:
+// Nothing here has to be learned first. There are three columns, and everything in them says in words what it is:
 //
-//   on the left         what wakes agents: you, every event source ("inbox, wakes books"), every schedule
-//                       ("lights, wakes home, in 20 s")
-//   in the middle       the agents. Under its name each says what it does right now, as a sentence: "searches the
-//                       web, for main", "waits for scout", "asks you", "resting". Its copies (sub-agents) are
-//                       lines of their own in its box
-//   on the right        what agents use: every MCP server, every skill
+//   Triggers            what starts an agent's work: you, every event source ("inbox, triggers books"), every
+//                       schedule ("lights, triggers home, in 20 s"), every webhook
+//   Agents              every agent, those that work on top and the idle ones below them. Under its name what
+//                       it is doing right now, as a person would say it:
+//                       "Running a command", "Waiting for scout", "Needs your answer", "Idle"; under that why
+//                       ("for you", "delegated by main", "triggered by inbox") and how far ("step 2 of 5").
+//                       Each of its sub-agents is a line of its own under it, one that a sub-agent started
+//                       standing in under that one
+//   Tools               what agents use: every MCP server, every skill
 //
-// A line joins two boxes only while something happens between them, in the color of the agent it happens to: from
-// what woke an agent to the agent, from an agent to what it uses, from an agent to the agent it handed a task to,
-// and in red from an agent to you while it waits for your answer. Dots run along a line the way things go. So what
-// is on the page at any moment reads as a sentence: you asked main, main asked scout, scout uses the web.
+// It is drawn the way a circuit board is, without pretending to be one: every box is a part with a border and pins,
+// an agent has a lamp in its own color (lit while it works, a ring while it is idle, red and blinking while it
+// waits for you), and the lines are traces that turn at 45 degrees. A trace joins two parts only while something
+// happens between them, in the color of the agent it happens to: from a trigger to the agent it started, from an
+// agent to the tool it is using, at the left of the agents from one to the agent it delegated a task to, and in
+// red from an agent to you while it waits for your answer. When a delegated task ends, its answer goes back at the
+// right of the agents, from the one that did it to the one that asked, for a few seconds (red if it failed); and
+// what you asked for comes back to you the same way. A trace starts with a ring, ends with an arrowhead, and one
+// dot runs along it the way things go. Every trace has a lane of its own, so that no two run on top of each other.
+// What is on the board at any moment reads as a sentence: you asked main, main delegated to scout, scout is
+// using the web.
 //
-// Everything else is there when it is pointed at: the pointer over a box draws thin lines to all it is wired to
-// (an agent's sources, schedules, MCP servers and skills; for a source, who listens to it) and lets the rest fade.
-// A click on an agent opens its box: a line for each of its conversations, branches under what they were branched
-// from. A click also shows it under the view, a double click opens it.
+// The board is larger than the panel may be, and a camera looks at it. While the eye at the top right is pressed
+// it follows what happens: it keeps every part that something happens at in view, and moves there softly. Drag
+// the board, scroll, or pinch (or scroll with ctrl or cmd held) to look yourself; the eye, or a double click on
+// the empty board, follows again. The button beside it shows the whole board.
+//
+// Everything else is there when it is pointed at: the pointer over anything draws thin traces to all it is wired
+// to (an agent's sources, schedules, MCP servers and skills; for a source, who listens to it), the rest fades, and
+// the line on top says what it is. A click on an agent unfolds it: a line for each of its conversations, branches
+// under what they were branched from. A click also shows it under the view, a double click opens it.
 //
 // There is no timeline: what happened, in order, is what the panel lists under every view.
 
-import { defineView, mix, type ViewAgent, type ViewConversation, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
+import { defineView, ease, frame, mix, type Box as Rect, type Cam, type ViewAgent, type ViewConversation, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
 
 // ---- what is said ---------------------------------------------------------------------------------------------------------
 
@@ -30,24 +45,24 @@ const ENDED = ["done", "failed", "cancelled"];
 const ended = (w: ViewWork) => ENDED.includes(w.doing);
 
 /** What pine's everyday tools do, as somebody would say it. A tool that is not here is called by its name. */
-const SAY: Record<string, string> = {
-	bash: "runs a command",
-	read: "reads a file",
-	edit: "edits a file",
-	write: "writes a file",
-	grep: "searches files",
-	find: "looks for files",
-	ls: "looks into a folder",
-	manual: "reads pine's manual",
-	download: "downloads something",
-	todo: "plans its steps",
-	question: "has a question",
-	delegate: "hands work on",
-	subagent: "starts copies of itself",
-	send: "sends a message",
-	publish_event: "publishes an event",
-	read_source: "reads from a source",
-	request_access: "asks for access",
+const DOING: Record<string, string> = {
+	bash: "Running a command",
+	read: "Reading a file",
+	edit: "Editing a file",
+	write: "Writing a file",
+	grep: "Searching files",
+	find: "Finding files",
+	ls: "Listing a folder",
+	manual: "Reading the manual",
+	download: "Downloading a file",
+	todo: "Planning next steps",
+	question: "Asking a question",
+	delegate: "Delegating a task",
+	subagent: "Starting sub-agents",
+	send: "Sending a message",
+	publish_event: "Publishing an event",
+	read_source: "Reading from a source",
+	request_access: "Requesting access",
 };
 
 /** A tool's name without its server's: "mcp__web__web_search" of "web" is "search". */
@@ -56,37 +71,37 @@ const toolWord = (tool: string | undefined, mcp?: string) => {
 	if (!mcp) return t.replace(/_/g, " ") || "a tool";
 	return t.replace(/^mcp__[^_]+(?:_[^_]+)*?__/, "").replace(new RegExp(`^${mcp}_`), "").replace(/_/g, " ") || "a tool";
 };
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** What a piece of work does right now, as a sentence without its subject. */
+/** What a piece of work is doing right now, as a person would put it. */
 export function sentenceOf(w: ViewWork, s: ViewState): string {
-	if (w.asking) return "asks you";
-	if (w.doing === "done") return "is done";
-	if (w.doing === "failed") return "failed";
-	if (w.doing === "cancelled") return "was stopped";
+	if (w.asking) return "Needs your answer";
+	if (w.doing === "done") return "Done";
+	if (w.doing === "failed") return "Failed";
+	if (w.doing === "cancelled") return "Stopped";
 	if (w.doing === "tool") {
-		if (w.skill) return `reads its skill ${w.skill}`;
-		if (w.mcp) return `uses ${w.mcp}: ${toolWord(w.tool, w.mcp)}`;
-		return SAY[w.tool ?? ""] ?? `uses ${toolWord(w.tool)}`;
+		if (w.skill) return `Reading skill: ${w.skill}`;
+		if (w.mcp) return `Using ${w.mcp}: ${toolWord(w.tool, w.mcp)}`;
+		return DOING[w.tool ?? ""] ?? `Using ${toolWord(w.tool)}`;
 	}
-	if (w.doing === "writing") return "writes its answer";
+	if (w.doing === "writing") return "Writing an answer";
 	if (w.doing === "waiting") {
 		const on = w.waitingOn.map((id) => s.work.find((x) => x.id === id)).filter((x): x is ViewWork => Boolean(x && !ended(x)));
-		const copies = on.filter((x) => x.copy).length;
-		const who = [...new Set(on.filter((x) => !x.copy).map((x) => x.agent)), ...(copies ? [copies === 1 ? "its copy" : `its ${copies} copies`] : [])];
-		return who.length ? `waits for ${who.join(" and ")}` : "waits";
+		const subs = on.filter((x) => x.copy).length;
+		const who = [...new Set(on.filter((x) => !x.copy).map((x) => x.agent)), ...(subs ? [plural(subs, "sub-agent")] : [])];
+		return who.length ? `Waiting for ${who.join(" and ")}` : "Waiting";
 	}
-	return "thinks";
+	return "Thinking";
 }
 
-/** Why a piece of work runs, in a few words: who it is for, or what woke the agent. */
+/** Why a piece of work runs, in a few words: who it is for, or what triggered it. */
 export function causeOf(w: ViewWork): string {
 	const f = w.from;
-	return f.k === "you" ? "for you" : f.k === "clock" ? `on schedule${f.name ? ` ${f.name}` : ""}` : f.k === "source" ? `woken by ${f.name}` : f.k === "outside" ? `woken by ${f.name}` : f.k === "agent" ? `for ${f.id}` : "";
+	return f.k === "you" ? "for you" : f.k === "clock" ? `triggered by ${f.name ?? "a schedule"}` : f.k === "source" || f.k === "outside" ? `triggered by ${f.name}` : f.k === "agent" ? `delegated by ${f.id}` : "";
 }
 
 const span = (ms: number) => (ms < 1500 ? "now" : ms < 90_000 ? `${Math.round(ms / 1000)} s` : ms < 5_400_000 ? `${Math.round(ms / 60_000)} min` : ms < 129_600_000 ? `${Math.round(ms / 3_600_000)} h` : `${Math.round(ms / 86_400_000)} d`);
-const listOf = (names: string[], max = 3) => (names.length <= max ? names.join(", ") : `${names.slice(0, max - 1).join(", ")} and ${names.length - max + 1} more`);
-
+const listOf = (names: string[], max = 3) => (names.length <= max ? names.join(", ") : `${names.slice(0, max - 1).join(", ")} +${names.length - max + 1}`);
 // ---- what just happened, for a moment -------------------------------------------------------------------------------------
 
 /** What the state does not say: that something came in just now, that an agent just sent something out. It fades. */
@@ -115,22 +130,26 @@ export class Recent {
 				this.hot.set(`skill:${h.skill}`, at);
 				break;
 			case "sent":
-				note(h.agent, "sent something out");
+				note(h.agent, "Sent a message");
 				break;
 			case "branched":
-				note(h.agent, h.worktree ? "made a branch, in a worktree" : "made a branch");
+				note(h.agent, h.worktree ? "New branch in a worktree" : "New branch");
 				break;
 			case "goal":
-				note(h.agent, h.status === "met" ? "reached its goal" : `its goal is ${h.status}`);
+				note(h.agent, h.status === "met" ? "Goal reached" : `Goal ${h.status}`);
 				break;
 			case "outside":
-				note(h.agent, "read content from outside");
+				note(h.agent, "Read outside content");
 				break;
 			case "decided":
-				note(h.agent, h.allowed ? "you said yes" : "you said no");
+				note(h.agent, h.allowed ? "You approved" : "You declined");
 				break;
 			case "ended":
-				note(h.agent, h.failed ? "a piece of work failed" : "finished a piece of work");
+				note(h.agent, h.failed ? "Task failed" : "Task finished");
+				break;
+			case "answered":
+				note(h.from, `Answered ${h.to}`);
+				note(h.to, `Answer from ${h.from}`);
 				break;
 			default:
 				break;
@@ -146,7 +165,7 @@ export interface Box {
 	id: string;
 	col: 0 | 1 | 2;
 	kind: "you" | "source" | "outside" | "sched" | "agent" | "mcp" | "skill";
-	/** Its place in its column: `y` counts from the column's top, which scrolls. */
+	/** Its place on the board. */
 	x: number;
 	y: number;
 	w: number;
@@ -156,21 +175,19 @@ export interface Box {
 	sub?: string;
 	right?: string;
 	/** For an agent: the lines under its name. The first is what it does. */
-	lines?: Array<{ text: string; tone: "now" | "ask" | "dim" | "note"; indent?: boolean }>;
+	lines?: Array<{ text: string; tone: "now" | "ask" | "sub" | "dim" | "note"; indent?: number }>;
 	agent?: ViewAgent;
 	bad?: boolean;
 	busy?: boolean;
 }
 export interface Layout {
+	/** The size of the board: everything on it lies between 0 and these. It does not depend on the panel's size. */
 	w: number;
 	h: number;
-	top: number;
-	cols: Array<{ x: number; w: number; tall: number; title: string }>;
+	cols: Array<{ x: number; w: number; title: string }>;
 	heads: Array<{ col: number; y: number; text: string }>;
 	boxes: Box[];
 	byId: Map<string, Box>;
-	/** How far the page can be scrolled: the tallest column decides, and the others follow at their own pace. */
-	reach: number;
 }
 /** A line between two boxes: something that happens now (`live`), or wiring that is shown for what the pointer is over. */
 export interface Link {
@@ -178,32 +195,37 @@ export interface Link {
 	to: string;
 	color: string;
 	live: boolean;
-	/** A task handed from an agent to an agent: it runs down the side of the middle column. */
+	/** A task delegated from an agent to an agent: it runs beside the agents, at their left. */
 	side?: boolean;
+	/** The answer to a delegated task, on its way back: it runs beside the agents at their right. */
+	back?: boolean;
 }
 
-const TOP = 34;
-const HEAD = 22;
-const PAD = 10;
+/** How long an answer is shown on its way back, once the work is over. */
+const ANSWER_MS = 3500;
+
+/** The board's measures: a narrow column at each side, the agents between them, and a gap for the lines. */
+const SIDE = 116;
+const MID = 236;
+const GAP = 52;
+/** The room on top of a column for what it is called. */
+const TITLE = 26;
+/** How far a pin stands out of its box: a line ends at a pin's tip. */
+export const PIN = 4;
 const ASK = "#ff5d73";
 
-/** Everything on the page for a panel of this size. `open` are the agents whose boxes are unfolded. */
-export function layoutOf(s: ViewState, size: { w: number; h: number }, open: Set<string>, now: number, recent?: Recent): Layout {
-	const W = Math.max(300, size.w);
-	const gap = Math.max(18, Math.min(84, Math.round(W * 0.075)));
-	const side = Math.max(70, Math.min(210, Math.round((W - 2 * PAD - 2 * gap) * 0.25)));
-	const mid = Math.min(480, W - 2 * PAD - 2 * gap - 2 * side);
-	const x0 = Math.round((W - (2 * side + 2 * gap + mid)) / 2);
+/** Everything on the board. `open` are the agents whose boxes are unfolded. */
+export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: Recent): Layout {
 	const cols = [
-		{ x: x0, w: side, tall: 0, title: "what wakes them" },
-		{ x: x0 + side + gap, w: mid, tall: 0, title: "agents" },
-		{ x: x0 + side + gap + mid + gap, w: side, tall: 0, title: "what they use" },
+		{ x: 0, w: SIDE, title: "Triggers" },
+		{ x: SIDE + GAP, w: MID, title: "Agents" },
+		{ x: SIDE + GAP + MID + GAP, w: SIDE, title: "Tools" },
 	];
 	const boxes: Box[] = [];
 	const heads: Layout["heads"] = [];
-	const y = [0, 0, 0];
+	const y = [TITLE, TITLE, TITLE];
 	const head = (col: number, text: string) => {
-		if (y[col]) y[col] += 6;
+		if (y[col] > TITLE) y[col] += 6;
 		heads.push({ col, y: y[col], text });
 		y[col] += 18;
 	};
@@ -214,43 +236,59 @@ export function layoutOf(s: ViewState, size: { w: number; h: number }, open: Set
 
 	// On the left: you, the event sources, the schedules, and any other way in.
 	const asks = s.work.filter((w) => !ended(w) && w.asking);
-	put(0, { id: "you", kind: "you", title: "you", sub: asks.length ? `${asks.length} question${asks.length === 1 ? "" : "s"} for you` : undefined, bad: asks.length > 0 }, asks.length ? 40 : 26);
+	put(0, { id: "you", kind: "you", title: "You", sub: asks.length ? `${plural(asks.length, "question")} for you` : undefined, bad: asks.length > 0 }, asks.length ? 40 : 26);
 	const sources = s.inputs.filter((i) => i.kind === "source").sort((a, b) => a.name.localeCompare(b.name));
-	if (sources.length) head(0, "events");
+	if (sources.length) head(0, "Events");
 	const listeners = (i: ViewInput) => [...new Set([...i.agents, ...s.agents.filter((a) => a.sources.includes(i.name)).map((a) => a.id)])];
 	for (const i of sources) {
 		const who = listeners(i);
-		put(0, { id: i.id, kind: "source", title: i.name, sub: i.failing ? "not running" : who.length ? `wakes ${listOf(who, 2)}` : (i.type ?? "nobody listens"), bad: i.failing }, 40);
+		put(0, { id: i.id, kind: "source", title: i.name, sub: i.failing ? "down" : who.length ? `triggers ${listOf(who, 2)}` : "no listeners", bad: i.failing }, 40);
 	}
 	const scheds: ViewSchedule[] = [];
 	for (const x of [...s.schedules].sort((a, b) => (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name))) if (!scheds.some((k) => k.name === x.name)) scheds.push(x);
-	if (scheds.length) head(0, "schedules");
-	for (const x of scheds) put(0, { id: `sched:${x.name}`, kind: "sched", title: x.name, right: x.next !== undefined && x.next > now - 1000 ? `in ${span(x.next - now)}` : undefined, sub: x.agent ? `wakes ${x.agent}` : "wakes all agents" }, 40);
+	if (scheds.length) head(0, "Schedules");
+	for (const x of scheds) put(0, { id: `sched:${x.name}`, kind: "sched", title: x.name, right: x.next !== undefined && x.next > now - 1000 ? `in ${span(x.next - now)}` : undefined, sub: x.agent ? `triggers ${x.agent}` : "triggers all agents" }, 40);
 	const others = s.inputs.filter((i) => i.kind === "outside");
-	if (others.length) head(0, "other ways in");
+	if (others.length) head(0, "Webhooks");
 	for (const i of others) put(0, { id: i.id, kind: "outside", title: i.name }, 26);
 
 	// In the middle: the agents, each with what it does as a sentence.
-	for (const a of s.agents) {
+	// Those that work stand on top, the idle ones below them, each group in pine's own order. One whose work has just
+	// ended keeps its place for as long as its answer is on its way back, so that the page does not jump twice.
+	const atWork = (a: ViewAgent) => s.work.some((w) => w.agent === a.id && (!ended(w) || (w.finished !== undefined && now >= w.finished && now - w.finished <= ANSWER_MS)));
+	for (const a of [...s.agents.filter(atWork), ...s.agents.filter((x) => !atWork(x))]) {
 		const mine = s.work.filter((w) => w.agent === a.id && !ended(w)).sort((p, q) => p.started - q.started);
 		const own = mine.filter((w) => !w.copy);
 		const copies = mine.filter((w) => w.copy);
 		const first = own.find((w) => w.asking) ?? own[0] ?? copies[0];
 		const lines: NonNullable<Box["lines"]> = [];
 		if (first) {
-			// What it does, and under it in smaller words why, and how far it is.
-			const more = [causeOf(first), first.steps ? `step ${first.steps.done} of ${first.steps.total}` : "", first.round ? `round ${first.round} of its goal` : "", first.branch ? "in a branch" : "", first.worktree ? "in a worktree" : ""].filter(Boolean).join(" · ");
+			// What it is doing, and under it in smaller words why, and then how far it is.
+			const why = causeOf(first);
+			const far = [first.steps ? `step ${first.steps.done} of ${first.steps.total}` : "", first.round ? `goal round ${first.round}` : ""].filter(Boolean).join(" · ");
+			const where = [first.branch ? "in a branch" : "", first.worktree ? "in a worktree" : ""].filter(Boolean).join(" · ");
 			lines.push({ text: sentenceOf(first, s), tone: first.asking ? "ask" : "now" });
-			if (more) lines.push({ text: more, tone: "dim" });
-			for (const w of own) if (w !== first) lines.push({ text: `and ${sentenceOf(w, s)}${causeOf(w) ? `, ${causeOf(w)}` : ""}`, tone: w.asking ? "ask" : "now" });
+			for (const text of [why, far, where]) if (text) lines.push({ text, tone: "dim" });
+			for (const w of own) if (w !== first) lines.push({ text: `${sentenceOf(w, s)}${causeOf(w) ? ` · ${causeOf(w)}` : ""}`, tone: w.asking ? "ask" : "now" });
 			const shown = first.copy ? copies.slice(1) : copies;
-			for (const c of shown.slice(0, 3)) lines.push({ text: `a copy ${sentenceOf(c, s)}`, tone: "now", indent: true });
-			if (shown.length > 3) lines.push({ text: `and ${shown.length - 3} more copies`, tone: "dim", indent: true });
-		} else lines.push({ text: "resting", tone: "dim" });
+			// Its sub-agents as a tree: one that a sub-agent started itself stands in under that one.
+			const ids = new Set(shown.map((c) => c.id));
+			const tree: Array<{ w: ViewWork; level: number }> = [];
+			const walk = (parent: number | undefined, level: number) => {
+				for (const c of shown) {
+					if ((c.parent !== undefined && ids.has(c.parent) ? c.parent : undefined) !== parent) continue;
+					tree.push({ w: c, level });
+					walk(c.id, Math.min(level + 1, 3));
+				}
+			};
+			walk(undefined, 1);
+			for (const t of tree.slice(0, 6)) lines.push({ text: `Sub-agent: ${sentenceOf(t.w, s).toLowerCase()}`, tone: t.w.asking ? "ask" : "sub", indent: t.level });
+			if (tree.length > 6) lines.push({ text: `+${plural(tree.length - 6, "more sub-agent")}`, tone: "dim", indent: 1 });
+		} else lines.push({ text: "Idle", tone: "dim" });
 		const said = recent?.notes.get(a.id);
 		if (said && now - said.at < 4000) lines.push({ text: said.text, tone: "note" });
-		if (open.has(a.id)) for (const [i, c] of a.conversations.entries()) lines.push({ text: convText(c, a, i), tone: "dim", indent: c.branchOf !== undefined });
-		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, lines, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, 28 + lines.length * 16 + 4);
+		if (open.has(a.id)) for (const [i, c] of a.conversations.entries()) lines.push({ text: convText(c, a, i), tone: "dim", indent: c.branchOf !== undefined ? 1 : undefined });
+		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, lines, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, 36 + lines.length * 17);
 	}
 
 	// On the right: the MCP servers and the skills, those that most agents have first.
@@ -263,29 +301,23 @@ export function layoutOf(s: ViewState, size: { w: number; h: number }, open: Set
 	const skills = ranked((a) => a.skills);
 	if (servers.length) head(2, "MCP servers");
 	for (const name of servers) put(2, { id: `mcp:${name}`, kind: "mcp", title: name }, 26);
-	if (skills.length) head(2, "skills");
+	if (skills.length) head(2, "Skills");
 	for (const name of skills) put(2, { id: `skill:${name}`, kind: "skill", title: name }, 26);
 
-	cols.forEach((c, i) => (c.tall = y[i]));
-	const room = size.h - TOP - HEAD - 8;
-	return { w: W, h: size.h, top: TOP + HEAD, cols, heads, boxes, byId: new Map(boxes.map((b) => [b.id, b])), reach: Math.max(0, Math.max(...y) - room) };
+	return { w: cols[2].x + cols[2].w, h: Math.max(...y) - 6, cols, heads, boxes, byId: new Map(boxes.map((b) => [b.id, b])) };
 }
 
 /** A conversation in words: never its name, which a view is not told. */
 function convText(c: ViewConversation, a: ViewAgent, i: number): string {
-	const what = c.main ? "its main conversation" : c.branchOf !== undefined ? `a branch of ${a.conversations.find((x) => x.id === c.branchOf)?.main ? "the main one" : "another"}` : `conversation ${i + 1}`;
-	return [what, c.busy ? "at work" : "", c.worktree ? "in a worktree" : "", c.goal ? `goal ${c.goal}` : "", c.outside ? "has read outside content" : ""].filter(Boolean).join(", ");
+	const what = c.main ? "Main conversation" : c.branchOf !== undefined ? `Branch of ${a.conversations.find((x) => x.id === c.branchOf)?.main ? "main" : "a conversation"}` : `Conversation ${i + 1}`;
+	return [what, c.busy ? "active" : "", c.worktree ? "in a worktree" : "", c.goal ? `goal ${c.goal}` : "", c.outside ? "read outside content" : ""].filter(Boolean).join(" · ");
 }
 
-/** How far a column has moved up when the page is scrolled by `scroll`: a short column moves less, so that all end together. */
-export function offsetOf(l: Layout, col: number, scroll: number): number {
-	const room = l.h - l.top - 8;
-	const longest = Math.max(...l.cols.map((c) => c.tall));
-	return longest <= room ? 0 : (scroll * Math.max(0, l.cols[col].tall - room)) / (longest - room);
-}
-
-/** What happens right now, as lines between boxes. */
-export function linksOf(s: ViewState, l: Layout): Link[] {
+/**
+ * What happens right now, as lines between boxes; and for a few seconds after a piece of work has ended, its
+ * answer on the way back to whoever asked for it: to the agent that delegated it, or to you.
+ */
+export function linksOf(s: ViewState, l: Layout, now: number = s.at): Link[] {
 	const out: Link[] = [];
 	const colorOf = (id: string) => s.agents.find((a) => a.id === id)?.color ?? "#8899aa";
 	const add = (link: Link) => {
@@ -307,6 +339,14 @@ export function linksOf(s: ViewState, l: Layout): Link[] {
 		}
 		if (w.doing === "tool" && w.skill) add({ from: me, to: `skill:${w.skill}`, color, live: true });
 		else if (w.doing === "tool" && w.mcp) add({ from: me, to: `mcp:${w.mcp}`, color, live: true });
+	}
+	for (const w of s.work) {
+		if (!ended(w) || w.copy || w.finished === undefined || now - w.finished > ANSWER_MS || now < w.finished) continue;
+		const me = `agent:${w.agent}`;
+		const color = w.doing === "failed" ? ASK : colorOf(w.agent);
+		const f = w.from;
+		if (f.k === "agent" && f.id !== w.agent) add({ from: me, to: `agent:${f.id}`, color, live: true, side: true, back: true });
+		else if (f.k === "you" && w.doing !== "cancelled") add({ from: me, to: "you", color, live: true });
 	}
 	return out;
 }
@@ -330,13 +370,9 @@ export function wiringOf(id: string | undefined, s: ViewState, l: Layout): Link[
 	return b.agent ? out : out.filter((k) => k.from === id || k.to === id);
 }
 
-/** The box under a point of the panel. */
-export function hitAt(l: Layout, p: { x: number; y: number }, scroll: number): Box | undefined {
-	if (p.y < l.top) return undefined;
-	return l.boxes.find((b) => {
-		const y = l.top + b.y - offsetOf(l, b.col, scroll);
-		return p.x >= b.x && p.x < b.x + b.w && p.y >= y && p.y < y + b.h;
-	});
+/** The box at a point of the board. */
+export function hitAt(l: Layout, p: { x: number; y: number }): Box | undefined {
+	return l.boxes.find((b) => p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h);
 }
 
 /** What a box is, in a few pieces of a sentence: what the line on top says while the pointer is over it. */
@@ -348,31 +384,66 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number): string[] {
 		const br = a.conversations.filter((c) => c.branchOf !== undefined).length;
 		const next = s.schedules.filter((x) => x.agent === a.id && x.next !== undefined && x.next > now).sort((p, q) => p.next! - q.next!)[0];
 		// What it is wired to, the lines on the page show; here is what they do not.
-		return [
-			`${a.id}${a.main ? ", the main agent" : ""}, works in ${a.mode} mode`,
-			`${a.conversations.length} conversation${a.conversations.length === 1 ? "" : "s"}${br ? `, ${br} of them ${br === 1 ? "a branch" : "branches"}` : ""}`,
-			next ? `${next.name} in ${span(next.next! - now)}` : "",
-			"click for its conversations, double click to open it",
-		].filter(Boolean);
+		return [`${a.id}${a.main ? " (main agent)" : ""}`, `${a.mode} mode`, `${plural(a.conversations.length, "conversation")}${br ? `, ${plural(br, "branch", "branches")}` : ""}`, next ? `${next.name} in ${span(next.next! - now)}` : "", "click to expand, double-click to open"].filter(Boolean);
 	}
-	if (b.kind === "you") return ["you: what you say starts an agent's work, and what an agent asks you waits here"];
+	if (b.kind === "you") return ["You", "your messages start an agent's work, and its questions wait here"];
 	if (b.kind === "source" || b.kind === "outside") {
 		const i = s.inputs.find((x) => x.id === b.id);
 		const listen = s.agents.filter((a) => i?.agents.includes(a.id) || a.sources.includes(b.title));
-		return [
-			`${b.title}: ${b.kind === "source" ? `an event source${i?.type ? ` (${i.type})` : ""}` : "a way in from outside"}`,
-			i?.failing ? "not running" : "",
-			listen.length ? `wakes ${who(listen).join(", ")}` : b.kind === "source" ? "nobody listens to it" : "",
-			i ? `${i.count} event${i.count === 1 ? "" : "s"} so far${i.last !== undefined ? `, the last ${span(now - i.last)} ago` : ""}` : "",
-		].filter(Boolean);
+		return [`${b.title}: ${b.kind === "source" ? `event source${i?.type ? ` (${i.type})` : ""}` : "webhook"}`, i?.failing ? "down" : "", listen.length ? `triggers ${who(listen).join(", ")}` : b.kind === "source" ? "no listeners" : "", i ? `${plural(i.count, "event")}${i.last !== undefined ? `, last ${span(now - i.last)} ago` : ""}` : ""].filter(Boolean);
 	}
 	if (b.kind === "sched") {
 		const x = s.schedules.find((k) => `sched:${k.name}` === b.id);
-		return [`${b.title}: a schedule`, x?.agent ? `wakes ${x.agent}` : "for all agents", x?.when ? `set to ${x.when}` : "", x?.next !== undefined && x.next > now ? `next in ${span(x.next - now)}` : ""].filter(Boolean);
+		return [`${b.title}: schedule`, x?.agent ? `triggers ${x.agent}` : "triggers all agents", x?.when ?? "", x?.next !== undefined && x.next > now ? `next in ${span(x.next - now)}` : ""].filter(Boolean);
 	}
 	const has = s.agents.filter((a) => (b.kind === "mcp" ? a.mcp : a.skills).includes(b.title));
 	const using = [...new Set(s.work.filter((w) => !ended(w) && w.doing === "tool" && (b.kind === "mcp" ? w.mcp : w.skill) === b.title).map((w) => w.agent))];
-	return [`${b.title}: ${b.kind === "mcp" ? "an MCP server" : "a skill"}`, `${who(has).join(", ")} ${has.length === 1 ? "has" : "have"} it`, using.length ? `${using.join(", ")} ${using.length === 1 ? "uses" : "use"} it right now` : ""].filter(Boolean);
+	return [`${b.title}: ${b.kind === "mcp" ? "MCP server" : "skill"}`, `available to ${who(has).join(", ")}`, using.length ? `in use by ${using.join(", ")}` : ""].filter(Boolean);
+}
+// ---- the camera ------------------------------------------------------------------------------------------------------------
+
+/** The room around the board that the camera may show, and the line on top of the panel, under which the board lies. */
+const MARGIN = 16;
+const BAR = 32;
+const Z_MAX = 1.4;
+type Size = { w: number; h: number };
+
+/** The board with the room around it: what the camera never leaves. */
+export const wholeOf = (l: Layout): Rect => ({ x: -MARGIN, y: -MARGIN, w: l.w + 2 * MARGIN, h: l.h + 2 * MARGIN });
+const roomOf = (view: Size): Size => ({ w: Math.max(1, view.w), h: Math.max(1, view.h - BAR) });
+
+/** A point of the panel as a point of the board. */
+export function toBoard(p: { x: number; y: number }, cam: Cam, view: Size): { x: number; y: number } {
+	return { x: (p.x - view.w / 2) / cam.z + cam.x, y: (p.y - BAR - (view.h - BAR) / 2) / cam.z + cam.y };
+}
+
+/** A board shorter than the panel hangs from its top, like a page: it does not float in the middle. */
+function hung(cam: Cam, l: Layout, view: Size): Cam {
+	const room = roomOf(view);
+	const whole = wholeOf(l);
+	return room.h / cam.z >= whole.h ? { ...cam, y: whole.y + room.h / cam.z / 2 } : cam;
+}
+
+/**
+ * Where the camera goes to show these boxes: the board as wide as the panel, and of its height the part they are
+ * in; further out only when they do not fit. With none, the top of the board.
+ */
+export function focusOf(l: Layout, ids: Iterable<string>, view: Size): Cam {
+	const boxes = [...ids].map((id) => l.byId.get(id)).filter((b): b is Box => b !== undefined);
+	const top = boxes.length ? Math.min(...boxes.map((b) => b.y)) - TITLE : 0;
+	const bottom = boxes.length ? Math.max(...boxes.map((b) => b.y + b.h)) : 1;
+	return hung(frame({ x: -MARGIN / 2, y: top, w: l.w + MARGIN, h: bottom - top }, roomOf(view), wholeOf(l), { zMax: Z_MAX, min: { w: l.w + MARGIN, h: 1 }, step: 0.01, zMin: 0.2 }), l, view);
+}
+
+/** Where the camera goes to show the whole board. */
+export function allOf(l: Layout, view: Size): Cam {
+	return hung(frame(wholeOf(l), roomOf(view), wholeOf(l), { zMax: Z_MAX, min: { w: l.w, h: 1 }, step: 0.01, zMin: 0.1 }), l, view);
+}
+
+/** A camera somebody moved by hand, kept where some of the board is still to be seen. */
+export function held(cam: Cam, l: Layout): Cam {
+	const whole = wholeOf(l);
+	return { x: Math.max(whole.x, Math.min(whole.x + whole.w, cam.x)), y: Math.max(whole.y, Math.min(whole.y + whole.h, cam.y)), z: Math.max(0.25, Math.min(3, cam.z)) };
 }
 
 // ---- drawing ---------------------------------------------------------------------------------------------------------------
@@ -380,14 +451,17 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number): string[] {
 type Ctx = CanvasRenderingContext2D;
 interface Theme {
 	bg: string;
-	box: string;
+	chip: string;
 	rule: string;
+	pin: string;
+	dot: string;
 	text: string;
 	dim: string;
 }
-const DARK: Theme = { bg: "#1b1e28", box: "#232634", rule: "#34384a", text: "#e4f0fb", dim: "#8d93b0" };
-const LIGHT: Theme = { bg: "#fbfaf7", box: "#ffffff", rule: "#dcd9d0", text: "#22242b", dim: "#6d7280" };
+const DARK: Theme = { bg: "#1b1e28", chip: "#232735", rule: "#3b4057", pin: "#565d7a", dot: "#31364a", text: "#e4f0fb", dim: "#8d93b0" };
+const LIGHT: Theme = { bg: "#fbfaf7", chip: "#ffffff", rule: "#d2cfc5", pin: "#b4b1a6", dot: "#dcd9cf", text: "#22242b", dim: "#6d7280" };
 const FONT = 'ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif';
+const MONO = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace';
 
 const WIDTHS = new Map<string, number>();
 function widthOf(g: Ctx, text: string): number {
@@ -418,60 +492,142 @@ function rounded(g: Ctx, x: number, y: number, w: number, h: number, r: number):
 	g.closePath();
 }
 
-/** The way of a line across the page, as points close enough together to draw it and to run a dot along it. */
-export function pathOf(link: Link, l: Layout, scroll: number, nth = 0): Array<[number, number]> | undefined {
-	const a = l.byId.get(link.from);
-	const b = l.byId.get(link.to);
-	if (!a || !b) return undefined;
-	const ya = l.top + a.y - offsetOf(l, a.col, scroll) + Math.min(a.h / 2, 14);
-	const yb = l.top + b.y - offsetOf(l, b.col, scroll) + Math.min(b.h / 2, 14);
-	const pts: Array<[number, number]> = [];
-	if (link.side || a.col === b.col) {
-		// From agent to agent: out of the giver's left side, down or up beside the column, into the taker's left side.
-		const x = a.x - 7 - (nth % 3) * 5;
-		const r = Math.min(6, Math.abs(yb - ya) / 2);
-		const dir = yb > ya ? 1 : -1;
-		pts.push([a.x, ya], [x + r, ya]);
-		for (let i = 1; i <= 4; i++) pts.push([x + r - Math.sin((i / 4) * (Math.PI / 2)) * r, ya + dir * (r - Math.cos((i / 4) * (Math.PI / 2)) * r)]);
-		pts.push([x, yb - dir * r]);
-		for (let i = 1; i <= 4; i++) pts.push([x + r - Math.cos((i / 4) * (Math.PI / 2)) * r, yb - dir * (r - Math.sin((i / 4) * (Math.PI / 2)) * r)]);
-		pts.push([b.x, yb]);
-		return pts;
+/** A path of straight pieces with each corner cut off at 45 degrees, the way a trace turns on a board. */
+function chamfer(pts: Array<[number, number]>, r: number): Array<[number, number]> {
+	const out: Array<[number, number]> = [pts[0]];
+	for (let i = 1; i < pts.length - 1; i++) {
+		const [px, py] = pts[i];
+		const [ax, ay] = pts[i - 1];
+		const [bx, by] = pts[i + 1];
+		const la = Math.hypot(ax - px, ay - py);
+		const lb = Math.hypot(bx - px, by - py);
+		const k = Math.min(r, la / 2, lb / 2);
+		if (k < 0.5) out.push([px, py]);
+		else out.push([px + ((ax - px) / la) * k, py + ((ay - py) / la) * k], [px + ((bx - px) / lb) * k, py + ((by - py) / lb) * k]);
 	}
-	// From one column to the next: out of one box's side, in a soft S, into the other's.
-	const leftToRight = a.col < b.col;
-	const xa = leftToRight ? a.x + a.w : a.x;
-	const xb = leftToRight ? b.x : b.x + b.w;
-	for (let i = 0; i <= 20; i++) {
-		const t = i / 20;
-		const k = t * t * (3 - 2 * t);
-		pts.push([xa + (xb - xa) * t, ya + (yb - ya) * k]);
+	out.push(pts[pts.length - 1]);
+	return out;
+}
+
+/** How far apart an agent's pins are, down each of its sides. */
+const PITCH = 8;
+/** Where `n` lines meet one side of a box: an agent's at its pins from the top down, anything else's around its one pin in the middle. */
+function pinsOf(b: Box, n: number): number[] {
+	if (b.kind === "agent") {
+		const pitch = n > 1 ? Math.min(PITCH, (b.h - 18) / (n - 1)) : 0;
+		return Array.from({ length: n }, (_, i) => b.y + 9 + i * pitch);
 	}
-	return pts;
+	const pitch = n > 1 ? Math.min(7, (b.h - 10) / (n - 1)) : 0;
+	return Array.from({ length: n }, (_, i) => b.y + b.h / 2 + (i - (n - 1) / 2) * pitch);
+}
+
+/**
+ * The way of every line across the board, as a board's traces run. A line leaves a box at the tip of a pin, runs
+ * straight across, turns into a lane of its own between the columns, and turns once more into a pin of the box it
+ * goes to; every turn is cut at 45 degrees. No two lines share a lane, and several at one side of a box take pins
+ * next to each other. A task delegated from agent to agent runs in a lane close beside the agents at their left,
+ * its answer at their right.
+ */
+export function routesOf(links: Link[], l: Layout): Array<Array<[number, number]> | undefined> {
+	const mid = (b: Box) => b.y + Math.min(b.h / 2, 14);
+	const info = links.map((k) => {
+		const a = l.byId.get(k.from);
+		const b = l.byId.get(k.to);
+		return a && b ? { a, b, same: a.col === b.col, forward: a.col < b.col, back: Boolean(k.back) && a.col === b.col } : undefined;
+	});
+	// Where each line meets its two boxes: several on one side of a box are spread, in the order of where they come from.
+	type End = { key: number; box: Box; other: number };
+	const sides = new Map<string, End[]>();
+	info.forEach((v, i) => {
+		if (!v) return;
+		const put = (key: number, box: Box, other: Box, side: string) => sides.set(`${box.id}|${side}`, [...(sides.get(`${box.id}|${side}`) ?? []), { key, box, other: mid(other) }]);
+		put(i * 2, v.a, v.b, v.same ? (v.back ? "r" : "l") : v.forward ? "r" : "l");
+		put(i * 2 + 1, v.b, v.a, v.same ? (v.back ? "r" : "l") : v.forward ? "l" : "r");
+	});
+	const yOf = new Map<number, number>();
+	for (const list of sides.values()) {
+		list.sort((p, q) => p.other - q.other || p.key - q.key);
+		const ys = pinsOf(list[0].box, list.length);
+		list.forEach((e, n) => yOf.set(e.key, ys[n]));
+	}
+	// A lane for each line. Those from agent to agent first, the shortest nearest the agents.
+	const lane = new Map<number, number>();
+	const reach = (i: number) => Math.abs(yOf.get(i * 2)! - yOf.get(i * 2 + 1)!);
+	const beside = (back: boolean) => info.map((v, i) => (v?.same && v.back === back ? i : -1)).filter((i) => i >= 0).sort((p, q) => reach(p) - reach(q));
+	const out = beside(false);
+	const home = beside(true);
+	out.forEach((i, n) => lane.set(i, l.cols[1].x - PIN - 6 - n * 6));
+	home.forEach((i, n) => lane.set(i, l.cols[1].x + l.cols[1].w + PIN + 6 + n * 6));
+	const keptLeft = out.length ? 6 + out.length * 6 : 0;
+	const keptRight = home.length ? 6 + home.length * 6 : 0;
+	for (const left of [true, false]) {
+		const x0 = (left ? l.cols[0].x + l.cols[0].w : l.cols[1].x + l.cols[1].w) + PIN + (left ? 0 : keptRight);
+		const x1 = (left ? l.cols[1].x : l.cols[2].x) - PIN - (left ? keptLeft : 0);
+		const mine = info.map((v, i) => (v && !v.same && (Math.min(v.a.col, v.b.col) === 0) === left ? i : -1)).filter((i) => i >= 0);
+		// The end of a line at the left of the gap, and at its right, whichever way the line goes.
+		const yl = (i: number) => yOf.get(info[i]!.forward ? i * 2 : i * 2 + 1)!;
+		const yr = (i: number) => yOf.get(info[i]!.forward ? i * 2 + 1 : i * 2)!;
+		// Lines that go down, the lowest in the lane furthest left; then lines that go up, the highest furthest left: so they nest and do not cross.
+		const down = mine.filter((i) => yr(i) >= yl(i)).sort((p, q) => yl(q) - yl(p));
+		const up = mine.filter((i) => yr(i) < yl(i)).sort((p, q) => yl(p) - yl(q));
+		const all = [...down, ...up];
+		all.forEach((i, n) => lane.set(i, Math.round(x0 + 4 + ((x1 - x0 - 8) * (n + 1)) / (all.length + 1))));
+	}
+	return info.map((v, i) => {
+		if (!v) return undefined;
+		const ya = yOf.get(i * 2)!;
+		const yb = yOf.get(i * 2 + 1)!;
+		const right = (b: Box) => b.x + b.w + PIN;
+		const xa = v.same ? (v.back ? right(v.a) : v.a.x - PIN) : v.forward ? right(v.a) : v.a.x - PIN;
+		const xb = v.same ? (v.back ? right(v.b) : v.b.x - PIN) : v.forward ? v.b.x - PIN : right(v.b);
+		if (!v.same && Math.abs(ya - yb) < 1) return [[xa, ya], [xb, yb]];
+		const x = lane.get(i)!;
+		return chamfer([[xa, ya], [x, ya], [x, yb], [xb, yb]], 5);
+	});
 }
 
 export interface Shown {
 	/** The box the pointer is over, and the one that was clicked. */
 	hover?: string;
 	selected?: string;
-	scroll: number;
 	recent: Recent;
+	/** Where the camera is, and the size of the panel. */
+	cam: Cam;
+	view: Size;
 }
 
-/** The whole page, into a canvas whose units are the panel's own pixels. */
+/** The whole board as the camera sees it, into a canvas whose units are the panel's own pixels. */
 export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): void {
 	const th = s.dark ? DARK : LIGHT;
 	const deep = (c: string) => (s.dark ? c : mix(c, "#15171d", 0.25));
+	const z = o.cam.z;
+	// Where the board's corner is on the panel.
+	const ox = o.view.w / 2 - o.cam.x * z;
+	const oy = BAR + (o.view.h - BAR) / 2 - o.cam.y * z;
 	g.globalAlpha = 1;
 	g.fillStyle = th.bg;
-	g.fillRect(0, 0, l.w, l.h);
-	g.textBaseline = "middle";
-	g.lineCap = "round";
-	g.lineJoin = "round";
+	g.fillRect(0, 0, o.view.w, o.view.h);
 
-	const live = linksOf(s, l);
+	// The board: a grid of small dots, as far as the panel reaches.
+	let grid = 12;
+	while (grid * z < 9) grid *= 2;
+	const step = grid * z;
+	g.fillStyle = th.dot;
+	g.beginPath();
+	for (let x = ((ox % step) + step) % step; x < o.view.w; x += step) for (let y = ((oy % step) + step) % step; y < o.view.h; y += step) g.rect(Math.round(x), Math.round(y), 1, 1);
+	g.fill();
+
+	g.save();
+	g.translate(ox, oy);
+	g.scale(z, z);
+	g.textBaseline = "middle";
+	g.lineCap = "butt";
+	g.lineJoin = "round";
+	const seen = (b: { y: number; h: number }) => (b.y + b.h) * z + oy > BAR - 8 && b.y * z + oy < o.view.h + 8;
+
+	const live = linksOf(s, l, now);
 	const focus = o.hover ?? o.selected;
-	const wires = wiringOf(focus, s, l);
+	const wires = wiringOf(focus, s, l).filter((k) => !live.some((x) => x.from === k.from && x.to === k.to));
 	// What belongs with the box the pointer is over; everything else steps back.
 	const near = new Set<string>();
 	if (focus) {
@@ -479,153 +635,246 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 		for (const k of [...wires, ...live]) if (k.from === focus || k.to === focus) near.add(k.from), near.add(k.to);
 	}
 	const faded = (id: string) => focus !== undefined && !near.has(id);
-	const yOf = (b: Box) => l.top + b.y - offsetOf(l, b.col, o.scroll);
+	const lit = (k: Link) => !focus || k.from === focus || k.to === focus;
 
-	g.save();
-	g.beginPath();
-	g.rect(0, l.top - 2, l.w, l.h - l.top + 2);
-	g.clip();
+	// The edge of the board, and a hole in each of its corners.
+	const whole = wholeOf(l);
+	g.globalAlpha = focus ? 0.5 : 1;
+	g.strokeStyle = th.rule;
+	g.lineWidth = 1;
+	rounded(g, whole.x + 4.5, whole.y + 4.5, whole.w - 9, whole.h - 9, 7);
+	g.stroke();
+	for (const [cx, cy] of [[whole.x + 12, whole.y + 12], [whole.x + whole.w - 12, whole.y + 12], [whole.x + 12, whole.y + whole.h - 12], [whole.x + whole.w - 12, whole.y + whole.h - 12]]) {
+		g.beginPath();
+		g.arc(cx, cy, 2.5, 0, Math.PI * 2);
+		g.stroke();
+	}
 
-	// The lines first, so that every box lies on the ends of its lines.
+	// What each column is, printed on the board; and under it what each group in it is.
+	g.textAlign = "left";
+	for (const c of l.cols) {
+		g.font = `700 10px ${MONO}`;
+		g.letterSpacing = "1.6px";
+		g.fillStyle = th.text;
+		g.fillText(c.title.toUpperCase(), c.x + 1, 8);
+		g.fillStyle = th.rule;
+		g.fillRect(c.x, 17, c.w, 1);
+	}
+	for (const head of l.heads) {
+		if (!seen({ y: head.y, h: 18 })) continue;
+		const c = l.cols[head.col];
+		g.font = `600 8px ${MONO}`;
+		g.letterSpacing = "1.2px";
+		g.fillStyle = th.dim;
+		const text = head.text.toUpperCase();
+		g.fillText(text, c.x + 1, head.y + 10);
+		g.fillStyle = th.rule;
+		const from = c.x + widthOf(g, text) + 8;
+		g.fillRect(from, head.y + 10, Math.max(0, c.x + c.w - from), 1);
+	}
+	g.letterSpacing = "0px";
+
+	// Every box is a part on the board: a body with a border, and pins where lines meet it.
+	for (const b of l.boxes) {
+		if (!seen(b)) continue;
+		const mine = live.filter((k) => k.from === b.id || k.to === b.id);
+		const hot = now - (o.recent.hot.get(b.id) ?? -1e9) < 1400;
+		// An agent whose answer is still on its way back is part of what happens, though its work is over.
+		const active = Boolean(b.busy) || mine.length > 0 || hot;
+		const color = b.bad ? ASK : (b.agent?.color ?? mine[0]?.color ?? th.dim);
+		g.globalAlpha = faded(b.id) ? 0.3 : 1;
+		g.fillStyle = th.pin;
+		if (b.kind === "agent") {
+			for (let py = b.y + 9; py <= b.y + b.h - 8.5; py += PITCH) {
+				g.fillRect(b.x - PIN, py - 1, PIN, 2);
+				g.fillRect(b.x + b.w, py - 1, PIN, 2);
+			}
+		} else g.fillRect(b.col === 0 ? b.x + b.w : b.x - PIN, b.y + b.h / 2 - 1, PIN, 2);
+		rounded(g, b.x, b.y, b.w, b.h, 3);
+		g.fillStyle = mix(th.chip, color, hot ? 0.3 : active || b.bad ? (s.dark ? 0.15 : 0.1) : 0);
+		g.fill();
+		g.lineWidth = 1;
+		g.strokeStyle = b.id === focus ? mix(th.dim, th.text, 0.5) : b.bad ? ASK : active ? mix(th.rule, deep(color), 0.75) : th.rule;
+		rounded(g, b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, 3);
+		g.stroke();
+
+		g.textAlign = "left";
+		if (b.agent) {
+			// An agent's lamp, in its own color: lit while it works, a ring while it is idle, red and blinking while it waits for you.
+			const c = deep(b.agent.color);
+			const lx = b.x + 12;
+			const ly = b.y + 13;
+			if (b.bad || b.busy) {
+				const on = !b.bad || now % 900 < 560;
+				g.fillStyle = b.bad ? ASK : c;
+				g.globalAlpha *= on ? 0.22 : 0.08;
+				g.beginPath();
+				g.arc(lx, ly, 6, 0, Math.PI * 2);
+				g.fill();
+				g.globalAlpha = (faded(b.id) ? 0.3 : 1) * (on ? 1 : 0.3);
+				g.beginPath();
+				g.arc(lx, ly, 3, 0, Math.PI * 2);
+				g.fill();
+				g.globalAlpha = faded(b.id) ? 0.3 : 1;
+			} else {
+				g.strokeStyle = mix(th.chip, c, 0.6);
+				g.lineWidth = 1.2;
+				g.beginPath();
+				g.arc(lx, ly, 2.6, 0, Math.PI * 2);
+				g.stroke();
+			}
+			// Its mode, printed small at the right; and a line under its name.
+			g.font = `600 8px ${MONO}`;
+			g.letterSpacing = "1px";
+			g.textAlign = "right";
+			g.fillStyle = th.dim;
+			const mode = (b.right ?? "").toUpperCase();
+			g.fillText(mode, b.x + b.w - 9, b.y + 13.5);
+			const modeW = mode ? widthOf(g, mode) + 16 : 0;
+			g.letterSpacing = "0px";
+			g.textAlign = "left";
+			g.font = `600 12.5px ${MONO}`;
+			g.fillStyle = active || b.bad ? th.text : mix(th.text, th.dim, 0.5);
+			g.fillText(fit(g, b.title, b.w - 30 - modeW), b.x + 22, b.y + 13.5);
+			g.fillStyle = th.rule;
+			g.fillRect(b.x + 1, b.y + 26, b.w - 2, 1);
+		} else {
+			g.font = `9px ${MONO}`;
+			const rightW = b.right ? widthOf(g, b.right) + 12 : 0;
+			if (b.right) {
+				g.textAlign = "right";
+				g.fillStyle = th.dim;
+				g.fillText(b.right, b.x + b.w - 7, b.y + 13.5);
+				g.textAlign = "left";
+			}
+			g.font = `600 11.5px ${MONO}`;
+			g.fillStyle = active || b.bad ? th.text : mix(th.text, th.dim, 0.3);
+			g.fillText(fit(g, b.title, b.w - 16 - rightW), b.x + 9, b.y + 13.5);
+			if (b.sub) {
+				g.font = `10.5px ${FONT}`;
+				g.fillStyle = b.bad ? ASK : th.dim;
+				g.fillText(fit(g, b.sub, b.w - 16), b.x + 9, b.y + 28);
+			}
+		}
+		(b.lines ?? []).forEach((line, i) => {
+			const ly = b.y + 38.5 + i * 17;
+			const dx = (line.indent ?? 0) * 12;
+			if (line.indent) {
+				// What stands under something: a small corner in front of it, as deep in as it is under.
+				g.fillStyle = th.dim;
+				g.fillRect(b.x + 12 + dx - 10, ly - 7, 1, 7);
+				g.fillRect(b.x + 12 + dx - 10, ly, 6, 1);
+			}
+			g.font = `${line.tone === "ask" ? "600 " : line.tone === "now" ? "500 " : ""}12px ${FONT}`;
+			g.fillStyle = line.tone === "ask" ? ASK : line.tone === "now" ? th.text : line.tone === "sub" ? mix(th.text, th.dim, 0.3) : line.tone === "note" ? deep(b.agent?.color ?? th.dim) : th.dim;
+			g.fillText(fit(g, line.text, b.w - 20 - dx), b.x + 12 + dx, ly);
+		});
+	}
+
+	// The lines: thin where the pointer asks what a box is wired to, full where something happens.
 	const stroke = (pts: Array<[number, number]>) => {
 		g.beginPath();
 		pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
 		g.stroke();
 	};
-	wires.forEach((k, i) => {
-		if (live.some((x) => x.from === k.from && x.to === k.to)) return;
-		const pts = pathOf(k, l, o.scroll, i);
+	/** The pin a line ends at, lit: from the line's end to the box. */
+	const pin = (p: [number, number], id: string) => {
+		const b = l.byId.get(id)!;
+		g.fillRect(p[0] < b.x ? p[0] : b.x + b.w, p[1] - 1.25, PIN, 2.5);
+	};
+	routesOf(wires, l).forEach((pts, i) => {
 		if (!pts) return;
-		g.globalAlpha = 0.5;
-		g.strokeStyle = deep(k.color);
+		g.globalAlpha = 0.55;
+		g.strokeStyle = g.fillStyle = deep(wires[i].color);
 		g.lineWidth = 1;
 		stroke(pts);
+		pin(pts[0], wires[i].from);
+		pin(pts[pts.length - 1], wires[i].to);
 	});
-	const sides = new Map<string, number>();
-	const ways = live.map((k) => {
-		const n = k.side ? (sides.get(k.to) ?? sides.size) : 0;
-		if (k.side) sides.set(k.to, n);
-		return { k, pts: pathOf(k, l, o.scroll, n) };
-	});
-	const lit = (k: Link) => !focus || k.from === focus || k.to === focus;
+	const ways = routesOf(live, l).map((pts, i) => ({ k: live[i], pts }));
 	for (const { k, pts } of ways) {
 		if (!pts) continue;
-		g.globalAlpha = lit(k) ? 0.9 : 0.15;
-		g.strokeStyle = deep(k.color);
-		g.lineWidth = 2;
+		const c = deep(k.color);
+		const a = lit(k) ? 1 : 0.14;
+		g.strokeStyle = g.fillStyle = c;
+		// A soft glow under it, then the trace itself.
+		g.globalAlpha = a * (s.dark ? 0.2 : 0.12);
+		g.lineWidth = 5;
 		stroke(pts);
-	}
-
-	// The boxes.
-	for (const head of l.heads) {
-		const y = l.top + head.y - offsetOf(l, head.col, o.scroll);
-		g.globalAlpha = focus ? 0.5 : 1;
-		g.font = `600 9.5px ${FONT}`;
-		g.textAlign = "left";
-		g.fillStyle = th.dim;
-		g.fillText(head.text.toUpperCase(), l.cols[head.col].x + 2, y + 10);
-	}
-	for (const b of l.boxes) {
-		const y = yOf(b);
-		if (y + b.h < l.top - 4 || y > l.h) continue;
-		const mineLive = live.filter((k) => k.from === b.id || k.to === b.id);
-		const hot = now - (o.recent.hot.get(b.id) ?? -1e9) < 1400;
-		const active = b.kind === "agent" ? Boolean(b.busy) : mineLive.length > 0 || hot;
-		const color = b.agent?.color ?? mineLive[0]?.color;
-		const edge = b.bad ? ASK : active && color ? deep(color) : th.rule;
-		const alpha = faded(b.id) ? 0.28 : 1;
-		g.globalAlpha = alpha;
-		rounded(g, b.x + 0.5, y + 0.5, b.w - 1, b.h - 1, 6);
-		g.fillStyle = hot ? mix(th.box, color ?? th.text, 0.22) : active && color ? mix(th.box, color, s.dark ? 0.1 : 0.07) : th.box;
+		g.globalAlpha = a;
+		g.lineWidth = 1.6;
+		stroke(pts);
+		const first = pts[0];
+		const last = pts[pts.length - 1];
+		pin(first, k.from);
+		pin(last, k.to);
+		// Where it comes from, a ring; where it goes, an arrowhead.
+		const dir = last[0] >= pts[pts.length - 2][0] ? 1 : -1;
+		g.beginPath();
+		g.moveTo(last[0] + dir * 1.5, last[1]);
+		g.lineTo(last[0] - dir * 4.5, last[1] - 3.6);
+		g.lineTo(last[0] - dir * 4.5, last[1] + 3.6);
+		g.closePath();
 		g.fill();
-		g.lineWidth = b.bad || b.id === focus ? 1.6 : 1;
-		g.strokeStyle = b.id === focus && !b.bad ? th.text : edge;
-		if (b.bad) g.globalAlpha = alpha * (0.7 + 0.3 * Math.sin(now / 280));
+		g.fillStyle = th.bg;
+		g.beginPath();
+		g.arc(first[0], first[1], 2.6, 0, Math.PI * 2);
+		g.fill();
+		g.lineWidth = 1.4;
 		g.stroke();
-		g.globalAlpha = alpha;
-		const padX = b.kind === "agent" ? 12 : 8;
-		if (b.agent) {
-			// An agent's own color, down the side of its box.
-			g.fillStyle = b.busy ? b.agent.color : mix(th.box, b.agent.color, 0.5);
-			rounded(g, b.x + 3, y + 4, 3, b.h - 8, 1.5);
-			g.fill();
-		}
-		g.textAlign = "left";
-		g.font = `10px ${FONT}`;
-		const rightW = b.right && (b.kind === "sched" || b.w > 150) ? widthOf(g, b.right) + 14 : 0;
-		if (rightW) {
-			g.textAlign = "right";
-			g.fillStyle = th.dim;
-			g.fillText(b.right!, b.x + b.w - 8, y + 14);
-			g.textAlign = "left";
-		}
-		g.font = `600 12px ${FONT}`;
-		g.fillStyle = b.kind !== "agent" || b.busy ? th.text : mix(th.text, th.dim, 0.55);
-		g.fillText(fit(g, b.title, b.w - padX - 6 - rightW), b.x + padX, y + 14);
-		if (b.sub) {
-			g.font = `10.5px ${FONT}`;
-			g.fillStyle = b.bad ? ASK : th.dim;
-			g.fillText(fit(g, b.sub, b.w - padX - 6), b.x + padX, y + 29);
-		}
-		(b.lines ?? []).forEach((line, i) => {
-			g.font = `${line.tone === "ask" ? "600 " : ""}11px ${FONT}`;
-			g.fillStyle = line.tone === "ask" ? ASK : line.tone === "now" ? th.text : line.tone === "note" ? deep(b.agent?.color ?? th.dim) : th.dim;
-			const dx = line.indent ? 10 : 0;
-			g.fillText(fit(g, line.text, b.w - padX - 8 - dx), b.x + padX + dx, y + 31 + i * 16);
-		});
 	}
 
-	// Dots run along the lines of what happens, the way it goes.
+	// One dot runs along each line of what happens, the way it goes.
 	for (const { k, pts } of ways) {
 		if (!pts || !lit(k)) continue;
 		const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
 		const total = lens.reduce((n, v) => n + v, 0);
-		const count = Math.max(1, Math.round(total / 46));
-		for (let d = 0; d < count; d++) {
-			let at = ((now / 1400 + d / count) % 1) * total;
-			let p = pts[0];
-			for (let i = 0; i < lens.length; i++) {
-				if (at <= lens[i] || i === lens.length - 1) {
-					const u = lens[i] ? Math.min(1, at / lens[i]) : 0;
-					p = [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u];
-					break;
-				}
-				at -= lens[i];
+		if (total < 24) continue;
+		let at = ((now / (900 + total * 6)) % 1) * total;
+		let p = pts[0];
+		for (let i = 0; i < lens.length; i++) {
+			if (at <= lens[i] || i === lens.length - 1) {
+				const u = lens[i] ? Math.min(1, at / lens[i]) : 0;
+				p = [pts[i][0] + (pts[i + 1][0] - pts[i][0]) * u, pts[i][1] + (pts[i + 1][1] - pts[i][1]) * u];
+				break;
 			}
-			g.globalAlpha = 1;
-			g.fillStyle = th.bg;
-			g.beginPath();
-			g.arc(p[0], p[1], 3.6, 0, Math.PI * 2);
-			g.fill();
-			g.fillStyle = deep(k.color);
-			g.beginPath();
-			g.arc(p[0], p[1], 2.4, 0, Math.PI * 2);
-			g.fill();
+			at -= lens[i];
 		}
+		g.globalAlpha = 1;
+		g.fillStyle = th.bg;
+		g.beginPath();
+		g.arc(p[0], p[1], 4, 0, Math.PI * 2);
+		g.fill();
+		g.fillStyle = deep(k.color);
+		g.beginPath();
+		g.arc(p[0], p[1], 2.6, 0, Math.PI * 2);
+		g.fill();
 	}
 	g.restore();
-
-	// Over the columns, what each one is.
 	g.globalAlpha = 1;
-	g.fillStyle = th.bg;
-	g.fillRect(0, 0, l.w, l.top - 2);
-	g.font = `600 11px ${FONT}`;
-	g.textAlign = "left";
-	g.fillStyle = th.dim;
-	for (const c of l.cols) g.fillText(fit(g, c.title, c.w), c.x + 2, TOP + 9);
 }
 
-// ---- the view: the page in the panel ---------------------------------------------------------------------------------------
+// ---- the view: the board in the panel ---------------------------------------------------------------------------------------
 
 const STYLE = `
-.overview { position: absolute; inset: 0; overflow: hidden; font: 11px ${FONT}; -webkit-font-smoothing: antialiased; }
-.overview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-.overview-bar { position: absolute; left: 12px; right: 8px; top: 5px; height: 24px; display: flex; align-items: center; gap: 6px; }
+.overview { position: absolute; inset: 0; overflow: hidden; font: 11px ${FONT}; -webkit-font-smoothing: antialiased; user-select: none; -webkit-user-select: none; }
+.overview canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+.overview canvas.over { cursor: pointer; }
+.overview canvas.drag { cursor: grabbing; }
+.overview-bar { position: absolute; left: 0; right: 0; top: 0; height: ${BAR}px; box-sizing: border-box; padding: 0 8px 0 12px; display: flex; align-items: center; gap: 6px; background: var(--bg); border-bottom: 1px solid var(--rule); }
 .overview-sum { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--dim); font-size: 12px; }
 .overview-sum b { color: var(--text); font-weight: 600; }
 .overview-sum .ask { color: ${ASK}; font-weight: 600; }
+.overview-bar button { flex: none; width: 26px; height: 22px; padding: 0; display: grid; place-items: center; border: 1px solid var(--rule); border-radius: 4px; background: var(--box); color: var(--dim); cursor: pointer; }
+.overview-bar button:hover { color: var(--text); }
+.overview-bar button[aria-pressed="true"] { color: var(--bg); background: var(--text); border-color: var(--text); }
+.overview-bar svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
 .overview-words { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
 `;
+const EYE = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.88 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.88 0"/><circle cx="12" cy="12" r="3"/></svg>';
+const ALL = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/></svg>';
+/** How long a box stays in what the camera follows after the last thing happened at it: a short tool call does not make it sway. */
+const LINGER_MS = 4000;
 
 export default defineView((host: ViewHost) => {
 	const root = host.root;
@@ -634,53 +883,111 @@ export default defineView((host: ViewHost) => {
 	const box = document.createElement("div");
 	box.className = "overview";
 	const canvas = document.createElement("canvas");
-	canvas.setAttribute("aria-label", "All of pine on one page: what wakes agents on the left, the agents and what each does in the middle, what they use on the right");
+	canvas.setAttribute("aria-label", "All of pine on one board: triggers on the left, the agents and what each is doing in the middle, their tools on the right");
 	const bar = document.createElement("div");
 	bar.className = "overview-bar";
 	const sum = document.createElement("div");
 	sum.className = "overview-sum";
+	const button = (label: string, icon: string) => {
+		const b = document.createElement("button");
+		b.type = "button";
+		b.title = label;
+		b.setAttribute("aria-label", label);
+		b.innerHTML = icon;
+		return b;
+	};
+	const followButton = button("Follow activity: the camera moves to where something is happening. Drag, scroll or pinch to look around yourself", EYE);
+	const allButton = button("Show everything", ALL);
 	const words = document.createElement("ul");
 	words.className = "overview-words";
 	words.dataset.slot = "overview-words";
-	bar.append(sum);
+	bar.append(sum, followButton, allButton);
 	box.append(canvas, bar, words);
 	root.append(style, box);
 
 	const open = new Set<string>();
 	const recent = new Recent();
 	let pointer: { x: number; y: number } | undefined;
-	let scroll = 0;
 	let layout: Layout | undefined;
 	let touched = 0;
+	let handled = 0;
 	let timer = 0;
-	let frame = 0;
+	let raf = 0;
 	let slow = false;
+	/** Where each box is drawn right now: it glides to where it belongs, it does not jump there. */
+	const glide = new Map<string, number>();
+	let before = 0;
+	/** The camera; whether it follows what happens; and where it is on its way to after "Show everything". */
+	let cam: Cam | undefined;
+	let follow = true;
+	let going: Cam | undefined;
+	/** When something last happened at a box: what the camera keeps in view. */
+	const linger = new Map<string, number>();
+	let drag: { x: number; y: number; moved: boolean } | undefined;
+	let dragged = false;
 
 	const size = () => ({ w: Math.max(1, root.clientWidth), h: Math.max(1, root.clientHeight) });
 	const at = (e: MouseEvent) => {
 		const r = canvas.getBoundingClientRect();
 		return { x: e.clientX - r.left, y: e.clientY - r.top };
 	};
-	/** Something was touched: the next frame comes now, not when the slow pace of a page at rest says. */
+	const boxAt = (p: { x: number; y: number }) => (layout && cam && p.y >= BAR ? hitAt(layout, toBoard(p, cam, size())) : undefined);
+	/** Something was touched: the next frame comes now, not when the slow pace of a board at rest says. */
 	const wake = () => {
 		touched = Date.now();
 		if (slow) {
 			window.clearTimeout(timer);
-			cancelAnimationFrame(frame);
-			frame = requestAnimationFrame(tick);
+			cancelAnimationFrame(raf);
+			raf = requestAnimationFrame(tick);
 		}
 	};
+	/** A hand is on the board: it is drawn at every frame for a moment, so that it moves with the hand. */
+	const hand = () => {
+		handled = Date.now();
+		wake();
+	};
+	const setFollow = (on: boolean) => {
+		follow = on;
+		going = undefined;
+		followButton.setAttribute("aria-pressed", String(on));
+		hand();
+	};
+	setFollow(true);
+	/** The owner moves the camera: it stops following, and stays where some of the board is to be seen. */
+	const move = (next: Cam) => {
+		if (!layout) return;
+		setFollow(false);
+		cam = held(next, layout);
+	};
+
+	canvas.addEventListener("pointerdown", (e) => {
+		drag = { x: e.clientX, y: e.clientY, moved: false };
+		canvas.setPointerCapture(e.pointerId);
+	});
 	canvas.addEventListener("pointermove", (e) => {
 		pointer = at(e);
-		wake();
+		if (drag && cam && (drag.moved || Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 3)) {
+			move({ ...cam, x: cam.x - (e.clientX - drag.x) / cam.z, y: cam.y - (e.clientY - drag.y) / cam.z });
+			drag = { x: e.clientX, y: e.clientY, moved: true };
+			canvas.classList.add("drag");
+		}
+		hand();
 	});
+	const drop = () => {
+		dragged = Boolean(drag?.moved);
+		drag = undefined;
+		canvas.classList.remove("drag");
+	};
+	canvas.addEventListener("pointerup", drop);
+	canvas.addEventListener("pointercancel", drop);
 	canvas.addEventListener("pointerleave", () => {
 		pointer = undefined;
-		wake();
+		hand();
 	});
 	canvas.addEventListener("click", (e) => {
-		const b = layout && hitAt(layout, at(e), scroll);
-		wake();
+		if (dragged) return;
+		const b = boxAt(at(e));
+		hand();
 		if (b?.agent) {
 			// A click opens an agent's box and shows it below; a second click closes both.
 			if (open.delete(b.agent.id)) host.select();
@@ -691,18 +998,33 @@ export default defineView((host: ViewHost) => {
 		} else if (!b) host.select();
 	});
 	canvas.addEventListener("dblclick", (e) => {
-		const b = layout && hitAt(layout, at(e), scroll);
+		const b = boxAt(at(e));
 		if (b?.agent) host.open({ agent: b.agent.id });
+		else if (!b) setFollow(true);
 	});
 	canvas.addEventListener(
 		"wheel",
 		(e) => {
 			e.preventDefault();
-			scroll += e.deltaY;
-			wake();
+			if (!cam) return;
+			if (e.ctrlKey || e.metaKey) {
+				// A pinch, or the wheel with a key held: closer or further, around where the pointer is.
+				const { w, h } = size();
+				const p = at(e);
+				const px = p.x - w / 2;
+				const py = p.y - BAR - (h - BAR) / 2;
+				const z = Math.max(0.25, Math.min(3, cam.z * Math.exp(-e.deltaY * 0.01)));
+				move({ x: cam.x + px / cam.z - px / z, y: cam.y + py / cam.z - py / z, z });
+			} else move({ ...cam, x: cam.x + e.deltaX / cam.z, y: cam.y + e.deltaY / cam.z });
 		},
 		{ passive: false },
 	);
+	followButton.addEventListener("click", () => setFollow(!follow));
+	allButton.addEventListener("click", () => {
+		setFollow(false);
+		if (layout) going = allOf(layout, size());
+		hand();
+	});
 
 	const say = (s: ViewState) => {
 		words.replaceChildren(
@@ -710,7 +1032,7 @@ export default defineView((host: ViewHost) => {
 				const mine = s.work.filter((w) => w.agent === a.id && !ended(w));
 				const li = document.createElement("li");
 				li.dataset.agent = a.id;
-				li.textContent = `${a.id}, ${a.mode} mode${a.main ? ", the main agent" : ""}: ${mine.length ? mine.map((w) => `${w.copy ? "a copy " : ""}${sentenceOf(w, s)}${causeOf(w) ? `, ${causeOf(w)}` : ""}`).join("; ") : "at rest"}. ${[a.sources.length ? `Woken by ${a.sources.join(", ")}` : "", a.schedules.length ? `schedules ${a.schedules.join(", ")}` : "", a.mcp.length ? `MCP servers ${a.mcp.join(", ")}` : "", a.skills.length ? `skills ${a.skills.join(", ")}` : "", `${a.conversations.length} conversations, ${a.conversations.filter((c) => c.branchOf !== undefined).length} of them branches`].filter(Boolean).join("; ")}`;
+				li.textContent = `${a.id}, ${a.mode} mode${a.main ? ", the main agent" : ""}: ${mine.length ? mine.map((w) => `${w.copy ? "sub-agent " : ""}${sentenceOf(w, s).toLowerCase()}${causeOf(w) ? `, ${causeOf(w)}` : ""}`).join("; ") : "idle"}. ${[a.sources.length ? `Triggered by ${a.sources.join(", ")}` : "", a.schedules.length ? `schedules: ${a.schedules.join(", ")}` : "", a.mcp.length ? `MCP servers: ${a.mcp.join(", ")}` : "", a.skills.length ? `skills: ${a.skills.join(", ")}` : "", `${plural(a.conversations.length, "conversation")}, ${plural(a.conversations.filter((c) => c.branchOf !== undefined).length, "branch", "branches")}`].filter(Boolean).join("; ")}`;
 				return li;
 			}),
 		);
@@ -730,24 +1052,56 @@ export default defineView((host: ViewHost) => {
 		try {
 			const s = host.state();
 			const now = Date.now();
-			const { w, h } = size();
+			const view = size();
 			const dpr = Math.min(3, window.devicePixelRatio || 1);
-			if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
-				canvas.width = Math.round(w * dpr);
-				canvas.height = Math.round(h * dpr);
+			if (canvas.width !== Math.round(view.w * dpr) || canvas.height !== Math.round(view.h * dpr)) {
+				canvas.width = Math.round(view.w * dpr);
+				canvas.height = Math.round(view.h * dpr);
 			}
 			const th = s.dark ? DARK : LIGHT;
-			for (const [k, v] of Object.entries({ "--text": th.text, "--dim": th.dim, "--rule": th.rule, "--box": th.box })) box.style.setProperty(k, v);
+			for (const [k, v] of Object.entries({ "--text": th.text, "--dim": th.dim, "--rule": th.rule, "--box": th.chip, "--bg": th.bg })) box.style.setProperty(k, v);
 			for (const id of open) if (!s.agents.some((a) => a.id === id)) open.delete(id);
-			layout = layoutOf(s, { w, h }, open, now, recent);
-			scroll = Math.max(0, Math.min(scroll, layout.reach));
-			const over = pointer && hitAt(layout, pointer, scroll);
-			canvas.style.cursor = over?.agent ? "pointer" : "default";
+			layout = layoutOf(s, open, now, recent);
+			const live = linksOf(s, layout, now);
+			const dt = before ? Math.min(100, now - before) : 0;
+			before = now;
+
+			// The camera. While it follows, it keeps in view every box that something happens at, and a while longer.
+			for (const b of layout.boxes) if (b.busy || (b.bad && b.kind !== "source")) linger.set(b.id, now);
+			for (const k of live) linger.set(k.from, now), linger.set(k.to, now);
+			for (const [id, t] of linger) if (now - t > LINGER_MS || !layout.byId.has(id)) linger.delete(id);
+			const target = follow ? focusOf(layout, linger.keys(), view) : going;
+			let panning = false;
+			if (!cam) cam = target ?? focusOf(layout, [], view);
+			else if (target) {
+				// Slower than a camera that is sent somewhere: it is to keep up, not to chase.
+				cam = ease(cam, target, follow ? dt * 0.55 : dt);
+				panning = cam.x !== target.x || cam.y !== target.y || cam.z !== target.z;
+				if (!panning && !follow) going = undefined;
+			}
+
+			// When an agent starts or stops, boxes change places: each moves most of its way in a fifth of a second.
+			let gliding = false;
+			const seen = new Set<string>();
+			const eased = (key: string, to: number) => {
+				seen.add(key);
+				const was = glide.get(key);
+				const y = was === undefined || !dt || Math.abs(to - was) < 0.6 ? to : was + (to - was) * (1 - Math.exp(-dt / 90));
+				if (y !== to) gliding = true;
+				glide.set(key, y);
+				return y;
+			};
+			for (const b of layout.boxes) b.y = eased(b.id, b.y);
+			for (const head of layout.heads) head.y = eased(`head:${head.col}:${head.text}`, head.y);
+			for (const key of glide.keys()) if (!seen.has(key)) glide.delete(key);
+
+			const over = pointer && !drag?.moved ? boxAt(pointer) : undefined;
+			canvas.classList.toggle("over", Boolean(over?.agent));
 			const picked = s.selected;
 			const sel = picked ? `agent:${"agent" in picked ? picked.agent : (s.work.find((x) => x.id === picked.work)?.agent ?? "")}` : undefined;
 			const g = canvas.getContext("2d")!;
 			g.setTransform(dpr, 0, 0, dpr, 0, 0);
-			draw(g, s, layout, now, { hover: over?.id, selected: sel && layout.byId.has(sel) ? sel : undefined, scroll, recent });
+			draw(g, s, layout, now, { hover: over?.id, selected: sel && layout.byId.has(sel) ? sel : undefined, recent, cam, view });
 
 			const running = s.work.filter((x) => !ended(x));
 			const asks = running.filter((x) => x.asking).length;
@@ -760,29 +1114,29 @@ export default defineView((host: ViewHost) => {
 				...(about.length
 					? [part("b", about[0]), ...about.slice(1).map((text) => `  ·  ${text}`)]
 					: [
-							part("b", running.length ? `${new Set(running.map((x) => x.agent)).size} of ${s.agents.length} agents at work` : `all ${s.agents.length} agents resting`),
-							asks ? part("ask", `  ·  ${asks} question${asks === 1 ? "" : "s"} for you`) : "",
-							bad.length ? part("ask", `  ·  ${bad.join(", ")} not running`) : "",
+							part("b", running.length ? `${new Set(running.map((x) => x.agent)).size} of ${s.agents.length} agents working` : `All ${s.agents.length} agents idle`),
+							asks ? part("ask", `  ·  ${plural(asks, "question")} for you`) : "",
+							bad.length ? part("ask", `  ·  ${bad.join(", ")} ${bad.length === 1 ? "is" : "are"} down`) : "",
 							next ? `  ·  next: ${next.name} in ${span(next.next! - now)}` : "",
 						].filter(Boolean)),
 			);
-			// Often while dots run or the pointer is here, once a second at rest, seldom while the window is behind.
-			const moving = running.length > 0 || [...recent.hot.values()].some((t) => now - t < 1500);
-			wait = !s.focused ? 2000 : moving || now - touched < 1200 ? 40 : 1000;
+			// Every frame while the camera or a box moves or a hand is on it, often while dots run, once a second at rest, seldom while the window is behind.
+			const moving = running.length > 0 || [...recent.hot.values()].some((t) => now - t < 1500) || live.length > 0;
+			wait = !s.focused ? 2000 : panning || gliding || drag || now - handled < 250 ? 0 : moving || now - touched < 1200 ? 40 : 1000;
 		} catch (e) {
 			window.clearTimeout(timer);
 			throw e;
 		}
 		slow = wait > 50;
-		timer = window.setTimeout(() => (frame = requestAnimationFrame(tick)), wait);
+		timer = window.setTimeout(() => (raf = requestAnimationFrame(tick)), wait);
 	};
-	frame = requestAnimationFrame(tick);
+	raf = requestAnimationFrame(tick);
 	const watch = new ResizeObserver(() => wake());
 	watch.observe(root);
 
 	return () => {
 		window.clearTimeout(timer);
-		cancelAnimationFrame(frame);
+		cancelAnimationFrame(raf);
 		watch.disconnect();
 		stopState();
 		stopHearing();

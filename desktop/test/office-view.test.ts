@@ -187,7 +187,7 @@ test("what just happened shows where it happened: a skill at the shelf, a schedu
 	office.hear({ k: "tool", work: 1, agent: "a01", tool: "mcp__web__web_search", mcp: "web" }, s, now);
 	office.hear({ k: "sent", work: 1, agent: "a01", tool: "send" }, s, now);
 	const floats = office.tags(s, now).filter((t: any) => t.k === "float").map((t: any) => t.text);
-	assert.deepEqual(floats, ["invoices", "daily", "a branch in a worktree"]);
+	assert.deepEqual(floats, ["invoices", "daily", "new branch in a worktree"]);
 	for (const key of ["skill:a01:invoices", "clock", "clocks:a01", "board:a01", "mcp:a01:web"]) assert.equal(office.hotAt.get(key), now, key);
 	assert.equal(office.traffic().letters, 1, "what is sent out flies to the dish");
 });
@@ -198,6 +198,9 @@ test("a bubble says what a tool does in a view's own words, and the letters are 
 	assert.equal(toolSay("pine_sources").text, "pine: sources");
 	assert.equal(toolSay("add_schedule").sign, "clock");
 	assert.equal(toolSay("something_new").text, "something new");
+	// The words are those a person would use: what it is doing, a sub-agent and not "a copy".
+	assert.equal(toolSay("subagent").text, "starting sub-agents");
+	assert.equal(toolSay("delegate").text, "delegating a task");
 	assert.ok(widthOf("thinking...") > widthOf("thinking"));
 	assert.equal(widthOf("i"), 1);
 });

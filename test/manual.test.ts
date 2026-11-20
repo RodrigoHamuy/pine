@@ -205,6 +205,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["what are the starred books and the rack in a robot's room", /^desktop#the-view/],
 		["the christmas view with santa and his elves, what is a gumball in the machine", /^desktop#the-workshop/],
 		["in the overview, what does a line between two boxes mean", /^desktop#the-overview/],
+		["zoom into the overview's board and drag it, and make its camera follow what happens again", /^desktop#the-overview/],
 		["a technical view of everything at once: agents, events, mcp servers, skills and their work over time", /^(desktop#the-(overview|view)|views)/],
 		["why does the view zoom in and out by itself", /^(desktop#the-view|views)/],
 		["my safe agent hands a task to an agent in bypass mode, does that run in bypass", /^agents#handing-work-to-another-agent/],

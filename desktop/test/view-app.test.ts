@@ -85,7 +85,7 @@ test("pine puts its own views into the home, and the panel runs the one that is 
 	await menu("view");
 	await sees("[data-slot=view-aside] [data-slot=view][data-view=office] [data-slot=view-frame][data-ready]", "the office, running in its frame");
 	await frame().locator("[data-slot=office-words] > li[data-agent=books]").waitFor({ state: "attached", timeout: 10_000 });
-	assert.match(await said("books"), /books, bypass mode: at rest/);
+	assert.match(await said("books"), /books, bypass mode: idle/);
 	assert.match(await said("main"), /main, safe mode, the main agent, under the roof/);
 	assert.equal(await page.getAttribute("[data-toggle=view]", "aria-pressed"), "true");
 	assert.match(await page.textContent("[data-slot=view-select]"), /office/, "the view's name, at the top, is where another is picked");
@@ -98,7 +98,7 @@ test("work main hands books shows at books, held to main's safe mode; what happe
 	await busy.waitFor({ state: "attached", timeout: 15_000 });
 	assert.match(await busy.textContent(), /from main/);
 	// books works in bypass by itself; handed work from main (safe), it is held to safe.
-	await frame().locator("[data-slot=office-words] > li[data-agent=books] li[data-work]", { hasText: "held to safe mode" }).waitFor({ state: "attached", timeout: 8000 });
+	await frame().locator("[data-slot=office-words] > li[data-agent=books] li[data-work]", { hasText: "limited to safe mode" }).waitFor({ state: "attached", timeout: 8000 });
 	await new Promise((r) => setTimeout(r, 1200));
 	await shoot("office");
 	await page.waitForFunction(() => /books answered main/.test(document.querySelector("[data-slot=view-inspector]")?.textContent ?? ""), null, { timeout: 15_000 });
@@ -199,7 +199,7 @@ test("the workshop, pine's other view, is in the home too and runs in the same f
 	await call("POST", "/settings", { key: "ui.view", value: "office" });
 });
 
-test("the overview, pine's third view, runs in the same frame and says in words what its board shows", async () => {
+test("the overview, pine's third view, runs in the same frame and says in words what its page shows", async () => {
 	assert.ok(fs.existsSync(path.join(home, "views", "overview.ts")), "the overview is in the views folder");
 	await call("POST", "/settings", { key: "ui.view", value: "overview" });
 	await sees("[data-toggle=view]", "the view's button");
@@ -207,7 +207,7 @@ test("the overview, pine's third view, runs in the same frame and says in words 
 	await sees("[data-slot=view-aside] [data-slot=view][data-view=overview] [data-slot=view-frame][data-ready]", "the overview, running in its frame");
 	const main = frame().locator("[data-slot=overview-words] > li[data-agent=main]");
 	await main.waitFor({ state: "attached", timeout: 10_000 });
-	assert.match((await main.textContent()) ?? "", /main, safe mode, the main agent: at rest/);
+	assert.match((await main.textContent()) ?? "", /main, safe mode, the main agent: idle/);
 	assert.match((await frame().locator("[data-slot=overview-words] > li[data-agent=books]").textContent()) ?? "", /books, bypass mode/);
 	await shoot("overview");
 	await call("POST", "/settings", { key: "ui.view", value: "office" });

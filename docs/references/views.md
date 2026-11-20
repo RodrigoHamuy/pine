@@ -11,8 +11,8 @@ in the `views` folder of pine's home, and the app shows it in a panel at the rig
 pine comes with three views. `office` is pine as a little tower house in pixels, a room and a robot for
 each agent, main under the roof. `workshop` is the same pine as Santa's workshop at the North Pole:
 the main agent is Santa, the others are elves, each in a workshop of another kind. `overview` is no
-picture but a page to read: what wakes agents, the agents with a sentence on what each does, and
-what they use, with a line between two of them while something happens there. It is the one the
+picture but a page to read: what triggers agents, the agents with what each is doing, and the tools
+they use, with a line between two of them while something happens there. It is the one the
 panel shows until you pick another ([desktop.md](desktop.md), "The view", says what is what in each). A
 home is given each of them once:
 all when pine starts without a `views` folder, and one that pine gets later at the next start of a

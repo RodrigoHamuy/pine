@@ -716,7 +716,7 @@ nor pine, nor the web ([views.md](views.md), "What a view cannot do").
 roof, the others on the floors below, you sit at your desk in the hall. Each agent has a room and a
 robot of its own look, in its color, and a plate at the door with its name and a sign for its mode. A
 robot's bubble says what it does, in words: "thinking...", "reading a file", "running a command",
-"browser: navigate", "skill: invoices", "waits for scout", "asks you!". What it does also shows in
+"browser: navigate", "skill: invoices", "waiting for scout", "needs your answer". What it does also shows in
 where it stands:
 
 | In the house | What it is |
@@ -725,9 +725,9 @@ where it stands:
 | A robot at its shelf with a book; a book with a star | It reads or searches files; it reads one of its skills. Each starred book on the shelf is a skill the agent has |
 | A robot at its desk, the screen full of lines | It runs a command, edits a file, or writes its answer |
 | A robot at the rack | It uses a tool of an MCP server. Each lit slot of the rack is an MCP server the agent has; the one in use blinks |
-| A robot on its chair, legs swinging, an hourglass | It waits for work it handed on or for its copies |
+| A robot on its chair, legs swinging, an hourglass | It waits for a task it delegated or for its sub-agents |
 | A robot jumps, a red "!" | It asks you. The bell on your desk in the hall rings, and the panel has the question on top |
-| Small robots beside it | Copies (sub-agents), for as long as they work |
+| Small robots beside it | Sub-agents, for as long as they work |
 | A letter with wings flies from one robot to another | A task handed on (`delegate`). A dashed line joins the two rooms while the work lasts; the answer flies back with a tick, or a cross if it failed |
 | A capsule in the glass tube | An event: from your desk (what you asked; the answer comes back down), from the box of an event source in the hall, or down from the clock in the turret when a schedule is due |
 | Alarm clocks over a desk; the clock in the turret | The agent's schedules; the turret's clock shows your time, and above it the schedule that runs next. They ring when one is due |
@@ -763,8 +763,8 @@ words as in `office`; their signs are sweets, and the `?` shows what each stands
 | An elf at the machine full of gumballs; Santa at his tree | A tool of an MCP server. Each gumball, each bauble on the tree, is an MCP server; the one in use lights up |
 | A glass of sand on the bench | It waits for others |
 | A jack-in-the-box with a red "!" | It asks you; the bell on your counter rings |
-| Small elves | Copies (sub-agents) |
-| A present flies from one to another | A task handed on; the answer flies back with a tick or a cross |
+| Small elves | Sub-agents |
+| A present flies from one to another | A delegated task; the answer flies back with a tick or a cross |
 | A sweet in the glass chute | An event, from your counter, a letter box of the mail room, or the clock in the tower |
 | Bells on a wall | The agent's schedules |
 | A little tree with a star on the bench | A goal |
@@ -779,17 +779,24 @@ a sleigh across it, elves on skis and a polar bear with its cub go by, and floes
 
 ### The overview
 
-`overview` is all of pine on one page, in words. There is nothing to learn first: three columns of
-boxes, and every box says what it is.
+`overview` is all of pine on one board, in words. There is nothing to learn first: three columns, and
+everything in them says what it is. It is drawn the way a circuit board is: every box is a part with a
+border and pins, and the lines between them are traces.
 
-| On the page | What it is |
+| On the board | What it is |
 |---|---|
-| The left column, "what wakes them" | You, every event source and every schedule, each with whom it wakes ("inbox, wakes books") and, for a schedule, when it is due. A source that is not running is red and says so. A question for you is said at your box |
-| The middle column, "agents" | Every agent. Under its name, as a sentence, what it does right now ("runs a command", "uses web: search", "waits for scout", "asks you", "resting"), and under that why and how far ("for you · step 2 of 5"). Each of its copies (sub-agents) is a line of its own in its box. Its mode stands beside its name |
-| The right column, "what they use" | Every MCP server and every skill |
-| A line between two boxes | Something happens between them right now, in the color of the agent it happens to: from what woke an agent to the agent, from an agent to the MCP server or skill it uses, beside the column from an agent to the agent it handed a task to, and in red from an agent to you while it waits for your answer. Dots run along it the way things go. Nothing happens: no line |
-| The pointer over a box | Thin lines to all it is wired to (for an agent its sources, schedules, MCP servers and skills; for a source or a server, everybody who has it), and the rest fades. The line on top of the page says what the box is |
-| A click on an agent | Opens its box: a line for each of its conversations, a branch set in under what it was branched from, with "in a worktree" and its goal where it has one. The agent is shown under the view; a double click opens it |
+| The left column, "Triggers" | What starts an agent's work: you, every event source, every schedule and every webhook, each with whom it triggers ("inbox, triggers books") and, for a schedule, when it is due. A source that is down is red and says so. A question for you is said at "You" |
+| The middle column, "Agents" | Every agent, those that work on top and the idle ones below them (when one starts or stops, the boxes glide to their new places). Under its name what it is doing right now ("Running a command", "Using web: search", "Waiting for scout", "Needs your answer", "Idle"), under that why ("for you", "delegated by main", "triggered by inbox") and how far ("step 2 of 5"). Each of its sub-agents is a line of its own under it, and a sub-agent that one of them started stands in under that one. Its mode stands beside its name |
+| The right column, "Tools" | Every MCP server and every skill |
+| The lamp beside an agent's name | In the agent's own color: lit while it works, a ring while it is idle, red and blinking while it waits for your answer. Its mode is printed at the right of its name |
+| A colored border and a tinted body | Something happens there right now. Everything else has a plain border |
+| A line between two things | Something happens between them right now, in the color of the agent it happens to: from a trigger to the agent it started, from an agent to the MCP server or skill it is using, beside the agents from one to the agent it delegated a task to, and in red from an agent to you while it waits for your answer. A line runs from pin to pin, starts with a ring and ends with an arrowhead, and a dot runs along it the way things go. Every line has a lane of its own and turns at 45 degrees, so no two lie on top of each other |
+| A line at the right of the agents | The answer to a delegated task on its way back: when the task ends, a line runs for a few seconds from the agent that did it to the agent that delegated it, red if it failed. The task went out at the left of the agents, its answer comes back at their right. What you asked an agent for comes back to "You" the same way |
+| The pointer over something | Thin lines to all it is wired to (for an agent its sources, schedules, MCP servers and skills; for a source or a server, everybody who has it), and the rest fades. The line on top of the panel says what it is |
+| A click on an agent | Unfolds it: a line for each of its conversations, a branch set in under what it was branched from, with "in a worktree" and its goal where it has one. The agent is shown under the view; a double click opens it |
+| The eye, at the top right | Follow activity, on at first: the camera keeps everything that something happens at in view and moves there softly; with nothing happening it shows the board from its top, as wide as the panel. A double click on the empty board turns it on again |
+| Dragging, scrolling, pinching | Moves the board, and zooms it (a pinch, or scrolling with `ctrl` or `cmd` held, around where the pointer is). The camera then stays where you put it and no longer follows |
+| The button beside the eye | Show everything: the whole board in the panel |
 
 It has no timeline: what happened, in order, is the list the panel shows under every view.
 
