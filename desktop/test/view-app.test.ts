@@ -184,3 +184,16 @@ test("without a view there is no button and no panel; choosing one brings both b
 	await call("POST", "/settings", { key: "ui.view", value: "office" });
 	await sees("[data-toggle=view]", "the button, back");
 });
+
+test("the workshop, pine's other view, is in the home too and runs in the same frame when it is chosen", async () => {
+	assert.ok(fs.existsSync(path.join(home, "views", "workshop.ts")), "the workshop is in the views folder");
+	await call("POST", "/settings", { key: "ui.view", value: "workshop" });
+	await sees("[data-toggle=view]", "the view's button");
+	if (!(await page.$("[data-slot=view-aside]"))) await menu("view");
+	await sees("[data-slot=view-aside] [data-slot=view][data-view=workshop] [data-slot=view-frame][data-ready]", "the workshop, running in its frame");
+	const main = frame().locator("[data-slot=workshop-words] > li[data-agent=main]");
+	await main.waitFor({ state: "attached", timeout: 10_000 });
+	assert.match((await main.textContent()) ?? "", /main, safe mode, the main agent, Santa, under the roof/);
+	await shoot("workshop");
+	await call("POST", "/settings", { key: "ui.view", value: "office" });
+});

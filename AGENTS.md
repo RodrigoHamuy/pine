@@ -75,7 +75,7 @@ src/
   themes.ts         the themes of the owner's UIs: VS Code color theme files in <home>/themes (seeded once from
                     examples/home/themes), listed for `GET /themes`, the one `ui.theme` names
   views.ts          the views of the Pine app's panel: scripts of the owner's in <home>/views, listed, handed over
-                    with their types stripped (never run by the daemon), `ui.view`; seeded once from examples/home/views,
+                    with their types stripped (never run by the daemon), `ui.view`; each of pine's own (examples/home/views: office, workshop) given to a home once (`seedOwn`),
                     with the guide to writing one (`views/AGENTS.md`, for the owner or a coding agent opened there;
                     no agent of pine's reads it), which is written anew when it or `view-kit.ts` changed (`seedGuide`).
                     Keep that guide true to `view-kit.ts`: `test/views.test.ts` checks its names
@@ -884,7 +884,7 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   CPU as the system counts it (`top`, its own processes, not its pine) with the view's panel closed, open
   at rest, open while three agents work and open with the window behind, and the frames the view draws.
   The window has to be in front to measure the view as it draws in front. Run it after a change to how a
-  view is drawn or fed (`desktop/src/View.tsx`, `view-state.ts`, `examples/home/views/office.ts`).
+  view is drawn or fed (`desktop/src/View.tsx`, `view-state.ts`, `examples/home/views/office.ts`, `workshop.ts`).
 - Whether there is a newer app (`desktop/electron/updates.ts`) is asked of a stand-in for GitHub
   on a loopback port, without a window in `desktop/test/updates.test.ts` and through the app in
   `app.test.ts` (`PINE_DESKTOP_RELEASES`, for tests only: an app from a checkout asks nobody).

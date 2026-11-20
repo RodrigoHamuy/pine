@@ -695,7 +695,8 @@ the table above).
 
 What the panel draws is a view: a script of yours in the `views` folder of pine's home, chosen with
 the view's name at the top of the panel, which is a list of the views in the folder (`ui.view`). pine
-comes with `office`, pine as a little house full of robots. How to write
+comes with two: `office`, pine as a little house full of robots, and `workshop`, pine as Santa's
+workshop at the North Pole. How to write
 one, and what a view is told, is in [views.md](views.md). With no view in the folder, or the setting
 `off`, there is no button and no panel. The mobile app and the web client show no view.
 
@@ -743,6 +744,37 @@ which agents the source wakes. The sky follows your clock and the year: dawn, da
 dusk and night with the moon in its phase, and the trees of the season. At night an agent at rest
 sleeps at its desk. A camera goes where agents work, in whole steps so that pixels stay whole; scroll,
 drag or pinch to look yourself, the eye follows again, and the frame beside it shows the whole house.
+
+### The workshop
+
+`workshop` draws the same as Santa's workshop at the North Pole. The main agent is Santa, under the
+roof; every other agent is an elf of its own look, its pointed cap in the agent's color, in a bay that
+is a workshop of another kind each. You stand at the counter of the mail room. The bubbles say the same
+words as in `office`; their signs are sweets, and the `?` shows what each stands for.
+
+| In the workshop | What it is |
+|---|---|
+| Santa checks a long list | The main agent is at rest. At night he sleeps in his chair |
+| An elf paces; a plan on blue paper on its bench | It thinks |
+| An elf at its shelf with a book | It reads or searches. A starred book is a skill: on an elf's shelf, on Santa's mantel |
+| An elf at its bench with a hammer, a brush or a wrench | It runs a command or edits a file |
+| An elf ties a ribbon round a parcel | It writes its answer |
+| An elf at the machine full of gumballs; Santa at his tree | A tool of an MCP server. Each gumball, each bauble on the tree, is an MCP server; the one in use lights up |
+| A glass of sand on the bench | It waits for others |
+| A jack-in-the-box with a red "!" | It asks you; the bell on your counter rings |
+| Small elves | Copies (sub-agents) |
+| A present flies from one to another | A task handed on; the answer flies back with a tick or a cross |
+| A sweet in the glass chute | An event, from your counter, a letter box of the mail room, or the clock in the tower |
+| Bells on a wall | The agent's schedules |
+| A little tree with a star on the bench | A goal |
+| A present flies up to the sleigh on the roof | The agent sent something out |
+| Snow globe, cookie jar, wind-up key, sparkler, gingerbread house | The modes `safe`, `manual`, `auto`, `bypass`, `plan` |
+| An amber lantern, a cap's bobble glowing amber | The work read outside content |
+| A stocking for each agent in Santa's room, where it is wide | It glows while that agent works, red while it asks |
+| Presents under Santa's tree; the big wheel on the wall | More presents the more work was done in the last half hour; the wheel turns faster while anybody works |
+
+It is winter there all year. The sky follows your clock, with northern lights at night; reindeer fly
+a sleigh across it, elves on skis and a polar bear with its cub go by, and floes drift on the sea.
 
 ## Settings
 

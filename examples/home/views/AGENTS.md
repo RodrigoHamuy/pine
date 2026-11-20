@@ -98,8 +98,10 @@ Save the file, then close the panel and open it again: the view is read anew eac
 opens. Pick it with the name at the top of the panel. A file pine cannot hand on (a wrong name, too
 large, TypeScript that cannot be erased) is greyed out in that list, with what is wrong with it.
 
-`office.ts` is pine's own view, a house full of robots drawn on a canvas. It is long, and a view can
-be twenty lines; read it for how a state is turned into a picture that moves, not as a template.
+`office.ts` and `workshop.ts` are pine's own views: a house full of robots, and Santa's workshop full
+of elves, each drawn on a canvas. They are long, and a view can be twenty lines; read them for how a
+state is turned into a picture that moves, not as a template. They are yours like any file here: pine
+gives a home each of its views once and never writes over one.
 
 More, also what the panel around a view shows: `pine manual "write a view"`, or
 `docs/references/views.md` in pine's repository.

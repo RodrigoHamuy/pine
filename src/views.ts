@@ -1,8 +1,9 @@
 // Views: scripts of the owner's in <home>/views that draw pine in the panel of the Pine app (`office.ts`
 // is the view "office"). `ui.view` in pine.json says which one the panel shows; the first there is when
 // it names none, and none at all when it says "off" or the folder holds no view: then the app shows no
-// button for the panel. A home gets pine's own views the first time pine starts without the folder (and
-// from `pine init`, which copies examples/home); after that the folder is the owner's.
+// button for the panel. A home gets each of pine's own views once (`seedOwn`): all of them the first time
+// pine starts without the folder (and from `pine init`, which copies examples/home), and one that pine
+// comes with later at the next start. Apart from that the folder is the owner's.
 //
 // The daemon never runs a view. It reads the file, takes its TypeScript types away (Node's own
 // `stripTypeScriptTypes`, which changes text and executes nothing) and hands the text to the app, which
@@ -85,25 +86,50 @@ function seedGuide(dir: string, kit: string): void {
 	}
 }
 
+/**
+ * pine's own views, each given to a home once. `.pine/seeded.json` lists the files this home was given. A
+ * view pine comes with that is not on the list is copied in and put on it; one the owner took out is on the
+ * list and stays out, and a file of the owner's with the same name is never written over. A folder from
+ * before the list was kept was given `office`, the one view pine had then.
+ */
+function seedOwn(dir: string, fresh: boolean): void {
+	const file = path.join(dir, ".pine", "seeded.json");
+	let given: string[] | undefined;
+	try {
+		const v: unknown = JSON.parse(fs.readFileSync(file, "utf8"));
+		if (Array.isArray(v) && v.every((x) => typeof x === "string")) given = v;
+	} catch {}
+	const had = given !== undefined;
+	given ??= fresh ? [] : ["office.ts"];
+	const own = fs.existsSync(bundled()) ? fs.readdirSync(bundled()).filter((n) => /\.(ts|js)$/.test(n)).sort() : [];
+	const add = own.filter((n) => !given.includes(n));
+	for (const name of add) {
+		try {
+			// Refuses when anything has that name already, a link included.
+			fs.copyFileSync(path.join(bundled(), name), path.join(dir, name), fs.constants.COPYFILE_EXCL);
+			fs.chmodSync(path.join(dir, name), 0o600);
+		} catch {}
+	}
+	if (add.length || !had) {
+		fs.mkdirSync(path.dirname(file), { recursive: true });
+		fs.writeFileSync(file, `${JSON.stringify([...given, ...add])}\n`, { mode: 0o600 });
+	}
+}
+
 export type ViewEntry = { id: string; file: string } | { id: string; file: string; problem: string };
 
 /**
- * The first start of a home without a views folder: pine's own views go into it. At every start, the
+ * The first start of a home without a views folder: pine's own views go into it. At every start, a view
+ * pine has that this home was never given is added (`seedOwn`), the
  * module views import is brought up to date in .pine/, a tsconfig.json is put there if none is, and the
  * guide to writing a view (AGENTS.md, for the owner or a coding agent opened in the folder) if there is
  * none or what it describes has changed (`seedGuide`).
  */
 export function seedViews(home: string): void {
 	const dir = viewsDir(home);
-	if (!fs.existsSync(dir)) {
-		fs.mkdirSync(dir, { recursive: true });
-		for (const name of fs.existsSync(bundled()) ? fs.readdirSync(bundled()) : []) {
-			if (!/\.(ts|js)$/.test(name)) continue;
-			const dst = path.join(dir, name);
-			fs.copyFileSync(path.join(bundled(), name), dst);
-			fs.chmodSync(dst, 0o600);
-		}
-	}
+	const fresh = !fs.existsSync(dir);
+	if (fresh) fs.mkdirSync(dir, { recursive: true });
+	seedOwn(dir, fresh);
 	const kit = path.join(dir, ".pine", "view.ts");
 	const text = fs.readFileSync(KIT(), "utf8");
 	if (!fs.existsSync(kit) || fs.readFileSync(kit, "utf8") !== text) {
