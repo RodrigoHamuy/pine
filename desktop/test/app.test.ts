@@ -626,6 +626,22 @@ test("an empty composer is drawn at full strength, and its send button says ther
 	await page.fill("[data-slot=composer] textarea", "");
 });
 
+test("the bar along the top keeps room for the window's buttons where the system draws them: none at its end on a Mac, the controls' width elsewhere", async () => {
+	const bar = await page.$eval("header:has([data-toggle=code])", (h: Element) => {
+		const overlay = (navigator as any).windowControlsOverlay;
+		const area = overlay?.visible ? overlay.getTitlebarAreaRect() : undefined;
+		return { right: parseFloat(getComputedStyle(h).paddingRight), controls: area ? innerWidth - area.x - area.width : 0, visible: Boolean(overlay?.visible), rem: parseFloat(getComputedStyle(document.documentElement).fontSize) };
+	});
+	// The bar's own room, 2 on the scale: all there is at its end on a Mac, whose buttons are at the start.
+	const own = bar.rem * 0.5;
+	if (process.platform === "darwin") assert.equal(bar.right, own, JSON.stringify(bar));
+	else {
+		assert.equal(bar.visible, true, "the window draws its controls over the page");
+		assert.ok(bar.controls > 0, JSON.stringify(bar));
+		assert.ok(Math.abs(bar.right - Math.max(bar.controls, own)) <= 1, JSON.stringify(bar));
+	}
+});
+
 test("a click into the composer draws no ring and no brighter border: it looks as it did before", async () => {
 	const look = () =>
 		page.$eval("[data-slot=composer] [data-slot=input-group]", (el: Element) => {

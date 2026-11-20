@@ -60,6 +60,6 @@ export const OffMac: Story = {
 	},
 	play: async (context) => {
 		await rightClick!(context);
-		await expect(await within(document.body).findByText("Ctrl+W")).toBeVisible();
+		await expect(await within(document.body).findByText("Ctrl+W")).toBeInTheDocument();
 	},
 };

@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, within } from "storybook/test";
+import { expect, fn, waitFor, within } from "storybook/test";
 import { SidebarFooter, SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
 import { Machines, TitleBar } from "./App.tsx";
 import { store } from "./model.ts";
@@ -99,9 +99,15 @@ const bar = (key: string): Story => ({
 			</div>
 		</SidebarProvider>
 	),
+	// Reached with the keyboard, as a tooltip shows for a button the keyboard brought it to.
 	play: async ({ canvas, userEvent }) => {
-		await userEvent.hover(canvas.getByRole("button", { name: /^New conversation/ }));
-		await expect(await within(document.body).findByText(key)).toBeVisible();
+		// (In a phone-wide window the button that shows the side bar comes first.)
+		const button = canvas.getByRole("button", { name: /^New conversation/ });
+		for (let i = 0; i < 4 && document.activeElement !== button; i++) await userEvent.tab();
+		await expect(document.activeElement).toBe(button);
+		// A tooltip opens after a moment, the first one of a page later than the next, and fades in.
+		const shown = await within(document.body).findByText(key, undefined, { timeout: 4000 });
+		await waitFor(() => expect(shown).toBeVisible());
 	},
 });
 
