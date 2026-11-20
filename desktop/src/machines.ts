@@ -20,6 +20,82 @@ export const MACHINE_ID = /^[A-Za-z0-9_-]{43}$/;
 /** Whether a machine of the list is a computer paired by its link (`paired:<machine id>`), rather than a user@host one. */
 export const isPaired = (host: string): boolean => host.startsWith(PAIRED) && MACHINE_ID.test(host.slice(PAIRED.length));
 
+/**
+ * The address of the project's own service (the web client and the meeting service), which the
+ * Pine app uses unless the owner names another: the Worker `pine` of web/relay (`--env official`) on
+ * the project's workers.dev account. A browser's key and its paired computers belong to this address, so
+ * changing it makes every owner pair again.
+ */
+export const OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev";
+
+/** A pairing code: 16 random bytes, base64url without padding. */
+const PAIR_CODE = /^[A-Za-z0-9_-]{22}$/;
+
+/** A pairing link as the page reads it: the service's origin (`https` only), the machine id and the code. */
+export type PairLink = { service: string; id: string; code: string };
+
+/**
+ * The `https` origin of an address, written in lower case and without `:443`; none for another
+ * scheme, a name or password, a host in brackets or port 0. Path, query and fragment are the
+ * caller's to refuse.
+ */
+function httpsOrigin(text: string): string | undefined {
+	let url: URL;
+	try {
+		url = new URL(text);
+	} catch {
+		return undefined;
+	}
+	if (url.protocol !== "https:" || !url.hostname || url.hostname.startsWith("[") || url.port === "0" || url.username || url.password) return undefined;
+	return url.origin;
+}
+
+/**
+ * A pairing link, as the QR code of the Pine app carries it (`<service origin>/#pair=<machine id>.<code>`,
+ * the web client's) or as the web client hands it to the mobile app
+ * (`pine://pair?service=<percent-encoded https origin>&id=<machine id>&code=<code>`). Anything else,
+ * and a service that is not `https`, is no pairing link: none. The page reads it to ask the owner
+ * (and to name a service that is not the official one); the bridge and the native side read it again.
+ */
+export function readPairLink(text: string): PairLink | undefined {
+	const link = text.trim();
+	if (link.startsWith("pine:")) {
+		const m = /^pine:\/\/pair\?([^#]*)$/.exec(link);
+		if (!m) return undefined;
+		const q = new URLSearchParams(m[1]);
+		const keys = [...q.keys()];
+		if (keys.length !== 3 || !["service", "id", "code"].every((k) => q.getAll(k).length === 1)) return undefined;
+		const service = q.get("service")!;
+		const id = q.get("id")!;
+		const code = q.get("code")!;
+		if (httpsOrigin(service) !== service || !MACHINE_ID.test(id) || !PAIR_CODE.test(code)) return undefined;
+		return { service, id, code };
+	}
+	const at = link.indexOf("#");
+	if (at < 0) return undefined;
+	const base = link.slice(0, at);
+	const hash = link.slice(at);
+	// The origin and one slash, nothing more: no path, no query, no name before the host.
+	if (!/^https:\/\/[^/?#@\s]+\/$/i.test(base) || !hash.startsWith("#pair=")) return undefined;
+	const service = httpsOrigin(base);
+	if (!service) return undefined;
+	const [id, code, ...more] = hash.slice("#pair=".length).split(".");
+	if (more.length || !MACHINE_ID.test(id ?? "") || !PAIR_CODE.test(code ?? "")) return undefined;
+	return { service, id, code };
+}
+
+/**
+ * The host of a pairing link's service when it is not the official one, which the owner is shown
+ * before saying yes, so that they know where the device connects; none for the official service.
+ */
+export const otherService = (link: PairLink): string | undefined => (link.service === OFFICIAL_SERVICE ? undefined : new URL(link.service).host);
+
+/**
+ * What the page calls the device it runs on when it pairs: "phone" in the mobile app, "browser"
+ * in the web client (and anywhere else, where nothing is paired).
+ */
+export const deviceWord = (platform: string): "phone" | "browser" => (platform === "android" || platform === "ios" ? "phone" : "browser");
+
 /** What a paired computer is called while no name is known for it: before the pairing, and where none was given. */
 export const YOUR_COMPUTER = "your computer";
 
@@ -80,11 +156,11 @@ export function reachedThrough(host: string, serviceHost?: string): string | und
 }
 
 /** The first screen during a pairing: what it says, and the four digits once the computer showed them. None: no pairing under way. Its name is not known yet. */
-export function firstScreen(state: ServiceState): { title: string; about: string; code?: string } | undefined {
+export function firstScreen(state: ServiceState, device: "phone" | "browser" = "browser"): { title: string; about: string; code?: string } | undefined {
 	if (state.status !== "starting" || !state.pairing) return undefined;
 	const { code, name } = state.pairing;
 	if (!code) return { title: "Pairing with your computer", about: "Reaching your computer through the link of its code…" };
-	return { title: "Confirm on your computer", about: `Your computer asks whether ${name ? `"${name}"` : "this browser"} may connect. Press Allow there if it shows ${code}, the same digits as here.`, code };
+	return { title: "Confirm on your computer", about: `Your computer asks whether ${name ? `"${name}"` : `this ${device}`} may connect. Press Allow there if it shows ${code}, the same digits as here.`, code };
 }
 
 /**

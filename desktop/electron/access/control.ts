@@ -5,20 +5,12 @@
 // the app's main process hands it the keychain as the cipher, its notifications, the login item
 // and the daemon of this computer.
 import path from "node:path";
-import { computerWord } from "../../src/machines.ts";
+import { computerWord, OFFICIAL_SERVICE } from "../../src/machines.ts";
 import { ACCESS_FILE, type AccessHost, type AccessHostOptions, type Cipher, fileVault, type HostStatus, startAccessHost } from "./host.ts";
 import { createPairing, type Pairing, type PairingRequest } from "./pairing.ts";
 import net from "node:net";
 import { type PeerPath, type RelayServer, type RelayTry, tryRelay } from "./peer.ts";
 import { AccessStore, type Device } from "./store.ts";
-
-/**
- * The address of the project's own service (the web client and the meeting service), which the
- * app uses unless the owner names another: the Worker `pine` of web/relay (`--env official`) on
- * the project's workers.dev account. A browser's key and its paired computers belong to this address, so
- * changing it makes every owner pair again.
- */
-export const OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev";
 
 /**
  * The owner's choices, kept in the app's preferences. No `service`: the official one. `relay`: the
