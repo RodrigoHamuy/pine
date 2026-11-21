@@ -13,11 +13,20 @@ each agent, main under the roof. `workshop` is the same pine as Santa's workshop
 the main agent is Santa, the others are elves, each in a workshop of another kind. `overview` is no
 picture but a page to read: what triggers agents, the agents with what each is doing, and the tools
 they use, with a line between two of them while something happens there. It is the one the
-panel shows until you pick another ([desktop.md](desktop.md), "The view", says what is what in each). A
-home is given each of them once:
-all when pine starts without a `views` folder, and one that pine gets later at the next start of a
-pine that has it. Apart from that the folder is yours. Take a view out and it stays out; change one
-and it stays as you left it; put a file in and it can be chosen.
+panel shows until you pick another ([desktop.md](desktop.md), "The view", says what is what in each). These
+three are pine's own, and pine keeps them up to date: a home gets all of them when pine starts
+without a `views` folder, one that pine gets later at the next start, and one that pine has
+redrawn in place of the one it had. Every other file in the folder is yours: put one in and it
+can be chosen.
+
+- To change one of pine's views, copy it under a name of your own (`my-office.ts`) and change
+  the copy: pine never touches a file it did not bring.
+- If you change `office.ts`, `workshop.ts` or `overview.ts` itself, the next start puts pine's
+  back and keeps your version beside it as a view of its own (`office-mine.ts`), which you can
+  choose like any other.
+- Take one of the three out and it stays out.
+- A home from before pine kept its views up to date has its three replaced once at the first
+  start; what was there is kept in `views/.pine/replaced/`.
 
 | | |
 |---|---|

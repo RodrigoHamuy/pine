@@ -1,9 +1,10 @@
 // Views: scripts of the owner's in <home>/views that draw pine in the panel of the Pine app (`office.ts`
 // is the view "office"). `ui.view` in pine.json says which one the panel shows; `overview` when it names
 // none (the first there is, in a folder without it), and none at all when it says "off" or the folder holds no view: then the app shows no
-// button for the panel. A home gets each of pine's own views once (`seedOwn`): all of them the first time
-// pine starts without the folder (and from `pine init`, which copies examples/home), and one that pine
-// comes with later at the next start. Apart from that the folder is the owner's.
+// button for the panel. pine's own views are pine's to keep up to date (`seedOwn`): a home gets all of them
+// the first time pine starts without the folder (and from `pine init`, which copies examples/home), one
+// that pine comes with later at the next start, and one that pine has redrawn in place of the one it had.
+// Every other file in the folder is the owner's.
 //
 // The daemon never runs a view. It reads the file, takes its TypeScript types away (Node's own
 // `stripTypeScriptTypes`, which changes text and executes nothing) and hands the text to the app, which
@@ -87,10 +88,18 @@ function seedGuide(dir: string, kit: string): void {
 }
 
 /**
- * pine's own views, each given to a home once. `.pine/seeded.json` lists the files this home was given. A
- * view pine comes with that is not on the list is copied in and put on it; one the owner took out is on the
- * list and stays out, and a file of the owner's with the same name is never written over. A folder from
- * before the list was kept was given `office`, the one view pine had then.
+ * pine's own views are pine's to keep up to date. A home is given each of them, and at every start one that
+ * is in the folder is replaced when pine's has changed, so that a view that was redrawn reaches a home that
+ * is there already. Whoever wants a view of pine's changed copies it under a name of their own.
+ *
+ * - `.pine/seeded.json` lists the files this home was given. A view pine comes with that is not on the list
+ *   is written and put on it; one the owner took out is on the list and stays out. A folder from before the
+ *   list was kept was given `office`, the one view pine had then.
+ * - `.pine/views.json` says what pine last wrote under each name, as a hash. A file that is still that is
+ *   replaced and nothing is kept. One the owner changed is kept as a view of its own beside it
+ *   (`office-mine.ts`), so that their work is in the list of views and not gone. In a home from before these
+ *   hashes pine cannot tell the two apart: the file is replaced and kept once in `.pine/replaced/`.
+ * - Something of that name that is no plain file (a link, a folder) is the owner's doing and is left alone.
  */
 function seedOwn(dir: string, fresh: boolean): void {
 	const file = path.join(dir, ".pine", "seeded.json");
@@ -101,18 +110,57 @@ function seedOwn(dir: string, fresh: boolean): void {
 	} catch {}
 	const had = given !== undefined;
 	given ??= fresh ? [] : ["office.ts"];
+	const stampFile = path.join(dir, ".pine", "views.json");
+	let wrote: Record<string, string> | undefined;
+	try {
+		const v: unknown = JSON.parse(fs.readFileSync(stampFile, "utf8"));
+		if (v && typeof v === "object" && !Array.isArray(v)) wrote = Object.fromEntries(Object.entries(v).filter(([, h]) => typeof h === "string")) as Record<string, string>;
+	} catch {}
+	const stamped = wrote !== undefined;
+	wrote ??= {};
+	const before = JSON.stringify(wrote);
+	const hash = (b: Buffer) => createHash("sha256").update(b).digest("hex").slice(0, 16);
 	const own = fs.existsSync(bundled()) ? fs.readdirSync(bundled()).filter((n) => /\.(ts|js)$/.test(n)).sort() : [];
 	const add = own.filter((n) => !given.includes(n));
-	for (const name of add) {
+	for (const name of own) {
+		const to = path.join(dir, name);
+		let there: Buffer | undefined;
 		try {
-			// Refuses when anything has that name already, a link included.
-			fs.copyFileSync(path.join(bundled(), name), path.join(dir, name), fs.constants.COPYFILE_EXCL);
-			fs.chmodSync(path.join(dir, name), 0o600);
+			if (!fs.lstatSync(to).isFile()) continue;
+			there = fs.readFileSync(to);
+		} catch {}
+		// Taken out by the owner: it stays out.
+		if (!there && !add.includes(name)) continue;
+		try {
+			const now = fs.readFileSync(path.join(bundled(), name));
+			if (there && !there.equals(now)) {
+				if (stamped && hash(there) !== wrote[name]) {
+					// The owner's own version of it: a view of its own from now on.
+					const [base, ext] = [name.replace(/\.(ts|js)$/, ""), name.slice(name.lastIndexOf("."))];
+					let mine = `${base}-mine${ext}`;
+					for (let n = 2; fs.existsSync(path.join(dir, mine)); n++) mine = `${base}-mine-${n}${ext}`;
+					fs.writeFileSync(path.join(dir, mine), there, { mode: 0o600, flag: "wx" });
+				} else if (!stamped) {
+					fs.mkdirSync(path.join(dir, ".pine", "replaced"), { recursive: true });
+					fs.writeFileSync(path.join(dir, ".pine", "replaced", name), there, { mode: 0o600 });
+				}
+			}
+			if (!there?.equals(now)) {
+				// Beside it first and then moved over it: a view is never half written.
+				const tmp = `${to}.${process.pid}.tmp`;
+				fs.writeFileSync(tmp, now, { mode: 0o600 });
+				fs.renameSync(tmp, to);
+			}
+			wrote[name] = hash(now);
 		} catch {}
 	}
 	if (add.length || !had) {
 		fs.mkdirSync(path.dirname(file), { recursive: true });
 		fs.writeFileSync(file, `${JSON.stringify([...given, ...add])}\n`, { mode: 0o600 });
+	}
+	if (JSON.stringify(wrote) !== before || !stamped) {
+		fs.mkdirSync(path.dirname(stampFile), { recursive: true });
+		fs.writeFileSync(stampFile, `${JSON.stringify(wrote)}\n`, { mode: 0o600 });
 	}
 }
 
@@ -120,7 +168,7 @@ export type ViewEntry = { id: string; file: string } | { id: string; file: strin
 
 /**
  * The first start of a home without a views folder: pine's own views go into it. At every start, a view
- * pine has that this home was never given is added (`seedOwn`), the
+ * pine has that this home was never given is added and one pine has changed is replaced (`seedOwn`), the
  * module views import is brought up to date in .pine/, a tsconfig.json is put there if none is, and the
  * guide to writing a view (AGENTS.md, for the owner or a coding agent opened in the folder) if there is
  * none or what it describes has changed (`seedGuide`).

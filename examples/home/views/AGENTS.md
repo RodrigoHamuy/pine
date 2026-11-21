@@ -105,8 +105,10 @@ large, TypeScript that cannot be erased) is greyed out in that list, with what i
 `office.ts`, `workshop.ts` and `overview.ts` are pine's own views: a house full of robots, Santa's
 workshop full of elves, and a page of boxes that say in words what happens. They are long, and a view
 can be twenty lines; read them for how a state is turned into something that moves, not as a
-template. `overview.ts` is the shortest and the plainest of them. They are yours like any file here:
-pine gives a home each of its views once and never writes over one.
+template. `overview.ts` is the shortest and the plainest of them. These three are pine's: it
+brings them up to date when it starts. To change one, copy it under a name of your own
+(`my-office.ts`) and change the copy. If you do change one of the three, pine keeps your version
+as a view of its own (`office-mine.ts`) when it puts its own back.
 
 More, also what the panel around a view shows: `pine manual "write a view"`, or
 `docs/references/views.md` in pine's repository.

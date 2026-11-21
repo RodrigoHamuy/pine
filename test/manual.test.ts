@@ -46,6 +46,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["board_answer", /^(boards#the-tools\/board-answer|setup#the-tools\/boards)/],
 		["is a pool worth it or should I use plain sub-agents", /^boards#when-a-pool-pays-and-what-it-costs$/],
 		["how many tokens do boards cost", /^boards#when-a-pool-pays-and-what-it-costs$/],
+		["I changed the office view and after an update my changes are gone", /^views($|#)/],
 		["a task stays taken after the agent crashed", /^boards#nothing-stays-taken$/],
 		["wake an agent when somebody posts a task", /^boards#events-of-a-board/],
 		["how do agents talk to each other", /^boards/],

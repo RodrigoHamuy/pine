@@ -1,6 +1,7 @@
 // The views of the Pine app's panel (src/views.ts): scripts of the owner's in <home>/views, chosen with
 // `ui.view`. The daemon lists them and hands one over with its types taken away; it runs none of them.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,7 +11,7 @@ import { type Harness, harness } from "./support/harness.ts";
 
 const tmp = () => fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-views-")));
 
-test("a home gets pine's views once, the module views import, a tsconfig for the owner's editor and the guide to writing a view; after that the folder is the owner's", () => {
+test("a home gets pine's views, the module views import, a tsconfig for the owner's editor and the guide to writing a view", () => {
 	const home = tmp();
 	try {
 		seedViews(home);
@@ -68,30 +69,72 @@ test("a home gets pine's views once, the module views import, a tsconfig for the
 	}
 });
 
-test("a view pine comes with later reaches a home that is there already, once; the owner's files are left alone", () => {
+test("pine's own views are kept up to date in a home that is there already: one pine redrew replaces the one it had, and a version the owner changed is kept as a view of its own", () => {
 	const home = tmp();
+	const shipped = (name: string) => fs.readFileSync(path.resolve(import.meta.dirname, "..", "examples", "home", "views", name), "utf8");
+	const hashOf = (text: string) => createHash("sha256").update(text).digest("hex").slice(0, 16);
 	try {
-		// A home of an older pine: it was given the office, which its owner changed, and there was no list of what it was given.
+		// A home of an older pine: it has the office as that pine drew it (or as its owner changed it: pine cannot
+		// tell), and there is no record of what it was given.
 		const dir = path.join(home, "views");
 		fs.mkdirSync(dir);
-		fs.writeFileSync(path.join(dir, "office.ts"), "// mine now\n");
+		fs.writeFileSync(path.join(dir, "office.ts"), "// the office of an older pine\n");
 		seedViews(home);
-		assert.equal(fs.readFileSync(path.join(dir, "office.ts"), "utf8"), "// mine now\n", "the office is the owner's");
-		assert.equal(fs.readFileSync(path.join(dir, "workshop.ts"), "utf8"), fs.readFileSync(path.resolve(import.meta.dirname, "..", "examples", "home", "views", "workshop.ts"), "utf8"), "the view that is new to this home is there");
+		assert.equal(fs.readFileSync(path.join(dir, "office.ts"), "utf8"), shipped("office.ts"), "the office is pine's as it is now");
+		assert.equal(fs.readFileSync(path.join(dir, ".pine", "replaced", "office.ts"), "utf8"), "// the office of an older pine\n", "and what was there is kept once, out of the list of views");
+		assert.equal(fs.readFileSync(path.join(dir, "workshop.ts"), "utf8"), shipped("workshop.ts"), "the view that is new to this home is there");
 		assert.deepEqual(listViews(home).map((v) => v.id), ["office", "overview", "workshop"]);
 		assert.equal(viewInForce(undefined, listViews(home)), "overview", "with no view chosen, pine's default is the one shown now");
 		assert.equal(viewInForce("office", listViews(home)), "office", "and a view the owner chose stays the one shown");
 		assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, ".pine", "seeded.json"), "utf8")), ["office.ts", "overview.ts", "workshop.ts"]);
-		// Taken out, it stays out; changed, it stays as it is.
+		assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, ".pine", "views.json"), "utf8")), { "office.ts": hashOf(shipped("office.ts")), "overview.ts": hashOf(shipped("overview.ts")), "workshop.ts": hashOf(shipped("workshop.ts")) });
+		// Nothing changed: nothing is written.
+		const stamp = fs.statSync(path.join(dir, "office.ts")).mtimeMs;
+		seedViews(home);
+		assert.equal(fs.statSync(path.join(dir, "office.ts")).mtimeMs, stamp);
+
+		// pine redraws a view (here: this home still has what an older pine wrote, and that pine said so): it is replaced, and nothing is kept.
+		fs.writeFileSync(path.join(dir, "office.ts"), "// what the pine before wrote\n");
+		fs.writeFileSync(path.join(dir, ".pine", "views.json"), JSON.stringify({ ...JSON.parse(fs.readFileSync(path.join(dir, ".pine", "views.json"), "utf8")), "office.ts": hashOf("// what the pine before wrote\n") }));
+		fs.rmSync(path.join(dir, ".pine", "replaced"), { recursive: true });
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "office.ts"), "utf8"), shipped("office.ts"));
+		assert.ok(!fs.existsSync(path.join(dir, ".pine", "replaced")) && !fs.existsSync(path.join(dir, "office-mine.ts")), "an untouched view leaves nothing behind");
+
+		// The owner changes one of pine's views: pine's comes back under its name, and theirs is a view of its own, twice if need be.
+		fs.writeFileSync(path.join(dir, "overview.ts"), "// my overview\n");
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "overview.ts"), "utf8"), shipped("overview.ts"));
+		assert.equal(fs.readFileSync(path.join(dir, "overview-mine.ts"), "utf8"), "// my overview\n");
+		fs.writeFileSync(path.join(dir, "overview.ts"), "// my second try\n");
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "overview-mine.ts"), "utf8"), "// my overview\n", "a version kept earlier is not written over");
+		assert.equal(fs.readFileSync(path.join(dir, "overview-mine-2.ts"), "utf8"), "// my second try\n");
+		assert.deepEqual(listViews(home).map((v) => v.id).sort(), ["office", "overview", "overview-mine", "overview-mine-2", "workshop"], "the owner's versions are in the list of views");
+		// A view of the owner's own under a name of their own is never touched.
+		fs.writeFileSync(path.join(dir, "garden.ts"), "// mine\n");
+		seedViews(home);
+		assert.equal(fs.readFileSync(path.join(dir, "garden.ts"), "utf8"), "// mine\n");
+
+		// Taken out, a view stays out. A link of that name is the owner's doing and is not written through.
 		fs.rmSync(path.join(dir, "workshop.ts"));
+		const elsewhere = path.join(home, "elsewhere.ts");
+		fs.writeFileSync(elsewhere, "// not pine's to write\n");
+		fs.rmSync(path.join(dir, "office.ts"));
+		fs.symlinkSync(elsewhere, path.join(dir, "office.ts"));
 		seedViews(home);
 		assert.ok(!fs.existsSync(path.join(dir, "workshop.ts")));
-		// A home that never had the office and whose owner wrote a workshop of their own: nothing is written over.
+		assert.equal(fs.readFileSync(elsewhere, "utf8"), "// not pine's to write\n");
+		assert.ok(fs.lstatSync(path.join(dir, "office.ts")).isSymbolicLink());
+
+		// A home that never had the office and whose owner wrote a file under a name pine now uses: the name is pine's,
+		// and what was there is kept; the office, which an older home was given already, is not brought back.
 		const own = tmp();
 		fs.mkdirSync(path.join(own, "views"));
 		fs.writeFileSync(path.join(own, "views", "workshop.ts"), "// my own workshop\n");
 		seedViews(own);
-		assert.equal(fs.readFileSync(path.join(own, "views", "workshop.ts"), "utf8"), "// my own workshop\n");
+		assert.equal(fs.readFileSync(path.join(own, "views", "workshop.ts"), "utf8"), shipped("workshop.ts"));
+		assert.equal(fs.readFileSync(path.join(own, "views", ".pine", "replaced", "workshop.ts"), "utf8"), "// my own workshop\n");
 		assert.ok(!fs.existsSync(path.join(own, "views", "office.ts")), "an older home was given the office already: it is not brought back");
 		fs.rmSync(own, { recursive: true, force: true });
 	} finally {
