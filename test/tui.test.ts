@@ -995,7 +995,7 @@ test("tui: the tab of a pinned conversation has the mark it has in the list", as
 test("tui: an answer's markdown is drawn, not shown raw: code in color without its backticks, diffs red and green, tables aligned, headings without #", async () => {
 	const { Answer } = await import("../src/tui/theme.ts");
 	const { highlightCode, languageOf } = await import("../src/tui/highlight.ts");
-	const plain = (lines: string[]) => lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+	const plain = (lines: readonly string[]) => lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
 	const draw = (text: string, width = 70) => new Answer(text).render(width);
 
 	// A diff: removed lines red, added lines green, and no line of backticks around it.
@@ -1043,7 +1043,7 @@ test("tui: an answer's markdown is drawn, not shown raw: code in color without i
 test("tui: a part of an answer that is folded away is one line; a click opens it, a second click folds it again", async () => {
 	const { Answer, markdownTheme } = await import("../src/tui/theme.ts");
 	const { Markdown } = await import("@earendil-works/pi-tui");
-	const plain = (lines: string[]) => lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
+	const plain = (lines: readonly string[]) => lines.map((l) => l.replace(/\x1b\[[0-9;]*m/g, "").trimEnd());
 	const draw = (text: string, width = 70) => plain(new Answer(text).render(width));
 	const click = (a: InstanceType<typeof Answer>, y: number, x = 3) => a.handleMouse({ x, y, button: "left", type: "click" });
 	const letter = "The landlord agrees.\n\n<details><summary>Full message</summary>\n\nDear Ms Okapi,\n\nthe keys are with the **caretaker**, see [the plan](https://example.com/plan).\n\n</details>\n\nThat is all.";

@@ -163,7 +163,7 @@ class Doc extends Container {
 	asText: () => boolean = () => false;
 	/** The width it was last drawn at, for working out where something lies in it. */
 	width = 80;
-	override render(width: number): string[] {
+	override render(width: number): readonly string[] {
 		this.width = width;
 		const lines = super.render(width);
 		return this.asText() ? picturesAsText(lines, () => true) : lines;
@@ -281,7 +281,7 @@ class Linked implements Component {
 	handleMouse(e: any) {
 		return this.inner.handleMouse?.(e);
 	}
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		const lines = this.inner.render(width);
 		const spans = findLinks(lines.map((l) => stripTerminalSequences(l)), width);
 		if (!spans.length) return lines;
@@ -369,7 +369,7 @@ class Button implements Component {
 	invalidate(): void {
 		this.text.invalidate();
 	}
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		return this.text.render(width);
 	}
 	handleMouse(e: any) {
@@ -456,7 +456,7 @@ class WithMicrophone implements Component {
 		this.inner.invalidate();
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		if (!this.shown() || width < 24) {
 			this.at = 0;
 			return this.inner.render(width);
@@ -534,7 +534,7 @@ class Thought implements Component {
 		return this.wrapped.lines;
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		const all = this.lines(width);
 		const secs = Math.max(1, Math.round((this.done ? (this.ms ?? 0) : Date.now() - this.started) / 1000));
 		const took = secs < 60 ? `${secs}s` : `${Math.floor(secs / 60)}m ${secs % 60}s`;
@@ -645,7 +645,7 @@ class Work implements Component {
 		return ` ${c.gray(`${this.shown() ? "▾" : "▸"} ${what.join(" · ")}`)}${failed ? `${c.gray(" · ")}${c.red(`${failed} failed`)}` : ""}${c.gray(`${took} · ${click}`)}`;
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		const out: string[] = [];
 		const rows: WorkRow[] = [];
 		const put = (line: string, row: WorkRow) => (out.push(line), rows.push(row));
@@ -751,7 +751,7 @@ class Picker implements Component {
 		return r ?? { handled: true };
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		const inner = Math.max(20, width - 4);
 		const pad = (l: string) => `${c.gray("│")} ${truncateToWidth(l, inner)}${" ".repeat(Math.max(0, inner - visibleWidth(truncateToWidth(l, inner))))} ${c.gray("│")}`;
 		return [
@@ -882,7 +882,7 @@ class ConversationList implements Component {
 		return { handled: true, render: true };
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		const inner = Math.max(20, width - 4);
 		this.hits.clear();
 		const pad = (l: string) => `${c.gray("│")} ${truncateToWidth(l, inner)}${" ".repeat(Math.max(0, inner - visibleWidth(truncateToWidth(l, inner))))} ${c.gray("│")}`;
@@ -1049,7 +1049,7 @@ class ApprovalDialog implements Component {
 		else if (data.length === 1 && data >= " " && data !== "\x7f") f.value += data;
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		const inner = Math.max(20, width - 4);
 		const body = [
 			c.bold(c.yellow(this.fields.length ? "Approval needed, and something only you have" : "Approval needed")),
@@ -1157,7 +1157,7 @@ class QuestionDialog implements Component {
 		else if (data.length === 1 && data >= " " && data !== "\x7f") this.own += data;
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		const inner = Math.max(20, width - 4);
 		const body = [c.bold(c.accent(`${this.req.agent} asks`)), "", ...String(this.req.summary ?? "").split("\n").flatMap((l) => wrapTextWithAnsi(l, inner)).slice(0, 14), ""];
 		this.rows = [];
@@ -1209,7 +1209,7 @@ class Screen extends TuiAltScreen {
 		// Overlays are placed from the top of the visible screen; `lines` may be longer than that.
 		const top = Math.max(0, out.length - height);
 		const asText = picturesAsText(lines, (row, col, w, h) => boxes.some((b) => row < top + b.row + b.height && top + b.row < row + h && col < b.col + b.width && b.col < col + w));
-		return asText === lines ? out : super.compositeOverlays(asText, width, height);
+		return asText === lines ? out : super.compositeOverlays([...asText], width, height);
 	}
 }
 

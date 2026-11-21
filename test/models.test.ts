@@ -319,3 +319,15 @@ test("pine model: add, list and remove from the shell, and a running daemon has 
 	await assert.rejects(() => pine("remove", "mock"), /in use by the default model/);
 	await h.close();
 });
+
+test("a sign-in to ChatGPT (openai-codex) offers GPT-6.2 Sol, which came with pi 1.6.0", async () => {
+	// Issue 45: the model list is pi's, so a model newer than pine's pi is not offered at all.
+	// A raised version of pi in package.json is what this guards.
+	const h = await harness({ agents: { main: {} }, start: false });
+	const credential = { type: "oauth", access: "not-a-real-token", refresh: "not-a-real-token", expires: Date.now() + 86_400_000 };
+	fs.writeFileSync(path.join(h.home, "auth.json"), JSON.stringify({ "openai-codex": credential }), { mode: 0o600 });
+	await h.restart();
+	const models = await h.pine.agents.availableModels();
+	assert.ok(models.includes("openai-codex/gpt-6.2-sol"), models.filter((m) => m.startsWith("openai-codex/")).join(", "));
+	await h.close();
+});

@@ -97,7 +97,7 @@ class Rows implements Component {
 		return { handled: true, render: true };
 	}
 
-	render(width: number): string[] {
+	render(width: number): readonly string[] {
 		if (this.cache?.width === width && this.cache.rows === this.rows) return this.cache.lines;
 		const lines: string[] = [];
 		this.owner = [];
