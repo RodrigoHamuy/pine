@@ -340,7 +340,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			defineTool({
 				name: "delegate",
 				label: "Delegate",
-				description: `Hand a task to another agent and get its answer. Each agent has its own workspace, knowledge and tools, and sees only what you write in "task", so include everything it needs. Agents: ${roster}`,
+				description: `Hand a task to another agent and get its answer. Each agent has its own workspace, knowledge and tools, and sees only what you write in "task", so include everything it needs. To give tasks to several agents at once, call delegate for each of them in the same message: they work side by side, and you get every answer. Agents: ${roster}`,
 				parameters: Type.Object({
 					agent: Type.String({ description: "Id of the agent" }),
 					task: Type.String({ description: "The complete task, self-contained" }),

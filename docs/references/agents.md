@@ -562,6 +562,9 @@ delegate(agent, task, wait?, thread?, worktree?)
 - The other agent gets only the task text, prefixed with who sent it. It runs in its own
   workspace with its own tools and instructions.
 - By default the caller waits and gets the answer as the tool's result.
+- Several `delegate` calls in one message of the model run side by side, each to its agent, and the
+  caller gets every answer: this is how one agent gives tasks to several others at once. Calls
+  in separate messages run one after the other, each waiting for its answer.
 - `wait: false` returns at once; the answer arrives later as a new message in the caller's
   session.
 - Each delegation starts the other agent fresh. `thread: "okapi"` instead continues a named

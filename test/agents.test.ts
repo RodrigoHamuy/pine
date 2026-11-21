@@ -104,6 +104,21 @@ test("the main agent hands a task to a specialist and gets the answer back", asy
 	await h.close();
 });
 
+test("tasks handed to several agents in one message are worked on side by side, and every answer comes back", async () => {
+	const h = await harness({ pine: { limits: { maxConcurrentRuns: 4 } }, agents: { main: {}, a: {}, b: {} } });
+	h.mock.state.scripts.slow = [{ delayMs: 600, text: "took my time" }];
+	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "delegate", args: { agent: "a", task: "@@REF:slow@@ one" } }, { name: "delegate", args: { agent: "b", task: "@@REF:slow@@ two" } }] }]), ...owner });
+	const runs = h.pine.tasks.list({ limit: 10 }).filter((x: any) => x.kind === "delegate");
+	assert.deepEqual(runs.map((x: any) => x.agent).sort(), ["a", "b"]);
+	// Each began before the other ended.
+	assert.ok(runs.every((x: any) => runs.every((y: any) => x.started < y.finished)), JSON.stringify(runs.map((x: any) => [x.agent, x.started, x.finished])));
+	assert.deepEqual(h.toolResults().slice(-2).map((t: string) => t.slice(0, 4)).sort(), ["[a] ", "[b] "]);
+	assert.equal(r.status, "done");
+	// And the tool says so, in both of its wordings: a model that is not told sends them one by one.
+	assert.match(JSON.stringify(h.mock.state.requests[0].body.tools), /call delegate for each of them in the same message/);
+	await h.close();
+});
+
 test("delegation without waiting delivers the answer later as a message", async () => {
 	const h = await harness({ pine: { main: "main" }, agents: { main: {}, gonzo: {} } });
 	h.mock.state.scripts.slow = [{ delayMs: 60, text: "GONZO-ANSWER" }];
