@@ -48,6 +48,8 @@ const SYNONYMS: string[][] = [
 	["theme", "colour", "color", "colorscheme", "appearance", "skin"],
 	["branch", "fork", "split", "offshoot", "copy", "duplicate", "clone", "sidetrack", "tangent"],
 	["worktree", "worktrees", "checkout", "isolated", "collide", "clash", "interfere", "overwrite", "simultaneously"],
+	// Boards: what somebody who has not heard the word calls agents that share tasks and findings.
+	["board", "blackboard", "kanban", "backlog", "swarm", "coordinate", "coordination", "collaborate", "claim", "findings"],
 	["interface", "ui", "gui", "frontend", "dashboard", "widget", "panel"],
 	["click", "press", "tap", "button", "pressed", "clicked"],
 	// Not "theme": its stem is "them", a word of every other question.

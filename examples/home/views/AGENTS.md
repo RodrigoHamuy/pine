@@ -28,8 +28,9 @@ A view runs in a frame of its own with scripts and nothing else. So:
 - No `fetch`, no picture or font from an address, no storage, no cookies, no worker, no other
   import, no window of its own. A picture has to be drawn by the script or be a `data:` address.
 - A view is told the shape of pine and nothing of its content: agents, what each piece of work does,
-  where it came from, the names of tools, MCP servers, skills, event sources and schedules. Never a
-  prompt, an answer, a path, a conversation's name or what an event said. Do not design a view that
+  where it came from, the names of tools, MCP servers, skills, event sources and schedules, how the
+  boards stand in numbers. Never a prompt, an answer, a path, a conversation's name, what stands on a
+  board or what an event said. Do not design a view that
   needs those.
 
 ## The smallest view
@@ -65,9 +66,9 @@ export default defineView((host) => {
 | | |
 |---|---|
 | `host.root` | The element to draw in: the middle of the panel, empty, sized by the panel. Read its size with `clientWidth` and `clientHeight`, and follow it with a `ResizeObserver` |
-| `host.state()` | All of pine now, a `ViewState`: `agents` (with their MCP servers, skills, sources, schedules and conversations), `work` (running, and what ended in the last half hour), `inputs` (you, the clock, each event source), `schedules` (with when each runs next), `selected`, `dark`, `focused` |
+| `host.state()` | All of pine now, a `ViewState`: `agents` (with their MCP servers, skills, sources, schedules and conversations), `work` (running, and what ended in the last half hour), `inputs` (you, the clock, each event source), `schedules` (with when each runs next), `boards` (the boards agents share work on: whose each is and how many of its tasks are open, taken, done, failed or waiting for the owner), `selected`, `dark`, `focused` |
 | `host.on("state", fn)` | `fn(state)` with every new state: a few times a second while work runs, once a second at rest. Returns the function that stops it |
-| `host.on("happening", fn)` | What just happened, as it happens (a `ViewHappening`): work started or ended, a tool, a skill, an event, a schedule due, a task handed on or answered, a copy, a question to you, a branch. For a view that animates |
+| `host.on("happening", fn)` | What just happened, as it happens (a `ViewHappening`): work started or ended, a tool, a skill, an event, a schedule due, a task handed on or answered, a copy, a question to you, a branch, a change on a board. For a view that animates |
 | `host.select(target)` | Shows an agent (`{ agent: "books" }`) or a piece of work (`{ work: 12 }`) under the view, in words; `select()` shows the log again. It comes back as `state.selected` |
 | `host.open(target)` | Opens the agent's conversation, or the piece of work, in a tab |
 
@@ -77,7 +78,8 @@ and while it is in a tool, its name in `tool`, the MCP server in `mcp`, and a sk
 `skill`. `copy` is a sub-agent; `from` says where the work came from; `parent` is the work that
 started it.
 
-The helpers of `pine/view` need nothing but the language: `running`, a camera (`frame`, `ease`),
+The helpers of `pine/view` need nothing but the language: `running`, `unsettled` (the tasks of a board
+that are not settled), a camera (`frame`, `ease`),
 boxes and paths (`union`, `inside`, `along`, `lengthOf`), a look that is the same every time for the
 same name (`hashOf`, `seeded`), and colors (`mix`, `shade`, `rgb`).
 

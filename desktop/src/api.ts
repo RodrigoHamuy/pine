@@ -186,6 +186,45 @@ export interface Todo {
 	status: "pending" | "in_progress" | "done";
 }
 
+/** A board (docs/references/boards.md): whom it is for, and how many tasks on it are in which state. */
+export interface BoardBrief {
+	id: number;
+	scope: "local" | "agent" | "global";
+	agent: string;
+	session: string;
+	name: string;
+	counts: { open: number; taken: number; done: number; failed: number; blocked: number; notes: number };
+}
+
+/** A task or a note of a board. Its text is an agent's (or the owner's) and is drawn as plain text. */
+export interface BoardItem {
+	id: number;
+	kind: "task" | "note";
+	text: string;
+	data?: Record<string, unknown>;
+	state: "open" | "taken" | "done" | "failed" | "blocked" | "";
+	by: string;
+	holder?: string;
+	run?: number;
+	/** A sub-agent has it. */
+	sub: boolean;
+	result?: string;
+	after: number[];
+	/** The tasks an open task still waits for. */
+	waits: number[];
+	about?: number;
+	/** It was written by a run that had read outside content. */
+	outside: boolean;
+	created: number;
+	updated: number;
+}
+
+export interface BoardView {
+	board: BoardBrief;
+	tasks: BoardItem[];
+	notes: BoardItem[];
+}
+
 export interface Program {
 	id: number;
 	command: string;
@@ -402,6 +441,15 @@ export const api = {
 	goal: (agent: string, session: string) => get<{ goal?: GoalInfo }>(`${a(agent)}/goal${s(session)}`),
 	setGoal: (agent: string, session: string, what: { objective: string } | { action: "pause" | "resume" | "clear" }) => post<{ goal?: GoalInfo; cleared?: boolean }>(`${a(agent)}/goal`, { session, ...what }),
 	todos: (agent: string, session: string) => get<Todo[]>(`${a(agent)}/todos${s(session)}`),
+	/** Boards: those a conversation can use (its own first), one with everything on it, and the owner's hand on it. */
+	boards: (agent: string, session: string) => get<BoardBrief[]>(`${a(agent)}/boards${s(session)}`),
+	board: (id: number) => get<BoardView>(`/boards/${id}`),
+	/** Every board, with the runs that hold one of its tasks: for the view of all of pine. */
+	allBoards: () => get<Array<BoardBrief & { runs: number[] }>>("/boards"),
+	boardPost: (where: number | { agent: string; session: string }, text: string, kind: "task" | "note" = "task") =>
+		typeof where === "number" ? post<{ board: number; id: number }>(`/boards/${where}/post`, { text, kind }) : post<{ board: number; id: number }>(`${a(where.agent)}/boards/post`, { session: where.session, text, kind }),
+	boardAct: (item: number, action: "reopen" | "answer" | "done" | "remove", text?: string) => post<{ ok: boolean }>(`/boards/items/${item}`, { action, text }),
+	boardRemove: (id: number) => post<{ removed: boolean }>(`/boards/${id}/remove`),
 	history: (agent: string, session: string, limit = 40) => get<Task[]>(`/tasks${qs({ agent, session, limit })}`),
 	tasks: (agent?: string, limit = 50) => get<Task[]>(`/tasks${qs({ agent, limit })}`),
 	/** One task, as the daemon has it on record. */

@@ -45,9 +45,14 @@ src/
   pine.ts           startPine(): builds and wires everything, returns a handle with stop()
   config.ts         loads and validates pine.json, agent.json, .env; all defaults live here
   store.ts          SQLite: event log (Bus), shared state (State), private storage (Kv), tasks
+  boards.ts         boards: tasks and notes that several runs share (a conversation and its sub-agents, several
+                    agents). The tables, who may use which board, a task taken in one step and given back when
+                    its run ends. No bus, no agent in it: the tools (src/tools.ts) and the control API use it
   agents.ts         AgentManager: task queue, pi sessions, conversations, the policy gate, the download tool, context block
   tools.ts          the tools pine gives an agent: delegate, subagent, publish_event, send, read_source, request_access, state_get,
-                    state_set, question, todo, stop_program, manual; the lists of what it has (sources, schedules,
+                    state_set, question, todo, stop_program, manual; the board tools (boards, board_read, board_post,
+                    board_claim, board_done) and the pool of sub-agents that works through a board (`workPool`);
+                    the lists of what it has (sources, schedules,
                     mcp_servers, skills, models); and the setup tools (subscribe, unsubscribe, add_/remove_ source, source_type,
                     mcp_server, skill, schedule, model_server; create_agent); and the main agent's tools for
                     conversations (conversations, read_conversation, set_conversation, remove_conversation)
@@ -768,6 +773,26 @@ These are invariants. A change that breaks one needs a test that shows why it is
    does what it is told; a check that decides who may do what belongs in `computer.ts`, where
    the tests reach it with a stand-in for the helper. On a system that is not macOS the server
    is not registered, and started by hand it offers nothing and says so.
+
+14. **A board is no way around the outside-content mark, and nothing on it stays taken.** A post
+   (`src/boards.ts`) carries the trust and the mark of the run that wrote it, a result that of the
+   run that settled it, and whatever shows a post to a run marks that run (`shown` in
+   `src/tools.ts`): `board_read`, the notes at the end of the other board tools' answers, the
+   answer of a pool, and a sub-agent the pool starts for a task that such a run posted. A new
+   place that hands board text to a model goes through `shown`. An event of a board
+   (`boardChanged` in `src/agents.ts`, on `board/<name>/...`, a reserved topic) has the trust of
+   what was written, never more. The board tools are registered where `Profile.board` says so:
+   in the owner's conversations, and for a run from outside only where its agent's `untrusted`
+   profile opts in; such a run makes no board beyond its own conversation, and neither does a
+   sub-agent. A task is held by a run of pine's, never by an agent's word: `boardsAfter` settles
+   or gives back what a run still holds when it ends, and `init` gives back everything after a
+   restart. Do not add a claim that outlives its run, and do not let a tool settle a task for
+   another run (the owner's hand through the control API is the one exception). A board holds
+   text and opens no file; whatever is kept by agent or by conversation goes with it
+   (`dropConversation`, `dropAgent` from `eraseAgent`, the renames). A UI is told on `pine/board`
+   which board changed and nothing of what is on it, and a view of the owner's is told numbers
+   and a board's name only (`boards` in `desktop/src/view-state.ts`). `test/boards.test.ts` and
+   `desktop/test/view-state.test.ts` fail without each of these.
 
 ## pi behaviours pine depends on
 

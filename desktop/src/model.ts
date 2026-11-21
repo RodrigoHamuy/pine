@@ -7,7 +7,7 @@
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "@/components/ui/toast";
-import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type GroupList, media, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
+import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type GroupList, media, type WorktreeMade, type BoardBrief, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
@@ -80,7 +80,7 @@ export interface Attachment {
 	preview?: string;
 }
 
-export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running" | "terminal";
+export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running" | "board" | "terminal";
 
 /** What can be shown beside a conversation: the side panel, the browser's aside, and the view of all of pine
  *  (which needs no conversation). */
@@ -144,6 +144,10 @@ export class Tab extends Model {
 	/** The worktree it works in, if it has one: its branch and what it was made from. */
 	worktree?: { branch: string; base: string };
 	programs: Program[] = [];
+	/** The boards this conversation can use, its own first, and a count that rises when one of them changed. */
+	boards: BoardBrief[] = [];
+	boardTick = 0;
+	boardAsked = 0;
 	stopped?: { at: number; waiting: number; spared: Set<number> };
 	pauseNoted = false;
 
@@ -1253,6 +1257,7 @@ export class Store extends Model {
 		this.touch();
 		this.badge();
 		if (tab.kind === "chat") void this.pollPrograms();
+		if (tab.kind === "chat") void this.refreshBoards(tab);
 		this.askNext();
 	}
 
@@ -1709,6 +1714,18 @@ export class Store extends Model {
 		} catch {
 			// the bar keeps what it showed
 		}
+	}
+
+	/** Ask which boards a conversation can use and how they stand: when its tab comes to the front, and when pine says a board changed. */
+	async refreshBoards(tab: Tab): Promise<void> {
+		if (tab.kind !== "chat" || this.service.status !== "ready") return;
+		// (Several changes in a row ask several times: only the answer to the last question counts.)
+		const asked = ++tab.boardAsked;
+		const list = await api.boards(tab.agent, tab.session).catch(() => undefined);
+		if (!list || asked !== tab.boardAsked) return;
+		tab.boards = list;
+		tab.boardTick++;
+		tab.touch();
 	}
 
 	private async pollPrograms(): Promise<void> {
@@ -2345,6 +2362,12 @@ export class Store extends Model {
 			return;
 		}
 		if (e.topic === "pine/conversation") return void this.followed(p);
+		// A board changed: the tab in front asks again if it is one of its own. (It says which board, and nothing of what is on it.)
+		if (e.topic === "pine/board") {
+			const t = this.active;
+			if (t?.kind === "chat" && (p.scope === "global" || (p.agent === t.agent && (p.scope === "agent" || p.session === t.session)))) void this.refreshBoards(t);
+			return;
+		}
 		// A theme chosen in another UI, or by the main agent: the window follows.
 		if (e.topic === "pine/settings") return void (p.key === "ui.theme" ? this.refreshThemes() : p.key === "ui.view" && this.refreshViews());
 		if (ns !== "agent") return;

@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Agent, Pool, setGlobalDispatcher } from "undici";
 import { AgentManager } from "./agents.ts";
+import { Boards } from "./boards.ts";
 import { loadConfig, PINE_ROOT, type PineConfig, sharedFiles } from "./config.ts";
 import { modelOrigins } from "./models.ts";
 import { HttpServer } from "./http.ts";
@@ -104,8 +105,15 @@ export async function startPine(opts: { home?: string; config?: PineConfig; log?
 	const state = new State(db, bus);
 	const kv = new Kv(db);
 	const tasks = new TaskStore(db);
+	const boards = new Boards(db);
+	// A secret that was typed into a conversation is taken out of the boards too.
+	const scrubEvents = bus.scrub.bind(bus);
+	bus.scrub = (secret) => {
+		scrubEvents(secret);
+		boards.scrub(secret);
+	};
 	const approvals = new Approvals(bus, log.child("approvals"), cfg.security.approvalTimeoutMs);
-	const agents = new AgentManager({ cfg, bus, state, kv, tasks, approvals, log: log.child("agents") });
+	const agents = new AgentManager({ cfg, bus, state, kv, tasks, boards, approvals, log: log.child("agents") });
 
 	const complete = async (o: CompleteOptions): Promise<string> => {
 		const model = agents.resolveModel(o.model ?? cfg.defaults.model ?? Object.values(cfg.agents)[0].model!);

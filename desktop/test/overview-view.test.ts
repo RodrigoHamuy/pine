@@ -13,7 +13,7 @@ registerHooks({
 	resolve: (spec, ctx, next) => (spec === "pine/view" ? { url: pathToFileURL(path.resolve(import.meta.dirname, "../../src/view-kit.ts")).href, shortCircuit: true } : next(spec, ctx)),
 });
 const view = await import("../../examples/home/views/overview.ts");
-const { Recent, layoutOf, sentenceOf, causeOf, linksOf, wiringOf, hitAt, tipOf, routesOf, focusOf, allOf, held, toBoard, wholeOf, PIN, draw } = view;
+const { Recent, layoutOf, sentenceOf, causeOf, linksOf, wiringOf, hitAt, tipOf, routesOf, focusOf, allOf, held, toBoard, wholeOf, PIN, draw, boardTitle, boardLine } = view;
 
 const T0 = 1_800_000_000_000;
 const conv = (id: number, more: object = {}) => ({ id, main: false, worktree: false, busy: false, outside: false, ...more });
@@ -43,6 +43,7 @@ const state = (works: ViewWork[], at = T0, more: Partial<ViewState> = {}): ViewS
 		{ name: "month-end", agent: "books", when: "0 8 1 * *", next: at + 9 * 86_400_000 },
 		{ name: "morning", agent: "main", when: "every 30m", next: at + 40_000 },
 	],
+	boards: [],
 	dark: true,
 	focused: true,
 	...more,
@@ -310,4 +311,38 @@ test("the whole board draws in every state: narrow and wide, dark and light, fro
 	}
 	assert.equal(frames, 30 * 3 * 2 * 8);
 	assert.equal(view.default.pineView, 1, "the file's default export is the view");
+});
+
+test("a board is a box beside the tools: whose it is and how its tasks stand, a line from the agent whose sub-agents work on it, and its question counts as one for you", () => {
+	const board = (id: number, more: object = {}) => ({ id, scope: "conversation" as const, agent: "scout", conversation: 1, open: 0, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [] as number[], ...more });
+	const works = [
+		work(1, "scout", { doing: "waiting", waitingOn: [2, 3], conversation: 1 }),
+		work(2, "scout", { parent: 1, depth: 1, copy: true, from: { k: "copy", id: "scout" }, doing: "tool", tool: "grep", board: 7 }),
+		work(3, "scout", { parent: 1, depth: 1, copy: true, from: { k: "copy", id: "scout" }, board: 7 }),
+	];
+	const s = state(works, T0, {
+		boards: [board(7, { open: 5, taken: 2, done: 3, notes: 4, workers: [2, 3] }), board(8, { scope: "all", agent: undefined, conversation: undefined, name: "bugs", blocked: 1, done: 2 }), board(9, { agent: "books", done: 6 })],
+	});
+	const l = layoutOf(s, new Set(), T0);
+	// The one with work on it and the one with a name are there; one whose tasks are all settled is not.
+	assert.deepEqual(l.boxes.filter((b: any) => b.kind === "board").map((b: any) => [b.id, b.title, b.sub, Boolean(b.busy), Boolean(b.bad)]), [
+		["board:7", "scout's board", "3 of 10 done", true, false],
+		["board:8", "bugs", "Needs your answer", false, true],
+	]);
+	assert.equal(l.heads.find((h: any) => h.col === 2)?.text, "Boards", "above what the agents use");
+	assert.equal(boardTitle(board(1, { agent: undefined })), "Board");
+	assert.equal(boardLine(board(1, { notes: 2 })), "2 notes");
+	// The agent's box says how far its board is, and the page counts the task that waits for an answer as a question for you.
+	assert.ok(l.byId.get("agent:scout")!.lines!.some((x: any) => x.text === "Board: 3 of 10 done · 2 in progress"));
+	assert.equal(l.byId.get("you")!.sub, "1 question for you");
+	// One line from the agent to its board, however many of its sub-agents have a task there.
+	assert.deepEqual(linksOf(s, l, T0).filter((k: any) => k.to === "board:7").map((k: any) => [k.from, k.live]), [["agent:scout", true]]);
+	// What the pointer over it says, and what it is wired to: a board for all agents to every agent.
+	assert.deepEqual(tipOf(l.byId.get("board:7"), s, T0), ["scout's board: board of a conversation of scout", "2 in progress, 5 open, 3 done", "4 notes", "read it in the Board tab beside the conversation"]);
+	assert.deepEqual(wiringOf("board:8", s, l).map((k: any) => k.from).sort(), ["agent:books", "agent:coder", "agent:main", "agent:scout"]);
+	assert.deepEqual(wiringOf("board:7", s, l).map((k: any) => k.from), ["agent:scout"]);
+	// Something happened on a board: its box is lit for a moment.
+	const recent = new Recent();
+	recent.hear({ k: "board", board: 7, change: "posted", agent: "scout" }, T0);
+	assert.equal(recent.hot.get("board:7"), T0);
 });

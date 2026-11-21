@@ -199,6 +199,16 @@ export class HttpServer {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, this.manager.todosOf(parts[1], q.get("session") ?? "main"));
 				}
+				// Boards (src/boards.ts): all of them, one with everything on it, and those a conversation can use.
+				if (url.pathname === "/boards") return send(200, this.manager.boardList());
+				if (parts[0] === "boards" && parts.length === 2) {
+					const found = this.manager.boardView(Number(parts[1]));
+					return found ? send(200, found) : send(404, { error: "no such board" });
+				}
+				if (parts[0] === "agents" && parts[2] === "boards" && parts.length === 3) {
+					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+					return send(200, this.manager.boardsFor(parts[1], q.get("session") ?? "main"));
+				}
 				// The goal the owner set for a conversation, and where it stands.
 				if (parts[0] === "agents" && parts[2] === "goal" && parts.length === 3) {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
@@ -503,6 +513,17 @@ export class HttpServer {
 					const files = (e as { files?: unknown }).files;
 					if (Array.isArray(files)) return send(409, { error: errText(e), conflicts: files });
 					throw new HttpError(409, errText(e));
+				}
+			}
+			// The owner's hand on a board: a task or a note of their own, and what becomes of a task.
+			if ((parts[0] === "boards" && parts.length === 3) || (parts[0] === "agents" && parts[2] === "boards" && parts[3] === "post" && parts.length === 4)) {
+				try {
+					if (parts[0] === "agents") return send(200, this.manager.boardPost({ agent: parts[1], session: typeof body.session === "string" ? body.session : "main" }, body));
+					if (parts[1] === "items") return send(200, this.manager.boardAct(Number(parts[2]), body.action, body.text));
+					if (parts[2] === "post") return send(200, this.manager.boardPost({ board: Number(parts[1]) }, body));
+					if (parts[2] === "remove") return send(200, this.manager.boardRemove(Number(parts[1])));
+				} catch (e) {
+					throw new HttpError(400, errText(e));
 				}
 			}
 			if (parts[0] === "agents" && parts[2] === "reset" && parts.length === 3) return send(200, { reset: await this.manager.resetSession(parts[1], body.session) });

@@ -91,6 +91,13 @@ export interface TaskMeta {
 	 * the run works there, on a branch of its own, and what it did stays on that branch.
 	 */
 	worktree?: { repo: string; common: string; admin: string; path: string; branch: string; base: string; from: string; sub: string; made: number; kind: "conversation" | "task"; squashed?: string };
+	/**
+	 * The conversation ("agent:session") whose board this run works on, for a task handed to another
+	 * agent for one run: it sees the tasks and notes of the conversation that handed it on (src/boards.ts).
+	 */
+	board?: string;
+	/** The task of a board this run was started for (`pool` of subagent): its answer is recorded as that task's result. */
+	boardTask?: number;
 	/** `input` is what the model server had to read anew; `cached` is what it took from its prompt cache. */
 	stats?: { input: number; output: number; cached?: number; turns: number; tools: string[]; ms: number; context?: ContextUse; timing?: CallTiming };
 }

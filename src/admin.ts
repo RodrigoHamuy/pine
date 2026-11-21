@@ -15,6 +15,7 @@ import { editJson } from "./mcp-config.ts";
 import { isInside, realish } from "./security.ts";
 import { placeOf } from "./snapshots.ts";
 import type { Kv, TaskStore } from "./store.ts";
+import type { Boards } from "./boards.ts";
 import { errText, matchesAny, parseDuration } from "./util.ts";
 
 export const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
@@ -246,7 +247,7 @@ export function unname(cfg: PineConfig, id: string): void {
  * does not load, the folder stays in `removed/` and `problem` says why. With `keepFiles` it
  * stays there on purpose. A workspace outside pine's home is the owner's folder and is left.
  */
-export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore }, id: string, keepFiles = false): { routes: string[]; kept?: string; workspaceLeft?: string; problem?: string } {
+export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore; boards?: Boards }, id: string, keepFiles = false): { routes: string[]; kept?: string; workspaceLeft?: string; problem?: string } {
 	const agent = cfg.agents[id];
 	if (!agent) throw new Error(`there is no agent "${id}"`);
 	if (id === mainAgentId(cfg)) throw new Error("the main agent administers pine and cannot be removed");
@@ -278,6 +279,8 @@ export function eraseAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore },
 	const ui = store.kv.get<{ tabs?: Array<{ agent: string }> }>("ui:tabs");
 	if (ui && Array.isArray(ui.tabs) && ui.tabs.some((t) => t.agent === id)) store.kv.set("ui:tabs", { ...ui, tabs: ui.tabs.filter((t) => t.agent !== id) });
 	store.tasks.forgetAgent(id);
+	// Its boards, and what it posted on a board for all agents.
+	store.boards?.dropAgent(id);
 	// What was recorded of its folders for undo.
 	const workspace = realish(agent.workspace);
 	const dir = realish(agent.dir);
@@ -343,7 +346,7 @@ const BY_CONVERSATION = ["taint", "keep", "folder", "group", "worktree", "todos"
  * where that was inside the agent's folder, the session file's header moves with it. What was
  * said in them is left as it was, old paths included.
  */
-export function renameAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore }, from: string, wanted: string): { id: string; routes: string[]; addresses: string[]; problem?: string } {
+export function renameAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore; boards?: Boards }, from: string, wanted: string): { id: string; routes: string[]; addresses: string[]; problem?: string } {
 	const agent = cfg.agents[from];
 	if (!agent) throw new Error(`there is no agent "${from}"`);
 	const to = wanted.trim();
@@ -434,6 +437,7 @@ export function renameAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore }
 	const ui = kv.get<{ tabs?: Array<{ agent: string }> }>("ui:tabs");
 	if (ui && Array.isArray(ui.tabs) && ui.tabs.some((t) => t.agent === from)) kv.set("ui:tabs", { ...ui, tabs: ui.tabs.map((t) => (t.agent === from ? { ...t, agent: to } : t)) });
 	store.tasks.renameAgent(from, to);
+	store.boards?.renameAgent(from, to);
 
 	// The folders under data/ named after it, and the recorded states of its folders, which are found by the folder's path.
 	for (const base of [path.join(cfg.dataDir, "programs"), path.join(cfg.dataDir, "browser-local"), path.join(cfg.dataDir, "browser-view")]) {

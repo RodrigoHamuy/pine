@@ -15,6 +15,8 @@
 //                       stool while others work for it, and jumps with a red ! when it asks you. On the bench:
 //                       the toy, a plan on blue paper, a glass of sand, the parcel, a jack-in-the-box with a !
 //   a to-do list        pips under the bubble: how many steps are done
+//   a board             the same pips while its sub-agents work through a board: one for each task, lit when it
+//                       is done; and a word at the pinboard when a task is posted, taken or settled
 //   a copy (sub-agent)  a small elf that pops up beside it, for as long as the copy works
 //   a task handed on    a present flies from elf to elf and a dotted line joins the two bays while the work
 //                       lasts; the answer flies back with a tick, or a cross
@@ -35,7 +37,7 @@
 // A camera goes where agents work. Scroll, drag or pinch to look yourself; the eye button follows again.
 // Click a bay or an elf to see it under the view; double-click to open it.
 
-import { along, type Box, type Cam, defineView, ease, frame, hashOf, inside, lengthOf, mix, type Pt, rgb, seeded, union, type ViewAgent, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
+import { along, type Box, type Cam, defineView, ease, frame, hashOf, inside, lengthOf, mix, type Pt, rgb, seeded, union, type ViewAgent, type ViewBoard, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
 
 // ---- what is there, each frame ----------------------------------------------------------------------------------------
 
@@ -48,6 +50,7 @@ export interface Now {
 	inputs: ViewInput[];
 	input: Map<string, ViewInput>;
 	schedules: ViewSchedule[];
+	boards: ViewBoard[];
 	dark: boolean;
 	focused: boolean;
 }
@@ -57,7 +60,7 @@ const ended = (w: ViewWork) => ENDED.includes(w.doing);
 
 export function nowOf(s: ViewState): Now {
 	const running = s.work.filter((w) => !ended(w)).sort((a, b) => a.started - b.started);
-	return { agents: s.agents, agent: new Map(s.agents.map((a) => [a.id, a])), work: new Map(s.work.map((w) => [w.id, w])), running, inputs: s.inputs, input: new Map(s.inputs.map((i) => [i.id, i])), schedules: s.schedules ?? [], dark: s.dark, focused: s.focused !== false };
+	return { agents: s.agents, agent: new Map(s.agents.map((a) => [a.id, a])), work: new Map(s.work.map((w) => [w.id, w])), running, inputs: s.inputs, input: new Map(s.inputs.map((i) => [i.id, i])), schedules: s.schedules ?? [], boards: s.boards ?? [], dark: s.dark, focused: s.focused !== false };
 }
 
 /** The way in a piece of work came through, if it came through one. */
@@ -106,6 +109,11 @@ const TOOLS: Record<string, [Sign, string, string?]> = {
 	stop_program: ["term", "stopping a program"],
 	state_get: ["eye", "reading shared state", HUE.read],
 	state_set: ["write", "writing shared state", HUE.write],
+	boards: ["list", "listing boards", HUE.read],
+	board_read: ["read", "reading the board", HUE.read],
+	board_post: ["note", "posting on the board", HUE.hand],
+	board_claim: ["hand", "taking a task", HUE.hand],
+	board_done: ["tick", "settling a task", HUE.hand],
 	subscribe: ["mail", "subscribing to events", HUE.setup],
 	unsubscribe: ["mail", "unsubscribing", HUE.setup],
 	add_source: ["dish", "adding a source", HUE.setup],
@@ -154,7 +162,10 @@ export function toolSay(tool: string | undefined, mcp?: string): { sign: Sign; t
 /** What a piece of work is doing, for its bubble: no words of its own, only what the state says. */
 export function sayOf(w: ViewWork, s: Now, now: number): Say {
 	const note = w.from.k === "agent" && !w.copy ? `for ${w.from.id}` : w.round ? `goal, round ${w.round}` : w.held && w.mode ? `limited to ${w.mode} mode` : undefined;
-	const more = { note, steps: w.steps };
+	// The board its sub-agents work through counts like a list of steps: a pip for each task, lit when it is done.
+	const board = !w.copy && w.conversation !== undefined ? s.boards.find((b) => b.scope === "conversation" && b.agent === w.agent && b.conversation === w.conversation && b.open + b.taken + b.blocked > 0) : undefined;
+	const tasks = board ? board.open + board.taken + board.done + board.failed + board.blocked : 0;
+	const more = { note: note ?? (w.copy && w.board !== undefined ? "a task of the board" : board ? `board: ${board.done} of ${tasks} done` : undefined), steps: w.steps ?? (board ? { done: board.done, total: tasks } : undefined) };
 	if (w.asking) return { sign: "ask", text: "needs your answer", color: HUE.ask, loud: true, ...more };
 	if (w.doing === "tool" && w.skill) return { sign: "star", text: `skill: ${w.skill}`.slice(0, 34), color: HUE.skill, ...more };
 	if (w.doing === "tool") return { ...toolSay(w.tool, w.mcp), ...more };
@@ -2782,6 +2793,16 @@ export class Workshop {
 				if (r && h.status === "met") this.pops.push({ x: r.board.x + 11, y: r.board.y + 4, at: now, color: "#ffe27a", kind: "confetti" });
 				break;
 			}
+			case "board": {
+				// Something happened on a board of this agent's: a word at its pinboard, and not for every one of forty tasks.
+				const r = h.agent ? this.rooms.get(h.agent) : undefined;
+				const said = h.change === "posted" ? (["posted on the board", "note"] as const) : h.change === "taken" ? (["task taken", "hand"] as const) : h.change === "settled" ? (["task settled", "tick"] as const) : undefined;
+				if (!r || !said || now - (this.hotAt.get(`boardSaid:${h.agent}`) ?? 0) < 1200) break;
+				this.hotAt.set(`boardSaid:${h.agent}`, now);
+				this.hotAt.set(`board:${h.agent}`, now);
+				say({ x: r.board.x + 11, y: r.board.y - 2 }, said[0], said[1], HUE.hand);
+				break;
+			}
 			case "steps": {
 				const w = this.workers.get(`a:${h.agent}`);
 				const r = this.rooms.get(h.agent);
@@ -4993,7 +5014,7 @@ export default defineView((host: ViewHost) => {
 				const li = document.createElement("li");
 				li.dataset.agent = a.id;
 				const mine = s.running.filter((w) => w.agent === a.id);
-				const has = [a.mcp.length ? `MCP servers: ${a.mcp.join(", ")}` : "", a.skills.length ? `skills: ${a.skills.join(", ")}` : "", a.schedules.length ? `schedules: ${a.schedules.join(", ")}` : "", a.conversations?.length > 1 ? `${a.conversations.length} conversations, ${a.conversations.filter((c) => c.branchOf !== undefined).length} of them branches` : ""].filter(Boolean).join("; ");
+				const has = [a.mcp.length ? `MCP servers: ${a.mcp.join(", ")}` : "", a.skills.length ? `skills: ${a.skills.join(", ")}` : "", a.schedules.length ? `schedules: ${a.schedules.join(", ")}` : "", a.conversations?.length > 1 ? `${a.conversations.length} conversations, ${a.conversations.filter((c) => c.branchOf !== undefined).length} of them branches` : "", ...s.boards.filter((b) => b.agent === a.id && b.open + b.taken + b.blocked > 0).map((b) => `a board with ${b.done} of ${b.open + b.taken + b.done + b.failed + b.blocked} tasks done${b.blocked ? `, ${b.blocked} waiting for your answer` : ""}`)].filter(Boolean).join("; ");
 				li.textContent = `${a.id}, ${a.mode} mode${a.main ? ", the main agent, Santa, under the roof" : ""}: ${mine.length ? `${mine.length} task${mine.length === 1 ? "" : "s"} running` : "idle"}${has ? `. ${has}` : ""}`;
 				const ul = document.createElement("ul");
 				for (const w of mine) {

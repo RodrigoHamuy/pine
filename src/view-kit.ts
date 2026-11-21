@@ -11,7 +11,7 @@
 //
 // What a view is told is the shape of pine and nothing of its content: which agents there are and how
 // they work, what each piece of work is doing and where it came from, which tools, MCP servers, skills
-// and sources are in use. Never a prompt, an answer, a tool's arguments, a path, a conversation's name
+// and sources are in use, and how the boards stand. Never a prompt, an answer, a tool's arguments, a path, a conversation's name
 // or what an event said. A view can draw all of pine and read none of it.
 
 /** An agent, as a view knows it. */
@@ -101,6 +101,34 @@ export interface ViewWork {
 	steps?: { done: number; total: number };
 	/** The round of its conversation's goal it is (goal mode: pine calls the agent again until the goal is met). */
 	round?: number;
+	/** The board whose task it has taken (`ViewBoard.id`), while it has one. */
+	board?: number;
+}
+
+/**
+ * A board: the tasks and notes of a job that several work on at once, an agent and its sub-agents or
+ * several agents. A view is told how many tasks are in which state and who works on them, never what a
+ * task or a note says.
+ */
+export interface ViewBoard {
+	id: number;
+	/** Whom it is for: one conversation, every conversation of an agent, or all agents. */
+	scope: "conversation" | "agent" | "all";
+	/** Its name, for a board that has one. A conversation's own board has none. */
+	name?: string;
+	/** The agent it belongs to (none for a board for all agents), and its conversation (`ViewConversation.id`). */
+	agent?: string;
+	conversation?: number;
+	/** Its tasks: nobody has them yet, somebody works on them, done, failed, and waiting for the owner's answer. */
+	open: number;
+	taken: number;
+	done: number;
+	failed: number;
+	blocked: number;
+	/** The notes left on it. */
+	notes: number;
+	/** The pieces of work that have one of its tasks now (`ViewWork.id`). */
+	workers: number[];
 }
 
 /** A way work comes in: the owner, the clock, an event source, another way. */
@@ -146,6 +174,8 @@ export interface ViewState {
 	inputs: ViewInput[];
 	/** Every schedule, the one that runs next first. */
 	schedules: ViewSchedule[];
+	/** Every board, the ones with work on them first. */
+	boards: ViewBoard[];
 	selected?: ViewTarget;
 	/** Whether the app is drawn dark. */
 	dark: boolean;
@@ -173,7 +203,9 @@ export type ViewHappening =
 	| { k: "copied"; work: number; agent: string }
 	| { k: "asked"; work: number; agent: string }
 	| { k: "decided"; work?: number; agent?: string; allowed: boolean }
-	| { k: "sent"; work: number; agent: string; tool: string };
+	| { k: "sent"; work: number; agent: string; tool: string }
+	/** Something changed on a board: a task or a note was posted, a task was taken, given back or settled, or something was removed. */
+	| { k: "board"; board: number; change: "posted" | "taken" | "released" | "settled" | "removed"; agent?: string };
 
 /** What the panel gives a view. */
 export interface ViewHost {
@@ -218,6 +250,9 @@ export interface Cam {
 	y: number;
 	z: number;
 }
+
+/** The tasks of a board that are not settled yet: open, taken, or waiting for the owner. */
+export const unsettled = (b: ViewBoard) => b.open + b.taken + b.blocked;
 
 /** The working pieces among `work`: not ended. */
 export const running = (work: ViewWork[]) => work.filter((w) => w.doing !== "done" && w.doing !== "failed" && w.doing !== "cancelled");

@@ -36,6 +36,13 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 	// [what is asked, a part that must be among the first three]
 	const cases: Array<[string, RegExp]> = [
 		["telegram pairing code", /^source-types#telegram$/],
+		["how do sub-agents know which of them looks at which file", /^boards(#a-pool-of-sub-agents)?$/],
+		["ten agents on one project: how do they share what they found", /^boards/],
+		["more than four sub-agents at once", /^boards#a-pool-of-sub-agents$/],
+		["a task stays taken after the agent crashed", /^boards#nothing-stays-taken$/],
+		["wake an agent when somebody posts a task", /^boards#events-of-a-board/],
+		["how do agents talk to each other", /^boards/],
+		["board_claim", /^boards#the-tools\/board-claim$/],
 		["put my coding chats into folders so the list stays tidy", /^agents#groups-of-conversations/],
 		["group the okapi conversations together", /^(agents#groups-of-conversations|setup#conversations-and-tabs)/],
 		["delete a whole group with its conversations", /^(agents#groups-of-conversations|setup#conversations-and-tabs)/],

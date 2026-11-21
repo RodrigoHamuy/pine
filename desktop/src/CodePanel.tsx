@@ -1,6 +1,7 @@
 // The panel beside a conversation: the agent itself (AgentView.tsx), then its work: the files
 // with an editor, what changed in the folder (git), what the last message changed, what the
-// agent's tool calls printed, and what its commands left running. Everything is read through the control API; a file is written through it too, by
+// agent's tool calls printed, what its commands left running, and the board it shares with its
+// sub-agents (Board.tsx). Everything is read through the control API; a file is written through it too, by
 // the daemon, inside a sandbox that reaches only this folder.
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ import { Printed } from "@/components/printed";
 import { SideSheet } from "@/components/side-sheet";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
+import { BoardTab } from "./Board.tsx";
 import { bridge } from "./bridge.ts";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
@@ -558,6 +560,8 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const setView = (v: CodeView) => ((store.codeView = v), store.touch());
 	const setFile = (file?: string) => ((state.file = file), redraw((n) => n + 1));
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
+	// The tasks of its boards that are not settled yet: what the tab's number says.
+	const unsettled = tab.boards.reduce((n, b) => n + b.counts.open + b.counts.taken + b.counts.blocked, 0);
 	// In a window narrower than that there is no room beside the conversation: the panel is a stock sheet over it,
 	// from the right, and putting it away is closing the panel. The owner's choice (open or not) is the same either way.
 	const sheet = !useMediaQuery(ROOM);
@@ -572,7 +576,7 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			onClose={() => void store.command("code")}
 			bar={
 				<>
-					{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
+					{/* Seven or eight tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
 					    for the line under the tab in front, which stock draws below the list. */}
 					<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 					<div className="pb-1.5">
@@ -587,6 +591,13 @@ export function CodePanel({ tab }: { tab: Tab }) {
 								Running
 								{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
 							</TabsTrigger>
+							{/* Only while the conversation has a board, or the owner asked for the tab: most conversations have none. */}
+							{tab.boards.length || view === "board" ? (
+								<TabsTrigger value="board">
+									Board
+									{unsettled ? <Badge variant="secondary">{unsettled}</Badge> : null}
+								</TabsTrigger>
+							) : null}
 							{/* A shell of this computer: a conversation of another machine's pine does not work here. */}
 							{store.remote ? null : <TabsTrigger value="terminal">Terminal</TabsTrigger>}
 						</TabsList>
@@ -607,6 +618,8 @@ export function CodePanel({ tab }: { tab: Tab }) {
 				<Files tab={tab} file={state.file} setFile={setFile} />
 			) : view === "output" ? (
 				<Output tab={tab} />
+			) : view === "board" ? (
+				<BoardTab tab={tab} />
 			) : view === "terminal" ? (
 				store.remote ? <EmptyView icon={SquareTerminalIcon} title="No terminal here">The terminal is a shell on this computer, and this conversation works on {store.remote}. Open a terminal there with ssh.</EmptyView> : <TerminalView tab={tab} />
 			) : (

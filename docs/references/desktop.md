@@ -601,9 +601,30 @@ agent's workspace):
 | Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
 | Output | The tool calls of the last messages, each with all it printed |
 | Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the conversation's browser, at the right of the window, where the agent sees the same page; only where the conversation has no browser does it open in your own |
+| Board | The tasks and notes this conversation shares with its sub-agents and with the agents it hands work to: see "The Board tab" below. The tab is there while the conversation has a board, and `/code board` opens it before that |
 | Terminal | A shell of your own for the conversation, in its folder: see "The terminal" below (`` ⌃` ``, View > Terminal, `/terminal`) |
 
 While an agent keeps a list of steps, the open steps stand at the top of the panel.
+
+### The Board tab
+
+A board is where a job that several work on at once is kept track of: its tasks, who has
+each, what became of it, and the notes they left for each other ([boards.md](boards.md)). An
+agent starts one when it splits a job among a pool of sub-agents; the tab appears then, with
+the number of tasks that are not settled yet beside its name.
+
+| On the tab | Meaning |
+|---|---|
+| A task | Its number and text, and where it stands: open, waiting for other tasks, somebody working on it (a sub-agent, or an agent by name), done, failed, or "Needs your answer". A click on the text shows all of it, its result and the notes about it |
+| "Needs your answer" | A task whose worker could not go on without you. Its question stands under it with a line to answer in: the answer becomes a note on the task, and the task is open again for whoever takes it next |
+| The menu at a task's right | "Take it back" from whoever has it (a sub-agent the pool started for it is stopped, and the task is given to a new one), "Open it again" after it was settled, "Mark as done", "Remove" |
+| Notes | What the workers found or decided, each with who wrote it and its fields (a file, a line) as small labels. "from outside content" marks a post by a run that had read a web page or other outside content |
+| The line at the bottom | A task of your own. While a pool runs it is worked like the others; otherwise it waits for the agent to take it |
+| The list at the top left | Where the conversation can use more than one board (one with a name, of the agent or for all agents): which one is shown |
+| Clear | Removes the board with everything on it |
+
+What stands on a board was written by agents and can repeat what they read: the app draws it
+as plain text. The terminal UI has no such tab.
 
 **The editor.** A click on a file in Files (or "Edit" on a diff) opens it in an editor with
 line numbers, colors for the common languages, search (`⌘F` in the editor) and undo.
@@ -736,7 +757,8 @@ where it stands:
 | A capsule in the glass tube | An event: from your desk (what you asked; the answer comes back down), from the box of an event source in the hall, or down from the clock in the turret when a schedule is due |
 | Alarm clocks over a desk; the clock in the turret | The agent's schedules; the turret's clock shows your time, and above it the schedule that runs next. They ring when one is due |
 | The board on the wall | The agent's conversations: a line for the main one, a fork for each branch, a leaf on one that works in a worktree, a small flag on one with a goal |
-| Pips under a bubble; a flag on the desk | The steps of its to-do list that are done; a goal that pine calls it for again and again |
+| Pips under a bubble; a flag on the desk | The steps of its to-do list that are done, or, while its sub-agents work through a board, the tasks of that board that are done ("board: 3 of 12 done" under the bubble); a goal that pine calls it for again and again |
+| A word at the board on the wall: "posted on the board", "task taken", "task settled" | Something happened on a board of the agent's ([boards.md](boards.md)) |
 | A letter flies up to the dish on the roof | The agent sent something out (`send`, `publish_event`) |
 | Shield, lock, bolt, warning sign, blueprint on a door plate | The agent's mode: `safe`, `manual`, `auto`, `bypass` (with hazard tape and a beacon in the room), `plan` |
 | An amber lamp in a room, amber eyes | The work read outside content: sending something out asks you from now on. A shield on a robot's chest is work held to a stricter mode |
@@ -791,7 +813,7 @@ agent with its avatar, on the panel's own ground in whatever theme you use.
 |---|---|
 | The left column, "Triggers" | What starts an agent's work: you, every event source, every schedule and every webhook, each with whom it triggers ("inbox, triggers books") and, for a schedule, when it is due. A source that is down says so, in the color of what failed. A question for you is said at "You" |
 | The middle column, "Agents" | Every agent, those that work on top and the idle ones below them (when one starts or stops, the boxes glide to their new places). Under its name what it is doing right now ("Running a command", "Using web: search", "Waiting for scout", "Needs your answer", "Idle"), under that why ("for you", "delegated by main", "triggered by inbox") and how far ("step 2 of 5"). Each of its sub-agents is a line of its own under it, and a sub-agent that one of them started stands in under that one. Its mode stands beside its name |
-| The right column, "Tools" | Every MCP server and every skill |
+| The right column, "Tools" | On top, under "Boards", every board that has work on it and every board with a name: whose it is, and how many of its tasks are done (or "Needs your answer" for a task that waits for you, which also counts as a question at "You"). While sub-agents of an agent have tasks of a board, a line joins that agent and the board, and the agent's card says how far the board is. Under them every MCP server and every skill |
 | An agent's card | Its avatar and name, and its mode as a badge at the right (`bypass` in the color of what warns). While it works, a small dot beside its name fades out and in, as it does on its tab |
 | A colored border and a tint | Something happens there right now, in the agent's color. A question for you is in the theme's color for a question, a source that is down in its color for what failed. Everything else has a plain border |
 | A line between two things | Something happens between them right now, in the color of the agent it happens to: from a trigger to the agent it started, from an agent to the MCP server or skill it is using, beside the agents from one to the agent it delegated a task to, and in the color of a question from an agent to you while it waits for your answer. A line starts with a dot and ends with an arrowhead, and a dot runs along it the way things go. Every line has a lane of its own and turns at 45 degrees, so no two lie on top of each other |
@@ -942,6 +964,7 @@ desktop/
     Conversation.tsx, Composer.tsx, markdown.tsx     a conversation, the input, an answer drawn (a picture
                    in either opens larger in a stock Dialog of its own)
     CodePanel.tsx  changes, files and the editor, output, what is running
+    Board.tsx      the Board tab: the tasks and notes a conversation shares with its sub-agents
     Browser.tsx    the agent's browser in its aside: its page as a picture, and what is done in it handed back
     View.tsx       the view's panel: what asks you, the view in its sandboxed frame, what happened, what is
                    chosen. view-world.ts is pine as the page knows it, made from the live events; view-state.ts

@@ -50,12 +50,13 @@ const announce = (list: ViewHappening[]) => {
 	for (const h of list) for (const fn of happenings) fn(h);
 };
 /** What the events do not say and the view shows: asked again when an event says it may have changed. */
-const stale = { conversations: true, schedules: true };
+const stale = { conversations: true, schedules: true, boards: true };
 store.taps.add((batch) => {
 	world.take(batch);
 	for (const e of batch) {
 		// A conversation was made, removed, branched or given a worktree; work began or ended in one (a branch is new with its first work).
 		if (e.topic === "pine/conversation" || /^agent\/[^/]+\/(started|done|failed)$/.test(e.topic)) stale.conversations = true;
+		if (e.topic === "pine/board") stale.boards = true;
 		if (e.source === "timer" || e.topic === "pine/settings" || /^agent\/[^/]+\/tool$/.test(e.topic)) stale.schedules ||= e.source === "timer" || e.topic === "pine/settings" || /schedule/.test(String((e.payload as { tool?: unknown })?.tool ?? ""));
 	}
 	if (!happenings.size) return;
@@ -153,6 +154,14 @@ function useSeed(): void {
 		// their next time: asked when an event says they may have changed, and now and then.
 		let talked = 0;
 		let timed = 0;
+		let boarded = 0;
+		// The boards (how many tasks stand how, and which work has one): asked when pine says one changed, and now and then.
+		const boards = async () => {
+			boarded = Date.now();
+			stale.boards = false;
+			const list = await api.allBoards().catch(() => undefined);
+			if (!gone && list) world.setBoards(list);
+		};
 		const conversations = async () => {
 			talked = Date.now();
 			stale.conversations = false;
@@ -180,6 +189,7 @@ function useSeed(): void {
 			// A schedule whose time has passed is asked about again: its next time is another.
 			const due = world.schedules.some((s) => s.next !== undefined && s.next - world.skew < t - 1500);
 			if ((stale.schedules && t - timed > 700) || (due && t - timed > 3000) || t - timed > 30_000) void schedules();
+			if ((stale.boards && t - boarded > 500) || t - boarded > 30_000) void boards();
 		}, 300);
 		return () => ((gone = true), window.clearInterval(id));
 	}, [s.home, s.remote]);

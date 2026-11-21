@@ -261,9 +261,10 @@ async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) =
 			if (api) gone = (await api.post(`/agents/${encodeURIComponent(id)}/erase`, { agent: id, keepFiles: keep })) as any;
 			else {
 				const { Kv, openDb, TaskStore } = await import("./store.ts");
+				const { Boards } = await import("./boards.ts");
 				const db = openDb(cfg.dataDir);
 				try {
-					gone = eraseAgent(cfg, { kv: new Kv(db), tasks: new TaskStore(db) }, id, keep);
+					gone = eraseAgent(cfg, { kv: new Kv(db), tasks: new TaskStore(db), boards: new Boards(db) }, id, keep);
 				} finally {
 					db.close();
 				}
@@ -280,9 +281,10 @@ async function agentCommand(cfg: PineConfig, argv: string[], out: (v: unknown) =
 			if (api) done = (await api.post(`/agents/${encodeURIComponent(id)}/id`, { agent: id, to })) as any;
 			else {
 				const { Kv, openDb, TaskStore } = await import("./store.ts");
+				const { Boards } = await import("./boards.ts");
 				const db = openDb(cfg.dataDir);
 				try {
-					done = renameAgent(cfg, { kv: new Kv(db), tasks: new TaskStore(db) }, id, to);
+					done = renameAgent(cfg, { kv: new Kv(db), tasks: new TaskStore(db), boards: new Boards(db) }, id, to);
 				} finally {
 					db.close();
 				}

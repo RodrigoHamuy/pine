@@ -218,3 +218,28 @@ test("the whole picture draws in every state: by day and by night, at rest and a
 		delete (globalThis as any).document;
 	}
 });
+
+test("a board its sub-agents work through shows as pips under the agent's bubble, a sub-agent says it has a task, and a word at the pinboard says what happened", () => {
+	const { world, shop } = building(3);
+	run(world, shop, 0, 200);
+	const board = { id: 7, scope: "conversation" as const, agent: "a01", conversation: 1, open: 5, taken: 2, done: 3, failed: 0, blocked: 0, notes: 4, workers: [2] };
+	const s = { ...told(world), boards: [board] };
+	const job = (more: object) => ({ id: 1, agent: "a01", copy: false, depth: 0, from: { k: "you" as const }, doing: "waiting" as const, waitingOn: [], started: start, tools: 0, asking: false, held: false, outside: false, branch: false, worktree: false, conversation: 1, ...more });
+	const said = view.sayOf(job({}), s, start);
+	assert.deepEqual([said.note, said.steps], ["board: 3 of 10 done", { done: 3, total: 10 }]);
+	// Its own list of steps comes first, and so does who it works for.
+	assert.deepEqual(view.sayOf(job({ steps: { done: 1, total: 2 } }), s, start).steps, { done: 1, total: 2 });
+	assert.equal(view.sayOf(job({ from: { k: "agent", id: "a00" } }), s, start).note, "for a00");
+	assert.equal(view.sayOf(job({ id: 2, copy: true, doing: "thinking", board: 7 }), s, start).note, "a task of the board");
+	// A board whose tasks are all settled says nothing, and neither does another conversation's.
+	assert.equal(view.sayOf(job({}), { ...s, boards: [{ ...board, open: 0, taken: 0 }] }, start).steps, undefined);
+	assert.equal(view.sayOf(job({ conversation: 2 }), s, start).steps, undefined);
+	assert.equal(toolSay("board_post").text, "posting on the board");
+	// Forty tasks posted at once are one word at the pinboard, not forty.
+	const now = start + 300;
+	for (let i = 0; i < 40; i++) shop.hear({ k: "board", board: 7, change: "posted", agent: "a01" }, s, now + i);
+	shop.hear({ k: "board", board: 7, change: "removed", agent: "a01" }, s, now + 2000);
+	shop.hear({ k: "board", board: 7, change: "settled", agent: "a01" }, s, now + 2000);
+	assert.deepEqual(shop.tags(s, now + 2000).filter((t: any) => t.k === "float").map((t: any) => t.text), ["posted on the board", "task settled"]);
+	assert.equal(shop.hotAt.get("board:a01"), now + 2000);
+});

@@ -75,7 +75,7 @@ export const SOURCE_TYPES = ["folder", "mqtt", "webhook", "ftp", "telegram", "ht
 export const EVERYDAY_TYPES = ["folder", "mqtt", "webhook", "ftp", "telegram", "http", "command"];
 
 /** Topics only the daemon itself publishes on: the publish_event tool and route definitions refuse them. */
-export const RESERVED_TOPICS = ["approval/#", "agent/#", "pine/#", "state/#", "timer/#"];
+export const RESERVED_TOPICS = ["approval/#", "agent/#", "pine/#", "state/#", "timer/#", "board/#"];
 
 /**
  * A subscription: one conversation of an agent listens to one source, and each event of the source
@@ -227,6 +227,8 @@ export interface UntrustedProfile {
 	publish: string[];
 	stateWrite: boolean;
 	subagents: boolean;
+	/** Whether such a run has the board tools. What it posts is marked as coming from outside. */
+	board: boolean;
 }
 
 export interface AgentConfig {
@@ -479,6 +481,7 @@ function loadAgent(id: string, dir: string, raw: any, cfg: PineConfig, problems:
 						publish: strings(raw.untrusted?.publish, []),
 						stateWrite: raw.untrusted?.stateWrite === true,
 						subagents: raw.untrusted?.subagents === true,
+						board: raw.untrusted?.board === true,
 					},
 		bashTimeoutSec: raw.bashTimeoutSec ?? cfg.defaults.bashTimeoutSec,
 		bashDeny: strings(raw.bashDeny, []),

@@ -218,13 +218,14 @@ declares them in **families**, which is about 11 500:
 
 | Family | Its actions |
 |---|---|
-| `pine_list` | What there is: `sources`, `schedules`, `mcp_servers`, `skills`, and for the main agent `agents`, `settings`, `routes`, `conversations`. `what` takes several at once (`["sources", "schedules"]`) |
+| `pine_list` | What there is: `sources`, `schedules`, `mcp_servers`, `skills`, `boards`, and for the main agent `agents`, `settings`, `routes`, `conversations`. `what` takes several at once (`["sources", "schedules"]`) |
 | `pine_sources` | `subscribe`, `unsubscribe`, `add_source`, `send`, `read_source`, `remove_source`, `publish_event`, and for the main agent `add_source_type`, `remove_source_type` |
 | `pine_schedules` | `add_schedule`, `remove_schedule` |
 | `pine_mcp` | `add_mcp_server`, `remove_mcp_server`, and the three tools for a server's resources |
 | `pine_skills` | `add_skill`, `remove_skill` |
 | `pine_agents` | The main agent's: `create_agent`, `update_agent`, `rename_agent`, `remove_agent` |
 | `pine_settings` | The main agent's: `set_setting`, `add_route`, `remove_route`, `add_model_server`, `remove_model_server` |
+| `pine_board` | `board_read`, `board_post`, `board_claim`, `board_done`: tasks and notes that several share ([boards.md](boards.md)) |
 | `pine_other` | `request_access`, `stop_program`, `state_get`, `state_set` |
 | `pine_conversations` | The main agent's: `read_conversation`, `set_conversation`, `remove_conversation` |
 | One for each MCP server, named after the server (`browser`, `media`, `home_link`) | The server's tools under their own names (`browser_navigate`, `browser_click`) |
@@ -581,6 +582,9 @@ delegate(agent, task, wait?, thread?, worktree?)
 - `worktree: true` (in your own conversations, when they have a folder): the other agent does
   the task in a worktree of its own of the conversation's folder, and its work comes back as a
   branch to merge, as for sub-agents below. Not with `thread` or `wait: false`.
+- A task handed on without `thread` works on the board of the conversation it came from, for
+  that run: the other agent reads the notes that are there and leaves its own
+  ([boards.md](boards.md)).
 
 What an agent is for, as the agents that delegate to it read it, is the first paragraph of its
 `AGENTS.md` (a heading above it aside), one line of at most 160 characters. Write it for the
@@ -592,7 +596,7 @@ has no such paragraph is shown with `description` from its `agent.json`.
 
 ## Sub-agents
 
-`subagent(tasks: string[], model?, thinking?, worktree?)` runs up to `subagents.maxParallel` copies of the
+`subagent(tasks: string[], model?, thinking?, worktree?, pool?)` runs up to `subagents.maxParallel` copies of the
 same agent at once (4 unless the agent's `agent.json` says otherwise).
 Each copy has the agent's workspace, instructions and tools but an empty conversation, cannot
 delegate or spawn further, and returns only its final answer. Use it for searches and checks
@@ -606,6 +610,7 @@ that would otherwise fill the context:
 | `model` | Another model for these sub-agents than the agent's own, as `provider/model` (the id alone is enough where only one model has it). For work another model does better: one that sees pictures, a small fast one for many simple checks, a large one for a hard part. The `models` tool lists what there is. Left out: the agent's own model. |
 | `thinking` | How much these sub-agents reason: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. A model that cannot reason ignores it. Left out: the agent's own level. |
 | `worktree` | `true`: each sub-agent changes files in a worktree of its own of the conversation's folder (a git repository), made from its last commit, so that sub-agents that change the same files do not collide. When it is done, what it changed is committed on its branch (`pine/<conversation>-sub`, `-sub-2`, ...), its folder goes, and the answer names the branch: the conversation brings it in with `git merge` and deletes it with `git branch -d`. One that changed nothing leaves nothing. Only in your own conversations; what is not committed in the folder is not in the sub-agents' worktrees. See [coding.md](coding.md), "A worktree for a conversation". |
+| `pool` | `true`: more tasks than run at once (up to 100), worked through on the conversation's board, where each sub-agent sees the others' notes. Not with `worktree`. See [boards.md](boards.md). |
 
 A sub-agent on another model is still the same agent: the same workspace, files, tools,
 instructions and permissions. Only the model that reads and answers is another one. So a file is
@@ -654,6 +659,9 @@ The same works for a task that was delegated to another agent.
 
 Small facts that several agents and routes need: who is home, the mode of the house, the state
 of the printer.
+
+(For work that several do together, who takes which task and what each found, there are
+boards: [boards.md](boards.md). Shared state is for facts about the world.)
 
 - Routes write it: `"set": { "house/mode": "{{payload.value}}" }`.
 - Agents read it with `state_get` and write it with `state_set`, within `state.read` and

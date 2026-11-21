@@ -101,6 +101,8 @@ Topics pine itself uses:
 | `agent/<id>/started`, `agent/<id>/done`, `agent/<id>/failed` | A task starts or ends |
 | `agent/<id>/tool` | A tool call starts or ends (live only, not stored) |
 | `agent/<id>/todos` | The agent changed its list of steps (`items`, each with `text` and `status`; live only) |
+| `board/<name>/task`, `/note`, `/done`, `/failed`, `/blocked` | Something happened on a board with a name that an agent or all agents have ([boards.md](boards.md)) |
+| `pine/board` | A board changed (`board`, `scope`, `agent`, `session`, `name`, `change`; live only): a UI asks the control API for the rest |
 | `agent/<id>/steered` | A message was given to a task that was already working (`task`), instead of becoming work of its own (live only) |
 | `agent/<id>/goal` | The goal of a conversation was set, judged, paused, resumed or cleared (the goal with its `objective`, `status`, `round`, `note` and the judge's `reason`, and `event`: what just happened) |
 | `agent/<id>/undone`, `agent/<id>/redone` | The owner took back their last message in a conversation, or brought it back (`session`, `message`, how many `tasks` and `files`) |
@@ -178,6 +180,8 @@ line saying so; a cancelled one sends nothing.
   or less (`thinking`).
 - Shared state (`state_get`, `state_set`) holds small facts such as `house/mode` that every agent
   can read and that can be shown to an agent in every turn.
+- A board holds the tasks and notes of a job that several work on: sub-agents take the tasks one
+  by one and see what the others found ([boards.md](boards.md)).
 - `publish_event` lets an agent put an event on a topic you allowed, which routes then act on.
 - `send` lets an agent reach out through a source that can send: a message to you on Telegram,
   a command to a device over MQTT.

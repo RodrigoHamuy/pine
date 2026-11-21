@@ -75,12 +75,12 @@ export const COMMANDS: Command[] = [
 		},
 	},
 	{
-		name: "code", title: "Side panel", about: "The agent, its files, changes, tool output, what is running and a terminal, beside the conversation", hint: "[agent|files|changes|turn|output|running|terminal|off]", keys: "⌥⌘B",
+		name: "code", title: "Side panel", about: "The agent, its files, changes, tool output, what is running, its board and a terminal, beside the conversation", hint: "[agent|files|changes|turn|output|running|board|terminal|off]", keys: "⌥⌘B",
 		run: (args) => {
 			const word = args.trim().toLowerCase();
 			if (!word) return store.command("code");
 			if (word === "off") return void (store.close("code"), store.touch());
-			if (!["agent", "changes", "turn", "files", "output", "running", "terminal"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, output, running, terminal.");
+			if (!["agent", "changes", "turn", "files", "output", "running", "board", "terminal"].includes(word)) return store.flash("The panel shows: agent, files, changes, turn, output, running, board, terminal.");
 			return store.command(`code-${word}`);
 		},
 	},

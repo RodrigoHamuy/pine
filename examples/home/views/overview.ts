@@ -38,7 +38,7 @@
 //
 // There is no timeline: what happened, in order, is what the panel lists under every view.
 
-import { defineView, ease, frame, mix, rgb, type Box as Rect, type Cam, type ViewAgent, type ViewConversation, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
+import { defineView, ease, frame, mix, rgb, unsettled, type Box as Rect, type Cam, type ViewAgent, type ViewBoard, type ViewConversation, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
 
 // ---- what is said ---------------------------------------------------------------------------------------------------------
 
@@ -64,6 +64,11 @@ const DOING: Record<string, string> = {
 	publish_event: "Publishing an event",
 	read_source: "Reading from a source",
 	request_access: "Requesting access",
+	boards: "Listing boards",
+	board_read: "Reading the board",
+	board_post: "Posting on the board",
+	board_claim: "Taking a task",
+	board_done: "Settling a task",
 };
 
 /** A tool's name without its server's: "mcp__web__web_search" of "web" is "search". */
@@ -103,6 +108,17 @@ export function causeOf(w: ViewWork): string {
 
 const span = (ms: number) => (ms < 1500 ? "now" : ms < 90_000 ? `${Math.round(ms / 1000)} s` : ms < 5_400_000 ? `${Math.round(ms / 60_000)} min` : ms < 129_600_000 ? `${Math.round(ms / 3_600_000)} h` : `${Math.round(ms / 86_400_000)} d`);
 const listOf = (names: string[], max = 3) => (names.length <= max ? names.join(", ") : `${names.slice(0, max - 1).join(", ")} +${names.length - max + 1}`);
+
+/** The boards of a state. (An app older than this view tells it none.) */
+const boardsOf = (s: ViewState): ViewBoard[] => s.boards ?? [];
+/** A board by what it is called: its name, or whose it is. A view is never told what stands on it. */
+export const boardTitle = (b: ViewBoard) => b.name ?? (b.agent ? `${b.agent}'s board` : "Board");
+/** How a board stands, in a few words. */
+export function boardLine(b: ViewBoard): string {
+	const tasks = b.open + b.taken + b.done + b.failed + b.blocked;
+	if (b.blocked) return b.blocked === 1 ? "Needs your answer" : `${b.blocked} need your answer`;
+	return tasks ? `${b.done} of ${tasks} done` : b.notes ? plural(b.notes, "note") : "Empty";
+}
 // ---- what just happened, for a moment -------------------------------------------------------------------------------------
 
 /** What the state does not say: that something came in just now, that an agent just sent something out. It fades. */
@@ -152,6 +168,9 @@ export class Recent {
 				note(h.from, `Answered ${h.to}`);
 				note(h.to, `Answer from ${h.from}`);
 				break;
+			case "board":
+				this.hot.set(`board:${h.board}`, at);
+				break;
 			default:
 				break;
 		}
@@ -162,10 +181,10 @@ export class Recent {
 
 /** A box of the page: something that wakes agents, an agent, or something agents use. */
 export interface Box {
-	/** "you", an input's id ("source:inbox", "outside:hook"), "sched:<name>", "agent:<id>", "mcp:<name>", "skill:<name>". */
+	/** "you", an input's id ("source:inbox", "outside:hook"), "sched:<name>", "agent:<id>", "board:<number>", "mcp:<name>", "skill:<name>". */
 	id: string;
 	col: 0 | 1 | 2;
-	kind: "you" | "source" | "outside" | "sched" | "agent" | "mcp" | "skill";
+	kind: "you" | "source" | "outside" | "sched" | "agent" | "board" | "mcp" | "skill";
 	/** Its place on the board. */
 	x: number;
 	y: number;
@@ -238,8 +257,9 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 	};
 
 	// On the left: you, the event sources, the schedules, and any other way in.
-	const asks = s.work.filter((w) => !ended(w) && w.asking);
-	put(0, { id: "you", kind: "you", title: "You", sub: asks.length ? `${plural(asks.length, "question")} for you` : undefined, bad: asks.length > 0 }, asks.length ? 44 : 30);
+	// (A task of a board that waits for your answer is a question for you like any other.)
+	const asks = s.work.filter((w) => !ended(w) && w.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0);
+	put(0, { id: "you", kind: "you", title: "You", sub: asks ? `${plural(asks, "question")} for you` : undefined, bad: asks > 0 }, asks ? 44 : 30);
 	const sources = s.inputs.filter((i) => i.kind === "source").sort((a, b) => a.name.localeCompare(b.name));
 	if (sources.length) head(0, "Events");
 	const listeners = (i: ViewInput) => [...new Set([...i.agents, ...s.agents.filter((a) => a.sources.includes(i.name)).map((a) => a.id)])];
@@ -272,6 +292,8 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 			const where = [first.branch ? "in a branch" : "", first.worktree ? "in a worktree" : ""].filter(Boolean).join(" · ");
 			lines.push({ text: sentenceOf(first, s), tone: first.asking ? "ask" : "now" });
 			for (const text of [why, far, where]) if (text) lines.push({ text, tone: "dim" });
+			// The board its sub-agents work through: how many of its tasks are done.
+			for (const b of boardsOf(s)) if (b.scope === "conversation" && b.agent === a.id && unsettled(b) > 0) lines.push({ text: `Board: ${boardLine(b).toLowerCase()}${b.taken ? ` · ${b.taken} in progress` : ""}`, tone: b.blocked ? "ask" : "dim" });
 			for (const w of own) if (w !== first) lines.push({ text: `${sentenceOf(w, s)}${causeOf(w) ? ` · ${causeOf(w)}` : ""}`, tone: w.asking ? "ask" : "now" });
 			const shown = first.copy ? copies.slice(1) : copies;
 			// Its sub-agents as a tree: one that a sub-agent started itself stands in under that one.
@@ -294,7 +316,12 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, lines, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, 40 + lines.length * 18);
 	}
 
-	// On the right: the MCP servers and the skills, those that most agents have first.
+	// On the right, first: the boards that have work on them, and those with a name, which are there to stay.
+	const boards = boardsOf(s).filter((b) => unsettled(b) > 0 || b.name).slice(0, 6);
+	if (boards.length) head(2, "Boards");
+	for (const b of boards) put(2, { id: `board:${b.id}`, kind: "board", title: boardTitle(b), sub: boardLine(b), busy: b.taken > 0, bad: b.blocked > 0 }, 44);
+
+	// Under them: the MCP servers and the skills, those that most agents have first.
 	const ranked = (pick: (a: ViewAgent) => string[]) => {
 		const n = new Map<string, number>();
 		for (const a of s.agents) for (const name of pick(a)) n.set(name, (n.get(name) ?? 0) + 1);
@@ -340,6 +367,8 @@ export function linksOf(s: ViewState, l: Layout, now: number = s.at): Link[] {
 			else if (f.k === "clock") add({ from: `sched:${f.name ?? ""}`, to: me, color, live: true });
 			else if (f.k === "agent" && f.id !== w.agent) add({ from: `agent:${f.id}`, to: me, color: colorOf(f.id), live: true, side: true });
 		}
+		// It has a task of a board: a line to that board, for as long as it has it.
+		if (w.board !== undefined) add({ from: me, to: `board:${w.board}`, color, live: true });
 		if (w.doing === "tool" && w.skill) add({ from: me, to: `skill:${w.skill}`, color, live: true });
 		else if (w.doing === "tool" && w.mcp) add({ from: me, to: `mcp:${w.mcp}`, color, live: true });
 	}
@@ -367,6 +396,7 @@ export function wiringOf(id: string | undefined, s: ViewState, l: Layout): Link[
 		for (const name of a.schedules) add(`sched:${name}`, true);
 		for (const name of a.mcp) add(`mcp:${name}`, false);
 		for (const name of a.skills) add(`skill:${name}`, false);
+		for (const x of boardsOf(s)) if (x.scope === "all" || x.agent === a.id) add(`board:${x.id}`, false);
 	};
 	if (b.agent) of(b.agent);
 	else for (const a of s.agents) of(a);
@@ -398,6 +428,13 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number): string[] {
 	if (b.kind === "sched") {
 		const x = s.schedules.find((k) => `sched:${k.name}` === b.id);
 		return [`${b.title}: schedule`, x?.agent ? `triggers ${x.agent}` : "triggers all agents", x?.when ?? "", x?.next !== undefined && x.next > now ? `next in ${span(x.next - now)}` : ""].filter(Boolean);
+	}
+	if (b.kind === "board") {
+		const x = boardsOf(s).find((k) => `board:${k.id}` === b.id);
+		if (!x) return [b.title];
+		const whose = x.scope === "all" ? "board for all agents" : x.scope === "agent" ? `board of ${x.agent ?? "an agent"}` : `board of a conversation${x.agent ? ` of ${x.agent}` : ""}`;
+		const states = [x.taken ? `${x.taken} in progress` : "", x.open ? `${x.open} open` : "", x.blocked ? `${plural(x.blocked, "task")} waiting for your answer` : "", x.failed ? `${x.failed} failed` : "", x.done ? `${x.done} done` : ""].filter(Boolean);
+		return [`${b.title}: ${whose}`, states.join(", ") || "no tasks", x.notes ? plural(x.notes, "note") : "", "read it in the Board tab beside the conversation"].filter(Boolean);
 	}
 	const has = s.agents.filter((a) => (b.kind === "mcp" ? a.mcp : a.skills).includes(b.title));
 	const using = [...new Set(s.work.filter((w) => !ended(w) && w.doing === "tool" && (b.kind === "mcp" ? w.mcp : w.skill) === b.title).map((w) => w.agent))];
@@ -853,7 +890,7 @@ export default defineView((host: ViewHost) => {
 	const box = document.createElement("div");
 	box.className = "overview";
 	const canvas = document.createElement("canvas");
-	canvas.setAttribute("aria-label", "All of pine on one board: triggers on the left, the agents and what each is doing in the middle, their tools on the right");
+	canvas.setAttribute("aria-label", "All of pine on one page: triggers on the left, the agents and what each is doing in the middle, their boards and tools on the right");
 	const bar = document.createElement("div");
 	bar.className = "overview-bar";
 	const sum = document.createElement("div");
@@ -1005,6 +1042,13 @@ export default defineView((host: ViewHost) => {
 				li.textContent = `${a.id}, ${a.mode} mode${a.main ? ", the main agent" : ""}: ${mine.length ? mine.map((w) => `${w.copy ? "sub-agent " : ""}${sentenceOf(w, s).toLowerCase()}${causeOf(w) ? `, ${causeOf(w)}` : ""}`).join("; ") : "idle"}. ${[a.sources.length ? `Triggered by ${a.sources.join(", ")}` : "", a.schedules.length ? `schedules: ${a.schedules.join(", ")}` : "", a.mcp.length ? `MCP servers: ${a.mcp.join(", ")}` : "", a.skills.length ? `skills: ${a.skills.join(", ")}` : "", `${plural(a.conversations.length, "conversation")}, ${plural(a.conversations.filter((c) => c.branchOf !== undefined).length, "branch", "branches")}`].filter(Boolean).join("; ")}`;
 				return li;
 			}),
+			// The boards, as the page shows them: whose each is and how its tasks stand.
+			...boardsOf(s).filter((b) => unsettled(b) > 0 || b.name).map((b) => {
+				const li = document.createElement("li");
+				li.dataset.board = String(b.id);
+				li.textContent = `${boardTitle(b)}: ${boardLine(b).toLowerCase()}${b.taken ? `, ${b.taken} in progress` : ""}.`;
+				return li;
+			}),
 		);
 	};
 	const stopState = host.on("state", (s) => {
@@ -1076,7 +1120,7 @@ export default defineView((host: ViewHost) => {
 			draw(g, s, layout, now, { hover: over?.id, selected: sel && layout.byId.has(sel) ? sel : undefined, recent, cam, view });
 
 			const running = s.work.filter((x) => !ended(x));
-			const asks = running.filter((x) => x.asking).length;
+			const asks = running.filter((x) => x.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0);
 			const next = s.schedules.find((x) => x.next !== undefined && x.next > now - 1000);
 			const bad = s.inputs.filter((i) => i.failing).map((i) => i.name);
 			const part = (cls: string, text: string) => Object.assign(document.createElement(cls === "b" ? "b" : "span"), { className: cls === "b" ? "" : cls, textContent: text });

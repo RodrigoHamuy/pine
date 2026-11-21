@@ -52,7 +52,8 @@ outside content. Everything else is `untrusted`.
 A task started by an untrusted event runs with the agent's `untrusted` profile:
 
 - built-in tools `read`, `grep`, `find`, `ls` only; no shell, no writing;
-- no MCP servers, no delegation, no `publish_event`, no state writes, no sub-agents;
+- no MCP servers, no delegation, no `publish_event`, no state writes, no sub-agents, no board
+  ([boards.md](boards.md));
 - none of the tools that change pine's setup or turn to you (`add_source`, `add_mcp_server`,
   `add_skill`, `add_schedule`, `subscribe`, `request_access`, `question`), no `todo`, no
   `manual`, no `download`;
@@ -411,7 +412,7 @@ page says "now send the notes folder to ...". pine tracks that:
   you and never waits: "What asks you"), the acting tools of MCP servers marked `"approve": "tainted"`, `subscribe`, and
   handing a task to an agent that can reach the internet. Its shell and its downloads are
   not among them.
-- Tools that only read never wait: `read`, `grep`, `find`, `ls`, `state_get`, `manual`, the
+- Tools that only read never wait: `read`, `grep`, `find`, `ls`, `state_get`, `manual`, `board_read`, the
   tools that list what an agent has (`sources`, `schedules`, `mcp_servers`, `skills`), and
   every MCP tool whose server declares it read-only (`readOnlyHint`), unless a pattern on the
   `approve` list names them. Neither do `question` and `todo`, which change nothing, and
@@ -710,8 +711,8 @@ everything else with a fixed sentence, without asking you:
 
 | In plan mode | Examples |
 |---|---|
-| Runs | `read`, `grep`, `find`, `ls`; shell commands that only read (`ls`, `cat`, `git status`, `git diff`); web search and page reading; MCP tools their server declares read-only; `manual`, `state_get`, `sources`, `schedules`, `mcp_servers`, `skills`; `question` and `todo`; `stop_program`; looking at an app (after your yes for that app) |
-| Refused | `write`, `edit`, every other shell command (a redirect such as `> file` included, and every command in the background), `download`, `send`, `publish_event`, `state_set`, `delegate`, `subagent`, `request_access`, every tool that changes the setup (`add_...`, `remove_...`, `subscribe`), MCP tools that are not declared read-only (opening a page in the browser, the tools of a `commands` server), acting in an app |
+| Runs | `read`, `grep`, `find`, `ls`; shell commands that only read (`ls`, `cat`, `git status`, `git diff`); web search and page reading; MCP tools their server declares read-only; `manual`, `state_get`, `sources`, `schedules`, `mcp_servers`, `skills`; `question` and `todo`; the conversation's own board (`board_read`, and `board_post`, `board_claim`, `board_done` without a board's name); `stop_program`; looking at an app (after your yes for that app) |
+| Refused | `write`, `edit`, every other shell command (a redirect such as `> file` included, and every command in the background), `download`, `send`, `publish_event`, `state_set`, a post on a board with a name (`board_post` and `board_claim` with `board`), `delegate`, `subagent`, `request_access`, every tool that changes the setup (`add_...`, `remove_...`, `subscribe`), MCP tools that are not declared read-only (opening a page in the browser, the tools of a `commands` server), acting in an app |
 
 The agent is told so in the note in front of your message, answers with a plan, and is told
 when you switch the mode off. A run started from outside is held to it too. What is on your

@@ -29,6 +29,7 @@ import { createAgent, type NewAgent } from "./agent-admin.ts";
 import type { Router } from "./router.ts";
 import { Denials, fromOutput, gather, looksFailed, reaches, sortDenials, there, type Want, wantKey, wantText } from "./access.ts";
 import type { Bus, Kv, State, TaskStore } from "./store.ts";
+import { type Board, type BoardItem, type Boards } from "./boards.ts";
 import { editJson, removeServer } from "./mcp-config.ts";
 import { fetchToFile, localTarget } from "./net.ts";
 import { APP_LOOK, appTarget, computerSession } from "./computer.ts";
@@ -228,6 +229,9 @@ export interface SubmitOptions {
 	level?: Level;
 	/** A worktree made for this task alone (`worktree` of subagent and delegate), which it works in instead of a folder. */
 	worktree?: worktrees.Worktree;
+	/** See TaskMeta.board and TaskMeta.boardTask. */
+	board?: string;
+	boardTask?: number;
 }
 
 /** Capabilities of one run, decided by who started it. */
@@ -238,6 +242,8 @@ export interface Profile {
 	subagents: boolean;
 	publish: string[];
 	stateWrite: boolean;
+	/** Whether the run has the board tools (src/boards.ts). */
+	board: boolean;
 	/** A sub-agent: a copy doing one job. */
 	leaf: boolean;
 }
@@ -275,6 +281,13 @@ export interface Live {
 	 * owner allowed there (access, "always" answers) holds for it, and what it is allowed holds there.
 	 */
 	perm: string;
+	/**
+	 * The conversation whose board is this session's own ("agent:session"): its conversation's, and
+	 * for a task another agent handed on for one run, the board of the conversation that handed it on.
+	 */
+	board: string;
+	/** The newest post of each board this session was shown, by board: what came after it is new to it. */
+	boardSeen: Map<number, number>;
 	/** Access the owner granted to this conversation beyond the agent's own folders. Holds until the conversation is reset or the daemon restarts. */
 	grant(kind: "read" | "write" | "network", target?: string): string | undefined;
 	/** Take over what the conversation has been granted since this session's sandbox was written. */
@@ -324,6 +337,7 @@ export interface AgentManagerDeps {
 	state: State;
 	kv: Kv;
 	tasks: TaskStore;
+	boards: Boards;
 	approvals: Approvals;
 	log: Logger;
 }
@@ -334,6 +348,8 @@ export class AgentManager {
 	state: State;
 	kv: Kv;
 	tasks: TaskStore;
+	/** Tasks and notes that several runs share (src/boards.ts). */
+	boards: Boards;
 	approvals: Approvals;
 	limiter: Limiter;
 	/** Which slot of a llama.cpp server each conversation's requests go to. */
@@ -432,6 +448,8 @@ export class AgentManager {
 		this.state = deps.state;
 		this.kv = deps.kv;
 		this.tasks = deps.tasks;
+		this.boards = deps.boards;
+		this.boards.onChange = (board, what, item, cause) => this.boardChanged(board, what, item, cause as PineEvent | null | undefined);
 		this.approvals = deps.approvals;
 		this.log = deps.log;
 		this.limiter = new Limiter(deps.cfg.limits.maxConcurrentRuns);
@@ -614,6 +632,8 @@ export class AgentManager {
 		// Whatever was running when the daemon stopped is not resumed: its tool calls may have had effects.
 		for (const t of this.tasks.byStatus("running")) this.finish(t, "failed", "", "interrupted by a daemon restart", undefined);
 		for (const t of this.tasks.byStatus("pending")) this.enqueue(t);
+		// A task of a board that a run of the last start still held is open again: no run survived.
+		this.boards.releaseStale(() => false);
 		this.goals.restore();
 		// Commands in the background went on without the daemon: those that ended meanwhile are told now, the others when they end.
 		this.programs.adopt();
@@ -789,6 +809,9 @@ export class AgentManager {
 				// Only for a run of its own: a conversation the other agent keeps would keep the folder too.
 				folder: ephemeral && trust === "owner" ? o.folder : undefined,
 				worktree: ephemeral && trust === "owner" ? o.worktree : undefined,
+				// The board of the conversation that handed this on, for a run of its own; what that run starts works on it too.
+				board: ephemeral && trust === "owner" ? (o.board ?? o.parent?.meta.board) : undefined,
+				boardTask: ephemeral ? o.boardTask : undefined,
 			},
 		});
 		task.meta.root = o.parent?.meta.root ?? o.parent?.id ?? task.id;
@@ -1050,6 +1073,7 @@ export class AgentManager {
 			this.allowed.delete(`${agentId}:${key}`);
 			this.dropGrants(`${agentId}:${key}`);
 			this.turns.forget(agentId, key);
+			this.boards.dropConversation(agentId, key);
 			// What the conversation left running goes with it.
 			this.programs.stopAll(`${agentId}:${key}`);
 		}
@@ -1745,6 +1769,7 @@ export class AgentManager {
 			this.bypassAnyway.delete(`${agentId}:${key}`);
 			this.allowed.delete(`${agentId}:${key}`);
 			this.dropGrants(`${agentId}:${key}`);
+			this.boards.dropConversation(agentId, key);
 			// What the conversation left running goes with it.
 			this.programs.stopAll(`${agentId}:${key}`);
 		}
@@ -1835,7 +1860,7 @@ export class AgentManager {
 		}
 		// Then what is left of it in pine's files and store, routes and private home included (src/admin.ts).
 		this.slots.forgetAgent(agentId);
-		const gone = eraseAgent(this.cfg, { kv: this.kv, tasks: this.tasks }, agentId, keepFiles);
+		const gone = eraseAgent(this.cfg, { kv: this.kv, tasks: this.tasks, boards: this.boards }, agentId, keepFiles);
 		for (const name of gone.routes) this.router?.remove(name);
 		if (gone.problem) this.log.error(`after removing the agent ${agentId} the configuration does not load: ${gone.problem}. Its folder is kept at ${gone.kept}`);
 		this.sources?.agentsChanged();
@@ -1869,7 +1894,7 @@ export class AgentManager {
 		for (const live of [...this.lives.values()]) if (live.agent.id === from) await this.dispose(live);
 		await this.sources?.detach(from);
 		this.slots.forgetAgent(from);
-		const done = renameAgent(this.cfg, { kv: this.kv, tasks: this.tasks }, from, to);
+		const done = renameAgent(this.cfg, { kv: this.kv, tasks: this.tasks, boards: this.boards }, from, to);
 		// What the owner allowed its conversations, and what they were refused, is theirs under the new name too.
 		const moved = (key: string) => `${to}${key.slice(from.length)}`;
 		for (const map of [this.allowed, this.grants, this.refused] as Array<Map<string, unknown>>) {
@@ -1922,6 +1947,7 @@ export class AgentManager {
 			if (this.bypassAnyway.delete(`${agentId}:${a}${end}`)) this.bypassAnyway.add(`${agentId}:${b}${end}`);
 			this.programs.rename(`${agentId}:${a}${end}`, `${agentId}:${b}${end}`);
 			this.tasks.rename(agentId, `${a}${end}`, `${b}${end}`);
+			this.boards.renameConversation(agentId, `${a}${end}`, `${b}${end}`);
 			this.turns.rename(agentId, `${a}${end}`, `${b}${end}`);
 		}
 		const folder = this.kv.get<string>(`folder:${agentId}:${a}`);
@@ -2309,6 +2335,12 @@ export class AgentManager {
 		const done: Task = { ...task, status, result: text, error, meta };
 		const source = `agent:${task.agent}`;
 		const cause = this.causeOf(task);
+		// What the run still held on a board: the task it was started for has its result now, anything else is open again.
+		try {
+			this.boardsAfter(done);
+		} catch (e) {
+			this.log.warn(`the board tasks of task #${task.id} could not be settled`, errText(e));
+		}
 		this.log.info(`task #${task.id} ${task.agent}/${task.session} ${status}${error ? `: ${error}` : ""}${stats ? ` (${stats.ms} ms, ${stats.turns} turns, ${stats.tools.length} tool calls, ${stats.input} tokens read${stats.cached ? ` + ${stats.cached} from cache` : ""}${speedText(speedOf(stats.timing)) ? `, ${speedText(speedOf(stats.timing))}` : ""})` : ""}`);
 		this.bus.publish(`agent/${task.agent}/${status === "done" ? "done" : "failed"}`, { task: task.id, agent: task.agent, session: task.session, root: task.meta.root ?? task.id, parent: task.parent, depth: task.depth, kind: task.kind, status, text: truncate(text, 4000), error, stats }, { source, cause, hop: true });
 		if (task.reply && status !== "cancelled" && !(status === "done" && SILENT.test(text))) {
@@ -2342,6 +2374,136 @@ export class AgentManager {
 		if (this.taints.size > 2000) for (const k of [...this.taints.keys()].slice(0, 1000)) this.taints.delete(k);
 	}
 
+	// ---- boards ----------------------------------------------------------------------------------
+
+	/**
+	 * A run ended. The task of a board it was started for (`pool` of subagent) has its answer as its
+	 * result; whatever else it still held is open again. Done here, by the daemon, so that no task
+	 * stays taken because an agent did not say what became of it.
+	 */
+	private boardsAfter(task: Task): void {
+		const held = this.boards.heldBy(task.id);
+		if (!held.length) {
+			if (task.session.startsWith("_t") && task.kind !== "subagent") this.boards.dropConversation(task.agent, task.session);
+			return;
+		}
+		const cause = this.causeOf(task);
+		const tainted = this.resultOf(task).tainted;
+		for (const item of held) {
+			if (item.id === task.meta.boardTask && task.status !== "cancelled") {
+				const ok = task.status === "done";
+				this.boards.settle(item.id, ok ? "done" : "failed", ok ? (task.result ?? "") : (task.error ?? task.status), { run: task.id, tainted, untrusted: task.meta.trust === "untrusted", cause });
+			} else this.boards.reopen(item.id, { cause });
+		}
+		// A run of its own that was no conversation leaves no board behind.
+		if (task.session.startsWith("_t") && task.kind !== "subagent") this.boards.dropConversation(task.agent, task.session);
+	}
+
+	/**
+	 * Something changed on a board. A UI that is running is told which board, and nothing else: what
+	 * is on it, it asks the control API. And for a board with a name that an agent or all agents
+	 * have, an event on `board/<name>/...` says what happened, so that a route can wake an agent: its
+	 * trust is that of whoever wrote it, and a post from a run that read outside content counts as
+	 * coming from outside.
+	 */
+	private boardChanged(board: Board, what: "posted" | "taken" | "released" | "settled" | "removed", item?: BoardItem, cause?: PineEvent | null): void {
+		this.bus.publish("pine/board", { board: board.id, scope: board.scope, agent: board.agent, session: board.session, name: board.name, change: what }, { persist: false, source: "pine" });
+		if (board.scope === "local" || !board.name || !item || what === "removed" || what === "taken") return;
+		// A task that can be taken (new, or open again), a note, or what became of a task.
+		const kind = what === "settled" ? item.state : item.kind === "note" ? "note" : this.boards.ready(item) ? "task" : undefined;
+		if (!kind) return;
+		const said = kind === "task" || kind === "note" ? item.text : (item.result ?? "");
+		const line = kind === "task" ? `Task #${item.id} on the board "${board.name}" is ready to be taken` : kind === "note" ? `A note on the board "${board.name}"` : `Task #${item.id} on the board "${board.name}" is ${kind}`;
+		this.bus.publish(
+			`board/${board.name}/${kind}`,
+			{ board: board.name, scope: board.scope, ...(board.agent ? { owner: board.agent } : {}), id: item.id, by: item.by, ...(item.holder ? { holder: item.holder } : {}), text: `${line}:\n${truncate(said, 2000)}` },
+			{ source: item.by === "owner" ? "owner" : `agent:${item.by}`, cause: cause ?? undefined, hop: Boolean(cause), trust: item.trust === "owner" && !item.tainted ? "owner" : "untrusted" },
+		);
+	}
+
+	// What the owner sees and does on a board, through the control API (the Board tab of a UI). The
+	// token is the owner: every board is theirs to read, and what they post is theirs.
+
+	private boardBrief(b: Board) {
+		// (`runs`: the runs that hold one of its tasks now, for a UI that draws who works on a board.)
+		return { ...b, counts: this.boards.counts(b.id), runs: this.boards.items(b.id, { kind: "task" }).flatMap((t) => (t.state === "taken" && t.run !== undefined ? [t.run] : [])) };
+	}
+
+	boardList() {
+		return this.boards.list().map((b) => this.boardBrief(b));
+	}
+
+	/** The boards a conversation can use, its own first. */
+	boardsFor(agentId: string, session: string) {
+		if (!this.cfg.agents[agentId]) throw new Error(`unknown agent "${agentId}"`);
+		const key = sessionKey(session);
+		const all = this.boards.visible({ agent: agentId, conversation: { agent: agentId, session: key } });
+		const own = (b: Board) => b.scope === "local" && !b.name;
+		return [...all.filter(own), ...all.filter((b) => !own(b))].map((b) => this.boardBrief(b));
+	}
+
+	/** A board with everything on it, as a UI shows it. */
+	boardView(id: number) {
+		const board = this.boards.get(id);
+		if (!board) return undefined;
+		const all = this.boards.items(id).map((x) => ({
+			id: x.id, kind: x.kind, text: x.text, data: x.data, state: x.state, by: x.by, holder: x.holder, run: x.run,
+			// (Whether a sub-agent has it: the run is one of the pool's.)
+			sub: x.run !== undefined && this.tasks.get(x.run)?.kind === "subagent",
+			result: x.result, after: x.after, waits: x.kind === "task" && x.state === "open" ? this.boards.waitsFor(x) : [], about: x.about,
+			outside: Boolean(x.tainted) || x.trust === "untrusted", created: x.created, updated: x.updated,
+		}));
+		return { board: this.boardBrief(board), tasks: all.filter((x) => x.kind === "task"), notes: all.filter((x) => x.kind === "note") };
+	}
+
+	/** The owner posts a task or a note: on a board by its number, or on a conversation's own (made if there is none). */
+	boardPost(where: { board: number } | { agent: string; session: string }, o: { text: unknown; kind?: unknown; after?: unknown; on?: unknown }) {
+		let board: Board | undefined;
+		if ("board" in where) board = this.boards.get(where.board);
+		else {
+			if (!this.cfg.agents[where.agent]) throw new Error(`unknown agent "${where.agent}"`);
+			board = this.boards.ensure("local", where.agent, sessionKey(where.session), "");
+		}
+		if (!board) throw new Error("there is no such board");
+		const after = Array.isArray(o.after) ? o.after.map(Number).filter(Number.isInteger) : undefined;
+		const item = this.boards.post(board, { kind: o.kind === "note" ? "note" : "task", text: String(o.text ?? ""), by: "owner", trust: "owner", after, about: Number.isInteger(o.on) ? (o.on as number) : undefined });
+		return { board: board.id, id: item.id };
+	}
+
+	/**
+	 * What the owner does with a task: `reopen` takes it back (from whoever has it, or after it was
+	 * settled) so that it can be taken again, `answer` answers the question a blocked task waits on
+	 * and opens it again, `done` settles it by hand, `remove` takes a task or a note off the board.
+	 */
+	boardAct(itemId: number, action: unknown, text?: unknown): { ok: true } {
+		const item = this.boards.item(itemId);
+		if (!item) throw new Error("there is nothing with that number on a board");
+		const board = this.boards.get(item.board)!;
+		// A sub-agent that was started for this task alone is stopped when the task is taken from it.
+		const stopWorker = () => {
+			const run = item.state === "taken" && item.run !== undefined ? this.tasks.get(item.run) : undefined;
+			if (run?.meta.boardTask === item.id && (run.status === "running" || run.status === "pending")) this.cancel(run.id);
+		};
+		if (action === "remove") return stopWorker(), this.boards.removeItem(itemId), { ok: true };
+		if (item.kind !== "task") throw new Error("that is a note: it can only be removed");
+		if (action === "reopen" || action === "answer") {
+			if (action === "answer") {
+				const answer = String(text ?? "").trim();
+				if (!answer) throw new Error("give the answer");
+				this.boards.post(board, { kind: "note", text: `${item.result ? `To "${truncate(item.result, 300)}": ` : ""}${answer}`, by: "owner", trust: "owner", about: item.id });
+			}
+			stopWorker();
+			this.boards.reopen(itemId);
+			return { ok: true };
+		}
+		if (action === "done") return this.boards.settle(itemId, "done", String(text ?? "").trim() || "settled by the owner"), { ok: true };
+		throw new Error('"action" is one of reopen, answer, done, remove');
+	}
+
+	boardRemove(id: number): { removed: boolean } {
+		return { removed: this.boards.remove(id) };
+	}
+
 	// ---- sessions ------------------------------------------------------------------------------
 
 	profileFor(agent: AgentConfig, trust: Trust, task?: Task): Profile {
@@ -2353,9 +2515,9 @@ export class AgentManager {
 		if (trust === "untrusted") {
 			const u = agent.untrusted;
 			if (u === false) throw new Error(`agent ${agent.id} does not accept tasks from untrusted sources`);
-			p = { tools: u.tools, mcp: pick(u.mcp), delegates: delegateTargets(this.cfg, agent).map((a) => a.id).filter((id) => u.delegates.includes(id) || u.delegates.includes("*")), subagents: u.subagents && agent.subagents.enabled, publish: u.publish, stateWrite: u.stateWrite, leaf };
+			p = { tools: u.tools, mcp: pick(u.mcp), delegates: delegateTargets(this.cfg, agent).map((a) => a.id).filter((id) => u.delegates.includes(id) || u.delegates.includes("*")), subagents: u.subagents && agent.subagents.enabled, publish: u.publish, stateWrite: u.stateWrite, board: u.board, leaf };
 		} else {
-			p = { tools: agent.tools ?? DEFAULT_TOOLS, mcp: all, delegates: delegateTargets(this.cfg, agent).map((a) => a.id), subagents: agent.subagents.enabled, publish: agent.publish, stateWrite: true, leaf };
+			p = { tools: agent.tools ?? DEFAULT_TOOLS, mcp: all, delegates: delegateTargets(this.cfg, agent).map((a) => a.id), subagents: agent.subagents.enabled, publish: agent.publish, stateWrite: true, board: true, leaf };
 		}
 		// A run that outside content started works in a sandbox whatever the agent's mode. On a
 		// machine that cannot provide one, its shell would run with the daemon's full rights: it gets
@@ -2430,6 +2592,8 @@ export class AgentManager {
 			agent,
 			key: task.session,
 			perm: `${agent.id}:${this.permSession(task)}`,
+			board: (ephemeral && trust === "owner" && task.meta.board) || `${agent.id}:${this.permSession(task)}`,
+			boardSeen: new Map(),
 			steering: [],
 			folder,
 			ephemeral,

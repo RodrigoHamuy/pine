@@ -447,7 +447,7 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 		// The side panel shows no browser of its own any more.
 		await page.fill("[data-slot=composer] textarea", "/code browser");
 		await page.press("[data-slot=composer] textarea", "Enter");
-		await sees("[data-slot=toast] >> text=The panel shows: agent, files, changes, turn, output, running, terminal.");
+		await sees("[data-slot=toast] >> text=The panel shows: agent, files, changes, turn, output, running, board, terminal.");
 		// The agent puts its browser in front of the owner: the aside opens. (In a conversation of its own, so that main's stays as the tests after this one expect it.)
 		const tabs = await page.locator("[data-slot=tab]").count();
 		await menu("new");

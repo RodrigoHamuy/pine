@@ -8,10 +8,11 @@
 // it runs in and whether its conversation read outside content; the ways in by name and type and who
 // listens to each; the schedules by name, when they run and whom they wake; each agent's conversations
 // as numbers (which is a branch of which, which works in a worktree, which has a goal), the skill a piece
-// of work reads if its agent has it, and how far its to-do list is.
-// Never: a prompt, a task's text, an answer, an error's text, a tool's arguments or subject (a path, a
+// of work reads if its agent has it, and how far its to-do list is; the boards by number, whom each is
+// for, its name if it has one, how many of its tasks are in which state, and which work has one.
+// Never: a prompt, a task's text, what stands on a board, an answer, an error's text, a tool's arguments or subject (a path, a
 // command), a question's text, a conversation's name, a folder, a model, a secret, or what an event said.
-import type { ViewAgent, ViewConversation, ViewHappening, ViewInput, ViewSchedule, ViewState, ViewTarget, ViewWork } from "../../src/view-kit.ts";
+import type { ViewAgent, ViewBoard, ViewConversation, ViewHappening, ViewInput, ViewSchedule, ViewState, ViewTarget, ViewWork } from "../../src/view-kit.ts";
 import { ENDED, type From, type Job, type TalkNews, type World } from "./view-world.ts";
 
 /** What an agent has, as the daemon's detail of it says (`holdings`): only the names are taken. */
@@ -70,6 +71,29 @@ function conversations(world: World, agent: string): ViewConversation[] {
 	});
 }
 
+/** A board's name as it is, if it is what pine makes of one: lowercase letters, digits, "-" and "_". */
+const boardName = (n: string) => (/^[a-z0-9_-]{1,40}$/.test(n) ? n : undefined);
+
+/** The boards as a view knows them: numbers. Those with work on them first. */
+function boards(world: World): ViewBoard[] {
+	return world.boards
+		.map((b) => {
+			const name = boardName(b.name);
+			const agent = b.scope !== "global" && world.places.has(b.agent) ? b.agent : undefined;
+			const talk = b.scope === "local" && agent && world.talks.has(`${agent}:${b.session}`) ? world.talkId(agent, b.session) : undefined;
+			return {
+				id: b.id,
+				scope: b.scope === "global" ? ("all" as const) : b.scope === "agent" ? ("agent" as const) : ("conversation" as const),
+				...(name ? { name } : {}),
+				...(agent ? { agent } : {}),
+				...(talk !== undefined ? { conversation: talk } : {}),
+				open: b.counts.open, taken: b.counts.taken, done: b.counts.done, failed: b.counts.failed, blocked: b.counts.blocked, notes: b.counts.notes,
+				workers: b.runs.filter((r) => world.jobs.has(r)),
+			};
+		})
+		.sort((a, b) => b.taken + b.open + b.blocked - (a.taken + a.open + a.blocked) || a.id - b.id);
+}
+
 function work(world: World, j: Job, holdings: Map<string, Holdings>): ViewWork {
 	const talk = world.talkOf(j);
 	const goal = talk ? world.goals.get(`${talk.agent}:${talk.session}`) : undefined;
@@ -78,6 +102,7 @@ function work(world: World, j: Job, holdings: Map<string, Holdings>): ViewWork {
 	const own = world.places.get(j.agent)?.mode;
 	const tool = j.doing === "tool" ? toolName(j.tool) : undefined;
 	const page = (t: number) => t - world.skew;
+	const board = world.boards.find((b) => b.runs.includes(j.id))?.id;
 	return {
 		id: j.id,
 		agent: j.agent,
@@ -102,6 +127,7 @@ function work(world: World, j: Job, holdings: Map<string, Holdings>): ViewWork {
 		...(skill ? { skill } : {}),
 		...(j.steps ? { steps: { done: j.steps.done, total: j.steps.total } } : {}),
 		...(goal && goal.status === "active" && j.depth === 0 && !ENDED.includes(j.doing) ? { round: goal.round } : {}),
+		...(board !== undefined && !ENDED.includes(j.doing) ? { board } : {}),
 	};
 }
 
@@ -118,7 +144,7 @@ export function viewStateOf(world: World, o: { colorOf: (agent: string) => strin
 		.map((s) => ({ name: s.name, ...(world.places.has(s.scope) ? { agent: s.scope } : {}), ...(whenText(s.when) ? { when: whenText(s.when) } : {}), ...(s.next !== undefined ? { next: page(s.next) } : {}), ...(s.last !== undefined ? { last: page(s.last) } : {}) }))
 		.sort((a, b) => (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name));
 	const selected = o.selected && ("agent" in o.selected ? { agent: o.selected.agent } : { work: o.selected.work });
-	return { at: Date.now(), agents, work: [...world.jobs.values()].map((j) => work(world, j, o.holdings)), inputs, schedules, ...(selected ? { selected } : {}), dark: o.dark, focused: o.focused !== false };
+	return { at: Date.now(), agents, work: [...world.jobs.values()].map((j) => work(world, j, o.holdings)), inputs, schedules, boards: boards(world), ...(selected ? { selected } : {}), dark: o.dark, focused: o.focused !== false };
 }
 
 /** What a batch of the daemon's events means to a view, once the world has taken it: who started, ended, used what. */
@@ -132,6 +158,7 @@ export function happeningsOf(batch: Array<{ topic: string; payload: any; source?
 			const sc = typeof p.name === "string" ? world.schedules.find((x) => x.name === p.name) : undefined;
 			out.push({ k: "event", input: "clock" }, { k: "scheduled", ...(sc ? { name: sc.name } : {}), ...(sc && world.places.has(sc.scope) ? { agent: sc.scope } : {}) });
 		}
+		else if (e.topic === "pine/board" && typeof p.board === "number" && ["posted", "taken", "released", "settled", "removed"].includes(p.change)) out.push({ k: "board", board: p.board, change: p.change, ...(typeof p.agent === "string" && world.places.has(p.agent) ? { agent: p.agent } : {}) });
 		else if (e.topic === "approval/requested" && typeof p.task === "number") out.push({ k: "asked", work: p.task, agent: String(p.agent ?? "") });
 		else if (e.topic === "approval/decided") out.push({ k: "decided", allowed: p.allow === true });
 		if (ns === "agent" && kind === "goal" && typeof p.session === "string" && world.places.has(who)) {

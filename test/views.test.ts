@@ -22,8 +22,8 @@ test("a home gets pine's views once, the module views import, a tsconfig for the
 		// The guide for whoever writes a view, also a coding agent opened in the folder: it names what the module really has.
 		const guide = fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8");
 		const kit = fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8");
-		for (const name of ["defineView", "running", "frame", "ease", "union", "inside", "along", "lengthOf", "hashOf", "seeded", "mix", "shade", "rgb"]) assert.ok(guide.includes("`" + name) && new RegExp(`export (function|const) ${name}\\b`).test(kit), `${name} is in the guide and in the module`);
-		for (const field of ["agents", "work", "inputs", "schedules", "selected", "dark", "focused"]) assert.ok(guide.includes(`\`${field}\``) && new RegExp(`\\b${field}\\??:`).test(kit), `ViewState.${field}`);
+		for (const name of ["defineView", "running", "unsettled", "frame", "ease", "union", "inside", "along", "lengthOf", "hashOf", "seeded", "mix", "shade", "rgb"]) assert.ok(guide.includes("`" + name) && new RegExp(`export (function|const) ${name}\\b`).test(kit), `${name} is in the guide and in the module`);
+		for (const field of ["agents", "work", "inputs", "schedules", "boards", "selected", "dark", "focused"]) assert.ok(guide.includes(`\`${field}\``) && new RegExp(`\\b${field}\\??:`).test(kit), `ViewState.${field}`);
 		// It is the owner's while pine's guide is the same: a change is kept, and one that was taken out comes back.
 		fs.writeFileSync(path.join(dir, "AGENTS.md"), "mine");
 		seedViews(home);

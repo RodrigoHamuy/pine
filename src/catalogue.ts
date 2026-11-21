@@ -41,7 +41,7 @@ export const DECLARED_SERVERS = ["web"];
  * was two calls of one tool, and a model sends two calls of one tool in two answers about half the
  * time; as two tools it sends them in one, as it does when every tool is declared by itself.
  */
-const LISTS = ["sources", "schedules", "mcp_servers", "skills", "models", "agents", "settings", "routes", "conversations"];
+const LISTS = ["sources", "schedules", "mcp_servers", "skills", "models", "agents", "settings", "routes", "conversations", "boards"];
 
 const GROUPS: Array<[id: string, name: string, about: string, tools: string[]]> = [
 	["lists", "pine_list", "What there is: the lists of what you have and of what pine has. Use it when your owner asks what you are watching, what is scheduled, which servers, skills, models, agents or conversations there are, or how pine is set up", LISTS],
@@ -60,6 +60,12 @@ const GROUPS: Array<[id: string, name: string, about: string, tools: string[]]> 
 		"pine_settings",
 		"Changes to pine's settings, its routes (rules for events that arrive, such as: a source's events wake another agent) and its model servers.",
 		["set_setting", "add_route", "remove_route", "add_model_server", "remove_model_server"],
+	],
+	[
+		"board",
+		"pine_board",
+		"Boards: a shared place for tasks and notes, for a job that several work on (you and your sub-agents, or several agents). A task is taken by one at a time; a note tells the others what you found. Which boards there are, pine_list says (boards).",
+		["board_read", "board_post", "board_claim", "board_done"],
 	],
 	["other", "pine_other", "Other tools of pine.", ["request_access", "stop_program", "state_get", "state_set"]],
 	[
@@ -118,6 +124,11 @@ const BRIEF: Record<string, string> = {
 	remove_model_server: "remove a model server",
 	request_access: "ask your owner for a folder outside your workspace, or for network in your shell",
 	stop_program: "stop a program one of your commands left running",
+	boards: "the boards you can use and how many tasks on each are open, taken and done",
+	board_read: "a board's tasks, who has each, what became of it, and the notes others left; with id, one task in full. Read it before you report what somebody may have reported already",
+	board_post: 'post a note (a finding or a decision the others on the same job should know) or, with kind "task", a piece of work for somebody to take; without "board" it is the board of this conversation, which your sub-agents share',
+	board_claim: "take a task so that nobody else does it: the one with the id, or the oldest that is ready. It is yours until board_done or the end of this turn",
+	board_done: 'say what became of a task you took: done with its result, failed with why, blocked with the question a person has to answer, or open to give it back',
 	state_get: "read shared state (facts agents and devices keep)",
 	state_set: "store a fact in shared state",
 	conversations: "the conversations of every agent: which are pinned, in a group, open in a tab or working, and when each was last used; and each agent's groups",
@@ -211,6 +222,17 @@ const ARG_HINT: Record<string, string> = {
 	"rename_group.agent": "whose it is; leave out for your own",
 	"remove_group.name": "the group's name",
 	"remove_group.agent": "whose it is; leave out for your own",
+	"board_read.board": "a board's name; leave out for this conversation's",
+	"board_read.id": "one task or note, in full",
+	"board_post.board": "a board's name; leave out for this conversation's",
+	"board_post.on": "for a note: the task it is about",
+	"board_post.after": "for a task: tasks that have to be done first",
+	"board_post.data": 'fields as JSON, e.g. {"file": "src/a.css", "line": 12}',
+	"board_post.scope": "only for a new board with a name",
+	"board_claim.id": "the task's number; leave out for the oldest that is ready",
+	"board_claim.board": "a board's name; leave out for this conversation's",
+	"board_done.id": "the task's number",
+	"board_done.result": "the result, why it failed, or the question",
 	"request_access.path": "absolute path of the file or folder",
 	"request_access.write": "true to also change files there",
 	"request_access.network": "true for network in your shell instead of a path",
@@ -349,12 +371,14 @@ export function shortTool(name: string, description: string, parameters: any): {
 	if (AS_IS.includes(name)) return { description, parameters };
 	// A session that may put a command into the background is told how; one that may not is not told of it.
 	const more = name === "bash" && parameters?.properties?.background ? " For a command that takes long or does not end by itself (a build, tests, an install, a server) set background: true: the call returns at once and pine tells you when the command has ended." : "";
-	return { description: `${SHORT[name] ?? lead(description, 200)}${more}`, parameters: leanSchema(parameters, name in SHORT ? "first" : "all") };
+	// A session whose sub-agents can share a board is told of the pool.
+	const pool = name === "subagent" && parameters?.properties?.pool ? ' With "pool" there can be many more tasks (one per file or folder): they are worked through a few at a time on this conversation\'s board, where the copies see each other\'s notes.' : "";
+	return { description: `${SHORT[name] ?? lead(description, 200)}${more}${pool}`, parameters: leanSchema(parameters, name in SHORT ? "first" : "all") };
 }
 
 /** The order tools are declared in: see shortDeclarations. */
 const FIRST = ["read", "bash", "edit", "write", "grep", "find", "ls", "download", "manual", "question", "todo", FIND_TOOLS];
-const LAST = ["pine_list", "pine_other", "pine_mcp", "pine_skills", "pine_sources", "pine_schedules", "subagent", "delegate", "pine_agents", "pine_settings", "pine_conversations"];
+const LAST = ["pine_list", "pine_other", "pine_mcp", "pine_skills", "pine_sources", "pine_schedules", "pine_board", "subagent", "delegate", "pine_agents", "pine_settings", "pine_conversations"];
 
 /**
  * The request as it goes to the model server: every tool's declaration short, and all of them

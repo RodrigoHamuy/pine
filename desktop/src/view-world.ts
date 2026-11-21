@@ -104,6 +104,17 @@ export interface Talk {
 	last: number;
 }
 
+/** A board, as `/boards` lists it: whom it is for, how many tasks are in which state, and the runs that hold one. */
+export interface BoardRow {
+	id: number;
+	scope: "local" | "agent" | "global";
+	agent: string;
+	session: string;
+	name: string;
+	counts: { open: number; taken: number; done: number; failed: number; blocked: number; notes: number };
+	runs: number[];
+}
+
 /** A schedule, as `/schedules` lists it. */
 export interface Sched {
 	name: string;
@@ -193,6 +204,7 @@ export class World {
 	private talkIds = new Map<string, number>();
 	private talked = new Set<string>();
 	schedules: Sched[] = [];
+	boards: BoardRow[] = [];
 	/** The goal of a conversation, by "agent:session": where it stands and the round it is in. */
 	goals = new Map<string, { status: GoalStatus; round: number; task?: number }>();
 	/** The sources that say they failed, and who listens to each. */
@@ -229,6 +241,7 @@ export class World {
 		this.talked.clear();
 		this.roomed = false;
 		this.schedules = [];
+		this.boards = [];
 		this.goals.clear();
 		this.sourceInfo.clear();
 		this.causes.clear();
@@ -329,6 +342,24 @@ export class World {
 	}
 
 	/** Every schedule, as the daemon lists them. What the page saw fire is kept. */
+	/** The boards as the daemon lists them. Only what a number or one of three words can say is kept. */
+	setBoards(list: unknown): void {
+		const n = (v: unknown) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? Math.floor(v) : 0);
+		this.boards = (Array.isArray(list) ? list : [])
+			.filter((b) => b && typeof b === "object" && typeof b.id === "number")
+			.slice(0, 200)
+			.map((b) => ({
+				id: b.id,
+				scope: b.scope === "global" || b.scope === "agent" ? b.scope : "local",
+				agent: String(b.agent ?? ""),
+				session: String(b.session ?? ""),
+				name: String(b.name ?? ""),
+				counts: { open: n(b.counts?.open), taken: n(b.counts?.taken), done: n(b.counts?.done), failed: n(b.counts?.failed), blocked: n(b.counts?.blocked), notes: n(b.counts?.notes) },
+				runs: (Array.isArray(b.runs) ? b.runs : []).filter((r: unknown): r is number => typeof r === "number").slice(0, 100),
+			}));
+		this.touch();
+	}
+
 	setSchedules(list: Array<{ name: string; scope: string; when?: string; next?: number }>): void {
 		const last = new Map(this.schedules.map((s) => [`${s.name}@${s.scope}`, s.last]));
 		this.schedules = list.filter((s) => typeof s.name === "string").map((s) => ({ name: s.name, scope: String(s.scope ?? "global"), when: typeof s.when === "string" ? s.when : undefined, next: typeof s.next === "number" ? s.next : undefined, last: last.get(`${s.name}@${s.scope}`) }));
