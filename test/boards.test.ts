@@ -112,9 +112,10 @@ test("boards: a pool of sub-agents works through more tasks than run at once, an
 	assert.match(JSON.stringify(worker.body.messages), /check part 3 @@REF:w3@@\\n\\nWhat everyone on this job goes by \(it was checked: no need to look it up again\):\\n- FOUND-BY-ONE gap-3 next to gap-4/);
 	// What a sub-agent is shown as new is what the others noted, not the list of everybody's tasks.
 	assert.match(h.toolResults(h.mock.state.requests.filter((q: any) => JSON.stringify(q.body.messages).includes("check part 1 @@REF:w1@@\\n\\n[pine")).at(-1)).join("\n"), /^Posted note #6 on the board of this conversation\.$/m);
-	// Without "pool", more tasks than run at once are refused, and the refusal says how.
+	// Without "pool", more tasks than run at once are a pool all the same: they are worked through, not refused.
 	const many = await h.pine.agents.run({ agent: "main", session: "audit", prompt: mockMsg([{ tools: [call("subagent", { tasks: ["a", "b", "c"] })] }]), ...owner });
-	assert.match(many.text, /at most 2 sub-tasks per call\. For more, give "pool": true/);
+	assert.doesNotMatch(many.text, /at most 2 sub-tasks/);
+	assert.match(many.text, /## Task #\d+: done[\s\S]*## Task #\d+: done[\s\S]*## Task #\d+: done/);
 	await h.close();
 });
 
@@ -279,7 +280,7 @@ test("boards: a pool comes back when a sub-agent asks, the conversation answers,
 	assert.match(last, /## Task #1: done\nwent left\nNotes about it:\n- Asked: WHICH-WAY left or right\?\n  Answer: GO-LEFT/);
 	assert.match(last, /## Task #2: done\nslow one done/);
 	assert.match(last, /## Task #3: done\nquick one done/);
-	assert.match(last, /All 3 tasks of the board are done\.$/);
+	assert.match(last, /All 3 tasks of the board are done\. If the job has pieces that were not given as tasks yet, it is not done: /);
 	assert.doesNotMatch(last, /Task #1 asks|What to do now/);
 	assert.equal(h.pine.tasks.list({ limit: 50 }).filter((t) => t.kind === "subagent").length, 4, "one sub-agent per task, and one more for the task that was asked about");
 	// The one that did the first task in the end was shown the question and the answer.
@@ -328,7 +329,7 @@ test("boards: one answer does for every task that has the same question: those t
 	// The second call finishes all three. The third asked after the answer was given: it was given out again by pine
 	// itself, with the answer, and the conversation was never turned to for it.
 	for (const name of ["a", "b", "c"]) assert.match(last, new RegExp(`${name} done at RATE-100`));
-	assert.match(last, /All 3 tasks of the board are done\.$/);
+	assert.match(last, /All 3 tasks of the board are done\. If the job has pieces that were not given as tasks yet, it is not done: /);
 	assert.doesNotMatch(last, /Task #3 asks/);
 	assert.equal(turns(h).length, 4, "three calls and the final answer: no turn for the third question");
 	const third = h.pine.tasks.list({ limit: 50 }).filter((t) => t.meta.boardTask === 3).sort((x, y) => y.id - x.id)[0];
@@ -426,7 +427,7 @@ test("boards: tasks split over several pool calls in one answer are one pool, no
 	const [worked, added] = /added to the pool/.test(first) ? [second, first] : [first, second];
 	assert.match(added, /^2 tasks added to the pool that is at work on this board\. Its call brings their results/);
 	for (const n of [1, 2, 3, 4]) assert.match(worked, new RegExp(`## Task #\\d+: done\\nanswer ${n}`));
-	assert.match(worked, /All 4 tasks of the board are done\.$/);
+	assert.match(worked, /All 4 tasks of the board are done\. If the job has pieces that were not given as tasks yet, it is not done: /);
 	assert.ok(Math.max(...taken) <= 2, `never more at once than the agent's sub-agents may be (${Math.max(...taken)})`);
 	assert.equal(boards.items(1, { kind: "note" }).length, 1, "the same note once");
 	assert.deepEqual((boards.items(1, { kind: "note" })[0].data as any).tasks.length, 4, "and it is for all four tasks");

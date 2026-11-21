@@ -597,7 +597,8 @@ has no such paragraph is shown with `description` from its `agent.json`.
 ## Sub-agents
 
 `subagent(tasks: string[], model?, thinking?, worktree?, pool?, note?, check?)` runs up to `subagents.maxParallel` copies of the
-same agent at once (4 unless the agent's `agent.json` says otherwise).
+same agent at once (4 unless the agent's `agent.json` says otherwise). Given more tasks than
+that, it works through them that many at a time, as a pool ([boards.md](boards.md)).
 Each copy has the agent's workspace, instructions and tools but an empty conversation, cannot
 delegate or spawn further, and returns only its final answer. Use it for searches and checks
 that would otherwise fill the context:
