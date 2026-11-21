@@ -580,7 +580,12 @@ test("boards: the owner reads every board through the control API, posts on one,
 	// what a UI needs to draw a board, and all a view of the owner's is ever told.
 	const briefs = (await req("GET", "/boards")).body;
 	assert.equal(briefs.length, 1);
-	assert.deepEqual(briefs[0].tasks, [{ id: 1, state: "open", after: [], waits: false }]);
+	// (Of a task also who posted it, when, since when it stands so, how many notes are about it and whether it carries
+	// outside content: names and numbers.)
+	const { created, updated, ...told } = briefs[0].tasks[0];
+	assert.deepEqual(told, { id: 1, state: "open", after: [], waits: false, by: "owner", notes: 0, outside: false });
+	assert.ok(created > 0 && updated >= created);
+	assert.equal(briefs[0].tasks.length, 1);
 	assert.ok(!JSON.stringify(briefs).includes("look at the footer") && !JSON.stringify(briefs).includes("tokens.css"));
 
 	// A sub-agent of the pool has the task; the owner takes it back, which stops that sub-agent.

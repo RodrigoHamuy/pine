@@ -5,7 +5,7 @@
 // the view tells the panel what to show or open. Around it the panel keeps what is the owner's to see
 // in full: what asks them, on top, and below the view what happened and what is chosen, in words.
 // Without a view (none in the folder, or `ui.view` "off") the app shows no button for the panel.
-import { CircleCheckIcon, CircleXIcon, ClockIcon, CopyIcon, ExternalLinkIcon, HourglassIcon, PenLineIcon, RadarIcon, RadioIcon, ShieldIcon, ShieldOffIcon, SparklesIcon, TriangleAlertIcon, UserIcon, WebhookIcon, WrenchIcon, XIcon } from "lucide-react";
+import { CircleCheckIcon, CircleXIcon, ClipboardListIcon, ClockIcon, CopyIcon, ExternalLinkIcon, HourglassIcon, PenLineIcon, RadarIcon, RadioIcon, ShieldIcon, ShieldOffIcon, SparklesIcon, TriangleAlertIcon, UserIcon, WebhookIcon, WrenchIcon, XIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useMediaQuery } from "usehooks-ts";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,8 @@ import { SideSheet } from "@/components/side-sheet";
 import { cn } from "@/lib/utils";
 import type { ViewHappening, ViewTarget } from "../../src/view-kit.ts";
 import { api } from "./api.ts";
+import { boardLabel, taskLine } from "./Board.tsx";
+import { useLoad } from "./use-load.ts";
 import { ROOM, store, useModel } from "./model.ts";
 import { AGENT_COLORS } from "./theme.ts";
 import { type Holdings, happeningsOf, knownTarget, talkHappenings, viewStateOf } from "./view-state.ts";
@@ -36,7 +38,7 @@ const NARROW_TO_WIDE = ["manual", "plan", "safe", "auto", "bypass"];
 const stricter = (a: string, b: string) => NARROW_TO_WIDE.indexOf(a) >= 0 && NARROW_TO_WIDE.indexOf(a) < NARROW_TO_WIDE.indexOf(b);
 
 /** What is chosen: an agent, or a piece of work. */
-type Sel = { k: "agent"; id: string } | { k: "job"; id: number } | undefined;
+type Sel = { k: "agent"; id: string } | { k: "job"; id: number } | { k: "board"; id: number; task?: number } | undefined;
 
 // ---- the world, fed from the start --------------------------------------------------------------------------------
 
@@ -363,9 +365,9 @@ export function ViewPanel({ id }: { id: string }) {
 	const w = useWorld();
 	const [sel, setSel] = useState<Sel>();
 	// What was chosen and is gone (an agent removed, work forgotten) is no longer chosen.
-	const gone = sel && (sel.k === "agent" ? !w.places.has(sel.id) : !w.jobs.has(sel.id));
+	const gone = sel && (sel.k === "agent" ? !w.places.has(sel.id) : sel.k === "job" ? !w.jobs.has(sel.id) : !w.boards.some((b) => b.id === sel.id));
 	const chosen = gone ? undefined : sel;
-	const pick = (next: Sel) => setSel((was) => (was && next && was.k === next.k && was.id === next.id ? undefined : next));
+	const pick = (next: Sel) => setSel((was) => (was && next && was.k === next.k && was.id === next.id && (was.k !== "board" || next.k !== "board" || was.task === next.task) ? undefined : next));
 	return (
 		<div data-slot="view" data-view={id} className="flex min-h-0 flex-1 flex-col">
 			<NeedsYou pick={pick} />
@@ -408,7 +410,7 @@ function ViewFrame({ id, sel, pick }: { id: string; sel: Sel; pick: (s: Sel) => 
 		if (!f || !code || !("code" in code)) return;
 		const target = (): ViewTarget | undefined => {
 			const s = live.current.sel;
-			return s?.k === "agent" ? { agent: s.id } : s?.k === "job" ? { work: s.id } : undefined;
+			return s?.k === "agent" ? { agent: s.id } : s?.k === "job" ? { work: s.id } : s?.k === "board" ? { board: s.id, ...(s.task !== undefined ? { task: s.task } : {}) } : undefined;
 		};
 		const stateNow = () => viewStateOf(world, { colorOf, holdings, selected: target(), dark: document.documentElement.classList.contains("dark"), focused: store.focused });
 		const post = (m: unknown) => f.contentWindow?.postMessage(m, "*");
@@ -438,11 +440,11 @@ function ViewFrame({ id, sel, pick }: { id: string; sel: Sel; pick: (s: Sel) => 
 			else if (m?.type === "error") setError(String(m.message ?? "").slice(0, 400));
 			else if (m?.type === "select") {
 				const t = knownTarget(world, m.target);
-				live.current.pick(t && ("agent" in t ? { k: "agent", id: t.agent } : { k: "job", id: t.work }));
+				live.current.pick(t && ("agent" in t ? { k: "agent", id: t.agent } : "work" in t ? { k: "job", id: t.work } : { k: "board", id: t.board, task: t.task }));
 			} else if (m?.type === "open") {
 				const t = knownTarget(world, m.target);
 				if (t && "agent" in t) void store.openTab(t.agent, "main");
-				else if (t) {
+				else if (t && "work" in t) {
 					const j = world.jobs.get(t.work);
 					if (j) openJob(j);
 				}
@@ -518,7 +520,7 @@ function Inspector({ sel, pick }: { sel: Sel; pick: (s: Sel) => void }) {
 	return (
 		<ScrollArea data-slot="view-inspector" className="h-44 flex-none sm:h-52">
 			<div className="flex flex-col gap-1.5 p-3 text-xs">
-				{sel?.k === "job" && w.jobs.get(sel.id) ? <JobDetail j={w.jobs.get(sel.id)!} now={now} pick={pick} /> : sel?.k === "agent" && w.places.get(sel.id) ? <AgentDetail id={sel.id} now={now} pick={pick} /> : <Feed now={now} pick={pick} />}
+				{sel?.k === "board" ? <BoardDetail key={`${sel.id}:${sel.task ?? ""}`} id={sel.id} task={sel.task} pick={pick} /> : sel?.k === "job" && w.jobs.get(sel.id) ? <JobDetail j={w.jobs.get(sel.id)!} now={now} pick={pick} /> : sel?.k === "agent" && w.places.get(sel.id) ? <AgentDetail id={sel.id} now={now} pick={pick} /> : <Feed now={now} pick={pick} />}
 			</div>
 		</ScrollArea>
 	);
@@ -593,6 +595,62 @@ function JobLine({ j, now, pick }: { j: Job; now: number; pick: (s: Sel) => void
 			<span className={cn("flex flex-none items-center gap-1", j.doing === "asking" && "text-warn")}><DoingIcon j={j} />{doingText(j, w)}</span>
 			<span className="w-7 flex-none text-end text-faint tabular-nums">{ago(end - j.started)}</span>
 		</button>
+	);
+}
+
+/**
+ * A board, or one of its tasks, in the words that stand on it. The view that asked for it knows none of them: it named
+ * a board and a task by their numbers, and the panel reads the rest from pine itself. Text of an agent's, drawn as text.
+ */
+function BoardDetail({ id, task, pick }: { id: number; task?: number; pick: (s: Sel) => void }) {
+	const w = useWorld();
+	const row = w.boards.find((b) => b.id === id);
+	// Read again whenever the board changes: the counts the world keeps of it say when.
+	const stamp = row ? JSON.stringify([row.counts, row.tasks.map((t) => t.state)]) : "";
+	const view = useLoad(() => api.board(id), [id, stamp]);
+	const v = view.data;
+	const t = v && task !== undefined ? v.tasks.find((x) => x.id === task) : undefined;
+	const notes = v ? v.notes.filter((n) => (t ? n.about === t.id : n.about === undefined)) : [];
+	const head = (
+		<div className="flex items-center gap-2">
+			<ClipboardListIcon className="size-4 flex-none text-muted-foreground" />
+			<span className="min-w-0 flex-1 truncate text-sm font-medium">{v ? boardLabel(v.board) : "Board"}{t ? ` · task #${t.id}` : ""}</span>
+			{t ? <Button variant="outline" size="xs" onClick={() => pick({ k: "board", id })}>The whole board</Button> : null}
+			<Button variant="ghost" size="icon-xs" aria-label="Back to what happened" onClick={() => pick(undefined)}><XIcon /></Button>
+		</div>
+	);
+	if (!v) return <>{head}<span className="text-muted-foreground">{view.error ?? "Loading"}</span></>;
+	if (t)
+		return (
+			<>
+				{head}
+				<p data-slot="view-task-text" className="whitespace-pre-wrap break-words">{t.text}</p>
+				<dl className="grid grid-cols-[6rem_1fr] gap-x-2 gap-y-1">
+					<dt className="text-muted-foreground">Now</dt>
+					<dd className={cn(t.state === "blocked" && "text-warn", t.state === "failed" && "text-destructive")}>{taskLine(t)}</dd>
+					<dt className="text-muted-foreground">Posted by</dt>
+					<dd>{t.by === "owner" ? "you" : t.by}{t.outside ? " · after reading outside content" : ""}</dd>
+					{t.after.length ? <><dt className="text-muted-foreground">Comes after</dt><dd>{t.after.map((a) => <button key={a} type="button" className="mr-1.5 hover:underline" onClick={() => pick({ k: "board", id, task: a })}>#{a}</button>)}</dd></> : null}
+					{t.result ? <><dt className="text-muted-foreground">{t.state === "blocked" ? "It asks" : t.state === "failed" ? "Why" : "Result"}</dt><dd className="whitespace-pre-wrap break-words">{t.result}</dd></> : null}
+				</dl>
+				{notes.length ? <span className="mt-1 font-medium text-muted-foreground">Notes about it</span> : null}
+				{notes.map((n) => <p key={n.id} className="whitespace-pre-wrap break-words"><span className="text-muted-foreground">{n.by === "owner" ? "you" : n.by}: </span>{n.text}</p>)}
+			</>
+		);
+	return (
+		<>
+			{head}
+			<span className="text-muted-foreground">{v.tasks.length ? `${v.tasks.filter((x) => x.state === "done").length} of ${v.tasks.length} tasks done` : "No tasks yet"}</span>
+			{v.tasks.map((x) => (
+				<button key={x.id} type="button" className="flex items-baseline gap-2 text-left hover:underline" onClick={() => pick({ k: "board", id, task: x.id })}>
+					<span className="w-8 flex-none tabular-nums text-muted-foreground">#{x.id}</span>
+					<span className="min-w-0 flex-1 truncate">{x.text}</span>
+					<span className={cn("flex-none text-muted-foreground", x.state === "blocked" && "text-warn", x.state === "failed" && "text-destructive")}>{taskLine(x)}</span>
+				</button>
+			))}
+			{notes.length ? <span className="mt-1 font-medium text-muted-foreground">Notes for everyone</span> : null}
+			{notes.map((n) => <p key={n.id} className="whitespace-pre-wrap break-words"><span className="text-muted-foreground">{n.by === "owner" ? "you" : n.by}: </span>{n.text}</p>)}
+		</>
 	);
 }
 

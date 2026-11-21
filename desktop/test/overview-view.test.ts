@@ -13,7 +13,7 @@ registerHooks({
 	resolve: (spec, ctx, next) => (spec === "pine/view" ? { url: pathToFileURL(path.resolve(import.meta.dirname, "../../src/view-kit.ts")).href, shortCircuit: true } : next(spec, ctx)),
 });
 const view = await import("../../examples/home/views/overview.ts");
-const { Recent, layoutOf, sentenceOf, causeOf, linksOf, wiringOf, hitAt, tipOf, routesOf, focusOf, allOf, held, toBoard, wholeOf, PIN, draw, boardTitle, boardLine, boardWords, tilesOf, tileAt, taskWords } = view;
+const { Recent, layoutOf, sentenceOf, causeOf, linksOf, wiringOf, hitAt, tipOf, routesOf, focusOf, allOf, held, toBoard, wholeOf, PIN, draw, boardTitle, boardLine, boardWords, tilesOf, tileAt, taskWords, rowsOf, rowAt, taskAt, SCALE, ROW } = view;
 
 const T0 = 1_800_000_000_000;
 const conv = (id: number, more: object = {}) => ({ id, main: false, worktree: false, busy: false, outside: false, ...more });
@@ -171,7 +171,7 @@ test("the pointer over a box shows all it is wired to, and the line on top says 
 	assert.deepEqual(ends("you"), [], "you talk to every agent: that is no wiring");
 	assert.deepEqual(wiringOf(undefined, s, l), []);
 	assert.ok(wiringOf("agent:books", s, l).every((k: any) => !k.live));
-	assert.deepEqual(tipOf(l.byId.get("agent:main"), s, T0), ["main (main agent)", "safe mode", "3 conversations, 1 branch", "morning in 40 s", "click to expand, double-click to open"]);
+	assert.deepEqual(tipOf(l.byId.get("agent:main"), s, T0), ["main (main agent)", "safe mode", "3 conversations, 1 branch", "morning in 40 s", "click to expand, zoom in for more, double-click to open"]);
 	assert.deepEqual(tipOf(l.byId.get("source:feed"), s, T0), ["feed: event source (feed)", "down", "triggers scout", "2 events"]);
 	assert.deepEqual(tipOf(l.byId.get("sched:morning"), s, T0), ["morning: schedule", "triggers main", "every 30m", "next in 40 s"]);
 	assert.deepEqual(tipOf(l.byId.get("mcp:web"), s, T0), ["web: MCP server", "available to main, books, scout", "in use by scout"]);
@@ -340,7 +340,7 @@ test("a board is a box beside the tools: whose it is and how its tasks stand, a 
 	// One line from the agent to its board, however many of its sub-agents have a task there.
 	assert.deepEqual(linksOf(s, l, T0).filter((k: any) => k.to === "board:7").map((k: any) => [k.from, k.live]), [["agent:scout", true]]);
 	// What the pointer over it says, and what it is wired to: a board for all agents to every agent.
-	assert.deepEqual(tipOf(l.byId.get("board:7"), s, T0), ["scout: board of a conversation of scout", "2 in progress, 5 to do, 3 done", "4 notes", "read it in the Board tab beside the conversation"]);
+	assert.deepEqual(tipOf(l.byId.get("board:7"), s, T0), ["scout: board of a conversation of scout", "2 in progress, 5 to do, 3 done", "4 notes", "click to read it, zoom in for every task"]);
 	assert.deepEqual(wiringOf("board:8", s, l).map((k: any) => k.from).sort(), ["agent:books", "agent:coder", "agent:main", "agent:scout"]);
 	assert.deepEqual(wiringOf("board:7", s, l).map((k: any) => k.from), ["agent:scout"]);
 	// Its tasks are tiles in its card: a column for each piece of work, and what comes after it under it.
@@ -365,7 +365,7 @@ test("a board is a box beside the tools: whose it is and how its tasks stand, a 
 	assert.equal(card.h, 44 + 12 + tiles.height + 10);
 	assert.equal(tileAt(card, { x: card.x + 10 + 12, y: card.y + 54 + 3 })?.id, 2);
 	assert.equal(tileAt(card, { x: card.x + 10 + 60, y: card.y + 54 + 3 }), undefined);
-	assert.deepEqual(tipOf(card, s2, T0, { x: card.x + 10 + 12, y: card.y + 54 + 13 }), ["Task 5 on scout's board", "waiting for task 2"]);
+	assert.deepEqual(tipOf(card, s2, T0, { x: card.x + 10 + 12, y: card.y + 54 + 13 }), ["Task 5 on scout's board", "waiting for task 2", "click to read it"]);
 	assert.equal(taskWords(checked.tasks[1], checked), "in progress, a sub-agent of scout has it, followed by task 5");
 	assert.equal(taskWords(checked.tasks[3], checked), "done, comes after task 1");
 	// The sub-agent that has a task is called by the task's number, which is its tile's.
@@ -379,4 +379,84 @@ test("a board is a box beside the tools: whose it is and how its tasks stand, a 
 	const recent = new Recent();
 	recent.hear({ k: "board", board: 7, change: "posted", agent: "scout" }, T0);
 	assert.equal(recent.hot.get("board:7"), T0);
+});
+
+test("how much the board says goes by how close it is looked at: a name from far, what happens in the middle, everything from close by", () => {
+	const t = (id: number, st: string, more: object = {}) => ({ id, state: st, after: [] as number[], ...more });
+	const tasks = [
+		t(1, "done", { since: T0 - 60_000, by: "scout" }),
+		t(2, "taken", { worker: 2, agent: "scout", since: T0 - 42_000, notes: 2 }),
+		t(3, "open", { by: "you" }),
+		t(4, "done", { after: [1], since: T0 - 1000, asked: "answered" }),
+		t(5, "waiting", { after: [2] }),
+		t(6, "blocked", { since: T0 - 30_000, asked: "open", outside: true }),
+		t(7, "failed", { after: [4], since: T0 - 5000 }),
+	];
+	const b = { id: 7, scope: "conversation" as const, agent: "scout", conversation: 1, open: 2, taken: 1, done: 2, failed: 1, blocked: 1, notes: 3, workers: [2], tasks };
+	const calls = [{ tool: "read", at: T0 - 9000, ms: 400, ok: true }, { tool: "bash", at: T0 - 8000, ms: 900, ok: false }, { tool: "mcp__web__web_search", mcp: "web", at: T0 - 500 }];
+	const works = [
+		work(1, "scout", { doing: "waiting", waitingOn: [2], started: T0 - 80_000, tools: 3, calls, mode: "safe" }),
+		work(2, "scout", { copy: true, parent: 1, depth: 1, from: { k: "copy", id: "scout" }, doing: "tool", tool: "grep", board: 7, started: T0 - 42_000, tools: 5, calls: calls.slice(0, 2) }),
+		work(3, "books", { doing: "done", started: T0 - 400_000, finished: T0 - 300_000, tools: 9 }),
+	];
+	const s = state(works, T0, { boards: [b] as any });
+	const [far, mid, near] = (["far", "mid", "near"] as const).map((d) => layoutOf(s, new Set(), T0, undefined, d));
+	assert.deepEqual([far.detail, mid.detail, near.detail], ["far", "mid", "near"]);
+	assert.deepEqual(layoutOf(s, new Set(), T0).boxes.map((x: any) => [x.id, x.h]), mid.boxes.map((x: any) => [x.id, x.h]), "the middle one is what is shown when nothing says otherwise");
+	// The same things at every level, by the same names: what changes is how much each says, and how much room it takes.
+	assert.deepEqual(far.boxes.map((x: any) => x.id).sort(), mid.boxes.map((x: any) => x.id).sort());
+	assert.deepEqual(near.boxes.map((x: any) => x.id).sort(), mid.boxes.map((x: any) => x.id).sort());
+	assert.ok(far.h < mid.h && mid.h < near.h && far.w < mid.w && mid.w < near.w);
+
+	// From far: a name and a word.
+	const scoutFar = far.byId.get("agent:scout")!;
+	assert.deepEqual([scoutFar.right, scoutFar.lines, scoutFar.h], ["working", [], 36]);
+	assert.equal(far.byId.get("agent:coder")!.right, "idle");
+	assert.deepEqual([far.byId.get("board:7")!.right, far.byId.get("board:7")!.sub, far.byId.get("board:7")!.rows], ["2/7", undefined, undefined]);
+	assert.equal(tileAt(far.byId.get("board:7"), { x: far.byId.get("board:7")!.x + 12, y: far.byId.get("board:7")!.y + 30 }), undefined, "no tiles from far, so none is pointed at");
+	const asked = layoutOf(state([work(1, "scout", { asking: true, doing: "asking" })], T0), new Set(), T0, undefined, "far");
+	assert.deepEqual([asked.byId.get("agent:scout")!.right, asked.byId.get("you")!.right], ["asks you", "1 question"]);
+
+	// From close by, an agent: under each piece of work how long it has run, its tool calls and the mode it is held to,
+	// then its last calls by name; what it finished; what it has; its conversations without a click.
+	const lines = near.byId.get("agent:scout")!.lines!;
+	const texts = lines.map((x: any) => x.text);
+	assert.deepEqual(texts.slice(0, 4), ["Waiting for 1 sub-agent", "for you", "for 80 s · 3 tool calls · safe mode", "read, bash, search"]);
+	assert.deepEqual(lines[3].calls, calls);
+	const sub = texts.indexOf("Task 2: searching files");
+	assert.deepEqual([texts[sub + 1], lines[sub + 1].more, lines[sub + 1].indent, texts[sub + 2]], ["for 42 s · 5 tool calls", true, 1, "read, bash"]);
+	for (const said of ["Listens to feed", "MCP servers: web, browser, maps, media", "Skills: research", "Main conversation"]) assert.ok(texts.includes(said), said);
+	assert.ok(near.byId.get("agent:books")!.lines!.some((x: any) => x.text === "Done 5 min ago · took 2 min · 9 tool calls"), JSON.stringify(near.byId.get("agent:books")!.lines));
+	assert.ok(!mid.byId.get("agent:scout")!.lines!.some((x: any) => x.calls || /tool call/.test(x.text)), "none of that in the middle");
+	// What it has is said of a tool too, and who asks at your box.
+	assert.equal(near.byId.get("mcp:web")!.sub, "available to main, books, scout");
+	assert.equal(near.byId.get("you")!.lines![0].text, "Task 6 on scout's board waits for an answer");
+
+	// From close by, a board: a row for each task, one that comes after another under it; how it stands, and at the right what else there is.
+	const rows = rowsOf(b as any, s, T0);
+	assert.deepEqual(rows.map((r: any) => [r.task?.id, r.indent, r.text, r.flags]), [
+		[1, 0, "Done 60 s ago", ""],
+		[4, 1, "Done just now", "answered"],
+		[7, 2, "Failed 5 s ago", ""],
+		[2, 0, "Searching files · 42 s", "2 notes"],
+		[5, 1, "After task 2", ""],
+		[3, 0, "To do · from you", ""],
+		[6, 0, "Waiting for an answer · 30 s", "outside content"],
+		[undefined, 0, "3 notes on this board", ""],
+	]);
+	const card = near.byId.get("board:7")!;
+	assert.equal(card.h, 44 + 12 + rows.length * ROW + 6);
+	assert.equal(rowAt(card, { x: card.x + 40, y: card.y + 54 + 3 * ROW + 2 })?.id, 2);
+	assert.equal(taskAt(card, { x: card.x + 40, y: card.y + 54 + 1 * ROW + 2 })?.id, 4);
+	assert.equal(rowAt(card, { x: card.x + 40, y: card.y + 20 }), undefined, "its name is no task");
+	assert.equal(rowAt(card, { x: card.x + 40, y: card.y + 54 + 7 * ROW + 2 }), undefined, "nor is the line about its notes");
+	assert.deepEqual(tipOf(card, s, T0, { x: card.x + 40, y: card.y + 54 + 4 * ROW + 2 }).slice(0, 1), ["Task 5 on scout's board"]);
+	// A hundred tasks: eighty rows and a word for the rest.
+	const many = rowsOf({ ...b, notes: 0, tasks: Array.from({ length: 100 }, (_, i) => t(i + 1, "open")) } as any, s, T0);
+	assert.deepEqual([many.length, many.at(-1)!.text, many.at(-1)!.task], [81, "+20 more tasks", undefined]);
+
+	// A level is drawn for another zoom than the one before it, so that words keep about their size when one takes the other's place.
+	assert.ok(SCALE.far < SCALE.mid && SCALE.mid < SCALE.near);
+	// All three draw, in light and dark, with a task chosen, without a throw.
+	for (const l of [far, mid, near]) for (const dark of [false, true]) draw(fakeCtx(), { ...s, dark }, l, T0, { recent: new Recent(), task: { board: 7, task: 2 }, cam: { x: l.w / 2, y: 200, z: 1 }, view: { w: 560, h: 600 } });
 });

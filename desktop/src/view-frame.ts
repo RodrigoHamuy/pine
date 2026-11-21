@@ -38,8 +38,8 @@ const host: ViewHost = {
 		set.add(fn as (v: unknown) => void);
 		return () => void set.delete(fn as (v: unknown) => void);
 	}) as ViewHost["on"],
-	select: (target) => tell({ type: "select", target: target && ("agent" in target ? { agent: String(target.agent) } : { work: Number(target.work) }) }),
-	open: (target) => tell({ type: "open", target: "agent" in target ? { agent: String(target.agent) } : { work: Number(target.work) } }),
+	select: (target) => tell({ type: "select", target: target && ("agent" in target ? { agent: String(target.agent) } : "work" in target ? { work: Number(target.work) } : { board: Number(target.board), ...(target.task !== undefined ? { task: Number(target.task) } : {}) }) }),
+	open: (target) => void ("board" in target || tell({ type: "open", target: "agent" in target ? { agent: String(target.agent) } : { work: Number(target.work) } })),
 };
 
 async function start(code: string): Promise<void> {

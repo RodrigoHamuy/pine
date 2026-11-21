@@ -178,6 +178,53 @@ export default defineView((host) => {
 	assert.ok(!(await page.textContent("[data-slot=tabs]").catch(() => "")).includes("nobody"));
 });
 
+test("a view names a board's task by its numbers and the panel says what the task is; the view itself is told none of it", async () => {
+	write(
+		path.join(home, "views", "pointer.js"),
+		`import { defineView } from "pine/view";
+export default defineView((host) => {
+	const pre = document.createElement("pre");
+	pre.id = "pointer";
+	host.root.append(pre);
+	let asked = false;
+	const look = (s) => {
+		const b = s.boards.find((x) => x.tasks.length);
+		if (b && !asked) {
+			asked = true;
+			// A task there is, and then one there is not: the panel goes by what it knows.
+			host.select({ board: b.id, task: b.tasks[0].id, text: "CANARY from the view" });
+			host.open({ board: b.id });
+		}
+		pre.textContent = JSON.stringify({ leak: /CANARY/.test(JSON.stringify(s)) ? "leaked" : "clean", selected: s.selected ?? null, task: b ? Object.keys(b.tasks[0]).sort() : [] });
+	};
+	host.on("state", look);
+	look(host.state());
+});
+`,
+	);
+	await page.click("[data-slot=view-select]");
+	await page.getByRole("option", { name: "pointer" }).click();
+	await sees("[data-slot=view][data-view=pointer] [data-slot=view-frame][data-ready]", "the pointing view, running in its frame");
+	// A task and a note about it on the board of main's conversation, both with a word no view may see.
+	const posted = ((await call("POST", "/agents/main/boards/post", { session: "main", text: "Look up CANARY-8842 in the ledger" })) as { data: { board: number; id: number } }).data;
+	await call("POST", `/boards/${posted.board}/post`, { text: "CANARY-8842 is on page 3", kind: "note", on: posted.id });
+	// The panel shows the task in its words, with the note about it.
+	await sees("[data-slot=view-task-text]", "the task's text, drawn by the panel under the view");
+	assert.equal(await page.textContent("[data-slot=view-task-text]"), "Look up CANARY-8842 in the ledger");
+	await sees("[data-slot=view-inspector] >> text=CANARY-8842 is on page 3", "the note about it, which came a moment later");
+	assert.match(await page.textContent("[data-slot=view-inspector]"), /task #\d+[\s\S]*Open[\s\S]*Posted by[\s\S]*you[\s\S]*CANARY-8842 is on page 3/);
+	// The view was told which task is shown, by two numbers, and of the task only names and numbers.
+	const pointer = frame().locator("#pointer");
+	await frame().locator("#pointer", { hasText: '"selected":{"board"' }).waitFor({ timeout: 10_000 });
+	const out = JSON.parse((await pointer.textContent()) ?? "{}");
+	assert.equal(out.leak, "clean", "what stands on the board does not reach the view");
+	assert.deepEqual(out.selected, { board: posted.board, task: posted.id });
+	assert.deepEqual(out.task, ["after", "by", "id", "notes", "outside", "posted", "since", "state"]);
+	// Nothing opened for a board: there is no tab of one.
+	assert.equal(await page.locator("[data-slot=view-task-text]").count(), 1);
+	await call("POST", `/boards/${posted.board}/remove`);
+});
+
 test("without a view there is no button and no panel; choosing one brings both back", async () => {
 	await call("POST", "/settings", { key: "ui.view", value: "off" });
 	await page.waitForSelector("[data-toggle=view]", { state: "detached", timeout: 10_000 });

@@ -83,6 +83,8 @@ export interface ViewWork {
 	started: number;
 	finished?: number;
 	tools: number;
+	/** Its last tool calls, the newest last (a dozen at most): names, times and how each went, never what a call was about. */
+	calls?: ViewCall[];
 	/** It waits for the owner's answer. */
 	asking: boolean;
 	/** The mode it runs in now, and whether that is stricter than its agent's own (handed on from a stricter mode). */
@@ -121,6 +123,17 @@ export interface ViewTask {
 	/** The piece of work that has it (`ViewWork.id`) and that work's agent, while somebody has it. */
 	worker?: number;
 	agent?: string;
+	/** Who put it on the board: an agent's id, or "you". */
+	by?: string;
+	/** When it was posted, and since when it stands as it does now (taken, done, waiting for an answer). */
+	posted?: number;
+	since?: number;
+	/** How many notes are about it. */
+	notes?: number;
+	/** It asked something: "open" while it waits for the answer, "answered" once it had one. */
+	asked?: "open" | "answered";
+	/** It was posted by work that had read outside content. */
+	outside?: boolean;
 }
 
 /**
@@ -180,7 +193,16 @@ export interface ViewSchedule {
 }
 
 /** What is chosen in the panel. */
-export type ViewTarget = { agent: string } | { work: number };
+export type ViewTarget = { agent: string } | { work: number } | { board: number; task?: number };
+
+/** One of a piece of work's last tool calls: the tool's name, when it began, and once it ended how long it took and whether it went well. */
+export interface ViewCall {
+	tool: string;
+	mcp?: string;
+	at: number;
+	ms?: number;
+	ok?: boolean;
+}
 
 /** All of pine, as a view sees it. */
 export interface ViewState {
@@ -226,6 +248,20 @@ export type ViewHappening =
 	/** Something changed on a board: a task or a note was posted, a task was taken, given back or settled, or something was removed. */
 	| { k: "board"; board: number; change: "posted" | "taken" | "released" | "settled" | "removed"; agent?: string; task?: number; state?: ViewTask["state"] };
 
+/** How much a view shows of a thing: little from far away, more from where it is usually looked at, everything from close by. */
+export type Detail = "far" | "mid" | "near";
+
+/**
+ * The level of detail for a zoom, where 1 is the size a view was drawn for: `far` below `at.far`, `near` above
+ * `at.near`. Give the level the view is at as `was`: it is kept until the zoom is clearly past a limit, so that
+ * a hand that rests at one does not make the picture flicker between two.
+ */
+export function detailAt(zoom: number, was?: Detail, at: { far: number; near: number } = { far: 0.5, near: 1.2 }): Detail {
+	const far = at.far * (was === "far" ? 1.1 : 1);
+	const near = at.near * (was === "near" ? 0.9 : 1);
+	return zoom < far ? "far" : zoom > near ? "near" : "mid";
+}
+
 /** What the panel gives a view. */
 export interface ViewHost {
 	/** The element to draw in: the whole panel's lens, empty. */
@@ -235,9 +271,9 @@ export interface ViewHost {
 	/** Called with every new state (several times a second while work runs), and with what just happened. Returns a function that stops it. */
 	on(what: "state", fn: (state: ViewState) => void): () => void;
 	on(what: "happening", fn: (h: ViewHappening) => void): () => void;
-	/** Shows an agent or a piece of work in the panel, under the view; nothing for none. */
+	/** Shows an agent, a piece of work, or a board or one of its tasks in the panel, under the view (there the panel says what a task is, in its words); nothing for none. */
 	select(target?: ViewTarget): void;
-	/** Opens an agent's conversation, or a piece of work by itself. */
+	/** Opens an agent's conversation, or a piece of work by itself. A board cannot be opened this way. */
 	open(target: ViewTarget): void;
 }
 

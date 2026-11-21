@@ -29,7 +29,8 @@ A view runs in a frame of its own with scripts and nothing else. So:
   import, no window of its own. A picture has to be drawn by the script or be a `data:` address.
 - A view is told the shape of pine and nothing of its content: agents, what each piece of work does,
   where it came from, the names of tools, MCP servers, skills, event sources and schedules, and of
-  the boards where each task stands (its number, its state, what it comes after, who has it). Never
+  the boards where each task stands (its number, its state, what it comes after, who has it, who
+  posted it and when, how many notes it has). Never
   a prompt, an answer, a path, a conversation's name, what a task or a note on a board says, or what
   an event said. Do not design a view that needs those.
 
@@ -69,19 +70,20 @@ export default defineView((host) => {
 | `host.state()` | All of pine now, a `ViewState`: `agents` (with their MCP servers, skills, sources, schedules and conversations), `work` (running, and what ended in the last half hour), `inputs` (you, the clock, each event source), `schedules` (with when each runs next), `boards` (the boards agents share work on: whose each is, how many of its tasks are open, taken, done, failed or waiting for an answer, and in `tasks` each task's number, state, what it comes after and who has it), `selected`, `dark`, `focused` |
 | `host.on("state", fn)` | `fn(state)` with every new state: a few times a second while work runs, once a second at rest. Returns the function that stops it |
 | `host.on("happening", fn)` | What just happened, as it happens (a `ViewHappening`): work started or ended, a tool, a skill, an event, a schedule due, a task handed on or answered, a copy, a question to you, a branch, a change on a board. For a view that animates |
-| `host.select(target)` | Shows an agent (`{ agent: "books" }`) or a piece of work (`{ work: 12 }`) under the view, in words; `select()` shows the log again. It comes back as `state.selected` |
+| `host.select(target)` | Shows an agent (`{ agent: "books" }`), a piece of work (`{ work: 12 }`) or a board or one of its tasks (`{ board: 7, task: 3 }`) under the view, in words; `select()` shows the log again. It comes back as `state.selected`. For a task the panel shows what it says: your view is not told that, the panel draws it |
 | `host.open(target)` | Opens the agent's conversation, or the piece of work, in a tab |
 
 Times in a state are the page's clock in milliseconds (`Date.now()`). A piece of work says what it
 does in `doing` (`thinking`, `tool`, `writing`, `waiting`, `asking`, `done`, `failed`, `cancelled`),
 and while it is in a tool, its name in `tool`, the MCP server in `mcp`, and a skill it reads in
 `skill`. `copy` is a sub-agent; `from` says where the work came from; `parent` is the work that
-started it.
+started it; `calls` are its last tool calls by name, with how long each took and whether it went well.
 
 The helpers of `pine/view` need nothing but the language: `running`; for boards `unsettled` (the tasks
 that are not settled), `progress` (how far a board is, 0 to 1), `tasksOf`, `tiling` (a board's tasks
 laid out as square tiles, a check under the work it checks) and `stages` (the same as rows that follow
-one another); a camera (`frame`, `ease`),
+one another); a camera (`frame`, `ease`) and `detailAt`, which says for a zoom whether to show little
+(`far`), the usual (`mid`) or everything (`near`), for a view that tells more the closer it is looked at;
 boxes and paths (`union`, `inside`, `along`, `lengthOf`), a look that is the same every time for the
 same name (`hashOf`, `seeded`), and colors (`mix`, `shade`, `rgb`).
 

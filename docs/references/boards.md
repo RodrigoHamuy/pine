@@ -295,7 +295,7 @@ read, and what you post is yours.
 
 | Endpoint | What it does |
 |---|---|
-| `GET /boards` | Every board with its counts, and in `tasks` where each task stands (`id`, `state`, `after`, `waits`, and `run` and `holder` while somebody has it), without a word of what it says: what a UI needs to draw a board |
+| `GET /boards` | Every board with its counts, and in `tasks` where each task stands (`id`, `state`, `after`, `waits`, `run` and `holder` while somebody has it, who posted it in `by`, when in `created`, since when it stands so in `updated`, how many notes are about it in `notes`, `asked` when it asked something, and `outside` when it carries outside content), without a word of what it says: what a UI needs to draw a board |
 | `GET /boards/<id>` | One board with its tasks and notes. A task says who has it (`holder`, `run`, `sub` for a sub-agent), what it waits for (`waits`), and whether what is in it came from a run that had read outside content (`outside`) |
 | `GET /agents/<id>/boards?session=` | The boards that conversation can use, its own first |
 | `POST /agents/<id>/boards/post` `{ session, text, kind?, after? }` | A task (or with `kind: "note"` a note) of yours on that conversation's own board, which is made if there is none |

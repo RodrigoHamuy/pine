@@ -5223,7 +5223,7 @@ export default defineView((host: ViewHost) => {
 		const state = host.state();
 		const s = nowOf(state);
 		const sel = state.selected;
-		const focus: Hit = sel ? ("agent" in sel ? { k: "agent", id: sel.agent } : { k: "work", id: sel.work }) : undefined;
+		const focus: Hit = sel ? ("agent" in sel ? { k: "agent", id: sel.agent } : "work" in sel ? { k: "work", id: sel.work } : undefined) : undefined;
 		const dpr = window.devicePixelRatio || 1;
 		// On a screen with two pixels to a point, half a step is still a whole pixel.
 		shop.zoomStep = dpr >= 2 ? 0.5 : 1;

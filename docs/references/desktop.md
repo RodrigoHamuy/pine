@@ -825,7 +825,10 @@ agent with its avatar, on the panel's own ground in whatever theme you use.
 | A click on an agent | Unfolds it: a line for each of its conversations, a branch set in under what it was branched from, with "in a worktree" and its goal where it has one. The agent is shown under the view; a double click opens it |
 | The eye, at the top right | Follow activity, on at first: the camera keeps everything that something happens at in view and moves there softly; with nothing happening it shows the board from its top, as wide as the panel. A double click on the empty board turns it on again |
 | Dragging, scrolling, pinching | Moves the board, and zooms it (a pinch, or scrolling with `ctrl` or `cmd` held, around where the pointer is). The camera then stays where you put it and no longer follows |
-| The button beside the eye | Show everything: the whole board in the panel |
+| Zooming out | From far away every box is one line: a name and how it stands. An agent says `working`, `waiting`, `asks you` or `idle`; a board how far it is and its bar. All of pine fits in the panel that way |
+| Zooming in | From close by every box says all there is. An agent: under each piece of work and each sub-agent how long it has run, how many tools it called and its last tool calls by name (one that failed in the color of what failed, the one it is in now in the agent's color), what it finished lately, what it has (sources, schedules, MCP servers, skills) and its conversations. A board: a row for every task with its number, what its worker is doing and for how long, what it waits for, and at the right its notes, whether it had an answer, and whether it carries outside content; a task that comes after another stands under it. A trigger says how many events it brought and when the last one came, a schedule how it is set and when it last ran, a tool who has it and who is using it |
+| A click on a board, or on one of its tasks | Shows it under the view: for a task what it says, how it stands, its result or its question, and the notes about it; for the card, the whole board with every task. A click on a task there goes to it |
+| The button beside the eye | Show everything: the whole board in the panel, from far if that is what it takes to read it |
 
 It has no timeline: what happened, in order, is the list the panel shows under every view.
 

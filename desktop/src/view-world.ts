@@ -45,6 +45,8 @@ export interface Job {
 	/** When the daemon last said anything of it: its clock. */
 	heard: number;
 	tools: number;
+	/** Its last tool calls, the newest last: the tool, when it began (the daemon's clock), and once it ended how long it took and how it went. */
+	calls: Array<{ tool: string; at: number; ms?: number; ok?: boolean }>;
 	/** What the owner is asked on its behalf, while it waits for the answer. */
 	ask?: { id: string; tool: string; summary: string };
 	error?: string;
@@ -108,6 +110,9 @@ export interface Talk {
 const STATES = ["open", "taken", "done", "failed", "blocked"];
 
 /** A board, as `/boards` lists it: whom it is for, how many tasks are in which state, and the runs that hold one. */
+/** How many of a piece of work's tool calls are kept. */
+const CALLS = 12;
+
 export interface BoardRow {
 	id: number;
 	scope: "local" | "agent" | "global";
@@ -117,7 +122,20 @@ export interface BoardRow {
 	counts: { open: number; taken: number; done: number; failed: number; blocked: number; notes: number };
 	runs: number[];
 	/** Where each task stands, what it comes after, and the run that has it. */
-	tasks: Array<{ id: number; state: "open" | "waiting" | "taken" | "blocked" | "done" | "failed"; after: number[]; run?: number }>;
+	tasks: Array<{
+		id: number;
+		state: "open" | "waiting" | "taken" | "blocked" | "done" | "failed";
+		after: number[];
+		run?: number;
+		/** Who posted it (an agent's id, or "owner"), when (the daemon's clock), and since when it stands as it does. */
+		by: string;
+		created: number;
+		updated: number;
+		/** How many notes are about it, whether it asked something ("open") and was answered, and whether it carries outside content. */
+		notes: number;
+		asked?: "open" | "answered";
+		outside: boolean;
+	}>;
 }
 
 /** A schedule, as `/schedules` lists it. */
@@ -369,6 +387,12 @@ export class World {
 						state: t.state === "open" && t.waits === true ? ("waiting" as const) : (t.state as BoardRow["tasks"][number]["state"]),
 						after: (Array.isArray(t.after) ? t.after : []).filter((a: unknown): a is number => typeof a === "number").slice(0, 20),
 						...(typeof t.run === "number" ? { run: t.run } : {}),
+						by: typeof t.by === "string" ? t.by.slice(0, 80) : "",
+						created: n(t.created),
+						updated: n(t.updated),
+						notes: Math.min(999, n(t.notes)),
+						...(t.asked === "open" || t.asked === "answered" ? { asked: t.asked } : {}),
+						outside: t.outside === true,
 					})),
 			}));
 		this.touch();
@@ -399,6 +423,7 @@ export class World {
 			const parent = t.parent !== undefined ? this.jobs.get(t.parent) : undefined;
 			const doing: Doing = t.status === "running" ? "thinking" : t.status === "failed" ? "failed" : t.status === "cancelled" ? "cancelled" : "done";
 			this.jobs.set(t.id, {
+				calls: [],
 				id: t.id,
 				agent: t.agent,
 				session: t.session,
@@ -564,6 +589,7 @@ export class World {
 				started: at,
 				heard: at,
 				tools: 0,
+				calls: [],
 			};
 			this.jobs.set(job.id, job);
 			if (parent) {
@@ -607,10 +633,16 @@ export class World {
 			if (p.phase === "start") {
 				job.tools++;
 				job.tool = String(p.tool ?? "");
+				job.calls.push({ tool: job.tool, at: job.heard });
+				if (job.calls.length > CALLS) job.calls.splice(0, job.calls.length - CALLS);
 				job.subject = p.subject ? label(String(p.subject), 80) : undefined;
 				job.skill = job.tool === "read" ? /\/([a-z0-9]+(?:-[a-z0-9]+)*)\/SKILL\.md$/.exec(String(p.subject ?? ""))?.[1] : undefined;
 				if (job.doing !== "asking") job.doing = /(^|_)(delegate|subagent)$/.test(job.tool) ? "waiting" : "tool";
-			} else if (job.doing !== "asking") {
+			} else {
+				const call = [...job.calls].reverse().find((c) => c.ms === undefined && c.tool === String(p.tool ?? c.tool));
+				if (call) Object.assign(call, { ms: Math.max(0, job.heard - call.at), ok: p.ok !== false });
+			}
+			if (p.phase !== "start" && job.doing !== "asking") {
 				job.doing = job.waitingOn.some((c) => !ENDED.includes(this.jobs.get(c)?.doing ?? "done")) ? "waiting" : "thinking";
 				job.tool = undefined;
 				job.subject = undefined;

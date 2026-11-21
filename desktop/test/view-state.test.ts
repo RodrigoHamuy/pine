@@ -78,7 +78,7 @@ test("a view is told of conversations, branches and worktrees as numbers, of sch
 	];
 	// The boards as the daemon lists them: a view is told numbers, and a name only if it is what pine makes of one.
 	w.setBoards([
-		{ id: 3, scope: "local", agent: "books", session, name: "", counts: { open: 2, taken: 1, done: 4, failed: 0, blocked: 1, notes: 3 }, runs: [7, 99], tasks: [{ id: 11, state: "done", after: [], text: SECRET }, { id: 12, state: "taken", after: [], run: 7, holder: "books", text: SECRET }, { id: 13, state: "open", waits: true, after: [11, 12, SECRET], result: SECRET }, { id: 14, state: `open ${SECRET}`, after: [] }, { text: SECRET }] },
+		{ id: 3, scope: "local", agent: "books", session, name: "", counts: { open: 2, taken: 1, done: 4, failed: 0, blocked: 1, notes: 3 }, runs: [7, 99], tasks: [{ id: 11, state: "done", after: [], text: SECRET, by: "owner", notes: SECRET }, { id: 12, state: "taken", after: [], run: 7, holder: "books", text: SECRET, by: "books", created: 5000, updated: 9000, notes: 2, asked: "answered", outside: true }, { id: 13, state: "open", waits: true, after: [11, 12, SECRET], result: SECRET, by: `agent ${SECRET}`, asked: SECRET, outside: SECRET }, { id: 14, state: `open ${SECRET}`, after: [] }, { text: SECRET }] },
 		{ id: 4, scope: "global", agent: "", session: "", name: "bugs", counts: { open: 1 }, runs: [] },
 		{ id: 5, scope: "agent", agent: "books", session: "", name: `Notes about ${SECRET}`, counts: { open: `${SECRET}` }, runs: [SECRET] },
 	]);
@@ -108,12 +108,21 @@ test("a view is told of conversations, branches and worktrees as numbers, of sch
 	assert.deepEqual(state.boards, [
 		{
 			id: 3, scope: "conversation", agent: "books", conversation: tax.id, open: 2, taken: 1, done: 4, failed: 0, blocked: 1, notes: 3, workers: [7],
-			tasks: [{ id: 11, state: "done", after: [] }, { id: 12, state: "taken", after: [], worker: 7, agent: "books" }, { id: 13, state: "waiting", after: [11, 12] }],
+			// (Of each also who posted it, as a name the view knows or "you"; when, and since when it stands so, on the page's
+			// clock; how many notes are about it; whether it asked and was answered; whether it carries outside content.)
+			tasks: [
+				{ id: 11, state: "done", after: [], by: "you", notes: 0, outside: false },
+				{ id: 12, state: "taken", after: [], worker: 7, agent: "books", by: "books", posted: 5000 - w.skew, since: 9000 - w.skew, notes: 2, asked: "answered", outside: true },
+				{ id: 13, state: "waiting", after: [11, 12], notes: 0, outside: false },
+			],
 		},
 		{ id: 4, scope: "all", name: "bugs", open: 1, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [], tasks: [] },
 		{ id: 5, scope: "agent", agent: "books", open: 0, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [], tasks: [] },
 	]);
 	assert.equal(work.board, 3, "the work that has one of its tasks");
+	// Its last tool calls: the tools' names and how each went, never what a call was about.
+	assert.deepEqual(work.calls!.map((c) => [c.tool, c.ok, c.ms === undefined]), [["read", undefined, true]]);
+	assert.ok(state.work.every((x) => (x.calls ?? []).every((c) => /^[A-Za-z0-9_-]+$/.test(c.tool) && Object.keys(c).every((k) => ["tool", "mcp", "at", "ms", "ok"].includes(k)))));
 	assert.deepEqual(happened.filter((h) => h.k === "board"), [{ k: "board", board: 3, change: "posted", agent: "books", task: 11, state: "open" }], "a change that is none of the five words is not passed on");
 	assert.ok(happened.some((h) => h.k === "branched" && h.agent === "books" && h.from === tax.id && h.worktree === false), "a branch made while the panel is open is news");
 	// A conversation that reads outside content after the first look is news too.
@@ -128,4 +137,10 @@ test("what a view asks the panel to show or open is checked against what the pan
 	assert.equal(knownTarget(w, { agent: "nobody" }), undefined);
 	assert.equal(knownTarget(w, { work: "2" }), undefined);
 	assert.equal(knownTarget(w, "main"), undefined);
+	// A board by its number, and one of its tasks by its own: nothing the panel does not know, and nothing but numbers.
+	w.setBoards([{ id: 3, scope: "local", agent: "books", session: "s", name: "", counts: {}, runs: [], tasks: [{ id: 11, state: "open", after: [] }] }]);
+	assert.deepEqual(knownTarget(w, { board: 3 }), { board: 3 });
+	assert.deepEqual(knownTarget(w, { board: 3, task: 11, text: "anything" }), { board: 3, task: 11 });
+	assert.deepEqual(knownTarget(w, { board: 3, task: 99 }), { board: 3 }, "a task it does not have is left out");
+	assert.equal(knownTarget(w, { board: 9 }), undefined);
 });

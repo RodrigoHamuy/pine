@@ -9,7 +9,9 @@
 // listens to each; the schedules by name, when they run and whom they wake; each agent's conversations
 // as numbers (which is a branch of which, which works in a worktree, which has a goal), the skill a piece
 // of work reads if its agent has it, and how far its to-do list is; the boards by number, whom each is
-// for, its name if it has one, how many of its tasks are in which state, and which work has one.
+// for, its name if it has one, how many of its tasks are in which state, and which work has one; of a task
+// its number, its state, who posted it (an agent's name or "you"), when, how many notes are about it and whether
+// it asked; of a piece of work its last tool calls by the tools' names, with how long each took and how it went.
 // Never: a prompt, a task's text, what stands on a board, an answer, an error's text, a tool's arguments or subject (a path, a
 // command), a question's text, a conversation's name, a folder, a model, a secret, or what an event said.
 import type { ViewAgent, ViewBoard, ViewConversation, ViewHappening, ViewInput, ViewSchedule, ViewState, ViewTarget, ViewWork } from "../../src/view-kit.ts";
@@ -95,7 +97,18 @@ function boards(world: World): ViewBoard[] {
 				// Each task: a number, one of six words, the numbers it comes after, and the work that has it.
 				tasks: b.tasks.map((t) => {
 					const job = t.run !== undefined ? world.jobs.get(t.run) : undefined;
-					return { id: t.id, state: t.state, after: t.after, ...(job ? { worker: job.id, ...(world.places.has(job.agent) ? { agent: job.agent } : {}) } : {}) };
+					// Who posted it is said only as a name the view knows already: an agent of pine's, or "you".
+					const by = t.by === "owner" ? "you" : world.places.has(t.by) ? t.by : undefined;
+					return {
+						id: t.id, state: t.state, after: t.after,
+						...(job ? { worker: job.id, ...(world.places.has(job.agent) ? { agent: job.agent } : {}) } : {}),
+						...(by ? { by } : {}),
+						...(t.created ? { posted: t.created - world.skew } : {}),
+						...(t.updated ? { since: t.updated - world.skew } : {}),
+						notes: t.notes,
+						...(t.asked ? { asked: t.asked } : {}),
+						outside: t.outside,
+					};
 				}),
 			};
 		})
@@ -125,6 +138,11 @@ function work(world: World, j: Job, holdings: Map<string, Holdings>): ViewWork {
 		started: page(j.started),
 		...(j.finished !== undefined ? { finished: page(j.finished) } : {}),
 		tools: j.tools,
+		// Its last calls by the tool's name, never what a call was about.
+		calls: j.calls.flatMap((c) => {
+			const name = toolName(c.tool);
+			return name ? [{ tool: name, ...(mcpOf(name) ? { mcp: mcpOf(name) } : {}), at: page(c.at), ...(c.ms !== undefined ? { ms: c.ms, ok: c.ok !== false } : {}) }] : [];
+		}),
 		asking: Boolean(j.ask) && !ENDED.includes(j.doing),
 		...(mode ? { mode } : {}),
 		held: Boolean(mode && own && stricter(mode, own)),
@@ -151,7 +169,7 @@ export function viewStateOf(world: World, o: { colorOf: (agent: string) => strin
 		.slice(0, 200)
 		.map((s) => ({ name: s.name, ...(world.places.has(s.scope) ? { agent: s.scope } : {}), ...(whenText(s.when) ? { when: whenText(s.when) } : {}), ...(s.next !== undefined ? { next: page(s.next) } : {}), ...(s.last !== undefined ? { last: page(s.last) } : {}) }))
 		.sort((a, b) => (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name));
-	const selected = o.selected && ("agent" in o.selected ? { agent: o.selected.agent } : { work: o.selected.work });
+	const selected = o.selected && ("agent" in o.selected ? { agent: o.selected.agent } : "work" in o.selected ? { work: o.selected.work } : { board: o.selected.board, ...(o.selected.task !== undefined ? { task: o.selected.task } : {}) });
 	return { at: Date.now(), agents, work: [...world.jobs.values()].map((j) => work(world, j, o.holdings)), inputs, schedules, boards: boards(world), ...(selected ? { selected } : {}), dark: o.dark, focused: o.focused !== false };
 }
 
@@ -219,5 +237,7 @@ export function knownTarget(world: World, t: unknown): ViewTarget | undefined {
 	const x = t as Record<string, unknown>;
 	if (typeof x.agent === "string" && world.places.has(x.agent)) return { agent: x.agent };
 	if (typeof x.work === "number" && world.jobs.has(x.work)) return { work: x.work };
+	const board = typeof x.board === "number" ? world.boards.find((b) => b.id === x.board) : undefined;
+	if (board) return { board: board.id, ...(typeof x.task === "number" && board.tasks.some((t) => t.id === x.task) ? { task: x.task } : {}) };
 	return undefined;
 }

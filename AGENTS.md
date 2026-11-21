@@ -799,8 +799,11 @@ These are invariants. A change that breaks one needs a test that shows why it is
    text and opens no file; whatever is kept by agent or by conversation goes with it
    (`dropConversation`, `dropAgent` from `eraseAgent`, the renames). A UI is told on `pine/board`
    which board changed and which post, by its number and how a task stands, never a word of what
-   is on it; and a view of the owner's is told numbers, states and a board's name only (`boards`
-   in `desktop/src/view-state.ts`, from the task list without texts that `boardBrief` makes). `test/boards.test.ts` and
+   is on it; and a view of the owner's is told numbers, states, times, a board's name and who posted
+   a task (an agent's name or "you") and nothing else (`boards` in `desktop/src/view-state.ts`, from the
+   task list without texts that `boardBrief` makes). What a task says is shown by the panel under the
+   view when the view names a board and a task by their numbers (`knownTarget`, `BoardDetail` in
+   `desktop/src/View.tsx`): the app reads it from pine and draws it as text, and the view is told none of it. `test/boards.test.ts` and
    `desktop/test/view-state.test.ts` fail without each of these.
 
 ## pi behaviours pine depends on

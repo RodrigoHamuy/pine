@@ -2442,11 +2442,21 @@ export class AgentManager {
 		// each task stands, what it comes after and who has it, without a word of what it says: for a UI that draws
 		// the board itself. The newest 200.)
 		const all = this.boards.items(b.id, { kind: "task" });
+		// (And of each task who posted it, when, since when it stands as it does, how many notes are about it, whether
+		// it asked something and was answered, and whether it carries outside content: numbers and names, no text.)
+		const about = new Map<number, { notes: number; answered: boolean }>();
+		for (const n of this.boards.items(b.id, { kind: "note" })) {
+			if (n.about === undefined) continue;
+			const a = about.get(n.about) ?? { notes: 0, answered: false };
+			a.notes++;
+			if (typeof n.data?.question === "string") a.answered = true;
+			about.set(n.about, a);
+		}
 		return {
 			...b,
 			counts: this.boards.counts(b.id),
 			runs: all.flatMap((t) => (t.state === "taken" && t.run !== undefined ? [t.run] : [])),
-			tasks: all.slice(-200).map((t) => ({ id: t.id, state: t.state, after: t.after, waits: t.state === "open" && this.boards.waitsFor(t).length > 0, ...(t.state === "taken" && t.run !== undefined ? { run: t.run } : {}), ...(t.state === "taken" && t.holder ? { holder: t.holder } : {}) })),
+			tasks: all.slice(-200).map((t) => ({ id: t.id, state: t.state, after: t.after, waits: t.state === "open" && this.boards.waitsFor(t).length > 0, ...(t.state === "taken" && t.run !== undefined ? { run: t.run } : {}), ...(t.state === "taken" && t.holder ? { holder: t.holder } : {}), by: t.by, created: t.created, updated: t.updated, notes: about.get(t.id)?.notes ?? 0, ...(t.state === "blocked" ? { asked: "open" } : about.get(t.id)?.answered ? { asked: "answered" } : {}), outside: Boolean(t.tainted) || t.trust === "untrusted" })),
 		};
 	}
 
