@@ -100,7 +100,7 @@ process.stdin.resume();
 	github = http.createServer((_req, res) => {
 		releases.asked++;
 		const version = releases.tag.slice(1);
-		res.writeHead(releases.status, { "content-type": "application/json" }).end(JSON.stringify({ tag_name: releases.tag, html_url: "https://example.invalid/elsewhere", assets: ["arm64", "x64"].map((arch) => ({ name: `Pine-${version}-${arch}.dmg` })) }));
+		res.writeHead(releases.status, { "content-type": "application/json" }).end(JSON.stringify({ tag_name: releases.tag, html_url: "https://example.invalid/elsewhere", assets: ["arm64", "x64"].flatMap((arch) => [{ name: `Pine-${version}-${arch}.dmg` }, { name: `Pine-${arch}.json` }]) }));
 	});
 	await new Promise<void>((r) => github.listen(0, "127.0.0.1", r));
 
@@ -236,6 +236,8 @@ test("starts a daemon of its own and shows the main agent", async () => {
 });
 
 test("a newer app is said at the start and when asked, with a link to its page on GitHub and nothing fetched", async () => {
+	// An app from a checkout updates nothing itself: macOS's updater was never pointed at a feed, and there is no switch for it.
+	assert.equal(await app.evaluate(({ autoUpdater }: any) => autoUpdater.getFeedURL()), "");
 	const mine = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8")).version;
 	const link = "https://github.com/pmndre/pine/releases/tag/v9.9.9";
 	// The start asked once, and the side bar says what it found.
@@ -286,6 +288,7 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	await page.locator("[data-setting=updates]").getByRole("button", { name: "Release page" }).click();
 	assert.deepEqual(await opened(), [link, link, link]);
 	const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
+	assert.equal(await page.$("[data-slot=field]:has-text('Update automatically')"), null);
 	await page.click("[data-slot=field]:has-text('Look for a newer version at the start') [data-slot=switch]");
 	for (let i = 0; i < 50 && prefs().updates !== false; i++) await new Promise((r) => setTimeout(r, 40));
 	assert.equal(prefs().updates, false);
@@ -891,6 +894,18 @@ test("an approval is asked in a dialog and answered from it, and so is a questio
 	assert.equal(await page.locator("[data-slot=spinner]").count(), 0);
 	const beats = await page.$$eval("[data-slot=pulse]", (els: Element[]) => els.map((e) => (e as HTMLElement).getAnimations()[0]?.currentTime));
 	assert.ok(beats.every((t) => t === beats[0]), `every dot at the same point of the beat: ${beats.join(", ")}`);
+	// Whatever goes on for as long as an agent works changes in steps, a few times a second: an animation
+	// that runs smoothly forever makes the system draw the whole window at the screen's rate the whole time
+	// (it cost a fifth of a core while agents worked; desktop/test/view-perf.test.ts measures it).
+	const smooth = await page.evaluate(() =>
+		document
+			.getAnimations()
+			.filter((a) => a.effect?.getComputedTiming().iterations === Infinity && a.playState === "running")
+			.map((a) => (a.effect as KeyframeEffect).target as HTMLElement)
+			.filter((el) => el && !getComputedStyle(el).animationTimingFunction.startsWith("steps("))
+			.map((el) => el.getAttribute("data-slot") ?? el.className.toString().slice(0, 40)),
+	);
+	assert.deepEqual(smooth, [], "no animation runs smoothly forever");
 	await page.locator("[data-slot=dialog-content][data-tone=warn]").getByRole("button", { name: /^Allow/ }).click();
 	await sees('[data-item="approval"][data-state="allowed"]');
 	// Then the agent asks something: the answers it offers, the recommended one first.

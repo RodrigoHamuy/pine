@@ -1,7 +1,7 @@
 // The window: the list of agents and conversations at the side, the tabs along the top, one
 // conversation in the middle with its panel, and whatever lies over them for a moment (a list
 // to pick from, a question, the palette).
-import { ArrowUpIcon, AudioLinesIcon, CheckIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, UnplugIcon, XIcon } from "lucide-react";
+import { ArrowUpIcon, AudioLinesIcon, DownloadIcon, HourglassIcon, RotateCwIcon, CheckIcon, RadarIcon, ChevronDownIcon, ChevronRightIcon, ChevronsUpDownIcon, LaptopIcon, ServerIcon, ExternalLinkIcon, FolderClosedIcon, FolderIcon, FolderOpenIcon, GitBranchIcon, GlobeIcon, ListIcon, MessageSquareIcon, PanelRightIcon, PlusIcon, SearchIcon, SettingsIcon, StarIcon, Trash2Icon, TriangleAlertIcon, UnplugIcon, XIcon } from "lucide-react";
 import { useMediaQuery } from "usehooks-ts";
 import { Toggle } from "@/components/ui/toggle";
 import { Badge } from "@/components/ui/badge";
@@ -22,12 +22,14 @@ import { COMMANDS } from "./commands.ts";
 import { TabMenu, type TabMenuAction } from "@/components/tab-menu";
 import { Conversation } from "./Conversation.tsx";
 import { Events } from "./Events.tsx";
-import { type Beside, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
+import { type Beside, ROOM, store, type Tab, type UpdatePhase, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
+import { VIEW_KEY, ViewAside } from "./View.tsx";
 import { Breakable, MachineList, Settings } from "./Settings.tsx";
 import { computerWord, firstScreen, isPaired, noMachineSaid } from "./machines.ts";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
+import { PairConfirm } from "./Pairing.tsx";
 import { PickDialog } from "./PickDialog.tsx";
 import { PublishDialog } from "./PublishDialog.tsx";
 import { QuestionDialog } from "./QuestionDialog.tsx";
@@ -90,7 +92,7 @@ export function Gate() {
 		</div>,
 	];
 	// A pairing link being paired with (the web client's): the four digits the computer shows too, once it showed them.
-	const pairing = firstScreen(state);
+	const pairing = firstScreen(state, s.device);
 	// The sentence under the title follows the view shown, never the emptiness of the list (machines.ts).
 	const said = state.status === "error" ? noMachineSaid(state, s.machinesShown.view, s.pairFailed) : undefined;
 	const pairFirst = state.status === "error" && said === undefined && !s.prefs.hosts.length;
@@ -101,6 +103,8 @@ export function Gate() {
 				<div key="p" className="flex w-full flex-col items-center gap-4">
 					{pairing.code ? <span className="font-mono text-4xl font-semibold tracking-widest select-text" data-slot="pairing-code">{pairing.code}</span> : null}
 					<Pulse label="Loading" />
+					{/* A pairing started from the owner's hand can be ended from here; the web client's has no way to. */}
+					{s.canCancelPair ? <Button variant="outline" data-slot="cancel-pairing" onClick={() => void s.cancelPair()}>Cancel</Button> : null}
 				</div>,
 			]
 		: state.status === "starting"
@@ -121,7 +125,7 @@ export function Gate() {
 					]
 				: state.status === "error"
 					? [
-							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? paired ? <>{named} is not reached</> : <>{named} is not reached over SSH</> : s.pairFailed ? "The pairing did not go through" : pairFirst ? "Pair this browser with your computer" : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
+							state.kind === "no-node" ? "pine needs Node" : state.kind === "no-pine" ? "pine is not installed" : state.kind === "ssh" ? (host ? paired ? <>{named} is not reached</> : <>{named} is not reached over SSH</> : s.pairFailed ? "The pairing did not go through" : pairFirst ? `Pair this ${s.device} with your computer` : "Choose a machine") : host ? <>pine on {named} did not start</> : "pine did not start",
 							// No machine in use in the pairing view: the list's three lines say how, once.
 							said ?? "",
 							<div key="b" className="flex w-full flex-col items-center gap-4">
@@ -464,7 +468,8 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 function Sidebar() {
 	const s = useModel(store);
 	const front = s.active;
-	const newer = s.update?.status === "newer" ? s.update : undefined;
+	const update = s.updatePhase;
+	const older = s.service.status === "ready" && s.service.olderThan ? s.service : undefined;
 	const { isMobile } = useSidebar();
 	// shadcn's stock Sidebar. In a wide window it is fixed in its place (the panel around it sets its width),
 	// its background left to the window behind it, which is the system's material on a Mac, and where nothing
@@ -493,9 +498,10 @@ function Sidebar() {
 			</SidebarContent>
 			<SidebarFooter className="gap-0">
 				<SidebarMenu>
-					{newer ? (
-						<SidebarMenuItem className="app-no-drag">
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(newer.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {newer.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`This is Pine ${newer.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></HoverTooltip>
+					{update ? <SidebarMenuItem className="app-no-drag"><UpdateButton update={update} /></SidebarMenuItem> : null}
+					{older ? (
+						<SidebarMenuItem className="app-no-drag" data-notice="older-pine">
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.openSettings("app")} />}><TriangleAlertIcon /><span className="grow min-w-0 flex-1 truncate">An older pine runs</span></TooltipTrigger><TooltipContent>{`The pine this app attached to is ${older.version}, older than the app's own (${older.olderThan}). Restart it on the newer one: Settings › App says how.`}</TooltipContent></HoverTooltip>
 						</SidebarMenuItem>
 					) : null}
 					<SidebarMenuItem className="app-no-drag">
@@ -534,7 +540,7 @@ export function Machines() {
 			: !s.connected
 				? "pine does not answer"
 				: `pine${state.version ? ` ${state.version}` : ""} · ${on ?? (state.started ? "started here" : "attached")}`;
-	const about = state.status === "ready" ? `${state.home} · ${state.host ? (isPaired(state.host) ? "paired with this browser" : `over SSH (${state.host})`) : state.started ? "started by this app" : "a pine that was already running"}` : "";
+	const about = state.status === "ready" ? `${state.home} · ${state.host ? (isPaired(state.host) ? `paired with this ${s.device}` : `over SSH (${state.host})`) : state.started ? "started by this app" : "a pine that was already running"}` : "";
 	return (
 		<SidebarMenuItem className="app-no-drag">
 			<DropdownMenu>
@@ -620,16 +626,17 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 }
 
 /**
- * The icon of the side panel or of the browser's aside, at the top right of the title bar. Pressed while it is open; open
- * but behind the other (a window with room for one only) it is pressed more lightly, and a click brings it to the front.
- * Only a conversation has them: on another tab they stay in their place and cannot be pressed.
+ * The icon of the side panel, the browser's aside or the view, at the top right of the title bar. Pressed while
+ * it is open; open but behind the others (a window with too little room) it is pressed more lightly, and a click brings it
+ * to the front. The side panel and the browser belong to a conversation: on another tab they stay in their place and
+ * cannot be pressed. The view can be opened beside any tab, where there is one (`store.hasView`).
  */
 function BesideToggle({ which, label, keys, icon }: { which: Beside; label: string; keys: string; icon: React.ReactNode }) {
 	const s = store;
 	const behind = s.behind(which);
 	return (
 		<HoverTooltip>
-			<TooltipTrigger render={<Toggle size="sm" data-toggle={which === "aside" ? "browser" : "code"} data-behind={behind || undefined} className="app-no-drag aria-pressed:bg-background aria-pressed:ring-1 aria-pressed:ring-border data-behind:bg-transparent data-behind:text-muted-foreground" disabled={s.active?.kind !== "chat"} pressed={which === "code" ? s.code : s.aside} onPressedChange={() => s.toggle(which)} aria-label={label} />}>{icon}</TooltipTrigger>
+			<TooltipTrigger render={<Toggle size="sm" data-toggle={which === "aside" ? "browser" : which} data-behind={behind || undefined} className="app-no-drag aria-pressed:bg-background aria-pressed:ring-1 aria-pressed:ring-border data-behind:bg-transparent data-behind:text-muted-foreground" disabled={which !== "view" && s.active?.kind !== "chat"} pressed={s.isOpen(which)} onPressedChange={() => s.toggle(which)} aria-label={label} />}>{icon}</TooltipTrigger>
 			<TooltipContent>{label}<Kbd>{keys}</Kbd></TooltipContent>
 		</HoverTooltip>
 	);
@@ -637,7 +644,7 @@ function BesideToggle({ which, label, keys, icon }: { which: Beside; label: stri
 
 /**
  * Follows the width of the room beside the side bar, where the conversation, the side panel and the aside lie: with less
- * than `BOTH`, the side panel and the aside are not both drawn (`store.one`). A ref of a callback, because the room is
+ * than `BOTH` or `THREE`, not all the panels beside it are drawn (`store.fits`). A ref of a callback, because the room is
  * there only once the app is ready.
  */
 function measureRoom(el: HTMLDivElement | null): (() => void) | undefined {
@@ -674,6 +681,7 @@ function TitleBar() {
 			<span className="min-w-0 flex-1" />
 			<BesideToggle which="code" label="Side panel: the agent, its files, changes, output and what is running" keys="⌥⌘B" icon={<PanelRightIcon />} />
 			<BesideToggle which="aside" label="Browser: the page the agent works in" keys="⇧⌘B" icon={<GlobeIcon />} />
+			{s.hasView ? <BesideToggle which="view" label={`View: all of pine at a glance, drawn by ${s.view}`} keys="⇧⌘O" icon={<RadarIcon />} /> : null}
 		</header>
 	);
 }
@@ -751,25 +759,68 @@ function Help({ close }: { close: () => void }) {
 	);
 }
 
-/** After "Check for Updates…" found a newer app: where it is. The app fetches and installs nothing itself. */
+/** The foot of the side bar for a newer app (`Store.updatePhase`): the wait and its call-off, Restart to update, the download, or the release's page. */
+function UpdateButton({ update: u }: { update: UpdatePhase }) {
+	const s = useModel(store);
+	switch (u.phase) {
+		case "waiting":
+			return <HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.cancelUpdateWait()} />}><HourglassIcon /><span className="grow min-w-0 flex-1 truncate">Restarts when the work is done</span><XIcon /></TooltipTrigger><TooltipContent>{`Pine ${u.version} is installed once no conversation is at work. Click to call it off: the update stays ready for a restart or a quit.`}</TooltipContent></HoverTooltip>;
+		case "ready":
+			return <HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void s.restartToUpdate()} />}><RotateCwIcon /><span className="grow min-w-0 flex-1 truncate">Restart to update</span></TooltipTrigger><TooltipContent>{`Pine ${u.version} is downloaded. Pine quits, puts the new app in place of this one (${u.mine}) and opens again, with the pine it started.`}</TooltipContent></HoverTooltip>;
+		case "downloading":
+			return <SidebarMenuButton disabled><DownloadIcon /><span className="grow min-w-0 flex-1 truncate">Downloading Pine {u.version}…</span></SidebarMenuButton>;
+		case "link":
+			return <HoverTooltip><TooltipTrigger render={<SidebarMenuButton className="text-primary hover:text-primary" onClick={() => void bridge.open(u.url)} />}><ArrowUpIcon /><span className="grow min-w-0 flex-1 truncate">Pine {u.version} is available</span><ExternalLinkIcon /></TooltipTrigger><TooltipContent>{`${u.reason ? `${u.reason} ` : ""}This is Pine ${u.mine}. Opens the release's page on GitHub in your browser: download the disk image there and put the app in place of this one.`}</TooltipContent></HoverTooltip>;
+	}
+}
+
+/**
+ * After "Check for Updates…" found a newer app: ready to install with a restart, waiting for the
+ * work to end before it restarts (the wait can be called off there), being downloaded, or
+ * where it is when the app does not update itself (the setting off, a checkout, a download that failed).
+ */
 function UpdateAsk() {
 	const s = useModel(store);
-	const u = s.update;
+	const u = s.updatePhase;
 	const close = () => ((s.updateAsk = false), s.touch());
-	if (u?.status !== "newer") return null;
+	if (!u) return null;
+	if (u.phase === "link") {
+		return (
+			<Dialog open onOpenChange={(open) => open || close()}>
+				<DialogContent showCloseButton={false} className="sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle>Pine {u.version} is available</DialogTitle>
+					</DialogHeader>
+					<div className="select-text">
+						{u.reason ? <p className="mb-2.5 text-muted-foreground">{u.reason}</p> : null}
+						<p className="text-muted-foreground">This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
+						<p className="mt-2.5 cursor-auto font-mono text-xs text-faint select-text">{u.url}</p>
+					</div>
+					<DialogFooter>
+						<Button variant="outline" onClick={close}>Not now</Button>
+						<Button onClick={() => (void bridge.open(u.url), close())}><ExternalLinkIcon data-icon="inline-start" />Open the release page</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		);
+	}
+	const title = { waiting: `Pine ${u.version} is ready`, ready: `Pine ${u.version} is ready`, downloading: `Pine ${u.version} is being downloaded` }[u.phase];
+	const text = {
+		waiting: `This is Pine ${u.mine}. Pine restarts to update once no conversation is at work. Call off the wait to keep working on this version: the update stays ready for a restart or a quit.`,
+		ready: `This is Pine ${u.mine}. Restart to update: Pine quits, puts the new app in place of this one and opens again, with the pine it started. Or quit when you like: the update is installed then.`,
+		downloading: `This is Pine ${u.mine}. The new app is downloaded in the background; "Restart to update" appears at the foot of the side bar when it is ready.`,
+	}[u.phase];
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
 			<DialogContent showCloseButton={false} className="sm:max-w-lg">
 				<DialogHeader>
-					<DialogTitle>Pine {u.version} is available</DialogTitle>
+					<DialogTitle>{title}</DialogTitle>
 				</DialogHeader>
-				<div className="select-text">
-					<p className="text-muted-foreground">This is Pine {u.mine}. The new app is a disk image on the release's page on GitHub: download it, quit Pine and put the new app in place of this one. Your pine home, with your agents, conversations and settings, stays as it is.</p>
-					<p className="mt-2.5 cursor-auto font-mono text-xs text-faint select-text">{u.url}</p>
-				</div>
+				<p className="text-muted-foreground select-text">{text} Your pine home, with your agents, conversations and settings, stays as it is.</p>
 				<DialogFooter>
-					<Button variant="outline" onClick={close}>Not now</Button>
-					<Button onClick={() => (void bridge.open(u.url), close())}><ExternalLinkIcon data-icon="inline-start" />Open the release page</Button>
+					<Button variant="outline" onClick={close}>{u.phase === "ready" ? "Not now" : "Close"}</Button>
+					{u.phase === "ready" ? <Button onClick={() => void s.restartToUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
+					{u.phase === "waiting" ? <Button variant="outline" onClick={() => s.cancelUpdateWait()}><XIcon data-icon="inline-start" />Call off the wait</Button> : null}
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
@@ -887,12 +938,14 @@ export function App() {
 								<div ref={measureRoom} data-slot="room" className={cn("flex min-h-0 flex-1 pr-1.5 pb-1.5", !column && "pl-1.5")}>
 									{/* The conversation, the side panel beside it, and the browser's aside at the far right. Each panel's width is
 									    its own: dragging the edge between the two changes both, and both are kept. */}
-									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && (keepWidth(layout, "code-panel", CODE_KEY), keepWidth(layout, "browser-panel", ASIDE_KEY))}>
+									<ResizablePanelGroup orientation="horizontal" onLayoutChanged={(layout, meta) => meta.isUserInteraction && (keepWidth(layout, "code-panel", CODE_KEY), keepWidth(layout, "browser-panel", ASIDE_KEY), keepWidth(layout, "view-panel", VIEW_KEY))}>
 										<ResizablePanel id="view" className="flex" minSize={320}>
 											{!tab ? <NoTab /> : tab.kind === "settings" ? <Settings /> : tab.kind === "events" ? <Events tab={tab} /> : <Conversation key={tab.id} tab={tab} />}
 										</ResizablePanel>
 										{chat && s.shown("code") ? <CodePanel key={`code:${tab!.id}`} tab={tab!} /> : null}
 										{chat && s.shown("aside") ? <BrowserAside key={`aside:${tab!.id}`} tab={tab!} /> : null}
+										{/* The view of all of pine, beside any tab. */}
+										{s.shown("view") ? <ViewAside key="view" /> : null}
 									</ResizablePanelGroup>
 								</div>
 							</div>
@@ -903,6 +956,7 @@ export function App() {
 			{s.browserAsk ? <BrowserAsk /> : null}
 			{s.updateAsk ? <UpdateAsk /> : null}
 			{s.homeScreen ? <HomeScreenTip /> : null}
+			{s.pairAsk ? <PairConfirm key={s.pairAsk.link} link={s.pairAsk} device={s.device} onPair={() => void s.confirmPair()} onCancel={() => s.dropPair()} /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
 			{s.publishing ? <PublishDialog /> : null}
 			{s.palette ? <Palette /> : null}

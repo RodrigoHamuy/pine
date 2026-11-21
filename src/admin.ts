@@ -7,9 +7,10 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AGENT_TOOLS } from "./agent-admin.ts";
-import { type AgentConfig, isColor, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
+import { type AgentConfig, delegatesText, isColor, loadConfig, mainAgentId, type Mode, MODES, PINE_ROOT, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
 import { renameEnv, secretName, unsetEnv } from "./env-file.ts";
 import { DEFAULT_THEME, listThemes } from "./themes.ts";
+import { listViews, viewInForce } from "./views.ts";
 import { editJson } from "./mcp-config.ts";
 import { isInside, realish } from "./security.ts";
 import { placeOf } from "./snapshots.ts";
@@ -36,7 +37,7 @@ export interface AgentChange {
 	/** A mode, or "default" for what pine gives an agent that names none (auto for the main agent, safe for the others). */
 	mode?: string;
 	tools?: string[];
-	/** Agents it may hand work to; "*" is every agent. */
+	/** Agents it may hand work to; "*" is every agent but the main one. */
 	delegates?: string[];
 	network?: boolean;
 	/** Folders outside its workspace it may read from now on. */
@@ -111,8 +112,8 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 	}
 	if (change.delegates !== undefined) {
 		const unknown = change.delegates.filter((d) => d !== "*" && (!cfg.agents[d] || d === agent.id));
-		if (unknown.length) throw new Error(`"delegates" names ${unknown.join(", ")}, which ${unknown.length === 1 ? "is" : "are"} not another agent. Agents: ${Object.keys(cfg.agents).filter((id) => id !== agent.id).join(", ") || "none"}; "*" is every agent`);
-		lines.push(`may hand work to: ${agent.delegates.join(", ") || "nobody"} -> ${change.delegates.join(", ") || "nobody"}`);
+		if (unknown.length) throw new Error(`"delegates" names ${unknown.join(", ")}, which ${unknown.length === 1 ? "is" : "are"} not another agent. Agents: ${Object.keys(cfg.agents).filter((id) => id !== agent.id).join(", ") || "none"}; "*" is every agent but the main one`);
+		lines.push(`may hand work to: ${delegatesText(cfg, agent)} -> ${delegatesText(cfg, { ...agent, delegates: change.delegates })}`);
 		steps.push((raw) => (raw.delegates = change.delegates));
 	}
 	if (change.network !== undefined) {
@@ -685,7 +686,7 @@ interface Setting {
 	/** What it does, in a sentence or two that need no other page to be understood. One that takes one of a few words says each on a line of its own. */
 	about: string;
 	/** What a value has to be. */
-	kind: "model" | "theme" | "boolean" | "duration" | { one: string[] } | { from: number; to: number };
+	kind: "model" | "theme" | "view" | "boolean" | "duration" | { one: string[] } | { from: number; to: number };
 	/** What is in force now, in the words the setting is written in. */
 	now(cfg: PineConfig): string;
 	/** Whether a new value holds at once. Otherwise it is saved and holds from the next start of pine. */
@@ -749,9 +750,16 @@ export const SETTINGS: Record<string, Setting> = {
 		now: (c) => c.ui.theme ?? DEFAULT_THEME,
 		live: true,
 	},
+	"ui.view": {
+		title: "View",
+		about: "What the Pine app's panel draws: a view, by its file's name in the views folder of pine's home (office for office.ts), also picked at the top of the panel. off: no panel, and no button for it. Not set: the view whose name comes first.",
+		kind: "view",
+		now: (c) => c.ui.view ?? `not set (${viewInForce(undefined, listViews(c.home)) ?? "no view"})`,
+		live: true,
+	},
 };
 
-const kindText = (k: Setting["kind"]) => (k === "model" ? "a model, as provider/model" : k === "theme" ? "the name of a theme in the themes folder" : k === "boolean" ? "true or false" : k === "duration" ? "a time such as 90s or 5m" : "one" in k ? k.one.join(", ") : `a number from ${k.from} to ${k.to}`);
+const kindText = (k: Setting["kind"]) => (k === "model" ? "a model, as provider/model" : k === "theme" ? "the name of a theme in the themes folder" : k === "view" ? "the name of a view in the views folder, or off" : k === "boolean" ? "true or false" : k === "duration" ? "a time such as 90s or 5m" : "one" in k ? k.one.join(", ") : `a number from ${k.from} to ${k.to}`);
 
 /** The settings as a list for the agent: name, what is in force, what it is. */
 export function settingsText(cfg: PineConfig): string {
@@ -777,6 +785,15 @@ export function checkSetting(cfg: PineConfig, key: string, given: unknown, model
 		if (!t) throw new Error(`there is no theme "${raw}". Themes: ${themes.filter((x) => !("problem" in x)).map((x) => x.id).join(", ")}`);
 		if ("problem" in t) throw new Error(`the theme "${raw}" cannot be drawn: ${t.problem}`);
 		value = t.id;
+	} else if (k === "view") {
+		const views = listViews(cfg.home);
+		if (String(raw) === "off") value = "off";
+		else {
+			const v = views.find((x) => x.id === String(raw));
+			if (!v) throw new Error(`there is no view "${raw}". Views: ${[...views.filter((x) => !("problem" in x)).map((x) => x.id), "off"].join(", ")}`);
+			if ("problem" in v) throw new Error(`the view "${raw}" cannot be used: ${v.problem}`);
+			value = v.id;
+		}
 	} else if (k === "boolean") {
 		if (raw !== true && raw !== false && raw !== "true" && raw !== "false") throw new Error(`${key} is true or false`);
 		value = raw === true || raw === "true";

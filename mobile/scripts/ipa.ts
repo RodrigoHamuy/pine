@@ -5,10 +5,11 @@
 // Builds the page for iOS and syncs it (npm run sync:ios), archives the app for devices with code
 // signing off, its version X.Y.Z and its build number the one a signed build of the same version
 // gets (iosVersion in scripts/version-code.ts: versionCode * 1000 + N, 999 for a release), and
-// writes ios/App/output/Pine-<version>.ipa. Then checks what it wrote: the app inside is not signed
-// at all, its binary is arm64, its versions are the ones asked for. Without a version it is 0.0.0,
-// build 1. Needs Xcode with the iOS SDK; the Release workflow
-// runs it on a runner with Xcode 27.
+// writes ios/App/output/Pine-<version>.ipa. Then checks what it wrote: nothing inside is signed at
+// all (the app, and each embedded framework, whose vendor's signature is taken off), every binary
+// is arm64, the WebRTC library and its OpenSSL are there, its versions are the ones asked for.
+// Without a version it is 0.0.0, build 1. Needs Xcode 27 with the iOS SDK; no workflow runs it for
+// now (the release's ios job is out until the core's tests pass on GitHub's Xcode 27 image).
 import { execFileSync, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -27,6 +28,20 @@ function run(cmd: string, args: string[], cwd = mobile) {
 	if (r.status !== 0) throw new Error(`${cmd} ${args[0]} failed (exit ${r.status ?? r.signal}).`);
 }
 const read = (cmd: string, args: string[]) => execFileSync(cmd, args, { encoding: "utf8" }).trim();
+
+/** The Mach-O files of an app bundle: its binary, and those of its frameworks and dylibs, found by their magic number. */
+function machO(bundle: string): string[] {
+	const magic = new Set([0xfeedfacf, 0xcffaedfe, 0xcafebabe, 0xbebafeca]);
+	return fs.readdirSync(bundle, { recursive: true, withFileTypes: true }).flatMap((entry) => {
+		if (!entry.isFile()) return [];
+		const file = path.join(entry.parentPath, entry.name);
+		const head = Buffer.alloc(4);
+		const fd = fs.openSync(file, "r");
+		const n = fs.readSync(fd, head, 0, 4, 0);
+		fs.closeSync(fd);
+		return n === 4 && magic.has(head.readUInt32BE(0)) ? [file] : [];
+	});
+}
 
 try {
 	run("npm", ["run", "sync:ios"]);
@@ -54,6 +69,13 @@ try {
 	const stage = path.join(build, "ipa");
 	fs.mkdirSync(path.join(stage, "Payload"), { recursive: true });
 	run("ditto", [app, path.join(stage, "Payload", "App.app")]);
+	// A framework that comes built (OpenSSL, which the WebRTC library needs) arrives with its vendor's
+	// signature, which Xcode copies as it is even with signing off. The sideloading tool signs every
+	// framework anew with the owner's identity, so that signature is never what an iPhone checks: it is
+	// taken off, and the IPA holds no signature at all, as it says.
+	for (const file of machO(path.join(stage, "Payload", "App.app"))) {
+		if (spawnSync("codesign", ["-dv", file], { encoding: "utf8" }).status === 0) run("codesign", ["--remove-signature", file]);
+	}
 	fs.mkdirSync(output, { recursive: true });
 	fs.rmSync(ipa, { force: true });
 	run("zip", ["-qry", ipa, "Payload"], stage);
@@ -62,19 +84,31 @@ try {
 	const unpacked = path.join(build, "check");
 	run("ditto", ["-x", "-k", ipa, unpacked]);
 	const inside = path.join(unpacked, "Payload", "App.app");
-	const signature = spawnSync("codesign", ["-dv", inside], { encoding: "utf8" });
-	if (signature.status === 0 || !/not signed at all/.test(signature.stderr)) {
-		throw new Error(`the app in the IPA is signed, and must not be:\n${signature.stderr}`);
+	// The app and every piece of code in it: its binary, and each embedded framework's.
+	const pieces = [inside, ...machO(inside).filter((f) => f !== path.join(inside, "App"))];
+	for (const file of pieces) {
+		const signature = spawnSync("codesign", ["-dv", file], { encoding: "utf8" });
+		if (signature.status === 0 || !/not signed at all/.test(signature.stderr)) {
+			throw new Error(`${path.relative(unpacked, file)} in the IPA is signed, and must not be:\n${signature.stderr}`);
+		}
 	}
 	const archs = read("lipo", ["-archs", path.join(inside, "App")]);
 	if (archs !== "arm64") throw new Error(`the app's binary is "${archs}", not arm64 alone.`);
+	// What the app carries beside it runs on an iPhone too (Swift's own back-deployment libraries come as arm64 and arm64e).
+	for (const file of machO(inside)) {
+		const has = read("lipo", ["-archs", file]).split(" ");
+		if (!has.includes("arm64")) throw new Error(`${path.relative(unpacked, file)} is "${has.join(" ")}", without arm64.`);
+	}
+	// The WebRTC library pairing rests on: linked into the app's binary, and the TLS library it needs beside it.
+	if (!fs.existsSync(path.join(inside, "Frameworks", "OpenSSL.framework", "OpenSSL"))) throw new Error("the app carries no OpenSSL.framework, which the WebRTC library needs.");
+	if (!fs.readFileSync(path.join(inside, "App")).includes("libdatachannel")) throw new Error("the app's binary does not carry libdatachannel.");
 	const plist = path.join(inside, "Info.plist");
 	const shown = read("plutil", ["-extract", "CFBundleShortVersionString", "raw", plist]);
 	const number = read("plutil", ["-extract", "CFBundleVersion", "raw", plist]);
 	if (shown !== short || number !== String(code)) {
 		throw new Error(`the app says version ${shown} (${number}), not ${short} (${code}).`);
 	}
-	console.log(`wrote ${ipa}: ${fs.statSync(ipa).size} bytes, not signed, arm64, version ${short} (${code})`);
+	console.log(`wrote ${ipa}: ${fs.statSync(ipa).size} bytes, nothing signed (the app and ${pieces.length - 1} embedded binaries), arm64, libdatachannel and OpenSSL inside, version ${short} (${code})`);
 } catch (e) {
 	console.error((e as Error).message);
 	process.exit(1);

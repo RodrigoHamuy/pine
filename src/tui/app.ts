@@ -3569,31 +3569,46 @@ export class PineTui {
 		const taint = this.taints.get(`${t.agent}:${t.session}`);
 		const mode = info?.mode ?? "auto";
 		const modeText = `${mode}${this.bypassPaused(t) ? " (paused)" : ""}`;
-		// Each part opens its list on a click: agent, conversation, model, mode.
+		const sep = c.gray(" · ");
+		// Each part opens its list on a click: agent, conversation, folder, model, reasoning, and the mode after them.
 		const line = new Line()
 			.add(" ")
 			.add(c.bold(t.agent), () => void this.pickAgent())
-			.add(c.gray(" · "))
+			.add(sep)
 			.add(c.gray(t.session), () => void this.pickSession())
-			.add(c.gray(" · "))
+			.add(sep)
 			.add(t.worktree ? c.cyan(`⎇ ${short(t.worktree.branch, 30)}`) : t.folder ? c.cyan(short(tilde(t.folder), 34)) : c.gray("no folder"), () => void (t.worktree ? this.worktreeMenu(t) : this.pickFolder()))
-			.add(c.gray(" · "))
+			.add(sep)
 			.add(c.gray(info?.model ?? ""), () => void this.pickModel())
-			.add(c.gray(" · "))
-			.add(c.gray(`reasoning ${info?.thinking ?? "off"}`), () => void this.pickReasoning())
-			.add(c.gray(" · "))
-			.add(mode === "bypass" ? c.red(modeText) : mode === "manual" ? c.cyan(modeText) : mode === "plan" ? c.magenta(modeText) : mode === "safe" ? c.green(modeText) : c.gray(modeText), () => void this.pickMode());
+			.add(sep)
+			.add(c.gray(`reasoning ${info?.thinking ?? "off"}`), () => void this.pickReasoning());
+		const modeShown = mode === "bypass" ? c.red(modeText) : mode === "manual" ? c.cyan(modeText) : mode === "plan" ? c.magenta(modeText) : mode === "safe" ? c.green(modeText) : c.gray(modeText);
+		const figures: string[] = [];
 		// How full the context window is. pi compacts the conversation by itself when it gets close to full.
-		if (t.context !== undefined) line.add(c.gray(" · ")).add((t.context >= 85 ? c.red : t.context >= 65 ? c.yellow : c.gray)(`context ${t.context}%`));
+		if (t.context !== undefined) figures.push((t.context >= 85 ? c.red : t.context >= 65 ? c.yellow : c.gray)(`context ${t.context}%`));
 		// How much of the last request the model server took from its cache. Low figures on a local model mean slow turns.
-		if (t.cacheShare !== undefined) line.add(c.gray(" · ")).add((t.cacheShare < 50 ? c.yellow : c.gray)(`cache ${t.cacheShare}%`));
+		if (t.cacheShare !== undefined) figures.push((t.cacheShare < 50 ? c.yellow : c.gray)(`cache ${t.cacheShare}%`));
 		// How fast the model read and wrote in the last task: what stays to be seen when the work is done.
-		if (speedText(t.speed)) line.add(c.gray(" · ")).add(c.gray(speedText(t.speed)));
-		if (taint) line.add(c.yellow(" · outside content"));
+		if (speedText(t.speed)) figures.push(c.gray(speedText(t.speed)));
+		const mark = taint ? c.yellow(" · outside content") : "";
+		// The mode and the mark say what the agent may do here, so they are the last to go when the bar has no
+		// room for all of it: the figures go first, from the last one, and then the end of the names before the mode.
+		const kept = visibleWidth(sep) + visibleWidth(modeShown) + visibleWidth(mark);
+		while (figures.length && line.width + kept + figures.reduce((w, f) => w + visibleWidth(sep) + visibleWidth(f), 0) > width) figures.pop();
+		const room = Math.max(0, width - kept);
+		if (line.width > room) {
+			line.text = truncateToWidth(line.text, room);
+			line.width = visibleWidth(line.text);
+			line.hits = line.hits.filter((h) => h.from < line.width).map((h) => ({ ...h, to: Math.min(h.to, line.width) }));
+		}
+		line.add(sep).add(modeShown, () => void this.pickMode());
+		for (const figure of figures) line.add(sep).add(figure);
+		line.add(mark);
 		this.footerHits = line.hits;
+		// The hint is the first to go: whole, since a cut hint would take the end of the mark with it.
 		const right = c.gray("/help ");
-		const gap = Math.max(1, width - line.width - visibleWidth(right));
-		return [truncateToWidth(line.text + " ".repeat(gap) + right, width)];
+		const gap = width - line.width - visibleWidth(right);
+		return [truncateToWidth(gap >= 1 ? line.text + " ".repeat(gap) + right : line.text, width)];
 	}
 }
 

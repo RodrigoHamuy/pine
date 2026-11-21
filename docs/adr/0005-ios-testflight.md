@@ -24,7 +24,9 @@ maintainer's team, uploaded to App Store Connect, added to the external group `P
 link the README and the release page give, and submitted to Beta App Review. Every preview from
 `next` goes to the internal group `Maintainers` (the maintainer's own devices), with no review, so
 that a preview is tried on a real iPhone before `next` is moved to `main`. The unsigned IPA stays
-attached to every release, and its job `ios` keeps no secret and no environment.
+the sideloading way and keeps no secret and no environment. (Since 0.49.1 it is built by hand: the
+job `ios` was taken out because the core's `swift test` did not pass on GitHub's Xcode 27 preview
+image. The job `testflight` runs on the same image and does not run `swift test` either.)
 
 **One App Store Connect API key, cloud-managed signing.** The key (role Admin: cloud-managed
 signing needs it, App Manager is not enough) is the only Apple secret. `xcodebuild` signs automatically with it (`-allowProvisioningUpdates`), with Apple's

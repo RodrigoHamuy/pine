@@ -19,7 +19,7 @@ import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "re
 import { type AgentDetail, api, type LoginState, type Route, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
-import { store, useModel } from "./model.ts";
+import { store, type UpdatePhase, useModel } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
 import type { DialogRootActions } from "@base-ui/react/dialog";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -37,6 +37,7 @@ import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 import { BrowserAccess } from "./BrowserAccess.tsx";
+import { PairLinkField } from "./Pairing.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -423,7 +424,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-delegates`}>May hand work to</FieldLabel>
 					{others.length ? <Checks id={`${field}-delegates`} label="May hand work to" all={["*", ...others]} value={now("delegates")} onChange={(v) => put("delegates", v)} /> : <p id={`${field}-delegates`} className="text-muted-foreground">There is no other agent yet.</p>}
-					<FieldDescription>{d.main ? "The main agent may delegate to everyone." : "Agents it can give a task to with its delegate tool."}</FieldDescription>
+					<FieldDescription>{d.main ? "Agents it can give a task to with its delegate tool; * is every other agent." : "Agents it can give a task to with its delegate tool; * is every agent but the main one."} The task runs in the other agent's mode or in this one's, whichever is stricter.</FieldDescription>
 				</Field>
 				<Field orientation="horizontal" className="col-span-full">
 					<FieldContent>
@@ -2096,10 +2097,8 @@ export function MachineList() {
 			setError(errText(e));
 		}
 	};
-	const forget = async (h: string) => {
-		const prefs = await s.attempt(() => bridge.forgetHost(h));
-		if (prefs) (s.prefs = prefs), s.touch();
-	};
+	// A paired computer is asked about first: forgetting it here leaves its access open (`forgetMachine`).
+	const forget = (h: string) => s.forgetMachine(h);
 	/** How the pine of a row is, when it is the one the app uses; nothing is asked of the others. */
 	const status = (h?: string) => {
 		if (state.host !== h) return null;
@@ -2111,7 +2110,7 @@ export function MachineList() {
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
 	/** What a row says of its machine when nothing is wrong: a paired computer by its name (its id says nothing), user@host as written. */
-	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this browser.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
+	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this {s.device}.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
 			<ItemMedia variant="icon">{h && !isPaired(h) ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
@@ -2178,7 +2177,11 @@ export function MachineList() {
 	);
 }
 
-/** How a browser is paired with a computer, in three lines, and where the Pine app is for a computer without it: opened like every other link. */
+/**
+ * How a device is paired with a computer, in three lines, and where the Pine app is for a computer
+ * without it: opened like every other link. Under a bridge that takes a link from the owner's hand
+ * (the mobile app's), the field to paste one into.
+ */
 function PairHowTo() {
 	const s = useModel(store);
 	return (
@@ -2188,8 +2191,9 @@ function PairHowTo() {
 				<ol className="list-decimal ps-5 text-sm text-muted-foreground">
 					<li>Open the Pine app on your computer.</li>
 					<li>Go to Settings &gt; Browser access and press Add a device.</li>
-					<li>Scan the code with this device's camera, or open the link it gives in this browser.</li>
+					<li>{s.canPasteLink ? "Scan the code with this phone's camera and open it in Pine, or paste the link it gives below." : "Scan the code with this device's camera, or open the link it gives in this browser."}</li>
 				</ol>
+				{s.canPasteLink ? <PairLinkField onLink={(text) => s.askToPair(text)} /> : null}
 				{s.serviceHost ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="meeting-line">{meetingLine(s.serviceHost)}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
@@ -2203,7 +2207,7 @@ function Environments() {
 	const s = useModel(store);
 	const pairing = s.machinesShown.view === "pair";
 	return (
-		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : pairing ? "The pine this browser uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : pairing ? `The pine this ${s.device} uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them.` : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
 			<MachineList />
 			{/* In the pairing view, the list's how-to is all there is to say. */}
 			{!pairing ? <Alert>
@@ -2225,6 +2229,14 @@ function Environments() {
 	);
 }
 
+/** What Settings > App says of a newer app, by where its update stands (`Store.updatePhase`). */
+const UPDATE_TEXT: Record<UpdatePhase["phase"], (u: UpdatePhase) => string> = {
+	waiting: () => "The new app is downloaded, and Pine restarts to update once no conversation is at work. Call off the wait to restart or quit when you like. Your pine home stays as it is.",
+	ready: () => "The new app is downloaded. Restart to update, or it is installed when you next quit Pine. Your pine home stays as it is.",
+	downloading: () => "The new app is being downloaded.",
+	link: (u) => `${u.reason ? `${u.reason} ` : ""}The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is.`,
+};
+
 function AppPage() {
 	const s = useModel(store);
 	const set = async (change: Record<string, unknown>) => {
@@ -2232,7 +2244,7 @@ function AppPage() {
 		s.touch();
 	};
 	const service = s.service.status === "ready" ? s.service : undefined;
-	const newer = s.update?.status === "newer" ? s.update : undefined;
+	const update = s.updatePhase;
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
 	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
 	// Under a bridge with no local machine (`s.local`), what only this computer has is neither asked nor shown:
@@ -2255,12 +2267,16 @@ function AppPage() {
 							<FieldContent>
 								<FieldTitle>
 									Pine {s.versions.app}
-									{newer ? <Badge variant="outline">{newer.version} is available</Badge> : s.update?.status === "latest" ? <Badge>the latest version</Badge> : null}
+									{update ? <Badge variant="outline">{update.version} is available</Badge> : s.update?.status === "latest" ? <Badge>the latest version</Badge> : null}
 								</FieldTitle>
-								<FieldDescription>{newer ? "The new app is a disk image on the release's page on GitHub: download it and put the app in place of this one. Your pine home stays as it is." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}</FieldDescription>
+								<FieldDescription>
+									{update ? UPDATE_TEXT[update.phase](update) : s.selfUpdate ? "The app asks GitHub for pine's last release, and when that is newer downloads it and installs it when you restart or quit." : "The app does not update itself. It asks GitHub for pine's last release, and says so when that is newer."}
+								</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
-								{newer ? <Button variant="outline" size="xs" onClick={() => void bridge.open(newer.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
+								{update?.phase === "waiting" ? <Button variant="outline" size="xs" onClick={() => s.cancelUpdateWait()}><XIcon data-icon="inline-start" />Call off the wait</Button> : null}
+								{update?.phase === "ready" ? <Button size="xs" onClick={() => void s.restartToUpdate()}><RotateCwIcon data-icon="inline-start" />Restart to update</Button> : null}
+								{update?.phase === "link" ? <Button variant="outline" size="xs" onClick={() => void bridge.open(update.url)}><ExternalLinkIcon data-icon="inline-start" />Release page</Button> : null}
 								<Button variant="outline" size="xs" disabled={s.updateLooking} onClick={() => void s.lookForUpdate(true)}><RotateCwIcon data-icon="inline-start" />Check now</Button>
 							</div>
 						</Field>
@@ -2273,6 +2289,17 @@ function AppPage() {
 							</FieldContent>
 							<div className="flex items-center gap-1.5">
 								<Switch id={`${field}-updates`} checked={s.prefs.updates} onCheckedChange={(updates) => void set({ updates })} />
+							</div>
+						</Field>
+					) : null}
+					{s.updates && s.selfUpdate ? (
+						<Field orientation="horizontal">
+							<FieldContent>
+								<FieldLabel htmlFor={`${field}-auto-update`}>Update automatically</FieldLabel>
+								<FieldDescription>A newer release is downloaded from GitHub in the background and installed when you restart or quit Pine, never by itself. Off: the app links to the release's page.</FieldDescription>
+							</FieldContent>
+							<div className="flex items-center gap-1.5">
+								<Switch id={`${field}-auto-update`} checked={s.prefs.autoUpdate !== false} onCheckedChange={(autoUpdate) => void set({ autoUpdate })} />
 							</div>
 						</Field>
 					) : null}
@@ -2304,6 +2331,12 @@ function AppPage() {
 							</div>
 						) : null}
 					</Field>
+					{service?.olderThan ? (
+						<Alert data-notice="older-pine">
+							<TriangleAlertIcon />
+							<AlertDescription>{`This pine is ${service.version}, older than the pine of this app (${service.olderThan}). The app did not start it, so it leaves it as it is: restart that pine on ${service.olderThan} (update it with "pine update" if it is an install of its own), or stop it and the app starts its own.`}</AlertDescription>
+						</Alert>
+					) : null}
 					{local ? (
 						<Field orientation="horizontal">
 							<FieldContent>

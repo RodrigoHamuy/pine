@@ -10,10 +10,11 @@ import { type AccessChange, type AccessControl, type AccessPrefs, createAccessCo
 import type { Cipher } from "./access/host.ts";
 import { startStandIn } from "./access/stand-in.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
-import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
-import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
+import { callDaemon, followEvents, mediaFromDaemon, pageCsp, VIEW_CSP } from "./daemon.ts";
+import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, pineVersion, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
 import { Terminals } from "./terminal.ts";
-import { LATEST, lookForUpdate, type Update } from "./updates.ts";
+import { makeUpdater } from "./updater.ts";
+import { ahead, DOWNLOADS, LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanLook, type Look } from "../src/theme.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -46,7 +47,8 @@ if (process.env.PINE_DESKTOP_DATA) app.setPath("userData", path.resolve(process.
 app.setName("Pine");
 
 protocol.registerSchemesAsPrivileged([
-	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	// corsEnabled: the view frame (view.html) is sandboxed into an origin of its own, and loads its module scripts across it.
+	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 	{ scheme: "pine-media", privileges: { standard: true, secure: true, stream: true, bypassCSP: false } },
 ]);
 
@@ -64,6 +66,8 @@ interface Prefs {
 	notify: boolean;
 	/** Whether GitHub is asked for a newer app when this one starts. */
 	updates: boolean;
+	/** Whether a newer app is downloaded and installed when the app restarts or quits; off: the owner gets the link to its page. */
+	autoUpdate: boolean;
 	/** `pine` for a terminal was looked after once (see firstCommand): a link the owner removed stays removed. */
 	commandTried: boolean;
 	/**
@@ -77,7 +81,7 @@ interface Prefs {
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, commandTried: false, access: readAccessPrefs(undefined) };
+let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, autoUpdate: true, commandTried: false, access: readAccessPrefs(undefined) };
 
 function loadPrefs(): void {
 	try {
@@ -89,6 +93,7 @@ function loadPrefs(): void {
 			use: undefined,
 			notify: raw.notify !== false,
 			updates: raw.updates !== false,
+			autoUpdate: raw.autoUpdate !== false,
 			commandTried: raw.commandTried === true,
 			look: cleanLook(raw.look),
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
@@ -129,7 +134,18 @@ function savePrefs(): void {
 
 // One pine at a time: this computer's, or another machine's over SSH (Settings > Environments). The
 // page knows only that there is one; which it is, it is told in the state (`host`, `label`).
-type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | { status: "error"; kind: ServiceError["kind"]; message: string; host?: string };
+type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string; olderThan?: string } | { status: "error"; kind: ServiceError["kind"]; message: string; host?: string };
+
+/**
+ * The version of the pine this app runs (the one it carries, in a packed app) when the daemon of
+ * this computer it attached to says an older one, by the rule of the update check. A daemon the
+ * app started, another machine's, or one on the same or a newer version: undefined.
+ */
+function olderThan(s: Service, host: string | undefined): string | undefined {
+	if (host || s.started || !s.version || !launch) return undefined;
+	const mine = pineVersion(launch);
+	return mine && ahead(mine, s.version) ? mine : undefined;
+}
 
 let win: BrowserWindow | undefined;
 let service: Service | undefined;
@@ -171,7 +187,7 @@ async function startService(): Promise<void> {
 		// Another machine was picked while this one connected: it stays held, and the other is shown.
 		if (mine !== round) return;
 		service = s;
-		setState({ status: "ready", mode: s.mode, started: s.started, home: s.home, version: s.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: s.host, label: s.label });
+		setState({ status: "ready", mode: s.mode, started: s.started, home: s.home, version: s.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: s.host, label: s.label, olderThan: olderThan(s, host) });
 		follow(s);
 	} catch (e) {
 		if (mine !== round) return;
@@ -320,7 +336,8 @@ const accessOn = () => {
 
 // ---- the page ----------------------------------------------------------------------------------
 
-const CSP = pageCsp();
+// The page may hold one kind of frame: the app's own view.html, which runs a view (View.tsx).
+const CSP = pageCsp({ frame: ["app://pine/view.html"] });
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json", ".map": "application/json" };
 
@@ -330,7 +347,9 @@ function page(request: Request): Response {
 	const rel = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
 	const file = path.normalize(path.join(dist, rel));
 	if (!file.startsWith(dist + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return new Response("not found", { status: 404 });
-	return new Response(fs.readFileSync(file), { headers: { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "content-security-policy": CSP, "x-content-type-options": "nosniff" } });
+	const view = rel === "/view.html";
+	// The view frame's own document gets its own policy; its scripts are read across its opaque origin.
+	return new Response(fs.readFileSync(file), { headers: { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "content-security-policy": view ? VIEW_CSP : CSP, "x-content-type-options": "nosniff", ...(/\.(js|css)$/.test(file) ? { "access-control-allow-origin": "*" } : {}) } });
 }
 
 function fromPage(e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): boolean {
@@ -457,16 +476,63 @@ async function commandFromMenu(): Promise<void> {
  * owner gets leads to GitHub.
  */
 const RELEASE_API = process.env.PINE_DESKTOP_RELEASES !== undefined ? process.env.PINE_DESKTOP_RELEASES || undefined : app.isPackaged ? LATEST : undefined;
+/**
+ * Where a release's update feed is downloaded from: pine's own releases. PINE_DESKTOP_DOWNLOADS is
+ * for tests, which name a stand-in for them beside the stand-in for GitHub (a real update of a
+ * signed app, from N to N+1, tried on this Mac without publishing anything).
+ */
+const RELEASE_DOWNLOADS = process.env.PINE_DESKTOP_DOWNLOADS || DOWNLOADS;
 
 /** The last answer that said something, for a page that is opened again. */
 let known: Update | undefined;
 /** The question of this start, asked once. */
 let atStart: Promise<Update> | undefined;
 
+/** The app's own updater (updater.ts): none in an app from a checkout, unless a test names its stand-in. It tells the page how its download goes. */
+const updater = makeUpdater((now) => {
+	// The install failed after the app's pine was stopped for it: that pine is started again, and the page shows the failure with the release's link.
+	if (installing && now.state === "failed") {
+		installing = false;
+		void startService();
+	}
+	send("pine:update-state", withUpdater(known));
+});
+/** Between "Restart to update" stopping the app's pines and the app quitting, or the updater saying it failed. */
+let installing = false;
+
+/**
+ * What is said of a newer release, with how the app's own update of it goes where there is one.
+ * With "Update automatically" off the page is not told of it, so that it offers the release page,
+ * also for an update that was downloaded before.
+ */
+const withUpdater = (said: Update | undefined): Update | undefined => (said?.status === "newer" && updater && prefs.autoUpdate ? { ...said, updater: updater.state() } : said);
+
+/** A newer release is downloaded when the owner lets the app update itself. */
+function downloadUpdate(): void {
+	if (known?.status === "newer" && updater && prefs.autoUpdate) updater.download(known.feed, known.version);
+}
+
 async function askForUpdate(): Promise<Update> {
-	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API);
+	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API, RELEASE_DOWNLOADS);
 	if (said.status !== "unknown") known = said;
-	return said;
+	downloadUpdate();
+	return withUpdater(said) as Update;
+}
+
+/**
+ * "Restart to update": every pine this app started on this computer in this run is stopped first,
+ * one that was to be kept running too (it would go on with the old version), and none it only
+ * attached to. The connections to other machines end with the quit, as at any quit. Then the
+ * updater quits and installs.
+ */
+async function installUpdate(): Promise<void> {
+	if (!updater || !prefs.autoUpdate || updater.state().state !== "ready") throw new Error("There is no update ready to install.");
+	installing = true;
+	stream?.abort();
+	const ours = [...held.entries()].filter(([, s]) => s.started && !s.host);
+	for (const [key] of ours) held.delete(key);
+	await Promise.all(ours.map(([, s]) => s.stop(true)));
+	updater.install();
 }
 
 /**
@@ -477,7 +543,7 @@ async function update(again?: boolean): Promise<Update | undefined> {
 	if (!RELEASE_API) return undefined;
 	if (again) return askForUpdate();
 	if (prefs.updates) await (atStart ??= askForUpdate().then((said) => (said.status === "unknown" && (atStart = undefined), said)));
-	return known;
+	return withUpdater(known);
 }
 
 // ---- menus -------------------------------------------------------------------------------------
@@ -524,6 +590,7 @@ function buildMenu(): void {
 				item("Changes", "code-changes", "CmdOrCtrl+Shift+G"),
 				item("Terminal", "code-terminal", "Ctrl+`"),
 				item("Toggle Browser", "browser", "CmdOrCtrl+Shift+B"),
+				item("Toggle View", "view", "CmdOrCtrl+Shift+O"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
 				{ role: "resetZoom" },
@@ -574,10 +641,11 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 }
 
 function wire(): void {
-	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
+	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron }, views: true, selfUpdate: Boolean(updater) }));
 	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
 	handle("pine:retry", () => startService());
 	handle("pine:update", (again?: boolean) => update(again === true));
+	handle("pine:install-update", () => installUpdate());
 	handle("pine:restart", async () => {
 		// Only a daemon of this app's own is its to restart; another one is somebody's terminal.
 		if (!service?.started) throw new Error("this pine was started somewhere else (a terminal, a service). Restart it there.");
@@ -625,6 +693,12 @@ function wire(): void {
 	handle("pine:prefs", (change: Partial<Prefs>) => {
 		if (typeof change.notify === "boolean") prefs.notify = change.notify;
 		if (typeof change.updates === "boolean") prefs.updates = change.updates;
+		if (typeof change.autoUpdate === "boolean") {
+			prefs.autoUpdate = change.autoUpdate;
+			// Turned on with a newer release known: it is downloaded now. Either way the page is told how the update stands.
+			downloadUpdate();
+			send("pine:update-state", withUpdater(known));
+		}
 		if (typeof change.keepRunning === "boolean") prefs.keepRunning = change.keepRunning;
 		if ("home" in change) {
 			const home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
@@ -801,6 +875,7 @@ else {
 	app.on("before-quit", (e) => {
 		if (quitting) return;
 		savePrefs();
+		updater?.quitting();
 		terminals.closeAll();
 		// Browser access closes its sockets; its daemon is one of those held, and follows them.
 		void access?.stop();

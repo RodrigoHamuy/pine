@@ -68,6 +68,28 @@ def whoosh():
     swell = np.sin(np.pi * t) ** 2.2
     return (noise(n, 520, 2.6) * (1 - 0.55 * np.sin(np.pi * t)) + noise(n, 1500, 2.2) * 0.9 * np.sin(np.pi * t)) * swell
 
+def tick():
+    """Something small settling into place: one soft, short touch, quieter and rounder than a key."""
+    return hit(int(0.05 * SR), 2300 * rng.uniform(0.9, 1.1), 1.2, 0.004) + 0.5 * hit(int(0.05 * SR), 900, 1.2, 0.007)
+
+def swish():
+    """A sheet lifting off another: a short breath of air."""
+    n = int(0.3 * SR)
+    t = np.arange(n) / n
+    return noise(n, 1900, 2.4) * np.sin(np.pi * t) ** 2.6 * (0.6 + 0.4 * t)
+
+def thud():
+    """A sheet set down: soft and low, no ring to it."""
+    n = int(0.22 * SR)
+    return hit(n, 150 * rng.uniform(0.9, 1.1), 1.4, 0.03, attack=0.004) + 0.25 * hit(n, 620, 1.3, 0.012, attack=0.002)
+
+def rewind():
+    """Time run backwards for a second: air that flutters, rising."""
+    n = int(1.0 * SR)
+    t = np.arange(n) / n
+    flutter = 0.55 + 0.45 * np.sin(2 * np.pi * (9 + 14 * t) * t * 1.0)
+    return (noise(n, 900, 2.6) * (1 - t) + noise(n, 2600, 2.2) * t) * flutter * np.sin(np.pi * t) ** 1.4
+
 # A handful of each, as a keyboard has a handful of keys that sound alike but not the same.
 # `peak` is how loud one is at its loudest, where 1 is as loud as a file can be.
 def pool(make, count, peak):
@@ -86,6 +108,10 @@ POOL = {
     "tap": pool(tap, 10, 0.03),
     "tap-space": pool(tap, 4, 0.03),
     "whoosh": pool(whoosh, 3, 0.085),
+    "tick": pool(tick, 8, 0.05),
+    "swish": pool(swish, 4, 0.06),
+    "thud": pool(thud, 4, 0.14),
+    "rewind": pool(rewind, 1, 0.07),
 }
 
 def describe(name):

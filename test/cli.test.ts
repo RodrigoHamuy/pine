@@ -223,7 +223,7 @@ test("pine update knows how pine was installed and which version is newer; pine 
 	fs.mkdirSync(carried, { recursive: true });
 	assert.equal(installKind(carried, global), "app");
 	assert.equal(installKind(carried), "app");
-	assert.match(appNews("0.14.0", "0.13.0"), /pine 0\.14\.0 is available \(this is 0\.13\.0\)\. This pine came with the Pine app.*\n\n  https:\/\/github\.com\/pmndre\/pine\/releases\/latest$/s);
+	assert.match(appNews("0.14.0", "0.13.0"), /pine 0\.14\.0 is available \(this is 0\.13\.0\)\. This pine came with the Pine app.*downloads the new release itself and installs it when you press "Restart to update" or quit it.*\n\n  https:\/\/github\.com\/pmndre\/pine\/releases\/latest$/s);
 	fs.rmSync(global, { recursive: true, force: true });
 
 	assert.deepEqual([newer("0.1.1", "0.1.0"), newer("0.10.0", "0.9.9"), newer("1.0.0", "0.99.99"), newer("0.1.0", "0.1.0"), newer("0.1.0", "0.2.0")], [true, true, true, false, false]);

@@ -20,7 +20,21 @@ export type ServiceState = {
 			 * Before the computer answered, neither. The other bridges leave it out.
 			 */
 			pairing?: { code?: string; name?: string };
-	  } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | {
+	  } | {
+			status: "ready";
+			mode: string;
+			started: boolean;
+			home: string;
+			version?: string;
+			from: string;
+			host?: string;
+			label?: string;
+			/**
+			 * The version of the pine this app runs (the one it carries), when the daemon of this computer
+			 * that it attached to (not started) says an older one. The desktop bridge alone sets it.
+			 */
+			olderThan?: string;
+	  } | {
 			status: "error";
 			kind: "no-home" | "no-node" | "no-pine" | "ssh" | "failed";
 			message: string;
@@ -45,6 +59,8 @@ export interface Prefs {
 	names?: Record<string, string>;
 	notify: boolean;
 	updates: boolean;
+	/** Whether the app downloads a newer release and installs it on a restart or a quit (the desktop app's own; the others leave it out). */
+	autoUpdate?: boolean;
 	/** The theme the window was last drawn in (theme.ts), so that it opens in it; none: pmndre. */
 	look?: Look;
 	/**
@@ -54,7 +70,7 @@ export interface Prefs {
 	storage?: Record<string, string>;
 }
 
-export type { Update } from "../electron/updates.ts";
+export type { Update, UpdaterState } from "../electron/updates.ts";
 
 /** What the bridge's `state()` answers when the page starts. */
 export interface AppState {
@@ -92,6 +108,17 @@ export interface AppState {
 	 * meeting service are never forgotten. The others leave it out: they reach machines without one.
 	 */
 	serviceHost?: string;
+	/**
+	 * Whether the page can run a view of the owner's (View.tsx): only where its frame (view.html) is built and
+	 * served under its own policy, which the desktop app's main process does. The other bridges leave it out,
+	 * and their page then shows no button for the view.
+	 */
+	views?: boolean;
+	/**
+	 * Whether this app updates itself (a packaged app on a Mac): it downloads a newer release and installs
+	 * it on "Restart to update" or a quit. The other bridges, and an app from a checkout, leave it out.
+	 */
+	selfUpdate?: boolean;
 }
 
 export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../electron/access/control.ts";
@@ -102,11 +129,14 @@ export type { AccessChange, AccessDevice, AccessProblem, AccessState } from "../
  */
 export type AccessCalls = "access" | "setAccess" | "openPairing" | "copyPairingLink" | "cancelPairing" | "answerPairing" | "removeDevice" | "onAccess";
 
+/** The app's own update (`AppState.selfUpdate`): only the desktop app's bridge has these calls. */
+export type UpdateCalls = "installUpdate" | "onUpdate";
+
 /**
  * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the
  * preview's, the mobile app's, the web client's).
  */
-export type PageBridge = Omit<Bridge, "state" | AccessCalls> & Partial<Pick<Bridge, AccessCalls>> & {
+export type PageBridge = Omit<Bridge, "state" | AccessCalls | UpdateCalls> & Partial<Pick<Bridge, AccessCalls | UpdateCalls>> & {
 	state: () => Promise<AppState>;
 	/**
 	 * Where the daemon's pictures, video and sound are fetched from, set by a bridge whose page
@@ -139,6 +169,19 @@ export type PageBridge = Omit<Bridge, "state" | AccessCalls> & Partial<Pick<Brid
 	 * keeps names (the web client's); the others leave it out.
 	 */
 	renameHost?: (host: string, name: string) => Promise<Prefs>;
+	/**
+	 * Pair with the computer of a pairing link (machines.ts `readPairLink`), after the owner said yes
+	 * to it in the page: the pairing then goes as the web client's does, through the service state
+	 * (`pairing`, then the machine in use, or an error with no machine). Rejects a link that is not a
+	 * pairing link of an `https` service, starting nothing. Set by a bridge that takes a link from the
+	 * owner's hand (the mobile app's), where `canPair`; the web client's pairs with the link of its
+	 * address by itself and leaves it out, and the page then shows no field to paste one.
+	 */
+	pair?: (link: string) => Promise<void>;
+	/** End the pairing that is open, nothing kept (the bridge that has `pair`). */
+	stopPairing?: () => Promise<void>;
+	/** A pairing link the app was opened with (the mobile app's): starts nothing, the page asks the owner first. */
+	onPairLink?: (fn: (link: string) => void) => () => void;
 };
 
 export const bridge = window.pine;

@@ -404,6 +404,8 @@ export const api = {
 	todos: (agent: string, session: string) => get<Todo[]>(`${a(agent)}/todos${s(session)}`),
 	history: (agent: string, session: string, limit = 40) => get<Task[]>(`/tasks${qs({ agent, session, limit })}`),
 	tasks: (agent?: string, limit = 50) => get<Task[]>(`/tasks${qs({ agent, limit })}`),
+	/** One task, as the daemon has it on record. */
+	taskRecord: (task: number) => get<Task>(`/tasks/${task}`),
 	// `via`: the answer is read in this app, where a shell code block has a Run button; the agent is told so. The button runs it
 	// in a terminal of this computer, so an agent of another machine's pine is not told (`runs`: false): it has no terminal here.
 	prompt: (agent: string, prompt: string, session: string, attachments?: Array<{ name: string; data: string }>, whenBusy: "steer" | "queue" = "steer", mentions?: string[], runs = true) => post<{ task: number; steered?: number }>(`${a(agent)}/prompt`, { prompt, session, wait: false, attachments, whenBusy, mentions, ...(runs ? { via: "app" } : {}) }),
@@ -471,6 +473,10 @@ export const api = {
 	setSetting: (key: string, value: unknown) => post<{ key: string; now: string; live: boolean }>("/settings", { key, value }),
 	// The themes of pine's home, as colors (theme.ts), and the one in force. A pine older than themes has none: an empty list.
 	themes: () => get<{ theme: string; chosen: string | null; themes: ThemeEntry[] }>("/themes"),
+	/** The views of the panel (src/views.ts): the one in force, none when there is none or `ui.view` is off. */
+	views: () => get<{ view: string | null; chosen: string | null; views: Array<{ id: string; problem?: string }> }>("/views"),
+	/** A view's code, its types taken away: run only in the view frame (View.tsx). */
+	viewCode: (id: string) => get<{ id: string; code: string } | { id: string; problem: string }>(`/views/${encodeURIComponent(id)}`),
 	agentDetail: (agent: string) => get<AgentDetail>(`${a(agent)}/detail`),
 	// What it is for is the first paragraph of `instructions` (the daemon's `purposeOf`).
 	createAgent: (body: { id: string; instructions: string; model?: string; tools?: string[] }) => post<{ id: string; workspace: string }>("/agents", body),

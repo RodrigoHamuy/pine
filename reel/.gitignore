@@ -5,6 +5,9 @@ sfx.wav
 sfx.json
 frames/
 
+# The office view as text, for film-view.html: `node reel/render.mjs --film view` writes it.
+view-code.js
+
 # Pictures the film shows that are not ours to publish. README.md says what each is.
 assets/wallpaper.jpg
 assets/meme.jpg

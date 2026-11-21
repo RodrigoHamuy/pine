@@ -169,7 +169,8 @@ line saying so; a cancelled one sends nothing.
 ## Agents working together
 
 - `delegate` gives another agent a task. That agent runs it in its own workspace with its own
-  tools and sees only the task text. By default the caller waits for the answer; with
+  tools and sees only the task text, held to the caller's mode where that is stricter. By
+  default it can go to everyone but the main agent. By default the caller waits for the answer; with
   `wait: false` the answer arrives later as a message in the caller's session.
 - `subagent` runs several copies of the same agent in parallel, each with its own task and an
   empty context, and returns their final answers. It keeps large searches out of the caller's

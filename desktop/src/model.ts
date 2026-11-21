@@ -11,7 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
-import { computerWord, homeScreenKeeps, machineName, machinesView, pairingEnded, type MachinesViewName } from "./machines.ts";
+import { computerWord, deviceWord, homeScreenKeeps, httpService, isPaired, machineName, machinesView, pairingEnded, readPairLink, type MachinesViewName, type PairLink } from "./machines.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
@@ -82,8 +82,9 @@ export interface Attachment {
 
 export type CodeView = "agent" | "files" | "changes" | "turn" | "output" | "running" | "terminal";
 
-/** What can be shown beside a conversation: the side panel and the browser's aside. */
-export type Beside = "code" | "aside";
+/** What can be shown beside a conversation: the side panel, the browser's aside, and the view of all of pine
+ *  (which needs no conversation). */
+export type Beside = "code" | "aside" | "view";
 
 /** Tailwind's `lg`: below it a conversation and the side panel beside it do not both fit, with the side bar as a column too.
  *  There the side panel (CodePanel.tsx) and the browser's aside (Browser.tsx) are sheets over the conversation, one at a time. */
@@ -94,6 +95,8 @@ export const ROOM = "(min-width: 64rem)";
  *  that none of the three is squeezed to its minimum. There only the one opened last is drawn; the other comes back
  *  by itself when there is room again. */
 export const BOTH = 1100;
+/** The same for all three: the conversation and three panels side by side. */
+export const THREE = 1500;
 
 const MEDIA_KIND = (name: string): "image" | "video" | "audio" | undefined => (/\.(png|jpe?g|gif|webp)$/i.test(name) ? "image" : /\.(mp4|mov|webm|m4v)$/i.test(name) ? "video" : /\.(wav|mp3|m4a|ogg|flac|aiff?)$/i.test(name) ? "audio" : undefined);
 export const mediaKind = MEDIA_KIND;
@@ -208,6 +211,9 @@ const sessionName = () => `s${Date.now().toString(36)}`;
 const worktreeNote = (made: WorktreeMade) =>
 	`This conversation now works in the worktree ${made.branch} at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a checkout of its own, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} Merge it back from the folder's chip.`;
 
+/** Where the app's update of a newer release stands (`Store.updatePhase`), with what a view of it says. */
+export type UpdatePhase = { phase: "waiting" | "ready" | "downloading" | "link"; version: string; mine: string; url: string; reason?: string };
+
 export type Picker = { title: string; items: Array<{ value: string; label: string; about?: string; tone?: Tone }>; current?: string; done: (value: string | undefined) => void; placeholder?: string; free?: boolean };
 
 /** The app as a whole. */
@@ -235,6 +241,15 @@ export class Store extends Model {
 	pairFailed = false;
 	/** The suggestion to add the web client to the home screen, shown once after a first pairing where that keeps the browser's key. */
 	homeScreen = false;
+	/**
+	 * A pairing link pasted by the owner or handed in by the app (`onPairLink`), waiting for the owner's
+	 * yes in the page: nothing of it reaches the computer before that yes (`confirmPair`).
+	 */
+	pairAsk?: PairLink & { link: string };
+	/** Whether the bridge pairs from a link in the owner's hand (`pair`: the mobile app's), not from its address by itself (the web client's). */
+	pairsFromHand = false;
+	/** The owner ended the open pairing: how it ends is then no failure to say. */
+	private pairCancelled = false;
 	focused = true;
 	versions = { app: "", electron: "" };
 	/** Whether this app asks for a newer one at all: an app from a checkout is no release and does not. */
@@ -244,6 +259,10 @@ export class Store extends Model {
 	/** The dialog that says there is a newer app, after the owner asked. */
 	updateAsk = false;
 	updateLooking = false;
+	/** Whether this app updates itself (`AppState.selfUpdate`): it then offers "Restart to update" once an update is ready. */
+	selfUpdate = false;
+	/** "Restart when they are done" was chosen: the update is installed once no conversation is at work. */
+	updateWhenDone = false;
 	/** The pine home the app was told to use, when it is not the usual one. */
 	home?: string;
 
@@ -281,8 +300,19 @@ export class Store extends Model {
 	codeView: CodeView = "agent";
 	/** Whether the browser's aside is open: a matter of this window alone, kept like the side bar. */
 	aside = localStorage.getItem("pine.aside") === "shown";
-	/** Of the side panel and the aside, the one opened last: where there is room for one only, it is the one shown. */
-	last: Beside = "code";
+	/** Whether the view's panel is open: kept like the aside. */
+	view_ = localStorage.getItem("pine.view") === "shown";
+	/** Whether this page can run a view at all (`AppState.views`): the desktop app's can, the others' cannot. */
+	viewsHere = false;
+	/** The view pine has in force (`ui.view`), the ones in its folder, and the one pine.json names; no view in force: no panel, no button. */
+	view: string | null = null;
+	views: Array<{ id: string; problem?: string }> = [];
+	viewChosen: string | null = null;
+	/** Who else reads the daemon's live events, batch by batch (the view's world). */
+	readonly taps = new Set<(batch: PineEvent[]) => void>();
+	/** The panels beside a conversation, the one opened last at the end: where there is room for fewer than are open,
+	 *  the ones opened last are drawn. */
+	order: Beside[] = ["view", "aside", "code"];
 	/** In a window with sheets, the sheet in front was put away while the other was open: that one stays open behind,
 	 *  and comes forward by its own toggle, or as a column once the window is wide. */
 	tucked = false;
@@ -292,17 +322,18 @@ export class Store extends Model {
 	}
 	/** The width of the room beside the side bar, as the window last measured it (`App.tsx`). */
 	room = Infinity;
-	/** Whether only one of the side panel and the aside is drawn at a time: as sheets, or as columns with less room than `BOTH`. */
-	get one(): boolean {
-		return this.sheets || this.room < BOTH;
+	/** How many of the panels beside a conversation are drawn at a time: one as sheets or with less room than `BOTH`,
+	 *  two with less than `THREE`. */
+	get fits(): number {
+		return this.sheets || this.room < BOTH ? 1 : this.room < THREE ? 2 : 3;
 	}
 	/** Called as the room beside the side bar changes size; the page is drawn again only when that changes what shows. */
 	measure(room: number): void {
-		const was = this.one;
+		const was = this.fits;
 		this.room = room;
 		// Once the window has room for columns, the one left behind has shown as one: a sheet is no longer held back.
 		if (!this.sheets) this.tucked = false;
-		if (this.one !== was) this.touch();
+		if (this.fits !== was) this.touch();
 	}
 	palette = false;
 	picker?: Picker;
@@ -347,6 +378,11 @@ export class Store extends Model {
 			this.touch();
 		});
 		bridge.onMenu((command: string) => void this.command(command));
+		// The app's own download of a newer release moves on (only the desktop app's bridge says so).
+		bridge.onUpdate?.((said: Update | undefined) => {
+			this.noteUpdate(said);
+			this.touch();
+		});
 		// How a block run with a Run button went: the conversation it came from is told, and goes on.
 		bridge.onTermRun((id: string, report: { command: string; state: "running" | "ended"; code?: number; seconds: number; output: string }) => {
 			const at = id.indexOf(":");
@@ -356,6 +392,8 @@ export class Store extends Model {
 			this.focused = f;
 			if (f && this.active) this.seen(this.active);
 			if (f) void this.refreshAgents();
+			// Said at once: the view draws seldom while the window is behind, and often again when it comes to the front.
+			this.touch();
 		});
 		bridge.onInitLine((line: string) => {
 			this.initLines.push(line);
@@ -372,10 +410,19 @@ export class Store extends Model {
 		this.local = first.local !== false;
 		this.canAddHost = first.canAddHost !== false;
 		this.canPair = first.canPair === true;
+		this.pairsFromHand = typeof bridge.pair === "function" && typeof bridge.stopPairing === "function";
+		// A pairing link the app was opened with (the mobile app's): asked about here, never paired with by itself.
+		if (this.canPair)
+			bridge.onPairLink?.((link: string) => {
+				const why = this.askToPair(link);
+				if (why) this.flash(why, "bad", 8000);
+			});
 		this.serviceHost = typeof first.serviceHost === "string" && first.serviceHost ? first.serviceHost : undefined;
+		this.viewsHere = first.views === true;
 		this.focused = first.focused;
 		this.versions = first.versions;
 		this.updates = first.updates;
+		this.selfUpdate = first.selfUpdate === true;
 		void this.lookForUpdate();
 		this.home = first.home;
 		document.documentElement.dataset.platform = this.platform;
@@ -389,7 +436,7 @@ export class Store extends Model {
 	 * conversation has no browser at all, the address goes to the owner's own browser.
 	 */
 	async showInBrowser(tab: Tab, url: string): Promise<void> {
-		const before = { aside: this.aside, last: this.last, tucked: this.tucked };
+		const before = { aside: this.aside, order: [...this.order], tucked: this.tucked };
 		this.open("aside");
 		this.touch();
 		const state = await api.browserOpen(tab.agent, tab.session, url).catch(() => undefined);
@@ -401,7 +448,7 @@ export class Store extends Model {
 		}
 		// Put back as it was: closed if it was, and the side panel in front again if it was.
 		if (!before.aside) this.close("aside");
-		this.last = before.last;
+		this.order = before.order;
 		this.tucked = before.tucked;
 		this.flash("This conversation has no browser, so the address was opened in your own.", "muted", 6000);
 		this.touch();
@@ -476,6 +523,80 @@ export class Store extends Model {
 		this.touch();
 	}
 
+	/** The update the app downloaded, installed: the app quits and comes back on the new version, with the pine it started. */
+	async installUpdate(): Promise<void> {
+		this.updateAsk = false;
+		this.updateWhenDone = false;
+		this.touch();
+		await this.attempt(() => bridge.installUpdate!());
+	}
+
+	/** How many conversations are at work, as the side bar shows them: sub-agents and delegated tasks are part of the work of their conversation. */
+	get working(): number {
+		let n = 0;
+		for (const tasks of this.busy.values()) if (tasks.size) n++;
+		return n;
+	}
+
+	/**
+	 * "Restart to update": at once when nothing is at work. Otherwise the owner is told how much
+	 * would be cut off, and chooses to restart now, once the work is done, or not at all.
+	 */
+	async restartToUpdate(): Promise<void> {
+		const n = this.working;
+		if (!n) return this.installUpdate();
+		this.updateAsk = false;
+		const how = await this.pick({
+			title: `Agents are at work in ${plural(n, "conversation")}`,
+			items: [
+				{ value: "done", label: "Restart when they are done", about: "the update is installed once nothing is at work" },
+				{ value: "now", label: "Restart now", about: "what they are doing is cut off", tone: "bad" },
+				{ value: "no", label: "Cancel" },
+			],
+		});
+		if (how === "now") return this.installUpdate();
+		if (how !== "done") return;
+		this.updateWhenDone = true;
+		this.touch();
+		this.installWhenDone();
+	}
+
+	/** The wait for the end of the work called off: the update stays ready for a restart or a quit. */
+	cancelUpdateWait(): void {
+		this.updateWhenDone = false;
+		this.touch();
+	}
+
+	/** Installs the update the owner said to install once the work is done, when nothing is at work any more and it is still ready. */
+	private installWhenDone(): void {
+		if (this.updatePhase?.phase === "waiting" && !this.working) void this.installUpdate();
+	}
+
+	/**
+	 * What the app was told of a newer release. An update that is no longer ready (a new release
+	 * being downloaded, a failure) ends a wait for the end of the work: there is nothing to install.
+	 */
+	private noteUpdate(said: Update | undefined): void {
+		if (said && said.status !== "unknown") this.update = said;
+		if (this.update?.status !== "newer" || this.update.updater?.state !== "ready") this.updateWhenDone = false;
+	}
+
+	/**
+	 * Where the app's update of a newer release stands, the one place every view of it reads:
+	 * `waiting` ready and installed once no conversation is at work, `ready` for a restart or a quit,
+	 * `downloading`, or `link` to the release's page (the app does not update itself, or the download
+	 * failed: `reason`). None: no newer release.
+	 */
+	get updatePhase(): UpdatePhase | undefined {
+		const u = this.update;
+		if (u?.status !== "newer") return undefined;
+		const shown = { version: u.version, mine: u.mine, url: u.url };
+		const state = u.updater?.state;
+		if (state === "ready") return { phase: this.updateWhenDone ? "waiting" : "ready", ...shown };
+		if (state === "downloading") return { phase: "downloading", ...shown };
+		return { phase: "link", ...shown, reason: u.updater?.state === "failed" ? u.updater.reason : undefined };
+	}
+
 	/**
 	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > App
 	 * show it); when the owner asked (the menu, the settings), the answer is said too.
@@ -487,7 +608,7 @@ export class Store extends Model {
 		this.touch();
 		const said: Update | undefined = await bridge.update(asked).catch(() => undefined);
 		this.updateLooking = false;
-		if (said && said.status !== "unknown") this.update = said;
+		this.noteUpdate(said);
 		this.touch();
 		if (!asked) return;
 		if (said?.status === "newer") this.updateAsk = true;
@@ -501,7 +622,13 @@ export class Store extends Model {
 		// Another pine than before (another machine was picked): nothing of the last one is kept, not even what an agent of the same name was doing.
 		const moved = s.host !== this.service.host || s.status !== was;
 		if (s.host !== this.service.host) this.forgetPine();
-		const ended = pairingEnded(this.service, s);
+		let ended = pairingEnded(this.service, s);
+		// Ended by the owner's Cancel: neither a failure to say nor a pairing to welcome.
+		if (ended && this.pairCancelled) {
+			ended = undefined;
+			this.pairCancelled = false;
+			this.pairFailed = false;
+		}
 		if (ended) this.pairFailed = ended === "failed";
 		else if (s.host || (s.status === "starting" && s.pairing)) this.pairFailed = false;
 		this.service = s;
@@ -522,7 +649,8 @@ export class Store extends Model {
 		const now = await bridge.state().catch(() => undefined);
 		if (now) this.prefs = now.prefs;
 		try {
-			if (homeScreenKeeps(navigator.userAgent, navigator.maxTouchPoints) && !localStorage.getItem(HOME_SCREEN_KEY)) {
+			// Only the web client is a web app to put on the home screen: the mobile app is an app already.
+			if (this.platform === "web" && homeScreenKeeps(navigator.userAgent, navigator.maxTouchPoints) && !localStorage.getItem(HOME_SCREEN_KEY)) {
 				localStorage.setItem(HOME_SCREEN_KEY, "offered");
 				this.homeScreen = true;
 			}
@@ -530,6 +658,77 @@ export class Store extends Model {
 			// No storage to remember it by: not offered, rather than offered at every pairing.
 		}
 		this.touch();
+	}
+
+	/** Whether the owner can paste a pairing link: only under a bridge that can pair and takes one from the owner's hand (the mobile app's). */
+	get canPasteLink(): boolean {
+		return this.canPair && this.pairsFromHand;
+	}
+
+	/** What the page calls the device it runs on when it pairs ("phone", "browser"). */
+	get device(): "phone" | "browser" {
+		return deviceWord(this.platform);
+	}
+
+	/**
+	 * A pairing link from the owner's paste or from the app: read, and put to the owner for a yes.
+	 * Says why when it is not a pairing link (none: it waits for the yes); nothing starts here.
+	 */
+	askToPair(text: string): string | undefined {
+		if (!this.canPasteLink) return undefined;
+		const link = readPairLink(text);
+		const http = link ? undefined : httpService(text);
+		if (http) return `This pairing link reaches your computer through ${http} over http, and this ${this.device} pairs only through https: nothing was used. Pair with a link of an https meeting service, or connect over SSH instead.`;
+		if (!link) return "That is not a pairing link. In the Pine app on your computer, go to Settings > Browser access, press Add a device, and copy the link it gives.";
+		this.pairAsk = { ...link, link: text.trim() };
+		this.touch();
+		return undefined;
+	}
+
+	/** The owner's yes to the pairing link the page showed: the bridge pairs, and the first screen follows how it goes. */
+	async confirmPair(): Promise<void> {
+		const asked = this.pairAsk;
+		this.pairAsk = undefined;
+		this.touch();
+		if (asked) await this.attempt(() => bridge.pair!(asked.link));
+	}
+
+	/** The owner's no to the pairing link the page showed: nothing of it was used. */
+	dropPair(): void {
+		this.pairAsk = undefined;
+		this.touch();
+	}
+
+	/** Whether the open pairing can be ended from the page: under a bridge that pairs from the owner's hand. */
+	get canCancelPair(): boolean {
+		return this.pairsFromHand && this.service.status === "starting" && !!this.service.pairing;
+	}
+
+	/** End the open pairing, nothing kept: the bridge goes back to how it was before. */
+	async cancelPair(): Promise<void> {
+		if (!this.canCancelPair) return;
+		this.pairCancelled = true;
+		await this.attempt(() => bridge.stopPairing!());
+	}
+
+	/**
+	 * Take a machine off the list. A paired computer is asked about first: forgetting it here leaves
+	 * its access open, which only Remove in the Pine app on that computer closes.
+	 */
+	async forgetMachine(host: string): Promise<void> {
+		if (isPaired(host)) {
+			const name = this.nameOf(host);
+			const sure = await this.pick({
+				title: `Forget ${name}?`,
+				items: [
+					{ value: "forget", label: `Forget it on this ${this.device}`, about: `this ${this.device} no longer lists it. Its access stays open until you remove this ${this.device} in the Pine app on ${name}: Settings > Browser access, Remove`, tone: "bad" },
+					{ value: "no", label: "Cancel" },
+				],
+			});
+			if (sure !== "forget") return;
+		}
+		const prefs = await this.attempt(() => bridge.forgetHost(host));
+		if (prefs) (this.prefs = prefs), this.touch();
 	}
 
 	/** The name the owner sees for a machine of the list (machines.ts): a paired computer's name, never its id. */
@@ -569,6 +768,8 @@ export class Store extends Model {
 		this.sessionModes = new Map();
 		this.pins = new Set();
 		this.busy = new Map();
+		// A wait for the end of the work was for that pine's work: the next one's would install in the middle of it.
+		this.updateWhenDone = false;
 		this.said = [];
 		this.titles = new Map();
 		this.saidAt = 0;
@@ -700,6 +901,7 @@ export class Store extends Model {
 		void this.refreshSaid(true);
 		void this.pending();
 		void this.refreshThemes();
+		void this.refreshViews();
 		this.touch();
 	}
 
@@ -716,6 +918,28 @@ export class Store extends Model {
 		applyLook(look);
 		if (look && JSON.stringify(look) !== JSON.stringify(this.prefs.look)) this.prefs = await bridge.prefs({ look }).catch(() => this.prefs);
 		this.touch();
+	}
+
+	/** Whether there is a view to show here: the page can run one, and pine has one in force. */
+	get hasView(): boolean {
+		return this.viewsHere && Boolean(this.view);
+	}
+
+	/** Asks pine which views there are and which one is in force. */
+	async refreshViews(): Promise<void> {
+		if (!this.viewsHere) return;
+		const got = await api.views().catch(() => undefined);
+		if (!got) return;
+		this.views = got.views;
+		this.view = got.view;
+		this.viewChosen = got.chosen;
+		this.touch();
+	}
+
+	/** The owner picks a view, or "off": `ui.view` in pine.json. */
+	async setView(id: string): Promise<void> {
+		const done = await this.attempt(() => api.setSetting("ui.view", id));
+		if (done) await this.refreshViews();
 	}
 
 	/** The owner picks a theme: `ui.theme` in pine.json, set through pine as any of its settings. */
@@ -1463,6 +1687,7 @@ export class Store extends Model {
 				if (!this.busy.has(key)) this.busy.set(key, new Set());
 				this.busy.get(key)!.add(r.task);
 			}
+			this.installWhenDone();
 			for (const x of s.sessions) {
 				const open = this.tabs.find((t) => t.kind === "chat" && t.agent === x.agent && t.session === x.session);
 				if (open && x.context?.percent !== undefined) open.context = x.context.percent;
@@ -1870,39 +2095,52 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/** Whether the side panel or the aside is open, and drawn: where there is room for one only (`one`), only the one opened last is. */
+	/** Whether the side panel, the aside or the view is open. */
+	isOpen(which: Beside): boolean {
+		return which === "code" ? this.code : which === "aside" ? this.aside : this.view_ && this.hasView;
+	}
+
+	/** The side panel and the browser belong to a conversation; the view is drawn beside any tab. */
+	private drawable(which: Beside): boolean {
+		return which === "view" || this.active?.kind === "chat";
+	}
+
+	/** Whether a panel is open, and drawn: where there is room for fewer than are open (`fits`), the ones opened last are. */
 	shown(which: Beside): boolean {
-		const open = which === "code" ? this.code : this.aside;
-		return open && !(this.sheets && this.tucked) && !(this.one && this.code && this.aside && this.last !== which);
+		if (!this.isOpen(which) || !this.drawable(which) || (this.sheets && this.tucked)) return false;
+		const open = this.order.filter((w) => this.isOpen(w) && this.drawable(w));
+		return open.slice(-this.fits).includes(which);
 	}
 
-	/** Open but not drawn: there is room for one only, and the other was opened last. */
+	/** Open but not drawn: there is no room for it, and others were opened after it. */
 	behind(which: Beside): boolean {
-		return (which === "code" ? this.code : this.aside) && !this.shown(which);
+		return this.isOpen(which) && this.drawable(which) && !this.shown(which);
 	}
 
-	/** Opens the side panel or the aside, in front of the other. */
+	/** Opens a panel, in front of the others. */
 	open(which: Beside): void {
-		this.last = which;
+		this.order = [...this.order.filter((w) => w !== which), which];
 		this.tucked = false;
 		if (which === "code") {
 			this.code = true;
 			this.saveTabs();
 		} else {
-			this.aside = true;
-			localStorage.setItem("pine.aside", "shown");
+			if (which === "view") this.view_ = true;
+			else this.aside = true;
+			localStorage.setItem(`pine.${which}`, "shown");
 		}
 	}
 
 	close(which: Beside): void {
-		// A sheet put away does not bring up the other one in its place: that one stays open, behind. (Columns do show it.)
-		if (this.sheets && this.shown(which) && (which === "code" ? this.aside : this.code)) this.tucked = true;
+		// A sheet put away does not bring up another in its place: that one stays open, behind. (Columns do show it.)
+		if (this.sheets && this.shown(which) && this.order.some((w) => w !== which && this.isOpen(w) && this.drawable(w))) this.tucked = true;
 		if (which === "code") {
 			this.code = false;
 			this.saveTabs();
 		} else {
-			this.aside = false;
-			localStorage.setItem("pine.aside", "hidden");
+			if (which === "view") this.view_ = false;
+			else this.aside = false;
+			localStorage.setItem(`pine.${which}`, "hidden");
 		}
 	}
 
@@ -1967,6 +2205,9 @@ export class Store extends Model {
 				return this.toggle("code");
 			case "browser":
 				return this.toggle("aside");
+			case "view":
+				if (!this.hasView) return this.flash(this.viewsHere ? "There is no view: put one into the views folder of pine's home, or choose one in Settings." : "Views are shown in the Pine app on your computer.", "muted", 6000);
+				return this.toggle("view");
 			case "events":
 				return this.openEvents();
 			case "updates":
@@ -2051,6 +2292,13 @@ export class Store extends Model {
 	private dirty = new Set<Model>();
 
 	onEvents(batch: PineEvent[]): void {
+		for (const tap of this.taps) {
+			try {
+				tap(batch);
+			} catch (err) {
+				console.error("tap", err);
+			}
+		}
 		for (const e of batch) {
 			try {
 				this.onEvent(e);
@@ -2098,7 +2346,7 @@ export class Store extends Model {
 		}
 		if (e.topic === "pine/conversation") return void this.followed(p);
 		// A theme chosen in another UI, or by the main agent: the window follows.
-		if (e.topic === "pine/settings") return void (p.key === "ui.theme" && this.refreshThemes());
+		if (e.topic === "pine/settings") return void (p.key === "ui.theme" ? this.refreshThemes() : p.key === "ui.view" && this.refreshViews());
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
 
@@ -2112,6 +2360,7 @@ export class Store extends Model {
 			} else if (kind === "done" || kind === "failed") {
 				this.busy.get(key)?.delete(p.task);
 				this.dirty.add(this);
+				this.installWhenDone();
 				// What an agent just did may have been making, changing or removing an agent.
 				void this.refreshAgents();
 				void this.refreshSaid();

@@ -138,8 +138,6 @@ export interface ActionContext {
 	sends: boolean;
 	/** For the send tool: whether the source it names reaches the owner and nobody else (`toOwner` of its type). */
 	toOwner?: boolean;
-	/** Whether the agent a task is handed to can send things out. */
-	canSendOut(agent: string): boolean;
 	/** Whether an address is one the agent can read anyway. */
 	reachable(url: unknown): boolean;
 	/** For a shell without a sandbox: why a command is critical because of what it names (pine's own program files), or undefined. */
@@ -186,7 +184,9 @@ export function classify(tool: string, input: any, ctx: ActionContext): Action {
 		return { cls: mine.some((r) => isInside(r, p)) ? "local" : "reach" };
 	}
 	if (tool === "download") return { cls: ctx.reachable(input?.url) ? "local" : "reach" };
-	if (tool === "delegate") return { cls: ctx.canSendOut(String(input?.agent ?? "")) ? "send" : "local", note: "hands a task to an agent that can send things out" };
+	// What another agent hands back can carry its files into this conversation, and one that read
+	// outside content could send them on: after outside content every delegation is put to the owner.
+	if (tool === "delegate") return { cls: "send", note: "hands a task to another agent, whose answer can carry its files back" };
 	return { cls: "local" };
 }
 

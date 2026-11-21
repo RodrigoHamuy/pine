@@ -32,27 +32,41 @@ Open the image and drag Pine into Applications. Nothing else has to be installed
 | pine's helpers | The small programs for dictating, app control and the `system` event source, built for both kinds of Mac. Elsewhere pine builds them on first use, which needs Apple's command line developer tools |
 | `pine` for a terminal | See below |
 
-An Android phone has an app of its own in the same release, for the pine of another machine
-([mobile.md](mobile.md)).
+Android phones and iPhones have an app of their own in the same release, for the pine of another
+machine, this computer's included: it pairs as a browser does (see "Browser access" and
+[mobile.md](mobile.md)).
 
 ### A newer version
 
-The app does not update itself: it says when there is a newer one and where it is. To get it,
-download the new image from the release's page, quit Pine and put the new app in place of the
-old one. Your pine home (`~/.pine`: agents, conversations, settings) is not in the app and
-stays as it is.
+The app updates itself. When there is a newer release, it downloads it in the background, from
+that release on GitHub, and installs it with macOS's own updater, only when you say so: press
+**Restart to update**, or quit Pine and the update is installed on the way out. It never
+restarts by itself. Your pine home (`~/.pine`: agents, conversations, settings) is not in the
+app and stays as it is.
 
 | | |
 |---|---|
-| At the start | The app asks GitHub once for pine's last release. When that is newer than the app, a line at the foot of the side bar says so (`Pine <version> is available`); a click opens the release's page on GitHub in your browser. Nothing is said when the app is the latest, or when nobody answers |
-| `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found, with the link to the release's page when there is a newer app |
-| Settings > App | The app's version and whether it is the latest, **Check now**, and the switch **Look for a newer version at the start** for the question at the start. The menu asks whatever the switch says |
+| At the start | The app asks GitHub once for pine's last release. When that is newer than the app, it is downloaded without a dialog; a line at the foot of the side bar says **Downloading Pine <version>…**, then **Restart to update**. Nothing is said when the app is the latest, or when nobody answers |
+| `Restart to update` | At the foot of the side bar, in Settings > App and in the dialog of **Check for Updates…**. Every pine this app started in this run is stopped first, also one kept with **Keep pine running**, so that it does not go on with the old version; the new app starts it again. A pine the app only attached to (started in a terminal or at login) is left alone: restart it yourself. While agents are working it first warns how many conversations would be cut off |
+| `Restart when they are done` | The warning's choice beside **Restart now** and **Cancel**: **Restarts when the work is done** stays at the foot of the side bar until then. Click it there to call it off |
+| Quitting | With an update downloaded, quitting Pine installs it. What stops with the app is what stops at any quit |
+| `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found. A newer release is downloaded, or ready to install with a restart |
+| Settings > App | The app's version and whether it is the latest, **Check now**, the switch **Look for a newer version at the start** for the question at the start, and the switch **Update automatically** (on unless you turn it off). The menu asks whatever the first switch says |
+| `Pine <version> is available` | What the app says instead when it does not update itself: **Update automatically** is off, or the download or the install failed (one line says so, in the app's own words). A click opens the release's page on GitHub in your browser: download the disk image there, quit Pine and put the new app in place of the old one |
 
-A release counts as a newer app once its disk image for your kind of Mac is attached to it,
-which is some minutes after pine itself is published. A preview of pine is not a release, and
-the app never points at one. The app fetches and installs nothing. `pine update` in a pine that
-came with the app says the same in a terminal. An app started from a checkout is no release
-and asks nobody.
+A release counts as a newer app once its disk image and its update feed for your kind of Mac
+are attached to it, which is some minutes after pine itself is published. A preview of pine is
+not a release, and the app never points at one. The address of the update is made by the app
+from the release's version and your kind of Mac, on pine's GitHub releases, and macOS installs
+only an app signed by the same developer as the one you run. The question and the update's feed
+send the user agent `Pine` and nothing else; the zip itself is fetched by macOS's updater, whose
+user agent names the app's version and the version of macOS. An app run from the disk image, or
+from a folder it cannot write, cannot replace itself: it says so and links to the release's
+page (move it to Applications). When **Update automatically** is turned off after an update
+was downloaded, the app shows the release's link again, but macOS may still install that update
+at the next quit. `pine update` in a pine that came with the app says that the app updates
+itself, and links to the release's page. An app started from a checkout is no release, asks nobody and
+installs nothing.
 
 ### The first start
 
@@ -169,12 +183,13 @@ pine, setting pine up. To open a folder for a conversation you type its path.
 
 ## The daemon: started or reused
 
-When the app opens it asks `pine service` ([operations.md](operations.md), "A UI of its own")
-for the daemon of your home:
+When the app starts it asks `pine service` ([operations.md](operations.md), "A UI of its own")
+for the daemon of your home, so you never have to start pine first:
 
 | What it finds | What happens |
 |---|---|
 | A pine is running for this home (started in a terminal, at login, by the terminal UI) | The app attaches to it. The side bar says `attached`. Quitting the app leaves it running |
+| `An older pine runs` | The pine the app attached to is older than the pine the app carries. Said at the foot of the side bar and in Settings > App, with both versions. Restart that pine on the newer version yourself, or stop it and let the app start its own. Never said of a pine the app started |
 | Nothing runs | The app starts one, as the terminal UI does, logging to `data/pine.log`. The side bar says `started here`. Quitting the app stops it, cleanly |
 | There is no pine home yet | A first screen offers to set pine up (`pine init`): the example home and the browser its web tools drive |
 | No Node, or no pine | A screen that says what to install |
@@ -315,8 +330,11 @@ it (its computer name). What the browser side looks like is in
 
 ### From a phone without SSH
 
-The mobile app needs SSH to a machine ([mobile.md](mobile.md)). To use this computer's pine from a
-phone with no SSH at all, pair the phone's browser here.
+A phone needs no SSH for this computer's pine: pair the Pine app on the phone, or the phone's
+browser, with the same QR code. On Android the code opens the app when it is installed; on an
+iPhone it opens Safari, which offers to open the app instead
+([mobile.md](mobile.md#pairing-with-a-computer-that-runs-the-pine-app)). The app is listed here
+as a device like a browser, by the phone's name ("Pine on Pixel 9", "Pine on iPhone").
 
 ### Pairing a device
 
@@ -330,9 +348,9 @@ service and lets nobody in.
 | `Open Pine at login` | Offered, checked, the first time you switch browser access on, and changed here later: so that this computer can be reached after a restart with no need to open the app. The computer has to be awake and Pine open |
 | `Service address` | Where browsers open the web client and find this computer. By default the project's own service, `https://pine.drcmda.workers.dev`. Write the address of a deployment of your own instead (see "Deploying it" in [web.md](web.md#deploying-it)). Only `https://` and `http://` addresses are kept. Changing it makes the browsers paired at the old address pair again: a browser's key and its machines belong to the address it opened |
 | `Add a device` | Shows a QR code, and Copy link for a computer that has no camera (send yourself the link and open it in that browser). The code works once, for two minutes, and stops when you close the dialog; New code makes another. Five wrong codes close it. Only one is open at a time, and only at this computer: nobody pairs a browser from afar |
-| `Allow` and `Refuse` | When a browser uses the code, the app names it ("Chrome on Android") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
+| `Allow` and `Refuse` | When a browser or the mobile app uses the code, the app names it ("Chrome on Android", "Pine on Pixel 9") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
 | `Devices` | Each paired browser by its name, the day it was paired and its last connection; "connected now" and how (same network, direct IPv4, direct IPv6, or relayed through your relay server) while it is connected. No notification for a reconnection |
-| `Remove` | Removes a paired phone, tablet or computer: it can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
+| `Remove` | Removes a paired phone, tablet or computer, so that the phone can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
 
 ### What a paired browser can do
 
@@ -364,7 +382,7 @@ if you have none.
 |---|---|
 | The phone says "<name> does not answer", by the name it was given at pairing ("Your computer" before) | It is asleep or shut down, Pine is closed, or the switch of browser access is not on. The phone keeps trying and connects when it is back |
 | The phone says "no direct connection could be made from this network" | Some networks (often a phone's data) do not let two devices connect directly. Try another Wi-Fi, or the phone's data instead of the Wi-Fi, or name a relay server of your own (`Relay server (TURN)`) |
-| The phone says "This browser is no longer known to <name>" | Its device was removed here, or the browser's data was cleared there. Add it again |
+| The phone says "This browser is no longer known to <name>" ("This phone" in the mobile app) | Its device was removed here, or the browser's data was cleared there (the mobile app's key is new: an iPhone reinstalled under another Apple ID). Add it again |
 | The section says the service cannot be reached | The app is offline, or the service address is wrong. Everything else in the app works |
 | A browser on a Mac asks about the local network | macOS may ask whether that browser may find devices on the local network. Allow it for a direct connection on the same Wi-Fi |
 
@@ -423,10 +441,11 @@ agent's:
 | Conversation | A conversation in which nothing was said yet shows who its agent is: what it is for, its model and mode, whom it hands work to, and how many skills, event sources, schedules and MCP servers it has. Then your messages, the agent's answers drawn as markdown, and the work of each turn (tool calls, thoughts, sub-tasks, what it said on the way) folded into one line that a click opens (it stays open while the turn runs, with its last lines). A `↳ … ↗` line opens a sub-agent's or delegated task's work in a tab of its own. A request of the agent's waits in the conversation with its buttons until it is answered, then becomes a line. Above your last message a line offers to take it back (**Take back**, `/undo`). Scrolled up, the conversation holds still while the answer goes on, and a button at its foot brings you back to the end |
 | Input | `↩` sends; while the agent works the message is given to that work, and `⌥↩` makes it wait its turn. `⇧↩` is a new line, `↑` brings back earlier inputs, `esc` stops the agent. `/` offers the commands of the terminal UI, `@` the files of the conversation's folder |
 | The line at the top of a conversation | Whose it is and which (`main / notes`), the folder it works in, how full its context is (tokens read and the share of the window; hover for the cache share and speed) |
-| The top right of the title bar | Two buttons: the side panel (`⌥⌘B`) and the browser (`⇧⌘B`). Each is pressed while what it shows is open. A click opens what is closed, closes what is in front, and brings to the front one that is open but behind the other (in a window narrower than 1024 pixels the sheet covers these buttons: there `⌥⌘B` and `⇧⌘B` do it). On a tab that is not a conversation (Settings, Events) both stay in their place and cannot be pressed |
+| The top right of the title bar | Up to three buttons: the side panel (`⌥⌘B`), the browser (`⇧⌘B`) and the view (`⇧⌘O`, where there is one), each a panel of its own at the right. Each is pressed while what it shows is open. A click opens what is closed, closes what is in front, and brings to the front one that is open but behind the others (in a window narrower than 1024 pixels the sheet covers these buttons: there `⌥⌘B`, `⇧⌘B` and `⇧⌘O` do it). On a tab that is not a conversation (Settings, Events) the side panel's and the browser's stay in their place and cannot be pressed; the view needs no conversation |
 | The bar under the input | `+` attaches files (or drop them on the input; a dropped folder is opened for the conversation); then the agent's model, how much it reasons and its mode, and where the conversation works (the agent's own workspace, or a folder of yours). The model and the folder open a list to search, the reasoning and the mode a menu right above the button. `outside content` appears when the conversation has read something from outside; each button says what it is in a tooltip |
 | Side panel | Beside a conversation (`⌥⌘B`): the agent, then its files, changes and output. See "The code panel and the editor" |
-| Browser | At the far right of the window, after the side panel (`⇧⌘B`): the browser the agent of the conversation works in. Drag its left edge to make it wider or narrower; its width is its own, apart from the side panel's. Its `×` closes it. See "The browser" |
+| View | At the right of the window, after the browser (`⇧⌘O`): all agents and their work at a glance, drawn by a view of yours. See "The view" |
+| Browser | At the right of the window, after the side panel (`⇧⌘B`): the browser the agent of the conversation works in. Drag its left edge to make it wider or narrower; its width is its own, apart from the side panel's. Its `×` closes it. See "The browser" |
 | Search | `⌘K`, or Search in the side bar: see "Finding a conversation" |
 
 The window can be made as narrow as a phone (360 pixels). Where there is no room for columns,
@@ -437,13 +456,13 @@ for every conversation.
 
 | Window | Side bar | Side panel and browser |
 |---|---|---|
-| 1024 pixels and wider | A column | A column each. Both at once where the room beside the side bar is 1100 pixels or more; with less, only the one you opened last, the other open behind it |
+| 1024 pixels and wider | A column | A column each. Two at once where the room beside the side bar is 1100 pixels or more, all three (with the view) from 1500; with less, the ones you opened last, the others open behind them |
 | 768 to 1023 | A column | Over the conversation, from the right: `esc`, a click beside it or its `×` closes it. With both open, only the one you opened last lies there, and the other stays open behind it. The sheet covers the buttons of the title bar, so its key (`⌥⌘B` or `⇧⌘B`) brings the other to the front. Closing the one in front does not bring the other up: it stays open behind, shown as a column when the window is wide again, or as a sheet by its key |
 | Narrower than 768 | Over the page, from the left, when its button at the top left or `⌘B` asks for it. Picking a conversation, `esc` or a click beside it puts it away; `⌘B` there does not hide the column of a wide window | As above: the whole width of a window narrower than 640 pixels, and at most 540 pixels wide from 640 to 767 |
 
-With both the side panel and the browser open and less room than they need side by side (a sheet each,
-or less than 1100 pixels beside the side bar), neither comes first: the one you opened last shows, and
-the other is open behind it. Its button is pressed more lightly. In a window 1024 pixels and wider a
+With more of the side panel, the browser and the view open than there is room for side by
+side (a sheet each, less than 1100 pixels beside the side bar for two, less than 1500 for three), none
+comes first: the ones you opened last show, and the others are open behind them. Its button is pressed more lightly. In a window 1024 pixels and wider a
 click on that button brings it to the front and puts the other behind, and a click on the button of
 the one in front closes it, which shows the other again. Below 1024 pixels each is a sheet over the
 conversation, which covers the buttons of the title bar: there only `⌥⌘B` and `⇧⌘B` switch, and
@@ -527,6 +546,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | A terminal | A shell of yours beside each conversation, and ▶ on an answer's shell code blocks to run them in it: see "The terminal" |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
+| `/view` | A command of the app's own: the view at the right of the window (`⇧⌘O`, View > Toggle View). See "The view" |
 
 ### A sound in an answer
 
@@ -668,6 +688,122 @@ to choose for an upload, no passkey or system dialog, no copying out of the page
 typed without an input method. For those, close the app's browser and ask the agent in
 the terminal UI to show the browser, or set `"headed": true` for the browser.
 
+## The view
+
+The view (`⇧⌘O`, View > Toggle View, the radar at the top right of the title bar, or "View" in the
+palette) shows all of pine at a glance, in a panel of its own at the right of the window: every agent,
+the work each one does right now, where that work came from, who handed what to whom, the copies
+(sub-agents) at work, and what waits for you. It needs no conversation: it opens with Settings or the
+event log in front too, and stays open beside the side panel and the browser where there is room (see
+the table above).
+
+What the panel draws is a view: a script of yours in the `views` folder of pine's home, chosen with
+the view's name at the top of the panel, which is a list of the views in the folder (`ui.view`). pine
+comes with three: `overview`, a page that says everything in words and is shown until you pick
+another, `office`, pine as a little house full of robots, and `workshop`, pine as Santa's
+workshop at the North Pole. How to write
+one, and what a view is told, is in [views.md](views.md). With no view in the folder, or the setting
+`off`, there is no button and no panel. The mobile app and the web client show no view.
+
+| | |
+|---|---|
+| Needs you | On top, whatever the view: what an agent asks you right now, each with **Answer** |
+| The view | In the middle, in a frame of its own: it draws pine as it likes, and a click in it can show an agent or a piece of work below, or open it |
+| What happened | Below the view, newest first, in plain words: what woke whom, what was handed on, who answered, what you were asked and what you said |
+| Looking closer | An agent or a piece of work chosen in the view, or in what happened, is shown below the view instead: for an agent its mode, its work, the conversations pine has open and what it did lately; for a piece of work where it came from, what it does now, the mode it runs in, whether its conversation read outside content, the time, what it handed on, and what it asks you. **Open** opens the conversation, or the task by itself |
+
+The words below the view are the app's own, and say everything. The view is told only the shape of
+pine: it never sees a prompt, an answer, a path or what an event said, and it reaches neither the app,
+nor pine, nor the web ([views.md](views.md), "What a view cannot do").
+
+`office` draws pine as a little tower house, cut open, in pixels: the main agent lives under the
+roof, the others on the floors below, you sit at your desk in the hall. Each agent has a room and a
+robot of its own look, in its color, and a plate at the door with its name and a sign for its mode. A
+robot's bubble says what it does, in words: "thinking...", "reading a file", "running a command",
+"browser: navigate", "skill: invoices", "waiting for scout", "needs your answer". What it does also shows in
+where it stands:
+
+| In the house | What it is |
+|---|---|
+| A robot paces its room | It thinks |
+| A robot at its shelf with a book; a book with a star | It reads or searches files; it reads one of its skills. Each starred book on the shelf is a skill the agent has |
+| A robot at its desk, the screen full of lines | It runs a command, edits a file, or writes its answer |
+| A robot at the rack | It uses a tool of an MCP server. Each lit slot of the rack is an MCP server the agent has; the one in use blinks |
+| A robot on its chair, legs swinging, an hourglass | It waits for a task it delegated or for its sub-agents |
+| A robot jumps, a red "!" | It asks you. The bell on your desk in the hall rings, and the panel has the question on top |
+| Small robots beside it | Sub-agents, for as long as they work |
+| A letter with wings flies from one robot to another | A task handed on (`delegate`). A dashed line joins the two rooms while the work lasts; the answer flies back with a tick, or a cross if it failed |
+| A capsule in the glass tube | An event: from your desk (what you asked; the answer comes back down), from the box of an event source in the hall, or down from the clock in the turret when a schedule is due |
+| Alarm clocks over a desk; the clock in the turret | The agent's schedules; the turret's clock shows your time, and above it the schedule that runs next. They ring when one is due |
+| The board on the wall | The agent's conversations: a line for the main one, a fork for each branch, a leaf on one that works in a worktree, a small flag on one with a goal |
+| Pips under a bubble; a flag on the desk | The steps of its to-do list that are done; a goal that pine calls it for again and again |
+| A letter flies up to the dish on the roof | The agent sent something out (`send`, `publish_event`) |
+| Shield, lock, bolt, warning sign, blueprint on a door plate | The agent's mode: `safe`, `manual`, `auto`, `bypass` (with hazard tape and a beacon in the room), `plan` |
+| An amber lamp in a room, amber eyes | The work read outside content: sending something out asks you from now on. A shield on a robot's chest is work held to a stricter mode |
+| A robot throws its arms up; a robot droops under a puff of smoke | Work is done; work failed |
+
+The `?` at the top right shows this key in the view itself, and the pointer over anything says what
+it is: over a rack the names of the MCP servers, over a shelf the skills, over the clocks the schedules
+and when each runs next, over the board how many conversations and branches, over a box in the hall
+which agents the source wakes. The sky follows your clock and the year: dawn, day, the golden hour,
+dusk and night with the moon in its phase, and the trees of the season. At night an agent at rest
+sleeps at its desk. A camera goes where agents work, in whole steps so that pixels stay whole; scroll,
+drag or pinch to look yourself, the eye follows again, and the frame beside it shows the whole house.
+
+### The workshop
+
+`workshop` draws the same as Santa's workshop at the North Pole. The main agent is Santa, under the
+roof; every other agent is an elf of its own look, its pointed cap in the agent's color, in a bay that
+is a workshop of another kind each. You stand at the counter of the mail room. The bubbles say the same
+words as in `office`; their signs are sweets, and the `?` shows what each stands for.
+
+| In the workshop | What it is |
+|---|---|
+| Santa checks a long list | The main agent is at rest. At night he sleeps in his chair |
+| An elf paces; a plan on blue paper on its bench | It thinks |
+| An elf at its shelf with a book | It reads or searches. A starred book is a skill: on an elf's shelf, on Santa's mantel |
+| An elf at its bench with a hammer, a brush or a wrench | It runs a command or edits a file |
+| An elf ties a ribbon round a parcel | It writes its answer |
+| An elf at the machine full of gumballs; Santa at his tree | A tool of an MCP server. Each gumball, each bauble on the tree, is an MCP server; the one in use lights up |
+| A glass of sand on the bench | It waits for others |
+| A jack-in-the-box with a red "!" | It asks you; the bell on your counter rings |
+| Small elves | Sub-agents |
+| A present flies from one to another | A delegated task; the answer flies back with a tick or a cross |
+| A sweet in the glass chute | An event, from your counter, a letter box of the mail room, or the clock in the tower |
+| Bells on a wall | The agent's schedules |
+| A little tree with a star on the bench | A goal |
+| A present flies up to the sleigh on the roof | The agent sent something out |
+| Snow globe, cookie jar, wind-up key, sparkler, gingerbread house | The modes `safe`, `manual`, `auto`, `bypass`, `plan` |
+| An amber lantern, a cap's bobble glowing amber | The work read outside content |
+| A stocking for each agent in Santa's room, where it is wide | It glows while that agent works, red while it asks |
+| Presents under Santa's tree; the big wheel on the wall | More presents the more work was done in the last half hour; the wheel turns faster while anybody works |
+
+It is winter there all year. The sky follows your clock, with northern lights at night; reindeer fly
+a sleigh across it, elves on skis and a polar bear with its cub go by, and floes drift on the sea.
+
+### The overview
+
+`overview` is all of pine on one board, in words. There is nothing to learn first: three columns, and
+everything in them says what it is. It looks like the app around it: the same font, cards and badges, each
+agent with its avatar, on the panel's own ground in whatever theme you use.
+
+| On the board | What it is |
+|---|---|
+| The left column, "Triggers" | What starts an agent's work: you, every event source, every schedule and every webhook, each with whom it triggers ("inbox, triggers books") and, for a schedule, when it is due. A source that is down says so, in the color of what failed. A question for you is said at "You" |
+| The middle column, "Agents" | Every agent, those that work on top and the idle ones below them (when one starts or stops, the boxes glide to their new places). Under its name what it is doing right now ("Running a command", "Using web: search", "Waiting for scout", "Needs your answer", "Idle"), under that why ("for you", "delegated by main", "triggered by inbox") and how far ("step 2 of 5"). Each of its sub-agents is a line of its own under it, and a sub-agent that one of them started stands in under that one. Its mode stands beside its name |
+| The right column, "Tools" | Every MCP server and every skill |
+| An agent's card | Its avatar and name, and its mode as a badge at the right (`bypass` in the color of what warns). While it works, a small dot beside its name fades out and in, as it does on its tab |
+| A colored border and a tint | Something happens there right now, in the agent's color. A question for you is in the theme's color for a question, a source that is down in its color for what failed. Everything else has a plain border |
+| A line between two things | Something happens between them right now, in the color of the agent it happens to: from a trigger to the agent it started, from an agent to the MCP server or skill it is using, beside the agents from one to the agent it delegated a task to, and in the color of a question from an agent to you while it waits for your answer. A line starts with a dot and ends with an arrowhead, and a dot runs along it the way things go. Every line has a lane of its own and turns at 45 degrees, so no two lie on top of each other |
+| A line at the right of the agents | The answer to a delegated task on its way back: when the task ends, a line runs for a few seconds from the agent that did it to the agent that delegated it, in the color of what failed if it did. The task went out at the left of the agents, its answer comes back at their right. What you asked an agent for comes back to "You" the same way |
+| The pointer over something | Thin lines to all it is wired to (for an agent its sources, schedules, MCP servers and skills; for a source or a server, everybody who has it), and the rest fades. The line on top of the panel says what it is |
+| A click on an agent | Unfolds it: a line for each of its conversations, a branch set in under what it was branched from, with "in a worktree" and its goal where it has one. The agent is shown under the view; a double click opens it |
+| The eye, at the top right | Follow activity, on at first: the camera keeps everything that something happens at in view and moves there softly; with nothing happening it shows the board from its top, as wide as the panel. A double click on the empty board turns it on again |
+| Dragging, scrolling, pinching | Moves the board, and zooms it (a pinch, or scrolling with `ctrl` or `cmd` held, around where the pointer is). The camera then stays where you put it and no longer follows |
+| The button beside the eye | Show everything: the whole board in the panel |
+
+It has no timeline: what happened, in order, is the list the panel shows under every view.
+
 ## Settings
 
 `⌘,` opens the settings panel in a tab of its own, beside the conversations (the same key puts
@@ -726,7 +862,7 @@ the agent to write. So:
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | Browser access | Off until you turn it on. Then the app's SSH server of its own (not the system's SSH server, Remote Login on macOS) accepts only the keys you allowed at this computer, by key and never by password, and gives them this computer's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
-| What the app itself asks the web | GitHub, for pine's last release (see "A newer version"). The question carries nothing about this computer, your pine or the app's version. Of the answer only the release's number is used, and the link you get is made by the app and leads to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
+| What the app itself asks the web | GitHub, for pine's last release and, when it is newer, its update (see "A newer version"). The question and the update's feed send the user agent `Pine` and nothing else; the update's zip is fetched by macOS's updater, whose user agent names the app's version and the version of macOS. Of the answer only the release's number is used, and the link and the update's address are made by the app and lead to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
 itself. What it knows, the daemon told it.
@@ -737,7 +873,7 @@ itself. What it knows, the daemon told it.
 
 | Flag | What it does |
 |---|---|
-| `--dmg` | Also a disk image, `release/Pine-<version>-<arch>.dmg` |
+| `--dmg` | Also a disk image, `release/Pine-<version>-<arch>.dmg`; the app zipped after its ticket is stapled, `Pine-<version>-<arch>.zip`; and the update feed that points at the zip, `Pine-<arch>.json` |
 | `--arch` | `arm64` or `x64`: the kind of Mac the app is for. Without it, the kind it is packed on. The helpers are built for both either way |
 | `--no-pine` | Without pine, Node and the helpers: the app then uses the `pine` of the owner's shell |
 | `--out` | Into another folder than `release/`, for a build beside one that is open |
@@ -762,12 +898,12 @@ built on is what is shipped. Whom it is signed for is set in the environment:
 | `PINE_VERSION` | The version of the app and of the pine inside it. Without it, the version in the checkout's `package.json` |
 
 The Release workflow (`.github/workflows/release.yml`) does this for every release from
-`main`, on a runner for each kind of Mac, and attaches the two disk images to the GitHub
-release. It takes the five values from secrets of an environment named `release`. Without
+`main`, on a runner for each kind of Mac, and attaches the disk images, the zips and the
+update feeds to the GitHub release. It takes the five values from secrets of an environment named `release`. Without
 them it builds no app and says so. To build the app of a release again (after a job that
 failed), run the workflow by hand from `main` with that release's version:
-`gh workflow run release.yml -f version=0.38.0`. Nothing is published; the disk images are
-attached to that release. Building the helpers takes the macOS 26 SDK or a newer one.
+`gh workflow run release.yml -f version=0.38.0`. Nothing is published; the disk images, zips and
+feeds are attached to that release. Building the helpers takes the macOS 26 SDK or a newer one.
 
 ## For changing the app
 
@@ -783,6 +919,11 @@ desktop/
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
     updates.ts     whether there is a newer app: GitHub asked for the last release, the link to its page
+                   and the address of its update feed (stand-ins for tests: PINE_DESKTOP_RELEASES,
+                   PINE_DESKTOP_DOWNLOADS)
+    updater.ts     the app's own update: Electron's autoUpdater (Squirrel.Mac) on that feed, downloaded
+                   in the background, installed at Restart to update or at quit; a stand-in for tests
+                   (PINE_DESKTOP_UPDATER)
     access/        browser access, without Electron (they run under plain Node in tests and in the
                    web client's smoke): server.ts the access server (ssh2 on any duplex stream: the
                    remote command answered with this computer's service line, direct-tcpip to that loopback
@@ -802,6 +943,10 @@ desktop/
                    in either opens larger in a stock Dialog of its own)
     CodePanel.tsx  changes, files and the editor, output, what is running
     Browser.tsx    the agent's browser in its aside: its page as a picture, and what is done in it handed back
+    View.tsx       the view's panel: what asks you, the view in its sandboxed frame, what happened, what is
+                   chosen. view-world.ts is pine as the page knows it, made from the live events; view-state.ts
+                   is what a view is told of it (names and states, no text); view-frame.ts (view.html) is the
+                   frame a view runs in, with "pine/view" (../src/view-kit.ts)
     Settings.tsx   the settings pages
     BrowserAccess.tsx, machines.ts  Settings > Browser access (with its QR code, components/qr-code.tsx);
                    how the page names a machine and draws a pairing on the first screen
@@ -834,7 +979,8 @@ desktop/
                    browser, `npm run dev:preview`: Vite's server makes every call for the page,
                    on a throwaway pine or the home `--home` names), test.mjs (`npm test`: the
                    app built once for the run), launch-json.mjs (the checkout's ports and
-                   .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter)
+                   .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter),
+                   update-feed.ts (the names of a release's zip and update feed, and the feed)
   test/            the app from end to end, driven through its real window; command.test.ts,
                    updates.test.ts, daemon.test.ts and preview.test.ts need no window.
                    support/: the build a test starts (app.ts), and a daemon of the test's own
