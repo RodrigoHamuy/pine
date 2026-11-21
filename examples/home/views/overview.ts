@@ -11,7 +11,14 @@
 //                       ("for you", "delegated by main", "triggered by inbox") and how far ("step 2 of 5").
 //                       Each of its sub-agents is a line of its own under it, one that a sub-agent started
 //                       standing in under that one
-//   Tools               what agents use: every MCP server, every skill
+//   Tools               what agents use. On top the boards, where a job that several work on is kept: a card
+//                       for each, with how far it is ("7/24"), a bar of how its tasks stand, and one small
+//                       tile per task in the order they were posted: an outline for one that is open (a faint
+//                       one while it waits for another), filled in the agent's color while a sub-agent works
+//                       on it, filled in the text's color when it is done, in the color of a question when
+//                       its worker asked something, in the color of what failed when it failed. A task that
+//                       comes after another (a check of somebody's work) stands under it. Under the boards
+//                       every MCP server and every skill
 //
 // It looks like the app it is shown in: the app's font, its cards with their thin borders and round corners, an
 // agent's avatar as the side bar draws it, its mode as a small badge, and the app's own colors for a question and
@@ -38,7 +45,7 @@
 //
 // There is no timeline: what happened, in order, is what the panel lists under every view.
 
-import { defineView, ease, frame, mix, rgb, unsettled, type Box as Rect, type Cam, type ViewAgent, type ViewBoard, type ViewConversation, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
+import { defineView, ease, frame, mix, rgb, tasksOf, tiling, unsettled, type TaskTile, type Box as Rect, type Cam, type ViewAgent, type ViewBoard, type ViewConversation, type ViewTask, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
 
 // ---- what is said ---------------------------------------------------------------------------------------------------------
 
@@ -69,6 +76,7 @@ const DOING: Record<string, string> = {
 	board_post: "Posting on the board",
 	board_claim: "Taking a task",
 	board_done: "Settling a task",
+	board_answer: "Answering a sub-agent",
 };
 
 /** A tool's name without its server's: "mcp__web__web_search" of "web" is "search". */
@@ -116,8 +124,26 @@ export const boardTitle = (b: ViewBoard) => b.name ?? (b.agent ? `${b.agent}'s b
 /** How a board stands, in a few words. */
 export function boardLine(b: ViewBoard): string {
 	const tasks = b.open + b.taken + b.done + b.failed + b.blocked;
-	if (b.blocked) return b.blocked === 1 ? "Needs your answer" : `${b.blocked} need your answer`;
+	if (b.blocked) return b.blocked === 1 ? "Waits for an answer" : `${b.blocked} wait for an answer`;
 	return tasks ? `${b.done} of ${tasks} done` : b.notes ? plural(b.notes, "note") : "Empty";
+}
+/** What happens on a board right now, in a few words: what its card says under its name. */
+export function boardWords(b: ViewBoard): string {
+	const tasks = b.open + b.taken + b.done + b.failed + b.blocked;
+	if (!tasks) return b.notes ? plural(b.notes, "note") : "Empty";
+	if (b.blocked) return b.blocked === 1 ? "Waits for an answer" : `${b.blocked} wait for an answer`;
+	const parts = [b.taken ? `${b.taken} in progress` : "", b.open ? `${b.open} to do` : "", b.failed ? `${b.failed} failed` : ""].filter(Boolean);
+	return parts.length ? parts.slice(0, 2).join(" · ") : "Done";
+}
+
+/** A task's tile in a board's card, from the card's left edge and the top of its tiles. */
+export type Tile = TaskTile;
+/**
+ * A board's tasks as tiles in its card (`tiling` of pine/view): as large as lets every piece of work stand in one
+ * row with what comes after it under it, smaller where there are more, and never higher than sixty pixels.
+ */
+export function tilesOf(b: ViewBoard, width: number): { size: number; tiles: Tile[]; height: number; more: number } {
+	return tiling(b, width, 60, [[8, 2], [7, 2], [6, 2], [5, 2], [4, 1]], 3);
 }
 // ---- what just happened, for a moment -------------------------------------------------------------------------------------
 
@@ -197,6 +223,8 @@ export interface Box {
 	/** For an agent: the lines under its name. The first is what it does. */
 	lines?: Array<{ text: string; tone: "now" | "ask" | "sub" | "dim" | "note"; indent?: number }>;
 	agent?: ViewAgent;
+	/** For a board: the board, whose tasks its card draws. */
+	board?: ViewBoard;
 	bad?: boolean;
 	busy?: boolean;
 }
@@ -293,7 +321,7 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 			lines.push({ text: sentenceOf(first, s), tone: first.asking ? "ask" : "now" });
 			for (const text of [why, far, where]) if (text) lines.push({ text, tone: "dim" });
 			// The board its sub-agents work through: how many of its tasks are done.
-			for (const b of boardsOf(s)) if (b.scope === "conversation" && b.agent === a.id && unsettled(b) > 0) lines.push({ text: `Board: ${boardLine(b).toLowerCase()}${b.taken ? ` · ${b.taken} in progress` : ""}`, tone: b.blocked ? "ask" : "dim" });
+			for (const b of boardsOf(s)) if (b.scope === "conversation" && b.agent === a.id && unsettled(b) > 0) lines.push({ text: b.blocked ? `Board: ${b.blocked === 1 ? "a task waits" : `${b.blocked} tasks wait`} for an answer` : `Board: ${boardLine(b).toLowerCase()}${b.taken ? ` · ${b.taken} in progress` : ""}`, tone: b.blocked ? "ask" : "dim" });
 			for (const w of own) if (w !== first) lines.push({ text: `${sentenceOf(w, s)}${causeOf(w) ? ` · ${causeOf(w)}` : ""}`, tone: w.asking ? "ask" : "now" });
 			const shown = first.copy ? copies.slice(1) : copies;
 			// Its sub-agents as a tree: one that a sub-agent started itself stands in under that one.
@@ -307,7 +335,9 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 				}
 			};
 			walk(undefined, 1);
-			for (const t of tree.slice(0, 6)) lines.push({ text: `Sub-agent: ${sentenceOf(t.w, s).toLowerCase()}`, tone: t.w.asking ? "ask" : "sub", indent: t.level });
+			// One that has a task of a board is called by that task's number, which is the tile's in the board's card.
+			const taskOf = (w: ViewWork) => (w.board === undefined ? undefined : tasksOf(boardsOf(s).find((b) => b.id === w.board) ?? ({} as ViewBoard)).find((t) => t.worker === w.id)?.id);
+			for (const t of tree.slice(0, 6)) lines.push({ text: `${taskOf(t.w) !== undefined ? `Task ${taskOf(t.w)}` : "Sub-agent"}: ${sentenceOf(t.w, s).toLowerCase()}`, tone: t.w.asking ? "ask" : "sub", indent: t.level });
 			if (tree.length > 6) lines.push({ text: `+${plural(tree.length - 6, "more sub-agent")}`, tone: "dim", indent: 1 });
 		} else lines.push({ text: "Idle", tone: "dim" });
 		const said = recent?.notes.get(a.id);
@@ -319,7 +349,12 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 	// On the right, first: the boards that have work on them, and those with a name, which are there to stay.
 	const boards = boardsOf(s).filter((b) => unsettled(b) > 0 || b.name).slice(0, 6);
 	if (boards.length) head(2, "Boards");
-	for (const b of boards) put(2, { id: `board:${b.id}`, kind: "board", title: boardTitle(b), sub: boardLine(b), busy: b.taken > 0, bad: b.blocked > 0 }, 44);
+	for (const b of boards) {
+		const all = b.open + b.taken + b.done + b.failed + b.blocked;
+		const tiles = tilesOf(b, SIDE - 20);
+		// Its name and how far it is, what happens on it, a bar, and its tasks as tiles.
+		put(2, { id: `board:${b.id}`, kind: "board", title: b.name ?? b.agent ?? "Board", right: all ? `${b.done}/${all}` : undefined, sub: boardWords(b), board: b, busy: b.taken > 0, bad: b.blocked > 0 }, 44 + (all ? 12 : 0) + (tiles.height ? tiles.height + 10 : 0) + (tiles.more ? 12 : 0));
+	}
 
 	// Under them: the MCP servers and the skills, those that most agents have first.
 	const ranked = (pick: (a: ViewAgent) => string[]) => {
@@ -408,8 +443,27 @@ export function hitAt(l: Layout, p: { x: number; y: number }): Box | undefined {
 	return l.boxes.find((b) => p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h);
 }
 
-/** What a box is, in a few pieces of a sentence: what the line on top says while the pointer is over it. */
-export function tipOf(b: Box | undefined, s: ViewState, now: number): string[] {
+/** Where a board's tiles begin in its card: under its two lines of words and its bar. */
+const TILES_AT = { x: 10, y: 54 };
+/** The task whose tile is at a point of the board, in a board's card. */
+export function tileAt(b: Box | undefined, p: { x: number; y: number } | undefined): ViewTask | undefined {
+	if (!b?.board || !p) return undefined;
+	const { size, tiles } = tilesOf(b.board, b.w - 20);
+	const x = p.x - b.x - TILES_AT.x;
+	const y = p.y - b.y - TILES_AT.y;
+	// (A tile's own square and the gap at its right and under it: the pointer need not be that exact.)
+	return tiles.find((t) => x >= t.x - 1 && x < t.x + size + 1 && y >= t.y - 1 && y < t.y + size + 1)?.task;
+}
+/** How a task stands, as somebody would say it. */
+export function taskWords(t: ViewTask, b: ViewBoard): string {
+	const next = tasksOf(b).filter((x) => x.after.includes(t.id)).map((x) => x.id);
+	const state =
+		t.state === "taken" ? `in progress${t.agent ? `, a sub-agent of ${t.agent} has it` : ""}` : t.state === "waiting" ? `waiting for task ${t.after.join(" and ")}` : t.state === "blocked" ? "waiting for an answer" : t.state === "open" ? "to do" : t.state;
+	return `${state}${t.state !== "waiting" && t.after.length ? `, comes after task ${t.after.join(" and ")}` : ""}${next.length ? `, followed by task ${next.join(" and ")}` : ""}`;
+}
+
+/** What a box is, in a few pieces of a sentence: what the line on top says while the pointer is over it. `at` is where the pointer is on the board. */
+export function tipOf(b: Box | undefined, s: ViewState, now: number, at?: { x: number; y: number }): string[] {
 	if (!b) return [];
 	const who = (list: ViewAgent[]) => list.map((a) => a.id);
 	if (b.agent) {
@@ -432,8 +486,12 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number): string[] {
 	if (b.kind === "board") {
 		const x = boardsOf(s).find((k) => `board:${k.id}` === b.id);
 		if (!x) return [b.title];
+		// Over one of its tiles: that task.
+		const tile = tileAt(b, at);
+		if (tile) return [`Task ${tile.id} on ${boardTitle(x)}`, taskWords(tile, x)];
 		const whose = x.scope === "all" ? "board for all agents" : x.scope === "agent" ? `board of ${x.agent ?? "an agent"}` : `board of a conversation${x.agent ? ` of ${x.agent}` : ""}`;
-		const states = [x.taken ? `${x.taken} in progress` : "", x.open ? `${x.open} open` : "", x.blocked ? `${plural(x.blocked, "task")} waiting for your answer` : "", x.failed ? `${x.failed} failed` : "", x.done ? `${x.done} done` : ""].filter(Boolean);
+		const waits = tasksOf(x).filter((t) => t.state === "waiting").length;
+		const states = [x.taken ? `${x.taken} in progress` : "", x.open ? `${x.open} to do${waits ? ` (${waits} after other tasks)` : ""}` : "", x.blocked ? `${plural(x.blocked, "task")} waiting for an answer` : "", x.failed ? `${x.failed} failed` : "", x.done ? `${x.done} done` : ""].filter(Boolean);
 		return [`${b.title}: ${whose}`, states.join(", ") || "no tasks", x.notes ? plural(x.notes, "note") : "", "read it in the Board tab beside the conversation"].filter(Boolean);
 	}
 	const has = s.agents.filter((a) => (b.kind === "mcp" ? a.mcp : a.skills).includes(b.title));
@@ -783,6 +841,7 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 				g.fillStyle = alarm ?? th.faint;
 				g.fillText(fit(g, b.sub, b.w - 20), b.x + 10, b.y + 31);
 			}
+			if (b.board) drawBoard(g, b, b.board, s, th, deep, now, fade);
 		}
 		(b.lines ?? []).forEach((line, i) => {
 			const ly = b.y + 43 + i * 18;
@@ -858,6 +917,62 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 	}
 	g.restore();
 	g.globalAlpha = 1;
+}
+
+/**
+ * A board's card under its two lines of words: a bar of how its tasks stand, and a tile for each task. A task
+ * somebody works on is in that agent's color and breathes; one whose worker asked is in the color of a question.
+ */
+function drawBoard(g: Ctx, box: Box, b: ViewBoard, s: ViewState, th: Theme, deep: (c: string) => string, now: number, fade: number): void {
+	const all = b.open + b.taken + b.done + b.failed + b.blocked;
+	if (!all) return;
+	const x0 = box.x + 10;
+	const w = box.w - 20;
+	const colorOf = (id?: string) => deep(s.agents.find((a) => a.id === (id ?? b.agent))?.color ?? th.muted);
+	const pulse = 0.62 + 0.38 * Math.sin(now / 320);
+	// The bar: done, in progress, asking, failed, and the rest still to do.
+	const by = box.y + 42;
+	rounded(g, x0, by, w, 4, 2);
+	g.fillStyle = veil(th.text, s.dark ? 0.1 : 0.12);
+	g.fill();
+	let at = x0;
+	for (const [n, color, alpha] of [[b.done, th.text, 0.6], [b.taken, colorOf(), pulse], [b.blocked, th.warn, 1], [b.failed, th.bad, 1]] as Array<[number, string, number]>) {
+		if (!n) continue;
+		const part = Math.max(2, (w * n) / all);
+		g.globalAlpha = fade * alpha;
+		g.fillStyle = color;
+		rounded(g, at, by, Math.min(part, x0 + w - at), 4, 2);
+		g.fill();
+		at += part;
+	}
+	g.globalAlpha = fade;
+	// The tiles.
+	const { size, tiles, more } = tilesOf(b, w);
+	const ty = box.y + TILES_AT.y;
+	const r = size > 4 ? 2 : 1;
+	for (const { task: t, x, y } of tiles) {
+		const tx = x0 + x;
+		const tyy = ty + y;
+		if (t.state === "open" || t.state === "waiting") {
+			g.strokeStyle = veil(th.text, t.state === "open" ? (s.dark ? 0.5 : 0.55) : s.dark ? 0.2 : 0.25);
+			g.lineWidth = 1;
+			rounded(g, tx + 0.5, tyy + 0.5, size - 1, size - 1, r);
+			g.stroke();
+			continue;
+		}
+		g.globalAlpha = fade * (t.state === "taken" ? pulse : t.state === "done" ? 0.6 : 1);
+		g.fillStyle = t.state === "taken" ? colorOf(t.agent) : t.state === "blocked" ? th.warn : t.state === "failed" ? th.bad : th.text;
+		rounded(g, tx, tyy, size, size, r);
+		g.fill();
+		g.globalAlpha = fade;
+	}
+	if (more) {
+		g.font = `10px ${FONT}`;
+		g.fillStyle = th.faint;
+		g.textAlign = "right";
+		g.fillText(`+${more}`, x0 + w, box.y + box.h - 8);
+		g.textAlign = "left";
+	}
 }
 
 // ---- the view: the board in the panel ---------------------------------------------------------------------------------------
@@ -1125,7 +1240,7 @@ export default defineView((host: ViewHost) => {
 			const bad = s.inputs.filter((i) => i.failing).map((i) => i.name);
 			const part = (cls: string, text: string) => Object.assign(document.createElement(cls === "b" ? "b" : "span"), { className: cls === "b" ? "" : cls, textContent: text });
 			// The line on top: how things stand; and while the pointer is over a box, what that box is.
-			const about = tipOf(over, s, now);
+			const about = tipOf(over, s, now, pointer && cam ? toBoard(pointer, cam, size()) : undefined);
 			sum.replaceChildren(
 				...(about.length
 					? [part("b", about[0]), ...about.slice(1).map((text) => `  ·  ${text}`)]

@@ -225,7 +225,7 @@ declares them in **families**, which is about 11 500:
 | `pine_skills` | `add_skill`, `remove_skill` |
 | `pine_agents` | The main agent's: `create_agent`, `update_agent`, `rename_agent`, `remove_agent` |
 | `pine_settings` | The main agent's: `set_setting`, `add_route`, `remove_route`, `add_model_server`, `remove_model_server` |
-| `pine_board` | `board_read`, `board_post`, `board_claim`, `board_done`: tasks and notes that several share ([boards.md](boards.md)) |
+| `pine_board` | `board_read`, `board_post`, `board_claim`, `board_done`, `board_answer`: the tasks of a job that several work on ([boards.md](boards.md)) |
 | `pine_other` | `request_access`, `stop_program`, `state_get`, `state_set` |
 | `pine_conversations` | The main agent's: `read_conversation`, `set_conversation`, `remove_conversation` |
 | One for each MCP server, named after the server (`browser`, `media`, `home_link`) | The server's tools under their own names (`browser_navigate`, `browser_click`) |
@@ -596,7 +596,7 @@ has no such paragraph is shown with `description` from its `agent.json`.
 
 ## Sub-agents
 
-`subagent(tasks: string[], model?, thinking?, worktree?, pool?)` runs up to `subagents.maxParallel` copies of the
+`subagent(tasks: string[], model?, thinking?, worktree?, pool?, note?, check?)` runs up to `subagents.maxParallel` copies of the
 same agent at once (4 unless the agent's `agent.json` says otherwise).
 Each copy has the agent's workspace, instructions and tools but an empty conversation, cannot
 delegate or spawn further, and returns only its final answer. Use it for searches and checks
@@ -607,10 +607,10 @@ that would otherwise fill the context:
 | Argument | What it does |
 |---|---|
 | `tasks` | One task per sub-agent. A sub-agent sees nothing of the conversation, so each task says everything it needs: what to do, which files (by their path), what to answer. |
-| `model` | Another model for these sub-agents than the agent's own, as `provider/model` (the id alone is enough where only one model has it). For work another model does better: one that sees pictures, a small fast one for many simple checks, a large one for a hard part. The `models` tool lists what there is. Left out: the agent's own model. |
+| `model` | Runs these sub-agents on a different model than the agent's own, as `provider/model` (the id alone is enough where only one model has it). For work another model does better: one that sees pictures, a small fast one for many simple checks, a large one for a hard part. The `models` tool lists what there is. Left out: the agent's own model. |
 | `thinking` | How much these sub-agents reason: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. A model that cannot reason ignores it. Left out: the agent's own level. |
 | `worktree` | `true`: each sub-agent changes files in a worktree of its own of the conversation's folder (a git repository), made from its last commit, so that sub-agents that change the same files do not collide. When it is done, what it changed is committed on its branch (`pine/<conversation>-sub`, `-sub-2`, ...), its folder goes, and the answer names the branch: the conversation brings it in with `git merge` and deletes it with `git branch -d`. One that changed nothing leaves nothing. Only in your own conversations; what is not committed in the folder is not in the sub-agents' worktrees. See [coding.md](coding.md), "A worktree for a conversation". |
-| `pool` | `true`: more tasks than run at once (up to 100), worked through on the conversation's board, where each sub-agent sees the others' notes. Not with `worktree`. See [boards.md](boards.md). |
+| `pool` | `true`: more tasks than run at once (up to 100), worked through on the conversation's board; `note` says once what all go by, `check` has a second one check each result. Comes back early when one asks or fails. Not with `worktree`. See [boards.md](boards.md). |
 
 A sub-agent on another model is still the same agent: the same workspace, files, tools,
 instructions and permissions. Only the model that reads and answers is another one. So a file is

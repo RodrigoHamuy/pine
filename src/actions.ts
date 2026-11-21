@@ -24,7 +24,7 @@ export type ActionClass = "look" | "local" | "reach" | "send" | "tell" | "own" |
 export const ROUTERS = new Set<string>();
 export const LOOK_TOOLS = ["read", "grep", "find", "ls", "state_get", "sources", "read_source", "tool_search", "manual", "schedules", "mcp_servers", "skills", "models", "stop_program", "question", "todo", "agents", "settings", "routes", "find_tools", "conversations", "read_conversation", "boards", "board_read"];
 /** The tools that write on a board (src/boards.ts). */
-const BOARD_WRITES = ["board_post", "board_claim", "board_done"];
+const BOARD_WRITES = ["board_post", "board_claim", "board_done", "board_answer"];
 /** Tools that change pine's setup or ask for access. Each asks the owner where it matters, so the gate does not ask again. */
 export const SETUP_TOOLS = ["request_access", "add_mcp_server", "remove_mcp_server", "add_source", "remove_source", "add_source_type", "remove_source_type", "add_skill", "remove_skill", "add_schedule", "remove_schedule", "create_agent", "update_agent", "rename_agent", "remove_agent", "set_setting", "add_route", "remove_route", "add_model_server", "remove_model_server", "set_conversation", "remove_conversation", "rename_group", "remove_group"];
 

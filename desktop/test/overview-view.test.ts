@@ -13,7 +13,7 @@ registerHooks({
 	resolve: (spec, ctx, next) => (spec === "pine/view" ? { url: pathToFileURL(path.resolve(import.meta.dirname, "../../src/view-kit.ts")).href, shortCircuit: true } : next(spec, ctx)),
 });
 const view = await import("../../examples/home/views/overview.ts");
-const { Recent, layoutOf, sentenceOf, causeOf, linksOf, wiringOf, hitAt, tipOf, routesOf, focusOf, allOf, held, toBoard, wholeOf, PIN, draw, boardTitle, boardLine } = view;
+const { Recent, layoutOf, sentenceOf, causeOf, linksOf, wiringOf, hitAt, tipOf, routesOf, focusOf, allOf, held, toBoard, wholeOf, PIN, draw, boardTitle, boardLine, boardWords, tilesOf, tileAt, taskWords } = view;
 
 const T0 = 1_800_000_000_000;
 const conv = (id: number, more: object = {}) => ({ id, main: false, worktree: false, busy: false, outside: false, ...more });
@@ -314,7 +314,7 @@ test("the whole board draws in every state: narrow and wide, dark and light, fro
 });
 
 test("a board is a box beside the tools: whose it is and how its tasks stand, a line from the agent whose sub-agents work on it, and its question counts as one for you", () => {
-	const board = (id: number, more: object = {}) => ({ id, scope: "conversation" as const, agent: "scout", conversation: 1, open: 0, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [] as number[], ...more });
+	const board = (id: number, more: object = {}) => ({ id, scope: "conversation" as const, agent: "scout", conversation: 1, open: 0, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [] as number[], tasks: [] as any[], ...more });
 	const works = [
 		work(1, "scout", { doing: "waiting", waitingOn: [2, 3], conversation: 1 }),
 		work(2, "scout", { parent: 1, depth: 1, copy: true, from: { k: "copy", id: "scout" }, doing: "tool", tool: "grep", board: 7 }),
@@ -325,10 +325,12 @@ test("a board is a box beside the tools: whose it is and how its tasks stand, a 
 	});
 	const l = layoutOf(s, new Set(), T0);
 	// The one with work on it and the one with a name are there; one whose tasks are all settled is not.
-	assert.deepEqual(l.boxes.filter((b: any) => b.kind === "board").map((b: any) => [b.id, b.title, b.sub, Boolean(b.busy), Boolean(b.bad)]), [
-		["board:7", "scout's board", "3 of 10 done", true, false],
-		["board:8", "bugs", "Needs your answer", false, true],
+	assert.deepEqual(l.boxes.filter((b: any) => b.kind === "board").map((b: any) => [b.id, b.title, b.right, b.sub, Boolean(b.busy), Boolean(b.bad)]), [
+		["board:7", "scout", "3/10", "2 in progress · 5 to do", true, false],
+		["board:8", "bugs", "2/3", "Waits for an answer", false, true],
 	]);
+	assert.equal(boardWords(board(1, { done: 4 })), "Done");
+	assert.equal(boardWords(board(1, { failed: 1, done: 4 })), "1 failed");
 	assert.equal(l.heads.find((h: any) => h.col === 2)?.text, "Boards", "above what the agents use");
 	assert.equal(boardTitle(board(1, { agent: undefined })), "Board");
 	assert.equal(boardLine(board(1, { notes: 2 })), "2 notes");
@@ -338,10 +340,42 @@ test("a board is a box beside the tools: whose it is and how its tasks stand, a 
 	// One line from the agent to its board, however many of its sub-agents have a task there.
 	assert.deepEqual(linksOf(s, l, T0).filter((k: any) => k.to === "board:7").map((k: any) => [k.from, k.live]), [["agent:scout", true]]);
 	// What the pointer over it says, and what it is wired to: a board for all agents to every agent.
-	assert.deepEqual(tipOf(l.byId.get("board:7"), s, T0), ["scout's board: board of a conversation of scout", "2 in progress, 5 open, 3 done", "4 notes", "read it in the Board tab beside the conversation"]);
+	assert.deepEqual(tipOf(l.byId.get("board:7"), s, T0), ["scout: board of a conversation of scout", "2 in progress, 5 to do, 3 done", "4 notes", "read it in the Board tab beside the conversation"]);
 	assert.deepEqual(wiringOf("board:8", s, l).map((k: any) => k.from).sort(), ["agent:books", "agent:coder", "agent:main", "agent:scout"]);
 	assert.deepEqual(wiringOf("board:7", s, l).map((k: any) => k.from), ["agent:scout"]);
-	// Something happened on a board: its box is lit for a moment.
+	// Its tasks are tiles in its card: a column for each piece of work, and what comes after it under it.
+	const t = (id: number, st: string, more: object = {}) => ({ id, state: st, after: [] as number[], ...more });
+	const checked = board(7, { open: 3, taken: 1, done: 2, tasks: [t(1, "done"), t(2, "taken", { worker: 2, agent: "scout" }), t(3, "open"), t(4, "done", { after: [1] }), t(5, "waiting", { after: [2] }), t(6, "waiting", { after: [3] })] });
+	const tiles = tilesOf(checked, 108);
+	assert.equal(tiles.size, 8, "few tasks: large tiles");
+	assert.deepEqual(tiles.tiles.map((k: any) => [k.task.id, k.x, k.y]), [[1, 0, 0], [2, 10, 0], [3, 20, 0], [4, 0, 10], [5, 10, 10], [6, 20, 10]], "a check stands under the work it checks");
+	assert.equal(tiles.more, 0);
+	// Twelve pieces of work with a check each fill one band; two hundred tasks are small tiles in rows, and nothing is drawn outside the card.
+	const many = (n: number, checks: boolean) => board(11, { open: n, tasks: [...Array.from({ length: n }, (_, i) => t(i + 1, "open")), ...(checks ? Array.from({ length: n }, (_, i) => t(n + i + 1, "waiting", { after: [i + 1] })) : [])] });
+	assert.deepEqual([tilesOf(many(12, true), 108).size, Math.max(...tilesOf(many(12, true), 108).tiles.map((k: any) => k.y))], [7, 9]);
+	const big = tilesOf(many(200, false), 108);
+	assert.deepEqual([big.size, big.more, big.tiles.every((k: any) => k.x + big.size <= 108)], [4, 0, true]);
+	assert.ok(big.height <= 12 * 5);
+	assert.ok(tilesOf(many(400, false), 108).more > 0, "more than fit are counted, not drawn over the edge");
+	assert.equal(tilesOf(board(12), 108).height, 0);
+	// The card is as high as its tiles need, and the pointer over a tile says which task it is and how it stands.
+	const s2 = state(works, T0, { boards: [checked] });
+	const l2 = layoutOf(s2, new Set(), T0);
+	const card = l2.byId.get("board:7")!;
+	assert.equal(card.h, 44 + 12 + tiles.height + 10);
+	assert.equal(tileAt(card, { x: card.x + 10 + 12, y: card.y + 54 + 3 })?.id, 2);
+	assert.equal(tileAt(card, { x: card.x + 10 + 60, y: card.y + 54 + 3 }), undefined);
+	assert.deepEqual(tipOf(card, s2, T0, { x: card.x + 10 + 12, y: card.y + 54 + 13 }), ["Task 5 on scout's board", "waiting for task 2"]);
+	assert.equal(taskWords(checked.tasks[1], checked), "in progress, a sub-agent of scout has it, followed by task 5");
+	assert.equal(taskWords(checked.tasks[3], checked), "done, comes after task 1");
+	// The sub-agent that has a task is called by the task's number, which is its tile's.
+	assert.ok(l2.byId.get("agent:scout")!.lines!.some((x: any) => x.text === "Task 2: searching files"), JSON.stringify(l2.byId.get("agent:scout")!.lines));
+	// A board that waits for an answer says so in the agent's card, in a line that fits it.
+	const asking = layoutOf(state(works, T0, { boards: [board(7, { open: 1, blocked: 1, workers: [2] })] }), new Set(), T0);
+	assert.ok(asking.byId.get("agent:scout")!.lines!.some((x: any) => x.text === "Board: a task waits for an answer" && x.tone === "ask"));
+	// It draws: the bar and the tiles, in light and in dark, without a throw.
+	for (const dark of [false, true]) draw(fakeCtx(), { ...s2, dark }, l2, T0, { recent: new Recent(), cam: { x: l2.w / 2, y: 200, z: 1 }, view: { w: 560, h: 600 } });
+	// Something happened on a board: its box is lit for a moment.	// Something happened on a board: its box is lit for a moment.
 	const recent = new Recent();
 	recent.hear({ k: "board", board: 7, change: "posted", agent: "scout" }, T0);
 	assert.equal(recent.hot.get("board:7"), T0);

@@ -37,8 +37,8 @@ before(async () => {
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ updates: false }));
-	// What the sub-agents do: one leaves a note with a field and markup in it, one asks a person.
-	mock.state.scripts.a = [{ tools: [{ name: "board_post", args: { text: "The reference is tokens.css <b>not bold</b>", data: '{"file":"tokens.css"}' } }] }, { text: "a is consistent" }];
+	// What the sub-agents do: one leaves a note with markup in it, one asks a question.
+	mock.state.scripts.a = [{ tools: [{ name: "board_post", args: { text: "The reference is tokens.css <b>not bold</b>" } }] }, { text: "a is consistent" }];
 	mock.state.scripts.b = [{ tools: [{ name: "board_done", args: { id: 2, outcome: "blocked", result: "teal or blue?" } }] }, { text: "asked" }];
 
 	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
@@ -61,7 +61,7 @@ test("the Board tab appears with a conversation's board and shows who has what; 
 	await sees(`${panel} [data-slot=tabs-trigger] >> text=Agent`);
 	assert.equal(await page.locator(`${panel} [data-slot=tabs-trigger]`, { hasText: "Board" }).count(), 0);
 
-	await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "subagent", args: { pool: true, tasks: ["check folder a @@REF:a@@", "check folder b @@REF:b@@"] } }] }, { text: "Both folders are checked." }], "Check the folders. "));
+	await page.fill("[data-slot=composer] textarea", mockMsg([{ tools: [{ name: "subagent", args: { pool: true, note: "Measure against tokens.css", tasks: ["check folder a @@REF:a@@", "check folder b @@REF:b@@"] } }] }, { text: "Both folders are checked." }], "Check the folders. "));
 	await page.press("[data-slot=composer] textarea", "Enter");
 	await sees("text=Both folders are checked.", 30_000);
 
@@ -72,10 +72,12 @@ test("the Board tab appears with a conversation's board and shows who has what; 
 	await tab.click();
 	await sees(`${panel} [data-task="1"][data-state=done]`);
 	await sees(`${panel} [data-task="2"][data-state=blocked]`);
-	assert.match(await page.locator(`${panel} [data-task="2"]`).innerText(), /Needs your answer[\s\S]*teal or blue\?/);
+	assert.match(await page.locator(`${panel} [data-task="2"]`).innerText(), /Waits for an answer[\s\S]*teal or blue\?/);
+	// What the agent told all of its sub-agents stands there once, with the tasks it is for.
+	assert.match(await page.locator(`${panel} [data-note="3"]`).innerText(), /Measure against tokens\.css[\s\S]*for tasks 1–2/);
 	// What an agent wrote is text: its markup is shown, not carried out.
-	const note = page.locator(`${panel} [data-note="3"]`);
-	assert.match(await note.innerText(), /The reference is tokens\.css <b>not bold<\/b>[\s\S]*file: tokens\.css/);
+	const note = page.locator(`${panel} [data-note="4"]`);
+	assert.match(await note.innerText(), /The reference is tokens\.css <b>not bold<\/b>/);
 	assert.equal(await note.locator("b").count(), 0);
 	await shot("board-blocked");
 

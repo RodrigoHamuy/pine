@@ -22,7 +22,7 @@ test("a home gets pine's views once, the module views import, a tsconfig for the
 		// The guide for whoever writes a view, also a coding agent opened in the folder: it names what the module really has.
 		const guide = fs.readFileSync(path.join(dir, "AGENTS.md"), "utf8");
 		const kit = fs.readFileSync(path.join(dir, ".pine", "view.ts"), "utf8");
-		for (const name of ["defineView", "running", "unsettled", "frame", "ease", "union", "inside", "along", "lengthOf", "hashOf", "seeded", "mix", "shade", "rgb"]) assert.ok(guide.includes("`" + name) && new RegExp(`export (function|const) ${name}\\b`).test(kit), `${name} is in the guide and in the module`);
+		for (const name of ["defineView", "running", "unsettled", "progress", "tasksOf", "tiling", "stages", "frame", "ease", "union", "inside", "along", "lengthOf", "hashOf", "seeded", "mix", "shade", "rgb"]) assert.ok(guide.includes("`" + name) && new RegExp(`export (function|const) ${name}\\b`).test(kit), `${name} is in the guide and in the module`);
 		for (const field of ["agents", "work", "inputs", "schedules", "boards", "selected", "dark", "focused"]) assert.ok(guide.includes(`\`${field}\``) && new RegExp(`\\b${field}\\??:`).test(kit), `ViewState.${field}`);
 		// It is the owner's while pine's guide is the same: a change is kept, and one that was taken out comes back.
 		fs.writeFileSync(path.join(dir, "AGENTS.md"), "mine");
@@ -148,4 +148,36 @@ test("the owner's UI lists the views and sets ui.view, or off; a view that is no
 	assert.equal((await call("GET", "/views")).body.view, "office");
 	// Without the token, nothing: a view's code is the owner's.
 	assert.equal((await fetch(`${base}/views/office`)).status, 401);
+});
+
+test("the view kit lays a board's tasks out as tiles: a check under the work it checks, larger tiles where they fit, and what does not fit is counted", async () => {
+	const { tiling, stages, progress, tasksOf, unsettled } = await import("../src/view-kit.ts");
+	const t = (id: number, state: any, after: number[] = []) => ({ id, state, after });
+	const board = (tasks: any[], more: object = {}): any => ({ id: 1, scope: "conversation", open: 0, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [], tasks, ...more });
+	// Three pieces of work and a check of each: three columns, the check under its work.
+	const checked = board([t(1, "done"), t(2, "taken"), t(3, "open"), t(4, "done", [1]), t(5, "waiting", [2]), t(6, "waiting", [3])], { open: 3, taken: 1, done: 2 });
+	const g = tiling(checked, 108, 60, [[8, 2], [6, 2], [4, 1]], 3);
+	assert.deepEqual([g.size, g.gap, g.more, g.height], [8, 2, 0, 18]);
+	assert.deepEqual(g.tiles.map((k) => [k.task.id, k.x, k.y]), [[1, 0, 0], [2, 10, 0], [3, 20, 0], [4, 0, 10], [5, 10, 10], [6, 20, 10]]);
+	assert.deepEqual(stages(checked).map((row) => row.map((k) => k.id)), [[1, 2, 3], [4, 5, 6]]);
+	assert.equal(progress(checked), 2 / 6);
+	assert.equal(unsettled(checked), 4);
+	// A second check of the same work goes further down its column; a task after two others stands under the first.
+	assert.deepEqual(tiling(board([t(1, "done"), t(2, "open", [1]), t(3, "open", [1]), t(4, "open"), t(5, "waiting", [4, 1])]), 100, 60, [[8, 2]]).tiles.map((k) => [k.task.id, k.x, k.y]), [[1, 0, 0], [2, 0, 10], [3, 0, 20], [4, 10, 0], [5, 10, 10]]);
+	// Many tasks: the largest tile with which all fit; where a little smaller keeps them in one band, that one.
+	const many = (n: number) => board(Array.from({ length: n }, (_, i) => t(i + 1, "open")));
+	assert.equal(tiling(many(11), 108, 60, [[8, 2], [7, 2], [6, 2]]).size, 8);
+	assert.deepEqual([tiling(many(12), 108, 60, [[8, 2], [7, 2], [6, 2]]).size, Math.max(...tiling(many(12), 108, 60, [[8, 2], [7, 2], [6, 2]]).tiles.map((k) => k.y))], [7, 0], "twelve stand in one row of slightly smaller tiles");
+	assert.equal(tiling(many(12), 24, 13, [[2, 1], [1, 1]]).size, 2, "a tile half the size is not a little smaller: two bands of the larger");
+	// More than fit even in the smallest: the rest is counted, and nothing lies outside the box.
+	const over = tiling(many(500), 108, 60, [[8, 2], [4, 1]]);
+	assert.equal(over.size, 4);
+	assert.ok(over.more > 0 && over.tiles.length + over.more === 500);
+	assert.ok(over.tiles.every((k) => k.x + over.size <= 108 && k.y + over.size <= 60));
+	// A board without tasks, and a board as an older app tells it (no `tasks`), take no room.
+	assert.deepEqual(tiling(board([]), 108, 60, [[8, 2]]), { size: 0, gap: 0, tiles: [], height: 0, more: 0 });
+	const old = board([]);
+	delete old.tasks;
+	assert.deepEqual(tasksOf(old), []);
+	assert.equal(tiling(old, 108, 60, [[8, 2]]).tiles.length, 0);
 });

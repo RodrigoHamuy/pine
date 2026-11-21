@@ -73,12 +73,12 @@ test("a view is told of conversations, branches and worktrees as numbers, of sch
 		ev("agent/books/tool", { task: 7, agent: "books", session, root: 7, depth: 0, phase: "start", tool: "read", subject: "/Users/owner/.pine/agents/books/skills/invoices/SKILL.md" }),
 		ev("agent/books/steered", { task: 7, agent: "books", session, by: 8, kind: "prompt", prompt: `and ${SECRET} too`, depth: 0 }),
 		ev("schedule/daily", { name: "daily", task: `sum up ${SECRET}` }, { source: "timer" }),
-		ev("pine/board", { board: 3, scope: "local", agent: "books", session, name: "", change: "posted", text: SECRET }, { source: "pine" }),
+		ev("pine/board", { board: 3, scope: "local", agent: "books", session, name: "", change: "posted", item: 11, kind: "task", state: "open", text: SECRET }, { source: "pine" }),
 		ev("pine/board", { board: 4, scope: "global", agent: "", session: "", name: "bugs", change: `rewritten ${SECRET}` }, { source: "pine" }),
 	];
 	// The boards as the daemon lists them: a view is told numbers, and a name only if it is what pine makes of one.
 	w.setBoards([
-		{ id: 3, scope: "local", agent: "books", session, name: "", counts: { open: 2, taken: 1, done: 4, failed: 0, blocked: 1, notes: 3 }, runs: [7, 99], tasks: [{ text: SECRET }] },
+		{ id: 3, scope: "local", agent: "books", session, name: "", counts: { open: 2, taken: 1, done: 4, failed: 0, blocked: 1, notes: 3 }, runs: [7, 99], tasks: [{ id: 11, state: "done", after: [], text: SECRET }, { id: 12, state: "taken", after: [], run: 7, holder: "books", text: SECRET }, { id: 13, state: "open", waits: true, after: [11, 12, SECRET], result: SECRET }, { id: 14, state: `open ${SECRET}`, after: [] }, { text: SECRET }] },
 		{ id: 4, scope: "global", agent: "", session: "", name: "bugs", counts: { open: 1 }, runs: [] },
 		{ id: 5, scope: "agent", agent: "books", session: "", name: `Notes about ${SECRET}`, counts: { open: `${SECRET}` }, runs: [SECRET] },
 	]);
@@ -103,14 +103,18 @@ test("a view is told of conversations, branches and worktrees as numbers, of sch
 	assert.ok(happened.some((h) => h.k === "skill" && h.skill === "invoices"));
 	assert.ok(happened.some((h) => h.k === "said" && h.work === 7));
 	assert.ok(happened.some((h) => h.k === "scheduled" && h.name === "daily" && h.agent === "books"));
-	// The boards: whose each is, by the conversation's number; counts; the work that has a task; never a text.
+	// The boards: whose each is, by the conversation's number; counts; the work that has a task; each task by its
+	// number, one of six words, what it comes after and who has it; never a text.
 	assert.deepEqual(state.boards, [
-		{ id: 3, scope: "conversation", agent: "books", conversation: tax.id, open: 2, taken: 1, done: 4, failed: 0, blocked: 1, notes: 3, workers: [7] },
-		{ id: 4, scope: "all", name: "bugs", open: 1, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [] },
-		{ id: 5, scope: "agent", agent: "books", open: 0, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [] },
+		{
+			id: 3, scope: "conversation", agent: "books", conversation: tax.id, open: 2, taken: 1, done: 4, failed: 0, blocked: 1, notes: 3, workers: [7],
+			tasks: [{ id: 11, state: "done", after: [] }, { id: 12, state: "taken", after: [], worker: 7, agent: "books" }, { id: 13, state: "waiting", after: [11, 12] }],
+		},
+		{ id: 4, scope: "all", name: "bugs", open: 1, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [], tasks: [] },
+		{ id: 5, scope: "agent", agent: "books", open: 0, taken: 0, done: 0, failed: 0, blocked: 0, notes: 0, workers: [], tasks: [] },
 	]);
 	assert.equal(work.board, 3, "the work that has one of its tasks");
-	assert.deepEqual(happened.filter((h) => h.k === "board"), [{ k: "board", board: 3, change: "posted", agent: "books" }], "a change that is none of the five words is not passed on");
+	assert.deepEqual(happened.filter((h) => h.k === "board"), [{ k: "board", board: 3, change: "posted", agent: "books", task: 11, state: "open" }], "a change that is none of the five words is not passed on");
 	assert.ok(happened.some((h) => h.k === "branched" && h.agent === "books" && h.from === tax.id && h.worktree === false), "a branch made while the panel is open is news");
 	// A conversation that reads outside content after the first look is news too.
 	assert.deepEqual(w.setRooms([{ agent: "books", session, busy: true, mode: "safe", trust: "owner" }]), []);

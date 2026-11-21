@@ -232,6 +232,7 @@ export interface SubmitOptions {
 	/** See TaskMeta.board and TaskMeta.boardTask. */
 	board?: string;
 	boardTask?: number;
+	boardShown?: number;
 }
 
 /** Capabilities of one run, decided by who started it. */
@@ -812,6 +813,7 @@ export class AgentManager {
 				// The board of the conversation that handed this on, for a run of its own; what that run starts works on it too.
 				board: ephemeral && trust === "owner" ? (o.board ?? o.parent?.meta.board) : undefined,
 				boardTask: ephemeral ? o.boardTask : undefined,
+				boardShown: ephemeral ? o.boardShown : undefined,
 			},
 		});
 		task.meta.root = o.parent?.meta.root ?? o.parent?.id ?? task.id;
@@ -2382,6 +2384,8 @@ export class AgentManager {
 	 * stays taken because an agent did not say what became of it.
 	 */
 	private boardsAfter(task: Task): void {
+		// A conversation that is stopped takes its pool's sub-agents with it, also the ones an earlier turn started.
+		if (task.status === "cancelled" && task.kind !== "subagent" && !task.session.startsWith("_t")) this.stopPool(task.agent, task.session);
 		const held = this.boards.heldBy(task.id);
 		if (!held.length) {
 			if (task.session.startsWith("_t") && task.kind !== "subagent") this.boards.dropConversation(task.agent, task.session);
@@ -2407,17 +2411,24 @@ export class AgentManager {
 	 * coming from outside.
 	 */
 	private boardChanged(board: Board, what: "posted" | "taken" | "released" | "settled" | "removed", item?: BoardItem, cause?: PineEvent | null): void {
-		this.bus.publish("pine/board", { board: board.id, scope: board.scope, agent: board.agent, session: board.session, name: board.name, change: what }, { persist: false, source: "pine" });
+		// (Which post changed and how it stands now, for a UI that moves it: a number and a state, nothing of what it says.)
+		this.bus.publish("pine/board", { board: board.id, scope: board.scope, agent: board.agent, session: board.session, name: board.name, change: what, ...(item ? { item: item.id, kind: item.kind, ...(item.kind === "task" && what !== "removed" ? { state: item.state } : {}) } : {}) }, { persist: false, source: "pine" });
 		if (board.scope === "local" || !board.name || !item || what === "removed" || what === "taken") return;
 		// A task that can be taken (new, or open again), a note, or what became of a task.
 		const kind = what === "settled" ? item.state : item.kind === "note" ? "note" : this.boards.ready(item) ? "task" : undefined;
 		if (!kind) return;
 		const said = kind === "task" || kind === "note" ? item.text : (item.result ?? "");
-		const line = kind === "task" ? `Task #${item.id} on the board "${board.name}" is ready to be taken` : kind === "note" ? `A note on the board "${board.name}"` : `Task #${item.id} on the board "${board.name}" is ${kind}`;
+		// A task that is open again comes with what was noted about it (the answer to its question): whoever is woken
+		// for it may be the one that asked, and must not take it for the task it remembers.
+		const about = kind === "task" && what === "released" ? this.boards.items(board.id, { about: item.id }).slice(-3) : [];
+		const line = kind === "task" ? `Task #${item.id} on the board "${board.name}" is ${about.length ? "ready to be taken again, with what was noted about it since" : "ready to be taken"}` : kind === "note" ? `A note on the board "${board.name}"` : `Task #${item.id} on the board "${board.name}" is ${kind}`;
+		const notes = about.length ? `\n\nNotes about it:\n${about.map((x) => `- ${x.by === "owner" ? "the owner" : x.by}: ${truncate(x.text.replace(/\s+/g, " "), 800)}`).join("\n")}` : "";
+		// The event has the trust of everything it carries, never more.
+		const clean = [item, ...about].every((x) => x.trust === "owner" && !x.tainted);
 		this.bus.publish(
 			`board/${board.name}/${kind}`,
-			{ board: board.name, scope: board.scope, ...(board.agent ? { owner: board.agent } : {}), id: item.id, by: item.by, ...(item.holder ? { holder: item.holder } : {}), text: `${line}:\n${truncate(said, 2000)}` },
-			{ source: item.by === "owner" ? "owner" : `agent:${item.by}`, cause: cause ?? undefined, hop: Boolean(cause), trust: item.trust === "owner" && !item.tainted ? "owner" : "untrusted" },
+			{ board: board.name, scope: board.scope, ...(board.agent ? { owner: board.agent } : {}), id: item.id, by: item.by, ...(item.holder ? { holder: item.holder } : {}), text: `${line}:\n${truncate(said, 2000)}${notes}` },
+			{ source: item.by === "owner" ? "owner" : `agent:${item.by}`, cause: cause ?? undefined, hop: Boolean(cause), trust: clean ? "owner" : "untrusted" },
 		);
 	}
 
@@ -2425,8 +2436,16 @@ export class AgentManager {
 	// token is the owner: every board is theirs to read, and what they post is theirs.
 
 	private boardBrief(b: Board) {
-		// (`runs`: the runs that hold one of its tasks now, for a UI that draws who works on a board.)
-		return { ...b, counts: this.boards.counts(b.id), runs: this.boards.items(b.id, { kind: "task" }).flatMap((t) => (t.state === "taken" && t.run !== undefined ? [t.run] : [])) };
+		// (`runs`: the runs that hold one of its tasks now, for a UI that draws who works on a board. `tasks`: where
+		// each task stands, what it comes after and who has it, without a word of what it says: for a UI that draws
+		// the board itself. The newest 200.)
+		const all = this.boards.items(b.id, { kind: "task" });
+		return {
+			...b,
+			counts: this.boards.counts(b.id),
+			runs: all.flatMap((t) => (t.state === "taken" && t.run !== undefined ? [t.run] : [])),
+			tasks: all.slice(-200).map((t) => ({ id: t.id, state: t.state, after: t.after, waits: t.state === "open" && this.boards.waitsFor(t).length > 0, ...(t.state === "taken" && t.run !== undefined ? { run: t.run } : {}), ...(t.state === "taken" && t.holder ? { holder: t.holder } : {}) })),
+		};
 	}
 
 	boardList() {
@@ -2475,25 +2494,57 @@ export class AgentManager {
 	 * settled) so that it can be taken again, `answer` answers the question a blocked task waits on
 	 * and opens it again, `done` settles it by hand, `remove` takes a task or a note off the board.
 	 */
+	/**
+	 * What a conversation was told of its board's tasks already, by a pool call: a task's number and when
+	 * it last changed. A pool returns more than once (whenever a sub-agent asks), and says each result once.
+	 * In memory: after a restart a conversation is told once more what is settled on its board.
+	 */
+	private poolTold = new Map<number, Map<number, number>>();
+	/** The boards a pool is at work on now: one at a time, and a second call adds its tasks to the first. */
+	pooling = new Set<number>();
+	toldOf(board: number): Map<number, number> {
+		let told = this.poolTold.get(board);
+		if (!told) this.poolTold.set(board, (told = new Map()));
+		return told;
+	}
+
+	/** What a pool's sub-agent was shown of its board when it was started, as the start of what it has seen there. */
+	private shownWith(task: Task): Array<[number, number]> {
+		const item = task.meta.boardTask !== undefined && task.meta.boardShown ? this.boards.item(task.meta.boardTask) : undefined;
+		return item ? [[item.board, task.meta.boardShown!]] : [];
+	}
+
+	/** The sub-agent a pool started for a task and that still works on it, if there is one. */
+	poolWorker(item: BoardItem): Task | undefined {
+		const run = item.state === "taken" && item.run !== undefined ? this.tasks.get(item.run) : undefined;
+		return run?.meta.boardTask === item.id && run.kind === "subagent" && (run.status === "running" || run.status === "pending") ? run : undefined;
+	}
+
+	/** Stop the sub-agents that work through a conversation's own board. Their tasks are open again (`boardsAfter`). */
+	private stopPool(agent: string, session: string): void {
+		const board = this.boards.find("local", agent, session, "");
+		if (!board) return;
+		for (const item of this.boards.items(board.id, { kind: "task" })) {
+			const worker = this.poolWorker(item);
+			if (worker) this.cancel(worker.id);
+		}
+	}
+
 	boardAct(itemId: number, action: unknown, text?: unknown): { ok: true } {
 		const item = this.boards.item(itemId);
 		if (!item) throw new Error("there is nothing with that number on a board");
-		const board = this.boards.get(item.board)!;
 		// A sub-agent that was started for this task alone is stopped when the task is taken from it.
 		const stopWorker = () => {
-			const run = item.state === "taken" && item.run !== undefined ? this.tasks.get(item.run) : undefined;
-			if (run?.meta.boardTask === item.id && (run.status === "running" || run.status === "pending")) this.cancel(run.id);
+			const worker = this.poolWorker(item);
+			if (worker) this.cancel(worker.id);
 		};
 		if (action === "remove") return stopWorker(), this.boards.removeItem(itemId), { ok: true };
 		if (item.kind !== "task") throw new Error("that is a note: it can only be removed");
 		if (action === "reopen" || action === "answer") {
-			if (action === "answer") {
-				const answer = String(text ?? "").trim();
-				if (!answer) throw new Error("give the answer");
-				this.boards.post(board, { kind: "note", text: `${item.result ? `To "${truncate(item.result, 300)}": ` : ""}${answer}`, by: "owner", trust: "owner", about: item.id });
-			}
+			if (action === "answer" && !String(text ?? "").trim()) throw new Error("give the answer");
 			stopWorker();
-			this.boards.reopen(itemId);
+			if (action === "answer") this.boards.answer(itemId, String(text), { by: "owner", trust: "owner" });
+			else this.boards.reopen(itemId);
 			return { ok: true };
 		}
 		if (action === "done") return this.boards.settle(itemId, "done", String(text ?? "").trim() || "settled by the owner"), { ok: true };
@@ -2593,7 +2644,7 @@ export class AgentManager {
 			key: task.session,
 			perm: `${agent.id}:${this.permSession(task)}`,
 			board: (ephemeral && trust === "owner" && task.meta.board) || `${agent.id}:${this.permSession(task)}`,
-			boardSeen: new Map(),
+			boardSeen: new Map(this.shownWith(task)),
 			steering: [],
 			folder,
 			ephemeral,

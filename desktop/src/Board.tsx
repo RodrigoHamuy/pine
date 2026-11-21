@@ -29,7 +29,7 @@ export const boardLabel = (b: BoardBrief) => (b.scope === "global" ? `${b.name} 
 export function taskLine(t: BoardItem): string {
 	if (t.state === "taken") return t.sub ? `A sub-agent of ${t.holder ?? "the agent"} is working on it` : `${t.holder ?? "An agent"} is working on it`;
 	if (t.state === "open") return t.waits.length ? `Waiting for ${t.waits.map((w) => `#${w}`).join(", ")}` : "Open";
-	return t.state === "done" ? "Done" : t.state === "failed" ? "Failed" : "Needs your answer";
+	return t.state === "done" ? "Done" : t.state === "failed" ? "Failed" : "Waits for an answer";
 }
 
 function TaskIcon({ task }: { task: BoardItem }) {
@@ -62,6 +62,25 @@ function Entry({ label, placeholder, icon: Icon, send }: { label: string; placeh
 }
 
 /** The fields of a note or a task, each as a small label: what agents compare without reading prose. */
+/** Task numbers the way a person writes them: "2–7, 9". */
+export function spans(ids: number[]): string {
+	const sorted = [...new Set(ids)].sort((a, b) => a - b);
+	const out: string[] = [];
+	for (let i = 0; i < sorted.length; i++) {
+		let j = i;
+		while (j + 1 < sorted.length && sorted[j + 1] === sorted[j] + 1) j++;
+		out.push(j > i ? `${sorted[i]}–${sorted[j]}` : String(sorted[i]));
+		i = j;
+	}
+	return out.join(", ");
+}
+
+/** A field as words: the tasks a pool's note came with are said as "for tasks 2–7", everything else as it is. */
+function fieldText(k: string, v: unknown): string {
+	if (k === "tasks" && Array.isArray(v) && v.every((x) => typeof x === "number")) return `for task${v.length === 1 ? "" : "s"} ${spans(v as number[])}`;
+	return `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`;
+}
+
 function Fields({ data }: { data?: Record<string, unknown> }) {
 	const fields = Object.entries(data ?? {}).slice(0, 8);
 	if (!fields.length) return null;
@@ -69,9 +88,7 @@ function Fields({ data }: { data?: Record<string, unknown> }) {
 		<span className="flex flex-wrap gap-1">
 			{fields.map(([k, v]) => (
 				<Badge variant="outline" key={k} className="max-w-full font-mono">
-					<span className="truncate">
-						{k}: {typeof v === "string" ? v : JSON.stringify(v)}
-					</span>
+					<span className="truncate">{fieldText(k, v)}</span>
 				</Badge>
 			))}
 		</span>
@@ -185,7 +202,7 @@ function Note({ note, remove }: { note: BoardItem; remove?: () => void }) {
 /** How a board stands, in a line. */
 function countsLine(b: BoardBrief): string {
 	const c = b.counts;
-	const parts = [c.taken ? `${c.taken} in progress` : "", c.open ? `${c.open} open` : "", c.blocked ? `${c.blocked} waiting for you` : "", c.failed ? `${c.failed} failed` : "", c.done ? `${c.done} done` : ""].filter(Boolean);
+	const parts = [c.taken ? `${c.taken} in progress` : "", c.open ? `${c.open} open` : "", c.blocked ? `${c.blocked} waiting for an answer` : "", c.failed ? `${c.failed} failed` : "", c.done ? `${c.done} done` : ""].filter(Boolean);
 	return parts.join(" · ") || (c.notes ? plural(c.notes, "note") : "empty");
 }
 

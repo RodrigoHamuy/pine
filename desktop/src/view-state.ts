@@ -71,6 +71,9 @@ function conversations(world: World, agent: string): ViewConversation[] {
 	});
 }
 
+/** What a task's state is called when pine says one changed. */
+const TASK_STATES = ["open", "taken", "blocked", "done", "failed"];
+
 /** A board's name as it is, if it is what pine makes of one: lowercase letters, digits, "-" and "_". */
 const boardName = (n: string) => (/^[a-z0-9_-]{1,40}$/.test(n) ? n : undefined);
 
@@ -89,6 +92,11 @@ function boards(world: World): ViewBoard[] {
 				...(talk !== undefined ? { conversation: talk } : {}),
 				open: b.counts.open, taken: b.counts.taken, done: b.counts.done, failed: b.counts.failed, blocked: b.counts.blocked, notes: b.counts.notes,
 				workers: b.runs.filter((r) => world.jobs.has(r)),
+				// Each task: a number, one of six words, the numbers it comes after, and the work that has it.
+				tasks: b.tasks.map((t) => {
+					const job = t.run !== undefined ? world.jobs.get(t.run) : undefined;
+					return { id: t.id, state: t.state, after: t.after, ...(job ? { worker: job.id, ...(world.places.has(job.agent) ? { agent: job.agent } : {}) } : {}) };
+				}),
 			};
 		})
 		.sort((a, b) => b.taken + b.open + b.blocked - (a.taken + a.open + a.blocked) || a.id - b.id);
@@ -158,7 +166,7 @@ export function happeningsOf(batch: Array<{ topic: string; payload: any; source?
 			const sc = typeof p.name === "string" ? world.schedules.find((x) => x.name === p.name) : undefined;
 			out.push({ k: "event", input: "clock" }, { k: "scheduled", ...(sc ? { name: sc.name } : {}), ...(sc && world.places.has(sc.scope) ? { agent: sc.scope } : {}) });
 		}
-		else if (e.topic === "pine/board" && typeof p.board === "number" && ["posted", "taken", "released", "settled", "removed"].includes(p.change)) out.push({ k: "board", board: p.board, change: p.change, ...(typeof p.agent === "string" && world.places.has(p.agent) ? { agent: p.agent } : {}) });
+		else if (e.topic === "pine/board" && typeof p.board === "number" && ["posted", "taken", "released", "settled", "removed"].includes(p.change)) out.push({ k: "board", board: p.board, change: p.change, ...(typeof p.agent === "string" && world.places.has(p.agent) ? { agent: p.agent } : {}), ...(p.kind === "task" && typeof p.item === "number" ? { task: p.item, ...(TASK_STATES.includes(p.state) ? { state: p.state } : {}) } : {}) });
 		else if (e.topic === "approval/requested" && typeof p.task === "number") out.push({ k: "asked", work: p.task, agent: String(p.agent ?? "") });
 		else if (e.topic === "approval/decided") out.push({ k: "decided", allowed: p.allow === true });
 		if (ns === "agent" && kind === "goal" && typeof p.session === "string" && world.places.has(who)) {

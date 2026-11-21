@@ -195,7 +195,7 @@ test("what just happened shows where it happened: a skill at the shelf, a schedu
 test("a board its sub-agents work through shows as pips under the agent's bubble, a sub-agent says it has a task, and a word at the pinboard says what happened", () => {
 	const { world, office } = building(3);
 	run(world, office, 0, 200);
-	const board = { id: 7, scope: "conversation" as const, agent: "a01", conversation: 1, open: 5, taken: 2, done: 3, failed: 0, blocked: 0, notes: 4, workers: [2] };
+	const board = { id: 7, scope: "conversation" as const, agent: "a01", conversation: 1, open: 5, taken: 2, done: 3, failed: 0, blocked: 0, notes: 4, workers: [2], tasks: [] };
 	const s = { ...told(world), boards: [board] };
 	const job = (more: object) => ({ id: 1, agent: "a01", copy: false, depth: 0, from: { k: "you" as const }, doing: "waiting" as const, waitingOn: [], started: start, tools: 0, asking: false, held: false, outside: false, branch: false, worktree: false, conversation: 1, ...more });
 	const said = sayOf(job({}), s, start);
@@ -203,18 +203,39 @@ test("a board its sub-agents work through shows as pips under the agent's bubble
 	// Its own list of steps comes first, and so does who it works for.
 	assert.deepEqual(sayOf(job({ steps: { done: 1, total: 2 } }), s, start).steps, { done: 1, total: 2 });
 	assert.equal(sayOf(job({ from: { k: "agent", id: "a00" } }), s, start).note, "for a00");
-	assert.equal(sayOf(job({ id: 2, copy: true, doing: "thinking", board: 7 }), s, start).note, "a task of the board");
+	assert.equal(sayOf(job({ id: 2, copy: true, doing: "thinking", board: 7 }), s, start).note, "a task of the board", "a view that is told no tasks still says it has one");
 	// A board whose tasks are all settled says nothing, and neither does another conversation's.
 	assert.equal(sayOf(job({}), { ...s, boards: [{ ...board, open: 0, taken: 0 }] }, start).steps, undefined);
 	assert.equal(sayOf(job({ conversation: 2 }), s, start).steps, undefined);
 	assert.equal(toolSay("board_post").text, "posting on the board");
-	// Forty tasks posted at once are one word at the pinboard, not forty.
+	// A sub-agent that has one of its tasks says which.
+	const t = (id: number, st: any, more: object = {}): any => ({ id, state: st, after: [] as number[], ...more });
+	const tasks = [t(1, "done"), t(2, "taken", { worker: 2, agent: "a01" }), t(3, "open"), t(4, "blocked"), t(5, "failed"), t(6, "waiting", { after: [3] })];
+	const full = { ...board, open: 2, taken: 1, done: 1, failed: 1, blocked: 1, tasks };
+	const s2: any = { ...s, boards: [full, { ...board, id: 8, scope: "all" as const, agent: undefined, conversation: undefined, name: "bugs", tasks: [t(1, "open")] }] };
+	assert.equal(sayOf(job({ id: 2, copy: true, doing: "thinking", board: 7 }), s2, start).note, "task 2 of the board");
+	// The board stands in the agent's room while it has work on it, a moment longer when all is done, and then no more.
+	assert.equal(office.boardOf(s2, "a01", start)?.id, 7);
+	assert.equal(office.boardOf(s2, "a00", start), undefined, "a board for all agents hangs in the hall, not in a room");
+	const settled: any = { ...s2, boards: [{ ...full, open: 0, taken: 0, blocked: 0, done: 5, tasks: tasks.map((x) => ({ ...x, state: "done" })) }] };
+	assert.equal(office.boardOf(settled, "a01", start + 5000)?.id, 7);
+	assert.equal(office.boardOf(settled, "a01", start + 10_000), undefined);
+	// The pointer over it finds it, and the board for all agents is named in the hall.
 	const now = start + 300;
-	for (let i = 0; i < 40; i++) office.hear({ k: "board", board: 7, change: "posted", agent: "a01" }, s, now + i);
-	office.hear({ k: "board", board: 7, change: "removed", agent: "a01" }, s, now + 2000);
-	office.hear({ k: "board", board: 7, change: "settled", agent: "a01" }, s, now + 2000);
-	assert.deepEqual(office.tags(s, now + 2000).filter((t: any) => t.k === "float").map((t: any) => t.text), ["posted on the board", "task settled"]);
-	assert.equal(office.hotAt.get("board:a01"), now + 2000);
+	office.boardOf(s2, "a01", now);
+	const room = office.rooms.get("a01")!;
+	assert.deepEqual(office.hit({ x: room.tasks.x + 5, y: room.tasks.y + 5 }), { k: "agent", id: "a01", part: "tasks" });
+	assert.ok(office.tags(s2, now).some((x: any) => x.k === "label" && x.text === "bugs"), "the board for all agents is named in the hall");
+	// Forty tasks posted at once are one word at the board, not forty; a question and a failure are always said.
+	for (let i = 0; i < 40; i++) office.hear({ k: "board", board: 7, change: "posted", agent: "a01", task: i + 1, state: "open" }, s2, now + i);
+	office.hear({ k: "board", board: 7, change: "removed", agent: "a01" }, s2, now + 2000);
+	office.hear({ k: "board", board: 7, change: "settled", agent: "a01", task: 1, state: "done" }, s2, now + 2000);
+	office.hear({ k: "board", board: 7, change: "settled", agent: "a01", task: 4, state: "blocked" }, s2, now + 2010);
+	office.hear({ k: "board", board: 7, change: "settled", agent: "a01", task: 5, state: "failed" }, s2, now + 2020);
+	office.hear({ k: "board", board: 8, change: "taken", task: 1, state: "taken" }, s2, now + 2030);
+	assert.deepEqual(office.tags(s2, now + 2030).filter((x: any) => x.k === "float").map((x: any) => x.text), ["new task", "task done", "a question", "task failed", "task taken"]);
+	assert.equal(office.hotAt.get("tasks:a01"), now + 2020);
+	assert.equal(office.hotAt.get("notice:8"), now + 2030);
 });
 
 test("a bubble says what a tool does in a view's own words, and the letters are the view's own", () => {

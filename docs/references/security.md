@@ -711,7 +711,7 @@ everything else with a fixed sentence, without asking you:
 
 | In plan mode | Examples |
 |---|---|
-| Runs | `read`, `grep`, `find`, `ls`; shell commands that only read (`ls`, `cat`, `git status`, `git diff`); web search and page reading; MCP tools their server declares read-only; `manual`, `state_get`, `sources`, `schedules`, `mcp_servers`, `skills`; `question` and `todo`; the conversation's own board (`board_read`, and `board_post`, `board_claim`, `board_done` without a board's name); `stop_program`; looking at an app (after your yes for that app) |
+| Runs | `read`, `grep`, `find`, `ls`; shell commands that only read (`ls`, `cat`, `git status`, `git diff`); web search and page reading; MCP tools their server declares read-only; `manual`, `state_get`, `sources`, `schedules`, `mcp_servers`, `skills`; `question` and `todo`; the conversation's own board (`board_read`, and `board_post`, `board_claim`, `board_done`, `board_answer` without a board's name); `stop_program`; looking at an app (after your yes for that app) |
 | Refused | `write`, `edit`, every other shell command (a redirect such as `> file` included, and every command in the background), `download`, `send`, `publish_event`, `state_set`, a post on a board with a name (`board_post` and `board_claim` with `board`), `delegate`, `subagent`, `request_access`, every tool that changes the setup (`add_...`, `remove_...`, `subscribe`), MCP tools that are not declared read-only (opening a page in the browser, the tools of a `commands` server), acting in an app |
 
 The agent is told so in the note in front of your message, answers with a plan, and is told

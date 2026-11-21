@@ -15,8 +15,13 @@
 //                       stool while others work for it, and jumps with a red ! when it asks you. On the bench:
 //                       the toy, a plan on blue paper, a glass of sand, the parcel, a jack-in-the-box with a !
 //   a to-do list        pips under the bubble: how many steps are done
-//   a board             the same pips while its sub-agents work through a board: one for each task, lit when it
-//                       is done; and a word at the pinboard when a task is posted, taken or settled
+//   a board             while its sub-agents work through a board, a cork board on a trolley stands in the bay:
+//                       a card for each task, in the order they were posted, what comes after a task (a check
+//                       of it) under it. Paper is one to do, the agent's color one in progress, green one that
+//                       is done, amber one whose worker asked a question (a ? over the board), red one that
+//                       failed; the strip on top says how far the board is, and so do the pips under the
+//                       bubble. A board for all agents hangs in the mail room, with its name. A word at a
+//                       board says what just happened on it
 //   a copy (sub-agent)  a small elf that pops up beside it, for as long as the copy works
 //   a task handed on    a present flies from elf to elf and a dotted line joins the two bays while the work
 //                       lasts; the answer flies back with a tick, or a cross
@@ -37,7 +42,7 @@
 // A camera goes where agents work. Scroll, drag or pinch to look yourself; the eye button follows again.
 // Click a bay or an elf to see it under the view; double-click to open it.
 
-import { along, type Box, type Cam, defineView, ease, frame, hashOf, inside, lengthOf, mix, type Pt, rgb, seeded, union, type ViewAgent, type ViewBoard, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
+import { along, type Box, type Cam, defineView, ease, frame, hashOf, inside, lengthOf, mix, type Pt, rgb, seeded, tasksOf, tiling, union, unsettled, type ViewAgent, type ViewBoard, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
 
 // ---- what is there, each frame ----------------------------------------------------------------------------------------
 
@@ -114,6 +119,7 @@ const TOOLS: Record<string, [Sign, string, string?]> = {
 	board_post: ["note", "posting on the board", HUE.hand],
 	board_claim: ["hand", "taking a task", HUE.hand],
 	board_done: ["tick", "settling a task", HUE.hand],
+	board_answer: ["tick", "answering a sub-agent", HUE.hand],
 	subscribe: ["mail", "subscribing to events", HUE.setup],
 	unsubscribe: ["mail", "unsubscribing", HUE.setup],
 	add_source: ["dish", "adding a source", HUE.setup],
@@ -165,7 +171,7 @@ export function sayOf(w: ViewWork, s: Now, now: number): Say {
 	// The board its sub-agents work through counts like a list of steps: a pip for each task, lit when it is done.
 	const board = !w.copy && w.conversation !== undefined ? s.boards.find((b) => b.scope === "conversation" && b.agent === w.agent && b.conversation === w.conversation && b.open + b.taken + b.blocked > 0) : undefined;
 	const tasks = board ? board.open + board.taken + board.done + board.failed + board.blocked : 0;
-	const more = { note: note ?? (w.copy && w.board !== undefined ? "a task of the board" : board ? `board: ${board.done} of ${tasks} done` : undefined), steps: w.steps ?? (board ? { done: board.done, total: tasks } : undefined) };
+	const more = { note: note ?? (w.copy && w.board !== undefined ? `task ${tasksOf(s.boards.find((b) => b.id === w.board) ?? ({} as ViewBoard)).find((t) => t.worker === w.id)?.id ?? ""} of the board`.replace("task  of", "a task of") : board ? `board: ${board.done} of ${tasks} done` : undefined), steps: w.steps ?? (board ? { done: board.done, total: tasks } : undefined) };
 	if (w.asking) return { sign: "ask", text: "needs your answer", color: HUE.ask, loud: true, ...more };
 	if (w.doing === "tool" && w.skill) return { sign: "star", text: `skill: ${w.skill}`.slice(0, 34), color: HUE.skill, ...more };
 	if (w.doing === "tool") return { ...toolSay(w.tool, w.mcp), ...more };
@@ -2299,7 +2305,7 @@ function benchToy(kind: number, x: number, base: number, t: number, color: strin
 // ---- the workshop -------------------------------------------------------------------------------------------------------
 
 /** What in a room stands for something the agent has. */
-export type Part = "rack" | "shelf" | "clocks" | "board";
+export type Part = "rack" | "shelf" | "clocks" | "board" | "tasks";
 export type Hit = { k: "agent"; id: string; part?: Part } | { k: "work"; id: number } | { k: "port"; id: string } | undefined;
 
 export const ROOM_W = 120;
@@ -2334,6 +2340,8 @@ export interface Room {
 	shelf: number;
 	win: Box[];
 	board: Box;
+	/** Where the task board stands while the agent has one with work on it: a cork board on a trolley, under the window. */
+	tasks: Box;
 	rack: number;
 	desk: number;
 	seat: Pt;
@@ -2488,6 +2496,11 @@ export class Workshop {
 	cat = { x: 0, dir: 1 as 1 | -1, state: "sit" as "sit" | "walk" | "nap", until: 0 };
 	/** When something last happened at a thing: a gumball of a machine, a letter box, a bell, a board. */
 	hotAt = new Map<string, number>();
+	/** The board that stands in an agent's room, and when it last had work on it: it stays a moment after the last task is done. */
+	private boardShown = new Map<string, { id: number; at: number }>();
+	/** The agents whose task board was drawn in this frame, and the notice boards in the hall: what the pointer can be over. */
+	private trolleys = new Set<string>();
+	private notices: Array<{ id: number; name: string; box: Box }> = [];
 	/** How you feel at your counter: asked, or glad of an answer. */
 	youMood?: { kind: "asked" | "glad"; until: number };
 	private nextWalker = 0;
@@ -2603,7 +2616,7 @@ export class Workshop {
 		const r = seeded(look.seed);
 		const toys: Room["toys"] = [];
 		for (let k = 0; k < 2; k++) for (let n = 0; n < 3; n++) if (r() < 0.85) toys.push([x + 5 + n * 5, floorY - 25 + k * 11, Math.floor(r() * 6), TOYS[Math.floor(r() * TOYS.length)]]);
-		return { agent, main, x, y, w, h, floorY, shelf: x + 3, win, board, rack, desk, seat: { x: desk - 4, y: floorY - 6 }, plant: rack - 8, clocks: { x: desk + 2, y: y + 9 }, outlet: { x: x + w - 7, y: y + 8 }, lamp: x + 51, screen, look, toys, bay, kind: Math.floor(r() * 16), lit: 0 };
+		return { agent, main, x, y, w, h, floorY, shelf: x + 3, win, board, tasks: { x: x + 24, y: floorY - 25, w: 26, h: 17 }, rack, desk, seat: { x: desk - 4, y: floorY - 6 }, plant: rack - 8, clocks: { x: desk + 2, y: y + 9 }, outlet: { x: x + w - 7, y: y + 8 }, lamp: x + 51, screen, look, toys, bay, kind: Math.floor(r() * 16), lit: 0 };
 	}
 
 	whole(): Box {
@@ -2794,13 +2807,20 @@ export class Workshop {
 				break;
 			}
 			case "board": {
-				// Something happened on a board of this agent's: a word at its pinboard, and not for every one of forty tasks.
+				// Something happened on a board: its cards change by themselves. A word says what, at the board it happened
+				// on, and not for every one of forty tasks; a question and a failure are always said.
 				const r = h.agent ? this.rooms.get(h.agent) : undefined;
-				const said = h.change === "posted" ? (["posted on the board", "note"] as const) : h.change === "taken" ? (["task taken", "hand"] as const) : h.change === "settled" ? (["task settled", "tick"] as const) : undefined;
-				if (!r || !said || now - (this.hotAt.get(`boardSaid:${h.agent}`) ?? 0) < 1200) break;
-				this.hotAt.set(`boardSaid:${h.agent}`, now);
-				this.hotAt.set(`board:${h.agent}`, now);
-				say({ x: r.board.x + 11, y: r.board.y - 2 }, said[0], said[1], HUE.hand);
+				const notice = this.notices.find((n) => n.id === h.board);
+				const at = notice ? { x: notice.box.x + notice.box.w / 2, y: notice.box.y - 2 } : r ? { x: r.tasks.x + r.tasks.w / 2, y: r.tasks.y - 2 } : undefined;
+				const key = notice ? `notice:${h.board}` : `tasks:${h.agent}`;
+				const said: readonly [string, Sign, string] | undefined =
+					h.state === "blocked" ? ["a question", "ask", HUE.ask] : h.state === "failed" ? ["task failed", "cross", "#e5484d"] : h.state === "done" ? ["task done", "tick", "#2fa868"] : h.change === "taken" ? ["task taken", "hand", HUE.hand] : h.change === "posted" ? [h.task !== undefined ? "new task" : "new note", "note", HUE.hand] : h.change === "released" ? ["task open again", "note", HUE.hand] : undefined;
+				if (!at || !said) break;
+				this.hotAt.set(key, now);
+				const loud = h.state === "blocked" || h.state === "failed";
+				if (!loud && now - (this.hotAt.get(`said:${key}`) ?? 0) < 1200) break;
+				this.hotAt.set(`said:${key}`, now);
+				say(at, said[0], said[1], said[2]);
 				break;
 			}
 			case "steps": {
@@ -3061,7 +3081,7 @@ export class Workshop {
 		for (const w of [...this.workers.values()].reverse()) if (w.box && inside(p, w.box)) return w.work !== undefined ? { k: "work", id: w.work } : { k: "agent", id: w.agent };
 		for (const room of this.rooms.values()) {
 			if (!inside(p, { x: room.x, y: room.y, w: room.w, h: room.h + SLAB })) continue;
-			const part: Part | undefined = inside(p, { x: room.rack - 1, y: room.floorY - 34, w: 12, h: 34 }) ? "rack" : inside(p, { x: room.shelf, y: room.floorY - 37, w: 19, h: 37 }) ? "shelf" : inside(p, { x: room.board.x - 1, y: room.board.y - 1, w: room.board.w + 2, h: room.board.h + 2 }) ? "board" : inside(p, { x: room.clocks.x - 1, y: room.clocks.y - 2, w: 30, h: 11 }) ? "clocks" : undefined;
+			const part: Part | undefined = this.trolleys.has(room.agent) && inside(p, { x: room.tasks.x - 1, y: room.tasks.y - 1, w: room.tasks.w + 2, h: room.tasks.h + 2 }) ? "tasks" : inside(p, { x: room.rack - 1, y: room.floorY - 34, w: 12, h: 34 }) ? "rack" : inside(p, { x: room.shelf, y: room.floorY - 37, w: 19, h: 37 }) ? "shelf" : inside(p, { x: room.board.x - 1, y: room.board.y - 1, w: room.board.w + 2, h: room.board.h + 2 }) ? "board" : inside(p, { x: room.clocks.x - 1, y: room.clocks.y - 2, w: 30, h: 11 }) ? "clocks" : undefined;
 			return { k: "agent", id: room.agent, ...(part ? { part } : {}) };
 		}
 		for (const port of this.ports.values()) if (inside(p, { x: port.box.x - 2, y: port.box.y - 2, w: port.box.w + 4, h: port.box.h + 4 })) return { k: "port", id: port.id };
@@ -3101,6 +3121,8 @@ export class Workshop {
 			} else if (p.kind === "you") out.push({ k: "label", x: p.box.x + 13, y: p.box.y + p.box.h + 1, text: "you", hot: Boolean(this.youMood) });
 			else if (hot || p.box.y === this.hallTop + 14) out.push({ k: "label", x: p.box.x + p.box.w / 2, y: p.box.y + p.box.h + (Math.round((p.box.x - this.inner.x - 48) / 22) % 2 ? 10 : 0), text: p.name, hot, bad: input?.failing });
 		}
+		this.placeNotices(s);
+		for (const n of this.notices) out.push({ k: "label", x: n.box.x + n.box.w / 2, y: n.box.y + n.box.h + 1, text: n.name, hot: now - (this.hotAt.get(`notice:${n.id}`) ?? -1e9) < 2500 });
 		for (const w of this.workers.values()) {
 			if (w.goneAt !== undefined) continue;
 			const j = w.work !== undefined ? s.work.get(w.work) : undefined;
@@ -3165,6 +3187,8 @@ export class Workshop {
 			const working = new Map<string, ViewWork[]>();
 			for (const j of s.running) working.set(j.agent, [...(working.get(j.agent) ?? []), j]);
 			for (const room of this.rooms.values()) {
+				// (Which board stands in a room is found for every room, seen or not: the pointer asks for it.)
+				this.boardOf(s, room.agent, now);
 				if (!sees({ x: room.x, y: room.y, w: room.w, h: room.h + SLAB })) continue;
 				this.drawRoom(s, room, working.get(room.agent) ?? [], now, night, worldGlows);
 			}
@@ -4377,6 +4401,10 @@ export class Workshop {
 		this.lamp(room, color, tint, glows);
 		this.shelf(room, agent, jobs, now, tint, glows, bay.wood);
 		this.drawBoard(room, agent, now, tint, glows);
+
+		// The task board: while the agent has a board with work on it, a cork board on a trolley with a card for each task.
+		const tasks = this.boardOf(s, room.agent, now);
+		if (tasks) this.drawTasks(room.tasks, floorY, tasks, s, now, tint, glows, `tasks:${room.agent}`);
 		drawPlant(room.plant, floorY, room.kind, now, room.lit > 0.5);
 		this.machine(room, agent, jobs, now, tint, glows, bay.accent);
 		this.bench(room, kind, color, jobs.find((j) => !j.copy), agent, jobs, now, tint, glows, night);
@@ -4535,6 +4563,10 @@ export class Workshop {
 
 		this.drawBoard(room, agent, now, tint, glows);
 
+		// The task board: while the agent has a board with work on it, a cork board on a trolley with a card for each task.
+		const tasks = this.boardOf(s, room.agent, now);
+		if (tasks) this.drawTasks(room.tasks, floorY, tasks, s, now, tint, glows, `tasks:${room.agent}`);
+
 		// The tree: a bauble for each MCP server, a string of little lights, a star; and presents under it, more as more gets done.
 		const tx = room.rack + 5;
 		const servers = agent?.mcp ?? [];
@@ -4656,6 +4688,85 @@ export class Workshop {
 		}
 	}
 
+	/**
+	 * The board that stands in an agent's room: the one its sub-agents work through, or another of its own with work
+	 * on it (the one with the most). It stays for a moment after its last task is settled, so that the end is seen.
+	 */
+	boardOf(s: Now, agent: string, now: number): ViewBoard | undefined {
+		const mine = s.boards.filter((b) => b.agent === agent && b.scope !== "all");
+		const live = mine.filter((b) => unsettled(b) > 0).sort((a, b) => unsettled(b) - unsettled(a) || a.id - b.id)[0];
+		const last = this.boardShown.get(agent);
+		const shown = live ?? (last && now - last.at < 9000 ? mine.find((b) => b.id === last.id) : undefined);
+		if (live) this.boardShown.set(agent, { id: live.id, at: now });
+		// (Whether a task board stands in the room: what the pointer asks.)
+		if (shown) this.trolleys.add(agent);
+		else this.trolleys.delete(agent);
+		return shown;
+	}
+
+	/** Where the boards that are for all agents hang in the hall: two at most, left of the way out, where there is room. */
+	private placeNotices(s: Now): void {
+		const boxes = [...this.ports.values()].filter((p) => p.kind !== "clock" && p.kind !== "you");
+		const used = 48 + Math.ceil(boxes.length / 2) * 16;
+		const x = this.inner.x;
+		this.notices = [];
+		s.boards
+			.filter((b) => b.scope === "all")
+			.slice(0, 2)
+			.forEach((b, i) => {
+				const box = { x: x + this.inner.w - 21 - 8 - (i + 1) * 28, y: this.hallTop + 9, w: 24, h: 14 };
+				if (box.x >= x + used + 2) this.notices.push({ id: b.id, name: b.name ?? "board", box });
+			});
+	}
+
+	/**
+	 * A board's tasks as cards on a cork board: paper for one that is to do (dim while it waits for another), the
+	 * color of the agent whose sub-agent has it, blinking, green when it is done, amber when its worker asked
+	 * something, red when it failed. What comes after a task (a check of it) hangs under it. A strip along the top
+	 * says how far the board is, and a sign stands over it while a question waits. With `floorY` it is on a trolley.
+	 */
+	private drawTasks(t: Box, floorY: number | undefined, b: ViewBoard, s: Now, now: number, tint: Tint, glows: Glow[], key: string): void {
+		T = tint;
+		const CORK = "#c98f55";
+		const WOOD = "#6a4632";
+		if (floorY !== undefined) {
+			R(t.x + 3, t.y + t.h, 1, floorY - t.y - t.h - 1, WOOD);
+			R(t.x + t.w - 4, t.y + t.h, 1, floorY - t.y - t.h - 1, WOOD);
+			R(t.x + 2, floorY - 1, 3, 1, INK);
+			R(t.x + t.w - 5, floorY - 1, 3, 1, INK);
+		}
+		block(t.x, t.y, t.w, t.h, CORK, { r: 0, ink: WOOD });
+		const all = b.open + b.taken + b.done + b.failed + b.blocked;
+		R(t.x + 1, t.y + 1, t.w - 2, 1, tone(CORK, -2));
+		if (all) R(t.x + 1, t.y + 1, Math.round(((t.w - 2) * b.done) / all), 1, "#2fa868");
+		const grid = tiling(b, t.w - 2, t.h - 4, [[2, 1], [1, 1]], 1);
+		const blink = Math.floor(now / 350) % 2 === 0;
+		for (const { task, x, y } of grid.tiles) {
+			const lit = task.state === "taken" || task.state === "blocked";
+			const c = task.state === "done" ? "#2fa868" : task.state === "failed" ? "#e5484d" : task.state === "blocked" ? (blink ? "#ffb21f" : "#fff3c4") : task.state === "taken" ? (blink ? this.colorOf(s, task.agent ?? b.agent ?? "") : "#ffffff") : task.state === "waiting" ? tone(CORK, 1) : PAPER;
+			T = lit ? PLAIN : tint;
+			R(t.x + 1 + x, t.y + 3 + y, grid.size, grid.size, c);
+		}
+		T = tint;
+		if (grid.more) R(t.x + t.w - 2, t.y + t.h - 2, 1, 1, INK), R(t.x + t.w - 4, t.y + t.h - 2, 1, 1, INK);
+		if (b.blocked) {
+			// A question on it: a sign over the board, for as long as it waits for an answer.
+			T = PLAIN;
+			const hop = Math.floor(now / 250) % 2;
+			const qx = t.x + t.w - 7;
+			const qy = t.y - 10 - hop;
+			slab(qx, qy, 7, 9, INK, 2);
+			slab(qx + 1, qy + 1, 5, 7, "#ffb21f", 1);
+			R(qx + 2, qy + 2, 3, 1, INK);
+			R(qx + 4, qy + 3, 1, 1, INK);
+			R(qx + 3, qy + 4, 1, 1, INK);
+			R(qx + 3, qy + 6, 1, 1, INK);
+			T = tint;
+			glows.push({ x: qx + 3, y: qy + 4, r: 9, color: "#ffb21f", a: 0.7 });
+		}
+		if (now - (this.hotAt.get(key) ?? -1e9) < 1500) glows.push({ x: t.x + t.w / 2, y: t.y + t.h / 2, r: 15, color: "#ffe27a", a: 0.6 });
+	}
+
 	private drawWorker(s: Now, room: Room, w: Worker, now: number, color: string, tint: Tint): void {
 		const j = w.work !== undefined ? s.work.get(w.work) : undefined;
 		const fading = w.goneAt !== undefined || now - w.born < 120;
@@ -4733,6 +4844,13 @@ export class Workshop {
 		// The way out, at the far end: a green door with a wreath, snow on the mat before it.
 		const boxes = [...this.ports.values()].filter((p) => p.kind !== "clock" && p.kind !== "you");
 		const used = 48 + Math.ceil(boxes.length / 2) * 16;
+		// An order board on the wall for each board that is for all agents (two at most), left of the way out.
+		this.placeNotices(s);
+		for (const n of this.notices) {
+			const b = s.boards.find((k) => k.id === n.id);
+			if (b) this.drawTasks(n.box, undefined, b, s, now, tint, glows, `notice:${n.id}`);
+		}
+		T = tint;
 		if (w - used > 26) {
 			const dx = x + w - 21;
 			block(dx, floor - 30, 15, 30, "#2f6f52", { r: 1 });
@@ -4853,6 +4971,9 @@ const KEY: Array<[Sign, string, string]> = [
 	["copy", "sub-agent: a small elf", HUE.hand],
 	["mail", "event: a sweet in the chute", "#3b8fd8"],
 	["clock", "schedule: bells, the tower", "#9b59c7"],
+	["note", "task board: a card for each task", "#c98f55"],
+	["tick", "cards: paper to do, green done", "#2fa868"],
+	["ask", "amber card: a sub-agent asks", "#ffb21f"],
 	["branch", "branches: forks on the board", "#8a6ad0"],
 	["leaf", "worktree: a leaf on a fork", "#2fa868"],
 	["flag", "goal: a little tree with a star", "#2fa868"],
@@ -5060,6 +5181,16 @@ export default defineView((host: ViewHost) => {
 			const sc = s.schedules.find((x) => x.name === n && x.agent === a.id);
 			return sc?.next !== undefined ? `${n} (${untilText(sc.next - now)})` : n;
 		}), "no schedules yet");
+		if (hover.part === "tasks") {
+			const b = shop.boardOf(s, a.id, now);
+			if (!b) return [];
+			const all = b.open + b.taken + b.done + b.failed + b.blocked;
+			const waits = tasksOf(b).filter((t) => t.state === "waiting").length;
+			return [
+				`${b.name ? `board ${b.name}` : "task board"}: ${b.done} of ${all} done`,
+				...[b.taken ? `${b.taken} in progress` : "", b.open ? `${b.open} to do${waits ? ` (${waits} after other tasks)` : ""}` : "", b.blocked ? `${b.blocked} waiting for an answer` : "", b.failed ? `${b.failed} failed` : ""].filter(Boolean),
+			];
+		}
 		if (hover.part === "board") {
 			const c = a.conversations ?? [];
 			const br = c.filter((x) => x.branchOf !== undefined).length;

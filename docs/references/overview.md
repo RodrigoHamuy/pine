@@ -180,8 +180,9 @@ line saying so; a cancelled one sends nothing.
   or less (`thinking`).
 - Shared state (`state_get`, `state_set`) holds small facts such as `house/mode` that every agent
   can read and that can be shown to an agent in every turn.
-- A board holds the tasks and notes of a job that several work on: sub-agents take the tasks one
-  by one and see what the others found ([boards.md](boards.md)).
+- A board holds the tasks of a job that several work on: a pool of sub-agents works through
+  any number of them a few at a time, one that cannot decide something asks, and the agent
+  that gave out the work answers ([boards.md](boards.md)).
 - `publish_event` lets an agent put an event on a topic you allowed, which routes then act on.
 - `send` lets an agent reach out through a source that can send: a message to you on Telegram,
   a command to a device over MQTT.

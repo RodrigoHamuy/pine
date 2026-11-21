@@ -51,7 +51,8 @@ src/
   agents.ts         AgentManager: task queue, pi sessions, conversations, the policy gate, the download tool, context block
   tools.ts          the tools pine gives an agent: delegate, subagent, publish_event, send, read_source, request_access, state_get,
                     state_set, question, todo, stop_program, manual; the board tools (boards, board_read, board_post,
-                    board_claim, board_done) and the pool of sub-agents that works through a board (`workPool`);
+                    board_claim, board_done, board_answer) and the pool of sub-agents that works through a board (`workPool`),
+                    which comes back to its conversation when a sub-agent asks or fails;
                     the lists of what it has (sources, schedules,
                     mcp_servers, skills, models); and the setup tools (subscribe, unsubscribe, add_/remove_ source, source_type,
                     mcp_server, skill, schedule, model_server; create_agent); and the main agent's tools for
@@ -778,8 +779,9 @@ These are invariants. A change that breaks one needs a test that shows why it is
    (`src/boards.ts`) carries the trust and the mark of the run that wrote it, a result that of the
    run that settled it, and whatever shows a post to a run marks that run (`shown` in
    `src/tools.ts`): `board_read`, the notes at the end of the other board tools' answers, the
-   answer of a pool, and a sub-agent the pool starts for a task that such a run posted. A new
-   place that hands board text to a model goes through `shown`. An event of a board
+   answer of a pool, and a sub-agent the pool starts for a task that such a run posted, or with such
+   a run's note or result (the notes for all, and what came of the tasks its own waited for, go
+   with its task). A new place that hands board text to a model goes through `shown`. An event of a board
    (`boardChanged` in `src/agents.ts`, on `board/<name>/...`, a reserved topic) has the trust of
    what was written, never more. The board tools are registered where `Profile.board` says so:
    in the owner's conversations, and for a run from outside only where its agent's `untrusted`
@@ -787,11 +789,18 @@ These are invariants. A change that breaks one needs a test that shows why it is
    sub-agent. A task is held by a run of pine's, never by an agent's word: `boardsAfter` settles
    or gives back what a run still holds when it ends, and `init` gives back everything after a
    restart. Do not add a claim that outlives its run, and do not let a tool settle a task for
-   another run (the owner's hand through the control API is the one exception). A board holds
+   another run. Two things are no exception to that, since they touch nobody's claim: the owner's
+   hand through the control API, and the conversation that gave out the work closing a task of
+   its own board that no run holds (a question it can settle itself: `board_done`). A question on a
+   board is answered by whoever gave out the work, never by a sub-agent (`board_answer` refuses
+   one): workers of equal standing do not steer each other. A pool's sub-agents may outlive the
+   call that started them (it comes back when one asks) and the turn, but not their conversation:
+   `stopPool` ends them when it is stopped. A board holds
    text and opens no file; whatever is kept by agent or by conversation goes with it
    (`dropConversation`, `dropAgent` from `eraseAgent`, the renames). A UI is told on `pine/board`
-   which board changed and nothing of what is on it, and a view of the owner's is told numbers
-   and a board's name only (`boards` in `desktop/src/view-state.ts`). `test/boards.test.ts` and
+   which board changed and which post, by its number and how a task stands, never a word of what
+   is on it; and a view of the owner's is told numbers, states and a board's name only (`boards`
+   in `desktop/src/view-state.ts`, from the task list without texts that `boardBrief` makes). `test/boards.test.ts` and
    `desktop/test/view-state.test.ts` fail without each of these.
 
 ## pi behaviours pine depends on

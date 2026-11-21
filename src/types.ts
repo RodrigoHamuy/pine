@@ -98,6 +98,8 @@ export interface TaskMeta {
 	board?: string;
 	/** The task of a board this run was started for (`pool` of subagent): its answer is recorded as that task's result. */
 	boardTask?: number;
+	/** The newest post on that board that such a run was shown with its task, so that it is not told of it again as news. */
+	boardShown?: number;
 	/** `input` is what the model server had to read anew; `cached` is what it took from its prompt cache. */
 	stats?: { input: number; output: number; cached?: number; turns: number; tools: string[]; ms: number; context?: ContextUse; timing?: CallTiming };
 }

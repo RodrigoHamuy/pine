@@ -190,7 +190,7 @@ Start at [docs/SKILL.md](docs/SKILL.md); it indexes everything.
 | Write `pine.json` and `agent.json`                                                      | [configuration.md](docs/references/configuration.md)         |
 | Let agents set things up by tool call instead of editing files                          | [setup.md](docs/references/setup.md)                         |
 | Set up agents, delegation and sub-agents; how tools are declared and what stays cached   | [agents.md](docs/references/agents.md)                       |
-| Let sub-agents and agents share tasks and findings on a board, and run a pool of sub-agents | [boards.md](docs/references/boards.md)                       |
+| Let sub-agents and agents work through shared tasks on a board, and run a pool of sub-agents | [boards.md](docs/references/boards.md)                       |
 | Route events, schedules, model calls                                                    | [events.md](docs/references/events.md)                       |
 | Event sources: setting one up, subscribing, sending, secrets, trust                     | [sources.md](docs/references/sources.md)                     |
 | Every source type: Telegram, folders, MQTT, web addresses, feeds, mail, Slack, cameras  | [source-types.md](docs/references/source-types.md)           |

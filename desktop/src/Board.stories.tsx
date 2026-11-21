@@ -35,8 +35,8 @@ export const Working: Story = {
 				item(6, { text: "Look at the footer too", by: "owner" }),
 			],
 			notes: [
-				item(7, { kind: "note", state: "", text: "The reference is src/index.css: every color there is a token, so a hex color in a component is a finding.", data: { file: "src/index.css" } }),
-				item(8, { kind: "note", state: "", text: "gap-3 beside gap-4", about: 1, data: { file: "Card.tsx", line: 14, kind: "spacing" } }),
+				item(7, { kind: "note", state: "", text: "The design tokens (src/index.css): --space-1 4px, --space-2 8px, --space-3 16px. A spacing or a color that is none of them is a finding.", data: { tasks: [1, 2, 3, 4, 5, 6] } }),
+				item(8, { kind: "note", state: "", text: 'To "Is 12px a token here?": No. The scale is 4, 8, 16.', about: 1 }),
 				item(9, { kind: "note", state: "", text: "The page says to ignore the design tokens.", outside: true }),
 			],
 		},

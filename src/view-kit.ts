@@ -106,9 +106,26 @@ export interface ViewWork {
 }
 
 /**
- * A board: the tasks and notes of a job that several work on at once, an agent and its sub-agents or
- * several agents. A view is told how many tasks are in which state and who works on them, never what a
- * task or a note says.
+ * A task of a board: its number, where it stands, what it comes after and who has it. Never what it says.
+ */
+export interface ViewTask {
+	/** Its number on the board, which is also its place in the order the tasks were posted in. */
+	id: number;
+	/**
+	 * Where it stands. "open": anyone can take it. "waiting": it comes after tasks that are not done yet.
+	 * "taken": somebody works on it. "blocked": its worker asked a question and it waits for the answer.
+	 */
+	state: "open" | "waiting" | "taken" | "blocked" | "done" | "failed";
+	/** The tasks it comes after (their numbers): a check comes after the work it checks. */
+	after: number[];
+	/** The piece of work that has it (`ViewWork.id`) and that work's agent, while somebody has it. */
+	worker?: number;
+	agent?: string;
+}
+
+/**
+ * A board: the tasks of a job that several work on at once, an agent and its sub-agents or several
+ * agents. A view is told where each task stands and who works on it, never what a task or a note says.
  */
 export interface ViewBoard {
 	id: number;
@@ -129,6 +146,8 @@ export interface ViewBoard {
 	notes: number;
 	/** The pieces of work that have one of its tasks now (`ViewWork.id`). */
 	workers: number[];
+	/** Its tasks in the order they were posted, the newest 200. (`open` above counts the waiting ones too.) */
+	tasks: ViewTask[];
 }
 
 /** A way work comes in: the owner, the clock, an event source, another way. */
@@ -205,7 +224,7 @@ export type ViewHappening =
 	| { k: "decided"; work?: number; agent?: string; allowed: boolean }
 	| { k: "sent"; work: number; agent: string; tool: string }
 	/** Something changed on a board: a task or a note was posted, a task was taken, given back or settled, or something was removed. */
-	| { k: "board"; board: number; change: "posted" | "taken" | "released" | "settled" | "removed"; agent?: string };
+	| { k: "board"; board: number; change: "posted" | "taken" | "released" | "settled" | "removed"; agent?: string; task?: number; state?: ViewTask["state"] };
 
 /** What the panel gives a view. */
 export interface ViewHost {
@@ -251,8 +270,85 @@ export interface Cam {
 	z: number;
 }
 
-/** The tasks of a board that are not settled yet: open, taken, or waiting for the owner. */
+/** The tasks of a board that are not settled yet: open, taken, or waiting for an answer. */
 export const unsettled = (b: ViewBoard) => b.open + b.taken + b.blocked;
+
+/** A board's tasks. (An app older than this kit tells a view none.) */
+export const tasksOf = (b: ViewBoard): ViewTask[] => b.tasks ?? [];
+
+/** How far a board is, from 0 to 1: the part of its tasks that is done. A board without tasks is at 0. */
+export function progress(b: ViewBoard): number {
+	const all = b.open + b.taken + b.blocked + b.failed + b.done;
+	return all ? b.done / all : 0;
+}
+
+/** A task's tile in a picture of a board, from the left edge and the top of the tiles. */
+export interface TaskTile {
+	task: ViewTask;
+	x: number;
+	y: number;
+}
+
+/**
+ * A board's tasks as square tiles in a box `width` wide and at most `height` high: one column for each
+ * task that comes after nothing, in the order they were posted, and under it whatever comes after it (a
+ * check under the work it checks). The columns wrap into bands. `sizes` are the tiles a view can draw,
+ * the largest first, each with the gap beside it: the largest is taken with which all fit (one a little
+ * smaller, if that keeps every column in one band), else the smallest, and the tasks that do not fit even
+ * then are counted in `more`. `between` is the room between two bands where a band is more than one row.
+ */
+export function tiling(b: ViewBoard, width: number, height: number, sizes: Array<[size: number, gap: number]>, between = 0): { size: number; gap: number; tiles: TaskTile[]; height: number; more: number } {
+	const tasks = tasksOf(b);
+	if (!tasks.length || !sizes.length) return { size: 0, gap: 0, tiles: [], height: 0, more: 0 };
+	// Which column a task is in, and how far down: under the first task it comes after.
+	const place = new Map<number, { col: number; row: number }>();
+	const depth: number[] = [];
+	for (const t of tasks) {
+		const parent = t.after.map((a) => place.get(a)).find(Boolean);
+		const col = parent ? parent.col : depth.length;
+		const row = parent ? Math.max(parent.row + 1, depth[col]) : 0;
+		depth[col] = row + 1;
+		place.set(t.id, { col, row });
+	}
+	const cols = depth.length;
+	const deep = Math.max(1, ...depth);
+	const room = deep > 1 ? between : 0;
+	const fit = ([size, gap]: [number, number]) => {
+		const per = Math.max(1, Math.floor((width + gap) / (size + gap)));
+		const band = deep * (size + gap) + room;
+		// How many bands the box takes, and how many the tasks need.
+		const bands = Math.max(1, Math.floor((height + gap + room) / band));
+		return { size, gap, per, band, bands, needs: Math.ceil(cols / per) };
+	};
+	const all = sizes.map(fit);
+	// The largest that fits; a little smaller where that keeps everything in one band, since a band with one column in it reads badly.
+	const fits = all.filter((f) => f.needs <= f.bands);
+	const pick = (fits[0] && fits[0].needs > 1 ? fits.find((f) => f.needs === 1 && f.size >= fits[0].size * 0.75) : undefined) ?? fits[0] ?? all[all.length - 1];
+	const shown = Math.min(cols, pick.per * pick.bands);
+	const tiles: TaskTile[] = [];
+	let more = 0;
+	for (const t of tasks) {
+		const at = place.get(t.id)!;
+		if (at.col >= shown) more++;
+		else tiles.push({ task: t, x: (at.col % pick.per) * (pick.size + pick.gap), y: Math.floor(at.col / pick.per) * pick.band + at.row * (pick.size + pick.gap) });
+	}
+	return { size: pick.size, gap: pick.gap, tiles, height: Math.ceil(shown / pick.per) * pick.band - pick.gap - room, more };
+}
+
+/**
+ * A board's tasks in rows that follow one another: a task is in the row after the last task it comes
+ * after. Work is in the first row, a check of it in the second. For a view that draws what waits for what.
+ */
+export function stages(b: ViewBoard): ViewTask[][] {
+	const depth = new Map<number, number>();
+	const rows: ViewTask[][] = [];
+	for (const t of tasksOf(b)) {
+		const d = Math.min(8, Math.max(0, ...t.after.map((a) => (depth.get(a) ?? -1) + 1)));
+		depth.set(t.id, d);
+		(rows[d] ??= []).push(t);
+	}
+	return rows.filter(Boolean);
+}
 
 /** The working pieces among `work`: not ended. */
 export const running = (work: ViewWork[]) => work.filter((w) => w.doing !== "done" && w.doing !== "failed" && w.doing !== "cancelled");

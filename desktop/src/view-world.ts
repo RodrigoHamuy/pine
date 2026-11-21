@@ -104,6 +104,9 @@ export interface Talk {
 	last: number;
 }
 
+/** The states a task of a board has. */
+const STATES = ["open", "taken", "done", "failed", "blocked"];
+
 /** A board, as `/boards` lists it: whom it is for, how many tasks are in which state, and the runs that hold one. */
 export interface BoardRow {
 	id: number;
@@ -113,6 +116,8 @@ export interface BoardRow {
 	name: string;
 	counts: { open: number; taken: number; done: number; failed: number; blocked: number; notes: number };
 	runs: number[];
+	/** Where each task stands, what it comes after, and the run that has it. */
+	tasks: Array<{ id: number; state: "open" | "waiting" | "taken" | "blocked" | "done" | "failed"; after: number[]; run?: number }>;
 }
 
 /** A schedule, as `/schedules` lists it. */
@@ -356,6 +361,15 @@ export class World {
 				name: String(b.name ?? ""),
 				counts: { open: n(b.counts?.open), taken: n(b.counts?.taken), done: n(b.counts?.done), failed: n(b.counts?.failed), blocked: n(b.counts?.blocked), notes: n(b.counts?.notes) },
 				runs: (Array.isArray(b.runs) ? b.runs : []).filter((r: unknown): r is number => typeof r === "number").slice(0, 100),
+				tasks: (Array.isArray(b.tasks) ? b.tasks : [])
+					.filter((t: any) => t && typeof t === "object" && typeof t.id === "number" && STATES.includes(t.state))
+					.slice(-200)
+					.map((t: any) => ({
+						id: n(t.id),
+						state: t.state === "open" && t.waits === true ? ("waiting" as const) : (t.state as BoardRow["tasks"][number]["state"]),
+						after: (Array.isArray(t.after) ? t.after : []).filter((a: unknown): a is number => typeof a === "number").slice(0, 20),
+						...(typeof t.run === "number" ? { run: t.run } : {}),
+					})),
 			}));
 		this.touch();
 	}

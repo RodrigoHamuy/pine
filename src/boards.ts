@@ -236,6 +236,11 @@ export class Boards {
 		return item;
 	}
 
+	/** Replace the fields of a post (a pool's note names the tasks it is for, and a later call adds to them). */
+	setData(id: number, data: Record<string, unknown>): void {
+		this.db.prepare("UPDATE board_items SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+	}
+
 	/** The tasks an open task still waits for: those named in `after` that are not done. */
 	waitsFor(item: BoardItem): number[] {
 		return item.after.filter((id) => this.item(id)?.state !== "done" && this.item(id) !== undefined);
@@ -301,6 +306,21 @@ export class Boards {
 		const board = this.get(item.board);
 		if (board) this.onChange?.(board, "released", open, o.cause);
 		return open;
+	}
+
+	/**
+	 * Answer the question a task waits on: the answer goes into the task's notes, with the question it
+	 * answers (which `reopen` clears from the task), and the task is open again for whoever takes it next.
+	 */
+	answer(id: number, answer: string, o: { by: string; trust: "owner" | "untrusted"; tainted?: string; cause?: unknown }): BoardItem {
+		const item = this.item(id);
+		const board = item && this.get(item.board);
+		if (!item || !board || item.kind !== "task") throw new Error(`there is no task #${id}`);
+		const text = String(answer ?? "").trim();
+		if (!text) throw new Error("give the answer");
+		const question = item.result ? `To "${item.result.length > 300 ? `${item.result.slice(0, 300)}…` : item.result}": ` : "";
+		this.post(board, { kind: "note", text: `${question}${text}`, by: o.by, trust: o.trust, tainted: o.tainted, about: item.id, cause: o.cause });
+		return this.reopen(id, { cause: o.cause });
 	}
 
 	/** The tasks a run of pine's holds right now. When the run ends, the daemon settles or gives back each: nothing stays taken for ever. */
