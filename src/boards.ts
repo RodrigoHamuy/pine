@@ -310,7 +310,8 @@ export class Boards {
 
 	/**
 	 * Answer the question a task waits on: the answer goes into the task's notes, with the question it
-	 * answers (which `reopen` clears from the task), and the task is open again for whoever takes it next.
+	 * answers in `data.question` (`reopen` clears it from the task), and the task is open again for whoever
+	 * takes it next.
 	 */
 	answer(id: number, answer: string, o: { by: string; trust: "owner" | "untrusted"; tainted?: string; cause?: unknown }): BoardItem {
 		const item = this.item(id);
@@ -318,8 +319,8 @@ export class Boards {
 		if (!item || !board || item.kind !== "task") throw new Error(`there is no task #${id}`);
 		const text = String(answer ?? "").trim();
 		if (!text) throw new Error("give the answer");
-		const question = item.result ? `To "${item.result.length > 300 ? `${item.result.slice(0, 300)}…` : item.result}": ` : "";
-		this.post(board, { kind: "note", text: `${question}${text}`, by: o.by, trust: o.trust, tainted: o.tainted, about: item.id, cause: o.cause });
+		// The note is the answer, and says in a field which question it answers: whoever shows it can set the two apart.
+		this.post(board, { kind: "note", text, ...(item.result ? { data: { question: item.result.length > 600 ? `${item.result.slice(0, 600)}…` : item.result } } : {}), by: o.by, trust: o.trust, tainted: o.tainted, about: item.id, cause: o.cause });
 		return this.reopen(id, { cause: o.cause });
 	}
 

@@ -86,7 +86,7 @@ test("the Board tab appears with a conversation's board and shows who has what; 
 	await page.press(`${panel} input[aria-label="Answer task 2"]`, "Enter");
 	await sees(`${panel} [data-task="2"][data-state=open]`);
 	const view = (await call("GET", "/boards/1")).data;
-	assert.match(view.notes.at(-1).text, /To "teal or blue\?": teal/);
+	assert.deepEqual([view.notes.at(-1).text, view.notes.at(-1).data], ["teal", { question: "teal or blue?" }]);
 	assert.equal(view.notes.at(-1).by, "owner");
 
 	// A task of the owner's own, and one taken off the board again.

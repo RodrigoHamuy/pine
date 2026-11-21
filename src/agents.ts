@@ -2422,7 +2422,9 @@ export class AgentManager {
 		// for it may be the one that asked, and must not take it for the task it remembers.
 		const about = kind === "task" && what === "released" ? this.boards.items(board.id, { about: item.id }).slice(-3) : [];
 		const line = kind === "task" ? `Task #${item.id} on the board "${board.name}" is ${about.length ? "ready to be taken again, with what was noted about it since" : "ready to be taken"}` : kind === "note" ? `A note on the board "${board.name}"` : `Task #${item.id} on the board "${board.name}" is ${kind}`;
-		const notes = about.length ? `\n\nNotes about it:\n${about.map((x) => `- ${x.by === "owner" ? "the owner" : x.by}: ${truncate(x.text.replace(/\s+/g, " "), 800)}`).join("\n")}` : "";
+		const notes = about.length
+			? `\n\nNotes about it:\n${about.map((x) => `- ${x.by === "owner" ? "the owner" : x.by}${typeof x.data?.question === "string" ? ` answered "${truncate(x.data.question.replace(/\s+/g, " "), 300)}"` : ""}: ${truncate(x.text.replace(/\s+/g, " "), 800)}`).join("\n")}`
+			: "";
 		// The event has the trust of everything it carries, never more.
 		const clean = [item, ...about].every((x) => x.trust === "owner" && !x.tainted);
 		this.bus.publish(
@@ -2502,6 +2504,8 @@ export class AgentManager {
 	private poolTold = new Map<number, Map<number, number>>();
 	/** The boards a pool is at work on now: one at a time, and a second call adds its tasks to the first. */
 	pooling = new Set<number>();
+	/** The tasks a pool gave out again by itself because their question was answered for all already: once each. */
+	poolReasked = new Set<number>();
 	toldOf(board: number): Map<number, number> {
 		let told = this.poolTold.get(board);
 		if (!told) this.poolTold.set(board, (told = new Map()));

@@ -73,7 +73,7 @@ They are the actions of the family `pine_board`; the list `boards` is one of `pi
 | `board_post` `text` [`kind`] [`board`] [`on`] [`after`] [`scope`] | Posts a note, or with `"kind": "task"` a task. `on`: the task a note is about. `after`: tasks that have to be done before this one can be taken; whoever does it is shown what came of them. `scope`: whom a board with a name is for, needed when the name is new. The answer says so when it made a board and who sees it, and lists the notes others left since the agent last looked. |
 | `board_claim` [`id`] [`board`] | Takes a task: the one with that number, or the oldest that is ready. The answer is the task in full. It is the agent's until `board_done`, or until the turn ends. |
 | `board_done` `id` [`result`] [`outcome`] | Says what became of a task the agent took. `outcome`: `done` (the default) with its result, `failed` with why, `blocked` with the question that has to be answered before it can go on, `open` to give it back. The conversation that gave out the work also closes with it a task of its own board that nobody has: a question whose answer is the result already. |
-| `board_answer` `id` `text` [`all`] | Answers the question a blocked task waits for: the answer becomes a note about the task, and the task is open again. Whoever takes it next is shown the question and the answer. With `"all": true` the tasks that have not started yet are shown it too, so that the next sub-agent does not ask the same. Not for a sub-agent: a question is answered by whoever gave out the work. |
+| `board_answer` `id` `text` [`all`] | Answers the question a blocked task waits for: the answer becomes a note about the task, and the task is open again. Whoever takes it next is shown the question and the answer, as settled. With `"all": true` the answer is for the whole job: every other task that waits for an answer is opened again with it, and the tasks that are not finished are shown it, so that one answer does where several sub-agents have the same question. Not for a sub-agent: a question is answered by whoever gave out the work. |
 
 Without `board` every one of them means the conversation's own board.
 
@@ -139,9 +139,11 @@ with every question that is open, each time until it is answered. The other sub-
 meanwhile; no new ones are started until the conversation calls again.
 The agent answers the question with `board_answer`, from what it knows for sure, can look up or
 was told by you. A value or a choice that nobody gave it is yours: it asks you first and passes
-on what you say (only `board_answer` puts the task back to work). Where the same question will
-come up in other tasks it answers with `"all": true`, and where its answer is the result already
-it closes the task itself with `board_done`. Then it calls `subagent` with
+on what you say (only `board_answer` puts the task back to work). Where other tasks have or
+will have the same question it answers with `"all": true`: those that asked are opened again
+with it, and a sub-agent that was still at work and asks the same a moment later has its task
+given out again by pine itself, once, without a turn of the agent. Where its answer is the
+result already, the agent closes the task itself with `board_done`. Then it calls `subagent` with
 `"pool": true` and no tasks: that call takes over the sub-agents that are still at work, gives
 the answered task to a new one, which is shown the question and the answer, and goes on.
 

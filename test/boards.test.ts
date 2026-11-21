@@ -269,14 +269,14 @@ test("boards: a pool comes back when a sub-agent asks, the conversation answers,
 	assert.match(first, /## What to do now\nAnswer task #1 with board_answer: only that puts a task back to work.* asking your owner does not by itself answer the task\. .*close it yourself with board_done \(id, result\)\.\nThen call subagent with "pool": true to go on/);
 	assert.doesNotMatch(first, /slow one done|quick one done/);
 	// The answer is for the task that asked, and with "all" for the one that has not started yet: it need not ask the same.
-	assert.equal(h.toolResults(turns(h)[2]).at(-1)!, "Answered. Task #1 is open again, and whoever takes it is shown the question and your answer. So is the 1 other task that has not started yet.");
-	assert.deepEqual(boards.items(1, { kind: "note" }).map((x) => [x.id, x.about ?? null, x.data ?? null]), [[4, 1, null], [5, null, { tasks: [3] }]]);
+	assert.equal(h.toolResults(turns(h)[2]).at(-1)!, "Answered. Task #1 is open again, and whoever takes it is shown the question and your answer. The 2 other tasks that are not finished are shown it as well.");
+	assert.deepEqual(boards.items(1, { kind: "note" }).map((x) => [x.id, x.about ?? null, x.data ?? null]), [[4, 1, { question: "WHICH-WAY left or right?" }], [5, null, { tasks: [2, 3], question: "WHICH-WAY left or right?" }]]);
 	const third = h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 3)!;
-	assert.match(third.prompt, /third @@REF:quick@@\n\nWhat everyone on this job goes by \(it was checked: no need to look it up again\):\n- To "WHICH-WAY left or right\?": GO-LEFT\n\n\[pine/);
+	assert.match(third.prompt, /third @@REF:quick@@\n\nQuestions that were asked on this job and are answered\. They are settled: go by the answers and do not ask them again\.\n- Asked: WHICH-WAY left or right\?\n  Answer: GO-LEFT\n\n\[pine/);
 	assert.doesNotMatch(h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 2)!.prompt, /GO-LEFT/, "the one that was at work already was started without it");
 	// The second call took over the sub-agent that was still at work, gave the first task out again, and says each result once.
 	const last = r.text.split(" || ").at(-1)!;
-	assert.match(last, /## Task #1: done\nwent left\nNotes about it:\n- To "WHICH-WAY left or right\?": GO-LEFT/);
+	assert.match(last, /## Task #1: done\nwent left\nNotes about it:\n- Asked: WHICH-WAY left or right\?\n  Answer: GO-LEFT/);
 	assert.match(last, /## Task #2: done\nslow one done/);
 	assert.match(last, /## Task #3: done\nquick one done/);
 	assert.match(last, /All 3 tasks of the board are done\.$/);
@@ -284,12 +284,56 @@ test("boards: a pool comes back when a sub-agent asks, the conversation answers,
 	assert.equal(h.pine.tasks.list({ limit: 50 }).filter((t) => t.kind === "subagent").length, 4, "one sub-agent per task, and one more for the task that was asked about");
 	// The one that did the first task in the end was shown the question and the answer.
 	const again = h.pine.tasks.list({ limit: 50 }).filter((t) => t.meta.boardTask === 1).sort((x, y) => y.id - x.id)[0];
-	assert.match(again.prompt, /first @@REF:asks@@\n\nNotes about this task:\n- To "WHICH-WAY left or right\?": GO-LEFT\n\n\[pine: this is task #1/);
+	assert.match(again.prompt, /first @@REF:asks@@\n\nQuestions that were asked on this job and are answered\. They are settled: go by the answers and do not ask them again\.\n- Asked: WHICH-WAY left or right\?\n  Answer: GO-LEFT\n\n\[pine: this is task #1/);
+	assert.match(again.prompt, /What is answered above is given: use it\./);
 	// A question is answered by whoever gave out the work, and only a question.
 	h.mock.state.scripts.sub = [{ tools: [call("board_answer", { id: 1, text: "x" })] }];
 	const other = await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("board_answer", { id: 1, text: "x" }), call("subagent", { tasks: ["@@REF:sub@@"] })] }]), ...owner });
 	assert.match(other.text, /task #1 is done, it waits for no answer/);
 	assert.match(other.text, /You are a sub-agent: this is not yours to do/);
+	await h.close();
+});
+
+test("boards: one answer does for every task that has the same question: those that asked are opened again, and one that asks a moment later is given out again without a turn of the conversation", async () => {
+	const h = await harness({ pine: { limits: { maxConcurrentRuns: 5 } }, agents: { main: { agent: { subagents: { maxParallel: 3 } } } } });
+	const boards = h.pine.agents.boards;
+	// Three sub-agents need the same value: two ask at once, the third is still at work when the answer is given and asks then.
+	h.mock.state.scripts.a = [{ tools: [call("board_done", { id: 1, outcome: "blocked", result: "WHAT-RATE for a?" })] }, { text: "stopped" }];
+	h.mock.state.scripts.b = [{ tools: [call("board_done", { id: 2, outcome: "blocked", result: "WHAT-RATE for b?" })] }, { text: "stopped" }];
+	h.mock.state.scripts.c = [{ delayMs: 500, tools: [call("board_done", { id: 3, outcome: "blocked", result: "WHAT-RATE for c?" })] }, { text: "stopped" }];
+	const asked = new Set<number>();
+	h.pine.bus.subscribe("pine/board", () => {
+		// Whoever is given a task after it was asked about does it.
+		for (const [id, name] of [[1, "a"], [2, "b"], [3, "c"]] as const) if (boards.item(id)?.state === "blocked" && !asked.has(id)) asked.add(id), (h.mock.state.scripts[name] = [{ text: `${name} done at RATE-100` }]);
+	});
+	const r = await h.pine.agents.run({
+		agent: "main",
+		session: "job",
+		// (The action is written with its family's name in front, as a model sometimes writes it: it is carried out all the same.)
+		prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["one @@REF:a@@", "two @@REF:b@@", "three @@REF:c@@"] })] }, { tools: [call("pine_board", { action: "pine_board.board_answer", id: 1, text: "RATE-100", all: true })] }, { tools: [call("subagent", { pool: true })] }]),
+		...owner,
+	});
+	assert.equal(r.status, "done");
+	const [first, answered, last] = [h.toolResults(turns(h)[1]).at(-1)!, h.toolResults(turns(h)[2]).at(-1)!, r.text.split(" || ").at(-1)!];
+	assert.match(first, /## Task #1 asks\nWHAT-RATE for a\?/);
+	assert.match(first, /## Task #2 asks\nWHAT-RATE for b\?/);
+	assert.match(first, /## Still being worked\n#3 \[taken by main\]/);
+	assert.equal(answered, "Answered. Task #1 is open again, and whoever takes it is shown the question and your answer. Task #2, which asked too, is open again with the same answer. The 1 other task that is not finished is shown it as well.");
+	// Each task that asked has the answer beside its own question, and the one still at work is named in the note for all.
+	assert.deepEqual(boards.items(1, { kind: "note" }).map((x) => [x.about ?? null, x.text, x.data]), [
+		[1, "RATE-100", { question: "WHAT-RATE for a?" }],
+		[2, "RATE-100", { question: "WHAT-RATE for b?" }],
+		[null, "RATE-100", { tasks: [3], question: "WHAT-RATE for a?" }],
+	]);
+	// The second call finishes all three. The third asked after the answer was given: it was given out again by pine
+	// itself, with the answer, and the conversation was never turned to for it.
+	for (const name of ["a", "b", "c"]) assert.match(last, new RegExp(`${name} done at RATE-100`));
+	assert.match(last, /All 3 tasks of the board are done\.$/);
+	assert.doesNotMatch(last, /Task #3 asks/);
+	assert.equal(turns(h).length, 4, "three calls and the final answer: no turn for the third question");
+	const third = h.pine.tasks.list({ limit: 50 }).filter((t) => t.meta.boardTask === 3).sort((x, y) => y.id - x.id)[0];
+	assert.match(third.prompt, /^three @@REF:c@@\n\nQuestions that were asked on this job and are answered\. They are settled: go by the answers and do not ask them again\.\n- Asked: WHAT-RATE for a\?\n  Answer: RATE-100\n\n\[pine/);
+	assert.equal(h.pine.tasks.list({ limit: 50 }).filter((t) => t.kind === "subagent").length, 6, "each task was given out twice, and none a third time");
 	await h.close();
 });
 
@@ -493,7 +537,7 @@ test("boards: a board with a name says what happens on it as events that only pi
 	assert.match(answered.text, /Answered\. Task #\d+ is open again/);
 	await h.pine.bus.drain();
 	const again = events.filter((e) => e.topic === "board/bugs/task").at(-1);
-	assert.match(again.payload.text, /is ready to be taken again, with what was noted about it since:\nmove the meeting\n\nNotes about it:\n- main: To "WHICH-DAY\?": THURSDAY$/);
+	assert.match(again.payload.text, /is ready to be taken again, with what was noted about it since:\nmove the meeting\n\nNotes about it:\n- main answered "WHICH-DAY\?": THURSDAY$/);
 	assert.equal(again.trust, "owner");
 	await h.close();
 });
@@ -577,12 +621,14 @@ test("boards: the owner reads every board through the control API, posts on one,
 	await req("POST", `/boards/${view.board.id}/post`, { kind: "note", text: "use the brush @@REF:painter@@", on: blocked });
 	await h.pine.agents.run({ agent: "main", session: "work", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: [] })] }]), ...owner });
 	const taker = h.mock.state.requests.find((q: any) => JSON.stringify(q.body.messages).includes("@@REF:painter@@") && !JSON.stringify(q.body.messages).includes("<<MOCK"));
-	assert.match(JSON.stringify(taker.body.messages), /pick a color\\n\\nNotes about this task:\\n- your owner: To \\"blue or green\?\\": green\\n- your owner: use the brush/);
+	const painter = h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === blocked && t.kind === "subagent")!;
+	assert.match(painter.prompt, /^pick a color\n\nNotes about this task:\n- your owner: use the brush @@REF:painter@@\n\nWhat everyone on this job goes by [^\n]*\n- your owner: the reference is tokens\.css\n\nQuestions that were asked on this job and are answered\. They are settled: go by the answers and do not ask them again\.\n- Asked: blue or green\?\n  Answer \(from your owner\): green\n\n\[pine/, painter.prompt);
+	assert.ok(taker, "and that is what the model was sent");
 	assert.equal(h.pine.agents.boards.item(blocked)!.result, "painted");
 	h.pine.agents.boards.reopen(blocked);
 	view = (await req("GET", "/boards/1")).body;
 	assert.equal(view.tasks.find((t: any) => t.id === blocked).state, "open");
-	assert.match(view.notes.at(-2).text, /To "blue or green\?": green/);
+	assert.deepEqual([view.notes.at(-2).text, view.notes.at(-2).data], ["green", { question: "blue or green?" }], "the answer is the note, and it says which question it answers");
 	assert.equal(view.notes.at(-2).about, blocked);
 	assert.equal(view.notes.at(-2).outside, false);
 	assert.deepEqual((await req("POST", "/boards/1/remove", {})).body, { removed: true });

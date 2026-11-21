@@ -228,7 +228,7 @@ const ARG_HINT: Record<string, string> = {
 	"board_claim.board": "a board's name; leave out for this conversation's",
 	"board_post.on": "for a note: the task it is about",
 	"board_post.scope": "needed for a new board with a name: whom it is for",
-	"board_answer.all": "true: tasks not started yet are shown it too",
+	"board_answer.all": "true: for every task that has or will have the same question",
 	"board_done.result": "the result, why it failed, or the question",
 	"request_access.path": "absolute path of the file or folder",
 	"request_access.write": "true to also change files there",
@@ -731,7 +731,10 @@ export function families(opts: { servers: Array<{ name: string; namespace: strin
 	};
 
 	const run = (f: Family) => async (_id: string, p: any, signal: any, onUpdate: any, ctx: any) => {
-		const wanted = String((Array.isArray(p?.[f.key]) ? p[f.key][0] : p?.[f.key]) ?? [p?.action, p?.tool].find((x) => typeof x === "string" && f.action.has(x)) ?? "").trim();
+		// ("pine_board.board_answer", "functions:board_answer": the action is what stands last.)
+		const wanted = String((Array.isArray(p?.[f.key]) ? p[f.key][0] : p?.[f.key]) ?? [p?.action, p?.tool].find((x) => typeof x === "string" && f.action.has(x)) ?? "")
+			.trim()
+			.replace(/^[\w-]+[.:/](?=[\w-]+$)/, "");
 		const plain = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
 		const find = (g: Family) => g.action.get(wanted) ?? [...g.action].find(([a, m]) => plain(a) === plain(wanted) || m.name === wanted || plain(m.name.replace(/^mcp__/, "")) === plain(wanted))?.[1];
 		let t = find(f);

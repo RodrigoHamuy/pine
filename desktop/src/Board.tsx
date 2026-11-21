@@ -78,6 +78,8 @@ export function spans(ids: number[]): string {
 /** A field as words: the tasks a pool's note came with are said as "for tasks 2–7", everything else as it is. */
 function fieldText(k: string, v: unknown): string {
 	if (k === "tasks" && Array.isArray(v) && v.every((x) => typeof x === "number")) return `for task${v.length === 1 ? "" : "s"} ${spans(v as number[])}`;
+	// An answer says which question it answers.
+	if (k === "question" && typeof v === "string") return `answers: ${v}`;
 	return `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`;
 }
 

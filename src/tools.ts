@@ -126,7 +126,12 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		return t.state === "taken" ? `taken by ${t.holder ?? "a run"}` : waits.length ? `open, waits for ${waits.map((w) => `#${w}`).join(", ")}` : t.state;
 	};
 	const taskLine = (t: BoardItem, n = 200) => `#${t.id} [${stateOf(t)}] ${flat(t.text, n)}${t.result ? `\n    ${t.state === "blocked" ? "waits for an answer to" : t.state === "failed" ? "failed" : "result"}: ${flat(t.result, n)}` : ""}`;
-	const noteLine = (x: BoardItem, n = 400) => `#${x.id} note by ${x.by}${x.about ? ` about #${x.about}` : ""}: ${flat(x.text, n)}${x.data ? ` ${truncate(JSON.stringify(x.data), 300)}` : ""}`;
+	/** The question a note answers, if it is an answer. */
+	const asked = (x: BoardItem) => (typeof x.data?.question === "string" ? x.data.question : undefined);
+	const noteLine = (x: BoardItem, n = 400) => {
+		const { tasks: _for, question: _q, ...fields } = x.data ?? {};
+		return `#${x.id} ${asked(x) !== undefined ? "answer" : "note"} by ${x.by}${x.about ? ` about #${x.about}` : ""}${asked(x) !== undefined ? ` to "${flat(asked(x)!, 160)}"` : ""}: ${flat(x.text, n)}${Object.keys(fields).length ? ` ${truncate(JSON.stringify(fields), 300)}` : ""}`;
+	};
 	/**
 	 * What is shown to this run of a board marks it like what it came from: a post by a run that had
 	 * read outside content, or by one that outside content started, is outside content here too.
@@ -215,7 +220,9 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const said = (xs: BoardItem[]) =>
 			xs
 				.map((x) => {
-					const { tasks: _for, ...fields } = x.data ?? {};
+					const { tasks: _for, question, ...fields } = x.data ?? {};
+					// An answer says what was asked and what the answer is, each on its own line: it is not to be read past.
+					if (typeof question === "string") return `- Asked: ${flat(question, 600)}\n  Answer${x.by === "owner" ? " (from your owner)" : ""}: ${flat(x.text, 1000)}`;
 					// (No number: whoever reads this has no use for it, and whoever wrote the note does not know it by one.)
 					return `- ${x.by === "owner" ? "your owner: " : ""}${flat(x.text, 1000)}${Object.keys(fields).length ? ` ${truncate(JSON.stringify(fields), 300)}` : ""}`;
 				})
@@ -232,14 +239,27 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			const worker = manager.poolWorker(t);
 			if (worker) watch(worker.id);
 		}
+		/**
+		 * A sub-agent that was at work when a question was answered for the whole job asks the same a moment later:
+		 * its task is given out again with that answer, once, and the conversation is not turned to for it.
+		 */
+		const reask = () => {
+			for (const t of news()) {
+				if (t.state !== "blocked" || manager.poolReasked.has(t.id)) continue;
+				const known = boards.items(board.id, { kind: "note" }).some((x) => !x.about && asked(x) !== undefined && meant(x, t.id));
+				if (!known || boards.items(board.id, { about: t.id }).some(asked)) continue;
+				manager.poolReasked.add(t.id);
+				boards.reopen(t.id, { cause: causeOf() });
+			}
+		};
 		/** Whether something waits for this conversation: a question, or a task that failed, that it has not been told of. */
-		const asked = () => news().some((t) => t.state !== "done");
+		const waits = () => (reask(), news().some((t) => t.state !== "done"));
 		const stop = () => [...active.keys()].forEach((id) => manager.cancel(id));
 		signal?.addEventListener("abort", stop, { once: true });
 		try {
 			await r.slot.suspend(async () => {
 				for (;;) {
-					while (!asked() && active.size < agent.subagents.maxParallel && started < POOL_MAX && !signal?.aborted) {
+					while (!waits() && active.size < agent.subagents.maxParallel && started < POOL_MAX && !signal?.aborted) {
 						const next = tasksNow().find((t) => boards.ready(t));
 						if (!next) break;
 						// What was noted about the task goes with it: the answer to a question it was blocked on, a hint from whoever had it before.
@@ -255,9 +275,12 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						const prompt = [
 							next.text,
 							...(before.length ? [`This task waited for ${before.length === 1 ? "another one, which is" : "others, which are"} done. What came of ${before.length === 1 ? "it" : "them"}:\n${before.map((x) => `- task #${x.id} (${flat(x.text, 120)}): ${flat(x.result ?? "no result given", 1500)}`).join("\n")}`] : []),
-							...(about.length ? [`Notes about this task:\n${said(about)}`] : []),
-							...(forAll.length ? [`What everyone on this job goes by (it was checked: no need to look it up again):\n${said(forAll)}`] : []),
-							`[pine: this is task #${next.id} of a board. Your final answer is its result, and pine settles the task with it: no board call is needed for that. If the task needs something that is given nowhere and that looking does not settle (a rate, a number, a date, which of two readings that give different results), do not assume one and do not work around it: call board_done with id ${next.id}, outcome "blocked" and your question, then stop. The task comes back with the answer. Names and matters of form you settle yourself (a column called differently). What is simply not there (a file the task names) is a result: say so.]`,
+							...(about.some((x) => !asked(x)) ? [`Notes about this task:\n${said(about.filter((x) => !asked(x)))}`] : []),
+							...(forAll.some((x) => !asked(x)) ? [`What everyone on this job goes by (it was checked: no need to look it up again):\n${said(forAll.filter((x) => !asked(x)))}`] : []),
+							// What was asked on this job and answered, last, where it is read last: a sub-agent that is given the task a
+							// second time is given it because of this, and must not ask the same again.
+							...([...about, ...forAll].some(asked) ? [`Questions that were asked on this job and are answered. They are settled: go by the answers and do not ask them again.\n${said([...about, ...forAll].filter(asked))}`] : []),
+							`[pine: this is task #${next.id} of a board. Your final answer is its result, and pine settles the task with it: no board call is needed for that. If the task needs something that is given nowhere and that looking does not settle (a rate, a number, a date, which of two readings that give different results), do not assume one and do not work around it: call board_done with id ${next.id}, outcome "blocked" and your question, then stop. The task comes back with the answer. What is answered above is given: use it. Names and matters of form you settle yourself (a column called differently). What is simply not there (a file the task names) is a result: say so.]`,
 						].join("\n\n");
 						const child = manager.submit({ agent: agent.id, prompt, session: "new", kind: "subagent", parent: r.task, tainted: outside, leaf: true, tools: agent.subagents.tools, model, thinking, label: truncate(next.text, 80), boardTask: next.id, boardShown: boards.last(board.id) });
 						// Taken for that run here, in the same step: nothing else ran since the task was found.
@@ -265,7 +288,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						started++;
 						watch(child.id);
 					}
-					if (asked() || !active.size) break;
+					if (waits() || !active.size) break;
 					await Promise.race(active.values());
 				}
 			});
@@ -288,13 +311,13 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 				return `## Task #${t.id}: ${t.state}\n${t.result ?? (t.state === "done" ? "(no result given)" : t.state)}${log.length ? `\nNotes about it:\n${said(log)}` : ""}`;
 			});
 		// A question is said every time, until it is answered: it is what the conversation has to act on.
-		const again = (t: BoardItem) => boards.items(board.id, { about: t.id }).some((x) => x.text.startsWith('To "'));
+		const again = (t: BoardItem) => boards.items(board.id, { about: t.id }).some(asked);
 		const asks = blocked.map((t) => `## Task #${t.id} asks${again(t) ? " again, after an answer" : ""}\n${t.result ?? "(no question given)"}\n${again(t) ? `Close it yourself: board_done with id ${t.id} and the result.` : `To answer: board_answer with id ${t.id} and your answer.`}`);
 		const goOn = working.length || open.some((t) => boards.ready(t));
 		const next = [
 			...(blocked.length
 				? [
-						`${blocked.length === 1 ? `Answer task #${blocked[0].id}` : `Answer tasks ${blocked.map((t) => `#${t.id}`).join(", ")}`} with board_answer: only that puts a task back to work, and the next sub-agent is shown the question and your answer. Your answer has to come from what you know for sure, can look up, or your owner told you. A value or a choice nobody gave you is your owner's: ask them (question) and pass on what they say with board_answer. An answer you make up is still a guess, and asking your owner does not by itself answer the task. Where other tasks will meet the same question, give "all": true and they are shown the answer too. Where your answer is the task's result already, close it yourself with board_done (id, result).`,
+						`${blocked.length === 1 ? `Answer task #${blocked[0].id}` : `Answer tasks ${blocked.map((t) => `#${t.id}`).join(", ")}`} with board_answer: only that puts a task back to work, and the next sub-agent is shown the question and your answer. Your answer has to come from what you know for sure, can look up, or your owner told you. A value or a choice nobody gave you is your owner's: ask them (question) and pass on what they say with board_answer. An answer you make up is still a guess, and asking your owner does not by itself answer the task. Where other tasks have or will have the same question, give "all": true: one answer then does for all of them. Where your answer is the task's result already, close it yourself with board_done (id, result).`,
 					]
 				: []),
 			...(fresh.some((t) => t.state === "failed") ? ["A task that failed stays failed, and tasks that wait for it are never started. Post it again as a new task (board_post with kind task) if it should be tried again."] : []),
@@ -1999,7 +2022,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				parameters: Type.Object({
 					id: Type.Number({ description: "The number of the task that is blocked" }),
 					text: Type.String({ description: "The answer, complete on its own: whoever reads it has not seen this conversation" }),
-					all: Type.Optional(Type.Boolean({ description: "true: the tasks of this board that have not started yet are shown the answer too, when the same question will come up in them" })),
+					all: Type.Optional(Type.Boolean({ description: "true: the answer is for the whole job. Every other task that waits for an answer is opened again with it, and the tasks that are not finished are shown it: for a question that all of them have or will have" })),
 				}),
 				execute: async (_id, p) => {
 					run();
@@ -2011,12 +2034,21 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					const question = item.result;
 					// (What others noted since this run last looked, before its own answer is on the board: its answer is no news to it.)
 					const fresh = news(board);
-					boards.answer(item.id, String(p.text ?? ""), postedAs());
-					// An answer that holds for the tasks still to come is a note for them: a second sub-agent need not ask what the first one asked.
-					const rest = p.all === true ? boards.items(board.id, { kind: "task" }).filter((t) => t.state === "open" && t.id !== item.id).map((t) => t.id) : [];
-					if (rest.length) boards.post(board, { kind: "note", text: `${question ? `To "${truncate(question, 300)}": ` : ""}${String(p.text).trim()}`, data: { tasks: rest }, ...postedAs() });
+					const text = String(p.text ?? "");
+					boards.answer(item.id, text, postedAs());
+					// An answer for the whole job: the others that wait for one are opened again with it, each with its own
+					// question beside it, and the tasks that are not finished are shown it, so that none asks what was asked.
+					const others = p.all === true ? boards.items(board.id, { kind: "task" }).filter((t) => t.id !== item.id) : [];
+					const waiting = others.filter((t) => t.state === "blocked");
+					for (const t of waiting) boards.answer(t.id, text, postedAs());
+					const rest = others.filter((t) => t.state === "open" || t.state === "taken").map((t) => t.id);
+					if (rest.length) boards.post(board, { kind: "note", text: text.trim(), data: { tasks: rest, ...(question ? { question: truncate(question, 600) } : {}) }, ...postedAs() });
 					live.boardSeen.set(board.id, boards.last(board.id));
-					return ok(`Answered. Task #${item.id} is open again, and whoever takes it is shown the question and your answer.${rest.length ? ` So ${rest.length === 1 ? "is the 1 other task that has" : `are the ${rest.length} other tasks that have`} not started yet.` : ""}${fresh}`);
+					const also = [
+						waiting.length ? `${waiting.length === 1 ? `Task #${waiting[0].id}, which asked too, is` : `Tasks ${waiting.map((t) => `#${t.id}`).join(", ")}, which asked too, are`} open again with the same answer.` : "",
+						rest.length ? `The ${rest.length === 1 ? "1 other task that is" : `${rest.length} other tasks that are`} not finished ${rest.length === 1 ? "is" : "are"} shown it as well.` : "",
+					].filter(Boolean);
+					return ok(`Answered. Task #${item.id} is open again, and whoever takes it is shown the question and your answer.${also.length ? ` ${also.join(" ")}` : ""}${fresh}`);
 				},
 			}),
 		);
