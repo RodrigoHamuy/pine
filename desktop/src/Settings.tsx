@@ -37,6 +37,7 @@ import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
 import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 import { BrowserAccess } from "./BrowserAccess.tsx";
+import { PairLinkField } from "./Pairing.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
 	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
@@ -2096,10 +2097,8 @@ export function MachineList() {
 			setError(errText(e));
 		}
 	};
-	const forget = async (h: string) => {
-		const prefs = await s.attempt(() => bridge.forgetHost(h));
-		if (prefs) (s.prefs = prefs), s.touch();
-	};
+	// A paired computer is asked about first: forgetting it here leaves its access open (`forgetMachine`).
+	const forget = (h: string) => s.forgetMachine(h);
 	/** How the pine of a row is, when it is the one the app uses; nothing is asked of the others. */
 	const status = (h?: string) => {
 		if (state.host !== h) return null;
@@ -2111,7 +2110,7 @@ export function MachineList() {
 		return <Badge variant={s.connected ? "default" : "outline"}>{s.connected ? "in use" : "not answering"}</Badge>;
 	};
 	/** What a row says of its machine when nothing is wrong: a paired computer by its name (its id says nothing), user@host as written. */
-	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this browser.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
+	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this {s.device}.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
 	const row = (h: string | undefined) => (
 		<Item key={h ?? ""} variant="outline" data-environment={h ?? "local"}>
 			<ItemMedia variant="icon">{h && !isPaired(h) ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
@@ -2178,7 +2177,11 @@ export function MachineList() {
 	);
 }
 
-/** How a browser is paired with a computer, in three lines, and where the Pine app is for a computer without it: opened like every other link. */
+/**
+ * How a device is paired with a computer, in three lines, and where the Pine app is for a computer
+ * without it: opened like every other link. Under a bridge that takes a link from the owner's hand
+ * (the mobile app's), the field to paste one into.
+ */
 function PairHowTo() {
 	const s = useModel(store);
 	return (
@@ -2188,8 +2191,9 @@ function PairHowTo() {
 				<ol className="list-decimal ps-5 text-sm text-muted-foreground">
 					<li>Open the Pine app on your computer.</li>
 					<li>Go to Settings &gt; Browser access and press Add a device.</li>
-					<li>Scan the code with this device's camera, or open the link it gives in this browser.</li>
+					<li>{s.canPasteLink ? "Scan the code with this phone's camera and open it in Pine, or paste the link it gives below." : "Scan the code with this device's camera, or open the link it gives in this browser."}</li>
 				</ol>
+				{s.canPasteLink ? <PairLinkField onLink={(text) => s.askToPair(text)} /> : null}
 				{s.serviceHost ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="meeting-line">{meetingLine(s.serviceHost)}</ItemDescription> : null}
 			</ItemContent>
 			<ItemActions>
@@ -2203,7 +2207,7 @@ function Environments() {
 	const s = useModel(store);
 	const pairing = s.machinesShown.view === "pair";
 	return (
-		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : pairing ? "The pine this browser uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them." : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
+		<Page title="Environments" lead={s.local ? "The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them." : pairing ? `The pine this ${s.device} uses: the one of the Pine app on a computer paired with it. One at a time: the foot of the side bar switches between them.` : "The pine this app uses: one on a machine that you reach with ssh. One at a time: the foot of the side bar switches between them."}>
 			<MachineList />
 			{/* In the pairing view, the list's how-to is all there is to say. */}
 			{!pairing ? <Alert>

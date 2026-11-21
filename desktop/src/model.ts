@@ -11,7 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
-import { computerWord, homeScreenKeeps, machineName, machinesView, pairingEnded, type MachinesViewName } from "./machines.ts";
+import { computerWord, deviceWord, homeScreenKeeps, httpService, isPaired, machineName, machinesView, pairingEnded, readPairLink, type MachinesViewName, type PairLink } from "./machines.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
@@ -241,6 +241,15 @@ export class Store extends Model {
 	pairFailed = false;
 	/** The suggestion to add the web client to the home screen, shown once after a first pairing where that keeps the browser's key. */
 	homeScreen = false;
+	/**
+	 * A pairing link pasted by the owner or handed in by the app (`onPairLink`), waiting for the owner's
+	 * yes in the page: nothing of it reaches the computer before that yes (`confirmPair`).
+	 */
+	pairAsk?: PairLink & { link: string };
+	/** Whether the bridge pairs from a link in the owner's hand (`pair`: the mobile app's), not from its address by itself (the web client's). */
+	pairsFromHand = false;
+	/** The owner ended the open pairing: how it ends is then no failure to say. */
+	private pairCancelled = false;
 	focused = true;
 	versions = { app: "", electron: "" };
 	/** Whether this app asks for a newer one at all: an app from a checkout is no release and does not. */
@@ -401,6 +410,13 @@ export class Store extends Model {
 		this.local = first.local !== false;
 		this.canAddHost = first.canAddHost !== false;
 		this.canPair = first.canPair === true;
+		this.pairsFromHand = typeof bridge.pair === "function" && typeof bridge.stopPairing === "function";
+		// A pairing link the app was opened with (the mobile app's): asked about here, never paired with by itself.
+		if (this.canPair)
+			bridge.onPairLink?.((link: string) => {
+				const why = this.askToPair(link);
+				if (why) this.flash(why, "bad", 8000);
+			});
 		this.serviceHost = typeof first.serviceHost === "string" && first.serviceHost ? first.serviceHost : undefined;
 		this.viewsHere = first.views === true;
 		this.focused = first.focused;
@@ -606,7 +622,13 @@ export class Store extends Model {
 		// Another pine than before (another machine was picked): nothing of the last one is kept, not even what an agent of the same name was doing.
 		const moved = s.host !== this.service.host || s.status !== was;
 		if (s.host !== this.service.host) this.forgetPine();
-		const ended = pairingEnded(this.service, s);
+		let ended = pairingEnded(this.service, s);
+		// Ended by the owner's Cancel: neither a failure to say nor a pairing to welcome.
+		if (ended && this.pairCancelled) {
+			ended = undefined;
+			this.pairCancelled = false;
+			this.pairFailed = false;
+		}
 		if (ended) this.pairFailed = ended === "failed";
 		else if (s.host || (s.status === "starting" && s.pairing)) this.pairFailed = false;
 		this.service = s;
@@ -627,7 +649,8 @@ export class Store extends Model {
 		const now = await bridge.state().catch(() => undefined);
 		if (now) this.prefs = now.prefs;
 		try {
-			if (homeScreenKeeps(navigator.userAgent, navigator.maxTouchPoints) && !localStorage.getItem(HOME_SCREEN_KEY)) {
+			// Only the web client is a web app to put on the home screen: the mobile app is an app already.
+			if (this.platform === "web" && homeScreenKeeps(navigator.userAgent, navigator.maxTouchPoints) && !localStorage.getItem(HOME_SCREEN_KEY)) {
 				localStorage.setItem(HOME_SCREEN_KEY, "offered");
 				this.homeScreen = true;
 			}
@@ -635,6 +658,77 @@ export class Store extends Model {
 			// No storage to remember it by: not offered, rather than offered at every pairing.
 		}
 		this.touch();
+	}
+
+	/** Whether the owner can paste a pairing link: only under a bridge that can pair and takes one from the owner's hand (the mobile app's). */
+	get canPasteLink(): boolean {
+		return this.canPair && this.pairsFromHand;
+	}
+
+	/** What the page calls the device it runs on when it pairs ("phone", "browser"). */
+	get device(): "phone" | "browser" {
+		return deviceWord(this.platform);
+	}
+
+	/**
+	 * A pairing link from the owner's paste or from the app: read, and put to the owner for a yes.
+	 * Says why when it is not a pairing link (none: it waits for the yes); nothing starts here.
+	 */
+	askToPair(text: string): string | undefined {
+		if (!this.canPasteLink) return undefined;
+		const link = readPairLink(text);
+		const http = link ? undefined : httpService(text);
+		if (http) return `This pairing link reaches your computer through ${http} over http, and this ${this.device} pairs only through https: nothing was used. Pair with a link of an https meeting service, or connect over SSH instead.`;
+		if (!link) return "That is not a pairing link. In the Pine app on your computer, go to Settings > Browser access, press Add a device, and copy the link it gives.";
+		this.pairAsk = { ...link, link: text.trim() };
+		this.touch();
+		return undefined;
+	}
+
+	/** The owner's yes to the pairing link the page showed: the bridge pairs, and the first screen follows how it goes. */
+	async confirmPair(): Promise<void> {
+		const asked = this.pairAsk;
+		this.pairAsk = undefined;
+		this.touch();
+		if (asked) await this.attempt(() => bridge.pair!(asked.link));
+	}
+
+	/** The owner's no to the pairing link the page showed: nothing of it was used. */
+	dropPair(): void {
+		this.pairAsk = undefined;
+		this.touch();
+	}
+
+	/** Whether the open pairing can be ended from the page: under a bridge that pairs from the owner's hand. */
+	get canCancelPair(): boolean {
+		return this.pairsFromHand && this.service.status === "starting" && !!this.service.pairing;
+	}
+
+	/** End the open pairing, nothing kept: the bridge goes back to how it was before. */
+	async cancelPair(): Promise<void> {
+		if (!this.canCancelPair) return;
+		this.pairCancelled = true;
+		await this.attempt(() => bridge.stopPairing!());
+	}
+
+	/**
+	 * Take a machine off the list. A paired computer is asked about first: forgetting it here leaves
+	 * its access open, which only Remove in the Pine app on that computer closes.
+	 */
+	async forgetMachine(host: string): Promise<void> {
+		if (isPaired(host)) {
+			const name = this.nameOf(host);
+			const sure = await this.pick({
+				title: `Forget ${name}?`,
+				items: [
+					{ value: "forget", label: `Forget it on this ${this.device}`, about: `this ${this.device} no longer lists it. Its access stays open until you remove this ${this.device} in the Pine app on ${name}: Settings > Browser access, Remove`, tone: "bad" },
+					{ value: "no", label: "Cancel" },
+				],
+			});
+			if (sure !== "forget") return;
+		}
+		const prefs = await this.attempt(() => bridge.forgetHost(host));
+		if (prefs) (this.prefs = prefs), this.touch();
 	}
 
 	/** The name the owner sees for a machine of the list (machines.ts): a paired computer's name, never its id. */

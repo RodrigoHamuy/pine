@@ -6,7 +6,8 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { type AccessControl, type AccessPrefs, type AccessState, createAccessControl, type Host, OFFICIAL_SERVICE, readAccessPrefs, relayAddress } from "../electron/access/control.ts";
+import { type AccessControl, type AccessPrefs, type AccessState, createAccessControl, type Host, readAccessPrefs, relayAddress } from "../electron/access/control.ts";
+import { OFFICIAL_SERVICE } from "../src/machines.ts";
 import type { AccessHostOptions, Cipher } from "../electron/access/host.ts";
 import { type RelayServer, type RelayTry, tryRelay } from "../electron/access/peer.ts";
 import { silentUdpPort, startTurn, TURN_PASSWORD, TURN_USER } from "./support/turn.ts";

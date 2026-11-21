@@ -10,7 +10,10 @@ import { store } from "./model.ts";
 
 window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq3lYcVb0mXkJ2yq8rV6tZsP4dW1nE9fKcH7uR2aB3m pine-android", copy: async () => {}, share: async () => {} });
 
-function Before({ state, hosts, loadError, names, canAddHost = true, canPair = false, serviceHost, pairFailed = false }: { state: ServiceState; hosts: string[]; loadError?: string; names?: Record<string, string>; canAddHost?: boolean; canPair?: boolean; serviceHost?: string; pairFailed?: boolean }) {
+function Before({ state, hosts, loadError, names, canAddHost = true, canPair = false, serviceHost, pairFailed = false, phone = false }: { state: ServiceState; hosts: string[]; loadError?: string; names?: Record<string, string>; canAddHost?: boolean; canPair?: boolean; serviceHost?: string; pairFailed?: boolean; phone?: boolean }) {
+	// `phone`: the mobile app's bridge, which pairs from a link in the owner's hand (`pair`) where it says `canPair`.
+	store.platform = phone ? "android" : "darwin";
+	store.pairsFromHand = phone;
 	store.local = false;
 	store.prefs = { ...store.prefs, hosts, use: state.host, names };
 	store.service = state;
@@ -31,8 +34,8 @@ const meta = {
 	parameters: { layout: "fullscreen" },
 	// What a story sets on the store is put back after it: the next story starts from the store as it was.
 	beforeEach: () => {
-		const { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed } = store;
-		return () => void Object.assign(store, { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed });
+		const { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed, platform, pairsFromHand } = store;
+		return () => void Object.assign(store, { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed, platform, pairsFromHand });
 	},
 	// Nothing of a local machine, and the machines listed: they are the only way to a pine.
 	play: async ({ canvasElement }) => {
@@ -345,5 +348,47 @@ export const PairedNoneInUse: Story = {
 		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).not.toBeNull();
 		await expect(canvasElement.querySelector("input")).toBeNull();
 		await expect(canvasElement).not.toHaveTextContent(/user@host|authorized_keys/);
+	},
+};
+
+// ---- The mobile app, pairing from a link in the owner's hand ----
+
+const NO_MACHINE = "Add the machine whose pine this phone is to use, as you would write it after ssh: user@host, or user@host:port. Put this phone's key into ~/.ssh/authorized_keys there first.";
+
+/** A phone whose app pairs, nothing added yet: pairing first, with a field to paste a link that did not open the app, and SSH behind a link. */
+export const PhonePairFirst: Story = {
+	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE } },
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement } = context;
+		const canvas = within(canvasElement);
+		await expect(canvas.getByText("Pair this phone with your computer")).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).toHaveTextContent(/this phone's camera/);
+		await expect(canvasElement.querySelector('[data-slot="pair-link-field"]')).not.toBeNull();
+		await expect(canvasElement.querySelector('[data-slot="ssh-instead"]')).not.toBeNull();
+		// No service is named for the whole app: each paired computer has its own.
+		await expect(canvasElement.querySelector('[data-slot="meeting-line"]')).toBeNull();
+	},
+};
+
+/** The computer shows the four digits beside the phone's name; the owner can end the pairing from the phone. */
+export const PhonePairing: Story = {
+	args: { hosts: [], canPair: true, phone: true, state: { status: "starting", pairing: { code: "4821", name: "Pine on Pixel 9" } } },
+	play: async ({ canvasElement }) => {
+		await expect(canvasElement.querySelector('[data-slot="pairing-code"]')).toHaveTextContent("4821");
+		await expect(within(canvasElement).getByText(/Pine on Pixel 9/)).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-slot="cancel-pairing"]')).not.toBeNull();
+	},
+};
+
+/** A phone whose app does not say it can pair (a platform whose native side is not done): the SSH view as before, nothing of pairing. */
+export const PhoneWithoutPairing: Story = {
+	args: { hosts: [], phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE } },
+	play: async (context) => {
+		await meta.play(context);
+		const { canvasElement } = context;
+		await expect(within(canvasElement).getByText("Choose a machine")).toBeInTheDocument();
+		await expect(canvasElement.querySelector("input")).not.toBeNull();
+		for (const slot of ["pair-how-to", "pair-link-field", "ssh-instead", "back-to-pairing", "cancel-pairing"]) await expect(canvasElement.querySelector(`[data-slot="${slot}"]`)).toBeNull();
 	},
 };

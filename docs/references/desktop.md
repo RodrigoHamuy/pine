@@ -32,8 +32,9 @@ Open the image and drag Pine into Applications. Nothing else has to be installed
 | pine's helpers | The small programs for dictating, app control and the `system` event source, built for both kinds of Mac. Elsewhere pine builds them on first use, which needs Apple's command line developer tools |
 | `pine` for a terminal | See below |
 
-An Android phone has an app of its own in the same release, for the pine of another machine
-([mobile.md](mobile.md)).
+Android phones and iPhones have an app of their own in the same release, for the pine of another
+machine, this computer's included: it pairs as a browser does (see "Browser access" and
+[mobile.md](mobile.md)).
 
 ### A newer version
 
@@ -182,8 +183,8 @@ pine, setting pine up. To open a folder for a conversation you type its path.
 
 ## The daemon: started or reused
 
-When the app opens it asks `pine service` ([operations.md](operations.md), "A UI of its own")
-for the daemon of your home:
+When the app starts it asks `pine service` ([operations.md](operations.md), "A UI of its own")
+for the daemon of your home, so you never have to start pine first:
 
 | What it finds | What happens |
 |---|---|
@@ -329,8 +330,11 @@ it (its computer name). What the browser side looks like is in
 
 ### From a phone without SSH
 
-The mobile app needs SSH to a machine ([mobile.md](mobile.md)). To use this computer's pine from a
-phone with no SSH at all, pair the phone's browser here.
+A phone needs no SSH for this computer's pine: pair the Pine app on the phone, or the phone's
+browser, with the same QR code. On Android the code opens the app when it is installed; on an
+iPhone it opens Safari, which offers to open the app instead
+([mobile.md](mobile.md#pairing-with-a-computer-that-runs-the-pine-app)). The app is listed here
+as a device like a browser, by the phone's name ("Pine on Pixel 9", "Pine on iPhone").
 
 ### Pairing a device
 
@@ -344,9 +348,9 @@ service and lets nobody in.
 | `Open Pine at login` | Offered, checked, the first time you switch browser access on, and changed here later: so that this computer can be reached after a restart with no need to open the app. The computer has to be awake and Pine open |
 | `Service address` | Where browsers open the web client and find this computer. By default the project's own service, `https://pine.drcmda.workers.dev`. Write the address of a deployment of your own instead (see "Deploying it" in [web.md](web.md#deploying-it)). Only `https://` and `http://` addresses are kept. Changing it makes the browsers paired at the old address pair again: a browser's key and its machines belong to the address it opened |
 | `Add a device` | Shows a QR code, and Copy link for a computer that has no camera (send yourself the link and open it in that browser). The code works once, for two minutes, and stops when you close the dialog; New code makes another. Five wrong codes close it. Only one is open at a time, and only at this computer: nobody pairs a browser from afar |
-| `Allow` and `Refuse` | When a browser uses the code, the app names it ("Chrome on Android") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
+| `Allow` and `Refuse` | When a browser or the mobile app uses the code, the app names it ("Chrome on Android", "Pine on Pixel 9") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
 | `Devices` | Each paired browser by its name, the day it was paired and its last connection; "connected now" and how (same network, direct IPv4, direct IPv6, or relayed through your relay server) while it is connected. No notification for a reconnection |
-| `Remove` | Removes a paired phone, tablet or computer: it can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
+| `Remove` | Removes a paired phone, tablet or computer, so that the phone can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
 
 ### What a paired browser can do
 
@@ -378,7 +382,7 @@ if you have none.
 |---|---|
 | The phone says "<name> does not answer", by the name it was given at pairing ("Your computer" before) | It is asleep or shut down, Pine is closed, or the switch of browser access is not on. The phone keeps trying and connects when it is back |
 | The phone says "no direct connection could be made from this network" | Some networks (often a phone's data) do not let two devices connect directly. Try another Wi-Fi, or the phone's data instead of the Wi-Fi, or name a relay server of your own (`Relay server (TURN)`) |
-| The phone says "This browser is no longer known to <name>" | Its device was removed here, or the browser's data was cleared there. Add it again |
+| The phone says "This browser is no longer known to <name>" ("This phone" in the mobile app) | Its device was removed here, or the browser's data was cleared there (the mobile app's key is new: an iPhone reinstalled under another Apple ID). Add it again |
 | The section says the service cannot be reached | The app is offline, or the service address is wrong. Everything else in the app works |
 | A browser on a Mac asks about the local network | macOS may ask whether that browser may find devices on the local network. Allow it for a direct connection on the same Wi-Fi |
 

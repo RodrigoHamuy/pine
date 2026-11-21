@@ -169,6 +169,19 @@ export type PageBridge = Omit<Bridge, "state" | AccessCalls | UpdateCalls> & Par
 	 * keeps names (the web client's); the others leave it out.
 	 */
 	renameHost?: (host: string, name: string) => Promise<Prefs>;
+	/**
+	 * Pair with the computer of a pairing link (machines.ts `readPairLink`), after the owner said yes
+	 * to it in the page: the pairing then goes as the web client's does, through the service state
+	 * (`pairing`, then the machine in use, or an error with no machine). Rejects a link that is not a
+	 * pairing link of an `https` service, starting nothing. Set by a bridge that takes a link from the
+	 * owner's hand (the mobile app's), where `canPair`; the web client's pairs with the link of its
+	 * address by itself and leaves it out, and the page then shows no field to paste one.
+	 */
+	pair?: (link: string) => Promise<void>;
+	/** End the pairing that is open, nothing kept (the bridge that has `pair`). */
+	stopPairing?: () => Promise<void>;
+	/** A pairing link the app was opened with (the mobile app's): starts nothing, the page asks the owner first. */
+	onPairLink?: (fn: (link: string) => void) => () => void;
 };
 
 export const bridge = window.pine;

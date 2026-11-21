@@ -337,7 +337,15 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["set up a turn server so my phone connects from mobile data", /^desktop#a-relay-server-of-your-own/],
 		["remove a phone that can reach my mac", /^desktop#(pairing-a-device|browser-access)/],
 		["remove a phone that can reach my computer", /^desktop#(pairing-a-device|browser-access)/],
-		["link my phone to pine with a barcode", /^(web#a-computer-paired-by-qr-code|desktop#(pairing-a-device|browser-access))/],
+		["link my phone to pine with a barcode", /^(web#a-computer-paired-by-qr-code|desktop#(pairing-a-device|browser-access)|mobile#pairing-with-a-computer)/],
+		// Pairing in the mobile app, asked for by somebody who does not know that the app can pair.
+		["connect the android app to my mac by scanning the code instead of typing user@host", /^mobile#(pairing-with-a-computer|how-the-link-reaches-the-app)/],
+		["the qr code opens safari and not the pine app on my iphone", /^(mobile#how-the-link-reaches-the-app|web#.*open-in-the-pine-app)/],
+		["my android phone opens the scanned code in chrome instead of the app", /^mobile#how-the-link-reaches-the-app/],
+		["I deleted my computer in the phone app, can the phone still get in", /^mobile#a-paired-computer/],
+		["why does the android app want to see the network state", /^mobile#what-the-app-is-careful-about/],
+		["unpair the phone app from my computer", /^(mobile#a-paired-computer|desktop#pairing-a-device)/],
+		["the deeplink does not open the android app", /^mobile#how-the-link-reaches-the-app/],
 	];
 	const missed = cases.filter(([q, want]) => !top(q).some((id) => want.test(id))).map(([q]) => `${q} → ${top(q).join(", ")}`);
 	assert.deepEqual(missed, []);
