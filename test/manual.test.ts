@@ -44,6 +44,8 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["a sub-agent of the pool cannot decide something and asks a question", /^boards#(the-agent-stays-in-the-loop|a-pool-of-sub-agents)/],
 		["have a second sub-agent check the first one's work", /^boards#(a-check-after-the-work|a-pool-of-sub-agents)/],
 		["board_answer", /^(boards#the-tools\/board-answer|setup#the-tools\/boards)/],
+		["delete a board", /^(boards#the-tools\/board-remove|setup#the-tools\/boards)/],
+		["how do I get rid of a board my agent made", /^boards#(the-tools\/board-remove|which-boards-there-are)/],
 		["is a pool worth it or should I use plain sub-agents", /^boards#when-a-pool-pays-and-what-it-costs$/],
 		["how many tokens do boards cost", /^boards#when-a-pool-pays-and-what-it-costs$/],
 		["I changed the office view and after an update my changes are gone", /^views($|#)/],

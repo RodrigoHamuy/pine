@@ -225,7 +225,7 @@ declares them in **families**, which is about 11 500:
 | `pine_skills` | `add_skill`, `remove_skill` |
 | `pine_agents` | The main agent's: `create_agent`, `update_agent`, `rename_agent`, `remove_agent` |
 | `pine_settings` | The main agent's: `set_setting`, `add_route`, `remove_route`, `add_model_server`, `remove_model_server` |
-| `pine_board` | `board_read`, `board_post`, `board_claim`, `board_done`, `board_answer`: the tasks of a job that several work on ([boards.md](boards.md)) |
+| `pine_board` | `board_read`, `board_post`, `board_claim`, `board_done`, `board_answer`, `board_remove`: the tasks of a job that several work on ([boards.md](boards.md)) |
 | `pine_other` | `request_access`, `stop_program`, `state_get`, `state_set` |
 | `pine_conversations` | The main agent's: `read_conversation`, `set_conversation`, `remove_conversation` |
 | One for each MCP server, named after the server (`browser`, `media`, `home_link`) | The server's tools under their own names (`browser_navigate`, `browser_click`) |

@@ -167,6 +167,9 @@ export function classify(tool: string, input: any, ctx: ActionContext): Action {
 	// A conversation's own board is its list of work, shared with its sub-agents, like its list of steps:
 	// it changes nothing outside pine. A board with a name is read by other conversations and agents.
 	if (BOARD_WRITES.includes(tool)) return input?.board ? { cls: "local", note: "a post on a board that other conversations read" } : { cls: "look" };
+	// Taking something off a board cannot be undone: it is asked about in manual mode. (A board that others use
+	// is put to the owner by the tool itself, in every mode.)
+	if (tool === "board_remove") return { cls: "local", note: "removes from a board for good" };
 	// App control. Looking at an app only reads. Acting in one is what the owner said yes to, app by
 	// app, for the conversation: it is not asked about click by click. An owner who wants each
 	// action looked at sets "approve" on the server.

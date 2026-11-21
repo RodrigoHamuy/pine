@@ -2565,7 +2565,13 @@ export class AgentManager {
 		throw new Error('"action" is one of reopen, answer, done, remove');
 	}
 
+	/** Remove a board with everything on it: the owner's hand, and `board_remove`. A pool's sub-agent at work on one of its tasks is stopped first. */
 	boardRemove(id: number): { removed: boolean } {
+		for (const item of this.boards.items(id, { kind: "task" })) {
+			const worker = this.poolWorker(item);
+			if (worker) this.cancel(worker.id);
+		}
+		this.poolTold.delete(id);
 		return { removed: this.boards.remove(id) };
 	}
 

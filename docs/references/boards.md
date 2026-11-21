@@ -48,9 +48,13 @@ are told to share what they find mostly repeat what they were told.
 | Board | Who uses it | Made by |
 |---|---|---|
 | A conversation's own board, which has no name | That conversation, its sub-agents, and whoever it hands a task to with `delegate` (for that one run, not in a `thread`) | The first post, or a task of yours in the Board tab. It goes when the conversation is reset or removed |
-| A board with a name, `"scope": "local"` | The same, and nobody else | `board_post` with a new name and that scope |
+| A board with a name, `"scope": "local"` | The same, and nobody else | `board_post` with a new name and that scope. It goes when the conversation is reset or removed |
 | A board with a name, `"scope": "agent"` | Every conversation of the one that made it | `board_post` with a new name and that scope. Only in your own conversations, and not by a sub-agent. It goes when its agent is removed |
-| A board with a name, `"scope": "global"` | Everyone | The main agent, the same way |
+| A board with a name, `"scope": "global"` | Everyone | The main agent, the same way. Nothing removes it by itself |
+
+Any board goes when you remove it in the Board tab, or when an agent removes it with
+`board_remove` once its work is finished. A board of the conversation's own goes without a
+question; one that other conversations use (`"scope": "agent"` or `"global"`) only after your yes.
 
 A name is lowercase letters, digits, `-` and `_`. A new board with a name is made only with a
 `scope`: an agent that leaves it out is told to say whom the board is for, so that a board meant
@@ -73,6 +77,7 @@ They are the actions of the family `pine_board`; the list `boards` is one of `pi
 | `board_post` `text` [`kind`] [`board`] [`on`] [`after`] [`scope`] | Posts a note, or with `"kind": "task"` a task. `on`: the task a note is about. `after`: tasks that have to be done before this one can be taken; whoever does it is shown what came of them. `scope`: whom a board with a name is for, needed when the name is new. The answer says so when it made a board and who sees it, and lists the notes others left since the agent last looked. |
 | `board_claim` [`id`] [`board`] | Takes a task: the one with that number, or the oldest that is ready. The answer is the task in full. It is the agent's until `board_done`, or until the turn ends. |
 | `board_done` `id` [`result`] [`outcome`] | Says what became of a task the agent took. `outcome`: `done` (the default) with its result, `failed` with why, `blocked` with the question that has to be answered before it can go on, `open` to give it back. The conversation that gave out the work also closes with it a task of its own board that nobody has: a question whose answer is the result already. |
+| `board_remove` [`board`] [`id`] | Removes a board with everything on it, or with `id` one task or note (a task with the notes about it; tasks that waited for it no longer do). Without `board`, the conversation's own board. A board of this conversation goes without a question; one for all the agent's conversations, or for all agents (only the main agent's to remove), is put to you first, in every mode. A sub-agent of a pool that works on a task that goes is stopped, and a board a pool is at work on cannot be removed until its call has come back. Not for a sub-agent, nor for a run started from outside. What is removed cannot be brought back. |
 | `board_answer` `id` `text` [`all`] | Answers the question a blocked task waits for: the answer becomes a note about the task, and the task is open again. Whoever takes it next is shown the question and the answer, as settled. With `"all": true` the answer is for the whole job: every other task that waits for an answer is opened again with it, and the tasks that are not finished are shown it, so that one answer does where several sub-agents have the same question. Not for a sub-agent: a question is answered by whoever gave out the work. |
 
 Without `board` every one of them means the conversation's own board.
@@ -270,7 +275,9 @@ A route wakes an agent when somebody posts a task ([events.md](events.md)):
 - **What is asked.** The conversation's own board is its list of work, like `todo`: its tools
   are never asked about, and they work in plan mode. A call that names a board (`board`)
   changes something other conversations read: it is asked about in manual mode and refused in
-  plan mode, like any change inside the agent's own folders.
+  plan mode, like any change inside the agent's own folders. `board_remove` is asked about in
+  manual mode and refused in plan mode on any board, and on a board others use it asks you in
+  every mode.
 - **Other agents' files.** A board holds text. It opens no folder, and a result that names a
   file names it for whoever can read it.
 
@@ -284,8 +291,8 @@ from a run that had read outside content marks the run that takes it.
 |---|---|
 | A task's text, a result | 4000 characters; more is cut |
 | A note | 2000 characters |
-| Posts on one board | 500. Remove what is finished, or use a new board |
-| Boards | 200 |
+| Posts on one board | 500. Remove what is finished (`board_remove` with an `id`), or use a new board |
+| Boards | 200. Remove the ones whose work is finished (`board_remove`, or the Board tab) |
 | Sub-agents started by one `subagent` call with `pool` | 100 |
 
 ## From the control API
@@ -301,7 +308,7 @@ read, and what you post is yours.
 | `POST /agents/<id>/boards/post` `{ session, text, kind?, after? }` | A task (or with `kind: "note"` a note) of yours on that conversation's own board, which is made if there is none |
 | `POST /boards/<id>/post` `{ text, kind?, after?, on? }` | The same on a board by its number |
 | `POST /boards/items/<n>` `{ action, text? }` | `reopen`: take a task back so that it can be taken again; `answer` with `text`: answer a blocked task; `done` with `text`: settle it by hand; `remove`: take a task or a note off the board. A sub-agent that a pool started for that task is stopped |
-| `POST /boards/<id>/remove` | Remove a board with everything on it |
+| `POST /boards/<id>/remove` | Remove a board with everything on it. A sub-agent that a pool started for one of its tasks is stopped |
 
 A UI that is running is told on `pine/board` which board changed (`board`, `scope`, `agent`,
 `session`, `name`, `change`) and which post (`item`, `kind`, and for a task its `state` now),

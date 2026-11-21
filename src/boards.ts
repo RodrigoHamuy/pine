@@ -137,7 +137,7 @@ export class Boards {
 	ensure(scope: BoardScope, agent: string, session: string, name: string): Board {
 		const found = this.find(scope, agent, session, name);
 		if (found) return found;
-		if ((this.db.prepare("SELECT COUNT(*) AS n FROM boards").get() as any).n >= MAX_BOARDS) throw new Error(`there are ${MAX_BOARDS} boards already; remove one that is finished first`);
+		if ((this.db.prepare("SELECT COUNT(*) AS n FROM boards").get() as any).n >= MAX_BOARDS) throw new Error(`there are ${MAX_BOARDS} boards already. Remove one whose work is finished (board_remove), or ask your owner to`);
 		const r = this.db.prepare("INSERT INTO boards (scope, agent, session, name, created) VALUES (?, ?, ?, ?, ?)").run(scope, scope === "global" ? "" : agent, scope === "local" ? session : "", name, Date.now());
 		return this.get(Number(r.lastInsertRowid))!;
 	}
@@ -210,7 +210,7 @@ export class Boards {
 	post(board: Board, o: { kind: "task" | "note"; text: string; data?: unknown; by: string; trust: "owner" | "untrusted"; tainted?: string; after?: number[]; about?: number; cause?: unknown }): BoardItem {
 		const text = String(o.text ?? "").trim();
 		if (!text) throw new Error(o.kind === "task" ? "a task needs its text: what is to be done, complete on its own" : "a note needs its text");
-		if ((this.db.prepare("SELECT COUNT(*) AS n FROM board_items WHERE board = ?").get(board.id) as any).n >= MAX_ITEMS) throw new Error(`this board holds ${MAX_ITEMS} posts, which is all it takes. Finish what is on it, or use a new board`);
+		if ((this.db.prepare("SELECT COUNT(*) AS n FROM board_items WHERE board = ?").get(board.id) as any).n >= MAX_ITEMS) throw new Error(`this board holds ${MAX_ITEMS} posts, which is all it takes. Remove what is finished (board_remove with an id, or the whole board), or use a new board`);
 		let data: string | null = null;
 		if (o.data !== undefined && o.data !== null && o.data !== "") {
 			if (typeof o.data !== "object" || Array.isArray(o.data)) throw new Error('"data" is a JSON object of fields, for example {"file": "src/a.css", "line": 12}');

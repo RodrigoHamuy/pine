@@ -2052,6 +2052,60 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					return ok(`Answered. Task #${item.id} is open again, and whoever takes it is shown the question and your answer.${also.length ? ` ${also.join(" ")}` : ""}${fresh}`);
 				},
 			}),
+			// Removing goes through the functions the control API has for the owner's own hand (`boardRemove`,
+			// `boardAct`), which stop a pool's sub-agent that works on what goes. What this conversation alone uses
+			// goes without a question; a board that other conversations use is put to the owner. Only the owner's
+			// own conversations have it: a sub-agent and a run started from outside are never given it.
+			...(live.trust !== "owner" || profile.leaf
+				? []
+				: [
+			defineTool({
+				name: "board_remove",
+				label: "Remove a board",
+				description: 'Remove a board with everything on it, when its work is finished or your owner asks for it. With "id", only that task or note. Without "board", the board of this conversation. A board that others use (one for all your conversations, or for all agents) goes only after your owner says yes. A sub-agent at work on a task that goes is stopped.',
+				parameters: Type.Object({
+					board: boardParam,
+					id: Type.Optional(Type.Number({ description: "The number of one task or note, to remove only that" })),
+				}),
+				execute: async (_id, p, signal) => {
+					run();
+					const target =
+						p.id !== undefined
+							? itemOf(p.id)
+							: (() => {
+									const wanted = p.board === undefined || p.board === null || String(p.board).trim() === "" ? "" : boardName(p.board);
+									const board = boards.resolve(who, wanted);
+									if (!board) throw new Error(wanted ? `there is no board "${wanted}" that you can use. The boards list says which there are.` : "this conversation has no board: there is nothing to remove.");
+									return { board, item: undefined };
+								})();
+					const { board, item } = target;
+					if (!item && manager.pooling.has(board.id)) throw new Error(`sub-agents are at work on ${boardLabel(board)} for a call of yours that has not come back. Wait for it, then remove the board.`);
+					// A board of this conversation (with a name or without) is its own list of work. One for all its
+					// conversations or for all agents is used by others too: taking it away is the owner's to say.
+					const shared = board.scope !== "local";
+					if (shared) {
+						if (board.scope === "global") mainOnly("remove a board");
+						const c = boards.counts(board.id);
+						const what = item
+							? `remove ${item.kind} #${item.id} from ${boardLabel(board)}\n${truncate(item.text, 600)}`
+							: `remove ${boardLabel(board)} with everything on it\n${c.open} open, ${c.taken} taken, ${c.done} done, ${c.failed} failed, ${c.blocked} blocked; ${c.notes} note${c.notes === 1 ? "" : "s"}`;
+						const decision = await confirm("board_remove", what, `${board.scope === "global" ? "every agent" : `every conversation of ${agent.id}`} uses this board, and what is removed cannot be brought back${careful()}`, signal);
+						if (!decision.allow) throw new Error(`not removed (${decision.by}). Do not retry; tell your owner.`);
+					}
+					const asked = shared ? "Your owner confirmed it. " : "";
+					if (item) {
+						manager.boardAct(item.id, "remove");
+						return ok(`${asked}${item.kind === "task" ? "Task" : "Note"} #${item.id} is removed from ${boardLabel(board)}${item.kind === "task" ? ", with the notes about it" : ""}.`);
+					}
+					const c = boards.counts(board.id);
+					const n = c.open + c.taken + c.done + c.failed + c.blocked;
+					manager.boardRemove(board.id);
+					live.boardSeen.delete(board.id);
+					const label = boardLabel(board);
+					return ok(`${asked}${label[0].toUpperCase()}${label.slice(1)} is removed, with its ${n} task${n === 1 ? "" : "s"} and ${c.notes} note${c.notes === 1 ? "" : "s"}.`);
+				},
+			}),
+					]),
 		);
 	}
 
