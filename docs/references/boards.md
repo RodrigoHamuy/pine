@@ -134,8 +134,10 @@ The call does not wait for the last task. It comes back to the conversation
 - when a sub-agent **asks a question**: a wrong choice would make its result wrong and looking
   does not settle it (a value its task needs is given nowhere, the task can mean two things
   that give different results). It called `board_done` with `blocked` and its question, and
-  stopped. Small things it decides itself and says what it assumed, and what is simply not
-  there (a file the task names) it reports as its result;
+  stopped. An answer whose last line is a question counts the same: pine settles that task as
+  blocked, not done, so that a question is never left in a result where it looks open and
+  nothing waits for it. Small things it decides itself and says what it assumed, and what is
+  simply not there (a file the task names) it reports as its result;
 - when a sub-agent **fails**;
 - or when nothing is left to do.
 

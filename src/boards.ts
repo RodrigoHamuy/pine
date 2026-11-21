@@ -104,6 +104,17 @@ const parse = (s: unknown) => {
 	}
 };
 
+/**
+ * Whether an answer ends by asking something: its last line is a question. Emphasis, quotes and
+ * brackets around it do not count; an answer that ends in a code block is no question.
+ */
+export function asksAtEnd(answer: string): boolean {
+	const text = answer.trim();
+	if (!text || text.endsWith("```")) return false;
+	const last = text.split("\n").at(-1)!.replace(/[\s*_"'\u201d\u2019)\]]+$/u, "");
+	return /[?\uff1f]$/u.test(last);
+}
+
 /** A board's name as it is kept: lowercase letters, digits, - and _. */
 export function boardName(wanted: unknown): string {
 	const name = String(wanted ?? "").trim().toLowerCase().replace(/^#/, "").replace(/[\s./]+/g, "-").replace(/[^a-z0-9_-]+/g, "").slice(0, 40);

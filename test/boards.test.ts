@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { boardName, Boards } from "../src/boards.ts";
+import { asksAtEnd, boardName, Boards } from "../src/boards.ts";
 import { classify } from "../src/actions.ts";
 import { harness, mockMsg, until } from "./support/harness.ts";
 
@@ -654,5 +654,44 @@ test("boards: a task that a sub-agent posts after it read outside content marks 
 	const doer = h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 2)!;
 	assert.match(doer.meta.tainted ?? "", /read returned outside content/, "the sub-agent that took the task started marked");
 	assert.match(h.pine.agents.outsideMark("main", "job") ?? "", /outside content/);
+	await h.close();
+});
+
+test("boards: a sub-agent whose answer ends with a question leaves its task blocked, not done, and one answer for all puts them back to work", async () => {
+	// What happened: sub-agents told to ask the owner counted their folder and asked at the end of their answer. Settled
+	// as done, the question read like one that was open, and the conversation answered tasks that were over.
+	assert.equal(asksAtEnd("COUNT 12 lines.\n\nWhat reviewer throughput should I use, in **lines per hour**?"), true);
+	assert.equal(asksAtEnd("Should it be left or right?)\n"), true);
+	assert.equal(asksAtEnd("Is it safe? Yes: nothing else uses it."), false);
+	assert.equal(asksAtEnd("The check:\n```js\nconst x = a ? b : c?\n```"), false);
+	assert.equal(asksAtEnd(""), false);
+
+	const h = await harness({ pine: { limits: { maxConcurrentRuns: 4 } }, agents: { main: { agent: { subagents: { maxParallel: 2 } } } } });
+	const boards = h.pine.agents.boards;
+	h.mock.state.scripts.a = [{ text: "COUNT-A 12 lines.\n\nWhat reviewer rate should I use, in lines per hour?" }];
+	h.mock.state.scripts.b = [{ delayMs: 250, text: "COUNT-B 30 lines. What reviewer rate should I use?" }];
+	// Given out again with the answer, each does its task.
+	h.pine.bus.subscribe("pine/board", () => {
+		if (boards.item(1)?.state === "blocked") h.mock.state.scripts.a = [{ text: "COUNT-A 12 lines: 0.12 hours" }];
+		if (boards.item(2)?.state === "blocked") h.mock.state.scripts.b = [{ text: "COUNT-B 30 lines: 0.3 hours" }];
+	});
+	const r = await h.pine.agents.run({
+		agent: "main",
+		session: "count",
+		prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["count a @@REF:a@@", "count b @@REF:b@@"] })] }, { tools: [call("board_answer", { id: 1, text: "100 lines per hour", all: true })] }, { tools: [call("subagent", { pool: true })] }]),
+		...owner,
+	});
+	assert.equal(r.status, "done");
+	const first = h.toolResults(turns(h)[1]).at(-1)!;
+	assert.match(first, /## Task #1 asks\nCOUNT-A 12 lines\.\n\nWhat reviewer rate should I use, in lines per hour\?\nTo answer: board_answer with id 1/);
+	assert.match(first, /## Still being worked\n#2 \[taken by main\] count b/);
+	assert.doesNotMatch(first, /## Task #\d: done/);
+	// The second asks the same a moment after the answer for all: blocked, not done, and given out again with the answer.
+	assert.match(h.toolResults(turns(h)[2]).at(-1)!, /The 1 other task that is not finished is shown it as well\./);
+	const last = r.text.split(" || ").at(-1)!;
+	assert.match(last, /## Task #1: done\nCOUNT-A 12 lines: 0\.12 hours/);
+	assert.match(last, /## Task #2: done\nCOUNT-B 30 lines: 0\.3 hours/);
+	// And a sub-agent is told so before it answers.
+	assert.match(h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 1)!.prompt, /Do not end it with a question: an answer that ends by asking something is taken for a question, and the task waits for its answer\./);
 	await h.close();
 });

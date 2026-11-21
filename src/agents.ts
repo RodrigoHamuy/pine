@@ -29,7 +29,7 @@ import { createAgent, type NewAgent } from "./agent-admin.ts";
 import type { Router } from "./router.ts";
 import { Denials, fromOutput, gather, looksFailed, reaches, sortDenials, there, type Want, wantKey, wantText } from "./access.ts";
 import type { Bus, Kv, State, TaskStore } from "./store.ts";
-import { type Board, type BoardItem, type Boards } from "./boards.ts";
+import { asksAtEnd, type Board, type BoardItem, type Boards } from "./boards.ts";
 import { editJson, removeServer } from "./mcp-config.ts";
 import { fetchToFile, localTarget } from "./net.ts";
 import { APP_LOOK, appTarget, computerSession } from "./computer.ts";
@@ -2396,7 +2396,10 @@ export class AgentManager {
 		for (const item of held) {
 			if (item.id === task.meta.boardTask && task.status !== "cancelled") {
 				const ok = task.status === "done";
-				this.boards.settle(item.id, ok ? "done" : "failed", ok ? (task.result ?? "") : (task.error ?? task.status), { run: task.id, tainted, untrusted: task.meta.trust === "untrusted", cause });
+				// An answer that ends by asking something waits for its answer, however the sub-agent ended: settled as
+				// done, its question would read like one that is open, and the conversation would answer a task that is over.
+				const outcome = !ok ? "failed" : asksAtEnd(task.result ?? "") ? "blocked" : "done";
+				this.boards.settle(item.id, outcome, ok ? (task.result ?? "") : (task.error ?? task.status), { run: task.id, tainted, untrusted: task.meta.trust === "untrusted", cause });
 			} else this.boards.reopen(item.id, { cause });
 		}
 		// A run of its own that was no conversation leaves no board behind.
