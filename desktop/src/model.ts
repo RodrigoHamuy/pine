@@ -2512,7 +2512,19 @@ export class Store extends Model {
 	private did(tab: Tab, part: Part): void {
 		const work = this.workOf(tab);
 		work.parts.push(part);
+		this.holders.set(part, work);
 		work.v++;
+	}
+
+	/**
+	 * The group of work each line stands in. A line can change after its group was closed (an approval or the
+	 * list of steps came between a call and its end), and it is that group that has to be drawn again, not the
+	 * tab's current one: a call would go on pulsing after it ended.
+	 */
+	private holders = new WeakMap<Part, Of<"work">>();
+	private redraw(part: Part | undefined): void {
+		const work = part && this.holders.get(part);
+		if (work) work.v++;
 	}
 
 	/** A task goes on working after it wrote something: those words were not its answer, and join the work. */
@@ -2543,7 +2555,7 @@ export class Store extends Model {
 		part.ms = ms ?? Date.now() - part.startedAt;
 		tab.lastThought = { task, part };
 		tab.thoughts.delete(task);
-		if (tab.work) tab.work.v++;
+		this.redraw(part);
 	}
 
 	private showSteps(tab: Tab, task: number, items: Todo[]): void {
@@ -2596,7 +2608,7 @@ export class Store extends Model {
 					this.did(tab, thought);
 				}
 				thought.text += p.text;
-				if (tab.work) tab.work.v++;
+				this.redraw(thought);
 				break;
 			}
 			case "todos":
@@ -2635,7 +2647,7 @@ export class Store extends Model {
 				if (ended && ended.task === p.task) {
 					if (depth === 0) ended.part.speed = speedText(p.speed);
 					tab.lastThought = undefined;
-					if (tab.work) tab.work.v++;
+					this.redraw(ended.part);
 				}
 				this.dirty.add(this);
 				break;
@@ -2665,7 +2677,7 @@ export class Store extends Model {
 					part.ms = p.ms;
 					if (!p.ok) part.preview = short(oneLine(String(p.preview ?? "")), 240);
 					tab.tools.delete(key);
-					if (tab.work) tab.work.v++;
+					this.redraw(part);
 					const images = (p.images ?? []) as string[];
 					if (images.length) {
 						// A picture a tool returned is for the owner: it stands where it happened, not folded away.
@@ -2687,11 +2699,16 @@ export class Store extends Model {
 					const n = p.stats?.tools?.length ?? 0;
 					const what = childKind(p.kind ?? child?.kind ?? "task");
 					const how = p.status === "done" ? `answered (${took(p.stats?.ms ?? 0)}${n ? `, ${plural(n, "tool call")}` : ""})` : `${p.status}${p.error ? `: ${p.error}` : ""}`;
-					const part = tab.work?.parts.find((x) => x.p === "child" && x.task === p.task) as Extract<Part, { p: "child" }> | undefined;
+					// (In whichever group it stands: an approval may have closed the one it was started in.)
+					let part: Extract<Part, { p: "child" }> | undefined;
+					for (let i = tab.items.length - 1; i >= 0 && !part; i--) {
+						const it = tab.items[i];
+						if (it.t === "work") part = it.parts.find((x) => x.p === "child" && x.task === p.task) as Extract<Part, { p: "child" }> | undefined;
+					}
 					if (part) {
 						part.status = p.status;
 						part.how = how;
-						tab.work!.v++;
+						this.redraw(part);
 					} else this.did(tab, { p: "child", task: p.task, agent: p.agent, kind: what, label: child?.label ?? "", status: p.status, how, depth });
 					break;
 				}

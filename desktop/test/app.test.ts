@@ -939,6 +939,11 @@ test("what is asked is answered from the conversation too: an approval by its bu
 	await page.click(`${asked} button:has-text("blue")`);
 	await sees('[data-item="approval"][data-state="allowed"] >> text=Answered');
 	await sees("[data-slot=markdown] >> text=answered from the line");
+	// The call the approval was for ended after its card closed the group it stood in: it is drawn as ended, and
+	// nothing in the window pulses once the agent is idle.
+	await page.waitForFunction(() => !document.querySelector("[data-slot=pulse]"), null, { timeout: 5000 }).catch(async () => {
+		throw new Error(`still pulsing: ${await page.locator("[data-slot=pulse]").evaluateAll((els) => els.map((el) => el.parentElement?.textContent?.slice(0, 80)).join(" | "))}`);
+	});
 });
 
 test("a folder is opened for a conversation: changes, and a file edited and saved", async () => {
