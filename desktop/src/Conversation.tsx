@@ -710,7 +710,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 	);
 	if (!tab.busy) {
 		if (waiting.length) return line(<TriangleAlertIcon />, waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval.", <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button>, true);
-		if (swarm) return line(<UsersIcon />, `swarm · round ${swarm.round} of ${swarm.until} · looking at the board`, <Button variant="outline" size="xs" onClick={() => void store.setSwarm(tab, "pause")}>Pause</Button>);
+		if (swarm) return line(<UsersIcon />, `swarm · round ${swarm.round} of ${swarm.until} · ${swarm.checking ? "checking the answer" : "looking at the board"}`, <Button variant="outline" size="xs" onClick={() => void store.setSwarm(tab, "pause")}>Pause</Button>);
 		if (goal) return line(<TargetIcon />, `goal · round ${goal.round} of ${goal.until} · checking whether it is met`, <Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button>);
 		if (elsewhere) return line(<TriangleAlertIcon />, `${elsewhere.agent} · ${elsewhere.session} waits for you.`, <Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button>, true);
 		if (tab.programs.length) return line(<PlayIcon />, `${plural(tab.programs.length, "program")} still running`, <Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button>);

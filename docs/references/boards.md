@@ -186,7 +186,12 @@ was told by you. A value or a choice that nobody gave it is yours: it asks you f
 on what you say (only `board_answer` puts the task back to work). Where other tasks have or
 will have the same question it answers with `"all": true`: those that asked are opened again
 with it, and a sub-agent that was still at work and asks the same a moment later has its task
-given out again by pine itself, once, without a turn of the agent. Where its answer is the
+given out again by pine itself, once, without a turn of the agent. A sub-agent of another task
+is shown such a question as what another task asked, with its own task named again after it,
+so that it goes by the answer and does not take that other task for its own. When all tasks are
+done, the pool's answer reminds the agent that a result which left something out or assumed a
+value given nowhere is not finished: the value is yours, so it asks you and has those pieces
+done again. Where its answer is the
 result already, the agent closes the task itself with `board_done`. Then it calls `subagent` with
 `"pool": true` and no tasks: that call takes over the sub-agents that are still at work, gives
 the answered task to a new one, which is shown the question and the answer, and goes on.
@@ -308,15 +313,17 @@ add up. A job can have both.
 ## A swarm
 
 `/swarm` and what is to be done, typed in a conversation, makes its agent the lead of a swarm:
-it does not do the job, it hands it out to sub-agents on the conversation's board, answers what
-they ask, and puts the result together.
+it hands the job out to sub-agents on the conversation's board, answers what they ask, and
+puts the result together. A job of a few steps it does itself. Either way pine has its answer
+checked before the swarm is done.
 
 ```
 /swarm Write a test file for each of the 16 modules in src/, and make sure they all pass.
 ```
 
 A normal message leaves it to the agent whether it uses sub-agents, a pool, checks. A swarm
-does not: the work goes over the board, pine looks at the board each time the lead ends a
+does not: the agent leads and coordinates the sub-agents instead of doing the work itself
+(all but a job of a few steps), the work goes over the board, pine looks at the board each time the lead ends a
 turn, and the answer is checked before the swarm is done. That is what `/swarm` adds to asking
 for sub-agents in your message:
 
@@ -324,21 +331,24 @@ for sub-agents in your message:
 |---|---|
 | Tasks on the board that are not done | It calls the lead again, with their numbers. A swarm does not end with work lying open. |
 | A task that waits for an answer, and the lead ended its turn with a question to you | The swarm waits. Your answer is its next turn. |
-| All done, and the lead has answered | It puts a check of that answer on the board (your job in your words, and the answer in full), and calls the lead again to have it done by a sub-agent that did none of the work. |
-| The check passed | The swarm is done. The lead says in a line that its answer was checked, and the answer stands. |
-| The check failed | The lead corrects a slip in its answer itself, hands work that is wrong out again, and gives you the whole answer again. That answer is checked once more: two checks in all. If the second fails too, the swarm ends and its last line says so. |
+| All done, and the lead has answered | It puts a check of that answer on the board (your job in your words, and the answer in full) and starts a sub-agent for it itself: one that did none of the work. The lead has no turn for this. |
+| The check passed | The swarm is done, and the answer you have stands. |
+| The check failed | It calls the lead with the number of the check. The lead reads on the board what was found, corrects a slip in its answer itself, hands work that is wrong out again, and gives you the whole answer again. That answer is checked once more: two checks in all. If the second fails too, the swarm ends, and its last line names the task on the board that says what was still found. |
 
 What is checked is the answer you read, against what you asked and against what was left (the
-files, the numbers): a check before the answer was written would pass a name the lead left out
+files, the numbers). A check fails for what can be pointed at (a wrong number, a broken rule, a
+part that is missing, an item a list has twice); taste, wording, layout and how the work was
+done are remarks, and what the check cannot reach (another agent's files) it says it could not
+check, without failing the answer for it. It is a check of the answer because a check before the answer was written would pass a name the lead left out
 or a number it copied wrong while putting the pieces together. No model is asked whether the
 job is done (as the judge of a goal is): the board says so.
 
-The lead is told how a swarm works with your message: to look first, to hand out the whole job
-in one `subagent` call (`tasks` or `stages`, a `note` with every decision two pieces have to
-agree on, and `check` only where every piece is written under rules), not to do pieces itself,
-and to answer in full, since that answer is what gets checked. A job one agent does in a few
-minutes is one piece for one sub-agent, and a lead that does such a job itself has its answer
-checked all the same. While a swarm is at work every `subagent` call of the conversation goes
+The lead is told how a swarm works with your message: to look first; to do a job of a few
+steps itself, unless your request says to use sub-agents; to hand out a larger one in one `subagent` call (`tasks` or `stages`, a `note`
+with every decision two pieces have to agree on, and `check` only where every piece is written
+under rules) and then to do none of its pieces itself; to ask you for a value the job needs
+that is given nowhere before it hands the job out; and to answer in full, since that answer is
+what gets checked. While a swarm is at work every `subagent` call of the conversation goes
 over the board, however few tasks it has, and so does work the lead hands to another agent
 with `delegate`: the lead waits for it, and it is a task on the board that the other agent's
 answer settles.
@@ -347,8 +357,8 @@ answer settles.
 |---|---|
 | `/swarm <what is to be done>` | Starts a swarm in this conversation. One that was there is replaced. At most 4000 characters: put details into a file and name the file. |
 | `/swarm` | Shows the swarm and where it stands. |
-| `/swarm pause` | No further rounds. A round that is running ends by itself; `esc` stops it at once. |
-| `/swarm resume` | Goes on with a swarm that stopped: paused, or at its limit. |
+| `/swarm pause` | No further rounds. A round that is running ends by itself, and so does a check of the answer; `esc` stops a round at once. |
+| `/swarm resume` | Goes on with a swarm that stopped: paused, or at its limit. Where the check of the answer passed meanwhile, the swarm is done at once. |
 | `/swarm clear` | Takes the swarm off the conversation. Its board and what is on it stay. |
 
 A swarm stops by itself, and says why:
@@ -357,6 +367,7 @@ A swarm stops by itself, and says why:
 |---|---|
 | It has had its rounds | It stops after `limits.swarmRounds` turns of the lead (8) with work left. `/swarm resume` gives it as many again. |
 | You stopped the agent (esc, `/stop`), or a round failed | It is paused. |
+| The check of the answer was stopped, or could not be done (the model server refused it for good) | It is paused, and that check does not count as one of the two. One the model server refuses for now, pine starts again after a pause. |
 | pine was stopped or restarted | It is paused. Nothing goes on unseen after a restart. |
 | The conversation was reset or removed | The swarm is gone with it. |
 
@@ -366,36 +377,46 @@ type `/swarm` with the job. A conversation has a swarm or a goal, not both at on
 programs use `POST /agents/<id>/swarm` of the control API ([operations.md](operations.md)).
 
 A swarm costs more than one agent doing the job: every sub-agent reads its task and the files
-anew, and the check of the answer is a run and a turn of its own. It is for jobs with many pieces, for
+anew, and the check of the answer is a run of its own. It is for jobs with many pieces, for
 pieces that can be written side by side, and for results that have to be right. For a question
 or a change in one file, write a normal message.
 
 ## When a pool pays, and what it costs
 
 Boards are not always the better way, and a swarm is not. Eighteen jobs were run on pine three
-ways, each twice, on a small fast model (Claude Haiku 5.5, four sub-agents at a time): without
-boards (plain `subagent`), with boards as an agent uses them by itself after a normal message,
-and as a swarm. Every job was scored against what is known to be right.
+ways on a small fast model (Claude Haiku 5.5, four sub-agents at a time): without boards
+(plain `subagent`), with boards as an agent uses them by itself after a normal message (each
+four times), and as a swarm (eight times). Every job was scored against what is known to be right.
 
 | Jobs | Without boards | With boards, by a normal message | As a swarm |
 |---|---|---|---|
-| One agent is enough (11 jobs: a question, a change in a few files, a report over a few dozen short files, a small library) | 98.8% right, 155 seconds for all of them | The same: the agent uses no board for these, and having them costs nothing (99.0%, 153 seconds) | Everything right in every run, 406 seconds: two and a half times as long, for the lead's plan, sub-agents that start from nothing, and the check of the answer |
-| The result has to be right, or something is missing that only you know (4 jobs: texts under rules, a test file for each of 16 modules, sums with an exchange rate nobody gave) | 97.1% right, 175 seconds, 3.9 cents | 96.9% right, 124 seconds, 4.2 cents | Everything right in every run, 168 seconds, 4.6 cents. It asked you for the missing rate, where the other two mostly reported without it |
-| Many pieces (24, 60 and 100 folders checked against one reference) | Everything right, 532 seconds, 13.5 cents, in 16 to 26 calls | Everything right, 229 seconds, 8.3 cents, in one or two calls | Everything right, 255 seconds, 7.6 cents |
-| All 18 | 98.6% right, every part right in 86% of the runs, 862 seconds, 19.8 cents | 98.7% right, 86% of the runs, 505 seconds, 14.9 cents | Every part right in all 36 runs, 829 seconds, 19.4 cents |
+| One agent is enough (11 jobs: a question, a change in a few files, a report over a few dozen short files, a small library) | 99.4% right, 151 seconds for all of them | The same: the agent uses no board for these, and having them costs nothing (98.6%, 153 seconds; the difference is single slips of the model) | 98.9% right, 250 seconds: the lead does these itself, and what is added is the check of its answer, about 9 seconds a job |
+| The result has to be right, or something is missing that only you know (4 jobs: texts under rules, a test file for each of 16 modules, sums with an exchange rate nobody gave) | 94.9% right, every part right in 69% of the runs, 171 seconds, 4.2 cents | 99.0% right, every part right in 94% of the runs, 148 seconds, 4.6 cents | Everything right in every run, 172 seconds, 4.5 cents |
+| Many pieces (24, 60 and 100 folders checked against one reference) | 99.7% right, 421 seconds, 10.8 cents, in 7 calls for 24 folders and up to 28 for 100 | Everything right, 206 seconds, 8.0 cents, in one call each | Everything right, 281 seconds, 9.8 cents |
+| All 18 | 98.5% right, every part right in 88% of the runs, 743 seconds, 17.5 cents | 98.9% right, 90% of the runs, 506 seconds, 15.1 cents | 99.4% right, 94% of the runs, 703 seconds, 17.9 cents |
 
-(Over ten runs in all, the 60-folder audit without boards came out fully right seven times and
-62%, 77% and 85% right the other three, mostly when the agent gave up on sub-agents halfway
-and searched by itself. With boards it was fully right in nine of ten and 96% in the tenth; as a swarm, in all ten.)
+What the check of a swarm's answer did in those 144 swarm runs: 159 checks, of which 15 failed
+the first answer. Eleven of those found something real that the lead then put right (totals a
+cent off from rounding each row, a clean folder listed as faulty, a count line that
+contradicted its own list, cause counts in a report that were wrong, texts that broke one of
+their rules); four were false alarms, which cost a turn of the lead and a second check and
+changed no result (the last round, after the check was told that a result it cannot reach is
+no reason to fail, had none). What a check does not catch is a misreading it shares with the
+lead: in one run both sorted incidents under the same wrong causes, and a fault in code that
+no test shows was missed by the swarm as often as by one agent.
 
 Blind judges were shown the three answers of each job under letters, with what they cost and
-the automatic score. A panel of the same small model (three judges for each comparison)
-preferred the one with boards 39 times, the one without 37 times, the swarm 21 times, and
-called 11 a tie. A panel of a larger model (one judge for each comparison) rated the results
-7.9, 7.9 and 8.6 of 10 (without boards, with boards, swarm) and the efficiency 7.6, 8.3 and
-6.7. On the jobs with many pieces it preferred the swarm 4 times, the one with boards twice
-and the one without never; on the jobs of the first row it rated all three results alike and
-the swarm least efficient.
+the automatic score. A panel of a larger model (one judge for each comparison, 108 comparisons
+over three rounds) rated the results 8.2, 8.4 and 8.8 of 10 (without boards, with boards,
+swarm) and the efficiency 7.5, 8.1 and 7.0, and preferred the one with boards 40 times, the one
+without 34 times, the swarm 23 times, and called 11 a tie. Where the result has to be right it
+rated the results 6.5, 8.1 and 8.8; on the jobs with many pieces 7.2, 7.7 and 8.7, and the
+efficiency 5.2, 7.8 and 6.7, and preferred the one without boards once in 18. On the jobs of
+the first row it rated all three results alike (9.1, 8.7, 8.8) and the swarm least efficient
+(6.9 against 8.7 and 8.5): there a swarm is a few seconds of checking added to an answer that
+was right anyway. A panel of the same small model (three judges for each comparison, the last
+round) rated the results 7.9, 8.6 and 8.7 and the efficiency 7.5, 7.7 and 6.3, and preferred
+the one with boards 40 times, the one without 34 times, the swarm 14 times, with 20 ties.
 
 On a model that takes longer for each step the seconds are larger and the gaps wider: what a
 pool and a swarm save is turns of the agent, and what they add is sub-agents that work side
@@ -404,16 +425,16 @@ by side.
 What boards cost when they are not used: about 1 000 tokens in every request, an eighth of
 what pine's tools take, for the tools' declaration. A sub-agent of a pool is given about 150
 tokens with its task. A question costs the agent a turn, a `check` one more sub-agent for
-every task, `verify` one sub-agent, and the check of a swarm's answer one sub-agent and a turn
-of the lead.
+every task, `verify` one sub-agent, and the check of a swarm's answer one sub-agent (and a
+turn of the lead only when it found something).
 
 So:
 
 - A question, a change in one place, a job one agent does in a minute: a normal message. A
-  swarm gets the same result there in two to three times the time.
+  swarm gets the same result there and adds the check of it, some seconds each time.
 - Up to four tasks, each clear: plain `subagent`.
-- Many pieces: a pool, which the agent takes by itself. From a few dozen on it takes less than
-  half the time of calls of four, in a tenth of the calls, and costs a third less.
+- Many pieces: a pool, which the agent takes by itself. From a few dozen on it takes half the
+  time of calls of four, in a tenth of the calls, and costs a quarter less.
 - A result that has to be right, a job in which something may be missing that only you know,
   or one too large to look over yourself: `/swarm`. The check of the answer is what catches
   the slip, and the lead asks you instead of reporting around a gap.

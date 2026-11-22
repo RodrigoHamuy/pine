@@ -108,14 +108,13 @@ test("/swarm in the input starts a swarm: the conversation says what pine does a
 	await page.press("[data-slot=composer] textarea", "Enter");
 	await page.locator("[data-slot=tab][data-active] [data-slot=tab-name]", { hasText: "new conversation" }).waitFor({ timeout: 20_000 });
 	await sees(`${panel} >> text=No board yet`);
-	// The lead hands out one piece and answers; pine has that answer checked, and the lead has the check done.
-	// (All three are told the job, which names the script: who is asking is read from what it was told last.)
+	// The lead hands out one piece and answers; pine has that answer checked by a sub-agent it starts itself.
+	// (Both are told the job, which names the script: who is asking is read from what it was told last.)
 	Object.defineProperty(mock.state.scripts, "lead", {
 		configurable: true,
 		get: () => {
 			const said = JSON.stringify(mock.state.requests.at(-1)?.body.messages.filter((m: any) => m.role === "user").at(-1) ?? "");
-			if (said.includes("Check the answer below")) return [{ text: "Compared it with the shelves, it matches.\n\nPASS" }];
-			if (said.includes("your answer is checked")) return [{ tools: [{ name: "subagent", args: { pool: true } }] }, { text: "Checked: it passed." }];
+			if (said.includes("Check the answer below")) return [{ delayMs: 600, text: "Compared it with the shelves, it matches.\n\nPASS" }];
 			return [{ tools: [{ name: "subagent", args: { tasks: ["sort the first shelf @@REF:piece@@"] } }] }, { text: "SWARM-ANSWER every shelf is sorted" }];
 		},
 	});
@@ -124,13 +123,12 @@ test("/swarm in the input starts a swarm: the conversation says what pine does a
 	await page.press("[data-slot=composer] textarea", "Enter");
 	await sees("text=swarm · started: main leads it", 30_000);
 	await sees("text=SWARM-ANSWER every shelf is sorted", 30_000);
-	await sees("text=swarm · the answer is checked by a sub-agent that did none of the work", 30_000);
-	await sees("text=swarm · done after 2 rounds: 1 task, and the answer was checked", 30_000);
-	await sees("text=Checked: it passed.");
+	await sees("text=swarm · the answer is being checked by a sub-agent that did none of the work", 30_000);
+	await sees("text=swarm · done after 1 round: 1 task, and the answer was checked", 30_000);
 	// The job is shown once, as the owner's message, without what pine told the lead under it.
 	const said = await page.locator("[data-slot=message-scroller], main").first().innerText();
 	assert.equal(said.split("sort the archive").length - 1, 1, said);
-	assert.ok(!said.includes("your owner started a swarm") && !said.includes("before the swarm is done"), "what pine told the lead is not shown as a message");
+	assert.ok(!said.includes("your owner started a swarm") && !said.includes("Check the answer below before"), "what pine told the lead is not shown as a message");
 	// (Which conversation it is, the board says: the one that is not the main conversation's.)
 	const listed = (await call("GET", "/boards")).data;
 	const session = (Array.isArray(listed) ? listed : listed.boards).find((b: any) => b.session !== "main").session;

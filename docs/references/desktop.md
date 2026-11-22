@@ -522,7 +522,7 @@ of steps, sub-agents, `/undo` and what a conversation is holds here unchanged: i
 daemon's doing. What differs is how it is drawn and reached. A swarm is started by typing
 `/swarm` and the job into the input, or with the command Swarm of the palette: the conversation
 gets a line for each thing pine does about it, the line above the input says which round it is
-in with a button to pause it, and a swarm that is paused or at its limit shows above the input
+in and whether the answer is being checked, with a button to pause it, and a swarm that is paused or at its limit shows above the input
 with Resume and Clear. Its tasks are in the Board tab of the side panel.
 
 | In the terminal UI | In the app |

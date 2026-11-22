@@ -162,6 +162,8 @@ export interface SwarmInfo {
 	status: "active" | "waiting" | "done" | "paused" | "limit";
 	round: number;
 	until: number;
+	/** The sub-agent that checks the answer right now. */
+	checking?: number;
 	note: string;
 	event?: string;
 }

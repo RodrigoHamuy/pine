@@ -271,9 +271,10 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const said = (xs: BoardItem[]) =>
 			xs
 				.map((x) => {
-					const { tasks: _for, question, ...fields } = x.data ?? {};
+					const { tasks: _for, question, of, ...fields } = x.data ?? {};
 					// An answer says what was asked and what the answer is, each on its own line: it is not to be read past.
-					if (typeof question === "string") return `- Asked: ${flat(question, 600)}\n  Answer${x.by === "owner" ? " (from your owner)" : ""}: ${flat(x.text, 1000)}`;
+					// (One that another task asked says so: read without that, its question is taken for the task to do.)
+					if (typeof question === "string") return `- Asked${typeof of === "number" ? ` by the sub-agent of another task (#${of}), about its own task` : ""}: ${flat(question, 600)}\n  Answer${x.by === "owner" ? " (from your owner)" : ""}: ${flat(x.text, 1000)}`;
 					// (No number: whoever reads this has no use for it, and whoever wrote the note does not know it by one.)
 					return `- ${x.by === "owner" ? "your owner: " : ""}${flat(x.text, 1000)}${Object.keys(fields).length ? ` ${truncate(JSON.stringify(fields), 300)}` : ""}`;
 				})
@@ -332,7 +333,10 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 							...(forAll.some((x) => !asked(x)) ? [`What everyone on this job goes by (it was checked: no need to look it up again):\n${said(forAll.filter((x) => !asked(x)))}`] : []),
 							// What was asked on this job and answered, last, where it is read last: a sub-agent that is given the task a
 							// second time is given it because of this, and must not ask the same again.
-							...([...about, ...forAll].some(asked) ? [`Questions that were asked on this job and are answered. They are settled: go by the answers and do not ask them again.\n${said([...about, ...forAll].filter(asked))}`] : []),
+							...(about.some(asked) ? [`Questions that were asked about this task and are answered. They are settled: go by the answers and do not ask them again.\n${said(about.filter(asked))}`] : []),
+							// One that another task asked is shown apart, and after it the task is named again: a sub-agent that reads
+							// "east has rows in USD" last has been seen to total east instead of the region it was given.
+							...(forAll.some(asked) ? [`Questions that other tasks of this job asked, and the answers. Each is about that other task, which somebody else does: you do not do it. Where your own task meets the same question, go by the answer and do not ask again.\n${said(forAll.filter(asked))}\n\nYour task is the one at the top, and only that: ${flat(next.text, 200)}`] : []),
 							// A check ends with its verdict, and is told so last, where it is read last: under a long task the sentence in the task itself is passed over.
 							next.data?.check !== undefined
 								? `[pine: this is task #${next.id} of a board, and it is a check. Your final answer is its result. First what you found, one line each. Then the last line of your answer is one word and nothing else: PASS or FAIL.]`
@@ -403,7 +407,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			...(notes.length ? [`## Notes the sub-agents left on the board${notes.length > 40 ? ` (the last 40 of ${notes.length}; board_read shows all)` : ""}\n${notes.slice(-40).map((x) => noteLine(x)).join("\n")}`] : []),
 			...(working.length ? [`## Still being worked\n${working.map((t) => taskLine(t)).join("\n")}`] : []),
 			...(open.length ? [`## Not done\n${open.map((t) => taskLine(t)).join("\n")}`] : []),
-			...(next.length ? [`## What to do now\n${next.join("\n")}`] : [`All ${all.length} task${all.length === 1 ? "" : "s"} ${only ? `you gave out on ${boardLabel(board)}` : "of the board"} ${all.every((t) => t.state === "done") ? (all.length === 1 ? "is" : "are") + " done" : "are settled"}. If the job has pieces that were not given as tasks yet, it is not done: give them all now (subagent with "pool": true and "tasks"), with what was answered in "note".${many(all)}`]),
+			...(next.length ? [`## What to do now\n${next.join("\n")}`] : [`All ${all.length} task${all.length === 1 ? "" : "s"} ${only ? `you gave out on ${boardLabel(board)}` : "of the board"} ${all.every((t) => t.state === "done") ? (all.length === 1 ? "is" : "are") + " done" : "are settled"}. If the job has pieces that were not given as tasks yet, it is not done: give them all now (subagent with "pool": true and "tasks"), with what was answered in "note".${many(all)}\n\n## Before you answer\nDid a result leave something out, or assume a value, because it was given nowhere (a rate, a date, which of two readings)? Then the job is not done, and your answer is not "give me the value and I will add it": call question now and ask your owner for it, then have those pieces done again with what they say (subagent with "pool": true and "tasks"). Answer when nothing is left out.`]),
 		].join("\n\n");
 		}
 	};
@@ -2320,7 +2324,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					const waiting = others.filter((t) => t.state === "blocked");
 					for (const t of waiting) boards.answer(t.id, text, postedAs());
 					const rest = others.filter((t) => t.state === "open" || t.state === "taken").map((t) => t.id);
-					if (rest.length) boards.post(board, { kind: "note", text: text.trim(), data: { tasks: rest, ...(question ? { question: truncate(question, 600) } : {}) }, ...postedAs() });
+					if (rest.length) boards.post(board, { kind: "note", text: text.trim(), data: { tasks: rest, ...(question ? { question: truncate(question, 600), of: item.id } : {}) }, ...postedAs() });
 					live.boardSeen.set(board.id, boards.last(board.id));
 					const also = [
 						waiting.length ? `${waiting.length === 1 ? `Task #${waiting[0].id}, which asked too, is` : `Tasks ${waiting.map((t) => `#${t.id}`).join(", ")}, which asked too, are`} open again with the same answer.` : "",

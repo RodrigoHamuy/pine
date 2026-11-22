@@ -98,9 +98,10 @@ src/
   router.ts         routes: filter, debounce, set / publish / call / agent
   timers.ts         the scheduler: cron, intervals and one-offs; a schedule with a task wakes an agent
   goals.ts          goal mode (`/goal`): a conversation's objective, the judge that says whether it is met, the task that calls the agent again
-  swarm.ts          a swarm (`/swarm`): a job the conversation's agent leads instead of doing it. What the lead is told, and what pine
-                    does each time the lead ends a turn, going by the conversation's board alone: call it again while tasks are not
-                    done, put a check of the lead's answer on the board when all are, wait for the owner's answer
+  swarm.ts          a swarm (`/swarm`): a job the conversation's agent leads. What the lead is told, and what pine does each time
+                    the lead ends a turn, going by the conversation's board alone: call it again while tasks are not done, put a
+                    check of the lead's answer on the board when all are and start the sub-agent that does it, call the lead
+                    when that check failed, wait for the owner's answer
   hatch.ts          agents introduce themselves once, in their answer to the owner's first message to them: the note in front
                     of it (`INTRODUCE`). No agent starts a conversation by itself
   browser-view.ts   the bundled browser of a conversation for a UI that shows it itself (the Pine app's panel): the
@@ -381,11 +382,15 @@ These are invariants. A change that breaks one needs a test that shows why it is
    owner starts, pauses, resumes or clears one, through the control API, there is no tool for
    it, and a run started from outside has none. The task that calls the lead again holds the
    owner's job and fixed text of pine's with the numbers of tasks (`continuePrompts`), never a
-   word of the lead's answer or of a sub-agent's result. What decides whether it is called
-   again is the board (tasks that are not done, a check of the lead's answer that is missing or
-   failed), never a model. The check pine posts (`checkTask`) holds the lead's answer:
-   it is a task on the board with the mark of the lead's run (rule 14), which is how any task
-   the lead writes reaches a sub-agent, and never a prompt in the owner's voice.
+   word of the lead's answer, of a sub-agent's result or of what a check found (the lead reads
+   that from the board with `board_read`, which marks its run). What decides whether it is called
+   again is the board (tasks that are not done, a check of the lead's answer that failed), never
+   a model. The check pine posts (`checkTask`) holds the lead's answer: it is a task on the board
+   with the mark of the lead's run (rule 14), which is how any task the lead writes reaches a
+   sub-agent, and never a prompt in the owner's voice. pine starts the sub-agent for it itself
+   (`startBoardTask` in `src/agents.ts`): a sub-agent of that conversation under the lead's turn,
+   with that turn's mark, the conversation's permissions and no way to ask the owner, whose run
+   holds the task like a pool's. Nothing else is started that way.
 4. **Untrusted runs get their capabilities by registration.** Tools and MCP servers that the
    untrusted profile does not list are not registered in that session at all, and the session
    key gets `~u` so history is never shared with the owner's session. The app control server

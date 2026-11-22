@@ -260,7 +260,7 @@ pine start
 | source | A named thing that reports events from outside: a folder, an MQTT broker, a web address, a command, a webhook, an FTP drop, a Telegram bot. It runs only while something is subscribed to it (or always, with `"start": "always"`) |
 | schedule | Something done at a time: at set times, every so often, or once. With a task it wakes an agent to do it |
 | goal | An objective you give a conversation with `/goal`: the agent is called again, round after round, until a judge says it is met |
-| swarm | A job you give a conversation with `/swarm`: its agent leads it instead of doing it, sub-agents work it through on the conversation's board, and pine calls the agent again while tasks are not done, and has its answer checked before it is done |
+| swarm | A job you give a conversation with `/swarm`: its agent leads it, sub-agents work it through on the conversation's board (a job of a few steps the agent does itself), pine calls the agent again while tasks are not done, and has its answer checked before it is done |
 | subscription | A conversation of an agent listens to a source: each event arrives there as a message and wakes the agent |
 | task | One piece of work for one agent; has a status, a result and statistics |
 | session | A conversation of one agent with history. The manual also says "conversation". Named ones are kept until removed (unused ones after `limits.conversationDays`); `new` is one-off |

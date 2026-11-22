@@ -558,9 +558,10 @@ files.
 
 ## A swarm
 
-With `/swarm` and a job, a conversation's agent leads the job instead of doing it: its
-sub-agents work it through on the conversation's board, and pine calls the lead again while
-tasks there are not done, and then to have its answer checked. Like a goal it is yours to start,
+With `/swarm` and a job, a conversation's agent leads the job: its sub-agents work it through
+on the conversation's board (a job of a few steps the lead does itself), pine calls the lead
+again while tasks there are not done, and then has its answer checked by a sub-agent that did
+none of the work. Like a goal it is yours to start,
 pause, resume and clear, and no tool reaches it. All of it is in [boards.md](boards.md), "A swarm".
 
 | Command | What it does |

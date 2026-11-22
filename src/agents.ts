@@ -2637,6 +2637,26 @@ export class AgentManager {
 		return item ? [[item.board, task.meta.boardShown!]] : [];
 	}
 
+	/**
+	 * Start a sub-agent of a conversation for one task of its board, outside a turn of that conversation: the
+	 * check of a swarm's answer, which pine has done itself (src/swarm.ts). `under` is the conversation's turn it
+	 * belongs to, ended or not: the sub-agent works under that conversation's permissions and its mark of outside
+	 * content, like one the conversation started. The task is taken for that run, and its answer settles it
+	 * (`boardsAfter`).
+	 */
+	startBoardTask(under: Task, item: BoardItem, prompt: string, label = truncate(item.text, 80)): Task {
+		const agent = this.cfg.agents[under.agent];
+		const board = agent && this.boards.get(item.board);
+		if (!agent || !board) throw new Error(`there is no board for task #${item.id}`);
+		const child = this.submit({ agent: agent.id, prompt, session: "new", kind: "subagent", parent: under, tainted: this.taintOf(under) ?? item.tainted, leaf: true, tools: agent.subagents.tools, label, boardTask: item.id, boardShown: this.boards.last(board.id) });
+		const got = this.boards.claim(board, { id: item.id, holder: agent.id, run: child.id, cause: this.causeOf(under) });
+		if (typeof got === "string") {
+			this.cancel(child.id);
+			throw new Error(got);
+		}
+		return child;
+	}
+
 	/** The run that was started for a task and still works on it, if there is one: a pool's sub-agent, or in a swarm another agent the task was handed to. */
 	poolWorker(item: BoardItem): Task | undefined {
 		const run = item.state === "taken" && item.run !== undefined ? this.tasks.get(item.run) : undefined;

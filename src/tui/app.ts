@@ -2740,7 +2740,7 @@ export class PineTui {
 				run: (args) => this.goal(args.trim()),
 			},
 			{
-				name: "swarm", description: "Have the agent lead a job instead of doing it: sub-agents work it through on the board, and the result is checked; /swarm alone shows where it stands", argumentHint: "[what is to be done|pause|resume|clear]",
+				name: "swarm", description: "Have the agent lead a job: sub-agents work it through on the board, and the answer is checked; /swarm alone shows where it stands", argumentHint: "[what is to be done|pause|resume|clear]",
 				getArgumentCompletions: (prefix) =>
 					[
 						{ value: "pause", label: "pause", description: "no further rounds until /swarm resume" },
@@ -3616,6 +3616,8 @@ export class PineTui {
 			if (t.swarm?.status === "active") parts.unshift(`swarm · round ${t.swarm.round} of ${t.swarm.until}`);
 			line = `${c.yellow(SPINNER[this.frame % SPINNER.length])} ${c.gray(parts.join(" · "))}`;
 		} else if (t.goal?.status === "active") line = c.gray(`◎ goal · round ${t.goal.round} of ${t.goal.until} · checking whether it is met · esc to pause`);
+		// A swarm between two turns of its lead: pine looks at the board, or has the answer checked.
+		else if (t.swarm?.status === "active") line = c.gray(`◎ swarm · round ${t.swarm.round} of ${t.swarm.until} · ${t.swarm.checking ? "checking the answer" : "looking at the board"} · esc to pause`);
 		// The agent's turn is over, and a command of its goes on: without a word that looks like a hang.
 		else if (t.left?.list.length) {
 			const background = t.left.list.filter((p) => p.background);
