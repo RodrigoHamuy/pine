@@ -732,3 +732,25 @@ test("boards: sub-agents given tasks that are on a board for all agents settle t
 	assert.match(closed.text, /"ids": there is no task #4 on a board of yours/);
 	await h.close();
 });
+
+test("boards: a board that is not there yet is never made again by whoever was told of it: a sub-agent is refused, another agent is told who makes it", async () => {
+	// The owner's run that went wrong: main handed out work "on the global board todo" before it had made it.
+	const h = await harness({ agents: { main: { agent: { delegates: ["helper"] } }, helper: {} } });
+	h.mock.state.scripts.sub = [{ tools: [call("board_post", { type: "note", board: "todo", text: "SUB-RESULT" })] }, { tools: [call("board_post", { type: "note", text: "SUB-RESULT on my own board" })] }];
+	h.mock.state.scripts.helper = [{ tools: [call("board_claim", { board: "todo" })] }, { tools: [call("board_post", { type: "note", board: "todo", text: "HELPER-RESULT" })] }, { tools: [call("subagent", { tasks: ["@@REF:sub@@"] })] }];
+	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("delegate", { agent: "helper", task: "On global board todo, take a task @@REF:helper@@" })] }]), ...owner });
+	const said = h.toolResults(h.mock.state.requests.filter((q: any) => JSON.stringify(q.body.messages).includes("@@REF:helper@@") && !JSON.stringify(q.body.messages).includes("<<MOCK")).at(-1)).join("\n");
+	// Another agent that looks for it is told that the main agent makes a board for all agents, and not to make a look-alike.
+	assert.match(said, /there is no board "todo" that you can use\. A board for all agents is made by the main agent \(main\): if you were told to use one by this name, it is not there yet\. Do not make another: say in your answer that it was not there\./);
+	assert.match(said, /there is no board "todo" yet\. A board for all agents is made by the main agent \(main\).*To make one of your own, post again with "scope"/s);
+	// A sub-agent is refused outright: it makes no board with a name. Its conversation's own board is still there for it.
+	assert.match(said, /there is no board "todo"\. A sub-agent makes no board with a name: leave out "board" to post on the board of your conversation, or say in your answer that the board "todo" was not there\./);
+	const boards = h.pine.agents.boards;
+	assert.deepEqual(boards.list().map((b) => `${b.scope}:${b.name}`), ["local:"], "no board named todo anywhere");
+	assert.equal(boards.items(boards.list()[0].id)[0].text, "SUB-RESULT on my own board");
+	// The main agent is told how to make it.
+	const own = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_read", { board: "todo" })] }]), ...owner });
+	assert.match(own.text, /There is no board "todo" that you can use\. The boards list says which there are\. board_post with this name and "scope" makes it\./);
+	assert.equal(r.status, "done");
+	await h.close();
+});

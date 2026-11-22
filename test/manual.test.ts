@@ -47,6 +47,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["tell all sub-agents of a pool the same thing before they start", /^boards#a-pool-of-sub-agents$/],
 		["have sub-agents do the tasks i was given on the global board", /^(boards#a-pool-of-sub-agents|agents#.*ids)/],
 		["create two new sub-agents for this work", /^(agents#sub-agents|setup#creating-an-agent)/],
+		["an agent made its own copy of the board instead of using the shared one", /^boards#which-boards-there-are$/],
 		["a board that every agent can use", /^boards#which-boards-there-are/],
 		["a sub-agent of the pool cannot decide something and asks a question", /^boards#(the-agent-stays-in-the-loop|a-pool-of-sub-agents)/],
 		["have a second sub-agent check the first one's work", /^boards#(a-check-after-the-work|a-pool-of-sub-agents)/],

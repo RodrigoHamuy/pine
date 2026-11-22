@@ -48,7 +48,7 @@ are told to share what they find mostly repeat what they were told.
 | Board | Who uses it | Made by |
 |---|---|---|
 | A conversation's own board, which has no name | That conversation, its sub-agents, and whoever it hands a task to with `delegate` (for that one run, not in a `thread`) | The first post, or a task of yours in the Board tab. It goes when the conversation is reset or removed |
-| A board with a name, `"scope": "local"` | The same, and nobody else | `board_post` with a new name and that scope. It goes when the conversation is reset or removed |
+| A board with a name, `"scope": "local"` | The same, and nobody else | `board_post` with a new name and that scope, not by a sub-agent. It goes when the conversation is reset or removed |
 | A board with a name, `"scope": "agent"` | Every conversation of the one that made it | `board_post` with a new name and that scope. Only in your own conversations, and not by a sub-agent. It goes when its agent is removed |
 | A board with a name, `"scope": "global"` | Everyone | The main agent, the same way. Nothing removes it by itself |
 
@@ -58,8 +58,12 @@ question; one that other conversations use (`"scope": "agent"` or `"global"`) on
 
 A name is lowercase letters, digits, `-` and `_`. A new board with a name is made only with a
 `scope`: an agent that leaves it out is told to say whom the board is for, so that a board meant
-for all agents is never quietly made for one conversation. (A sub-agent, and a run started from
-outside, make one for their own conversation and need not say so.) Where a name fits several
+for all agents is never quietly made for one conversation. A sub-agent, and a run started from
+outside, make no board with a name: they post on their conversation's own board. Another agent
+that looks for a board that is not there is told who makes it, and to report that it is missing
+rather than make a look-alike under that name that nobody else would see. (So whoever hands out
+a board's tasks makes the board and posts them first.)
+Where a name fits several
 boards and no `scope` is given, the nearest is meant: the conversation's, then the agent's, then
 the global one. With a `scope`, exactly the board of that place. Nobody reads a board
 that is another's alone; what several share is a global board, or a conversation's own board

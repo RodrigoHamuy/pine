@@ -2047,6 +2047,15 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 	// reader (`shown`). A run that outside content started has these tools only where its profile says so.
 	if (profile.board) {
 		const boardParam = Type.Optional(Type.String({ description: 'Leave out: the board of this conversation, which your sub-agents share. Or the name of another board ("bugs"); the boards list says which there are' }));
+		/**
+		 * What to do about a board with a name that is not there. Only the main agent makes a board for all agents, so an
+		 * agent that was told of one and does not find it has to say so: a board it made itself under that name would
+		 * look the same to it, and nobody else would ever see what it posted there.
+		 */
+		const notThere = () =>
+			isMain && !profile.leaf && live.trust === "owner"
+				? `board_post with this name and "scope" makes it.`
+				: `A board for all agents is made by the main agent (${mainId}): if you were told to use one by this name, it is not there yet. Do not make another: say in your answer that it was not there.`;
 		/** The board a call names, or an error that says which there are. */
 		const boardOf = (name: unknown): Board => {
 			const wanted = name === undefined || name === null || String(name).trim() === "" ? "" : boardName(name);
@@ -2054,7 +2063,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 			if (found) return found;
 			if (!wanted) return boards.ensure("local", who.conversation.agent, who.conversation.session, "");
 			const others = boards.visible(who).filter((b) => b.name).map((b) => b.name);
-			throw new Error(`there is no board "${wanted}" that you can use.${others.length ? ` Boards with a name: ${[...new Set(others)].join(", ")}.` : ""} board_post with this name makes it.`);
+			throw new Error(`there is no board "${wanted}" that you can use.${others.length ? ` Boards with a name: ${[...new Set(others)].join(", ")}.` : ""} ${notThere()}`);
 		};
 		const scopeOfBoard = (value: unknown): BoardScope => {
 			const v = String(value ?? "").toLowerCase() || "local";
@@ -2106,7 +2115,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						return ok([head, item.text, ...(item.data ? [`Fields: ${JSON.stringify(item.data)}`] : []), ...(item.result ? [`${item.state === "blocked" ? "It waits for an answer to" : item.state === "failed" ? "Why it failed" : "Result"}:\n${item.result}`] : []), ...(about.length ? ["Notes about it:", ...about.map((x) => noteLine(x, 2000))] : [])].join("\n"));
 					}
 					const board = boards.resolve(who, p.board === undefined || String(p.board).trim() === "" ? "" : boardName(p.board));
-					if (!board) return ok(p.board ? `There is no board "${p.board}" that you can use. The boards list says which there are.` : "The board of this conversation is empty: nothing was posted yet.");
+					if (!board) return ok(p.board ? `There is no board "${p.board}" that you can use. The boards list says which there are. ${notThere()}` : "The board of this conversation is empty: nothing was posted yet.");
 					return ok(boardText(board));
 				},
 			}),
@@ -2133,10 +2142,14 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					let made = "";
 					if (!board) {
 						// Whom a new board with a name is for is said, not assumed: one made for this conversation by default looks
-						// to its maker like one that other agents use, and nobody else ever sees it. (A sub-agent and a run from
-						// outside have no choice to make: theirs is for their conversation.)
-						if (wanted && !asked && !profile.leaf && live.trust === "owner") {
-							throw new Error(`there is no board "${wanted}" yet. To make it, post again with "scope", which says whom it is for: "local" (this conversation and the sub-agents it starts, nobody else), "agent" (all your conversations)${isMain ? ', "global" (all agents)' : ""}.`);
+						// to its maker like one that other agents use, and nobody else ever sees it. A sub-agent and a run from
+						// outside make none with a name: told to use a board that is not there, they would make a look-alike
+						// that only their conversation sees, and report to the board they were told of.
+						if (wanted && (profile.leaf || live.trust !== "owner")) {
+							throw new Error(`there is no board "${wanted}". ${profile.leaf ? "A sub-agent" : "This run"} makes no board with a name: leave out "board" to post on the board of your conversation, or say in your answer that the board "${wanted}" was not there.`);
+						}
+						if (wanted && !asked) {
+							throw new Error(`there is no board "${wanted}" yet.${isMain ? "" : ` ${notThere()}`} To make ${isMain ? "it" : "one of your own"}, post again with "scope", which says whom it is for: "local" (this conversation and the sub-agents it starts, nobody else), "agent" (all your conversations)${isMain ? ', "global" (all agents)' : ""}.`);
 						}
 						const scope = asked ?? "local";
 						board = boards.ensure(...place(scope));
