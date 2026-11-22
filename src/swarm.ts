@@ -101,7 +101,7 @@ const excerpt = (text: string, head = 6000, tail = 6000) => (text.length > head 
 export const checkTask = (objective: string, answer: string) =>
 	[
 		"Check the answer below before the one who asked for it relies on it. You did none of the work, and you change nothing.",
-		"First compare it with what was asked, part by part: is everything that was asked for there, in the form that was asked for, and nothing left out? Then do not take its word for it: look at what was left (open the files it names, run what can be run, count again, compare with the source), as far as it takes to be sure. Where the job was large, check the parts that matter most and a few picked at random.",
+		"First compare it with what was asked, part by part: is everything that was asked for there, in the form that was asked for, and nothing left out? Then do not take its word for it: look at what was left (open the files it names, run what can be run, count again, compare with the source), as far as it takes to be sure. A list you check both ways: every entry on it is true, and nothing that belongs on it is missing. What one command can check in full (a list against the files, a count, a sum), check in full; only where that is not possible, check the parts that matter most and a few picked at random.",
 		"Say what is wrong or missing and where, one line each; then end your answer with one word on a line of its own: PASS when the answer is right and complete, FAIL when it is not. FAIL is for what can be pointed at: a wrong fact or number, a rule that is broken, a part that is missing, an item that a list has twice or that is in two lists of which it can only be in one. What is a matter of taste, of wording or of how the answer is laid out is a remark, not a FAIL: a result that is given once with explanations and once more in the form that was asked for is laid out that way, not there twice. So is how the work was done (who did which part, in how many steps) where the result does not depend on it. What you cannot check because you cannot reach it (another agent's files, a system outside) is no FAIL either: say what you could not check, and judge by what you can. You judge the answer, not what the job was about: a job that was to find faults and found them all is PASS.",
 		"",
 		"What was asked, in the owner's words:",
@@ -117,7 +117,7 @@ export const checkPrompt = (item: BoardItem) => `${item.text}\n\n[pine: this is 
 /** What a UI calls the sub-agent that does it. */
 const CHECK_LABEL = "checks the answer against what you asked";
 
-type Manager = Pick<AgentManager, "cfg" | "kv" | "tasks" | "bus" | "boards" | "goals" | "submit" | "cancel" | "taintOf" | "startBoardTask" | "retrying">;
+type Manager = Pick<AgentManager, "cfg" | "kv" | "tasks" | "bus" | "boards" | "goals" | "submit" | "cancel" | "taintOf" | "startBoardTask" | "retrying" | "resolveModel">;
 
 export class Swarms {
 	private m: Manager;
@@ -180,6 +180,14 @@ export class Swarms {
 		if (objective.length > 4000) throw new Error("the job of a swarm is at most 4000 characters: put the details into a file and name the file");
 		if (!this.m.cfg.agents[agent].subagents.enabled) throw new Error(`${agent} has no sub-agents (subagents.enabled is off), and a swarm is made of them`);
 		if (this.m.goals.get(agent, key)?.status === "active") throw new Error("this conversation works on a goal. /goal clear first, or start the swarm in another conversation");
+		// The model the answer is checked on has to be there before the work starts, not when it is over.
+		if (this.m.cfg.defaults.checker) {
+			try {
+				this.m.resolveModel(this.m.cfg.defaults.checker);
+			} catch (e) {
+				throw new Error(`the answer of a swarm is checked on ${this.m.cfg.defaults.checker} (defaults.checker), and ${errText(e)}. Set another model there, or none`);
+			}
+		}
 		const board = this.m.boards.find("local", agent, key, "");
 		const since = board ? this.m.boards.last(board.id) : 0;
 		let task: Task;
@@ -377,8 +385,10 @@ export class Swarms {
 		// itself, under the lead's turn that just ended: the lead has no turn for it.
 		const board = boards.find("local", swarm.agent, swarm.session, "") ?? boards.ensure("local", swarm.agent, swarm.session, "");
 		const check = boards.post(board, { kind: "task", text: checkTask(swarm.objective, answer), data: { check: "job", answer: true }, by: swarm.agent, trust: "owner", tainted: this.m.taintOf(task), long: true });
-		const run = this.m.startBoardTask(task, check, checkPrompt(check), CHECK_LABEL);
-		this.save({ ...swarm, task: undefined, checking: run.id, checks: swarm.checks + 1, note: last ? "the new answer is being checked" : "the answer is being checked by a sub-agent that did none of the work" }, "checking");
+		// (On the model the owner set for it, where they set one: a check on another model does not share the lead's misreadings.)
+		const model = this.m.cfg.defaults.checker;
+		const run = this.m.startBoardTask(task, check, checkPrompt(check), CHECK_LABEL, model);
+		this.save({ ...swarm, task: undefined, checking: run.id, checks: swarm.checks + 1, note: `${last ? "the new answer is being checked" : "the answer is being checked by a sub-agent that did none of the work"}${model ? `, on ${model}` : ""}` }, "checking");
 	}
 
 	/** The check of the lead's answer ended: done when it passed, and the lead's to put right when it did not. */
@@ -396,7 +406,7 @@ export class Swarms {
 				try {
 					const fresh = this.m.boards.item(item.id);
 					if (!fresh) throw new Error("the check is no longer on the board");
-					this.save({ ...now, checking: this.m.startBoardTask(lead, fresh, checkPrompt(fresh), CHECK_LABEL).id }, "checking");
+					this.save({ ...now, checking: this.m.startBoardTask(lead, fresh, checkPrompt(fresh), CHECK_LABEL, this.m.cfg.defaults.checker).id }, "checking");
 				} catch (e) {
 					this.halt({ ...now, checks: Math.max(0, now.checks - 1) }, "paused", `paused: the check of the answer could not be started again (${errText(e)}). /swarm resume goes on`);
 				}

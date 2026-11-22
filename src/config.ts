@@ -288,7 +288,7 @@ export interface PineConfig {
 	logLevel: LogLevel;
 	main?: string;
 	/** `mode`: for every agent that names none. Not set: auto for the main agent, safe for the others. */
-	defaults: { model?: string; /** The model that judges whether a goal is met, as "provider/id". Not set: the agent's own. */ judge?: string; /** Agents introduce themselves in their answer to the first message their owner writes to them. */ introduce: boolean; thinking: string; mode?: Mode; bashTimeoutSec: number; taskTimeoutSec: number; idleMs: number; settings: Record<string, unknown> };
+	defaults: { model?: string; /** The model that judges whether a goal is met, as "provider/id". Not set: the agent's own. */ judge?: string; /** The model that checks a swarm's answer, as "provider/id". Not set: the agent's own. */ checker?: string; /** Agents introduce themselves in their answer to the first message their owner writes to them. */ introduce: boolean; thinking: string; mode?: Mode; bashTimeoutSec: number; taskTimeoutSec: number; idleMs: number; settings: Record<string, unknown> };
 	limits: {
 		maxConcurrentRuns: number;
 		/** Sub-agents one conversation runs at a time: the default of `subagents.maxParallel` for an agent that names none. */
@@ -592,6 +592,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 		defaults: {
 			model: d.model,
 			judge: typeof d.judge === "string" && d.judge ? d.judge : undefined,
+			checker: typeof d.checker === "string" && d.checker ? d.checker : undefined,
 			introduce: d.introduce !== false,
 			thinking: d.thinking ?? "medium",
 			mode: d.mode,
@@ -648,6 +649,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 	if (raw.ui?.theme !== undefined && !(typeof raw.ui.theme === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.theme))) problems.push('pine.json: ui.theme names a theme by the file name in the themes folder, without .json, for example "pmndre"');
 	if (raw.ui?.view !== undefined && !(typeof raw.ui.view === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.view))) problems.push('pine.json: ui.view names a view by the file name in the views folder, without .ts, for example "house", or is "off"');
 	if (d.judge !== undefined && !/^[^/\s]+\/\S+$/.test(String(d.judge))) problems.push("pine.json: defaults.judge names a model as provider/model-id");
+	if (d.checker !== undefined && !/^[^/\s]+\/\S+$/.test(String(d.checker))) problems.push("pine.json: defaults.checker names a model as provider/model-id");
 	if (cfg.http) {
 		for (const [name, h] of Object.entries<any>(raw.http?.hooks ?? {})) {
 			if (!/^[A-Za-z0-9_-]+$/.test(name)) problems.push(`pine.json: invalid hook name "${name}"`);

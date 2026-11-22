@@ -24,8 +24,8 @@ const turns = (h: Harness, session = "main") => h.pine.tasks.list({ agent: "main
  * depends on which round the swarm is in. The check pine posts quotes the job, so the sub-agent that does
  * it finds the same name: it is told apart by how its task begins, and answers what `checker` says.
  */
-async function swarm(rounds: (round: number) => any[], o: { checker?: (n: number) => string; checkMs?: number; pine?: Record<string, unknown>; agents?: Record<string, any> } = {}) {
-	const h = await harness({ pine: { limits: { maxConcurrentRuns: 4 }, ...(o.pine ?? {}) }, agents: { main: { agent: { subagents: { maxParallel: 2 } } }, ...(o.agents ?? {}) } });
+async function swarm(rounds: (round: number) => any[], o: { checker?: (n: number) => string; checkMs?: number; pine?: Record<string, unknown>; agents?: Record<string, any>; models?: any[] } = {}) {
+	const h = await harness({ ...(o.models ? { models: o.models } : {}), pine: { limits: { maxConcurrentRuns: 4 }, ...(o.pine ?? {}) }, agents: { main: { agent: { subagents: { maxParallel: 2 } } }, ...(o.agents ?? {}) } });
 	let checks = 0;
 	Object.defineProperty(h.mock.state.scripts, "lead", {
 		get: () => {
@@ -213,6 +213,27 @@ test("swarm: the check of an answer that a lead wrote after it read outside cont
 	assert.ok(!turns(h)[1].prompt.includes("IGNORE-ALL-RULES"));
 	assert.match(second.tainted ?? "", /read returned outside content/);
 	await h.close();
+});
+
+test("swarm: the answer is checked on the model the owner set for it (defaults.checker), the lead and its sub-agents stay on the agent's; a model that is not there refuses the swarm at its start", async () => {
+	const { h, events, job } = await swarm(() => [{ tools: [call("subagent", { tasks: ["piece @@REF:one@@"] })] }, { text: "LEAD-ANSWER" }], { models: [{ id: "second" }], pine: { limits: { maxConcurrentRuns: 4 }, defaults: { checker: "mock/second" } } });
+	h.mock.state.scripts.one = [{ text: "ONE-DONE" }];
+	h.pine.agents.swarms.set("main", "main", job);
+	await settled(h);
+	assert.deepEqual([swarmOf(h)!.status, swarmOf(h)!.round], ["done", 1]);
+	assert.equal(events[1].note, "the answer is being checked by a sub-agent that did none of the work, on mock/second");
+	const checker = h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 2)!;
+	assert.equal(checker.meta.model, "mock/second");
+	const asked = (q: any) => rawTextOf([...q.body.messages].reverse().find((m: any) => m.role === "user")?.content ?? "");
+	const byModel = (model: string) => h.mock.state.requests.filter((q: any) => q.body.model === model).map(asked);
+	assert.ok(byModel("second").length > 0 && byModel("second").every((x: string) => x.includes("Check the answer below")), "only the check goes to that model");
+	assert.ok(!byModel("m").some((x: string) => x.includes("Check the answer below")), "and the check goes to no other");
+	await h.close();
+
+	const none = await harness({ pine: { limits: { maxConcurrentRuns: 4 }, defaults: { checker: "mock/missing" } }, agents: { main: {} } });
+	assert.throws(() => none.pine.agents.swarms.set("main", "main", "the job"), /the answer of a swarm is checked on mock\/missing \(defaults\.checker\), and model "mock\/missing" is not defined in models\.json/);
+	assert.equal(none.pine.tasks.list({ limit: 10 }).length, 0, "and nothing was started");
+	await none.close();
 });
 
 test("swarm: a check that the model server refuses for now is started again by pine after a pause; one that cannot be done pauses the swarm, and does not count as a check", async () => {

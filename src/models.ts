@@ -263,13 +263,14 @@ export function addModelServer(home: string, server: NewServer): string[] {
 	return entry.models.map((m) => `${server.name}/${m.id}`);
 }
 
-/** Who has a model of this server set: agents, the default, the judge of goals. */
+/** Who has a model of this server set: agents, the default, the judge of goals, the check of a swarm's answer. */
 export function modelServerUsers(cfg: PineConfig, name: string): string[] {
 	const of = (ref: string | undefined) => typeof ref === "string" && ref.startsWith(`${name}/`);
 	return [
 		...Object.values(cfg.agents).filter((a) => of(a.model)).map((a) => `agent ${a.id}`),
 		...(of(cfg.defaults.model) ? [`the default model (${Object.values(cfg.agents).filter((a) => !a.model).map((a) => a.id).join(", ") || "no agent right now"})`] : []),
 		...(of(cfg.defaults.judge) ? ["the judge of goals (defaults.judge)"] : []),
+		...(of(cfg.defaults.checker) ? ["the check of a swarm's answer (defaults.checker)"] : []),
 	];
 }
 

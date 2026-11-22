@@ -388,7 +388,8 @@ These are invariants. A change that breaks one needs a test that shows why it is
    a model. The check pine posts (`checkTask`) holds the lead's answer: it is a task on the board
    with the mark of the lead's run (rule 14), which is how any task the lead writes reaches a
    sub-agent, and never a prompt in the owner's voice. pine starts the sub-agent for it itself
-   (`startBoardTask` in `src/agents.ts`): a sub-agent of that conversation under the lead's turn,
+   (`startBoardTask` in `src/agents.ts`), on the model the owner set for it where they set one
+   (`defaults.checker`, like the judge's `defaults.judge`): a sub-agent of that conversation under the lead's turn,
    with that turn's mark, the conversation's permissions and no way to ask the owner, whose run
    holds the task like a pool's. Nothing else is started that way.
 4. **Untrusted runs get their capabilities by registration.** Tools and MCP servers that the

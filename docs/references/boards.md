@@ -343,6 +343,11 @@ check, without failing the answer for it. It is a check of the answer because a 
 or a number it copied wrong while putting the pieces together. No model is asked whether the
 job is done (as the judge of a goal is): the board says so.
 
+The check runs on the agent's own model unless you set another for it: `defaults.checker` in
+`pine.json`, which the main agent sets for you when you ask it. A second look by the same model catches slips,
+which is most of what goes wrong; it does not catch what that model reads wrongly every time.
+A check on another model does.
+
 The lead is told how a swarm works with your message: to look first; to do a job of a few
 steps itself, unless your request says to use sub-agents; to hand out a larger one in one `subagent` call (`tasks` or `stages`, a `note`
 with every decision two pieces have to agree on, and `check` only where every piece is written
@@ -386,37 +391,39 @@ or a change in one file, write a normal message.
 Boards are not always the better way, and a swarm is not. Eighteen jobs were run on pine three
 ways on a small fast model (Claude Haiku 5.5, four sub-agents at a time): without boards
 (plain `subagent`), with boards as an agent uses them by itself after a normal message (each
-four times), and as a swarm (eight times). Every job was scored against what is known to be right.
+six times), and as a swarm (ten times). Every job was scored against what is known to be right.
 
 | Jobs | Without boards | With boards, by a normal message | As a swarm |
 |---|---|---|---|
-| One agent is enough (11 jobs: a question, a change in a few files, a report over a few dozen short files, a small library) | 99.4% right, 151 seconds for all of them | The same: the agent uses no board for these, and having them costs nothing (98.6%, 153 seconds; the difference is single slips of the model) | 98.9% right, 250 seconds: the lead does these itself, and what is added is the check of its answer, about 9 seconds a job |
-| The result has to be right, or something is missing that only you know (4 jobs: texts under rules, a test file for each of 16 modules, sums with an exchange rate nobody gave) | 94.9% right, every part right in 69% of the runs, 171 seconds, 4.2 cents | 99.0% right, every part right in 94% of the runs, 148 seconds, 4.6 cents | Everything right in every run, 172 seconds, 4.5 cents |
-| Many pieces (24, 60 and 100 folders checked against one reference) | 99.7% right, 421 seconds, 10.8 cents, in 7 calls for 24 folders and up to 28 for 100 | Everything right, 206 seconds, 8.0 cents, in one call each | Everything right, 281 seconds, 9.8 cents |
-| All 18 | 98.5% right, every part right in 88% of the runs, 743 seconds, 17.5 cents | 98.9% right, 90% of the runs, 506 seconds, 15.1 cents | 99.4% right, 94% of the runs, 703 seconds, 17.9 cents |
+| One agent is enough (11 jobs: a question, a change in a few files, a report over a few dozen short files, a small library) | 99.2% right, 153 seconds for all of them | The same: the agent uses no board for these, and having them costs nothing (98.7%, 154 seconds; the difference is single slips of the model) | 99.0% right. The lead does these itself: its answer is on the screen about as soon as without a swarm (175 seconds against 158 in the last round), and the check of it ends at 251 seconds, about 9 seconds a job later |
+| The result has to be right, or something is missing that only you know (4 jobs: texts under rules, a test file for each of 16 modules, sums with an exchange rate nobody gave) | 93.7% right, every part right in 67% of the runs, 179 seconds, 4.6 cents | 99.3% right, every part right in 96% of the runs, 143 seconds, 4.5 cents | Everything right in every run, 164 seconds, 4.3 cents |
+| Many pieces (24, 60 and 100 folders checked against one reference) | 99.4% right, every part right in 83% of the runs, 440 seconds, 10.9 cents, in up to 28 calls | 99.6% right, every part right in 94% of the runs, 208 seconds, 8.1 cents, in one call each | Everything right in every run, 282 seconds, 9.9 cents |
+| All 18 | 98.0% right, every part right in 84% of the runs, 772 seconds, 17.9 cents | 99.0% right, 90% of the runs, 504 seconds, 15.1 cents | 99.4% right, 94% of the runs, 698 seconds, 17.9 cents |
 
-What the check of a swarm's answer did in those 144 swarm runs: 159 checks, of which 15 failed
-the first answer. Eleven of those found something real that the lead then put right (totals a
-cent off from rounding each row, a clean folder listed as faulty, a count line that
-contradicted its own list, cause counts in a report that were wrong, texts that broke one of
-their rules); four were false alarms, which cost a turn of the lead and a second check and
-changed no result (the last round, after the check was told that a result it cannot reach is
-no reason to fail, had none). What a check does not catch is a misreading it shares with the
-lead: in one run both sorted incidents under the same wrong causes, and a fault in code that
-no test shows was missed by the swarm as often as by one agent.
+What the check of a swarm's answer did in those 180 swarm runs: 197 checks, of which 17 failed
+the first answer. Thirteen found something real that the lead then put right (totals a cent
+off, a clean folder listed as faulty, a count that contradicted its own list, wrong numbers
+in a report, texts that broke a rule); four were false alarms, which cost a turn and a second
+check and changed no result (none in the 79 checks of the last two rounds). Given answers
+with one error put in, the check failed 36 of 36 and passed 15 of 16 right ones, in 3 to 16
+seconds.
 
-Blind judges were shown the three answers of each job under letters, with what they cost and
-the automatic score. A panel of a larger model (one judge for each comparison, 108 comparisons
-over three rounds) rated the results 8.2, 8.4 and 8.8 of 10 (without boards, with boards,
-swarm) and the efficiency 7.5, 8.1 and 7.0, and preferred the one with boards 40 times, the one
-without 34 times, the swarm 23 times, and called 11 a tie. Where the result has to be right it
-rated the results 6.5, 8.1 and 8.8; on the jobs with many pieces 7.2, 7.7 and 8.7, and the
-efficiency 5.2, 7.8 and 6.7, and preferred the one without boards once in 18. On the jobs of
-the first row it rated all three results alike (9.1, 8.7, 8.8) and the swarm least efficient
-(6.9 against 8.7 and 8.5): there a swarm is a few seconds of checking added to an answer that
-was right anyway. A panel of the same small model (three judges for each comparison, the last
-round) rated the results 7.9, 8.6 and 8.7 and the efficiency 7.5, 7.7 and 6.3, and preferred
-the one with boards 40 times, the one without 34 times, the swarm 14 times, with 20 ties.
+A check on the agent's own model does not catch a misreading it shares with whoever wrote the
+answer. One answer of these runs sorted three incidents under the wrong cause: checked again
+four times by the same model it passed four times, and checked four times by another model
+(`defaults.checker`) it failed four times, each time naming those incidents. A fault in code
+that no test shows was missed by the swarm as often as by one agent.
+
+Blind judges were shown the three answers of each job of the last round under letters, with
+what they cost and the automatic score (for a swarm both times: when the answer was on the
+screen, and when its check ended). A panel of a larger model rated the results 8.2, 8.6 and
+9.0 of 10 (without boards, with boards, swarm) and the efficiency 7.4, 8.2 and 7.9, and
+preferred each about as often (10, 10 and 9 times, 7 ties). Where the result has to be right
+it rated the results 6.5, 8.4 and 8.9; on the jobs with many pieces the efficiency 5.0, 7.8
+and 7.7, and it never preferred the one without boards; on the jobs of the first row the
+results 9.0, 8.9 and 9.2 and the efficiency 8.6, 8.6 and 8.0. A panel of the small model
+itself rated the results 8.0, 8.3 and 8.8 and the efficiency 7.3, 7.9 and 6.2, and preferred
+the one with boards 38 times, the one without 32 times, the swarm 18 times, with 20 ties.
 
 On a model that takes longer for each step the seconds are larger and the gaps wider: what a
 pool and a swarm save is turns of the agent, and what they add is sub-agents that work side
@@ -437,7 +444,8 @@ So:
   time of calls of four, in a tenth of the calls, and costs a quarter less.
 - A result that has to be right, a job in which something may be missing that only you know,
   or one too large to look over yourself: `/swarm`. The check of the answer is what catches
-  the slip, and the lead asks you instead of reporting around a gap.
+  the slip, and the lead asks you instead of reporting around a gap. Where a wrong reading
+  would cost you, have the check run on another model than the agent's (`defaults.checker`).
 - Every piece checked by a second sub-agent (`check`) only where the pieces are written under
   rules: it doubles the sub-agents.
 

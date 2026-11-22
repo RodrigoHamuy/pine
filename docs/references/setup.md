@@ -155,7 +155,7 @@ Which model the agent runs on is told to it with your message, so it needs no to
 | `create_agent` `id` `instructions` [`model`] [`tools`] [`color`] | Main agent only. See below. Changing and removing one, and pine's settings: "The main agent administers pine". |
 | **Model servers** | |
 | `add_model_server` `name` `url` [`context`] | Main agent only. Adds a model server of your own by its address; pine asks the server for its models. See "Adding a model server". |
-| `remove_model_server` `name` | Main agent only. Takes one out again, with the key pine keeps for it. Refused while an agent, the default or the judge of goals (`defaults.judge`) uses one of its models. You are asked. |
+| `remove_model_server` `name` | Main agent only. Takes one out again, with the key pine keeps for it. Refused while an agent, the default, the judge of goals (`defaults.judge`) or the check of a swarm's answer (`defaults.checker`) uses one of its models. You are asked. |
 | **Signing in** | |
 | `sign_in` `provider` [`way`] | Main agent only. Signs (logs) pine in to a model provider, such as a Claude or ChatGPT subscription: `way` is `browser` (an account or subscription: Claude, ChatGPT, GitHub Copilot) or `key` (an API key); left out, the provider's usual way. You confirm it, then pine's own dialog asks you for what the sign-in needs: the page to open (with its address and, for some providers, a code), the key in a hidden field, or a code to paste back. What you type goes to pine and never to the agent; the credential is kept in `auth.json`, which no agent can read. Say no to the page's question to stop the sign-in. When the agents had no model that answers, pine chooses one of the new ones. Refused in a conversation that has read outside content. The same as Settings > Models in the Pine app and `pine login`. |
 | `sign_out` `provider` | Main agent only. Removes pine's sign-in to a model provider; you are told which agents use its models, and asked. |
@@ -424,6 +424,7 @@ What holds for them:
 | `defaults.mode` | Mode: how freely agents work, and with that how far they reach, for every agent that does not set its own. A rule or a preference for all agents (how to behave, a default for a tool) is not a setting: the main agent writes it into `AGENTS.md` or `TOOLS.md` in pine's home ([agents.md](agents.md), "What holds for all agents") |
 | `defaults.introduce` | Every agent introduces itself in its answer to the first message its owner writes to it, once |
 | `defaults.judge` | Judge of goal mode: the model that says after each round whether a goal is met. Not set: the agent's own |
+| `defaults.checker` | Check of a swarm's answer: the model the sub-agent runs on that checks the answer before a swarm is done. Not set: the agent's own |
 | `defaults.bashTimeoutSec` | Longest shell command, in seconds. From the next start |
 | `defaults.taskTimeoutSec` | Longest task, in seconds: how long an agent may work on one message or event. From the next start |
 | `limits.maxConcurrentRuns` | Agents at work at once: how many agents and sub-agents can work at the same time, all conversations together; the others wait their turn. 8 unless you changed it. From the next start |

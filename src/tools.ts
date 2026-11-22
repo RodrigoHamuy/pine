@@ -1513,7 +1513,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				defineTool({
 					name: "remove_model_server",
 					label: "Remove model server",
-					description: `Take a model server of your owner's own out of pine again, with the key pine keeps for it. Not possible while an agent, the default or the judge of goals uses one of the server's models. Your owner confirms it. Right now: ${listModelServers(cfg.home).map((s) => s.name).join(", ") || "none"}.`,
+					description: `Take a model server of your owner's own out of pine again, with the key pine keeps for it. Not possible while an agent, the default, the judge of goals or the check of a swarm's answer uses one of the server's models. Your owner confirms it. Right now: ${listModelServers(cfg.home).map((s) => s.name).join(", ") || "none"}.`,
 					parameters: Type.Object({ name: Type.String({ description: "Name of the server, as in <name>/<model>" }) }),
 					execute: async (_id, p, signal) => {
 						run();
