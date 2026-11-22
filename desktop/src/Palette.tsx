@@ -6,12 +6,16 @@ import { computerWord } from "./machines.ts";
 import { useNamedLine } from "./lists.tsx";
 import { store, useModel } from "./model.ts";
 import { ago, fuzzy } from "./text.ts";
+import { goTo, useSettingsIndex } from "./Settings.tsx";
+import { search } from "./settings-index.ts";
 
 export function Palette() {
 	const s = store;
 	const [query, setQuery] = useState("");
 	const line = useNamedLine(query);
 	useModel(s);
+	// What Settings has, found by the same search as in Settings: asked for once the palette opens.
+	const index = useSettingsIndex(true);
 	type Row = { id: string; group: string; label: string; about?: string; keys?: string; run: () => void; conv?: { agent: string; session: string } };
 	const all = useMemo(() => {
 		const chat = s.active?.kind === "chat";
@@ -50,10 +54,11 @@ export function Palette() {
 			return { ...r, about: `${m.who}: ${m.snippet}`, keys: ago(m.ts), run: () => void s.openFound(m.agent, m.session, query.trim()) };
 		};
 		const byName = named.map(here);
+		const settings: Row[] = search(index, q).slice(0, 8).map((e) => ({ id: `f:${e.id}`, group: "In Settings", label: e.title, about: e.path.join(" › "), run: () => goTo(e.place) }));
 		const said: Row[] = found.filter((m) => !listed.has(`${m.agent}:${m.session}`)).map((m) => ({ id: `m:${m.agent}:${m.session}`, group: "Said in conversations", label: `${m.agent} · ${s.titleOf(m.agent, m.session)}`, about: `${m.who}: ${m.snippet}`, keys: ago(m.ts), run: () => void s.openFound(m.agent, m.session, query.trim()) }));
-		return [...byName, ...said, ...described.filter((r) => !holds(r) || !listed.has(`${r.conv!.agent}:${r.conv!.session}`)), ...loose.filter((r) => !r.conv || !listed.has(`${r.conv.agent}:${r.conv.session}`))].slice(0, 80);
+		return [...byName, ...settings, ...said, ...described.filter((r) => !holds(r) || !listed.has(`${r.conv!.agent}:${r.conv!.session}`)), ...loose.filter((r) => !r.conv || !listed.has(`${r.conv.agent}:${r.conv.session}`))].slice(0, 80);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [query, all, s.said]);
+	}, [query, all, s.said, index]);
 	// Rows that follow each other under the same heading are one group.
 	const groups: Array<{ name: string; rows: Row[] }> = [];
 	for (const r of shown) groups.at(-1)?.name === r.group ? groups.at(-1)!.rows.push(r) : groups.push({ name: r.group, rows: [r] });

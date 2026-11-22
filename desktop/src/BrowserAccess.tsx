@@ -119,7 +119,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 
 	return (
 		<>
-			<Section title={`This ${computer}`}>
+			<Section title={`This ${computer}`} data-find="access-computer">
 				<FieldGroup>
 					<Field orientation="horizontal" data-setting="access">
 						<FieldContent>
@@ -160,7 +160,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 				</FieldGroup>
 			</Section>
 
-			<Section title="Devices" actions={<Button variant="outline" disabled={state.status === "off"} onClick={actions.add}><PlusIcon data-icon="inline-start" />Add a device</Button>}>
+			<Section title="Devices" data-find="access-devices" actions={<Button variant="outline" disabled={state.status === "off"} onClick={actions.add}><PlusIcon data-icon="inline-start" />Add a device</Button>}>
 				{state.devices.length ? (
 					<ItemGroup>
 						{state.devices.map((d) => (

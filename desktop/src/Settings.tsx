@@ -12,16 +12,16 @@ import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLeg
 import { Input } from "@/components/ui/input";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
-import { Sidebar as SidebarRoot, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
+import { Sidebar as SidebarRoot, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Pulse } from "@/components/pulse";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "cn";
-import { type ComponentProps, Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
+import { type ComponentProps, Fragment, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
 import { type AgentDetail, api, type LoginState, type Provider, type Route, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
-import { store, type UpdatePhase, useModel } from "./model.ts";
+import { store, type UpdatePhase, useModel, useSignal } from "./model.ts";
 import { ago, errText, MODES, plural, REASONING, short, tilde } from "./text.ts";
 import type { DialogRootActions } from "@base-ui/react/dialog";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -41,18 +41,21 @@ import { ModelNotice } from "@/components/model-notice";
 import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 import { BrowserAccess } from "./BrowserAccess.tsx";
 import { Control, CONTROL, Page, Section } from "./settings-parts.tsx";
+import { type Entry, entries, GROUPS, LABELS, type Lists, type Place, search } from "./settings-index.ts";
 import { PairLinkField } from "./Pairing.tsx";
 
-const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = [
-	{ id: "general", label: "General", icon: SlidersHorizontalIcon },
-	{ id: "agents", label: "Agents", icon: UsersIcon },
-	{ id: "models", label: "Models", icon: CpuIcon },
-	{ id: "mcp", label: "MCP servers", icon: PlugIcon },
-	{ id: "skills", label: "Skills", icon: BookIcon },
-	{ id: "events", label: "Events", icon: ZapIcon },
-	{ id: "environments", label: "Environments", icon: ServerIcon },
-	{ id: "access", label: "Browser access", icon: MonitorSmartphoneIcon },
-];
+const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = (
+	[
+		["general", SlidersHorizontalIcon],
+		["agents", UsersIcon],
+		["models", CpuIcon],
+		["mcp", PlugIcon],
+		["skills", BookIcon],
+		["events", ZapIcon],
+		["environments", ServerIcon],
+		["access", MonitorSmartphoneIcon],
+	] as const
+).map(([id, icon]) => ({ id, label: LABELS[id], icon }));
 
 /**
  * Whether Settings > Browser access is offered: only by the desktop app's bridge, which has its calls,
@@ -218,11 +221,6 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 	);
 }
 
-const GROUPS: Array<{ prefix: string; title: string; about: string }> = [
-	{ prefix: "defaults.", title: "Defaults for agents", about: "What all agents use unless you set something else on an agent's own page." },
-	{ prefix: "limits.", title: "Limits", about: "How much work runs at the same time, and how large a download may be." },
-	{ prefix: "security.", title: "Security", about: "When pine asks you before an agent goes further." },
-];
 
 function General() {
 	const s = useModel(store);
@@ -434,14 +432,14 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 		>
 			<Section title="Model">
 				<FieldGroup>
-					<Field orientation="responsive">
+					<Field orientation="responsive" data-find="agent-model">
 						<FieldContent className="min-w-0">
 							<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
 							<FieldDescription>The model this agent thinks with.</FieldDescription>
 						</FieldContent>
 						{select(`${field}-model`, modelItems, (change.model as string) ?? d.model ?? "", (v) => put("model", v || "default"))}
 					</Field>
-					<Field orientation="responsive">
+					<Field orientation="responsive" data-find="agent-reasoning">
 						<FieldContent className="min-w-0">
 							<FieldLabel htmlFor={`${field}-reasoning`}>Reasoning</FieldLabel>
 							<FieldDescription>How long the model thinks before it answers. A higher level takes longer.</FieldDescription>
@@ -451,7 +449,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				</FieldGroup>
 			</Section>
 
-			<Section title="Instructions" about="The files the agent reads with each message.">
+			<Section title="Instructions" about="The files the agent reads with each message." data-find="agent-instructions">
 				<FileTabs files={FILES.filter((f) => f.edit || d.files[f.key] !== undefined)} value={file} onChange={setFile}>
 					{(key) => {
 						const meta = FILES.find((f) => f.key === key)!;
@@ -466,26 +464,26 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 
 			<Section title="Permissions" about="What the agent may do without asking you.">
 				<FieldGroup>
-					<Field orientation="responsive">
+					<Field orientation="responsive" data-find="agent-mode">
 						<FieldContent className="min-w-0">
 							<FieldLabel htmlFor={`${field}-mode`}>Mode</FieldLabel>
 							<FieldDescription>{modeAbout}</FieldDescription>
 						</FieldContent>
 						{select(`${field}-mode`, modeItems, mode, (m) => m && put("mode", m))}
 					</Field>
-					<Field orientation="horizontal">
+					<Field orientation="horizontal" data-find="agent-network">
 						<FieldContent className="min-w-0">
 							<FieldLabel htmlFor={`${field}-network`}>Network for shell commands</FieldLabel>
 							<FieldDescription>In safe and manual mode, the agent's commands have no network unless this is on. With it on, a command can send what the agent has read anywhere.</FieldDescription>
 						</FieldContent>
 						<Switch id={`${field}-network`} checked={now("network")} onCheckedChange={(on) => put("network", on)} />
 					</Field>
-					<FieldSet>
+					<FieldSet data-find="agent-tools">
 						<FieldLegend variant="label">Built-in tools</FieldLegend>
 						<FieldDescription>Without bash, edit and write, the agent can only read.</FieldDescription>
 						<CheckList label="Built-in tools" items={d.allTools.map((t) => ({ value: t, label: <span className="font-mono">{t}</span>, about: TOOL_ABOUT[t], checked: tools.includes(t) }))} onToggle={(t, on) => put("tools", toggle(tools, t, on))} />
 					</FieldSet>
-					<FieldSet>
+					<FieldSet data-find="agent-delegates">
 						<FieldLegend variant="label">Can delegate to</FieldLegend>
 						<FieldDescription>Agents it can hand a task to. A delegated task runs in the stricter of the two agents' modes.</FieldDescription>
 						{others.length ? (
@@ -510,6 +508,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 
 			<Section
 				title="Folders outside the workspace"
+				data-find="agent-folders"
 				about="Other folders the agent may use in safe and manual mode. In auto and bypass mode the agent reaches all your files anyway."
 				actions={
 					<DropdownMenu>
@@ -554,7 +553,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				)}
 			</Section>
 
-			<Section title="What this agent has" about="Ask the agent, or use the other pages of Settings, to add or remove any of these.">
+			<Section data-find="agent-holdings" title="What this agent has" about="Ask the agent, or use the other pages of Settings, to add or remove any of these.">
 				<FieldGroup>
 					{(
 						[
@@ -588,7 +587,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 			</Section>
 
 			{d.main ? null : (
-				<Section>
+				<Section data-find="agent-remove">
 					<FieldGroup>
 						<Field orientation="responsive">
 							<FieldContent className="min-w-0">
@@ -937,7 +936,8 @@ function NewModelServer({ made }: { made: () => void }) {
 function Models() {
 	const providers = useLoad(() => api.providers());
 	const servers = useLoad(() => api.modelServers());
-	const [query, setQuery] = useState("");
+	// A provider picked in the search of Settings is shown by the search of this page: without words it lists only a few.
+	const [query, setQuery] = useState(() => store.settingsFind?.filter ?? "");
 	const connecting = useRef<DialogRootActions>(null);
 	const s = useModel(store);
 	const fallback = useLoad(() => api.settings().then((all) => all.find((x) => x.key === "defaults.model")?.now));
@@ -977,7 +977,7 @@ function Models() {
 				</Section>
 			) : null}
 
-			<Section title="Subscriptions and API keys" about="A model from a provider on the internet.">
+			<Section title="Subscriptions and API keys" about="A model from a provider on the internet." data-find="providers">
 				<InputGroup>
 					<InputGroupAddon>
 						<SearchIcon />
@@ -998,6 +998,7 @@ function Models() {
 
 			<Section
 				title="Models on your own computer"
+				data-find="model-servers"
 				about="Run a model yourself with LM Studio, Ollama or llama.cpp, then connect it here."
 				actions={
 					<Dialog actionsRef={connecting}>
@@ -1009,7 +1010,7 @@ function Models() {
 				{servers.data?.length ? (
 					<ItemGroup>
 						{servers.data.map((x) => (
-							<Item key={x.name} variant="outline" size="sm">
+							<Item key={x.name} variant="outline" size="sm" data-find={`model-server:${x.name}`}>
 								<ItemContent className="min-w-0">
 									<ItemTitle>
 										{x.name}
@@ -1164,7 +1165,7 @@ function Mcp() {
 								const agent = x.scope === "global" ? undefined : x.scope;
 								const tone = /connected|ok|local|authenticated/i.test(state) ? "good" : /needs|error|fail|unauth/i.test(state) ? "warn" : undefined;
 								return (
-									<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm">
+									<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm" data-find={`mcp:${x.scope}:${x.name}`}>
 										<ItemContent className="min-w-0">
 											<ItemTitle>
 												{x.name}
@@ -1283,7 +1284,7 @@ function Skills() {
 						skills.data.map((x) => {
 							const managed = x.managed && x.scope !== "local";
 							return (
-								<Item key={x.dir} variant="outline" size="sm">
+								<Item key={x.dir} variant="outline" size="sm" data-find={`skill:${x.dir}`}>
 									<ItemContent className="min-w-0">
 										<ItemTitle>
 											{x.name}
@@ -1566,6 +1567,7 @@ function Sources() {
 	return (
 		<Section
 			title="Sources"
+			data-find="sources"
 			about="Something that can wake an agent: a folder, a web page, a chat, a device. A source does nothing until an agent is subscribed to it."
 			actions={
 				<Dialog actionsRef={adding}>
@@ -1578,7 +1580,7 @@ function Sources() {
 				{sources.data ? (
 					sources.data.length ? (
 						sources.data.map((x) => (
-							<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm">
+							<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm" data-find={`source:${x.scope}:${x.name}`}>
 								<ItemMedia><span className={cn("size-2 rounded-full", x.error ? "bg-destructive" : x.running ? "bg-primary" : "bg-muted-foreground")} /></ItemMedia>
 								<ItemContent className="min-w-0">
 									<ItemTitle>
@@ -1764,6 +1766,7 @@ export function Schedules() {
 	return (
 		<Section
 			title="Schedules"
+			data-find="schedules"
 			about="A task for an agent at set times, every so often, or once, as if you had sent it. You can also just ask an agent: “every morning at seven …”, “remind me at five”."
 			actions={
 				<Dialog actionsRef={adding}>
@@ -1776,7 +1779,7 @@ export function Schedules() {
 				{list.data ? (
 					list.data.length ? (
 						list.data.map((x) => (
-							<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm">
+							<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm" data-find={`schedule:${x.scope}:${x.name}`}>
 								<ItemContent className="min-w-0">
 									<ItemTitle>
 										{x.name}
@@ -1986,6 +1989,7 @@ export function Routes() {
 	return (
 		<Section
 			title="Routes"
+			data-find="routes"
 			about="A rule: when an event arrives, one thing happens, often without waking an agent. Most setups need none: to react to a source, subscribe an agent to it; to do something at a time, add a schedule."
 			actions={
 				<Dialog actionsRef={adding}>
@@ -2000,7 +2004,7 @@ export function Routes() {
 						list.data.map((r) => {
 							const said = routeSaid(r);
 							return (
-								<Item key={r.name} variant="outline" size="sm">
+								<Item key={r.name} variant="outline" size="sm" data-find={`route:${r.name}`}>
 									<ItemContent className="min-w-0">
 										<ItemTitle>
 											{r.name}
@@ -2075,7 +2079,7 @@ function SharedInstructions() {
 		files.reload();
 	};
 	return (
-		<Section title="Instructions for all agents" about="Notes that all agents read with each message. The main agent keeps them up to date when you tell it something meant for everybody, and you can change them here. Something for one agent only goes into that agent's own files: open the agent above.">
+		<Section data-find="shared-instructions" title="Instructions for all agents" about="Notes that all agents read with each message. The main agent keeps them up to date when you tell it something meant for everybody, and you can change them here. Something for one agent only goes into that agent's own files: open the agent above.">
 			{files.data ? (
 				<FileTabs files={files.data.map((f) => ({ key: f.name, label: f.name, about: f.about }))} value={name} onChange={setName}>
 					{(key) => (
@@ -2292,7 +2296,7 @@ export function MachineList() {
 					</Button>
 				) : null}
 			</div>
-			{shown.view === "ssh" ? <Section title="Add a machine">
+			{shown.view === "ssh" ? <Section title="Add a machine" data-find="add-machine">
 				<FieldGroup>
 					<Field>
 						<FieldLabel htmlFor={`${field}-host`}>Host</FieldLabel>
@@ -2358,7 +2362,7 @@ function Environments() {
 			<MachineList />
 			{/* In the pairing view, the list's how-to is all there is to say. */}
 			{!pairing ? (
-				<Section title="What a machine needs">
+				<Section title="What a machine needs" data-find="machine-needs">
 					<ul className="flex list-disc flex-col gap-1 ps-5 text-muted-foreground">
 						{needs.map((line, i) => <li key={i}>{line}</li>)}
 					</ul>
@@ -2424,7 +2428,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 						</Field>
 					) : null}
 					{s.updates ? (
-						<Field orientation="horizontal">
+						<Field orientation="horizontal" data-find="updates-at-start">
 							<FieldContent>
 								<FieldLabel htmlFor={`${field}-updates`}>Check for updates at start</FieldLabel>
 								<FieldDescription>One request to GitHub each time the app starts. It sends nothing about this {computerWord(s.platform)} or your pine.</FieldDescription>
@@ -2433,7 +2437,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 						</Field>
 					) : null}
 					{s.updates && s.selfUpdate ? (
-						<Field orientation="horizontal">
+						<Field orientation="horizontal" data-find="auto-update">
 							<FieldContent>
 								<FieldLabel htmlFor={`${field}-auto-update`}>Update automatically</FieldLabel>
 								<FieldDescription>A newer release is downloaded in the background and installed when you restart or quit Pine, never while you work. Off: the app links to the release page instead.</FieldDescription>
@@ -2441,7 +2445,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 							<Switch id={`${field}-auto-update`} checked={s.prefs.autoUpdate !== false} onCheckedChange={(autoUpdate) => void set({ autoUpdate })} />
 						</Field>
 					) : null}
-					<Field orientation="horizontal">
+					<Field orientation="horizontal" data-find="notifications">
 						<FieldContent>
 							<FieldLabel htmlFor={`${field}-notify`}>Notifications</FieldLabel>
 							<FieldDescription>While the window is in the background: when an agent is done, stops with an error, needs your approval or asks you something. The text is pine's, never the agent's.</FieldDescription>
@@ -2458,7 +2462,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 					</Alert>
 				) : null}
 				<FieldGroup>
-					<Field orientation="responsive">
+					<Field orientation="responsive" data-find="pine">
 						<FieldContent className="min-w-0">
 							<FieldTitle>
 								{service ? `pine ${service.version ?? ""}` : "pine"}
@@ -2475,7 +2479,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 						) : null}
 					</Field>
 					{local ? (
-						<Field orientation="horizontal">
+						<Field orientation="horizontal" data-find="keep-running">
 							<FieldContent>
 								<FieldLabel htmlFor={`${field}-keep-running`}>Keep pine running after the app quits</FieldLabel>
 								<FieldDescription>Schedules, sources and Telegram keep working while the window is closed. Takes effect the next time the app starts pine.</FieldDescription>
@@ -2484,7 +2488,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 						</Field>
 					) : null}
 					{local && command && (command.state !== "unavailable" || command.why) ? (
-						<Field orientation="responsive">
+						<Field orientation="responsive" data-find="command">
 							<FieldContent>
 								<FieldTitle>
 									The pine command in a terminal
@@ -2521,7 +2525,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 						</Field>
 					) : null}
 					{local ? (
-						<Field orientation="responsive">
+						<Field orientation="responsive" data-find="home">
 							<FieldContent className="min-w-0">
 								<FieldTitle>Home folder</FieldTitle>
 								<FieldDescription>
@@ -2541,6 +2545,75 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 	);
 }
 
+// ---- search -----------------------------------------------------------------------------------------
+
+/** Where a thing found in Settings is: its page opens, and the page shows it (see Settings below). */
+export function goTo(place: Place): void {
+	store.settingsFind = place.find || place.filter ? { find: place.find, filter: place.filter } : undefined;
+	store.openSettings(place.section, place.agent);
+}
+
+/**
+ * Everything the search of Settings can find, for as long as `on`: the lists are asked for when the search
+ * starts and again each time it starts anew, so that what was added since is found too.
+ */
+export function useSettingsIndex(on: boolean): Entry[] {
+	const s = useModel(store);
+	const [lists, setLists] = useState<Lists>({});
+	useEffect(() => {
+		if (!on) return;
+		let live = true;
+		const ask = <K extends keyof Lists>(key: K, p: Promise<Lists[K]>) => void p.then((v) => live && setLists((was) => ({ ...was, [key]: v })), () => undefined);
+		ask("settings", api.settings());
+		ask("providers", api.providers());
+		ask("modelServers", api.modelServers());
+		ask("mcp", api.mcp());
+		ask("skills", api.skills());
+		ask("sources", api.sources());
+		ask("schedules", api.schedules());
+		ask("routes", api.routes());
+		return () => void (live = false);
+	}, [on]);
+	const access = offersAccess(s);
+	return useMemo(
+		() => entries({ local: s.local, updates: s.updates, selfUpdate: s.selfUpdate, access }, { ...lists, agents: s.agents, machines: s.prefs.hosts.map((host) => ({ host, name: s.nameOf(host) })) }),
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+		[lists, s.agents, s.prefs.hosts, s.local, s.updates, s.selfUpdate, access],
+	);
+}
+
+/** What fits the words, as a page of its own in place of the page that was open. */
+function Found({ query, list, pick, back }: { query: string; list: Entry[]; pick: (e: Entry) => void; back: () => void }) {
+	// Up and down go from one to the next; up from the first goes back to the field.
+	const move = (e: React.KeyboardEvent<HTMLDivElement>) => {
+		if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+		const all = [...e.currentTarget.querySelectorAll<HTMLElement>("[data-result]")];
+		const at = all.indexOf(document.activeElement as HTMLElement);
+		e.preventDefault();
+		if (e.key === "ArrowUp" && at <= 0) return back();
+		all[Math.min(all.length - 1, e.key === "ArrowDown" ? at + 1 : at - 1)]?.focus();
+	};
+	return (
+		<Page title={`“${query.trim()}”`} lead={list.length ? `${plural(list.length, "place")} in Settings. Pick one to go there.` : undefined}>
+			{list.length ? (
+				<ItemGroup data-slot="settings-results" onKeyDown={move}>
+					{list.slice(0, 60).map((e) => (
+						<Item key={e.id} variant="outline" size="sm" data-result={e.id} render={<button type="button" />} onClick={() => pick(e)}>
+							<ItemContent className="min-w-0">
+								<ItemTitle>{e.title}</ItemTitle>
+								<ItemDescription className="truncate">{[e.path.join(" › "), e.about].filter(Boolean).join(" · ")}</ItemDescription>
+							</ItemContent>
+							<ItemActions><ChevronRightIcon /></ItemActions>
+						</Item>
+					))}
+				</ItemGroup>
+			) : (
+				<EmptyView icon={SearchIcon} title="Nothing in Settings fits">Try another word, or fewer of them. You can also ask the main agent: it knows every setting.</EmptyView>
+			)}
+		</Page>
+	);
+}
+
 export function Settings() {
 	const s = useModel(store);
 	const sections = offeredSections(s);
@@ -2548,24 +2621,68 @@ export function Settings() {
 	// Pages that were folded into others open where they went: App into General, Instructions into Agents.
 	const asked = s.section === "app" ? "general" : s.section === "instructions" ? "agents" : s.section;
 	const section = sections.some((x) => x.id === asked) ? asked : "general";
+	const [query, setQuery] = useState("");
+	const searching = query.trim() !== "";
+	const index = useSettingsIndex(searching);
+	const found = searching ? search(index, query) : [];
+	const hits = new Set(found.map((e) => e.place.section));
+	const field = useRef<HTMLInputElement>(null);
+	const root = useRef<HTMLDivElement>(null);
+	// ⌘F (the menu's Find) looks in Settings while they are in front.
+	useSignal("find", () => (field.current?.focus(), field.current?.select()));
+	const pick = (e: Entry) => (setQuery(""), goTo(e.place));
+	// What was picked is shown once its page has drawn it: scrolled to the middle and marked for a moment. A page
+	// draws what it asked the daemon for a moment later, so it is looked for a few times; then the page stays at its top.
+	const want = s.settingsFind;
+	useEffect(() => {
+		if (searching || !want) return;
+		let tries = 0;
+		let unmark: ReturnType<typeof setTimeout> | undefined;
+		const look = setInterval(() => {
+			const el = want.find ? root.current?.querySelector<HTMLElement>(`[data-slot=settings-page] ${want.find}`) : undefined;
+			if (!el && ++tries < 30) return;
+			clearInterval(look);
+			if (store.settingsFind === want) store.settingsFind = undefined;
+			if (!el) return;
+			el.scrollIntoView({ block: "center" });
+			el.setAttribute("data-found", "");
+			unmark = setTimeout(() => el.removeAttribute("data-found"), 1600);
+		}, 100);
+		return () => (clearInterval(look), clearTimeout(unmark));
+	}, [want, searching, section, s.settingsAgent]);
+	const keys = (e: React.KeyboardEvent<HTMLInputElement>) => {
+		if (e.key === "Enter" && found[0]) (e.preventDefault(), pick(found[0]));
+		else if (e.key === "ArrowDown") (e.preventDefault(), root.current?.querySelector<HTMLElement>("[data-result]")?.focus());
+		else if (e.key === "Escape" && query) (e.preventDefault(), e.stopPropagation(), setQuery(""));
+	};
 	// The sections are a column beside the page where there is room, and a row above it where there is not
 	// (a narrow window, or a wide panel beside): measured on the settings themselves, not on the window.
 	// An item's title wraps (its badges go under its name where the row is narrow): set once here for every row.
+	// What the search picked is outlined for a moment (`data-found`).
 	return (
-		<div className="@container/settings flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background **:data-[slot=item-title]:flex-wrap">
+		<div ref={root} className="@container/settings flex min-h-0 min-w-0 flex-1 overflow-hidden rounded-xl border bg-background **:data-[slot=item-title]:flex-wrap **:data-found:rounded-md **:data-found:outline-2 **:data-found:outline-offset-4 **:data-found:outline-ring">
 			<div className="flex min-h-0 min-w-0 flex-1 flex-col @3xl/settings:flex-row">
 				{/* A provider of its own, as in shadcn's sidebar in a dialog: the page needs one where no app side bar is around it (Storybook).
 				    Its ⌘B listener changes nothing here (open is fixed and the side bar cannot collapse); the app's provider still gets the key. */}
 				<SidebarProvider open className="min-h-0 w-full flex-none @3xl/settings:w-auto">
 					<SidebarRoot collapsible="none" className="w-full border-b border-line-soft bg-transparent @3xl/settings:w-50 @3xl/settings:border-r @3xl/settings:border-b-0">
+						<SidebarHeader className="px-2 pt-2 pb-0 @3xl/settings:pt-4">
+							<InputGroup>
+								<InputGroupAddon>
+									<SearchIcon />
+								</InputGroupAddon>
+								<InputGroupInput ref={field} type="search" aria-label="Search Settings" placeholder="Search" data-slot="settings-search" value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={keys} />
+							</InputGroup>
+						</SidebarHeader>
 						<SidebarContent>
 							<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x @3xl/settings:*:data-[slot=scroll-area-viewport]:scroll-fade">
-								<SidebarGroup role="navigation" className="py-2 @3xl/settings:py-4">
+								<SidebarGroup role="navigation" className="py-2">
 									<SidebarGroupContent>
 										<SidebarMenu className="flex-row @3xl/settings:flex-col">
 											{sections.map((x) => (
 												<SidebarMenuItem key={x.id} className="flex-none @3xl/settings:flex-initial">
-													<SidebarMenuButton isActive={section === x.id} aria-current={section === x.id ? "page" : undefined} onClick={() => ((s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
+													{/* While searching, a section with nothing that fits fades, as in the system's settings; a click on one ends the search. */}
+													<SidebarMenuButton isActive={!searching && section === x.id} aria-current={!searching && section === x.id ? "page" : undefined} className={cn(searching && !hits.has(x.id) && "opacity-50")} onClick={() => (setQuery(""), (s.section = x.id), (s.settingsAgent = undefined), s.touch())}><x.icon />{x.label}</SidebarMenuButton>
 												</SidebarMenuItem>
 											))}
 										</SidebarMenu>
@@ -2575,8 +2692,10 @@ export function Settings() {
 						</SidebarContent>
 					</SidebarRoot>
 				</SidebarProvider>
-				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={section}>
-					{section === "agents" ? <Agents /> : section === "models" ? <Models /> : section === "mcp" ? <Mcp /> : section === "skills" ? <Skills /> : section === "events" ? <EventsPage /> : section === "environments" ? <Environments /> : section === "access" ? <Access /> : <General />}
+				<ScrollArea className="flex min-h-0 min-w-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade" key={searching ? "search" : section}>
+					{searching ? (
+						<Found query={query} list={found} pick={pick} back={() => field.current?.focus()} />
+					) : section === "agents" ? <Agents /> : section === "models" ? <Models /> : section === "mcp" ? <Mcp /> : section === "skills" ? <Skills /> : section === "events" ? <EventsPage /> : section === "environments" ? <Environments /> : section === "access" ? <Access /> : <General />}
 				</ScrollArea>
 			</div>
 		</div>

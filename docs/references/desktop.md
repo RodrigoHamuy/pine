@@ -844,6 +844,14 @@ The daemon checks a change as it checks the main agent's (the same code), writes
 configuration back, and undoes what does not load. You are not asked to confirm in a dialog
 of pine's: the app is your own hand, like a `pine` command.
 
+**Search** at the top of the list of sections (`⌘F` while Settings are in front) finds a
+setting by its name, by a word of what it does or by its key in `pine.json`, and also what pine
+has: an agent and each of its fields, a provider, a model server, an MCP server, a skill, a
+source, a schedule, a route, a machine. The results are listed best first, each with the way to
+it (General › Limits), and the sections with nothing that fits fade. Enter or a click goes
+there, scrolls to it and outlines it for a moment. Escape empties the field. The palette (`⌘K`)
+lists the same results under In Settings.
+
 | Page | What you do there | The same by command or by asking the main agent |
 |---|---|---|
 | General | From the top: **This app** (the theme, the app's version and whether there is a newer one with Check now, whether that is asked at the start, Update automatically, notifications); **pine**, the pine the app talks to (its version, started here or attached, the main agent, whether there is a sandbox, Show log, Restart, Keep pine running after the app quits, the `pine` command for a terminal, whether the browser of the web tools is on this computer with Fetch it, the home folder); **Worth a look**, the notes `pine check` would print about this setup; then pine's settings in three framed groups, **Defaults for agents**, **Limits** and **Security**: the model, reasoning and mode agents start from, how long a command and a task may run, how many agents work at once, and what pine asks you about. Each setting has a name and a sentence on what it does; its key in `pine.json` is shown when you point at the name. A number or a time is saved with Enter or when you leave the field. What only tunes pine to a model server is not there: that is written into `pine.json` by hand ([setup.md](setup.md), "pine's settings") | `set_setting`; `pine check`; `pine browser-install` |
@@ -977,7 +985,7 @@ desktop/
                    chosen. view-world.ts is pine as the page knows it, made from the live events; view-state.ts
                    is what a view is told of it (names and states, no text); view-frame.ts (view.html) is the
                    frame a view runs in, with "pine/view" (../src/view-kit.ts)
-    Settings.tsx   the settings pages
+    Settings.tsx   the settings pages; settings-index.ts is what their search finds and where it is
     BrowserAccess.tsx, machines.ts  Settings > Browser access (with its QR code, components/qr-code.tsx);
                    how the page names a machine and draws a pairing on the first screen
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash

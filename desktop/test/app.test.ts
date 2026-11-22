@@ -1123,6 +1123,61 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await menu("settings");
 });
 
+test("settings are searched: what fits is listed in place of the page, and a pick opens its page at it", async () => {
+	await menu("settings");
+	await sees("[data-slot=settings-page] h1");
+	const field = page.locator("[data-slot=settings-search]");
+	// ⌘F (the menu's Find) goes to the field while Settings are in front.
+	await menu("find");
+	await page.waitForFunction(() => document.activeElement?.getAttribute("data-slot") === "settings-search");
+	await page.keyboard.type("largest download");
+	await sees("[data-slot=settings-results] [data-result='setting:limits.maxDownloadMb']");
+	await sees("[data-slot=settings-page] h1 >> text=“largest download”");
+	// The pages with nothing that fits fade in the navigation; the one that has it does not.
+	const faded = (label: string) => page.locator(`[role=navigation] [data-sidebar=menu-button]:has-text('${label}')`).evaluate((e: Element) => e.classList.contains("opacity-50"));
+	assert.equal(await faded("Models"), true);
+	assert.equal(await faded("General"), false);
+	await shot("09-settings-search");
+	// Enter goes to the first: its page, scrolled to it and marked for a moment, and the field is empty again.
+	await field.press("Enter");
+	await sees("[data-slot=settings-page] [data-setting-key='limits.maxDownloadMb'][data-found]");
+	await sees("[data-slot=settings-page] h1 >> text=General");
+	assert.equal(await field.inputValue(), "");
+	// An agent's own field opens that agent's page.
+	await field.fill("network for shell");
+	const result = page.locator("[data-slot=settings-results] [data-result^='agent:'][data-result$=':network']").first();
+	const agent = (await result.getAttribute("data-result"))!.split(":")[1];
+	// The arrows go from the field into the list, and Enter picks.
+	await field.press("ArrowDown");
+	await page.waitForFunction(() => document.activeElement?.hasAttribute("data-result"));
+	await result.click();
+	await sees(`[data-slot=settings-page] h1 >> text=${agent}`);
+	await sees("[data-slot=settings-page] [data-find=agent-network][data-found]");
+	// A provider the Models page lists only when searched for: it opens searched for it.
+	await field.fill("opencode");
+	await page.click("[data-slot=settings-results] [data-result='provider:opencode']");
+	await sees("[data-slot=settings-page] [data-provider=opencode][data-found]");
+	assert.equal(await page.inputValue("[data-slot=settings-page] input[aria-label='Search providers']"), "opencode");
+	// What pine has is found by its name: the source added above.
+	await field.fill("scans");
+	await sees("[data-slot=settings-results] [data-result$=':scans'] >> text=Events › Sources");
+	// Nothing fits: said so. Escape empties the field, and the page that was open is back.
+	await field.fill("zzqqxx");
+	await sees("[data-slot=settings-page] >> text=Nothing in Settings fits");
+	await field.press("Escape");
+	assert.equal(await field.inputValue(), "");
+	await sees("[data-slot=settings-page] h1 >> text=Models");
+	// The palette finds settings too, and opens them the same way.
+	await menu("palette");
+	await sees("[data-slot=command-input]");
+	await page.keyboard.type("notifications");
+	await sees("[cmdk-group-heading] >> text=In Settings");
+	await page.click("[data-slot=command-item]:has-text('General › This app')");
+	await sees("[data-slot=settings-page] [data-find=notifications][data-found]");
+	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
+	await menu("settings");
+});
+
 const rgb = (hex: string) => `rgb(${[1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)).join(", ")})`;
 /** The color a CSS color value resolves to in the page, read from an element of the test's own. */
 const resolved = (value: string) =>

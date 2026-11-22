@@ -146,6 +146,25 @@ export const AgentPage: Story = { args: { section: "agents", agent: "scout" } };
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
 export const McpServers: Story = { args: { section: "mcp" } };
 
+/** The search at the top of the navigation, with words typed: what fits in place of the page, best first, and the pages with nothing that fits faded. */
+export const Search: Story = {
+	args: { section: "general" },
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.type(await canvas.findByRole("searchbox", { name: "Search Settings" }), "mode");
+		await canvas.findByText("“mode”");
+		await expect(await canvas.findByText("General › Defaults for agents · How much an agent asks, and how far it reaches.")).toBeVisible();
+	},
+};
+
+/** Words that fit nothing in Settings. */
+export const SearchFindsNothing: Story = {
+	args: { section: "general" },
+	play: async ({ canvas, userEvent }) => {
+		await userEvent.type(await canvas.findByRole("searchbox", { name: "Search Settings" }), "zzqqxx");
+		await canvas.findByText("Nothing in Settings fits");
+	},
+};
+
 /** This computer and two machines added over SSH, the app on one of them: in use there, Use and Forget on the others. */
 export const Environments: Story = {
 	args: { section: "environments" },

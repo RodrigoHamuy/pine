@@ -288,6 +288,8 @@ export class Store extends Model {
 	/** The page the settings tab shows, and the agent whose page is open there. */
 	section = "general";
 	settingsAgent?: string;
+	/** What the search of Settings (or the palette) picked on that page: the element to show, and the words for the page's own search. Taken once the page shows it. */
+	settingsFind?: { find?: string; filter?: string };
 	/** Whether the dialog that makes a new agent is open: over whatever is in front, from the side bar's + and from Settings > Agents. */
 	newAgent = false;
 	/** Conversations in which an agent is at work right now, whether a tab shows them or not: "agent:session". */
