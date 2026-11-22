@@ -90,7 +90,7 @@ test("three columns: triggers, agents, tools; each card has the size of its kind
 	assert.ok(l.boxes.every((b: any) => b.y >= 0 && b.y + b.h <= l.h), "everything is on the board");
 	const of = (col: number) => l.boxes.filter((b: any) => b.col === col).map((b: any) => b.id);
 	assert.deepEqual(of(0), ["you", "source:feed", "source:inbox", "source:telegram", "sched:morning", "sched:daily-report", "sched:month-end", "outside:hook"], "you, then the event sources, then the schedules, the one that is due first on top");
-	assert.deepEqual(of(1), ["agent:main", "agent:books", "agent:scout", "agent:coder"], "those that work on top in pine's own order, the idle one below them");
+	assert.deepEqual(of(1), ["agent:main", "agent:scout", "agent:books", "agent:coder"], "those that work on top, scout under main, which handed it its task; the idle one below them");
 	// Only scout works: it stands on top. When its work ends it keeps its place while its answer goes back, then joins the idle ones in pine's order.
 	const agentsOf = (works: ViewWork[], now: number) => layoutOf(state(works, now), now).boxes.filter((b: any) => b.col === 1).map((b: any) => b.agent.id);
 	assert.deepEqual(agentsOf([work(1, "scout", { started: T0 - 5000 })], T0), ["scout", "main", "books", "coder"]);
@@ -424,4 +424,65 @@ test("a board is a card beside the tools: whose it is and how its tasks stand, a
 	const recent = new Recent();
 	recent.hear({ k: "board", board: 7, change: "posted", agent: "scout" } as any, T0);
 	assert.equal(recent.hot.get("board:7"), T0);
+});
+
+test("an agent that handed tasks on stays at work while they run, and above the agents it handed them to", () => {
+	const order = (works: ViewWork[], now = T0) => layoutOf(state(works, now), now).boxes.filter((b: any) => b.col === 1).map((b: any) => b.agent.id);
+	// coder handed a task each to main and books without waiting for them: its own turn is over, and it is idle by
+	// what it does itself. It stands on top all the same, above the two, while their tasks run.
+	const handed = [
+		work(1, "coder", { started: T0 - 60_000, finished: T0 - 50_000, doing: "done" }),
+		work(2, "main", { started: T0 - 50_000, parent: 1, depth: 1, from: { k: "agent", id: "coder" } }),
+		work(3, "books", { started: T0 - 50_000, parent: 1, depth: 1, from: { k: "agent", id: "coder" } }),
+	];
+	assert.deepEqual(order(handed), ["coder", "main", "books", "scout"]);
+	// When the tasks are over and their answers are back, it is idle, and everybody is in pine's own order again.
+	const over = handed.map((w) => ({ ...w, doing: "done" as const, finished: T0 - 20_000 }));
+	assert.deepEqual(order(over), ["main", "books", "scout", "coder"]);
+	// A chain: scout hands a task to books, which hands one to main. Who handed it on is above whom it went to, whatever pine's order.
+	const chain = [
+		work(1, "scout", { doing: "waiting", waitingOn: [2] }),
+		work(2, "books", { doing: "waiting", waitingOn: [3], parent: 1, depth: 1, from: { k: "agent", id: "scout" } }),
+		work(3, "main", { parent: 2, depth: 2, from: { k: "agent", id: "books" } }),
+		work(4, "coder", { from: { k: "source", name: "inbox" } }),
+	];
+	assert.deepEqual(order(chain), ["scout", "books", "main", "coder"], "and an agent at work on its own comes after the chain, in pine's order");
+	// Two that hand work to each other: both on top, in pine's order.
+	const ring = [work(1, "scout", { from: { k: "agent", id: "books" } }), work(2, "books", { from: { k: "agent", id: "scout" } })];
+	assert.deepEqual(order(ring), ["books", "scout", "main", "coder"]);
+	// The line from coder to each of them is there as long as coder stands above them.
+	const s = state(handed);
+	assert.deepEqual(linksOf(s, layoutOf(s, T0), T0).filter((k: any) => k.side).map((k: any) => [k.from, k.to]), [["agent:coder", "agent:main"], ["agent:coder", "agent:books"]]);
+});
+
+test("a dot runs along its line at an even pace, whatever the zoom, the camera or the lanes do", () => {
+	const s = state(STORY(T0));
+	const l = layoutOf(s, T0);
+	const recent = new Recent();
+	const view = { w: 560, h: 600 };
+	const key = "source:inbox>agent:books";
+	// Sixty frames a second while the camera zooms in and glides: each frame the dot moves on by about as much as the
+	// last, never a leap. (It was placed by the clock divided by the line's length on the panel, and with a clock of
+	// trillions of milliseconds, a line one pixel longer put it anywhere.)
+	const steps: number[] = [];
+	let before: number | undefined;
+	for (let i = 0; i < 120; i++) {
+		const now = T0 + i * 16;
+		draw(fakeCtx(), s, l, now, { recent, cam: { x: 200 + i * 2, y: 250 + i, z: 0.8 + i * 0.01 }, view });
+		const p = recent.dots.get(key)!.p;
+		if (before !== undefined) steps.push((p - before + 1) % 1);
+		before = p;
+	}
+	assert.ok(Math.max(...steps) < 0.02 && Math.min(...steps) > 0, `even steps: ${Math.min(...steps)} to ${Math.max(...steps)}`);
+	// Once along the line takes the same time at every zoom.
+	const lap = (z: number) => {
+		const r = new Recent();
+		draw(fakeCtx(), s, l, T0, { recent: r, cam: { x: 284, y: 300, z }, view });
+		draw(fakeCtx(), s, l, T0 + 500, { recent: r, cam: { x: 284, y: 300, z }, view });
+		return r.dots.get(key)!.p;
+	};
+	assert.ok(Math.abs(lap(0.6) - lap(2)) < 1e-9);
+	// A line that is gone takes its dot with it.
+	draw(fakeCtx(), state([]), layoutOf(state([]), T0), T0 + 5000, { recent, cam: { x: 284, y: 300, z: 1 }, view });
+	assert.equal(recent.dots.size, 0);
 });

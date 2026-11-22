@@ -163,6 +163,12 @@ export class Recent {
 	hot = new Map<string, number>();
 	/** A few words at an agent's box, for a moment. */
 	notes = new Map<string, { text: string; at: number }>();
+	/**
+	 * How far along its line each running dot is, as a part of the line (0 to 1), and when it was last moved. A dot
+	 * moves by the time since the last frame, so that a line that grows or shrinks (a zoom, the camera on its way,
+	 * a lane that moves) stretches under it, and the dot does not jump.
+	 */
+	dots = new Map<string, { p: number; at: number }>();
 
 	hear(h: ViewHappening, at: number): void {
 		const note = (agent: string | undefined, text: string) => agent && this.notes.set(agent, { text, at });
@@ -321,7 +327,33 @@ export function rowsOf(b: ViewBoard, s: ViewState, now: number): TaskRow[] {
 }
 
 /** Work that runs now, or whose answer is still on its way back: its agent keeps its place on top until then. */
-const atWork = (s: ViewState, a: ViewAgent, now: number) => s.work.some((w) => w.agent === a.id && (!ended(w) || (w.finished !== undefined && now >= w.finished && now - w.finished <= ANSWER_MS)));
+const current = (w: ViewWork, now: number) => !ended(w) || (w.finished !== undefined && now >= w.finished && now - w.finished <= ANSWER_MS);
+const atWork = (s: ViewState, a: ViewAgent, now: number) => s.work.some((w) => w.agent === a.id && current(w, now));
+/** Who handed a task to whom, for as long as the task runs or its answer is on its way back: the lines beside the agents. */
+const handedOf = (s: ViewState, now: number): Array<[from: string, to: string]> =>
+	s.work.filter((w) => !w.copy && w.from.k === "agent" && w.from.id !== w.agent && current(w, now)).map((w) => [(w.from as { id: string }).id, w.agent]);
+/**
+ * The agents in the order they stand: those at work on top, and above all an agent that handed a task on stays
+ * above the agents it handed it to, also when its own turn is over and it waits for nothing (a task handed on
+ * without waiting): it is at work as long as what it started is. Each agent that handed work on is followed by
+ * those it handed it to, in pine's own order; then the idle ones, in pine's own order.
+ */
+function standing(s: ViewState, now: number): ViewAgent[] {
+	const handed = handedOf(s, now);
+	const active = s.agents.filter((a) => atWork(s, a, now) || handed.some(([from]) => from === a.id));
+	const ids = new Set(active.map((a) => a.id));
+	const out: ViewAgent[] = [];
+	const put = (a: ViewAgent) => {
+		if (out.includes(a)) return;
+		out.push(a);
+		for (const b of active) if (handed.some(([from, to]) => from === a.id && to === b.id)) put(b);
+	};
+	// Those nobody at work handed anything to come first, each with what it handed on under it.
+	for (const a of active) if (!handed.some(([from, to]) => to === a.id && from !== a.id && ids.has(from))) put(a);
+	// What is left hands work around in a ring (a to b, b to a): in pine's own order.
+	for (const a of active) put(a);
+	return [...out, ...s.agents.filter((a) => !ids.has(a.id))];
+}
 /** How many questions wait for you: from work that asks, and from tasks of a board whose worker asked. */
 const questionsOf = (s: ViewState) => s.work.filter((w) => !ended(w) && w.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0);
 /** Who listens to an event source: those it names, and those that name it. */
@@ -373,10 +405,10 @@ export function layoutOf(s: ViewState, now: number): Layout {
 	if (others.length) head(0, "Webhooks");
 	for (const i of others) put(0, { id: i.id, kind: "outside", title: i.name, sub: i.count ? plural(i.count, "event") : "webhook" }, SIZE.tool);
 
-	// In the middle: the agents. Those that work stand on top, the idle ones below them, each group in pine's own
-	// order. One whose work has just ended keeps its place for as long as its answer is on its way back, so that the
-	// page does not jump twice.
-	for (const a of [...s.agents.filter((x) => atWork(s, x, now)), ...s.agents.filter((x) => !atWork(s, x, now))]) {
+	// In the middle: the agents. Those that work stand on top, one that handed work on above those it handed it to,
+	// and the idle ones below them (`standing`). One whose work has just ended keeps its place for as long as its
+	// answer is on its way back, so that the page does not jump twice.
+	for (const a of standing(s, now)) {
 		const mine = s.work.filter((w) => w.agent === a.id && !ended(w));
 		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, SIZE.agent);
 	}
@@ -1281,7 +1313,7 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): Hi
 		g.lineWidth = 1;
 		stroke(onPanel(pts));
 	});
-	const ways = routesOf(live, l).map((pts, i) => ({ k: live[i], pts: pts && onPanel(pts) }));
+	const ways = routesOf(live, l).map((pts, i) => ({ k: live[i], board: pts, pts: pts && onPanel(pts) }));
 	for (const { k, pts } of ways) {
 		if (!pts) continue;
 		g.globalAlpha = lit(k) ? 1 : 0.14;
@@ -1305,12 +1337,23 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): Hi
 	}
 
 	// One dot runs along each line of what happens, the way it goes: lighter than its line, so that it shows on it.
-	for (const { k, pts } of ways) {
-		if (!pts || !lit(k)) continue;
-		const lens = pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+	const lengthOf = (pts: Array<[number, number]>) => pts.slice(1).map((p, i) => Math.hypot(p[0] - pts[i][0], p[1] - pts[i][1]));
+	const moved = new Set<string>();
+	for (const { k, board, pts } of ways) {
+		if (!pts || !board) continue;
+		const lens = lengthOf(pts);
 		const total = lens.reduce((n, v) => n + v, 0);
 		if (total < 24) continue;
-		let at = ((now / (900 + total * 6)) % 1) * total;
+		// Once along a line takes longer the longer it is on the board: not on the panel, where a zoom would change it.
+		const period = 900 + lengthOf(board).reduce((n, v) => n + v, 0) * 6;
+		const key = `${k.from}>${k.to}${k.back ? "<" : ""}`;
+		const was = o.recent.dots.get(key);
+		const p0 = was ? (was.p + Math.max(0, Math.min(1000, now - was.at)) / period) % 1 : 0;
+		o.recent.dots.set(key, { p: p0, at: now });
+		moved.add(key);
+		// (A line the pointer dims keeps its dot going, unseen: it is where it would be when the line is lit again.)
+		if (!lit(k)) continue;
+		let at = p0 * total;
 		let p = pts[0];
 		for (let i = 0; i < lens.length; i++) {
 			if (at <= lens[i] || i === lens.length - 1) {
@@ -1326,6 +1369,8 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): Hi
 		g.arc(p[0], p[1], 3, 0, Math.PI * 2);
 		g.fill();
 	}
+	// A line that is gone takes its dot with it: one that comes again starts at its beginning.
+	for (const key of o.recent.dots.keys()) if (!moved.has(key)) o.recent.dots.delete(key);
 	g.restore();
 	g.globalAlpha = 1;
 	return hits;
