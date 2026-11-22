@@ -3,59 +3,59 @@
 //
 // Nothing here has to be learned first. There are three columns, and everything in them says in words what it is:
 //
-//   Triggers            what starts an agent's work: you, every event source ("inbox, triggers books"), every
-//                       schedule ("lights, triggers home, in 20 s"), every webhook
-//   Agents              every agent, those that work on top and the idle ones below them. Under its name what
-//                       it is doing right now, as a person would say it:
-//                       "Running a command", "Waiting for scout", "Needs your answer", "Idle"; under that why
-//                       ("for you", "delegated by main", "triggered by inbox") and how far ("step 2 of 5").
-//                       Each of its sub-agents is a line of its own under it, one that a sub-agent started
-//                       standing in under that one
+//   Triggers            what starts an agent's work: you, each event source ("inbox, triggers books"), each
+//                       schedule ("lights, triggers home, in 20 s"), each webhook
+//   Agents              all agents, those that work on top and the idle ones below them. A card for each: under
+//                       its name what it is doing right now, as a person would say it ("Running a command",
+//                       "Waiting for scout", "Needs your answer", "Idle"), the conversation it works in
+//                       ("main conversation", "branch of main"), why ("for you", "delegated by main",
+//                       "triggered by inbox"), how long, and how far ("4/7")
 //   Tools               what agents use. On top the boards, where a job that several work on is kept: a card
 //                       for each, with how far it is ("7/24"), a bar of how its tasks stand, and one small
 //                       tile per task in the order they were posted: an outline for one that is open (a faint
 //                       one while it waits for another), filled in the agent's color while a sub-agent works
 //                       on it, filled in the text's color when it is done, in the color of a question when
-//                       its worker asked something, in the color of what failed when it failed. A task that
-//                       comes after another (a check of somebody's work) stands under it. Under the boards
-//                       every MCP server and every skill
+//                       its worker asked something, in the color of what failed when it failed. Under the
+//                       boards the MCP servers and the skills
 //
 // It looks like the app it is shown in: the app's font, its cards with their thin borders and round corners, an
 // agent's avatar as the side bar draws it, its mode as a small badge, and the app's own colors for a question and
-// for what failed. It has no ground of its own: the panel's shows through, in any theme. The lines are what it has
-// from a circuit board: traces that turn at 45 degrees. A trace joins two cards only while something happens
-// between them, in the color of the agent it happens to: from a trigger to the agent it started, from an agent to
-// the tool it is using, at the left of the agents from one to the agent it delegated a task to, and in the color
-// of a question from an agent to you while it waits for your answer. When a delegated task ends, its answer goes
-// back at the right of the agents, from the one that did it to the one that asked, for a few seconds (in the color
-// of what failed, if it did); and what you asked for comes back to you the same way. A trace starts with a dot,
-// ends with an arrowhead, and one dot runs along it the way things go. Every trace has a lane of its own, so that
-// no two run on top of each other. What is on the board at any moment reads as a sentence: you asked main, main
-// delegated to scout, scout is using the web. While an agent works, a small dot beside its name fades out and in.
+// for what failed. It has no ground of its own: the panel's shows through, in any theme. What happens stands out
+// and what rests steps back: an agent at work has a card tinted in its color with a soft glow, its avatar filled
+// with a ring that turns around it, and what it does in the largest words on the board; an idle agent's card is
+// flat, its avatar an outline. A question for you is in the color of a question wherever it is.
+//
+// The lines are what it has from a circuit board: traces that turn at 45 degrees. A trace joins two cards only
+// while something happens between them, in the color of the agent it happens to: from a trigger to the agent it
+// started, from an agent to the tool it is using, at the left of the agents from one to the agent it delegated a
+// task to, and in the color of a question from an agent to you while it waits for your answer. When a delegated
+// task ends, its answer goes back at the right of the agents for a few seconds (in the color of what failed, if
+// it did); and what you asked for comes back to you the same way. A trace starts with a dot, ends with an
+// arrowhead, and one dot runs along it the way things go.
 //
 // The board is larger than the panel may be, and a camera looks at it. While the eye at the top right is pressed
-// it follows what happens: it keeps every part that something happens at in view, and moves there softly. Drag
+// it follows what happens: it keeps each card that something happens at in view, and moves there softly. Drag
 // the board, scroll, or pinch (or scroll with ctrl or cmd held) to look yourself; the eye, or a double click on
 // the empty board, follows again. The button beside it shows the whole board.
 //
-// How much each thing says goes by how close it is looked at. From far away a box is one line: a name and how it
-// stands ("working", "asks you", "7/24" and a bar), so that all of pine fits in the panel. In the middle it is as
-// described above. From close by it tells all a view is told: under each piece of work and each sub-agent how long it
-// has run, how many tools it called and its last tool calls as small pills (one that failed in the color of what
-// failed, the one it is in now in the agent's), what it finished lately, what it has, and its conversations; a
-// board as a row for every task, with its number, what its worker is doing and for how long, what it waits for, and
-// at the right its notes and whether it had an answer, a task that comes after another standing in under it. A level
-// takes the place of another around the pointer, at about the size its words had. A click on a board or on one of
-// its tasks shows it under the view, where the panel says what the task is in its own words: this view is never told.
+// Zooming never moves a card or changes its size: the board stays as it is, and the words in a card stay as large
+// as they are. So the closer a card is looked at, the more room it has, and it fills that room the way a page
+// fills a wider window, the most important first. From far an agent is its avatar, then its name and one word for
+// how it stands; then what it is doing; then where (a chip with its conversation), why and for how long; then its
+// steps, its board and its last tool calls; then a line for each sub-agent and what each is doing; then how long
+// it has run and what it finished lately; and with room for a second column, its conversations and what it is
+// connected to. A board's card is a row of tiles at first and a row for each task from close by; a trigger or a
+// tool says who it triggers or who uses it, and from close by all a view knows of it. A click on a board or on one
+// of its tasks shows it under the view, where the panel says what the task is in its own words: this view is
+// never told.
 //
-// Everything else is there when it is pointed at: the pointer over anything draws thin traces to all it is wired
-// to (an agent's sources, schedules, MCP servers and skills; for a source, who listens to it), the rest fades, and
-// the line on top says what it is. A click on an agent unfolds it: a line for each of its conversations, branches
-// under what they were branched from. A click also shows it under the view, a double click opens it.
+// The rest is there when it is pointed at: the pointer over anything draws thin traces to all it is wired to (an
+// agent's sources, schedules, MCP servers and skills; for a source, who listens to it), the rest fades, and the
+// line on top says what it is. A click on an agent shows it under the view, a double click opens it.
 //
-// There is no timeline: what happened, in order, is what the panel lists under every view.
+// There is no timeline: what happened, in order, is what the panel lists under each view.
 
-import { defineView, detailAt, ease, frame, mix, rgb, tasksOf, tiling, unsettled, type TaskTile, type Box as Rect, type Cam, type Detail, type ViewAgent, type ViewCall, type ViewBoard, type ViewConversation, type ViewTask, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
+import { defineView, ease, frame, mix, rgb, tasksOf, tiling, unsettled, type TaskTile, type Box as Rect, type Cam, type ViewAgent, type ViewCall, type ViewBoard, type ViewConversation, type ViewTask, type ViewHappening, type ViewHost, type ViewInput, type ViewSchedule, type ViewState, type ViewWork } from "pine/view";
 
 // ---- what is said ---------------------------------------------------------------------------------------------------------
 
@@ -213,33 +213,30 @@ export class Recent {
 	}
 }
 
+
 // ---- where everything is ---------------------------------------------------------------------------------------------------
 
-/** A box of the page: something that wakes agents, an agent, or something agents use. */
+/** A card of the board: something that wakes agents, an agent, or something agents use. */
 export interface Box {
 	/** "you", an input's id ("source:inbox", "outside:hook"), "sched:<name>", "agent:<id>", "board:<number>", "mcp:<name>", "skill:<name>". */
 	id: string;
 	col: 0 | 1 | 2;
 	kind: "you" | "source" | "outside" | "sched" | "agent" | "board" | "mcp" | "skill";
-	/** Its place on the board. */
+	/** Its place on the board. Its size goes by its kind alone, never by what it says. */
 	x: number;
 	y: number;
 	w: number;
 	h: number;
 	title: string;
-	/** A second line, smaller: what it is, whom it wakes. And words at the right of the first line. */
+	/** Words at the right of its name, and a second line under it: what it is, whom it triggers. */
 	sub?: string;
 	right?: string;
-	/** For an agent: the lines under its name. The first is what it does. */
-	lines?: Array<{ text: string; tone: "now" | "ask" | "sub" | "dim" | "note"; indent?: number; calls?: ViewCall[]; /** It goes on what stands above it: no corner in front of it. */ more?: boolean }>;
 	agent?: ViewAgent;
-	/** For a board: the board, whose tasks its card draws. From close by, a row for each task. */
 	board?: ViewBoard;
-	rows?: TaskRow[];
 	bad?: boolean;
 	busy?: boolean;
 }
-/** A row of a board's card when it is looked at from close by: one task, or under the tasks a word about the whole board. */
+/** A row of a board's card when it has room for one: a task, or under the tasks a word about the whole board. */
 export interface TaskRow {
 	task?: ViewTask;
 	/** How deep it stands under the task it comes after. */
@@ -249,9 +246,7 @@ export interface TaskRow {
 	flags: string;
 }
 export interface Layout {
-	/** How much of everything the boxes say: see `layoutOf`. */
-	detail: Detail;
-	/** The size of the board: everything on it lies between 0 and these. It does not depend on the panel's size. */
+	/** The size of the board: everything on it lies between 0 and these. It does not depend on the panel's size, or on the zoom. */
 	w: number;
 	h: number;
 	cols: Array<{ x: number; w: number; title: string }>;
@@ -276,27 +271,21 @@ const ANSWER_MS = 3500;
 
 /** The board's measures: a narrow column at each side, the agents between them, and a gap for the lines. */
 const SIDE = 128;
-const MID = 236;
-const GAP = 46;
-/** The room on top of a column for what it is called. */
-const TITLE = 26;
+const MID = 232;
+const GAP = 40;
+/** The room on top of a column for what it is called, and above a group in a column for its name. */
+const TITLE = 30;
+const HEAD = 16;
+/** How high each kind of card is, and the room between two. A card says more when there is more of it on the panel, never by growing. */
+export const SIZE = { agent: 112, side: 44, tool: 32, board: 100 };
+const SPACE = 8;
 /** How far from a box a line begins and ends: the room for the dot it starts with and the arrowhead it ends with. */
 export const PIN = 3;
 /** The color of a line that is a question for you, and of an answer that failed: names, which the drawing turns into the theme's own colors. */
 export const ASK = "ask";
 export const FAILED = "failed";
-
-/** The columns' measures at each level of detail: narrow where a box is a name, wide where it tells everything. */
-const MEASURES: Record<Detail, { side: number; mid: number; gap: number }> = { far: { side: 118, mid: 170, gap: 40 }, mid: { side: SIDE, mid: MID, gap: GAP }, near: { side: 250, mid: 330, gap: GAP } };
-/**
- * How large each level is drawn for: the board from close by is drawn for a zoom a third closer than the one in
- * the middle, the one from far for a zoom that shows nearly twice as much. So a level takes the place of another
- * at about the size its words have on the panel, and what changes is how much is said.
- */
-export const SCALE: Record<Detail, number> = { far: 0.6, mid: 1, near: 1.3 };
-/** A task's row in a board's card from close by, and where the rows begin. */
+/** A task's row in a board's card. */
 export const ROW = 17;
-const ROWS_AT = 54;
 
 /** How a task stands, for its row: what its worker is doing and for how long, or what it waits for. */
 function rowOf(t: ViewTask, s: ViewState, now: number): { text: string; flags: string } {
@@ -331,139 +320,65 @@ export function rowsOf(b: ViewBoard, s: ViewState, now: number): TaskRow[] {
 	return shown;
 }
 
+/** Work that runs now, or whose answer is still on its way back: its agent keeps its place on top until then. */
+const atWork = (s: ViewState, a: ViewAgent, now: number) => s.work.some((w) => w.agent === a.id && (!ended(w) || (w.finished !== undefined && now >= w.finished && now - w.finished <= ANSWER_MS)));
+/** How many questions wait for you: from work that asks, and from tasks of a board whose worker asked. */
+const questionsOf = (s: ViewState) => s.work.filter((w) => !ended(w) && w.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0);
+/** Who listens to an event source: those it names, and those that name it. */
+const listenersOf = (s: ViewState, i: ViewInput) => [...new Set([...i.agents, ...s.agents.filter((a) => a.sources.includes(i.name)).map((a) => a.id)])];
+/** The MCP servers or skills of all agents, those that most agents have first. */
+function ranked(s: ViewState, pick: (a: ViewAgent) => string[]): string[] {
+	const n = new Map<string, number>();
+	for (const a of s.agents) for (const name of pick(a)) n.set(name, (n.get(name) ?? 0) + 1);
+	return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
+}
+
 /**
- * Everything on the board. `open` are the agents whose boxes are unfolded. `detail` is how much the boxes say:
- * from far a name and how it stands, in the middle what each is doing, from close by all there is to tell.
+ * Everything on the board, each card in its place and at the size of its kind. What a card says is not decided
+ * here but where it is drawn (`contentOf`), by how much room it has on the panel at the zoom it is looked at.
  */
-export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: Recent, detail: Detail = "mid"): Layout {
-	const m = MEASURES[detail];
-	const far = detail === "far";
-	const near = detail === "near";
-	type Lines = NonNullable<Box["lines"]>;
-	/** A box with lines under its two rows of words is as high as they need. */
-	const tall = (lines: Lines, base: number) => (lines.length ? 40 + lines.length * 18 : base);
-	const dim = (texts: Array<string | undefined | false>): Lines => texts.filter((t): t is string => Boolean(t)).map((text) => ({ text, tone: "dim" as const }));
+export function layoutOf(s: ViewState, now: number): Layout {
 	const cols = [
-		{ x: 0, w: m.side, title: "Triggers" },
-		{ x: m.side + m.gap, w: m.mid, title: "Agents" },
-		{ x: m.side + m.gap + m.mid + m.gap, w: m.side, title: "Tools" },
+		{ x: 0, w: SIDE, title: "Triggers" },
+		{ x: SIDE + GAP, w: MID, title: "Agents" },
+		{ x: SIDE + GAP + MID + GAP, w: SIDE, title: "Tools" },
 	];
 	const boxes: Box[] = [];
 	const heads: Layout["heads"] = [];
 	const y = [TITLE, TITLE, TITLE];
 	const head = (col: number, text: string) => {
-		if (y[col] > TITLE) y[col] += 6;
+		if (y[col] > TITLE) y[col] += 8;
 		heads.push({ col, y: y[col], text });
-		y[col] += 18;
+		y[col] += HEAD;
 	};
 	const put = (col: 0 | 1 | 2, b: Omit<Box, "col" | "x" | "y" | "w" | "h">, h: number) => {
 		boxes.push({ ...b, col, x: cols[col].x, y: y[col], w: cols[col].w, h });
-		y[col] += h + 6;
+		y[col] += h + SPACE;
 	};
 
 	// On the left: you, the event sources, the schedules, and any other way in.
-	// (A task of a board that waits for your answer is a question for you like any other.)
-	const asks = s.work.filter((w) => !ended(w) && w.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0);
-	// (From close by: who asks.)
-	const asking = near ? [...s.work.filter((w) => !ended(w) && w.asking).map((w) => `${w.agent}${w.copy ? "'s sub-agent" : ""} needs your answer`), ...boardsOf(s).flatMap((b) => tasksOf(b).filter((t) => t.state === "blocked").map((t) => `Task ${t.id} on ${boardTitle(b)} waits for an answer`))].slice(0, 8).map((text) => ({ text, tone: "ask" as const })) : [];
-	put(0, { id: "you", kind: "you", title: "You", sub: asks && !far ? `${plural(asks, "question")} for you` : undefined, right: far && asks ? plural(asks, "question") : undefined, lines: asking, bad: asks > 0 }, far ? 30 : tall(asking, asks ? 44 : 30));
+	const asks = questionsOf(s);
+	put(0, { id: "you", kind: "you", title: "You", sub: asks ? plural(asks, "question") : "nothing waiting", bad: asks > 0 }, SIZE.side);
 	const sources = s.inputs.filter((i) => i.kind === "source").sort((a, b) => a.name.localeCompare(b.name));
 	if (sources.length) head(0, "Events");
-	const listeners = (i: ViewInput) => [...new Set([...i.agents, ...s.agents.filter((a) => a.sources.includes(i.name)).map((a) => a.id)])];
 	for (const i of sources) {
-		const who = listeners(i);
-		if (far) {
-			put(0, { id: i.id, kind: "source", title: i.name, right: i.failing ? "down" : undefined, bad: i.failing }, 30);
-			continue;
-		}
-		const more = near ? dim([i.type ? `${i.type} source` : "", `${plural(i.count, "event")}${i.last !== undefined ? `, last ${span(now - i.last)} ago` : ""}`, who.length > 2 ? `triggers ${who.join(", ")}` : ""]) : [];
-		put(0, { id: i.id, kind: "source", title: i.name, sub: i.failing ? "down" : who.length ? `triggers ${listOf(who, 2)}` : "no listeners", lines: more, bad: i.failing }, tall(more, 44));
+		const who = listenersOf(s, i);
+		put(0, { id: i.id, kind: "source", title: i.name, right: i.failing ? "down" : undefined, sub: i.failing ? "not connected" : who.length ? `triggers ${listOf(who, 2)}` : "no listeners", bad: i.failing }, SIZE.side);
 	}
 	const scheds: ViewSchedule[] = [];
 	for (const x of [...s.schedules].sort((a, b) => (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name))) if (!scheds.some((k) => k.name === x.name)) scheds.push(x);
 	if (scheds.length) head(0, "Schedules");
-	for (const x of scheds) {
-		const more = near ? dim([x.when, x.last !== undefined ? `last ran ${span(Math.max(0, now - x.last))} ago` : "has not run since the panel opened"]) : [];
-		put(0, { id: `sched:${x.name}`, kind: "sched", title: x.name, right: x.next !== undefined && x.next > now - 1000 ? `in ${span(x.next - now)}` : undefined, sub: far ? undefined : x.agent ? `triggers ${x.agent}` : "triggers all agents", lines: more }, far ? 30 : tall(more, 44));
-	}
+	for (const x of scheds) put(0, { id: `sched:${x.name}`, kind: "sched", title: x.name, right: x.next !== undefined && x.next > now - 1000 ? `in ${span(x.next - now)}` : undefined, sub: x.agent ? `triggers ${x.agent}` : "triggers all agents" }, SIZE.side);
 	const others = s.inputs.filter((i) => i.kind === "outside");
 	if (others.length) head(0, "Webhooks");
-	for (const i of others) {
-		const more = near ? dim([`${plural(i.count, "event")}${i.last !== undefined ? `, last ${span(now - i.last)} ago` : ""}`]) : [];
-		put(0, { id: i.id, kind: "outside", title: i.name, sub: near ? "webhook" : undefined, lines: more }, tall(more, 30));
-	}
+	for (const i of others) put(0, { id: i.id, kind: "outside", title: i.name, sub: i.count ? plural(i.count, "event") : "webhook" }, SIZE.tool);
 
-	// In the middle: the agents, each with what it does as a sentence.
-	// Those that work stand on top, the idle ones below them, each group in pine's own order. One whose work has just
-	// ended keeps its place for as long as its answer is on its way back, so that the page does not jump twice.
-	const atWork = (a: ViewAgent) => s.work.some((w) => w.agent === a.id && (!ended(w) || (w.finished !== undefined && now >= w.finished && now - w.finished <= ANSWER_MS)));
-	for (const a of [...s.agents.filter(atWork), ...s.agents.filter((x) => !atWork(x))]) {
-		const mine = s.work.filter((w) => w.agent === a.id && !ended(w)).sort((p, q) => p.started - q.started);
-		const own = mine.filter((w) => !w.copy);
-		const copies = mine.filter((w) => w.copy);
-		const first = own.find((w) => w.asking) ?? own[0] ?? copies[0];
-		const lines: NonNullable<Box["lines"]> = [];
-		if (far) {
-			// From far away: its name and one word for how it stands.
-			const state = mine.some((w) => w.asking) ? "asks you" : !mine.length ? "idle" : mine.every((w) => w.doing === "waiting") ? "waiting" : "working";
-			put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: state, lines, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, 36);
-			continue;
-		}
-		// From close by, under each piece of work: how long it has run, how many tools it called, the mode it is held to,
-		// and its last tool calls by name, the one it is in last.
-		const more = (w: ViewWork, indent?: number) => {
-			if (!near) return;
-			const time = span(Math.max(0, now - w.started));
-			const parts = [time === "now" ? "just started" : `for ${time}`, w.tools ? plural(w.tools, "tool call") : "", w.mode && w.mode !== a.mode ? `${w.mode} mode` : "", w.outside ? "read outside content" : ""].filter(Boolean);
-			lines.push({ text: parts.join(" · "), tone: "dim", indent, more: true });
-			if (w.calls?.length) lines.push({ text: w.calls.map((c) => toolWord(c.tool, c.mcp)).join(", "), tone: "dim", indent, calls: w.calls, more: true });
-		};
-		if (first) {
-			// What it is doing, and under it in smaller words why, and then how far it is.
-			const why = causeOf(first);
-			const howFar = [first.steps ? `step ${first.steps.done} of ${first.steps.total}` : "", first.round ? `goal round ${first.round}` : ""].filter(Boolean).join(" · ");
-			const where = [first.branch ? "in a branch" : "", first.worktree ? "in a worktree" : ""].filter(Boolean).join(" · ");
-			lines.push({ text: sentenceOf(first, s), tone: first.asking ? "ask" : "now" });
-			for (const text of [why, howFar, where]) if (text) lines.push({ text, tone: "dim" });
-			more(first);
-			// The board its sub-agents work through: how many of its tasks are done.
-			for (const b of boardsOf(s)) if (b.scope === "conversation" && b.agent === a.id && unsettled(b) > 0) lines.push({ text: b.blocked ? `Board: ${b.blocked === 1 ? "a task waits" : `${b.blocked} tasks wait`} for an answer` : `Board: ${boardLine(b).toLowerCase()}${b.taken ? ` · ${b.taken} in progress` : ""}`, tone: b.blocked ? "ask" : "dim" });
-			for (const w of own) {
-				if (w === first) continue;
-				lines.push({ text: `${sentenceOf(w, s)}${causeOf(w) ? ` · ${causeOf(w)}` : ""}`, tone: w.asking ? "ask" : "now" });
-				more(w);
-			}
-			const shown = first.copy ? copies.slice(1) : copies;
-			// Its sub-agents as a tree: one that a sub-agent started itself stands in under that one.
-			const ids = new Set(shown.map((c) => c.id));
-			const tree: Array<{ w: ViewWork; level: number }> = [];
-			const walk = (parent: number | undefined, level: number) => {
-				for (const c of shown) {
-					if ((c.parent !== undefined && ids.has(c.parent) ? c.parent : undefined) !== parent) continue;
-					tree.push({ w: c, level });
-					walk(c.id, Math.min(level + 1, 3));
-				}
-			};
-			walk(undefined, 1);
-			// One that has a task of a board is called by that task's number, which is the tile's in the board's card.
-			const taskOf = (w: ViewWork) => (w.board === undefined ? undefined : tasksOf(boardsOf(s).find((b) => b.id === w.board) ?? ({} as ViewBoard)).find((t) => t.worker === w.id)?.id);
-			const most = near ? 24 : 6;
-			for (const t of tree.slice(0, most)) {
-				lines.push({ text: `${taskOf(t.w) !== undefined ? `Task ${taskOf(t.w)}` : "Sub-agent"}: ${sentenceOf(t.w, s).toLowerCase()}`, tone: t.w.asking ? "ask" : "sub", indent: t.level });
-				more(t.w, t.level);
-			}
-			if (tree.length > most) lines.push({ text: `+${plural(tree.length - most, "more sub-agent")}`, tone: "dim", indent: 1 });
-		} else lines.push({ text: "Idle", tone: "dim" });
-		const said = recent?.notes.get(a.id);
-		if (said && now - said.at < 4000) lines.push({ text: said.text, tone: "note" });
-		if (near) {
-			// What it finished a while ago, and what it has: from close by there is room for it.
-			const done = s.work.filter((w) => w.agent === a.id && !w.copy && ended(w) && w.finished !== undefined).sort((p, q) => q.finished! - p.finished!).slice(0, 3);
-			for (const w of done) lines.push({ text: `${sentenceOf(w, s)} ${span(Math.max(0, now - w.finished!))} ago · took ${span(w.finished! - w.started)}${w.tools ? ` · ${plural(w.tools, "tool call")}` : ""}`, tone: "dim" });
-			lines.push(...dim([a.sources.length ? `Listens to ${listOf(a.sources, 5)}` : "", a.schedules.length ? `Schedules: ${listOf(a.schedules, 5)}` : "", a.mcp.length ? `MCP servers: ${listOf(a.mcp, 5)}` : "", a.skills.length ? `Skills: ${listOf(a.skills, 5)}` : ""]));
-		}
-		if (open.has(a.id) || near) for (const [i, c] of a.conversations.entries()) lines.push({ text: convText(c, a, i), tone: "dim", indent: c.branchOf !== undefined ? 1 : undefined });
-		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, lines, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, 40 + lines.length * 18);
+	// In the middle: the agents. Those that work stand on top, the idle ones below them, each group in pine's own
+	// order. One whose work has just ended keeps its place for as long as its answer is on its way back, so that the
+	// page does not jump twice.
+	for (const a of [...s.agents.filter((x) => atWork(s, x, now)), ...s.agents.filter((x) => !atWork(s, x, now))]) {
+		const mine = s.work.filter((w) => w.agent === a.id && !ended(w));
+		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, SIZE.agent);
 	}
 
 	// On the right, first: the boards that have work on them, and those with a name, which are there to stay.
@@ -471,55 +386,45 @@ export function layoutOf(s: ViewState, open: Set<string>, now: number, recent?: 
 	if (boards.length) head(2, "Boards");
 	for (const b of boards) {
 		const all = b.open + b.taken + b.done + b.failed + b.blocked;
-		if (far) {
-			// From far away: its name, how far it is, and the bar.
-			put(2, { id: `board:${b.id}`, kind: "board", title: b.name ?? b.agent ?? "Board", right: all ? `${b.done}/${all}` : undefined, board: b, busy: b.taken > 0, bad: b.blocked > 0 }, all ? 40 : 30);
-			continue;
-		}
-		if (near) {
-			// From close by: a row for every task.
-			const rows = rowsOf(b, s, now);
-			put(2, { id: `board:${b.id}`, kind: "board", title: b.name ?? b.agent ?? "Board", right: all ? `${b.done}/${all}` : undefined, sub: boardWords(b), board: b, rows, busy: b.taken > 0, bad: b.blocked > 0 }, 44 + (all ? 12 : 0) + (rows.length ? rows.length * ROW + 6 : 0));
-			continue;
-		}
-		const tiles = tilesOf(b, m.side - 20);
-		// Its name and how far it is, what happens on it, a bar, and its tasks as tiles.
-		put(2, { id: `board:${b.id}`, kind: "board", title: b.name ?? b.agent ?? "Board", right: all ? `${b.done}/${all}` : undefined, sub: boardWords(b), board: b, busy: b.taken > 0, bad: b.blocked > 0 }, 44 + (all ? 12 : 0) + (tiles.height ? tiles.height + 10 : 0) + (tiles.more ? 12 : 0));
+		put(2, { id: `board:${b.id}`, kind: "board", title: b.name ?? b.agent ?? "Board", right: all ? `${b.done}/${all}` : undefined, sub: boardWords(b), board: b, busy: b.taken > 0, bad: b.blocked > 0 }, SIZE.board);
 	}
-
 	// Under them: the MCP servers and the skills, those that most agents have first.
-	const ranked = (pick: (a: ViewAgent) => string[]) => {
-		const n = new Map<string, number>();
-		for (const a of s.agents) for (const name of pick(a)) n.set(name, (n.get(name) ?? 0) + 1);
-		return [...n].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([name]) => name);
-	};
-	const servers = ranked((a) => a.mcp);
-	const skills = ranked((a) => a.skills);
-	if (servers.length) head(2, "MCP servers");
-	// (From close by: who has it, and who is using it now.)
-	const used = (kind: "mcp" | "skill", name: string) => {
-		if (!near) return {};
-		const has = s.agents.filter((a) => (kind === "mcp" ? a.mcp : a.skills).includes(name)).map((a) => a.id);
-		const using = [...new Set(s.work.filter((w) => !ended(w) && w.doing === "tool" && (kind === "mcp" ? w.mcp : w.skill) === name).map((w) => w.agent))];
-		return { sub: `available to ${listOf(has, 4)}`, lines: using.map((id) => ({ text: `in use by ${id}`, tone: "now" as const })) };
-	};
-	for (const name of servers) {
-		const u = used("mcp", name);
-		put(2, { id: `mcp:${name}`, kind: "mcp", title: name, ...u }, near ? tall(u.lines ?? [], 44) : 30);
-	}
-	if (skills.length) head(2, "Skills");
-	for (const name of skills) {
-		const u = used("skill", name);
-		put(2, { id: `skill:${name}`, kind: "skill", title: name, ...u }, near ? tall(u.lines ?? [], 44) : 30);
+	const servers = ranked(s, (a) => a.mcp);
+	const skills = ranked(s, (a) => a.skills);
+	const usedBy = (kind: "mcp" | "skill", name: string) => [...new Set(s.work.filter((w) => !ended(w) && w.doing === "tool" && (kind === "mcp" ? w.mcp : w.skill) === name).map((w) => w.agent))];
+	const has = (kind: "mcp" | "skill", name: string) => s.agents.filter((a) => (kind === "mcp" ? a.mcp : a.skills).includes(name)).map((a) => a.id);
+	for (const [kind, names, title] of [["mcp", servers, "MCP servers"], ["skill", skills, "Skills"]] as const) {
+		if (names.length) head(2, title);
+		for (const name of names) {
+			const using = usedBy(kind, name);
+			const who = has(kind, name);
+			put(2, { id: `${kind}:${name}`, kind, title: name, sub: using.length ? `in use by ${listOf(using, 2)}` : who.length === s.agents.length && who.length > 1 ? "all agents" : who.length > 2 ? plural(who.length, "agent") : who.join(", "), busy: using.length > 0 }, SIZE.tool);
+		}
 	}
 
-	return { detail, w: cols[2].x + cols[2].w, h: Math.max(...y) - 6, cols, heads, boxes, byId: new Map(boxes.map((b) => [b.id, b])) };
+	return { w: cols[2].x + cols[2].w, h: Math.max(...y) - SPACE, cols, heads, boxes, byId: new Map(boxes.map((b) => [b.id, b])) };
 }
 
 /** A conversation in words: never its name, which a view is not told. */
 function convText(c: ViewConversation, a: ViewAgent, i: number): string {
-	const what = c.main ? "Main conversation" : c.branchOf !== undefined ? `Branch of ${a.conversations.find((x) => x.id === c.branchOf)?.main ? "main" : "a conversation"}` : `Conversation ${i + 1}`;
-	return [what, c.busy ? "active" : "", c.worktree ? "in a worktree" : "", c.goal ? `goal ${c.goal}` : "", c.outside ? "read outside content" : ""].filter(Boolean).join(" · ");
+	return [convName(a, i, true), c.worktree ? "worktree" : "", c.goal ? `goal ${c.goal}` : "", c.outside ? "read outside content" : ""].filter(Boolean).join(" · ");
+}
+/** What a conversation is called here: "main conversation", "conversation 3", "branch of main". */
+function convName(a: ViewAgent, i: number, capital = false): string {
+	const c = a.conversations[i];
+	const parent = c.branchOf !== undefined ? a.conversations.findIndex((x) => x.id === c.branchOf) : -1;
+	const name = c.main ? "main conversation" : c.branchOf !== undefined ? `branch of ${parent >= 0 ? (a.conversations[parent].main ? "main" : `conversation ${parent + 1}`) : "a conversation"}` : `conversation ${i + 1}`;
+	return capital ? name[0].toUpperCase() + name.slice(1) : name;
+}
+/**
+ * Which of its agent's conversations a piece of work runs in, by what it is called here. None for work that runs
+ * for another agent. `short` leaves out the word "conversation" where something else says it (the chip's bubble).
+ */
+export function sessionOf(w: ViewWork, a: ViewAgent | undefined, short = false): string | undefined {
+	if (w.conversation === undefined || !a) return undefined;
+	const i = a.conversations.findIndex((c) => c.id === w.conversation);
+	const name = i >= 0 ? convName(a, i) : w.branch ? "a branch" : undefined;
+	return short && name === "main conversation" ? "main" : name;
 }
 
 /**
@@ -587,24 +492,17 @@ export function hitAt(l: Layout, p: { x: number; y: number }): Box | undefined {
 	return l.boxes.find((b) => p.x >= b.x && p.x < b.x + b.w && p.y >= b.y && p.y < b.y + b.h);
 }
 
-/** Where a board's tiles begin in its card: under its two lines of words and its bar. */
-const TILES_AT = { x: 10, y: 54 };
-/** The task whose tile is at a point of the board, in a board's card. */
-export function tileAt(b: Box | undefined, p: { x: number; y: number } | undefined): ViewTask | undefined {
-	if (!b?.board || !p || b.rows || !b.sub) return undefined;
-	const { size, tiles } = tilesOf(b.board, b.w - 20);
-	const x = p.x - b.x - TILES_AT.x;
-	const y = p.y - b.y - TILES_AT.y;
-	// (A tile's own square and the gap at its right and under it: the pointer need not be that exact.)
-	return tiles.find((t) => x >= t.x - 1 && x < t.x + size + 1 && y >= t.y - 1 && y < t.y + size + 1)?.task;
+/** Where a task was drawn in the last frame, in the panel's pixels: a tile, or a row of a board's card. */
+export interface Hit {
+	x: number;
+	y: number;
+	w: number;
+	h: number;
+	board: number;
+	task: ViewTask;
 }
-/** The task whose row is at a point of the board, in a board's card from close by. */
-export function rowAt(b: Box | undefined, p: { x: number; y: number } | undefined): ViewTask | undefined {
-	if (!b?.rows || !p || p.y < b.y + ROWS_AT) return undefined;
-	return b.rows[Math.floor((p.y - b.y - ROWS_AT) / ROW)]?.task;
-}
-/** The task at a point of a board's card, as a tile or as a row. */
-export const taskAt = (b: Box | undefined, p: { x: number; y: number } | undefined): ViewTask | undefined => rowAt(b, p) ?? tileAt(b, p);
+/** The task drawn at a point of the panel. (A tile's gap around it counts: the pointer need not be that exact.) */
+export const hitTask = (hits: Hit[], p: { x: number; y: number } | undefined): Hit | undefined => (p ? hits.find((h) => p.x >= h.x - 1 && p.x < h.x + h.w + 1 && p.y >= h.y - 1 && p.y < h.y + h.h + 1) : undefined);
 /** How a task stands, as somebody would say it. */
 export function taskWords(t: ViewTask, b: ViewBoard): string {
 	const next = tasksOf(b).filter((x) => x.after.includes(t.id)).map((x) => x.id);
@@ -613,8 +511,8 @@ export function taskWords(t: ViewTask, b: ViewBoard): string {
 	return `${state}${t.state !== "waiting" && t.after.length ? `, comes after task ${t.after.join(" and ")}` : ""}${next.length ? `, followed by task ${next.join(" and ")}` : ""}`;
 }
 
-/** What a box is, in a few pieces of a sentence: what the line on top says while the pointer is over it. `at` is where the pointer is on the board. */
-export function tipOf(b: Box | undefined, s: ViewState, now: number, at?: { x: number; y: number }): string[] {
+/** What a box is, in a few pieces of a sentence: what the line on top says while the pointer is over it, or over `task` of it. */
+export function tipOf(b: Box | undefined, s: ViewState, now: number, task?: ViewTask): string[] {
 	if (!b) return [];
 	const who = (list: ViewAgent[]) => list.map((a) => a.id);
 	if (b.agent) {
@@ -622,7 +520,7 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number, at?: { x: n
 		const br = a.conversations.filter((c) => c.branchOf !== undefined).length;
 		const next = s.schedules.filter((x) => x.agent === a.id && x.next !== undefined && x.next > now).sort((p, q) => p.next! - q.next!)[0];
 		// What it is wired to, the lines on the page show; here is what they do not.
-		return [`${a.id}${a.main ? " (main agent)" : ""}`, `${a.mode} mode`, `${plural(a.conversations.length, "conversation")}${br ? `, ${plural(br, "branch", "branches")}` : ""}`, next ? `${next.name} in ${span(next.next! - now)}` : "", "click to expand, zoom in for more, double-click to open"].filter(Boolean);
+		return [`${a.id}${a.main ? " (main agent)" : ""}`, `${a.mode} mode`, `${plural(a.conversations.length, "conversation")}${br ? `, ${plural(br, "branch", "branches")}` : ""}`, next ? `${next.name} in ${span(next.next! - now)}` : "", "zoom in for more, double-click to open"].filter(Boolean);
 	}
 	if (b.kind === "you") return ["You", "your messages start an agent's work, and its questions wait here"];
 	if (b.kind === "source" || b.kind === "outside") {
@@ -638,12 +536,12 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number, at?: { x: n
 		const x = boardsOf(s).find((k) => `board:${k.id}` === b.id);
 		if (!x) return [b.title];
 		// Over one of its tiles: that task.
-		const tile = taskAt(b, at);
+		const tile = task;
 		if (tile) return [`Task ${tile.id} on ${boardTitle(x)}`, taskWords(tile, x), "click to read it"];
 		const whose = x.scope === "all" ? "board for all agents" : x.scope === "agent" ? `board of ${x.agent ?? "an agent"}` : `board of a conversation${x.agent ? ` of ${x.agent}` : ""}`;
 		const waits = tasksOf(x).filter((t) => t.state === "waiting").length;
 		const states = [x.taken ? `${x.taken} in progress` : "", x.open ? `${x.open} to do${waits ? ` (${waits} after other tasks)` : ""}` : "", x.blocked ? `${plural(x.blocked, "task")} waiting for an answer` : "", x.failed ? `${x.failed} failed` : "", x.done ? `${x.done} done` : ""].filter(Boolean);
-		return [`${b.title}: ${whose}`, states.join(", ") || "no tasks", x.notes ? plural(x.notes, "note") : "", "click to read it, zoom in for every task"].filter(Boolean);
+		return [`${b.title}: ${whose}`, states.join(", ") || "no tasks", x.notes ? plural(x.notes, "note") : "", "click to read it, zoom in for each task"].filter(Boolean);
 	}
 	const has = s.agents.filter((a) => (b.kind === "mcp" ? a.mcp : a.skills).includes(b.title));
 	const using = [...new Set(s.work.filter((w) => !ended(w) && w.doing === "tool" && (b.kind === "mcp" ? w.mcp : w.skill) === b.title).map((w) => w.agent))];
@@ -655,6 +553,9 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number, at?: { x: n
 const MARGIN = 12;
 const BAR = 32;
 const Z_MAX = 1.4;
+/** How far out and how close the hand may take the camera: from the whole board as a map to a card that fills the panel. */
+const Z_MIN = 0.2;
+const Z_HAND = 3.5;
 type Size = { w: number; h: number };
 
 /** The board with the room around it: what the camera never leaves. */
@@ -692,7 +593,401 @@ export function allOf(l: Layout, view: Size): Cam {
 /** A camera somebody moved by hand, kept where some of the board is still to be seen. */
 export function held(cam: Cam, l: Layout): Cam {
 	const whole = wholeOf(l);
-	return { x: Math.max(whole.x, Math.min(whole.x + whole.w, cam.x)), y: Math.max(whole.y, Math.min(whole.y + whole.h, cam.y)), z: Math.max(0.25, Math.min(3, cam.z)) };
+	return { x: Math.max(whole.x, Math.min(whole.x + whole.w, cam.x)), y: Math.max(whole.y, Math.min(whole.y + whole.h, cam.y)), z: Math.max(Z_MIN, Math.min(Z_HAND, cam.z)) };
+}
+
+
+// ---- what a card says, by the room it has ----------------------------------------------------------------------------------
+
+/** How wide a text is in a font: the canvas's measure where it is drawn, a stand-in in a test. */
+export type Measure = (font: string, text: string) => number;
+/** The colors a piece of a card can have: the theme's, and the color of the card's agent. */
+export type Tone = "text" | "muted" | "faint" | "warn" | "bad" | "accent";
+/**
+ * Something drawn in a card, in the panel's pixels from the card's top left corner. Text is the same size at
+ * each zoom; what changes with the zoom is how many pieces there is room for.
+ */
+export type Piece =
+	| { k: "text"; x: number; y: number; text: string; font: string; tone: Tone; align?: "left" | "right" }
+	/** The agent's avatar: filled while it works, an outline while it is idle. */
+	| { k: "avatar"; x: number; y: number; r: number; busy: boolean; ask: boolean }
+	| { k: "badge"; x: number; y: number; w: number; text: string; tone: Tone }
+	/** The conversation a piece of work runs in. */
+	| { k: "chip"; x: number; y: number; w: number; text: string }
+	/** A to-do list as a bar of steps. */
+	| { k: "steps"; x: number; y: number; w: number; done: number; total: number }
+	/** How a board's tasks stand, as one bar. */
+	| { k: "bar"; x: number; y: number; w: number; board: ViewBoard }
+	| { k: "tile"; x: number; y: number; size: number; task: ViewTask; board: ViewBoard }
+	/** A task's row: where the pointer finds it, and its ground while it is read under the view. */
+	| { k: "row"; x: number; y: number; w: number; h: number; task: ViewTask; board: ViewBoard }
+	| { k: "pill"; x: number; y: number; w: number; text: string; call: ViewCall }
+	/** A dot: in a tone, or in `color` (another agent's). */
+	| { k: "dot"; x: number; y: number; r: number; tone: Tone; color?: string; pulse?: boolean; hollow?: boolean }
+	/** The small corner in front of what stands under something. */
+	| { k: "elbow"; x: number; y: number };
+
+const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif';
+/** The type of the board: few sizes, and weight for what matters most. */
+const F = {
+	name: `600 13px ${FONT}`,
+	title: `500 12.5px ${FONT}`,
+	focus: `600 14px ${FONT}`,
+	idle: `500 13.5px ${FONT}`,
+	text: `12px ${FONT}`,
+	small: `11px ${FONT}`,
+	tiny: `10.5px ${FONT}`,
+	label: `500 10.5px ${FONT}`,
+	num: `500 11px ${FONT}`,
+	letter: `600 10px ${FONT}`,
+	badge: `500 10.5px ${FONT}`,
+};
+
+/**
+ * Text cut to a width, with an ellipsis where it was cut. `least` is the part of it that has to stay for it to be
+ * worth showing: "triggered by…" says nothing, so a line that would lose more is not shown at all.
+ */
+function clip(m: Measure, font: string, text: string, max: number, least = 0): string {
+	if (max <= 4) return "";
+	if (m(font, text) <= max) return text;
+	let lo = 0;
+	let hi = text.length;
+	while (lo < hi) {
+		const mid = Math.ceil((lo + hi) / 2);
+		if (m(font, `${text.slice(0, mid)}…`) <= max) lo = mid;
+		else hi = mid - 1;
+	}
+	return lo > 0 && lo >= text.length * least ? `${text.slice(0, lo).trimEnd()}…` : "";
+}
+
+/** A row of a piece of work's last tool calls as pills, the newest at the right: as many as there is room for. */
+function pillsOf(m: Measure, calls: ViewCall[], x: number, y: number, room: number): Piece[] {
+	const list: Array<{ c: ViewCall; text: string; w: number }> = [];
+	let used = 0;
+	for (const c of [...calls].reverse()) {
+		const text = toolWord(c.tool, c.mcp);
+		const w = m(F.tiny, text) + 12;
+		if (used + w > room) break;
+		list.unshift({ c, text, w });
+		used += w + 4;
+	}
+	let px = x;
+	return list.map(({ c, text, w }) => {
+		const p: Piece = { k: "pill", x: px, y, w, text, call: c };
+		px += w + 4;
+		return p;
+	});
+}
+
+/** What fills a card of `W` by `H` pixels on the panel. */
+export function contentOf(b: Box, s: ViewState, now: number, W: number, H: number, m: Measure, recent?: Recent): Piece[] {
+	if (b.agent) return agentContent(b.agent, s, now, W, H, m, recent);
+	if (b.board) return boardContent(b, b.board, s, now, W, H, m);
+	return sideContent(b, s, now, W, H, m);
+}
+
+/**
+ * An agent's card. What matters most comes first, and each next thing only where there is room for it: the
+ * avatar; its name and a word for how it stands; what it is doing, the largest words of the card; the
+ * conversation, why and for how long; its steps, its board and its last tool calls; its sub-agents; how long it
+ * has run and what it finished lately; and in a second column its conversations and what it is connected to.
+ */
+function agentContent(a: ViewAgent, s: ViewState, now: number, W: number, H: number, m: Measure, recent?: Recent): Piece[] {
+	const out: Piece[] = [];
+	const mine = s.work.filter((w) => w.agent === a.id && !ended(w)).sort((p, q) => p.started - q.started);
+	const own = mine.filter((w) => !w.copy);
+	const copies = mine.filter((w) => w.copy);
+	const first = own.find((w) => w.asking) ?? own[0] ?? copies[0];
+	const ask = mine.some((w) => w.asking);
+	const busy = mine.length > 0;
+	if (W < 60 || H < 22) {
+		out.push({ k: "avatar", x: W / 2, y: H / 2, r: Math.max(3, Math.min(9, Math.min(W, H) / 2 - 3)), busy, ask });
+		return out;
+	}
+	const pad = W < 150 ? 9 : 12;
+	const single = H < 52;
+	const r = H < 30 ? 7 : 9;
+	const hy = single ? H / 2 : pad + 10;
+	out.push({ k: "avatar", x: pad + r, y: hy, r, busy, ask });
+	const nameX = pad + r * 2 + 8;
+	let right = W - pad;
+	if (single) {
+		// One line: its name, and at the right one word for how it stands.
+		const word = ask ? "asks you" : !busy ? "idle" : mine.every((w) => w.doing === "waiting") ? "waiting" : "working";
+		const ww = m(F.small, word);
+		if (right - nameX - ww - 8 >= 30) {
+			out.push({ k: "text", x: right, y: hy, text: word, font: F.small, tone: ask ? "warn" : busy ? "accent" : "faint", align: "right" });
+			right -= ww + 8;
+		}
+	} else if (W >= 176) {
+		const bw = m(F.badge, a.mode) + 14;
+		out.push({ k: "badge", x: right - bw, y: hy, w: bw, text: a.mode, tone: a.mode === "bypass" ? "bad" : "muted" });
+		right -= bw + 8;
+	}
+	out.push({ k: "text", x: nameX, y: hy, text: clip(m, F.name, a.id, right - nameX), font: F.name, tone: busy ? "text" : "muted" });
+	if (single) return out;
+
+	// A second column, where there is room for one, for what the agent has rather than what it does.
+	const two = W >= 460 && H >= 170;
+	const L = pad;
+	const colW = two ? Math.round((W - pad * 3) * 0.6) : W - pad * 2;
+	const bottom = H - pad + 3;
+	let y = hy + 13;
+	/** Whether the next thing has room. The first that has none ends the card: nothing less important takes its place. */
+	let open = true;
+	const fits = (h: number) => open && (y + h <= bottom || (open = false));
+
+	// What it is doing: what the eye goes to first.
+	if (fits(19)) {
+		const text = first ? sentenceOf(first, s) : "Idle";
+		const font = first ? F.focus : F.idle;
+		out.push({ k: "text", x: L, y: y + 10, text: clip(m, font, text, colW, 0.35), font, tone: ask ? "warn" : first ? "text" : "faint" });
+		y += 22;
+	}
+	// Where and why: the conversation it works in, who it is for, and for how long. For a moment, what just happened.
+	const said = recent?.notes.get(a.id);
+	const note = said && now - said.at < 4000 ? said.text : undefined;
+	if (fits(18)) {
+		const cy = y + 8;
+		let x = L;
+		let end = L + colW;
+		if (first) {
+			const time = span(Math.max(0, now - first.started));
+			if (time !== "now") {
+				out.push({ k: "text", x: end, y: cy, text: time, font: F.small, tone: "faint", align: "right" });
+				end -= m(F.small, time) + 8;
+			}
+			// (The chip's speech bubble says that it is a conversation: the words need not.)
+			const where = sessionOf(first, a, true);
+			if (where) {
+				const text = `${where}${first.worktree ? " · worktree" : ""}`;
+				const cw = Math.min(m(F.tiny, text) + 20, end - x);
+				const shown = clip(m, F.tiny, text, cw - 20, 0.5);
+				if (shown) {
+					out.push({ k: "chip", x, y: cy, w: cw, text: shown });
+					x += cw + 7;
+				}
+			}
+			const words = note ?? causeOf(first);
+			const said = words ? clip(m, F.small, words, end - x, 0.7) : "";
+			if (said) out.push({ k: "text", x, y: cy, text: said, font: F.small, tone: note ? "accent" : "faint" });
+		} else {
+			const last = s.work.filter((w) => w.agent === a.id && !w.copy && ended(w) && w.finished !== undefined).sort((p, q) => q.finished! - p.finished!)[0];
+			const words = note ?? (last ? `last active ${span(Math.max(0, now - last.finished!))} ago` : plural(a.conversations.length, "conversation"));
+			out.push({ k: "text", x, y: cy, text: clip(m, F.small, words, end - x, 0.5), font: F.small, tone: note ? "accent" : "faint" });
+		}
+		y += 20;
+	}
+	if (first) {
+		// How far it is: its to-do list as a bar of steps, and the round of its goal.
+		if (first.steps && first.steps.total > 0 && fits(12)) {
+			const label = `${first.round ? `round ${first.round} · ` : ""}${first.steps.done}/${first.steps.total}`;
+			const lw = m(F.tiny, label);
+			out.push({ k: "steps", x: L, y: y + 5, w: colW - lw - 10, done: first.steps.done, total: first.steps.total });
+			out.push({ k: "text", x: L + colW, y: y + 5, text: label, font: F.tiny, tone: "faint", align: "right" });
+			y += 15;
+		}
+		// The board its sub-agents work through, as tiles.
+		const board = boardsOf(s).find((x) => x.scope === "conversation" && x.agent === a.id && unsettled(x) > 0);
+		if (board && fits(16)) {
+			const all = board.open + board.taken + board.done + board.failed + board.blocked;
+			const label = `${board.done}/${all}`;
+			const lw = m(F.tiny, label);
+			const t = tiling(board, colW - lw - 10, 13, [[6, 1], [5, 1], [4, 1]]);
+			for (const k of t.tiles) out.push({ k: "tile", x: L + k.x, y: y + 1 + k.y, size: t.size, task: k.task, board });
+			out.push({ k: "text", x: L + colW, y: y + 7, text: label, font: F.tiny, tone: board.blocked ? "warn" : "faint", align: "right" });
+			y += 18;
+		}
+		// Its last tool calls.
+		if (first.calls?.length && fits(18)) {
+			out.push(...pillsOf(m, first.calls, L, y + 8, colW));
+			y += 20;
+		}
+		// Its sub-agents as a tree: one that a sub-agent started itself stands in under that one.
+		const shown = first.copy ? copies.slice(1) : copies;
+		const ids = new Set(shown.map((c) => c.id));
+		const tree: Array<{ w: ViewWork; level: number }> = [];
+		const walk = (parent: number | undefined, level: number) => {
+			for (const c of shown) {
+				if ((c.parent !== undefined && ids.has(c.parent) ? c.parent : undefined) !== parent) continue;
+				tree.push({ w: c, level });
+				walk(c.id, Math.min(level + 1, 3));
+			}
+		};
+		walk(undefined, 1);
+		// Before them, the work of other agents it delegated and waits for: each in that agent's color.
+		const others = first.waitingOn.map((id) => s.work.find((x) => x.id === id)).filter((x): x is ViewWork => Boolean(x && !ended(x) && !x.copy && x.agent !== a.id));
+		const rows: Array<{ w: ViewWork; level: number; other?: boolean }> = [...others.map((w) => ({ w, level: 1, other: true })), ...tree];
+		// One that has a task of a board is called by that task's number, which is the tile's in the board's card.
+		const taskOf = (w: ViewWork) => (w.board === undefined ? undefined : tasksOf(boardsOf(s).find((x) => x.id === w.board) ?? ({} as ViewBoard)).find((t) => t.worker === w.id)?.id);
+		const room = open ? Math.floor((bottom - y) / 18) : 0;
+		if (rows.length && room <= 0) open = false;
+		if (rows.length && room > 0) {
+			// As many as there is room for; what is left is counted at the right of the last.
+			const n = Math.min(room, rows.length);
+			rows.slice(0, n).forEach((t, i) => {
+				const dx = (t.level - 1) * 12;
+				const ry = y + 9;
+				const time = span(Math.max(0, now - t.w.started));
+				const tail = i === n - 1 && n < rows.length ? `+${rows.length - n} more` : time === "now" ? "" : time;
+				const color = t.other ? s.agents.find((x) => x.id === t.w.agent)?.color : undefined;
+				out.push({ k: "elbow", x: L + 4 + dx, y: ry });
+				out.push({ k: "dot", x: L + 16 + dx, y: ry, r: 2.5, tone: t.w.asking ? "warn" : "accent", color: t.w.asking ? undefined : color, pulse: true });
+				const tw = tail ? m(F.small, tail) + 8 : 0;
+				if (tail) out.push({ k: "text", x: L + colW, y: ry, text: tail, font: F.small, tone: "faint", align: "right" });
+				const id = taskOf(t.w);
+				const text = `${t.other ? t.w.agent : id !== undefined ? `Task ${id}` : "Sub-agent"} · ${sentenceOf(t.w, s).toLowerCase()}`;
+				out.push({ k: "text", x: L + 24 + dx, y: ry, text: clip(m, F.text, text, colW - 24 - dx - tw), font: F.text, tone: t.w.asking ? "warn" : "muted" });
+				y += 18;
+			});
+			if (n < rows.length) open = false;
+		}
+		// Its other work, each with the conversation it runs in.
+		for (const w of own) {
+			if (w === first || !fits(18)) continue;
+			const where = sessionOf(w, a) ?? causeOf(w);
+			out.push({ k: "dot", x: L + 4, y: y + 9, r: 2.5, tone: w.asking ? "warn" : "accent", pulse: true });
+			out.push({ k: "text", x: L + 12, y: y + 9, text: clip(m, F.text, `${sentenceOf(w, s)}${where ? ` · ${where}` : ""}`, colW - 12), font: F.text, tone: w.asking ? "warn" : "text" });
+			y += 18;
+		}
+		// How long it has run, how many tools it called, the mode it is held to.
+		if (fits(22)) {
+			const parts = [`started ${span(Math.max(0, now - first.started)) === "now" ? "just now" : `${span(now - first.started)} ago`}`, first.tools ? plural(first.tools, "tool call") : "", first.mode && first.mode !== a.mode ? `limited to ${first.mode} mode` : "", first.outside ? "read outside content" : ""].filter(Boolean);
+			out.push({ k: "text", x: L, y: y + 13, text: clip(m, F.small, parts.join(" · "), colW), font: F.small, tone: "faint" });
+			y += 22;
+		}
+	}
+	// What it finished lately.
+	const done = s.work.filter((w) => w.agent === a.id && !w.copy && ended(w) && w.finished !== undefined).sort((p, q) => q.finished! - p.finished!).slice(0, 3);
+	const section = (x: number, w: number, label: string, rows: Array<{ text: string; tone: Tone; dot?: Tone; hollow?: boolean; pulse?: boolean }>, at: number, first = true): number => {
+		if (!rows.length || !first || at + 34 > bottom) return at;
+		out.push({ k: "text", x, y: at + 8, text: label, font: F.label, tone: "faint" });
+		at += 18;
+		for (const row of rows) {
+			if (at + 16 > bottom) break;
+			const dx = row.dot ? 11 : 0;
+			if (row.dot) out.push({ k: "dot", x: x + 3, y: at + 8, r: 2.5, tone: row.dot, hollow: row.hollow, pulse: row.pulse });
+			out.push({ k: "text", x: x + dx, y: at + 8, text: clip(m, F.small, row.text, w - dx), font: F.small, tone: row.tone });
+			at += 16;
+		}
+		return at + 6;
+	};
+	/** A piece of work that ended, in words: what it was for, how it ended and when, and how long it took. */
+	const lately = (w: ViewWork, long: boolean) => {
+		const why = causeOf(w);
+		const took = w.finished! - w.started;
+		return {
+			text: `${why ? why[0].toUpperCase() + why.slice(1) : "A task"} · ${w.doing === "failed" ? "failed" : w.doing === "cancelled" ? "stopped" : "done"} ${span(Math.max(0, now - w.finished!)) === "now" ? "just now" : `${span(now - w.finished!)} ago`}${long ? ` · took ${took < 1500 ? "a second" : span(took)}` : ""}`,
+			tone: (w.doing === "failed" ? "bad" : "muted") as Tone,
+		};
+	};
+	// What it has: its conversations, the one it works in now first in the eye, and what it is connected to.
+	const busyIn = new Set(mine.map((w) => w.conversation).filter((c) => c !== undefined));
+	const convs = a.conversations.map((c, i) => ({ text: convText(c, a, i), tone: (busyIn.has(c.id) || c.busy ? "text" : "muted") as Tone, dot: (busyIn.has(c.id) || c.busy ? "accent" : "faint") as Tone, hollow: !(busyIn.has(c.id) || c.busy), pulse: busyIn.has(c.id) || c.busy }));
+	const wired = [a.sources.length ? `Events: ${a.sources.join(", ")}` : "", a.schedules.length ? `Schedules: ${a.schedules.join(", ")}` : "", a.mcp.length ? `MCP: ${a.mcp.join(", ")}` : "", a.skills.length ? `Skills: ${a.skills.join(", ")}` : ""].filter(Boolean).map((text) => ({ text, tone: "muted" as Tone }));
+	if (two) {
+		const x = pad * 2 + colW;
+		const w = W - x - pad;
+		let at = hy + 13;
+		at = section(x, w, "Conversations", convs, at);
+		at = section(x, w, "Connected to", wired, at);
+		section(x, w, "Lately", done.map((d) => lately(d, false)), at);
+	} else {
+		y = section(L, colW, "Conversations", convs, y + 2, open);
+		y = section(L, colW, "Lately", done.map((d) => lately(d, true)), y, open);
+		section(L, colW, "Connected to", wired, y, open);
+	}
+	return out;
+}
+
+/** What a trigger or a tool says beyond its name and its second line, from close by. */
+function detailsOf(b: Box, s: ViewState, now: number): Array<{ text: string; tone: Tone }> {
+	const dim = (texts: Array<string | undefined | false>) => texts.filter((t): t is string => Boolean(t)).map((text) => ({ text, tone: "faint" as Tone }));
+	if (b.kind === "you") return [...s.work.filter((w) => !ended(w) && w.asking).map((w) => `${w.agent}${w.copy ? "'s sub-agent" : ""} needs your answer`), ...boardsOf(s).flatMap((x) => tasksOf(x).filter((t) => t.state === "blocked").map((t) => `Task ${t.id} on ${boardTitle(x)} waits`))].map((text) => ({ text, tone: "warn" as Tone }));
+	if (b.kind === "source" || b.kind === "outside") {
+		const i = s.inputs.find((x) => x.id === b.id);
+		if (!i) return [];
+		const who = listenersOf(s, i);
+		return dim([i.type ? `${i.type} source` : b.kind === "outside" ? "webhook" : "", `${plural(i.count, "event")}${i.last !== undefined ? `, last ${span(Math.max(0, now - i.last))} ago` : ""}`, who.length > 2 ? `triggers ${who.join(", ")}` : ""]);
+	}
+	if (b.kind === "sched") {
+		const x = s.schedules.find((k) => `sched:${k.name}` === b.id);
+		return dim([x?.when, x?.last !== undefined ? `last ran ${span(Math.max(0, now - x.last))} ago` : "has not run since the panel opened"]);
+	}
+	const kind = b.kind === "mcp" ? "mcp" : "skill";
+	const has = s.agents.filter((a) => (kind === "mcp" ? a.mcp : a.skills).includes(b.title)).map((a) => a.id);
+	return [{ text: `${b.kind === "mcp" ? "MCP server" : "skill"} of ${listOf(has, 4)}`, tone: "faint" }];
+}
+
+/** A trigger or a tool: its name, a word at the right, a second line, and from close by all a view knows of it. */
+function sideContent(b: Box, s: ViewState, now: number, W: number, H: number, m: Measure): Piece[] {
+	const out: Piece[] = [];
+	if (W < 30 || H < 12) return out;
+	const pad = W < 100 ? 7 : 10;
+	const single = H < 36;
+	const ty = single ? H / 2 : 15.5;
+	const warn: Tone = b.kind === "source" ? "bad" : "warn";
+	let right = W - pad;
+	if (b.right) {
+		// The name comes first: what stands at its right only where the name keeps most of itself.
+		const rw = m(F.small, b.right);
+		const kept = clip(m, F.title, b.title, right - pad - rw - 8);
+		if (kept === b.title || kept.length >= 7) {
+			out.push({ k: "text", x: right, y: ty, text: b.right, font: F.small, tone: b.bad ? warn : "faint", align: "right" });
+			right -= rw + 8;
+		}
+	}
+	out.push({ k: "text", x: pad, y: ty, text: clip(m, F.title, b.title, right - pad), font: F.title, tone: b.busy || b.bad ? "text" : "muted" });
+	if (single) return out;
+	const sub = b.sub ? clip(m, F.small, b.sub, W - 2 * pad, 0.6) : "";
+	if (sub) out.push({ k: "text", x: pad, y: 31, text: sub, font: F.small, tone: b.bad ? warn : b.busy ? "accent" : "faint" });
+	let y = 42;
+	for (const d of detailsOf(b, s, now)) {
+		if (y + 16 > H - pad + 3) break;
+		out.push({ k: "text", x: pad, y: y + 8, text: clip(m, F.small, d.text, W - 2 * pad, 0.5), font: F.small, tone: d.tone });
+		y += 16;
+	}
+	return out;
+}
+
+/** A board's card: its name and how far it is, what happens on it, a bar, and its tasks: as tiles, or where there is room, a row for each. */
+function boardContent(b: Box, x: ViewBoard, s: ViewState, now: number, W: number, H: number, m: Measure): Piece[] {
+	const out: Piece[] = sideContent({ ...b, board: undefined }, s, now, W, H, m).filter((p) => p.k === "text" && p.y < 40);
+	const all = x.open + x.taken + x.done + x.failed + x.blocked;
+	if (!all || H < 50 || W < 40) return out;
+	const pad = W < 100 ? 7 : 10;
+	const w = W - 2 * pad;
+	out.push({ k: "bar", x: pad, y: 42, w, board: x });
+	const top = 52;
+	const room = H - top - pad + 2;
+	if (W >= 190 && room >= 3 * ROW) {
+		const rows = rowsOf(x, s, now);
+		const n = Math.floor(room / ROW);
+		const shown = rows.length > n ? [...rows.slice(0, n - 1), { indent: 0, text: `+${plural(rows.length - n + 1, "more task")}`, flags: "" }] : rows;
+		shown.forEach((row, i) => {
+			const ry = top + i * ROW + ROW / 2;
+			const t = row.task;
+			let tx = pad + row.indent * 12;
+			if (t) out.push({ k: "row", x: 4, y: ry - ROW / 2, w: W - 8, h: ROW, task: t, board: x });
+			if (row.indent) out.push({ k: "elbow", x: tx - 6, y: ry });
+			if (t) {
+				out.push({ k: "tile", x: tx, y: ry - 4, size: 8, task: t, board: x });
+				tx += 14;
+				out.push({ k: "text", x: tx, y: ry, text: `${t.id}`, font: F.num, tone: "muted" });
+				tx += m(F.num, `${t.id}`) + 7;
+			}
+			const fw = row.flags ? Math.min(m(F.tiny, row.flags), w * 0.4) + 8 : 0;
+			if (row.flags) out.push({ k: "text", x: pad + w, y: ry, text: clip(m, F.tiny, row.flags, w * 0.4), font: F.tiny, tone: "faint", align: "right" });
+			const tone: Tone = !t ? "faint" : t.state === "taken" ? "text" : t.state === "blocked" ? "warn" : t.state === "failed" ? "bad" : t.state === "done" ? "muted" : "faint";
+			out.push({ k: "text", x: tx, y: ry, text: clip(m, F.text, row.text, pad + w - tx - fw), font: F.text, tone });
+		});
+		return out;
+	}
+	if (room < 4) return out;
+	const t = tiling(x, w, room, [[8, 2], [7, 2], [6, 2], [5, 2], [4, 1]], 3);
+	for (const k of t.tiles) out.push({ k: "tile", x: pad + k.x, y: top + 2 + k.y, size: t.size, task: k.task, board: x });
+	if (t.more && t.tiles.length) out.push({ k: "text", x: W - pad, y: H - 9, text: `+${t.more}`, font: F.tiny, tone: "faint", align: "right" });
+	return out;
 }
 
 // ---- drawing ---------------------------------------------------------------------------------------------------------------
@@ -713,7 +1008,6 @@ interface Theme {
 }
 const DARK: Theme = { text: "#e4f0fb", muted: "#a6accd", faint: "#767c9d", warn: "#fffac2", bad: "#d0679d" };
 const LIGHT: Theme = { text: "#1f2328", muted: "#59636e", faint: "#818b98", warn: "#9a6700", bad: "#cf222e" };
-const FONT = '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif';
 /** A color, thinned: what lies under it shows through. */
 const veil = (hex: string, alpha: number) => `rgba(${rgb(hex).join(", ")}, ${alpha})`;
 /** White or a near-black, whichever reads better on a color: as the app writes an agent's initial on its avatar. */
@@ -727,31 +1021,29 @@ function onColor(hex: string): string {
 }
 
 const WIDTHS = new Map<string, number>();
-function widthOf(g: Ctx, text: string): number {
-	const key = `${g.font}|${text}`;
-	let w = WIDTHS.get(key);
-	if (w === undefined) {
-		if (WIDTHS.size > 4000) WIDTHS.clear();
-		w = g.measureText(text).width;
-		WIDTHS.set(key, w);
-	}
-	return w;
-}
-/** Text cut to a width, with an ellipsis where it was cut. */
-function fit(g: Ctx, text: string, max: number): string {
-	if (widthOf(g, text) <= max) return text;
-	let n = text.length;
-	while (n > 1 && widthOf(g, `${text.slice(0, n)}…`) > max) n--;
-	return n > 1 ? `${text.slice(0, n)}…` : "";
+/** The canvas's measure, kept: the same words are measured at each frame. */
+function measurer(g: Ctx): Measure {
+	return (font, text) => {
+		const key = `${font}|${text}`;
+		let w = WIDTHS.get(key);
+		if (w === undefined) {
+			if (WIDTHS.size > 6000) WIDTHS.clear();
+			g.font = font;
+			w = g.measureText(text).width;
+			WIDTHS.set(key, w);
+		}
+		return w;
+	};
 }
 
 function rounded(g: Ctx, x: number, y: number, w: number, h: number, r: number): void {
+	const k = Math.max(0, Math.min(r, w / 2, h / 2));
 	g.beginPath();
-	g.moveTo(x + r, y);
-	g.arcTo(x + w, y, x + w, y + h, r);
-	g.arcTo(x + w, y + h, x, y + h, r);
-	g.arcTo(x, y + h, x, y, r);
-	g.arcTo(x, y, x + w, y, r);
+	g.moveTo(x + k, y);
+	g.arcTo(x + w, y, x + w, y + h, k);
+	g.arcTo(x + w, y + h, x, y + h, k);
+	g.arcTo(x, y + h, x, y, k);
+	g.arcTo(x, y, x + w, y, k);
 	g.closePath();
 }
 
@@ -772,25 +1064,21 @@ function chamfer(pts: Array<[number, number]>, r: number): Array<[number, number
 	return out;
 }
 
-/** Where `n` lines meet one side of a box: an agent's beside its name and down from there, anything else's around its middle. */
+/** Where `n` lines meet one side of a box: around its middle, a little apart. */
 function pinsOf(b: Box, n: number): number[] {
-	if (b.kind === "agent") {
-		const pitch = n > 1 ? Math.min(8, (b.h - 30) / (n - 1)) : 0;
-		return Array.from({ length: n }, (_, i) => b.y + 17 + i * pitch);
-	}
 	const pitch = n > 1 ? Math.min(7, (b.h - 14) / (n - 1)) : 0;
 	return Array.from({ length: n }, (_, i) => b.y + b.h / 2 + (i - (n - 1) / 2) * pitch);
 }
 
 /**
- * The way of every line across the board, as a board's traces run. A line leaves a box at its side, runs
+ * The way of each line across the board, as a board's traces run. A line leaves a box at its side, runs
  * straight across, turns into a lane of its own between the columns, and turns once more into the box it goes
- * to; every turn is cut at 45 degrees. No two lines share a lane, and several at one side of a box meet it a
+ * to; each turn is cut at 45 degrees. No two lines share a lane, and several at one side of a box meet it a
  * little apart. A task delegated from agent to agent runs in a lane close beside the agents at their left,
  * its answer at their right.
  */
 export function routesOf(links: Link[], l: Layout): Array<Array<[number, number]> | undefined> {
-	const mid = (b: Box) => b.y + Math.min(b.h / 2, 14);
+	const mid = (b: Box) => b.y + b.h / 2;
 	const info = links.map((k) => {
 		const a = l.byId.get(k.from);
 		const b = l.byId.get(k.to);
@@ -859,14 +1147,22 @@ export interface Shown {
 	view: Size;
 }
 
-/** The whole board as the camera sees it, into a canvas whose units are the panel's own pixels. The canvas is left clear where nothing is drawn. */
-export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): void {
+/**
+ * The whole board as the camera sees it, into a canvas whose units are the panel's own pixels. The canvas is left
+ * clear where nothing is drawn. The cards are where the board says, at the zoom's size; what is in them, the
+ * traces' width and the words are drawn at the panel's own size. Returns where each task was drawn.
+ */
+export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): Hit[] {
 	const th = s.dark ? DARK : LIGHT;
 	const deep = (c: string) => (c === ASK ? th.warn : c === FAILED ? th.bad : s.dark ? c : mix(c, "#15171d", 0.25));
+	const m = measurer(g);
+	const hits: Hit[] = [];
 	const z = o.cam.z;
-	// Where the board's corner is on the panel.
+	// Where the board's corner is on the panel, and a point of the board on the panel.
 	const ox = o.view.w / 2 - o.cam.x * z;
 	const oy = BAR + (o.view.h - BAR) / 2 - o.cam.y * z;
+	const X = (x: number) => ox + x * z;
+	const Y = (y: number) => oy + y * z;
 	g.globalAlpha = 1;
 	g.clearRect(0, 0, o.view.w, o.view.h);
 	g.save();
@@ -884,12 +1180,10 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 	for (let x = ((ox % step) + step) % step; x < o.view.w; x += step) for (let y = ((oy % step) + step) % step; y < o.view.h; y += step) g.rect(Math.round(x), Math.round(y), 1, 1);
 	g.fill();
 
-	g.translate(ox, oy);
-	g.scale(z, z);
 	g.textBaseline = "middle";
 	g.lineCap = "round";
 	g.lineJoin = "round";
-	const seen = (b: { y: number; h: number }) => (b.y + b.h) * z + oy > BAR - 8 && b.y * z + oy < o.view.h + 8;
+	const seen = (b: { y: number; h: number }) => Y(b.y + b.h) > BAR - 8 && Y(b.y) < o.view.h + 8;
 
 	const live = linksOf(s, l, now);
 	const focus = o.hover ?? o.selected;
@@ -903,145 +1197,78 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 	const faded = (id: string) => focus !== undefined && !near.has(id);
 	const lit = (k: Link) => !focus || k.from === focus || k.to === focus;
 
-	// What each column is, and under it what each group in it is: as the app's side bar names its groups.
-	g.textAlign = "left";
+	// What each column is, just above its first card, and above each group in it what the group is: as the app's
+	// side bar names its groups. From far the groups' names would stand on the cards, so they go.
 	g.globalAlpha = focus ? 0.5 : 1;
+	g.textAlign = "left";
+	g.textBaseline = "bottom";
 	g.font = `500 12px ${FONT}`;
 	g.fillStyle = th.muted;
-	for (const c of l.cols) g.fillText(c.title, c.x + 2, 9);
-	g.font = `11px ${FONT}`;
-	g.fillStyle = th.faint;
-	for (const head of l.heads) if (seen({ y: head.y, h: 18 })) g.fillText(head.text, l.cols[head.col].x + 2, head.y + 10);
+	for (const c of l.cols) g.fillText(c.title, X(c.x) + 2, Y(TITLE) - 5);
+	if (z >= 0.6) {
+		g.font = `11px ${FONT}`;
+		g.fillStyle = th.faint;
+		for (const head of l.heads) if (seen({ y: head.y, h: HEAD })) g.fillText(head.text, X(l.cols[head.col].x) + 2, Y(head.y + HEAD) - 4);
+	}
+	g.textBaseline = "middle";
 
-	// Every box is a card of the app: a surface a little lighter than the ground, a thin border, round corners.
+	// The cards.
 	for (const b of l.boxes) {
 		if (!seen(b)) continue;
+		const R = { x: Math.round(X(b.x)), y: Math.round(Y(b.y)), w: Math.round(b.w * z), h: Math.round(b.h * z) };
 		const mine = live.filter((k) => k.from === b.id || k.to === b.id);
 		const hot = now - (o.recent.hot.get(b.id) ?? -1e9) < 1400;
 		// An agent whose answer is still on its way back is part of what happens, though its work is over.
 		const active = Boolean(b.busy) || mine.length > 0 || hot;
 		// What warns: a source that is down in the color of what failed, a question for you in the color of a question.
 		const alarm = b.bad ? (b.kind === "source" ? th.bad : th.warn) : undefined;
-		const color = alarm ?? deep(b.agent?.color ?? mine[0]?.color ?? th.muted);
+		const accent = deep(b.agent?.color ?? mine[0]?.color ?? th.muted);
+		const color = alarm ?? accent;
 		const fade = faded(b.id) ? 0.3 : 1;
-		const r = b.kind === "agent" ? 10 : 8;
+		const r = Math.max(4, Math.min(12, (b.kind === "agent" ? 10 : 8) * Math.sqrt(z)));
 		g.globalAlpha = fade;
-		rounded(g, b.x, b.y, b.w, b.h, r);
-		g.fillStyle = veil(th.text, s.dark ? 0.035 : 0.03);
+		// What happens has a glow of its color; what rests is flat.
+		if ((active && (b.agent || b.kind === "you")) || (alarm && b.kind !== "source")) {
+			g.save();
+			g.shadowColor = veil(color, s.dark ? 0.5 : 0.32);
+			g.shadowBlur = Math.max(6, Math.min(22, 16 * z));
+			rounded(g, R.x + 0.5, R.y + 0.5, R.w - 1, R.h - 1, r);
+			g.strokeStyle = veil(color, 0.6);
+			g.lineWidth = 1;
+			g.stroke();
+			g.restore();
+		}
+		rounded(g, R.x, R.y, R.w, R.h, r);
+		g.fillStyle = veil(th.text, active || alarm ? (s.dark ? 0.04 : 0.035) : s.dark ? 0.025 : 0.02);
 		g.fill();
 		if (active || alarm) {
-			g.fillStyle = veil(color, hot ? 0.2 : s.dark ? 0.08 : 0.07);
+			const grad = g.createLinearGradient(0, R.y, 0, R.y + R.h);
+			grad.addColorStop(0, veil(color, hot ? 0.26 : s.dark ? 0.15 : 0.1));
+			grad.addColorStop(1, veil(color, hot ? 0.12 : s.dark ? 0.04 : 0.03));
+			g.fillStyle = grad;
 			g.fill();
 		}
 		g.lineWidth = 1;
-		g.strokeStyle = b.id === focus ? veil(th.text, 0.45) : active || alarm ? veil(color, 0.55) : veil(th.text, s.dark ? 0.1 : 0.14);
-		rounded(g, b.x + 0.5, b.y + 0.5, b.w - 1, b.h - 1, r);
+		g.strokeStyle = active || alarm ? veil(color, 0.55) : veil(th.text, s.dark ? 0.09 : 0.12);
+		rounded(g, R.x + 0.5, R.y + 0.5, R.w - 1, R.h - 1, r);
 		g.stroke();
-
-		g.textAlign = "left";
-		if (b.agent) {
-			// The agent's avatar, as the app draws it everywhere: its initial on its own color.
-			const ax = b.x + 19;
-			const ay = b.y + 18;
-			g.fillStyle = b.agent.color;
-			g.beginPath();
-			g.arc(ax, ay, 9, 0, Math.PI * 2);
-			g.fill();
-			g.font = `600 10px ${FONT}`;
-			g.textAlign = "center";
-			g.fillStyle = onColor(b.agent.color);
-			g.fillText(b.title.slice(0, 1).toUpperCase(), ax, ay + 0.5);
-			// Its mode, as a small badge at the right; the one that asks nothing in the color of what warns.
-			g.font = `500 10.5px ${FONT}`;
-			const mode = b.right ?? "";
-			const badge = mode ? widthOf(g, mode) + 12 : 0;
-			if (mode) {
-				const bx = b.x + b.w - 10 - badge;
-				rounded(g, bx + 0.5, ay - 8.5, badge, 17, 8.5);
-				g.strokeStyle = veil(th.text, s.dark ? 0.12 : 0.16);
-				g.stroke();
-				g.fillStyle = mode === "bypass" ? th.bad : mode === "asks you" ? th.warn : th.muted;
-				g.fillText(mode, bx + badge / 2 + 0.5, ay + 0.5);
-			}
-			g.textAlign = "left";
-			g.font = `600 13px ${FONT}`;
-			g.fillStyle = active || alarm ? th.text : th.muted;
-			const name = fit(g, b.title, b.w - 34 - 16 - badge - (b.busy ? 14 : 0));
-			g.fillText(name, b.x + 34, ay + 0.5);
-			if (b.busy) {
-				// While it works, the app's own sign of something going on: a small dot that fades out and in, in steps.
-				g.globalAlpha = fade * [1, 0.75, 0.5, 0.75][Math.floor(now / 300) % 4];
-				g.fillStyle = alarm ?? th.muted;
-				g.beginPath();
-				g.arc(b.x + 34 + widthOf(g, name) + 9, ay + 0.5, 3, 0, Math.PI * 2);
-				g.fill();
-				g.globalAlpha = fade;
-			}
-		} else {
-			g.font = `11px ${FONT}`;
-			const rightW = b.right ? widthOf(g, b.right) + 10 : 0;
-			if (b.right) {
-				g.textAlign = "right";
-				g.fillStyle = th.faint;
-				g.fillText(b.right, b.x + b.w - 10, b.y + 15.5);
-				g.textAlign = "left";
-			}
-			g.font = `500 12.5px ${FONT}`;
-			g.fillStyle = active || alarm ? th.text : mix(th.text, th.muted, 0.6);
-			g.fillText(fit(g, b.title, b.w - 20 - rightW), b.x + 10, b.y + 15.5);
-			if (b.sub) {
-				g.font = `11px ${FONT}`;
-				g.fillStyle = alarm ?? th.faint;
-				g.fillText(fit(g, b.sub, b.w - 20), b.x + 10, b.y + 31);
-			}
-			if (b.board) drawBoard(g, b, b.board, s, th, deep, now, fade, l.detail, o.task?.board === b.board.id ? o.task.task : undefined);
+		if (b.id === focus) {
+			// What the pointer is over, or what is shown under the view: a ring around it.
+			g.strokeStyle = veil(th.text, 0.5);
+			g.lineWidth = 1.5;
+			rounded(g, R.x - 2.5, R.y - 2.5, R.w + 5, R.h + 5, r + 2.5);
+			g.stroke();
 		}
-		(b.lines ?? []).forEach((line, i) => {
-			const ly = b.y + 43 + i * 18;
-			const dx = (line.indent ?? 0) * 12;
-			if (line.indent && !line.more) {
-				// What stands under something: a small corner in front of it, as deep in as it is under.
-				g.fillStyle = veil(th.text, 0.3);
-				g.fillRect(b.x + 14 + dx - 10, ly - 8, 1, 8);
-				g.fillRect(b.x + 14 + dx - 10, ly, 6, 1);
-			}
-			if (line.calls) {
-				// Its last tool calls as small pills, the newest at the right: as many as there is room for. One that
-				// failed is in the color of what failed, the one it is in now in the agent's own.
-				g.font = `10.5px ${FONT}`;
-				const room = b.w - 26 - dx;
-				const pills: Array<{ c: ViewCall; text: string; w: number }> = [];
-				let used = 0;
-				for (const c of [...line.calls].reverse()) {
-					const text = toolWord(c.tool, c.mcp);
-					const w = widthOf(g, text) + 12;
-					if (used + w > room) break;
-					pills.unshift({ c, text, w });
-					used += w + 4;
-				}
-				let px = b.x + 14 + dx;
-				for (const { c, text, w } of pills) {
-					const running = c.ms === undefined;
-					const color = c.ok === false ? th.bad : running ? deep(b.agent?.color ?? th.muted) : th.faint;
-					rounded(g, px + 0.5, ly - 7.5, w, 15, 7.5);
-					g.strokeStyle = veil(color, running || c.ok === false ? 0.8 : 0.35);
-					g.lineWidth = 1;
-					g.stroke();
-					g.fillStyle = c.ok === false ? th.bad : running ? th.text : th.muted;
-					g.textAlign = "center";
-					g.fillText(text, px + w / 2 + 0.5, ly + 0.5);
-					g.textAlign = "left";
-					px += w + 4;
-				}
-				return;
-			}
-			g.font = `${line.tone === "ask" ? "600 " : line.tone === "now" ? "500 " : ""}12.5px ${FONT}`;
-			g.fillStyle = line.tone === "ask" ? th.warn : line.tone === "now" ? th.text : line.tone === "sub" ? th.muted : line.tone === "note" ? deep(b.agent?.color ?? th.muted) : th.faint;
-			g.fillText(fit(g, line.text, b.w - 26 - dx), b.x + 14 + dx, ly);
-		});
+		// What is in it, kept inside it.
+		g.save();
+		rounded(g, R.x, R.y, R.w, R.h, r);
+		g.clip();
+		paint(g, contentOf(b, s, now, R.w, R.h, m, o.recent), R, { th, s, deep, accent, agent: b.agent, now, fade, chosen: o.task }, hits);
+		g.restore();
 	}
 
 	// The lines: thin where the pointer asks what a box is wired to, full where something happens.
+	const onPanel = (pts: Array<[number, number]>): Array<[number, number]> => pts.map(([x, y]) => [X(x), Y(y)]);
 	const stroke = (pts: Array<[number, number]>) => {
 		g.beginPath();
 		pts.forEach(([x, y], i) => (i ? g.lineTo(x, y) : g.moveTo(x, y)));
@@ -1052,9 +1279,9 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 		g.globalAlpha = 0.5;
 		g.strokeStyle = deep(wires[i].color);
 		g.lineWidth = 1;
-		stroke(pts);
+		stroke(onPanel(pts));
 	});
-	const ways = routesOf(live, l).map((pts, i) => ({ k: live[i], pts }));
+	const ways = routesOf(live, l).map((pts, i) => ({ k: live[i], pts: pts && onPanel(pts) }));
 	for (const { k, pts } of ways) {
 		if (!pts) continue;
 		g.globalAlpha = lit(k) ? 1 : 0.14;
@@ -1065,13 +1292,14 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 		const first = pts[0];
 		const last = pts[pts.length - 1];
 		const dir = last[0] >= pts[pts.length - 2][0] ? 1 : -1;
+		const tip = last[0] + dir * PIN * z;
 		g.beginPath();
 		g.arc(first[0], first[1], 2.5, 0, Math.PI * 2);
 		g.fill();
 		g.beginPath();
-		g.moveTo(last[0] + dir * PIN, last[1]);
-		g.lineTo(last[0] - dir * 3.5, last[1] - 3.6);
-		g.lineTo(last[0] - dir * 3.5, last[1] + 3.6);
+		g.moveTo(tip, last[1]);
+		g.lineTo(tip - dir * 6.5, last[1] - 3.6);
+		g.lineTo(tip - dir * 6.5, last[1] + 3.6);
 		g.closePath();
 		g.fill();
 	}
@@ -1100,108 +1328,227 @@ export function draw(g: Ctx, s: ViewState, l: Layout, now: number, o: Shown): vo
 	}
 	g.restore();
 	g.globalAlpha = 1;
+	return hits;
 }
 
-/**
- * A board's card under its two lines of words: a bar of how its tasks stand, and a tile for each task. A task
- * somebody works on is in that agent's color and breathes; one whose worker asked is in the color of a question.
- */
-function drawBoard(g: Ctx, box: Box, b: ViewBoard, s: ViewState, th: Theme, deep: (c: string) => string, now: number, fade: number, detail: Detail = "mid", chosen?: number): void {
-	const all = b.open + b.taken + b.done + b.failed + b.blocked;
-	if (!all) return;
-	const x0 = box.x + 10;
-	const w = box.w - 20;
-	const colorOf = (id?: string) => deep(s.agents.find((a) => a.id === (id ?? b.agent))?.color ?? th.muted);
+/** What `paint` needs besides the pieces. */
+interface Paint {
+	th: Theme;
+	s: ViewState;
+	deep: (c: string) => string;
+	/** The color of the card: its agent's, or of what happens at it. */
+	accent: string;
+	agent?: ViewAgent;
+	now: number;
+	fade: number;
+	/** The task that is read under the view. */
+	chosen?: { board: number; task: number };
+}
+
+/** The pieces of a card, at the card's corner `R` on the panel. Tasks drawn go into `hits`. */
+function paint(g: Ctx, pieces: Piece[], R: { x: number; y: number }, c: Paint, hits: Hit[]): void {
+	const { th, s, now, fade } = c;
+	const tone = (t: Tone) => (t === "text" ? th.text : t === "muted" ? th.muted : t === "faint" ? th.faint : t === "warn" ? th.warn : t === "bad" ? th.bad : c.accent);
+	/** The app's own sign of something going on: fading out and in, in steps. */
+	const breath = [1, 0.75, 0.5, 0.75][Math.floor(now / 300) % 4];
 	const pulse = 0.62 + 0.38 * Math.sin(now / 320);
-	// The bar: done, in progress, asking, failed, and the rest still to do.
-	const by = box.y + (detail === "far" ? 27 : 42);
-	rounded(g, x0, by, w, 4, 2);
-	g.fillStyle = veil(th.text, s.dark ? 0.1 : 0.12);
-	g.fill();
-	let at = x0;
-	for (const [n, color, alpha] of [[b.done, th.text, 0.6], [b.taken, colorOf(), pulse], [b.blocked, th.warn, 1], [b.failed, th.bad, 1]] as Array<[number, string, number]>) {
-		if (!n) continue;
-		const part = Math.max(2, (w * n) / all);
-		g.globalAlpha = fade * alpha;
-		g.fillStyle = color;
-		rounded(g, at, by, Math.min(part, x0 + w - at), 4, 2);
-		g.fill();
-		at += part;
-	}
-	g.globalAlpha = fade;
-	if (detail === "far") return;
-	/** A task's tile: an outline while nobody has it, filled once somebody has or had. */
-	const tile = (t: ViewTask, tx: number, tyy: number, size: number, r: number) => {
-		if (t.state === "open" || t.state === "waiting") {
-			g.strokeStyle = veil(th.text, t.state === "open" ? (s.dark ? 0.5 : 0.55) : s.dark ? 0.2 : 0.25);
-			g.lineWidth = 1;
-			rounded(g, tx + 0.5, tyy + 0.5, size - 1, size - 1, r);
-			g.stroke();
-		} else {
-			g.globalAlpha = fade * (t.state === "taken" ? pulse : t.state === "done" ? 0.6 : 1);
-			g.fillStyle = t.state === "taken" ? colorOf(t.agent) : t.state === "blocked" ? th.warn : t.state === "failed" ? th.bad : th.text;
-			rounded(g, tx, tyy, size, size, r);
-			g.fill();
-			g.globalAlpha = fade;
-		}
-		if (t.id === chosen) {
-			// The task that is read under the view: a ring around its tile.
-			g.strokeStyle = veil(th.text, 0.8);
-			g.lineWidth = 1;
-			rounded(g, tx - 1.5, tyy - 1.5, size + 3, size + 3, r + 1.5);
-			g.stroke();
-		}
-	};
-	if (box.rows) {
-		// From close by: a row for each task. Its tile, its number, how it stands, and at the right what else there is.
-		box.rows.forEach((row, i) => {
-			const ry = box.y + ROWS_AT + i * ROW + ROW / 2;
-			const dx = row.indent * 12;
-			const t = row.task;
-			let tx = x0 + dx;
-			if (t?.id === chosen && t) {
-				rounded(g, box.x + 4, ry - ROW / 2, box.w - 8, ROW, 4);
-				g.fillStyle = veil(th.text, s.dark ? 0.08 : 0.07);
+	const colorOf = (b: ViewBoard, id?: string) => c.deep(s.agents.find((a) => a.id === (id ?? b.agent))?.color ?? th.muted);
+	g.textBaseline = "middle";
+	for (const p of pieces) {
+		const x = R.x + p.x;
+		const y = R.y + p.y;
+		g.globalAlpha = fade;
+		switch (p.k) {
+			case "text":
+				g.font = p.font;
+				g.textAlign = p.align ?? "left";
+				g.fillStyle = tone(p.tone);
+				g.fillText(p.text, x, y + 0.5);
+				break;
+			case "avatar": {
+				const color = c.agent?.color ?? th.muted;
+				const letter = (c.agent?.id ?? "?").slice(0, 1).toUpperCase();
+				g.textAlign = "center";
+				g.font = p.r >= 7 ? F.letter : `600 ${Math.max(6, p.r * 1.1)}px ${FONT}`;
+				if (p.busy) {
+					// At work: its color, filled, and a ring that turns around it.
+					g.fillStyle = color;
+					g.beginPath();
+					g.arc(x, y, p.r, 0, Math.PI * 2);
+					g.fill();
+					if (p.r >= 6) {
+						g.fillStyle = onColor(color);
+						g.fillText(letter, x, y + 0.5);
+					}
+					const turn = (now / 520) % (Math.PI * 2);
+					g.strokeStyle = p.ask ? th.warn : c.deep(color);
+					g.lineWidth = 1.5;
+					g.globalAlpha = fade * (p.ask ? breath : 0.9);
+					g.beginPath();
+					if (p.ask) g.arc(x, y, p.r + 3.5, 0, Math.PI * 2);
+					else g.arc(x, y, p.r + 3.5, turn, turn + Math.PI * 0.7);
+					g.stroke();
+				} else {
+					// At rest: an outline in its color.
+					g.strokeStyle = veil(color, 0.75);
+					g.lineWidth = 1.5;
+					g.beginPath();
+					g.arc(x, y, p.r - 0.75, 0, Math.PI * 2);
+					g.stroke();
+					if (p.r >= 6) {
+						g.fillStyle = c.deep(color);
+						g.fillText(letter, x, y + 0.5);
+					}
+				}
+				break;
+			}
+			case "badge":
+				rounded(g, x + 0.5, y - 8.5, p.w, 17, 8.5);
+				g.strokeStyle = veil(th.text, s.dark ? 0.12 : 0.16);
+				g.lineWidth = 1;
+				g.stroke();
+				g.font = F.badge;
+				g.textAlign = "center";
+				g.fillStyle = tone(p.tone);
+				g.fillText(p.text, x + p.w / 2 + 0.5, y + 0.5);
+				break;
+			case "chip":
+				// The conversation: a small pill in the agent's color, with a speech bubble in front.
+				rounded(g, x + 0.5, y - 8, p.w, 16, 8);
+				g.fillStyle = veil(c.accent, s.dark ? 0.12 : 0.08);
 				g.fill();
-			}
-			if (row.indent) {
-				g.fillStyle = veil(th.text, 0.3);
-				g.fillRect(tx - 8, ry - 8, 1, 8);
-				g.fillRect(tx - 8, ry, 5, 1);
-			}
-			if (t) {
-				tile(t, tx, ry - 4, 8, 2);
-				tx += 14;
-				g.font = `500 11px ${FONT}`;
-				g.fillStyle = th.muted;
-				g.fillText(`${t.id}`, tx, ry + 0.5);
-				tx += widthOf(g, `${t.id}`) + 7;
-			}
-			g.font = `10.5px ${FONT}`;
-			const fw = row.flags ? Math.min(widthOf(g, row.flags), w * 0.4) + 8 : 0;
-			if (row.flags) {
-				g.textAlign = "right";
-				g.fillStyle = th.faint;
-				g.fillText(fit(g, row.flags, w * 0.4), x0 + w, ry + 0.5);
+				g.strokeStyle = veil(c.accent, 0.45);
+				g.lineWidth = 1;
+				g.stroke();
+				g.strokeStyle = c.accent;
+				g.lineWidth = 1.2;
+				rounded(g, x + 5.5, y - 3.5, 7, 5.5, 1.8);
+				g.stroke();
+				g.beginPath();
+				g.moveTo(x + 7.5, y + 2);
+				g.lineTo(x + 7, y + 4);
+				g.lineTo(x + 9.5, y + 2);
+				g.stroke();
+				g.font = F.tiny;
 				g.textAlign = "left";
+				g.fillStyle = th.text;
+				g.fillText(p.text, x + 15, y + 0.5);
+				break;
+			case "steps": {
+				// A segment for each step while they fit, done ones in the agent's color, the one it is on breathing.
+				if (p.w <= 0) break;
+				if (p.total > 24 || p.w / p.total < 6) {
+					// Too many to tell apart: one bar, as far as it is.
+					rounded(g, x, y - 2, p.w, 4, 2);
+					g.fillStyle = veil(th.text, s.dark ? 0.12 : 0.14);
+					g.fill();
+					rounded(g, x, y - 2, Math.max(2, (p.w * Math.min(p.done, p.total)) / p.total), 4, 2);
+					g.fillStyle = c.accent;
+					g.fill();
+					break;
+				}
+				const seg = (p.w - 2 * (p.total - 1)) / p.total;
+				for (let i = 0; i < p.total; i++) {
+					g.globalAlpha = fade * (i === p.done ? pulse * 0.6 : 1);
+					rounded(g, x + i * (seg + 2), y - 2, seg, 4, 2);
+					g.fillStyle = i <= p.done ? c.accent : veil(th.text, s.dark ? 0.12 : 0.14);
+					g.fill();
+				}
+				break;
 			}
-			g.font = `11.5px ${FONT}`;
-			g.fillStyle = !t ? th.faint : t.state === "taken" ? th.text : t.state === "blocked" ? th.warn : t.state === "failed" ? th.bad : t.state === "done" ? th.muted : th.faint;
-			g.fillText(fit(g, row.text, x0 + w - tx - fw), tx, ry + 0.5);
-		});
-		return;
+			case "bar": {
+				// How a board's tasks stand: done, in progress, asking, failed, and the rest still to do.
+				const b = p.board;
+				const all = b.open + b.taken + b.done + b.failed + b.blocked;
+				rounded(g, x, y - 2, p.w, 4, 2);
+				g.fillStyle = veil(th.text, s.dark ? 0.1 : 0.12);
+				g.fill();
+				let at = x;
+				for (const [n, color, alpha] of [[b.done, th.text, 0.6], [b.taken, colorOf(b), pulse], [b.blocked, th.warn, 1], [b.failed, th.bad, 1]] as Array<[number, string, number]>) {
+					if (!n || !all) continue;
+					const part = Math.max(2, (p.w * n) / all);
+					g.globalAlpha = fade * alpha;
+					g.fillStyle = color;
+					rounded(g, at, y - 2, Math.min(part, x + p.w - at), 4, 2);
+					g.fill();
+					at += part;
+				}
+				break;
+			}
+			case "row":
+				hits.push({ x, y, w: p.w, h: p.h, board: p.board.id, task: p.task });
+				if (c.chosen?.board === p.board.id && c.chosen.task === p.task.id) {
+					rounded(g, x, y, p.w, p.h, 4);
+					g.fillStyle = veil(th.text, s.dark ? 0.08 : 0.07);
+					g.fill();
+				}
+				break;
+			case "tile": {
+				// A task: an outline while nobody has it, filled once somebody has or had it.
+				const t = p.task;
+				const r = p.size > 4 ? 2 : 1;
+				if (!pieces.some((q) => q.k === "row" && q.task === t)) hits.push({ x, y, w: p.size, h: p.size, board: p.board.id, task: t });
+				if (t.state === "open" || t.state === "waiting") {
+					g.strokeStyle = veil(th.text, t.state === "open" ? (s.dark ? 0.5 : 0.55) : s.dark ? 0.2 : 0.25);
+					g.lineWidth = 1;
+					rounded(g, x + 0.5, y + 0.5, p.size - 1, p.size - 1, r);
+					g.stroke();
+				} else {
+					g.globalAlpha = fade * (t.state === "taken" ? pulse : t.state === "done" ? 0.6 : 1);
+					g.fillStyle = t.state === "taken" ? colorOf(p.board, t.agent) : t.state === "blocked" ? th.warn : t.state === "failed" ? th.bad : th.text;
+					rounded(g, x, y, p.size, p.size, r);
+					g.fill();
+					g.globalAlpha = fade;
+				}
+				if (c.chosen?.board === p.board.id && c.chosen.task === t.id) {
+					// The task that is read under the view: a ring around its tile.
+					g.strokeStyle = veil(th.text, 0.8);
+					g.lineWidth = 1;
+					rounded(g, x - 1.5, y - 1.5, p.size + 3, p.size + 3, r + 1.5);
+					g.stroke();
+				}
+				break;
+			}
+			case "pill": {
+				// A tool call: one that failed in the color of what failed, the one it is in now in the agent's own.
+				const running = p.call.ms === undefined;
+				const color = p.call.ok === false ? th.bad : running ? c.accent : th.faint;
+				rounded(g, x + 0.5, y - 7.5, p.w, 15, 7.5);
+				if (running) {
+					g.fillStyle = veil(c.accent, 0.14);
+					g.fill();
+				}
+				g.strokeStyle = veil(color, running || p.call.ok === false ? 0.8 : 0.35);
+				g.lineWidth = 1;
+				g.stroke();
+				g.font = F.tiny;
+				g.textAlign = "center";
+				g.fillStyle = p.call.ok === false ? th.bad : running ? th.text : th.muted;
+				g.fillText(p.text, x + p.w / 2 + 0.5, y + 0.5);
+				break;
+			}
+			case "dot":
+				g.globalAlpha = fade * (p.pulse ? breath : 1);
+				g.beginPath();
+				g.arc(x, y, p.r, 0, Math.PI * 2);
+				if (p.hollow) {
+					g.strokeStyle = p.color ? c.deep(p.color) : tone(p.tone);
+					g.lineWidth = 1;
+					g.stroke();
+				} else {
+					g.fillStyle = p.color ? c.deep(p.color) : tone(p.tone);
+					g.fill();
+				}
+				break;
+			case "elbow":
+				g.fillStyle = veil(th.text, 0.3);
+				g.fillRect(Math.round(x), y - 9, 1, 9);
+				g.fillRect(Math.round(x), y, 6, 1);
+				break;
+		}
 	}
-	// The tiles.
-	const { size, tiles, more } = tilesOf(b, w);
-	const ty = box.y + TILES_AT.y;
-	for (const { task: t, x, y } of tiles) tile(t, x0 + x, ty + y, size, size > 4 ? 2 : 1);
-	if (more) {
-		g.font = `10px ${FONT}`;
-		g.fillStyle = th.faint;
-		g.textAlign = "right";
-		g.fillText(`+${more}`, x0 + w, box.y + box.h - 8);
-		g.textAlign = "left";
-	}
+	g.textAlign = "left";
+	g.globalAlpha = fade;
 }
 
 // ---- the view: the board in the panel ---------------------------------------------------------------------------------------
@@ -1256,10 +1603,11 @@ export default defineView((host: ViewHost) => {
 	box.append(canvas, bar, words);
 	root.append(style, box);
 
-	const open = new Set<string>();
 	const recent = new Recent();
 	let pointer: { x: number; y: number } | undefined;
 	let layout: Layout | undefined;
+	/** Where each task was drawn in the last frame: what the pointer and a click find. */
+	let hits: Hit[] = [];
 	let touched = 0;
 	let handled = 0;
 	let timer = 0;
@@ -1276,8 +1624,6 @@ export default defineView((host: ViewHost) => {
 	const linger = new Map<string, number>();
 	let drag: { x: number; y: number; moved: boolean } | undefined;
 	let dragged = false;
-	/** How much the boxes say. The hand's zoom changes it; following what happens shows the middle one. */
-	let detail: Detail = "mid";
 
 	const size = () => ({ w: Math.max(1, root.clientWidth), h: Math.max(1, root.clientHeight) });
 	const at = (e: MouseEvent) => {
@@ -1299,32 +1645,7 @@ export default defineView((host: ViewHost) => {
 		handled = Date.now();
 		wake();
 	};
-	/**
-	 * Another level of detail takes the place of the one that is shown. The boxes are other sizes then, so the
-	 * camera is set anew: what was under `p` of the panel (the pointer, or its middle) is under it again, at about
-	 * the size its words had.
-	 */
-	const relevel = (want: Detail, p?: { x: number; y: number }) => {
-		if (want === detail) return;
-		const was = layout;
-		const from = cam;
-		const z = (from?.z ?? 1) * (SCALE[detail] / SCALE[want]);
-		detail = want;
-		glide.clear();
-		if (!was || !from) return;
-		const view = size();
-		const sp = p ?? { x: view.w / 2, y: BAR + (view.h - BAR) / 2 };
-		const q = toBoard(sp, from, view);
-		const mid = (b: Box) => Math.hypot(Math.max(b.x - q.x, 0, q.x - b.x - b.w), Math.max(b.y - q.y, 0, q.y - b.y - b.h));
-		const old = [...was.boxes].sort((a, b) => mid(a) - mid(b))[0];
-		layout = layoutOf(host.state(), open, Date.now(), recent, detail);
-		const now = old && layout.byId.get(old.id);
-		const part = (v: number) => Math.max(-0.5, Math.min(1.5, v));
-		const to = old && now ? { x: now.x + part((q.x - old.x) / old.w) * now.w, y: now.y + part((q.y - old.y) / old.h) * now.h } : q;
-		cam = held({ x: to.x - (sp.x - view.w / 2) / z, y: to.y - (sp.y - BAR - (view.h - BAR) / 2) / z, z }, layout);
-	};
 	const setFollow = (on: boolean) => {
-		if (on) relevel("mid");
 		follow = on;
 		going = undefined;
 		followButton.setAttribute("aria-pressed", String(on));
@@ -1367,15 +1688,12 @@ export default defineView((host: ViewHost) => {
 		const b = boxAt(at(e));
 		hand();
 		if (b?.agent) {
-			// A click opens an agent's box and shows it below; a second click closes both.
-			if (open.delete(b.agent.id)) host.select();
-			else {
-				open.add(b.agent.id);
-				host.select({ agent: b.agent.id });
-			}
-		} else if (b?.board && cam) {
+			// A click shows an agent under the view; a second click shows the log again.
+			const sel = host.state().selected;
+			host.select(sel && "agent" in sel && sel.agent === b.agent.id ? undefined : { agent: b.agent.id });
+		} else if (b?.board) {
 			// A click on a task shows what it says under the view, in the panel's own words; on the card, the whole board.
-			const t = taskAt(b, toBoard(at(e), cam, size()));
+			const t = hitTask(hits, at(e))?.task;
 			const sel = host.state().selected;
 			const same = sel && "board" in sel && sel.board === b.board.id && sel.task === t?.id;
 			host.select(same ? undefined : t ? { board: b.board.id, task: t.id } : { board: b.board.id });
@@ -1397,10 +1715,8 @@ export default defineView((host: ViewHost) => {
 				const p = at(e);
 				const px = p.x - w / 2;
 				const py = p.y - BAR - (h - BAR) / 2;
-				const z = Math.max(0.25, Math.min(3, cam.z * Math.exp(-e.deltaY * 0.01)));
+				const z = Math.max(Z_MIN, Math.min(Z_HAND, cam.z * Math.exp(-e.deltaY * 0.01)));
 				move({ x: cam.x + px / cam.z - px / z, y: cam.y + py / cam.z - py / z, z });
-				// Closer or further than a level is drawn for: the next one takes its place, around the pointer.
-				if (cam) relevel(detailAt(cam.z * SCALE[detail], detail), p);
 			} else move({ ...cam, x: cam.x + e.deltaX / cam.z, y: cam.y + e.deltaY / cam.z });
 		},
 		{ passive: false },
@@ -1408,14 +1724,7 @@ export default defineView((host: ViewHost) => {
 	followButton.addEventListener("click", () => setFollow(!follow));
 	allButton.addEventListener("click", () => {
 		setFollow(false);
-		if (layout) {
-			// Everything: in the middle level if its words can still be read then, else from far.
-			const s = host.state();
-			const whole = allOf(layoutOf(s, open, Date.now(), recent, "mid"), size());
-			relevel(detailAt(whole.z, "mid"), undefined);
-			layout = layoutOf(s, open, Date.now(), recent, detail);
-			going = allOf(layout, size());
-		}
+		if (layout) going = allOf(layout, size());
 		hand();
 	});
 
@@ -1462,8 +1771,7 @@ export default defineView((host: ViewHost) => {
 			for (const [k, v] of Object.entries({ "--text": th.text, "--faint": th.faint, "--warn": th.warn, "--bad": th.bad, "--hover": veil(th.text, 0.07), "--press": veil(th.text, 0.12) })) box.style.setProperty(k, v);
 			// The frame is see-through only while it is dark where the app is dark: then the panel's own ground is the board's.
 			root.ownerDocument.documentElement.style.colorScheme = s.dark ? "dark" : "light";
-			for (const id of open) if (!s.agents.some((a) => a.id === id)) open.delete(id);
-			layout = layoutOf(s, open, now, recent, detail);
+			layout = layoutOf(s, now);
 			const live = linksOf(s, layout, now);
 			const dt = before ? Math.min(100, now - before) : 0;
 			before = now;
@@ -1503,7 +1811,7 @@ export default defineView((host: ViewHost) => {
 			const sel = picked ? ("board" in picked ? `board:${picked.board}` : `agent:${"agent" in picked ? picked.agent : (s.work.find((x) => x.id === picked.work)?.agent ?? "")}`) : undefined;
 			const g = canvas.getContext("2d")!;
 			g.setTransform(dpr, 0, 0, dpr, 0, 0);
-			draw(g, s, layout, now, { hover: over?.id, selected: sel && layout.byId.has(sel) ? sel : undefined, task: picked && "board" in picked && picked.task !== undefined ? { board: picked.board, task: picked.task } : undefined, recent, cam, view });
+			hits = draw(g, s, layout, now, { hover: over?.id, selected: sel && layout.byId.has(sel) ? sel : undefined, task: picked && "board" in picked && picked.task !== undefined ? { board: picked.board, task: picked.task } : undefined, recent, cam, view });
 
 			const running = s.work.filter((x) => !ended(x));
 			const asks = running.filter((x) => x.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0);
@@ -1511,7 +1819,8 @@ export default defineView((host: ViewHost) => {
 			const bad = s.inputs.filter((i) => i.failing).map((i) => i.name);
 			const part = (cls: string, text: string) => Object.assign(document.createElement(cls === "b" ? "b" : "span"), { className: cls === "b" ? "" : cls, textContent: text });
 			// The line on top: how things stand; and while the pointer is over a box, what that box is.
-			const about = tipOf(over, s, now, pointer && cam ? toBoard(pointer, cam, size()) : undefined);
+			const pointed = over?.board ? hitTask(hits, pointer) : undefined;
+			const about = tipOf(over, s, now, pointed && pointed.board === over?.board?.id ? pointed.task : undefined);
 			sum.replaceChildren(
 				...(about.length
 					? [part("b", about[0]), ...about.slice(1).map((text) => `  ·  ${text}`)]
