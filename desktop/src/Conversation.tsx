@@ -3,7 +3,7 @@
 // The parts are shadcn's chat components, composed the way its AI Elements pages show: the thread
 // is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
-import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Sound } from "@/components/sound";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -486,6 +486,18 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 					{item.kind === "audio" ? null : <div className={MEDIA.cap}>{item.name}</div>}
 				</div>
 			);
+		case "swarm": {
+			const w = item.swarm;
+			return (
+				<Marker className="select-text">
+					<MarkerIcon>{w.status === "done" ? <CheckIcon /> : w.status === "active" ? <UsersIcon /> : <ClockIcon />}</MarkerIcon>
+					<MarkerContent>
+						swarm · {w.note}
+						{item.full ? <span className="block">the job: {short(oneLine(w.objective), 320)}</span> : null}
+					</MarkerContent>
+				</Marker>
+			);
+		}
 		case "goal": {
 			const g = item.goal;
 			const wait = g.status !== "met" && g.status !== "active";
@@ -687,6 +699,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 	const waiting = [...tab.approvals.values()];
 	const elsewhere = store.tabs.find((t) => t !== tab && t.approvals.size > 0);
 	const goal = tab.goal?.status === "active" ? tab.goal : undefined;
+	const swarm = tab.swarm?.status === "active" ? tab.swarm : undefined;
 	// The line keeps its height when it says nothing, so that the input does not move.
 	const line = (icon: ReactNode, text: string, action?: ReactNode, warn?: boolean) => (
 		<Marker className="min-h-7.5 py-1.5">
@@ -697,6 +710,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 	);
 	if (!tab.busy) {
 		if (waiting.length) return line(<TriangleAlertIcon />, waiting[0].req.tool === "question" ? "A question waits for your answer." : "A request waits for your approval.", <Button variant="outline" size="xs" onClick={() => store.ask(waiting[0].req.id)}>Open</Button>, true);
+		if (swarm) return line(<UsersIcon />, `swarm · round ${swarm.round} of ${swarm.until} · looking at the board`, <Button variant="outline" size="xs" onClick={() => void store.setSwarm(tab, "pause")}>Pause</Button>);
 		if (goal) return line(<TargetIcon />, `goal · round ${goal.round} of ${goal.until} · checking whether it is met`, <Button variant="outline" size="xs" onClick={() => void store.setGoal(tab, "pause")}>Pause</Button>);
 		if (elsewhere) return line(<TriangleAlertIcon />, `${elsewhere.agent} · ${elsewhere.session} waits for you.`, <Button variant="outline" size="xs" onClick={() => store.activate(elsewhere)}>Go there</Button>, true);
 		if (tab.programs.length) return line(<PlayIcon />, `${plural(tab.programs.length, "program")} still running`, <Button variant="ghost" size="xs" onClick={() => void store.command("code-running")}>Show</Button>);
@@ -709,6 +723,7 @@ function StatusLine({ tab }: { tab: Tab }) {
 	const total = tab.tokens.input + tab.tokens.cached;
 	const parts = [
 		goal ? `goal · round ${goal.round} of ${goal.until}` : "",
+		swarm ? `swarm · round ${swarm.round} of ${swarm.until}` : "",
 		waiting.length ? "waiting for you" : tab.thinking ? "thinking" : "working",
 		clock(secs),
 		at >= 0 ? `step ${at + 1} of ${steps.length}` : "",

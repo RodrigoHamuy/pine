@@ -297,7 +297,7 @@ test("admin: an agent renamed by the owner takes everything that named it along,
 	assert.deepEqual(h.pine.schedules!.list().filter((s: any) => s.scope === "scholar").map((s: any) => s.name).sort(), ["soon", "weekly"]);
 
 	// Nothing is left that carries the old id: no stored entry, no file or folder, no line of configuration.
-	for (const prefix of ["taint:", "keep:", "folder:", "todos:", "turns:", "undone:", "prefix:", "note:", "goal:", "timer:", "source:"]) assert.deepEqual(h.pine.agents.kv.keys(prefix).filter((k: string) => k.includes("helper") && h.pine.agents.kv.get(k) != null), [], prefix);
+	for (const prefix of ["taint:", "keep:", "folder:", "todos:", "turns:", "undone:", "prefix:", "note:", "goal:", "swarm:", "timer:", "source:"]) assert.deepEqual(h.pine.agents.kv.keys(prefix).filter((k: string) => k.includes("helper") && h.pine.agents.kv.get(k) != null), [], prefix);
 	const left = (dir: string): string[] => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? [e.name, ...left(path.join(dir, e.name))] : [e.name])) : []);
 	assert.deepEqual(left(h.home).filter((n) => /helper/.test(decodeURIComponent(n))), [], "no file or folder in pine's home is named after it");
 	for (const f of [path.join(h.home, "pine.json"), path.join(h.home, ".env"), ...Object.keys(h.pine.cfg.agents).map(file)]) assert.doesNotMatch(fs.readFileSync(f, "utf8"), /helper/i, f);

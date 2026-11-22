@@ -556,6 +556,18 @@ judge has a model of its own (`defaults.judge`). Say in the objective how to tel
 "the file exists and has all twelve entries"): the judge sees only the agent's answer, not the
 files.
 
+## A swarm
+
+With `/swarm` and a job, a conversation's agent leads the job instead of doing it: its
+sub-agents work it through on the conversation's board, and pine calls the lead again while
+tasks there are not done, and then to have its answer checked. Like a goal it is yours to start,
+pause, resume and clear, and no tool reaches it. All of it is in [boards.md](boards.md), "A swarm".
+
+| Command | What it does |
+|---|---|
+| `/swarm <what is to be done>` | Starts a swarm in this conversation: the job goes out as your message, with pine's note on how a swarm is led. |
+| `/swarm`, `/swarm pause`, `/swarm resume`, `/swarm clear` | Shows it, holds it, goes on with it, takes it off. |
+
 ## Handing work to another agent
 
 Every agent may hand work to every other agent but the main one, unless its `agent.json` lists
@@ -621,7 +633,7 @@ Every agent has sub-agents and starts them itself: asked to "create two new sub-
 "use sub-agents", an agent calls `subagent`, and nothing has to be created first or asked of
 the main agent. `create_agent` is something else: a new agent that stays.
 
-`subagent(tasks: string[], ids?, model?, thinking?, worktree?, pool?, note?, check?)` runs up to `subagents.maxParallel` copies of the
+`subagent(tasks: string[], stages?, ids?, model?, thinking?, worktree?, pool?, note?, check?, verify?)` runs up to `subagents.maxParallel` copies of the
 same agent at once (pine's `limits.maxSubagents`, 4 unless you changed it in Settings > General, or what the agent's `agent.json` says). Given more tasks than
 that, it works through them that many at a time, as a pool ([boards.md](boards.md)).
 Each copy has the agent's workspace, instructions and tools but an empty conversation, cannot
@@ -636,7 +648,10 @@ that would otherwise fill the context:
 | `model` | Runs these sub-agents on a different model than the agent's own, as `provider/model` (the id alone is enough where only one model has it). For work another model does better: one that sees pictures, a small fast one for many simple checks, a large one for a hard part. The `models` tool lists what there is. Left out: the agent's own model. |
 | `thinking` | How much these sub-agents reason: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. A model that cannot reason ignores it. Left out: the agent's own level. |
 | `worktree` | `true`: each sub-agent changes files in a worktree of its own of the conversation's folder (a git repository), made from its last commit, so that sub-agents that change the same files do not collide. When it is done, what it changed is committed on its branch (`pine/<conversation>-sub`, `-sub-2`, ...), its folder goes, and the answer names the branch: the conversation brings it in with `git merge` and deletes it with `git branch -d`. One that changed nothing leaves nothing. Only in your own conversations; what is not committed in the folder is not in the sub-agents' worktrees. See [coding.md](coding.md), "A worktree for a conversation". |
-| `pool` | `true`: more tasks than run at once (up to 100), worked through on the conversation's board; `note` says once what all go by, `check` has a second one check each result. Comes back early when one asks or fails. Not with `worktree`. See [boards.md](boards.md). |
+| `pool` | `true`: more tasks than run at once (up to 100), worked through on the conversation's board; `note` says once what all go by. Comes back early when one asks or fails. Not with `worktree`. See [boards.md](boards.md). |
+| `stages` | Instead of `tasks`, for pieces that build on others: a list of lists of tasks. A stage starts when the one before is done, and is shown what came of it. Makes the call a pool. See [boards.md](boards.md), "Stages". |
+| `check` | A second sub-agent checks each task's result and says PASS or FAIL; what fails is done again once with what the check found, and checked again. Makes the call a pool. See [boards.md](boards.md), "A check after the work". |
+| `verify` | One last check of the finished whole by a sub-agent that did none of it, which says PASS or FAIL. Makes the call a pool. See [boards.md](boards.md), "A check of the whole". |
 | `ids` | Tasks that are on a board already, by number: one sub-agent for each, which settles that very task where it is (a board for all agents, say). Makes the call a pool. See [boards.md](boards.md). |
 
 A sub-agent on another model is still the same agent: the same workspace, files, tools,

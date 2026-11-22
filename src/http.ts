@@ -214,6 +214,11 @@ export class HttpServer {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, { goal: this.manager.goals.get(parts[1], q.get("session") ?? "main") });
 				}
+				// The swarm the owner started in a conversation, and where it stands.
+				if (parts[0] === "agents" && parts[2] === "swarm" && parts.length === 3) {
+					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+					return send(200, { swarm: this.manager.swarms.get(parts[1], q.get("session") ?? "main") });
+				}
 				// A conversation's worktree and where it stands against its base; and every worktree of pine's.
 				if (parts[0] === "agents" && parts[2] === "worktree" && parts.length === 3) {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
@@ -448,6 +453,22 @@ export class HttpServer {
 					return send(200, await this.manager.removeSession(parts[1], body.session));
 				} catch (e) {
 					throw new HttpError(409, errText(e));
+				}
+			}
+			// A swarm. Like a goal it is the owner's to start, pause, resume and clear: no tool reaches it.
+			if (parts[0] === "agents" && parts[2] === "swarm" && parts.length === 3) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				const session = String(body.session ?? "main");
+				const swarms = this.manager.swarms;
+				try {
+					if (body.action === "pause") return send(200, { swarm: swarms.pause(parts[1], session) });
+					if (body.action === "resume") return send(200, { swarm: swarms.resume(parts[1], session) });
+					if (body.action === "clear") return send(200, { cleared: swarms.clear(parts[1], session) });
+					if (body.action !== undefined) throw new Error("action is pause, resume or clear; to start a swarm send objective");
+					if (typeof body.objective !== "string") throw new Error("objective required: what is to be done");
+					return send(200, { swarm: swarms.set(parts[1], session, body.objective) });
+				} catch (e) {
+					throw new HttpError(400, errText(e));
 				}
 			}
 			// Goal mode. This is the only way to a goal, and it is the owner's, like the folder of a conversation: no tool reaches it.

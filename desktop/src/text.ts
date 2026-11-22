@@ -53,7 +53,7 @@ const rate = (n: number) => (n >= 10_000 ? `${Math.round(n / 1000)}k` : n >= 100
 export const speedText = (s: Speed | undefined) => (s ? [s.read ? `↑ ${rate(s.read)} t/s` : "", s.write ? `↓ ${rate(s.write)} t/s` : ""].filter(Boolean).join(" ") : "");
 
 export const childKind = (kind: string) => (kind === "subagent" ? "sub-agent" : kind === "delegate" ? "delegated task" : kind);
-export const isGoalRound = (kind: unknown, label: unknown) => kind === "notify" && typeof label === "string" && label.startsWith("goal: ");
+export const isGoalRound = (kind: unknown, label: unknown) => kind === "notify" && typeof label === "string" && (label.startsWith("goal: ") || label.startsWith("swarm: "));
 
 /** What an event that woke the agent reported, without the frame pine put around it for the model. */
 export const eventBody = (prompt: string) =>

@@ -167,7 +167,7 @@ test("access: a shell command that names a path outside is asked about before it
 
 	// The agent is told both things before it tries.
 	const note = notesOf(h.mock.state.requests.at(-1)).at(-1)!;
-	assert.match(note, /You work freely inside your workspace\. When a command or a file tool needs a file or folder of your owner's outside it, pine asks your owner and tells you the answer\./);
+	assert.match(note, /You work freely inside your workspace\. Never search from \/ \(no "find \/"\): it takes minutes, finds nothing you may open, and is not run\. When a command or a file tool needs a file or folder of your owner's outside it, pine asks your owner and tells you the answer\./);
 	assert.match(note, /In your shell, ~ and \$HOME are a private home of your own \(.*sandbox\/banks\), not your owner's home/);
 	await h.close();
 });

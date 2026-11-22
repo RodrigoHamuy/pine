@@ -145,7 +145,9 @@ running (a server, a build, a watcher) you start with `background: true` on the 
 `stop_program` ends it ([references/coding.md](references/coding.md), "Commands in the
 background"). When your owner wants you to work on until something is reached, tell them to
 type `/goal` with what they want reached: only they can set a goal
-([references/agents.md](references/agents.md), "Goal mode"). In plan mode you only look and
+([references/agents.md](references/agents.md), "Goal mode"). When they want a job done by a
+swarm, tell them to type `/swarm` with the job: you then lead it on your board
+([references/boards.md](references/boards.md), "A swarm"). In plan mode you only look and
 answer with a plan; your owner switches the mode when it is to be carried out.
 
 If you are the main agent and your owner asks for a new agent, call `create_agent` with an id,
@@ -179,7 +181,7 @@ hand work to the agents listed in your prompt, and write shared state under your
 | Install it, start it, update it, use the CLI (every `pine` command), the control API for scripts, run it at login or in a container, find out why something did not happen | [references/operations.md](references/operations.md) |
 | Look up a key in `pine.json`, `agent.json`, `models.json` or `.env` | [references/configuration.md](references/configuration.md) |
 | Know what agents can set up by tool call, for whom, and what you are asked: event sources, MCP servers, skills, schedules, new agents, new source types, model servers; the main agent's tools for conversations and tabs; how an agent lists what it has; the table of pine's own tools (`question`, `todo`, `stop_program` and the rest) | [references/setup.md](references/setup.md) |
-| Let several agents or sub-agents work on one job without doing the same thing twice: boards with tasks that one takes at a time, a pool of sub-agents for more tasks than run at once whose questions the agent answers while the others work on, a check after the work it checks, waking an agent when a task is posted | [references/boards.md](references/boards.md) |
+| Let several agents or sub-agents work on one job without doing the same thing twice: boards with tasks that one takes at a time, a pool of sub-agents for more tasks than run at once whose questions the agent answers while the others work on, stages that wait for each other, a check after the work it checks that has what fails put right, a check of the finished whole, a swarm (the agent leads a job on the board until it is done and checked), waking an agent when a task is posted | [references/boards.md](references/boards.md) |
 | Add an agent, give it a workspace, tools and a persona; skills; how agents look pine up (the `manual` tool); how tools are declared to the model (in families) and what a model server keeps of a conversation (prompt cache, slots); delegation, sub-agents, sessions, goal mode (`/goal`: working until an objective is met), shared state | [references/agents.md](references/agents.md) |
 | Let an agent react to the outside world and reach out: what a source and a subscription are, setting one up, who is woken (three scopes, a fresh conversation for every event), filtering events with `when`, sending and reading through a source, secrets, trust, files a source received; a source type of your own | [references/sources.md](references/sources.md) |
 | Pick the source type for a service or a device, with its options, its events and an entry to copy: a watched folder, MQTT devices, webhooks, FTP uploads from cameras, Telegram, a web address or a command that is looked at again and again or followed, feeds, calendars, services that push (SSE, WebSocket), mail, Slack, Matrix, Discord, devices that mail or log (SMTP, syslog), cameras (ONVIF), inverters and meters (Modbus), serial ports, who is on the network, this computer (sleep, lock, power) | [references/source-types.md](references/source-types.md) |
@@ -258,6 +260,7 @@ pine start
 | source | A named thing that reports events from outside: a folder, an MQTT broker, a web address, a command, a webhook, an FTP drop, a Telegram bot. It runs only while something is subscribed to it (or always, with `"start": "always"`) |
 | schedule | Something done at a time: at set times, every so often, or once. With a task it wakes an agent to do it |
 | goal | An objective you give a conversation with `/goal`: the agent is called again, round after round, until a judge says it is met |
+| swarm | A job you give a conversation with `/swarm`: its agent leads it instead of doing it, sub-agents work it through on the conversation's board, and pine calls the agent again while tasks are not done, and has its answer checked before it is done |
 | subscription | A conversation of an agent listens to a source: each event arrives there as a message and wakes the agent |
 | task | One piece of work for one agent; has a status, a result and statistics |
 | session | A conversation of one agent with history. The manual also says "conversation". Named ones are kept until removed (unused ones after `limits.conversationDays`); `new` is one-off |

@@ -317,6 +317,8 @@ export interface PineConfig {
 		goalIdleRounds: number;
 		/** How long the judge of a goal may take before its silence counts as no verdict. */
 		goalJudgeMs: number;
+		/** A swarm (src/swarm.ts): how many turns its lead gets before it stops with work left and the owner has to say that it goes on. */
+		swarmRounds: number;
 		/**
 		 * Whether pine has the idle slots of a llama.cpp server read what every conversation of an
 		 * agent begins with (the tools and instructions), after the owner has used the model: the
@@ -617,6 +619,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 			goalRounds: Math.max(1, Math.floor(Number(l.goalRounds ?? 20)) || 20),
 			goalIdleRounds: Math.max(0, Math.floor(Number(l.goalIdleRounds ?? 3)) || 0),
 			goalJudgeMs: parseDuration(l.goalJudgeTimeout ?? "90s"),
+			swarmRounds: Math.max(1, Math.floor(Number(l.swarmRounds ?? 8)) || 8),
 		},
 		security: {
 			approvalTimeoutMs: parseDuration(raw.security?.approvalTimeout ?? "5m"),

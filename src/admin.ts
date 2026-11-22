@@ -332,7 +332,7 @@ export function checkAgentId(cfg: PineConfig, id: string): void {
 }
 
 /** The prefixes of what pine stores per conversation as "<prefix>:<agent>:<conversation>". */
-const BY_CONVERSATION = ["taint", "keep", "folder", "group", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited", "goal"];
+const BY_CONVERSATION = ["taint", "keep", "folder", "group", "worktree", "todos", "turns", "undone", "prefix", "note", "branch", "visited", "goal", "swarm"];
 
 /**
  * Give an agent another id, and with it everything that carries its name, so that nothing is
@@ -419,7 +419,7 @@ export function renameAgent(cfg: PineConfig, store: { kv: Kv; tasks: TaskStore; 
 	for (const prefix of BY_CONVERSATION) {
 		for (const key of kv.keys(`${prefix}:${from}:`)) {
 			const value = deep(kv.get(key));
-			if (prefix === "goal" && value && typeof value === "object") value.agent = to;
+			if ((prefix === "goal" || prefix === "swarm") && value && typeof value === "object") value.agent = to;
 			rekey(key, `${prefix}:${to}:${key.slice(prefix.length + from.length + 2)}`, value);
 		}
 	}

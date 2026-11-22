@@ -8,7 +8,7 @@ import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentC
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
 import { finish as finishWorktree, type Worktree, worktreeName } from "./worktrees.ts";
 import { NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
-import { type Board, type BoardItem, boardName, type BoardScope, type Who } from "./boards.ts";
+import { type Board, type BoardItem, boardName, type BoardScope, MAX_FAILED_FINALS, MAX_REWORK, verdictOf, type Who } from "./boards.ts";
 import type { PineEvent, TaskResult } from "./types.ts";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { addServer, findServer, mcpEnvName, piMcp, removeServer, splitCommand, validateServer } from "./mcp-config.ts";
@@ -172,6 +172,14 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 	/** How many tasks one call of subagent puts onto a board and starts at most: pine's setting, read at each call. */
 	const poolMax = () => cfg.limits.maxPoolTasks;
 	/**
+	 * Said under many results: an answer put together from dozens of them is where a name is left out or stands
+	 * twice, and where the working-out ends up in what the owner reads.
+	 */
+	const many = (all: BoardItem[]) => {
+		const n = all.filter((t) => t.data?.check === undefined).length;
+		return n >= 12 ? ` Your answer has to account for each of these ${n} results, once: go through them in order, and before you send it count what you list against ${n}. Write the answer once, as it is meant: no corrections of yourself in it.` : "";
+	};
+	/**
 	 * Work through the tasks of this conversation's board with sub-agents, a few at a time. The daemon
 	 * takes each task for the sub-agent it starts for it, and when that sub-agent ends, its answer is the
 	 * task's result (`boardsAfter` in src/agents.ts): a sub-agent that says nothing about the board
@@ -182,7 +190,11 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 	 * others work on. The conversation answers and calls again, and that call takes over the sub-agents
 	 * that still work. With nobody asking, it comes back when nothing is left to do.
 	 */
-	const workPool = async (r: ReturnType<typeof run>, texts: string[], signal: AbortSignal | undefined, model?: string, thinking?: string, note?: string, check?: string, on?: { board: Board; ids: number[] }): Promise<string> => {
+	const workPool = async (r: ReturnType<typeof run>, job: { texts: string[]; stages?: string[][]; note?: string; check?: string; verify?: string; on?: { board: Board; ids: number[] } }, signal: AbortSignal | undefined, model?: string, thinking?: string): Promise<string> => {
+		const { note, check, verify, on } = job;
+		// Stages: each is a list of tasks that run side by side, and waits for the one before it (and for its checks).
+		const layers = job.stages?.length ? job.stages : [job.texts];
+		const texts = layers.flat();
 		// Tasks that are on a board already are worked where they are, so that the task that was given out is the one
 		// that is settled: a copy on this conversation's board would be done while the one given out stays open. On
 		// such a board only these tasks are this pool's: the others there may be somebody else's. A call that goes on
@@ -196,18 +208,42 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		// same note is on the board once, and a task that is there and not settled is not there twice.
 		const same = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
 		const there = boards.items(board.id).filter((x) => !only || x.kind !== "task" || only.has(x.id));
-		const posted = texts.map((t) => there.find((x) => x.kind === "task" && x.state !== "done" && x.state !== "failed" && same(x.text, t))?.id ?? boards.post(board, { kind: "task", text: t, ...postedAs() }).id);
-		const given = [...(on?.ids ?? []), ...posted];
-		given.forEach((id) => only?.add(id));
+		const unsettled = (x: BoardItem) => x.kind === "task" && x.state !== "done" && x.state !== "failed";
 		// A check is a task after the work it checks, for a second sub-agent, which is shown that work's result when it
-		// starts: what a sub-agent says it did is a claim, and the check is what makes it more than that.
-		if (check?.trim()) {
-			for (const id of given) {
-				const text = `${check.trim()}\n\nYou check the work of another sub-agent. You do not do it again and you change nothing. That sub-agent's task was:\n${boards.item(id)?.text ?? ""}${note?.trim() ? `\n\nIt was told:\n${note.trim()}` : ""}`;
-				const found = boards.items(board.id, { kind: "task" }).find((x) => x.after.includes(id) && same(x.text, text));
-				const made = found?.id ?? boards.post(board, { kind: "task", text, after: [id], ...postedAs() }).id;
-				only?.add(made);
-			}
+		// starts: what a sub-agent says it did is a claim, and the check is what makes it more than that. It ends with
+		// PASS or FAIL; what fails is given out again with what the check found (`Boards.rework`), and checked again.
+		const checkOf = (id: number): number => {
+			const text = `${check!.trim()}\n\nYou check the work of another sub-agent: whether it did what its task says, and whether what it reports is true. You do not do it again and you change nothing. Look at what it left (the files, the numbers), not only at what it says. Say what is wrong with its work and where, one line each; then end your answer with one word on a line of its own: PASS when its work is right and complete, FAIL when it is not. FAIL is for what can be pointed at: a wrong fact or number, a rule that is broken, a part that is missing. What is a matter of taste or wording is a remark, not a FAIL. You judge the work, not what the work was about: a task that was to find faults and found them all is PASS. That sub-agent's task was:\n${boards.item(id)?.text ?? ""}${note?.trim() ? `\n\nIt was told:\n${note.trim()}` : ""}`;
+			const found = boards.items(board.id, { kind: "task" }).find((x) => x.after.includes(id) && x.data?.check === id);
+			return found?.id ?? boards.post(board, { kind: "task", text, after: [id], data: { check: id }, ...postedAs() }).id;
+		};
+		const given: number[] = [];
+		const checks: number[] = [];
+		let prior: number[] = [];
+		layers.forEach((layer, n) => {
+			const ids = [...(n === 0 ? (on?.ids ?? []) : []), ...layer.map((t) => there.find((x) => unsettled(x) && same(x.text, t))?.id ?? boards.post(board, { kind: "task", text: t, ...(prior.length ? { after: prior } : {}), ...postedAs() }).id)];
+			const checked = check?.trim() ? ids.map(checkOf) : [];
+			given.push(...ids);
+			checks.push(...checked);
+			prior = [...ids, ...checked];
+		});
+		[...given, ...checks].forEach((id) => only?.add(id));
+		// A check of the whole that is on the board and has not begun comes after what is added now: it is the last thing done.
+		if (given.length) for (const x of boards.items(board.id, { kind: "task" })) if (x.data?.check === "job" && x.state === "open") boards.waitFor(x.id, [...given, ...checks]);
+		// The check of the whole: one task after everything else of this call, for a sub-agent that did none of it.
+		// It reports to the conversation, which decides what is done about it: nothing is given out again by itself.
+		let final = 0;
+		// Checks of the whole that failed one after the other, since the last one that passed: a check that never passes
+		// (a rule that is a matter of taste, a checker that always finds something) is not asked again and again.
+		const finals = boards.items(board.id, { kind: "task" }).filter((x) => x.data?.check === "job" && x.state === "done");
+		const failedInARow = finals.length - 1 - finals.map((x) => verdictOf(x.result)).lastIndexOf("pass");
+		const refused = Boolean(verify?.trim()) && failedInARow >= MAX_FAILED_FINALS;
+		if (verify?.trim() && !refused) {
+			const all = given.length ? [...given, ...checks] : boards.items(board.id, { kind: "task" }).filter((x) => (!only || only.has(x.id)) && x.data?.check !== "job").map((x) => x.id);
+			const text = `${verify.trim()}\n\nYou check the result of a whole job that other sub-agents did; you did none of it. You change nothing. Do not take their word for it: look at what they left (open the files, run what can be run, count again, compare with the source). Say what is wrong or missing and where, one line each; then end your answer with one word on a line of its own: PASS when the result is right and complete, FAIL when it is not. FAIL is for what can be pointed at: a wrong fact or number, a rule that is broken, a part that is missing. What is a matter of taste or wording is a remark, not a FAIL. You judge the result, not what the job was about: a job that was to find faults and found them all is PASS.`;
+			const old = boards.items(board.id, { kind: "task" }).find((x) => x.data?.check === "job" && unsettled(x) && same(x.text, text));
+			final = old?.id ?? boards.post(board, { kind: "task", text, after: all, data: { check: "job" }, ...postedAs() }).id;
+			only?.add(final);
 		}
 		manager.poolAt.set(live.board, { board: board.id, only });
 		// The note is for the tasks of the call it came with (`data.tasks`), not for whatever else the board holds:
@@ -215,8 +251,9 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		let mine = 0;
 		if (note?.trim()) {
 			const old = there.find((x) => x.kind === "note" && !x.about && same(x.text, note));
-			if (!old) mine = boards.post(board, { kind: "note", text: note, ...(given.length ? { data: { tasks: given } } : {}), ...postedAs() }).id;
-			else if (Array.isArray(old.data?.tasks)) boards.setData(old.id, { ...old.data, tasks: [...new Set([...(old.data.tasks as number[]), ...given])] });
+			const forThese = [...given, ...(final ? [final] : [])];
+			if (!old) mine = boards.post(board, { kind: "note", text: note, ...(forThese.length ? { data: { tasks: forThese } } : {}), ...postedAs() }).id;
+			else if (Array.isArray(old.data?.tasks)) boards.setData(old.id, { ...old.data, tasks: [...new Set([...(old.data.tasks as number[]), ...forThese])] });
 		}
 		// A pool is at work on this board already (a model that splits its tasks over several calls in one answer):
 		// these tasks are its now, and that call brings their results. Two loops on one board would start twice as many.
@@ -282,19 +319,24 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						// A sub-agent is shown it here, at its start, because that is when it decides how it works.
 						const forAll = boards.items(board.id, { kind: "note" }).filter((x) => !x.about && meant(x, next.id)).slice(-12);
 						// And what became of the tasks it waited for: a review is a task after the work it reviews.
-						const before = next.after.map((id) => boards.item(id)).filter((x): x is BoardItem => x?.state === "done");
+						// (A check that passed has nothing to tell whoever comes after the work it checked.)
+						const before = next.after.map((id) => boards.item(id)).filter((x): x is BoardItem => x?.state === "done" && (x.data?.check === undefined || verdictOf(x.result) === "fail"));
 						// A task that a run wrote after it had read outside content is outside content for whoever does it, and so is such a note or result.
 						const from = [next, ...about, ...forAll, ...before].find((x) => x.tainted || x.trust === "untrusted");
 						const outside = live.tainted ?? from?.tainted ?? (from ? "a task on the board that came from outside" : undefined);
 						const prompt = [
 							next.text,
-							...(before.length ? [`This task waited for ${before.length === 1 ? "another one, which is" : "others, which are"} done. What came of ${before.length === 1 ? "it" : "them"}:\n${before.map((x) => `- task #${x.id} (${flat(x.text, 120)}): ${flat(x.result ?? "no result given", 1500)}`).join("\n")}`] : []),
+							// (Within a budget: a task after twenty others is shown the start of each, and reads one in full with board_read.)
+							...(before.length ? [`This task waited for ${before.length === 1 ? "another one, which is" : "others, which are"} done. What came of ${before.length === 1 ? "it" : "them"}${before.length > 4 ? " (cut short; board_read with a task's id shows one in full)" : ""}:\n${before.map((x) => `- task #${x.id} (${flat(x.text, 120)}): ${flat(x.result ?? "no result given", Math.max(200, Math.min(1500, Math.floor(6000 / before.length))))}`).join("\n")}`] : []),
 							...(about.some((x) => !asked(x)) ? [`Notes about this task:\n${said(about.filter((x) => !asked(x)))}`] : []),
 							...(forAll.some((x) => !asked(x)) ? [`What everyone on this job goes by (it was checked: no need to look it up again):\n${said(forAll.filter((x) => !asked(x)))}`] : []),
 							// What was asked on this job and answered, last, where it is read last: a sub-agent that is given the task a
 							// second time is given it because of this, and must not ask the same again.
 							...([...about, ...forAll].some(asked) ? [`Questions that were asked on this job and are answered. They are settled: go by the answers and do not ask them again.\n${said([...about, ...forAll].filter(asked))}`] : []),
-							`[pine: this is task #${next.id} of a board. Your final answer is the task's result, and pine settles the task with it: no board call is needed for that. Do not end it with a question: an answer that ends by asking something is taken for a question, and the task waits for the answer. If the task needs something that is given nowhere and that looking does not settle (a rate, a number, a date, which of two readings that give different results), do not assume one and do not work around it: call board_done with id ${next.id}, outcome "blocked" and your question, then stop. The task comes back with the answer. What is answered above is given: use it. Names and matters of form you settle yourself (a column called differently). What is simply not there (a file the task names) is a result: say so.]`,
+							// A check ends with its verdict, and is told so last, where it is read last: under a long task the sentence in the task itself is passed over.
+							next.data?.check !== undefined
+								? `[pine: this is task #${next.id} of a board, and it is a check. Your final answer is its result. First what you found, one line each. Then the last line of your answer is one word and nothing else: PASS or FAIL.]`
+								: `[pine: this is task #${next.id} of a board. Your final answer is the task's result, and pine settles the task with it: no board call is needed for that. Do not end it with a question: an answer that ends by asking something is taken for a question, and the task waits for the answer. If the task needs something that is given nowhere and that looking does not settle (a rate, a number, a date, which of two readings that give different results), do not assume one and do not work around it: call board_done with id ${next.id}, outcome "blocked" and your question, then stop. The task comes back with the answer. What is answered above is given: use it. Names and matters of form you settle yourself (a column called differently). What is simply not there (a file the task names) is a result: say so.]`,
 						].join("\n\n");
 						const child = manager.submit({ agent: agent.id, prompt, session: "new", kind: "subagent", parent: r.task, tainted: outside, leaf: true, tools: agent.subagents.tools, model, thinking, label: truncate(next.text, 80), boardTask: next.id, boardShown: boards.last(board.id) });
 						// Taken for that run here, in the same step: nothing else ran since the task was found.
@@ -302,8 +344,10 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						started++;
 						watch(child.id);
 					}
-					if (waits() || !active.size) break;
-					await Promise.race(active.values());
+					// (A task that is given out again after a pause, because the model server refused its sub-agent for now, is waited for like one that is being worked.)
+					const pausing = tasksNow().map((t) => manager.retrying.get(t.id)).filter((x): x is Promise<void> => x !== undefined);
+					if (waits() || (!active.size && !pausing.length)) break;
+					await Promise.race([...active.values(), ...pausing]);
 				}
 			});
 		} finally {
@@ -321,8 +365,15 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const parts = fresh
 			.filter((t) => t.state !== "blocked")
 			.map((t) => {
-				const log = boards.items(board.id, { about: t.id }).slice(-5);
-				return `## Task #${t.id}: ${t.state}\n${t.result ?? (t.state === "done" ? "(no result given)" : t.state)}${log.length ? `\nNotes about it:\n${said(log)}` : ""}`;
+				// (What a check found and the work was given out again for is no news: the result here is the one after it.)
+				const log = boards.items(board.id, { about: t.id }).filter((x) => x.data?.rework === undefined).slice(-5);
+				const again = Number(t.data?.reworked ?? 0);
+				const verdict = t.data?.check !== undefined && t.state === "done" ? verdictOf(t.result) : undefined;
+				const what = t.data?.check === "job" ? `Final check (#${t.id})` : typeof t.data?.check === "number" ? `Check of task #${t.data.check} (#${t.id})` : `Task #${t.id}`;
+				const head = `## ${what}: ${verdict ? verdict.toUpperCase() : t.state}${again ? ` (done again ${again === 1 ? "once" : `${again} times`} after its check failed)` : ""}${verdict === "fail" && typeof t.data?.check === "number" ? `, still, after the work was done ${MAX_REWORK + 1} times: it is yours to decide what is done about it` : ""}`;
+				// A check that passed is one line: what it looked at is in the work's own result.
+				const body = verdict === "pass" ? truncate((t.result ?? "").replace(/^\W*pass\W*\n/i, "").replace(/\n\W*pass(ed)?\W*$/i, "").trim(), 300) : (t.result ?? (t.state === "done" ? "(no result given)" : t.state));
+				return `${head}${body ? `\n${body}` : ""}${log.length ? `\nNotes about it:\n${said(log)}` : ""}`;
 			});
 		// A question is said every time, until it is answered: it is what the conversation has to act on.
 		const again = (t: BoardItem) => boards.items(board.id, { about: t.id }).some(asked);
@@ -335,6 +386,14 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						`${blocked.length === 1 ? `Answer task #${blocked[0].id}` : `Answer tasks ${blocked.map((t) => `#${t.id}`).join(", ")}`} with board_answer: only that puts a task back to work, and the next sub-agent is shown the question and your answer. Your answer has to come from what you know for sure, can look up, or your owner told you. A value or a choice nobody gave you is your owner's: ask them (question) and pass on what they say with board_answer. An answer you make up is still a guess, and asking your owner does not by itself answer the task. Where other tasks have or will have the same question, give "all": true: one answer then does for all of them. Where your answer is the task's result already, close it yourself with board_done (id, result).`,
 					]
 				: []),
+			...(refused ? [`The whole was checked ${failedInARow} times in a row and failed each time, so no further check was made. Do not hand it out again: give your owner the result as it stands, and say plainly what the last check still found wrong.`] : []),
+			...(!refused && fresh.some((t) => t.data?.check === "job" && verdictOf(t.result) === "fail")
+				? [
+						failedInARow + 1 >= 2
+							? "The final check failed again. If what it found is a real fault (a wrong fact or number, a broken rule, a missing part), hand that out once more as new tasks with \"verify\". If it is the same point again, or a matter of taste, stop here: give your owner the result as it stands and say what the check still found."
+							: 'The final check found something wrong. Have it put right: hand out what it found as new tasks (subagent with "tasks", and "verify" again so that the whole is checked once more). Do not tell your owner the job is done before a final check passed; say what is still wrong if it cannot be put right.',
+					]
+				: []),
 			...(fresh.some((t) => t.state === "failed") ? ["A task that failed stays failed, and tasks that wait for it are never started. Post it again as a new task (board_post with type task) if it should be tried again."] : []),
 			...(started >= poolMax() ? [`${poolMax()} tasks were started in this call.`] : []),
 			...(goOn ? [`${blocked.length ? "Then call" : "Call"} subagent with "pool": true to go on: it comes back when the next sub-agent asks or fails, or when all are done.`] : blocked.length ? ['After you answered, call subagent with "pool": true to have the answered tasks done. Until then another call starts nothing.'] : []),
@@ -344,7 +403,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			...(notes.length ? [`## Notes the sub-agents left on the board${notes.length > 40 ? ` (the last 40 of ${notes.length}; board_read shows all)` : ""}\n${notes.slice(-40).map((x) => noteLine(x)).join("\n")}`] : []),
 			...(working.length ? [`## Still being worked\n${working.map((t) => taskLine(t)).join("\n")}`] : []),
 			...(open.length ? [`## Not done\n${open.map((t) => taskLine(t)).join("\n")}`] : []),
-			...(next.length ? [`## What to do now\n${next.join("\n")}`] : [`All ${all.length} task${all.length === 1 ? "" : "s"} ${only ? `you gave out on ${boardLabel(board)}` : "of the board"} ${all.every((t) => t.state === "done") ? (all.length === 1 ? "is" : "are") + " done" : "are settled"}. If the job has pieces that were not given as tasks yet, it is not done: give them all now (subagent with "pool": true and "tasks"), with what was answered in "note".`]),
+			...(next.length ? [`## What to do now\n${next.join("\n")}`] : [`All ${all.length} task${all.length === 1 ? "" : "s"} ${only ? `you gave out on ${boardLabel(board)}` : "of the board"} ${all.every((t) => t.state === "done") ? (all.length === 1 ? "is" : "are") + " done" : "are settled"}. If the job has pieces that were not given as tasks yet, it is not done: give them all now (subagent with "pool": true and "tasks"), with what was answered in "note".${many(all)}`]),
 		].join("\n\n");
 		}
 	};
@@ -371,6 +430,15 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					if (r.task.depth + 1 > cfg.limits.maxDelegationDepth) throw new Error(`delegation depth limit (${cfg.limits.maxDelegationDepth}) reached; do the task yourself`);
 					if (p.worktree === true && (p.thread || p.wait === false)) throw new Error('"worktree" is for a task you wait for, without a thread: the work comes back as a branch for you to merge');
 					const [tree] = p.worktree === true ? await apart(1) : [];
+					// In a swarm, work that goes to another agent is on the conversation's board like the work of the
+					// sub-agents: a task that this run of the other agent holds, and that its answer settles (`boardsAfter`).
+					// So the board is the one place that says what was handed out and what became of it (src/swarm.ts).
+					const onBoard = profile.board && !profile.leaf && !p.thread && manager.swarms.get(who.conversation.agent, who.conversation.session)?.status === "active";
+					// And the lead waits for it: a swarm whose lead ends its turn while another agent still works would be
+					// looked at with that work missing. Several delegate calls in one answer still run side by side.
+					if (onBoard) p.wait = true;
+					const board = onBoard ? boards.ensure("local", who.conversation.agent, who.conversation.session, "") : undefined;
+					const posted = board ? boards.post(board, { kind: "task", text: String(p.task), data: { agent: String(p.agent) }, ...postedAs() }) : undefined;
 					const child = manager.submit({
 						agent: p.agent,
 						prompt: `[task from agent ${agent.id}]\n${p.task}`,
@@ -384,9 +452,11 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						worktree: tree,
 						// For that one run it works on this conversation's board (not in a thread, which the other agent keeps).
 						board: live.board,
+						...(posted ? { boardTask: posted.id, boardShown: boards.last(posted.board) } : {}),
 						notify: p.wait === false ? { agent: agent.id, session: r.task.session } : undefined,
 						label: truncate(p.task, 80),
 					});
+					if (board && posted) boards.claim(board, { id: posted.id, holder: String(p.agent), run: child.id, cause: causeOf() });
 					if (p.wait === false) return ok(`Task #${child.id} handed to ${p.agent}. The answer will arrive as a separate message later; do not wait for it now.`);
 					const waited = await manager.awaitChildren(r, [child.id], signal).then((x) => ({ res: x }), (error) => ({ res: undefined, error }));
 					// Its worktree is tidied whatever became of the task: what it did stays on its branch.
@@ -438,11 +508,12 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			defineTool({
 				name: "subagent",
 				label: "Sub-agents",
-				description: `Start sub-agents: copies of you that run independent sub-tasks in parallel, as many as the job has pieces (${agent.subagents.maxParallel} work at a time). When a task says "sub-agents", also "create new sub-agents", this is the tool: you start them yourself, and nothing has to be created or asked of another agent. Each runs with a fresh, empty context in the same workspace and returns only the final answer. Use it for research or checks that would otherwise fill your context. Each task text must be self-contained. Split a job only after you know the pieces: list the folders or files yourself first, then give one task per piece, each naming one piece by path. Never one task for the whole job, and never "the first folder". A copy has your files and tools and what your owner allowed this conversation.${profile.board ? ` With "pool" there can be many more tasks than ${agent.subagents.maxParallel}: they go onto this conversation's board and the copies work through them ${agent.subagents.maxParallel} at a time. Use it for many pieces of one job (one task per file or folder). Give all the tasks in one call, every piece of the job: never one task first to try it out. A question one copy asks is answered once for all of them. What all of them need, say once and in full in "note" (the values and the rules themselves, as you read them or your owner said them, so that no copy has to look them up again). Look first: a note that is wrong is wrong for every one of them. The call comes back when all are done, or earlier when a copy asks a question or fails: answer it (board_answer) and call again with "pool": true and no tasks, and the others have worked on meanwhile. With "check" every result is checked by a second copy as soon as it is there. Tasks that are on a board already (tasks you were given there) are worked where they are: give their numbers in "ids", never their text in "tasks", and each copy settles that very task.` : ""}${choose ? ' With "model" the copies run on another model than yours, for work it does better (a model that sees pictures, a small fast one); with "thinking" they reason more or less than you.' : ""}`,
+				description: `Start sub-agents: copies of you that run independent sub-tasks in parallel, as many as the job has pieces (${agent.subagents.maxParallel} work at a time). When a task says "sub-agents", also "create new sub-agents", this is the tool: you start them yourself, and nothing has to be created or asked of another agent. Each runs with a fresh, empty context in the same workspace and returns only the final answer. Use it for research or checks that would otherwise fill your context. Each task text must be self-contained. Split a job only after you know the pieces: list the folders or files yourself first, then give one task per piece, each naming one piece by path. Never one task for the whole job, and never "the first folder". A copy has your files and tools and what your owner allowed this conversation.${profile.board ? ` With "pool" there can be many more tasks than ${agent.subagents.maxParallel}: they go onto this conversation's board and the copies work through them ${agent.subagents.maxParallel} at a time. Use it for many pieces of one job (one task per file or folder). Give all the tasks in one call, every piece of the job: never one task first to try it out. A question one copy asks is answered once for all of them. What all of them need, say once and in full in "note" (the values and the rules themselves, as you read them or your owner said them, so that no copy has to look them up again). Look first: a note that is wrong is wrong for every one of them. With a note, a task is one line that names its piece (the folder, the file) and what is different about it: what is the same for all is in the note, not repeated in every task. Pieces that build on others go into "stages" instead of "tasks": a list of lists, each stage started when the one before is done and shown what came of it. The call comes back when all are done, or earlier when a copy asks a question or fails: answer it (board_answer) and call again with "pool": true and no tasks, and the others have worked on meanwhile. With "verify" the finished whole is checked at the end by one copy that did none of it, which says PASS or FAIL: for any job whose result has to be right. With "check" every single result is checked by a second copy, and what fails is done again with what the check found and checked again, all in this one call: use it when your owner asks for each piece to be checked by somebody else, or when the pieces are written under rules that a second look catches (a text with a length, a file in a format), instead of handing out checks and fixes in rounds of your own. It is one more copy for each task, so not for pieces that only read and report. Tasks that are on a board already (tasks you were given there) are worked where they are: give their numbers in "ids", never their text in "tasks", and each copy settles that very task.` : ""}${choose ? ' With "model" the copies run on another model than yours, for work it does better (a model that sees pictures, a small fast one); with "thinking" they reason more or less than you.' : ""}`,
 				parameters: Type.Object({
 					tasks: profile.board ? Type.Optional(Type.Array(Type.String(), { description: 'One complete task per sub-agent, naming the files by path and what to report. With "pool" it can be left out, to go on with the tasks that are on the board' })) : Type.Array(Type.String(), { description: "One complete task per sub-agent, naming the files by path and what to report" }),
+					...(profile.board ? { stages: Type.Optional(Type.Array(Type.Array(Type.String()), { description: 'Instead of "tasks", for pieces that build on others: a list of stages, each a list of tasks. The tasks of a stage run side by side; a stage starts when the one before is done (and checked), and its sub-agents are shown what came of it. Makes the call a pool' })) } : {}),
 					...(profile.board ? { ids: Type.Optional(Type.Array(Type.Number(), { description: 'Tasks that are on a board already, by their numbers (board_read shows them): one sub-agent for each, which settles that very task on its board. For tasks you were given on a board, use this and never copy their text into "tasks": a copy is a new task, and the one you were given stays open. Makes the call a pool' })) } : {}),
-					...(profile.board ? { pool: Type.Optional(Type.Boolean({ description: `Give all the tasks in this one call, however many: they are worked through ${agent.subagents.maxParallel} at a time on this conversation's board. Tasks that are on the board already are worked too, and a call with no tasks goes on with what is there` })), check: Type.Optional(Type.String({ description: 'A second sub-agent checks each task\'s result. It is a task of its own that starts when the work is done and is shown the task and what came of it: say what to check and against what (the file, the rule), and what to report. Makes the call a pool' })), note: Type.Optional(Type.String({ description: 'What every one of these sub-agents needs, said once and in full, so that none has to look it up again. The values themselves and the rules, not where to find them: only what you have read yourself or your owner said, never a guess, since all of them will go by it. It goes onto the board as a note that each is shown when it starts. Makes the call a pool' })) } : {}),
+					...(profile.board ? { pool: Type.Optional(Type.Boolean({ description: `Give all the tasks in this one call, however many: they are worked through ${agent.subagents.maxParallel} at a time on this conversation's board. Tasks that are on the board already are worked too, and a call with no tasks goes on with what is there` })), check: Type.Optional(Type.String({ description: 'A second sub-agent checks each task\'s result and says PASS or FAIL: one more sub-agent per task, so only for pieces written under rules a second look catches. Say what to check and against what (the file, the rule, by counting, by running it). What fails is done again once with what the check found, and checked again. Makes the call a pool' })), verify: Type.Optional(Type.String({ description: 'One last check of the finished whole, by a sub-agent that did none of it. Say how to check the result against what your owner asked (run it, count it, compare it with the source); it says PASS or FAIL and what is wrong, and you decide what is done about it. Makes the call a pool' })), note: Type.Optional(Type.String({ description: 'What every one of these sub-agents needs, said once and in full, so that none has to look it up again. The values themselves and the rules, not where to find them: only what you have read yourself or your owner said, never a guess, since all of them will go by it. It goes onto the board as a note that each is shown when it starts. Makes the call a pool' })) } : {}),
 					...(choose
 						? {
 								model: Type.Optional(Type.String({ description: "Another model for these sub-tasks, as provider/model. Leave out for your own. The models tool lists them" })),
@@ -454,9 +525,20 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 				execute: async (_id, p: any, signal) => {
 					const r = run();
 					const note = typeof p.note === "string" && profile.board ? p.note.trim() : "";
-					const check = typeof p.check === "string" && profile.board ? p.check.trim() : "";
+					// (A model that fills in every argument writes "false" or "none" where it means that there is no check.)
+					const said = (v: unknown, name: string): string => {
+						const text = typeof v === "string" && profile.board ? v.trim() : "";
+						if (/^(false|no|none|null|off|n\/a|-)?[.!]?$/i.test(text)) return "";
+						if (text.length < 40 && /^(true|yes|ok|on|sure)\b/i.test(text) || (v === true && profile.board)) throw new Error(`"${name}" says what is to be checked and against what (the rule, the file, by counting, by running it), in a sentence or two: it is the task of the sub-agent that checks. Leave it out for no check.`);
+						return text;
+					};
+					const check = said(p.check, "check");
+					const verify = said(p.verify, "verify");
 					// A note and a check are for a pool: a call that has one is a pool, whether it said so or not.
 					if (!Array.isArray(p.tasks)) p.tasks = [];
+					// Stages: a list of lists. One that came as a flat list of tasks is one stage; empty stages are left out.
+					const stages: string[][] = profile.board && Array.isArray(p.stages) ? (p.stages.every((x: unknown) => typeof x === "string") ? [p.stages.map(String)] : p.stages.map((x: unknown) => (Array.isArray(x) ? x.map(String) : typeof x === "string" ? [x] : [])).filter((x: string[]) => x.length)) : [];
+					if (stages.length && p.tasks.length) throw new Error('give "tasks" (all side by side) or "stages" (one stage after the other), not both: put the tasks into the stage they belong to');
 					// Tasks that are on a board already: all on one board this run may use, and still to be done.
 					const onBoard: number[] = profile.board && Array.isArray(p.ids) ? [...new Set<number>(p.ids.map(Number))] : [];
 					let on: { board: Board; ids: number[] } | undefined;
@@ -470,18 +552,20 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						on = { board, ids: [...(on?.ids ?? []), id] };
 					}
 					// And so is one with more tasks than run at once: they are worked through, not refused.
-					const pooled = (p.pool === true || !!note || !!check || !!on || (p.tasks.length > agent.subagents.maxParallel && p.worktree !== true)) && profile.board;
+					// In a swarm every piece of work goes over the board, however few: that is where pine looks for what is done and what was checked (src/swarm.ts).
+					const swarming = !profile.leaf && p.worktree !== true && manager.swarms.get(who.conversation.agent, who.conversation.session)?.status === "active";
+					const pooled = (p.pool === true || !!note || !!check || !!verify || !!stages.length || !!on || swarming || (p.tasks.length > agent.subagents.maxParallel && p.worktree !== true)) && profile.board;
 					if (!pooled && !p.tasks.length) throw new Error("give at least one task");
 					if (!pooled && p.tasks.length > agent.subagents.maxParallel) throw new Error(`at most ${agent.subagents.maxParallel} sub-tasks per call${profile.board ? '. For more, give "pool": true: they are worked through a few at a time' : ""}`);
-					if (check && !p.tasks.length && !on) throw new Error('"check" is for the tasks of the call it comes with: give the tasks too');
-					if (pooled && p.tasks.length > poolMax()) throw new Error(`at most ${poolMax()} tasks per call`);
-					if (pooled && p.worktree === true) throw new Error('"pool" (and "note" and "check", which make a pool) and "worktree" do not go together: leave one out');
+					if (check && !p.tasks.length && !stages.length && !on) throw new Error('"check" is for the tasks of the call it comes with: give the tasks too');
+					if (pooled && p.tasks.length + stages.flat().length > poolMax()) throw new Error(`at most ${poolMax()} tasks per call`);
+					if (pooled && p.worktree === true) throw new Error('"pool" (and "note", "check", "verify" and "stages", which make a pool) and "worktree" do not go together: leave one out');
 					if ((p.model || p.thinking) && !choose) throw new Error('sub-agents of this run work on your own model and at your own reasoning level: leave out "model" and "thinking"');
 					const model = p.model ? await pickModel(String(p.model)) : undefined;
 					const thinking = p.thinking ? String(p.thinking).trim().toLowerCase() : undefined;
 					if (thinking && !THINKING_LEVELS.includes(thinking)) throw new Error(`"thinking" is one of ${THINKING_LEVELS.join(", ")}`);
 					if (p.worktree === true && !choose) throw new Error('sub-agents of this run work where you do: leave out "worktree"');
-					if (pooled) return ok(await workPool(r, p.tasks.map(String), signal, model, thinking, note, check, on));
+					if (pooled) return ok(await workPool(r, { texts: p.tasks.map(String), stages, note, check, verify, on }, signal, model, thinking));
 					const trees = p.worktree === true ? await apart(p.tasks.length) : [];
 					const ids = p.tasks.map(
 						(t: string, i: number) =>
@@ -2203,7 +2287,9 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					// can settle by itself, a task it does not want done after all). Nobody's claim is touched: there is none.
 					const own = !profile.leaf && board.scope === "local" && board.agent === who.conversation.agent && board.session === who.conversation.session;
 					const unheld = item.state === "blocked" || item.state === "open";
-					boards.settle(item.id, outcome, text, { ...(own && unheld && outcome !== "blocked" ? {} : { run: r.task.id }), tainted: live.tainted, untrusted: live.trust === "untrusted", cause: causeOf() });
+					const settled = boards.settle(item.id, outcome, text, { ...(own && unheld && outcome !== "blocked" ? {} : { run: r.task.id }), tainted: live.tainted, untrusted: live.trust === "untrusted", cause: causeOf() });
+					// A check that says so itself, instead of leaving it to its answer: what failed is given out again all the same.
+					if (outcome === "done" && profile.leaf && verdictOf(settled.result) === "fail" && boards.rework(settled, postedAs())) return ok(`Task #${item.id} is done. The work you checked is given out again with what you found, and checked again after that.`);
 					return ok(`Task #${item.id} is ${outcome}${outcome === "blocked" ? ": it waits for an answer, and is given out again when one comes. Stop working on it now" : ""}.${news(board)}`);
 				},
 			}),

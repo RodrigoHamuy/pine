@@ -154,6 +154,18 @@ export interface WorktreeMade {
 	copied: string[];
 }
 
+/** The swarm of a conversation, as the daemon keeps it (src/swarm.ts in pine). */
+export interface SwarmInfo {
+	agent: string;
+	session: string;
+	objective: string;
+	status: "active" | "waiting" | "done" | "paused" | "limit";
+	round: number;
+	until: number;
+	note: string;
+	event?: string;
+}
+
 export interface GoalInfo {
 	agent: string;
 	session: string;
@@ -440,6 +452,8 @@ export const api = {
 	/** A command of an answer that the owner ran in the app's terminal is still running, or has ended: the conversation is told. */
 	terminalRun: (agent: string, session: string, report: { command: string; state: "running" | "ended"; code?: number; seconds: number; output: string }) => post<{ task: number }>(`${a(agent)}/terminal`, { session, ...report }),
 	stopProgram: (agent: string, session: string, id: number) => post<{ stopped: boolean }>(`${a(agent)}/programs/stop`, { session, id }),
+	swarm: (agent: string, session: string) => get<{ swarm?: SwarmInfo }>(`${a(agent)}/swarm${s(session)}`),
+	setSwarm: (agent: string, session: string, what: { objective: string } | { action: "pause" | "resume" | "clear" }) => post<{ swarm?: SwarmInfo; cleared?: boolean }>(`${a(agent)}/swarm`, { session, ...what }),
 	goal: (agent: string, session: string) => get<{ goal?: GoalInfo }>(`${a(agent)}/goal${s(session)}`),
 	setGoal: (agent: string, session: string, what: { objective: string } | { action: "pause" | "resume" | "clear" }) => post<{ goal?: GoalInfo; cleared?: boolean }>(`${a(agent)}/goal`, { session, ...what }),
 	todos: (agent: string, session: string) => get<Todo[]>(`${a(agent)}/todos${s(session)}`),

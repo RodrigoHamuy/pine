@@ -50,7 +50,10 @@ const SYNONYMS: string[][] = [
 	["branch", "fork", "split", "offshoot", "copy", "duplicate", "clone", "sidetrack", "tangent"],
 	["worktree", "worktrees", "checkout", "isolated", "collide", "clash", "interfere", "overwrite", "simultaneously"],
 	// Boards: what somebody who has not heard the word calls agents that share tasks and findings.
-	["board", "blackboard", "kanban", "backlog", "swarm", "coordinate", "coordination", "collaborate", "claim", "findings"],
+	["board", "blackboard", "kanban", "backlog", "coordinate", "coordination", "collaborate", "claim", "findings"],
+	["swarm", "team", "crew", "fleet", "orchestrate", "orchestrator", "orchestration", "lead", "coordinator", "parallelize", "fan-out"],
+	["check", "verify", "verifier", "critic", "reviewer", "review", "validate", "judge", "audit"],
+	["stages", "stage", "phases", "phase", "dependency", "dependencies", "depends", "pipeline", "sequence"],
 	["interface", "ui", "gui", "frontend", "dashboard", "widget", "panel"],
 	["click", "press", "tap", "button", "pressed", "clicked"],
 	// Not "theme": its stem is "them", a word of every other question.

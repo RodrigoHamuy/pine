@@ -25,7 +25,7 @@ PINE of course also handles regular chat, coding, tasks and orchestration. Agent
 - **No configs:** Tell the main agent what you want. It configures PINE, creates agents, MCPs, event sources, skills and schedules through administrative tool calls, never touches user config, never messes it up or breaks it.
 - **Self-discovery:** A built-in BM25 manual tool lets agents look up any API or internal detail on demand, without carrying docs in context.
 - **A CLI that feels like a desktop app:** Tabs, buttons, scroll regions, inline images and video, and drag-and-drop with thumbnails. Works in Kitty-protocol terminals like Ghostty, with fallbacks for older ones.
-- **Built in:** Computer use (macOS), web browsing, coding tools, diffs and git, undo, plan mode and goals (`/goal` keeps an agent working until it is done).
+- **Built in:** Computer use (macOS), web browsing, coding tools, diffs and git, undo, plan mode, goals (`/goal` keeps an agent working until it is done) and swarms (`/swarm` has an agent lead a job that its sub-agents work through on a board, with the result checked).
 - **Orchestration:** Agents can delegate, create sub-agents in parallel. A pinned tab simply persists an agent and its task. Name it, give it instructions, chat with it or subscribe it to events.
 
 > [!IMPORTANT]
@@ -190,7 +190,7 @@ Start at [docs/SKILL.md](docs/SKILL.md); it indexes everything.
 | Write `pine.json` and `agent.json`                                                      | [configuration.md](docs/references/configuration.md)         |
 | Let agents set things up by tool call instead of editing files                          | [setup.md](docs/references/setup.md)                         |
 | Set up agents, delegation and sub-agents; how tools are declared and what stays cached   | [agents.md](docs/references/agents.md)                       |
-| Let sub-agents and agents work through shared tasks on a board, and run a pool of sub-agents | [boards.md](docs/references/boards.md)                       |
+| Let sub-agents and agents work through shared tasks on a board, run a pool of sub-agents, and lead a job as a swarm (`/swarm`) | [boards.md](docs/references/boards.md)                       |
 | Route events, schedules, model calls                                                    | [events.md](docs/references/events.md)                       |
 | Event sources: setting one up, subscribing, sending, secrets, trust                     | [sources.md](docs/references/sources.md)                     |
 | Every source type: Telegram, folders, MQTT, web addresses, feeds, mail, Slack, cameras  | [source-types.md](docs/references/source-types.md)           |

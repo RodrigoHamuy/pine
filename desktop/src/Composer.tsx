@@ -267,6 +267,7 @@ export function Composer({ tab }: { tab: Tab }) {
 	const paused = store.bypassPaused(tab);
 	const tainted = store.taints.get(`${tab.agent}:${tab.session}`);
 	const goal = tab.goal && tab.goal.status !== "met" ? tab.goal : undefined;
+	const swarm = tab.swarm && (tab.swarm.status === "paused" || tab.swarm.status === "limit") ? tab.swarm : undefined;
 
 	const model = info?.model ?? "none";
 	const thinking = info?.thinking ?? "medium";
@@ -287,6 +288,17 @@ export function Composer({ tab }: { tab: Tab }) {
 					<AlertAction>
 						<Button variant="link" size="xs" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
 						<Button variant="link" size="xs" onClick={() => void store.setGoal(tab, "clear")}>Clear</Button>
+					</AlertAction>
+				</Alert>
+			) : null}
+			{swarm ? (
+				<Alert className="mb-2">
+					<ClockIcon />
+					<AlertTitle>Swarm {swarm.status === "paused" ? "paused" : "limit reached"}</AlertTitle>
+					<AlertDescription className="truncate">{swarm.note}</AlertDescription>
+					<AlertAction>
+						<Button variant="link" size="xs" onClick={() => void store.setSwarm(tab, "resume")}>Resume</Button>
+						<Button variant="link" size="xs" onClick={() => void store.setSwarm(tab, "clear")}>Clear</Button>
 					</AlertAction>
 				</Alert>
 			) : null}

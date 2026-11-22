@@ -37,6 +37,17 @@ export interface WorktreeInfo {
 	gone?: boolean;
 }
 
+/** The swarm of a conversation, as the daemon keeps it (src/swarm.ts). */
+export interface SwarmInfo {
+	agent: string;
+	session: string;
+	objective: string;
+	status: "active" | "waiting" | "done" | "paused" | "limit";
+	round: number;
+	until: number;
+	note: string;
+}
+
 /** The goal of a conversation, as the daemon keeps it (src/goals.ts). `reason` is the judge's line: text to show, nothing more. */
 export interface GoalInfo {
 	agent: string;
@@ -123,6 +134,9 @@ export class Client {
 	folder = (agent: string, session: string) => this.get<{ folder?: string; workspace: string }>(`/agents/${agent}/folder?session=${encodeURIComponent(session)}`);
 	programs = (agent: string, session: string) => this.get<Array<{ id: number; command: string; processes: number; ports: number[]; seconds: number; background?: boolean; output?: string }>>(`/agents/${agent}/programs?session=${encodeURIComponent(session)}`);
 	goal = (agent: string, session: string) => this.get<{ goal?: GoalInfo }>(`/agents/${agent}/goal?session=${encodeURIComponent(session)}`);
+	swarm = (agent: string, session: string) => this.get<{ swarm?: SwarmInfo }>(`/agents/${agent}/swarm?session=${encodeURIComponent(session)}`);
+	/** Start a swarm on a job (`objective`), or pause, resume or clear the one there is (`action`). */
+	setSwarm = (agent: string, session: string, what: { objective: string } | { action: "pause" | "resume" | "clear" }) => this.post<{ swarm?: SwarmInfo; cleared?: boolean }>(`/agents/${agent}/swarm`, { session, ...what });
 	/** Set a goal (`objective`), or pause, resume or clear the one there is (`action`). */
 	setGoal = (agent: string, session: string, what: { objective: string } | { action: "pause" | "resume" | "clear" }) => this.post<{ goal?: GoalInfo; cleared?: boolean }>(`/agents/${agent}/goal`, { session, ...what });
 	stopProgram = (agent: string, session: string, id: number) => this.post<{ stopped: boolean }>(`/agents/${agent}/programs/stop`, { session, id });

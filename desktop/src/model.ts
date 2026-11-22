@@ -7,7 +7,7 @@
 // list for each would be the slowest thing the app does.
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "@/components/ui/toast";
-import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type GroupList, media, type WorktreeMade, type BoardBrief, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
+import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type SwarmInfo, type GroupList, media, type WorktreeMade, type BoardBrief, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
@@ -67,6 +67,7 @@ export type Item = Base &
 		| { t: "steps"; task: number; items: Todo[] }
 		| { t: "media"; name: string; url: string; kind: "image" | "video" | "audio" }
 		| { t: "goal"; goal: GoalInfo; full?: boolean }
+		| { t: "swarm"; swarm: SwarmInfo; full?: boolean }
 		| { t: "divider"; text: string }
 		| { t: "entry"; entry: TranscriptEntry }
 	);
@@ -141,6 +142,8 @@ export class Tab extends Model {
 	speed?: Speed;
 	lastAnswer?: string;
 	goal?: GoalInfo;
+	/** The swarm started in this conversation with /swarm, as the daemon last reported it. */
+	swarm?: SwarmInfo;
 	folder?: string;
 	workspace?: string;
 	/** The worktree it works in, if it has one: its branch and what it was made from. */
@@ -1311,6 +1314,7 @@ export class Store extends Model {
 		tab.workspace = folder?.workspace;
 		learnHome(folder?.workspace);
 		tab.goal = goal?.goal;
+		tab.swarm = (await api.swarm(agent, session).catch(() => undefined))?.swarm;
 		try {
 			const history = (await api.history(agent, session)).filter((t) => t.depth === 0).reverse();
 			for (const t of history) this.past(tab, t);
@@ -1326,6 +1330,7 @@ export class Store extends Model {
 			const steps = await api.todos(agent, session).catch(() => [] as Todo[]);
 			if (steps.some((t) => t.status !== "done")) this.showSteps(tab, -1, steps);
 			if (tab.goal) tab.add({ t: "goal", goal: tab.goal, full: true });
+			if (tab.swarm && tab.swarm.status !== "done") tab.add({ t: "swarm", swarm: tab.swarm, full: true });
 		} catch (e) {
 			tab.note(`Could not load the conversation: ${errText(e)}`, "bad");
 		}
@@ -1845,7 +1850,7 @@ export class Store extends Model {
 
 	private freshen(t: Tab): void {
 		t.clear();
-		t.context = t.cacheShare = t.goal = undefined;
+		t.context = t.cacheShare = t.goal = t.swarm = undefined;
 		this.taints.delete(`${t.agent}:${t.session}`);
 		t.note("Fresh conversation");
 		t.touch();
@@ -1976,6 +1981,35 @@ export class Store extends Model {
 			tab.awaiting = tab.awaiting.filter((x) => x !== arg.trim());
 			tab.remove(mine);
 			tab.note(`No goal set: ${errText(e)}`, "bad");
+			tab.touch();
+		}
+	}
+
+	/** /swarm: show it, start one on a job, or pause, resume or clear it. The daemon keeps it and decides everything about it. */
+	async setSwarm(tab: Tab, arg: string): Promise<void> {
+		if (tab.kind !== "chat") return;
+		const word = arg.trim().toLowerCase();
+		if (!arg.trim()) {
+			tab.swarm = (await api.swarm(tab.agent, tab.session).catch(() => undefined))?.swarm;
+			if (tab.swarm) tab.add({ t: "swarm", swarm: tab.swarm, full: true });
+			else tab.note("This conversation has no swarm. Type /swarm and what is to be done: the agent hands the job out to sub-agents on the board, and the result is checked before it tells you it is done.");
+			return tab.touch();
+		}
+		if (word === "pause" || word === "resume" || word === "clear") {
+			const done = await this.attempt(() => api.setSwarm(tab.agent, tab.session, { action: word }));
+			if (word === "clear" && done && !done.cleared) this.flash("This conversation has no swarm.");
+			return;
+		}
+		// The first round is the job itself, sent as a message of the owner's.
+		const mine = tab.add({ t: "user", text: arg.trim() });
+		tab.awaiting.push(arg.trim());
+		tab.touch();
+		try {
+			await api.setSwarm(tab.agent, tab.session, { objective: arg.trim() });
+		} catch (e) {
+			tab.awaiting = tab.awaiting.filter((x) => x !== arg.trim());
+			tab.remove(mine);
+			tab.note(`No swarm started: ${errText(e)}`, "bad");
 			tab.touch();
 		}
 	}
@@ -2398,6 +2432,7 @@ export class Store extends Model {
 		if (e.topic === "pine/settings") return void (p.key === "ui.theme" ? this.refreshThemes() : p.key === "ui.view" ? this.refreshViews() : p.key === "defaults.model" && this.refreshAgents());
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
+		if (kind === "swarm") return this.swarmEvent(p);
 
 		// Which conversations are at work, also those no tab shows: the side bar says so beside each agent.
 		if ((p.depth ?? 0) === 0 && typeof p.agent === "string" && typeof p.session === "string" && typeof p.task === "number") {
@@ -2505,6 +2540,16 @@ export class Store extends Model {
 		else if (p.change === "folder") return void (await this.followWorktree(agent, session), this.touch());
 		void this.refreshConversations(agent);
 		this.touch();
+	}
+
+	private swarmEvent(p: any): void {
+		for (const tab of this.tabs) {
+			if (tab.kind !== "chat" || tab.agent !== p.agent || tab.session !== p.session) continue;
+			tab.swarm = p.event === "cleared" ? undefined : (p as SwarmInfo);
+			tab.add({ t: "swarm", swarm: p as SwarmInfo });
+			if (tab !== this.active) tab.unread = true;
+			this.dirty.add(tab).add(this);
+		}
 	}
 
 	private goalEvent(p: any): void {

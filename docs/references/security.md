@@ -783,6 +783,23 @@ nothing is marked as outside content. So a schedule must really be your wish:
   shows all of them with their tasks; an agent's `schedules` tool shows its own and those for
   all agents.
 
+### A swarm goes on in your name
+
+With `/swarm` an agent leads a job and is called again while tasks on the conversation's board
+are not done, and then to have its answer checked ([boards.md](boards.md), "A swarm"). As for a goal:
+
+- Only you start a swarm, pause it, resume it or clear it, through a UI or the control API. No
+  tool reaches it: an agent cannot make itself a swarm or give itself more rounds.
+- What calls the lead again is your job in your words and fixed text of pine's with the numbers
+  of tasks. No word of the lead's answer or of a sub-agent's result is in it.
+- The check of the lead's answer that pine posts is a task on the board that holds your job and
+  that answer. It carries the outside-content mark of the
+  lead's run, like any task the lead writes itself, and marks the sub-agent that does it.
+- No model decides that a swarm is done: the board does. It stops after `limits.swarmRounds`
+  turns of the lead, and after a restart of pine it waits for you.
+- A run started from outside has no swarm, and a swarm changes nothing about what an agent
+  may do: every turn and every sub-agent works under the conversation's mode and approvals.
+
 ### A goal goes on in your name
 
 With `/goal` an agent is called again and again until an objective is met ("Goal mode" in

@@ -98,6 +98,9 @@ src/
   router.ts         routes: filter, debounce, set / publish / call / agent
   timers.ts         the scheduler: cron, intervals and one-offs; a schedule with a task wakes an agent
   goals.ts          goal mode (`/goal`): a conversation's objective, the judge that says whether it is met, the task that calls the agent again
+  swarm.ts          a swarm (`/swarm`): a job the conversation's agent leads instead of doing it. What the lead is told, and what pine
+                    does each time the lead ends a turn, going by the conversation's board alone: call it again while tasks are not
+                    done, put a check of the lead's answer on the board when all are, wait for the owner's answer
   hatch.ts          agents introduce themselves once, in their answer to the owner's first message to them: the note in front
                     of it (`INTRODUCE`). No agent starts a conversation by itself
   browser-view.ts   the bundled browser of a conversation for a UI that shows it itself (the Pine app's panel): the
@@ -374,6 +377,15 @@ These are invariants. A change that breaks one needs a test that shows why it is
    fixed text of pine's (`continuePrompt`), never a word of the agent's answer or of the
    judge's reason: the answer may repeat outside content, and the judge has read it. No
    verdict pauses the goal; it never counts as "go on".
+   A swarm (`src/swarm.ts`) calls an agent again in the owner's name in the same way: only the
+   owner starts, pauses, resumes or clears one, through the control API, there is no tool for
+   it, and a run started from outside has none. The task that calls the lead again holds the
+   owner's job and fixed text of pine's with the numbers of tasks (`continuePrompts`), never a
+   word of the lead's answer or of a sub-agent's result. What decides whether it is called
+   again is the board (tasks that are not done, a check of the lead's answer that is missing or
+   failed), never a model. The check pine posts (`checkTask`) holds the lead's answer:
+   it is a task on the board with the mark of the lead's run (rule 14), which is how any task
+   the lead writes reaches a sub-agent, and never a prompt in the owner's voice.
 4. **Untrusted runs get their capabilities by registration.** Tools and MCP servers that the
    untrusted profile does not list are not registered in that session at all, and the session
    key gets `~u` so history is never shared with the owner's session. The app control server
@@ -787,7 +799,8 @@ These are invariants. A change that breaks one needs a test that shows why it is
    `src/tools.ts`): `board_read`, the notes at the end of the other board tools' answers, the
    answer of a pool, and a sub-agent the pool starts for a task that such a run posted, or with such
    a run's note or result (the notes for all, and what came of the tasks its own waited for, go
-   with its task). A new place that hands board text to a model goes through `shown`. An event of a board
+   with its task; and the note with which a failed check gives its work out again, `Boards.rework`,
+   which carries the mark of the check's run). A new place that hands board text to a model goes through `shown`. An event of a board
    (`boardChanged` in `src/agents.ts`, on `board/<name>/...`, a reserved topic) has the trust of
    what was written, never more. The board tools are registered where `Profile.board` says so:
    in the owner's conversations, and for a run from outside only where its agent's `untrusted`
@@ -951,6 +964,11 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   `live:` test builds the real helper, and it reads a recording, not the microphone.
 - A model call pine makes itself, without tools (the judge of goal mode), is scripted with the
   mock's `withoutTools` option: see `judged()` in `test/goals.test.ts`.
+- A swarm's lead is scripted by round: its job names a script (`@@REF:lead@@`) whose steps a getter
+  picks by the round the swarm is in, and the check pine posts, which quotes the job and so finds
+  the same script, is told apart by how its task begins: see `swarm()` in `test/swarm.test.ts`. The
+  same way a check and the work it checks are told apart in `test/boards.test.ts` (the check's
+  own words name a script of their own, which comes first in its task).
 - pine's own question for what a call needs outside the sandbox (`security.askAccess`) is off in
   `harness()`, so that a test about the sandbox meets the sandbox and not a question. The tests
   about it (`test/access.test.ts`) turn it on, set `HOME` to a folder of their own for "the

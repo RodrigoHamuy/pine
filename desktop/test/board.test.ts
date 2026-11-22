@@ -101,3 +101,61 @@ test("the Board tab appears with a conversation's board and shows who has what; 
 	await added.waitFor({ state: "detached" });
 	assert.deepEqual((await call("GET", "/boards/1")).data.tasks.map((t: any) => [t.id, t.state]), [[1, "done"], [2, "open"]]);
 });
+
+test("/swarm in the input starts a swarm: the conversation says what pine does about it, its work is on the Board tab, and one that is paused shows above the input", async () => {
+	// A conversation of its own, so that the board of the test before is not in the way.
+	await page.fill("[data-slot=composer] textarea", "/new swarmed");
+	await page.press("[data-slot=composer] textarea", "Enter");
+	await page.locator("[data-slot=tab][data-active] [data-slot=tab-name]", { hasText: "new conversation" }).waitFor({ timeout: 20_000 });
+	await sees(`${panel} >> text=No board yet`);
+	// The lead hands out one piece and answers; pine has that answer checked, and the lead has the check done.
+	// (All three are told the job, which names the script: who is asking is read from what it was told last.)
+	Object.defineProperty(mock.state.scripts, "lead", {
+		configurable: true,
+		get: () => {
+			const said = JSON.stringify(mock.state.requests.at(-1)?.body.messages.filter((m: any) => m.role === "user").at(-1) ?? "");
+			if (said.includes("Check the answer below")) return [{ text: "Compared it with the shelves, it matches.\n\nPASS" }];
+			if (said.includes("your answer is checked")) return [{ tools: [{ name: "subagent", args: { pool: true } }] }, { text: "Checked: it passed." }];
+			return [{ tools: [{ name: "subagent", args: { tasks: ["sort the first shelf @@REF:piece@@"] } }] }, { text: "SWARM-ANSWER every shelf is sorted" }];
+		},
+	});
+	mock.state.scripts.piece = [{ text: "shelf one sorted" }];
+	await page.fill("[data-slot=composer] textarea", "/swarm sort the archive @@REF:lead@@");
+	await page.press("[data-slot=composer] textarea", "Enter");
+	await sees("text=swarm · started: main leads it", 30_000);
+	await sees("text=SWARM-ANSWER every shelf is sorted", 30_000);
+	await sees("text=swarm · the answer is checked by a sub-agent that did none of the work", 30_000);
+	await sees("text=swarm · done after 2 rounds: 1 task, and the answer was checked", 30_000);
+	await sees("text=Checked: it passed.");
+	// The job is shown once, as the owner's message, without what pine told the lead under it.
+	const said = await page.locator("[data-slot=message-scroller], main").first().innerText();
+	assert.equal(said.split("sort the archive").length - 1, 1, said);
+	assert.ok(!said.includes("your owner started a swarm") && !said.includes("before the swarm is done"), "what pine told the lead is not shown as a message");
+	// (Which conversation it is, the board says: the one that is not the main conversation's.)
+	const listed = (await call("GET", "/boards")).data;
+	const session = (Array.isArray(listed) ? listed : listed.boards).find((b: any) => b.session !== "main").session;
+	assert.equal((await call("GET", `/agents/main/swarm?session=${session}`)).data.swarm.status, "done");
+	// Its work is on the conversation's board: the piece and the check of the answer, both done.
+	const tab = page.locator(`${panel} [data-slot=tabs-trigger]`, { hasText: "Board" });
+	await tab.waitFor({ timeout: 20_000 });
+	await tab.click();
+	await page.locator(`${panel} [data-task][data-state=done]`, { hasText: "sort the first shelf" }).waitFor({ timeout: 20_000 });
+	await page.locator(`${panel} [data-task][data-state=done]`, { hasText: "Check the answer below" }).waitFor({ timeout: 20_000 });
+	await shot("swarm-done");
+
+	// A swarm that is paused: a banner above the input, with Resume and Clear. Clear takes it off.
+	mock.state.scripts.slow = [{ delayMs: 15_000, text: "never" }];
+	await page.fill("[data-slot=composer] textarea", "/swarm sort the cellar @@REF:slow@@");
+	await page.press("[data-slot=composer] textarea", "Enter");
+	await sees("text=/swarm · round 1 of 8/", 30_000);
+	await page.fill("[data-slot=composer] textarea", "/swarm pause");
+	await page.press("[data-slot=composer] textarea", "Enter");
+	const banner = page.locator("[data-slot=alert]", { hasText: "Swarm paused" });
+	await banner.waitFor({ timeout: 20_000 });
+	assert.match(await banner.innerText(), /paused by you\. \/swarm resume goes on/);
+	await shot("swarm-paused");
+	await banner.getByRole("button", { name: "Clear" }).click();
+	await banner.waitFor({ state: "detached", timeout: 20_000 });
+	assert.equal((await call("GET", `/agents/main/swarm?session=${session}`)).data.swarm, undefined);
+	await menu("stop");
+});

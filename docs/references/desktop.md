@@ -517,9 +517,13 @@ Worktree… or "Worktree…" in the side bar's menu opens what can be done with 
 it into what it was made from, update it from there, ask the agent to commit, discard it. The
 Changes view of the panel says how many commits it is ahead, with a button to merge.
 
-Everything in [tui.md](tui.md) about modes, goals, approvals, an agent's questions, its list
+Everything in [tui.md](tui.md) about modes, goals, swarms, approvals, an agent's questions, its list
 of steps, sub-agents, `/undo` and what a conversation is holds here unchanged: it is the
-daemon's doing. What differs is how it is drawn and reached.
+daemon's doing. What differs is how it is drawn and reached. A swarm is started by typing
+`/swarm` and the job into the input, or with the command Swarm of the palette: the conversation
+gets a line for each thing pine does about it, the line above the input says which round it is
+in with a button to pause it, and a swarm that is paused or at its limit shows above the input
+with Resume and Clear. Its tasks are in the Board tab of the side panel.
 
 | In the terminal UI | In the app |
 |---|---|

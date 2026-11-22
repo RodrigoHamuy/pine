@@ -28,6 +28,9 @@ beforehand cannot do:
 - A sub-agent that cannot decide something asks, and is answered while the others work on.
 - One piece of work waits for another and is handed its result: a check after the work it
   checks.
+- Each result gets a check by a second sub-agent, and what fails it is done again and checked
+  again by itself.
+- The finished whole gets one more check by a sub-agent that did none of the work.
 - Work is added while it runs: by the agent, when a result calls for more, or by you.
 - The one who posts a task and the one who takes it never started each other (a board with a
   name, and an agent woken by a schedule or an event).
@@ -115,6 +118,9 @@ conversation's board, and that many sub-agents at a time work through them. Task
 Board tab, or posted with `board_post`) are worked too, and a call with `"pool": true` and no
 tasks goes on with what is there.
 
+A job that is split into more than a hundred tasks takes a higher `limits.maxPoolTasks`, or a
+second call for the tasks beyond the hundred.
+
 Tasks on another board, such as a board for all agents on which an agent was given tasks, are
 worked where they are: `subagent` with their numbers in `ids` (all of one board) gives each to a
 sub-agent, and that sub-agent's answer settles that very task on that board. On such a board the
@@ -145,6 +151,18 @@ own), and a call that has a `note` is a pool whether it says `pool` or not. Ever
 goes by it, so a note that is wrong is wrong for all of them: the agent is told to say there
 only what it read itself or you told it. If you know what they should measure against, say so
 in your message.
+
+### What a pool call takes
+
+| Argument | What it does |
+|---|---|
+| `tasks` | The pieces, all side by side: one task for each sub-agent. |
+| `stages` | Instead of `tasks`, for pieces that build on others: a list of lists. The tasks of a stage run side by side; a stage starts when the one before is done (and checked), and its sub-agents are shown what came of it. See "Stages". |
+| `note` | What all of them go by, said once and in full. See below. |
+| `check` | A second sub-agent checks each task's result and says PASS or FAIL. What fails is done again with what the check found. One more sub-agent for each task: for pieces written under rules, not for pieces that only read and report. See "A check after the work". |
+| `verify` | One last check of the finished whole, by a sub-agent that did none of it. See "A check of the whole". |
+| `pool` | `true` with no tasks: go on with what is on the board (after a question was answered, or for tasks that were posted with `board_post`). |
+| `ids` | Tasks that are on a board already, by number. |
 
 ### The agent stays in the loop
 
@@ -181,6 +199,10 @@ the answered task to a new one, which is shown the question and the answer, and 
   last 12).
 - A sub-agent that fails leaves its task `failed`, and what waits for that task is never
   started. One that is stopped leaves its task open.
+- A sub-agent that fails because the model server refused it for now (a rate limit, an
+  overload, a connection that dropped) did not fail at its task: the task is given out again
+  after a few seconds, twice at most, and the agent is not called for it. A limit of your
+  account (a quota, a balance) is not asked again.
 - A task you add in the Board tab while the pool runs is worked like the others. A task you
   take back there is given to a new sub-agent; one you remove stops the sub-agent that has it.
   A question you answer there is as good as the agent's answer.
@@ -195,6 +217,31 @@ the answered task to a new one, which is shown the question and the answer, and 
 Ask it that way round: first what they measure against, then the pool. An agent that is told
 to let its sub-agents choose a reference tends to choose one for them without looking.
 
+### Stages
+
+Pieces that build on others are given as stages: first the base, then what uses it, then
+putting it together.
+
+```
+subagent(stages: [["Write src/money.js as SPEC.md says ..."],
+                  ["Write src/cart.js ...", "Write src/tax.js ...", "Write src/discount.js ..."],
+                  ["Write src/invoice.js and src/index.js ..."]],
+         note: "Amounts are whole cents, made and read only through src/money.js ...",
+         verify: "Import src/index.js and run every example of SPEC.md. Report each that differs.")
+```
+
+- The tasks of one stage run side by side.
+- A stage starts when every task of the one before is done, and with `check` when their checks
+  are done too. A check that fails gives the work out again, and the next stage waits for that.
+- A sub-agent of a later stage is shown what came of the stage before: each result, cut short
+  when there are many (`board_read` with a task's number shows one in full).
+- A task of a stage that fails keeps the stages after it from starting: the agent is told, and
+  posts the task again or goes on without it.
+- `tasks` and `stages` do not go together: a call has one or the other.
+
+By hand it is the same thing: a task posted with `after` (`board_post` with `"type": "task"`)
+waits until the tasks it names are done, and whoever does it is shown their results.
+
 ### A check after the work
 
 What a sub-agent says it did is a claim. With `check`, every task of the call is followed by a
@@ -203,48 +250,175 @@ task and what came of it:
 
 ```
 subagent(tasks: ["Summarise book/ch1.md in two sentences into summaries/ch1.md", ...],
-         check: "Check the summary against its chapter, fact by fact, and count its sentences. Report what is wrong, or that nothing is.")
+         check: "Check the summary against its chapter, fact by fact, and count its sentences.")
 ```
 
 > For each of the six chapters in `book/`: have one sub-agent write a summary, and a second
 > one check that summary against the chapter. Tell me what the checks found.
 
-A check changes nothing and does not do the work again: it reports, and the agent reads the
-report with the work's result and decides what to do about it. A call that has a `check` is a
-pool whether it says `pool` or not.
+A check changes nothing and does not do the work again. It says what is wrong and ends with one
+word on a line of its own, `PASS` or `FAIL`. When the check of a task fails, the task is given
+out again with what the check found, and checked again when it is done:
 
-By hand it is the same thing: a task posted with `after` (`board_post` with `"type": "task"`)
-waits until the tasks it names are done, and whoever does it is shown their results.
+| The check ends with | What happens |
+|---|---|
+| `PASS` | The agent is told in one line that the task's check passed. |
+| `FAIL` | The task is done again, by a new sub-agent, which is shown what the check found and what was answered before. The task itself is unchanged: one that was to look and report is done again as that, and changes no file. When it is done the check runs again. No turn of the agent is needed for this, and tasks that wait for the work (a later stage) wait on. |
+| `FAIL` again after the task was done a second time | The check's report goes to the agent, which decides what is done about it. A slip is settled by one more try with the check's findings; what fails twice is mostly a rule that can be read two ways. |
+| Neither word | The check is a report: the agent reads it with the work's result. Nothing is given out again by itself. |
+
+So "write it, have it checked, fix what is wrong, check again" is one call, and what comes back
+is the result as it stands after the checks, with a note on which tasks had to be done again.
+A call that has a `check` is a pool whether it says `pool` or not.
+
+A check judges the work, not what the work was about: for a task that was to find faults, PASS
+means the faults were found rightly, not that there were none. And it costs a second sub-agent
+for every task. Use it for pieces that are written under rules which a second look catches (a
+text of a set length, a file in a set form). For pieces that only read and report, one check of
+the whole (below) costs one sub-agent and finds the same kind of slip in a sample.
+
+### A check of the whole
+
+`verify` adds one more task, after everything else of the call: a sub-agent that did none of
+the work checks the finished whole against what is said in `verify` (run it, count it again,
+compare it with the source), and ends with `PASS` or `FAIL`.
+
+```
+subagent(tasks: [...one per region...],
+         verify: "Recompute three regions of your choice from raw/ and compare them with clean/. Add up totals.json again.")
+```
+
+A check, of a piece or of the whole, is told that FAIL is for what can be pointed at (a wrong
+fact or number, a rule that is broken, a part that is missing), and that a matter of taste or
+wording is a remark.
+
+Its verdict comes back to the agent with the results. It is always the last thing done: tasks
+that are added while it waits are done before it. Nothing is given out again by itself
+after it: what it found wrong, the agent hands out as new tasks, with a `verify` again. After
+three checks of the whole that failed one after the other no further one is made: a check
+that never passes (a rule that is a matter of taste) is not asked again and again, and the
+agent is told to give you the result as it stands with what the last check still found. A call
+with `verify` and no tasks checks what is there already: the work on the board, or what the
+agent did itself.
+
+A check of each piece finds what is wrong inside a piece. A check of the whole finds what is
+wrong between them: two pieces that do not fit, a piece that is missing, a total that does not
+add up. A job can have both.
+
+## A swarm
+
+`/swarm` and what is to be done, typed in a conversation, makes its agent the lead of a swarm:
+it does not do the job, it hands it out to sub-agents on the conversation's board, answers what
+they ask, and puts the result together.
+
+```
+/swarm Write a test file for each of the 16 modules in src/, and make sure they all pass.
+```
+
+A normal message leaves it to the agent whether it uses sub-agents, a pool, checks. A swarm
+does not: the work goes over the board, pine looks at the board each time the lead ends a
+turn, and the answer is checked before the swarm is done. That is what `/swarm` adds to asking
+for sub-agents in your message:
+
+| pine finds | What it does |
+|---|---|
+| Tasks on the board that are not done | It calls the lead again, with their numbers. A swarm does not end with work lying open. |
+| A task that waits for an answer, and the lead ended its turn with a question to you | The swarm waits. Your answer is its next turn. |
+| All done, and the lead has answered | It puts a check of that answer on the board (your job in your words, and the answer in full), and calls the lead again to have it done by a sub-agent that did none of the work. |
+| The check passed | The swarm is done. The lead says in a line that its answer was checked, and the answer stands. |
+| The check failed | The lead corrects a slip in its answer itself, hands work that is wrong out again, and gives you the whole answer again. That answer is checked once more: two checks in all. If the second fails too, the swarm ends and its last line says so. |
+
+What is checked is the answer you read, against what you asked and against what was left (the
+files, the numbers): a check before the answer was written would pass a name the lead left out
+or a number it copied wrong while putting the pieces together. No model is asked whether the
+job is done (as the judge of a goal is): the board says so.
+
+The lead is told how a swarm works with your message: to look first, to hand out the whole job
+in one `subagent` call (`tasks` or `stages`, a `note` with every decision two pieces have to
+agree on, and `check` only where every piece is written under rules), not to do pieces itself,
+and to answer in full, since that answer is what gets checked. A job one agent does in a few
+minutes is one piece for one sub-agent, and a lead that does such a job itself has its answer
+checked all the same. While a swarm is at work every `subagent` call of the conversation goes
+over the board, however few tasks it has, and so does work the lead hands to another agent
+with `delegate`: the lead waits for it, and it is a task on the board that the other agent's
+answer settles.
+
+| Command | What it does |
+|---|---|
+| `/swarm <what is to be done>` | Starts a swarm in this conversation. One that was there is replaced. At most 4000 characters: put details into a file and name the file. |
+| `/swarm` | Shows the swarm and where it stands. |
+| `/swarm pause` | No further rounds. A round that is running ends by itself; `esc` stops it at once. |
+| `/swarm resume` | Goes on with a swarm that stopped: paused, or at its limit. |
+| `/swarm clear` | Takes the swarm off the conversation. Its board and what is on it stay. |
+
+A swarm stops by itself, and says why:
+
+| What happened | What the swarm does |
+|---|---|
+| It has had its rounds | It stops after `limits.swarmRounds` turns of the lead (8) with work left. `/swarm resume` gives it as many again. |
+| You stopped the agent (esc, `/stop`), or a round failed | It is paused. |
+| pine was stopped or restarted | It is paused. Nothing goes on unseen after a restart. |
+| The conversation was reset or removed | The swarm is gone with it. |
+
+Only you start a swarm: there is no tool for it, so an agent cannot make itself one or give
+itself more rounds. If your owner asks you, as an agent, to "swarm" something, tell them to
+type `/swarm` with the job. A conversation has a swarm or a goal, not both at once. Other
+programs use `POST /agents/<id>/swarm` of the control API ([operations.md](operations.md)).
+
+A swarm costs more than one agent doing the job: every sub-agent reads its task and the files
+anew, and the check of the answer is a run and a turn of its own. It is for jobs with many pieces, for
+pieces that can be written side by side, and for results that have to be right. For a question
+or a change in one file, write a normal message.
 
 ## When a pool pays, and what it costs
 
-A pool is not always the better way. The same jobs were run on pine with and without boards,
-side by side, each several times, on a small model (Claude Haiku), with one folder or file for
-each sub-agent:
+Boards are not always the better way, and a swarm is not. Eighteen jobs were run on pine three
+ways, each twice, on a small fast model (Claude Haiku 5.5, four sub-agents at a time): without
+boards (plain `subagent`), with boards as an agent uses them by itself after a normal message,
+and as a swarm. Every job was scored against what is known to be right.
 
-| Job | Plain sub-agents, four at a time | A pool |
-|---|---|---|
-| 24 pieces, nothing unclear in them | Everything found, about two minutes, 6 calls | The same in the same time, in one call (one fault missed in one of five runs). About a quarter more tokens (3% to 48%) |
-| 60 pieces | 24 to 26 of 26 faults found, in 15 to 19 calls, in four and a half to six minutes | 26 of 26 in both runs, in 1 to 3 calls, in about the same time. Up to 40% more tokens |
-| 100 pieces | Not finished, in both runs: after 12 and 21 pieces the agent stopped and asked whether to go on, having found 5 and 7 of 39 faults | All 100 done in both runs, in one or two calls: 34 and 39 of 39 faults found, in seven to eight minutes |
-| 12 pieces, two of which need a value nobody gave | Both wrong in every run: the sub-agent cannot ask, and leaves the value out or makes one up | Right in about half the runs (the sub-agent asked, the agent asked you and passed the answer on), left open or wrong in the others |
-| Work, then a check of each piece | The same result, in two rounds | The same result in one call with `check`, at the same cost |
+| Jobs | Without boards | With boards, by a normal message | As a swarm |
+|---|---|---|---|
+| One agent is enough (11 jobs: a question, a change in a few files, a report over a few dozen short files, a small library) | 98.8% right, 155 seconds for all of them | The same: the agent uses no board for these, and having them costs nothing (99.0%, 153 seconds) | Everything right in every run, 406 seconds: two and a half times as long, for the lead's plan, sub-agents that start from nothing, and the check of the answer |
+| The result has to be right, or something is missing that only you know (4 jobs: texts under rules, a test file for each of 16 modules, sums with an exchange rate nobody gave) | 97.1% right, 175 seconds, 3.9 cents | 96.9% right, 124 seconds, 4.2 cents | Everything right in every run, 168 seconds, 4.6 cents. It asked you for the missing rate, where the other two mostly reported without it |
+| Many pieces (24, 60 and 100 folders checked against one reference) | Everything right, 532 seconds, 13.5 cents, in 16 to 26 calls | Everything right, 229 seconds, 8.3 cents, in one or two calls | Everything right, 255 seconds, 7.6 cents |
+| All 18 | 98.6% right, every part right in 86% of the runs, 862 seconds, 19.8 cents | 98.7% right, 86% of the runs, 505 seconds, 14.9 cents | Every part right in all 36 runs, 829 seconds, 19.4 cents |
 
-A larger model (Claude Sonnet) did the 24 pieces equally well both ways at the same cost, and
-saw the missing value itself: it told its sub-agents not to convert, and asked you at the end,
-with or without a pool.
+(Over ten runs in all, the 60-folder audit without boards came out fully right seven times and
+62%, 77% and 85% right the other three, mostly when the agent gave up on sub-agents halfway
+and searched by itself. With boards it was fully right in nine of ten and 96% in the tenth; as a swarm, in all ten.)
 
-What boards cost when they are not used: about 700 tokens in every request, a tenth of what
-pine's tools take, for the tools' declaration. A sub-agent of a pool is given about 150 tokens
-with its task. A question costs the agent a turn.
+Blind judges were shown the three answers of each job under letters, with what they cost and
+the automatic score. A panel of the same small model (three judges for each comparison)
+preferred the one with boards 39 times, the one without 37 times, the swarm 21 times, and
+called 11 a tie. A panel of a larger model (one judge for each comparison) rated the results
+7.9, 7.9 and 8.6 of 10 (without boards, with boards, swarm) and the efficiency 7.6, 8.3 and
+6.7. On the jobs with many pieces it preferred the swarm 4 times, the one with boards twice
+and the one without never; on the jobs of the first row it rated all three results alike and
+the swarm least efficient.
+
+On a model that takes longer for each step the seconds are larger and the gaps wider: what a
+pool and a swarm save is turns of the agent, and what they add is sub-agents that work side
+by side.
+
+What boards cost when they are not used: about 1 000 tokens in every request, an eighth of
+what pine's tools take, for the tools' declaration. A sub-agent of a pool is given about 150
+tokens with its task. A question costs the agent a turn, a `check` one more sub-agent for
+every task, `verify` one sub-agent, and the check of a swarm's answer one sub-agent and a turn
+of the lead.
 
 So:
 
+- A question, a change in one place, a job one agent does in a minute: a normal message. A
+  swarm gets the same result there in two to three times the time.
 - Up to four tasks, each clear: plain `subagent`.
-- Many tasks: a pool. From a few dozen on it is the difference between a job that is finished
-  and one that is not.
-- Tasks in which something may be missing that only you know: a pool, and say in your message
-  that the sub-agents should ask rather than assume.
+- Many pieces: a pool, which the agent takes by itself. From a few dozen on it takes less than
+  half the time of calls of four, in a tenth of the calls, and costs a third less.
+- A result that has to be right, a job in which something may be missing that only you know,
+  or one too large to look over yourself: `/swarm`. The check of the answer is what catches
+  the slip, and the lead asks you instead of reporting around a gap.
+- Every piece checked by a second sub-agent (`check`) only where the pieces are written under
+  rules: it doubles the sub-agents.
 
 ## Several agents on one board
 
@@ -310,11 +484,16 @@ from a run that had read outside content marks the run that takes it.
 
 | What | Limit |
 |---|---|
-| A task's text, a result | 4000 characters; more is cut |
+| A task's text, a result | 4000 characters; more is cut. The check of the whole that pine posts in a swarm holds the lead's report up to 12 000 characters, so that nothing it lists is taken for missing |
 | A note | 2000 characters |
 | Posts on one board | 500. Remove what is finished (`board_remove` with an `id`), or use a new board |
 | Boards | 200. Remove the ones whose work is finished (`board_remove`, or the Board tab) |
 | Sub-agents started by one `subagent` call with `pool` | 100 |
+| A task given out again because its check failed | once; then the check's report stands |
+| A task given out again because the model server refused its sub-agent for now | twice, after 4 and 8 seconds; then it is failed |
+| Turns of the lead in a swarm | `limits.swarmRounds` (8); `/swarm resume` gives as many again |
+| Checks of the lead's answer in a swarm | 2 |
+| Checks of the whole that fail one after the other on a board | 3; then no further one is made |
 
 ## From the control API
 
@@ -330,6 +509,7 @@ read, and what you post is yours.
 | `POST /boards/<id>/post` `{ text, kind?, after?, on? }` | The same on a board by its number |
 | `POST /boards/items/<n>` `{ action, text? }` | `reopen`: take a task back so that it can be taken again; `answer` with `text`: answer a blocked task; `done` with `text`: settle it by hand; `remove`: take a task or a note off the board. A sub-agent that a pool started for that task is stopped |
 | `POST /boards/<id>/remove` | Remove a board with everything on it. A sub-agent that a pool started for one of its tasks is stopped |
+| `GET /agents/<id>/swarm?session=`, `POST /agents/<id>/swarm` `{ session, objective }` or `{ session, action }` | A swarm: where it stands, start one on a job, or `pause`, `resume`, `clear` it ([operations.md](operations.md)) |
 
 A UI that is running is told on `pine/board` which board changed (`board`, `scope`, `agent`,
 `session`, `name`, `change`) and which post (`item`, `kind`, and for a task its `state` now),

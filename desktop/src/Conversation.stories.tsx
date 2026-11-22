@@ -101,7 +101,7 @@ const thinking: Made[] = [
 ];
 export const Thinking: Story = { args: { items: thinking } };
 
-/** What pine says between turns: notes in each tone, an event, the goal, a divider. */
+/** What pine says between turns: notes in each tone, an event, the goal, a swarm, a divider. */
 const notes: Made[] = [
 	{ t: "divider", text: "yesterday" },
 	{ t: "note", tone: "muted", text: "The model changed to mock/m." },
@@ -110,6 +110,8 @@ const notes: Made[] = [
 	{ t: "note", tone: "accent", text: "↶ Taken back: your last message", lines: [{ text: "2 files restored" }, { text: "notes.md was changed since", tone: "warn" }] },
 	{ t: "event", label: "folder · changed", body: "~/notes/today.md was written" },
 	{ t: "goal", goal: { agent: "main", session: "main", objective: "Every link in the notes works", status: "met", note: "met after 2 rounds", round: 2, until: 5, reason: "All twelve links answer." } },
+	{ t: "swarm", swarm: { agent: "main", session: "main", objective: "Write a test file for each module in src/", status: "active", note: "3 tasks are not done: round 2 of 8 starts", round: 2, until: 8 }, full: true },
+	{ t: "swarm", swarm: { agent: "main", session: "main", objective: "Write a test file for each module in src/", status: "done", note: "done after 3 rounds: 16 tasks, and the result was checked", round: 3, until: 8 } },
 ];
 export const Notes: Story = { args: { items: notes } };
 

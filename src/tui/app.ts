@@ -37,7 +37,7 @@ import type { TranscriptEntry } from "../types.ts";
 import type { PineEvent, Task } from "../types.ts";
 import { errText, expandHome, openInSystem, safeName, type Speed, speedOf, speedText, unfolded } from "../util.ts";
 import { Listening, type VoiceTools, voiceTools } from "./voice.ts";
-import type { AgentInfo, Client, Conversation, GoalInfo, GroupList } from "./client.ts";
+import type { AgentInfo, Client, Conversation, GoalInfo, GroupList, SwarmInfo } from "./client.ts";
 import { CodePane, PANE_VIEWS, type PaneView } from "./code-pane.ts";
 import { redoText, undoText } from "./undo.ts";
 import { isAudioFile, isImageFile, isVideoFile, mimeOf, Picture, picturesAsText, picturesIn, prepare, prepareSound, prepareVideo, Slot, Sound, type SoundPlayer, soundPlayer, stopSounds, stopVideos, Video } from "./picture.ts";
@@ -56,6 +56,8 @@ interface Tab {
 	worktree?: { branch: string; base: string };
 	/** The goal set for this conversation with /goal, as the daemon last reported it. */
 	goal?: GoalInfo;
+	/** The swarm started in this conversation with /swarm, as the daemon last reported it. */
+	swarm?: SwarmInfo;
 	/** For a task tab: the task it shows, and how deep that task sits under its conversation. */
 	task?: number;
 	baseDepth: number;
@@ -425,7 +427,7 @@ export function mentionsIn(text: string): string[] {
 /** For this long after esc stopped something, esc does not stop what started since. */
 const STOP_GRACE = 3000;
 /** A round of a goal: pine calling the agent again (src/goals.ts). Only pine makes a task of this kind. */
-const isGoalRound = (kind: unknown, label: unknown) => kind === "notify" && typeof label === "string" && label.startsWith("goal: ");
+const isGoalRound = (kind: unknown, label: unknown) => kind === "notify" && typeof label === "string" && (label.startsWith("goal: ") || label.startsWith("swarm: "));
 
 /** The microphone and the room around it, in cells. */
 const MIC = " 🎤 ";
@@ -1477,6 +1479,7 @@ export class PineTui {
 		tab.folder = (await this.client.folder(agent, session).catch(() => undefined))?.folder;
 		tab.worktree = brief((await this.client.worktree(agent, session).catch(() => undefined))?.worktree);
 		tab.goal = (await this.client.goal(agent, session).catch(() => undefined))?.goal;
+		tab.swarm = (await this.client.swarm(agent, session).catch(() => undefined))?.swarm;
 		this.say(tab, c.gray(`${c.bold(agent)}${info?.description ? ` · ${info.description}` : ""}\nsession ${session} · model ${info?.model ?? "?"}${tab.folder ? ` · works in ${tilde(tab.folder)}` : ""}${tab.worktree ? ` (worktree ${tab.worktree.branch} of ${tab.worktree.base})` : ""} · type a message, / for commands, or click the bar below`));
 		try {
 			const history = (await this.client.history(agent, session)).filter((t) => t.depth === 0).reverse();
@@ -1492,6 +1495,7 @@ export class PineTui {
 			if (steps.some((t) => t.status !== "done")) this.showSteps(tab, -1, steps);
 			if (history.length) this.say(tab, c.gray("── now ──"));
 			if (tab.goal) this.say(tab, this.goalLine(tab.goal, true));
+			if (tab.swarm && tab.swarm.status !== "done") this.say(tab, this.swarmLine(tab.swarm, true));
 		} catch (e) {
 			this.say(tab, c.red(`could not load history: ${errText(e)}`));
 		}
@@ -2203,6 +2207,7 @@ export class PineTui {
 		if (matchesKey(data, "escape") && this.active.running.size) return void this.stopRunning(this.active), true;
 		// Between two rounds of a goal nothing runs, but the next round is about to start: esc holds it back.
 		if (matchesKey(data, "escape") && this.active.goal?.status === "active") return void this.goal("pause").catch((e) => this.flash(errText(e))), true;
+		if (matchesKey(data, "escape") && this.active.swarm?.status === "active") return void this.swarm("pause").catch((e) => this.flash(errText(e))), true;
 		if (matchesKey(data, "tab") && empty) return this.cycle(1), true;
 		// As in Claude Code and opencode: shift+tab steps through the modes.
 		if (matchesKey(data, "shift+tab") && empty && this.active.kind === "chat") {
@@ -2734,6 +2739,16 @@ export class PineTui {
 					].filter((w) => prefix.trim() !== "" && w.value.startsWith(prefix.trim().toLowerCase())),
 				run: (args) => this.goal(args.trim()),
 			},
+			{
+				name: "swarm", description: "Have the agent lead a job instead of doing it: sub-agents work it through on the board, and the result is checked; /swarm alone shows where it stands", argumentHint: "[what is to be done|pause|resume|clear]",
+				getArgumentCompletions: (prefix) =>
+					[
+						{ value: "pause", label: "pause", description: "no further rounds until /swarm resume" },
+						{ value: "resume", label: "resume", description: "go on with a swarm that stopped" },
+						{ value: "clear", label: "clear", description: "take the swarm off this conversation; its board stays" },
+					].filter((w) => prefix.trim() !== "" && w.value.startsWith(prefix.trim().toLowerCase())),
+				run: (args) => this.swarm(args.trim()),
+			},
 			{ name: "stop", description: "Stop what the agent is doing (also: esc)", run: () => (this.active.running.size ? this.stopRunning(this.active) : this.flash("nothing is running")) },
 			{
 				name: "model", description: "Show or switch this agent's model", argumentHint: "[provider/id]",
@@ -3149,6 +3164,7 @@ export class PineTui {
 		if (e.topic === "pine/conversation") return void this.followed(p);
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
+		if (kind === "swarm") return this.swarmEvent(p);
 
 		// A tab on one task follows that task and whatever it starts itself.
 		for (const t of this.tabs) {
@@ -3262,6 +3278,51 @@ export class PineTui {
 			if (tab !== this.active) tab.unread = true;
 		}
 		this.tui.requestRender();
+	}
+
+	// ---- swarms ------------------------------------------------------------------------------------
+	// Like a goal, the daemon keeps a swarm and decides everything about it (src/swarm.ts).
+
+	/** One line on where a swarm stands; `full` adds the job. */
+	private swarmLine(s: SwarmInfo, full = false): string {
+		const mark = s.status === "done" ? c.green("✓") : s.status === "active" ? c.accent("◎") : c.yellow("‖");
+		return `${mark} ${c.bold("swarm")} ${c.gray(s.note)}${full ? `\n${c.gray(`  the job: ${short(oneLine(s.objective), 300)}`)}` : ""}`;
+	}
+
+	private swarmEvent(p: any): void {
+		for (const tab of this.tabs) {
+			if (tab.kind !== "chat" || tab.agent !== p.agent || tab.session !== p.session) continue;
+			tab.swarm = p.event === "cleared" ? undefined : (p as SwarmInfo);
+			this.say(tab, this.swarmLine(p as SwarmInfo));
+			if (tab !== this.active) tab.unread = true;
+		}
+		this.tui.requestRender();
+	}
+
+	/** /swarm: show it, start one, or pause, resume or clear it. All of it is the daemon's doing. */
+	private async swarm(arg: string): Promise<void> {
+		const t = this.active;
+		if (t.kind !== "chat") return this.flash("switch to a conversation tab first");
+		const word = arg.toLowerCase();
+		if (!arg) {
+			t.swarm = (await this.client.swarm(t.agent, t.session)).swarm;
+			return void this.say(t, t.swarm ? this.swarmLine(t.swarm, true) : c.gray("this conversation has no swarm · /swarm <what is to be done> starts one: the agent hands the job out to sub-agents on the board, and the result is checked before it tells you it is done"));
+		}
+		if (word === "pause" || word === "resume" || word === "clear") {
+			const done = await this.client.setSwarm(t.agent, t.session, { action: word });
+			if (word === "clear" && !done.cleared) this.flash("this conversation has no swarm");
+			return;
+		}
+		// The first round is the job itself, sent as a message of yours.
+		this.user(t, arg);
+		t.awaiting.push(arg);
+		t.scroll.scrollToEnd();
+		try {
+			await this.client.setSwarm(t.agent, t.session, { objective: arg });
+		} catch (e) {
+			t.awaiting = t.awaiting.filter((a) => a !== arg);
+			this.say(t, c.red(`✗ no swarm started: ${errText(e)}`));
+		}
 	}
 
 	/** /goal: show it, set it, or pause, resume or clear it. All of it is the daemon's doing. */
@@ -3552,6 +3613,7 @@ export class PineTui {
 			const parts = [t.thinking ? "thinking" : "working", `${secs}s`, ...steps, ...(t.toolCalls ? [`${t.toolCalls} tool call${t.toolCalls === 1 ? "" : "s"}`] : []), ...(helpers ? [`${helpers} sub-task${helpers === 1 ? "" : "s"} running`] : []), ...(t.tokens.output ? [`${t.tokens.input + t.tokens.cached}↑${t.tokens.cached ? ` (${Math.round((100 * t.tokens.cached) / (t.tokens.input + t.tokens.cached))}% cached)` : ""} ${t.tokens.output}↓`] : []), ...(speedText(t.speed) ? [speedText(t.speed)] : []), "esc to stop"];
 			// A goal: which round this is, so that work that goes on by itself is seen to.
 			if (t.goal?.status === "active") parts.unshift(`goal · round ${t.goal.round} of ${t.goal.until}`);
+			if (t.swarm?.status === "active") parts.unshift(`swarm · round ${t.swarm.round} of ${t.swarm.until}`);
 			line = `${c.yellow(SPINNER[this.frame % SPINNER.length])} ${c.gray(parts.join(" · "))}`;
 		} else if (t.goal?.status === "active") line = c.gray(`◎ goal · round ${t.goal.round} of ${t.goal.until} · checking whether it is met · esc to pause`);
 		// The agent's turn is over, and a command of its goes on: without a word that looks like a hang.

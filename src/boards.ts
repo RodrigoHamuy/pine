@@ -89,6 +89,8 @@ export interface Who {
 
 /** How long a task's text, a note and a result may be, and how much a board holds. More is cut or refused. */
 export const TASK_CHARS = 4000;
+/** A task that holds a report to be checked in full (the check of the whole that pine posts in a swarm): cut short, the check would miss what was left out and call it missing. */
+export const LONG_TASK_CHARS = 16_000;
 export const NOTE_CHARS = 2000;
 export const RESULT_CHARS = 4000;
 export const DATA_CHARS = 2000;
@@ -114,6 +116,34 @@ export function asksAtEnd(answer: string): boolean {
 	const last = text.split("\n").at(-1)!.replace(/[\s*_"'\u201d\u2019)\]]+$/u, "");
 	return /[?\uff1f]$/u.test(last);
 }
+
+/**
+ * What a check says of the work it checked: PASS or FAIL, as a line of its own (whatever emphasis is around it,
+ * also after "Verdict:"). It is asked for as the last line, where a model that reasons first puts its conclusion;
+ * the last such line counts, then a first or last line that begins with the word. A line that says how one rule
+ * of several went ("2. Word count: PASS") is no verdict. Neither: the check is a report, and nothing follows from it.
+ */
+export function verdictOf(answer: string | undefined): "pass" | "fail" | undefined {
+	const lines = String(answer ?? "").split("\n").map((l) => l.trim()).filter(Boolean);
+	const word = (m: RegExpExecArray | null) => (m ? (m[1].toLowerCase().startsWith("pass") ? "pass" : "fail") : undefined);
+	const alone = (l: string) => word(/^[^a-z0-9]*(?:(?:final\s+)?(?:verdict|result|outcome|status)\s*[:=-]\s*)?[^a-z0-9]*(pass|fail)(?:ed|es|s)?[^a-z0-9]*$/i.exec(l));
+	const starts = (l: string | undefined) => word(/^[^a-z0-9]*(?:(?:final\s+)?(?:verdict|result|outcome|status)\s*[:=-]\s*)?[^a-z0-9]*(pass|fail)(?:ed|es|s)?\b/i.exec(l ?? ""));
+	for (let i = lines.length - 1; i >= 0; i--) {
+		const v = alone(lines[i]);
+		if (v) return v;
+	}
+	return starts(lines.at(-1)) ?? starts(lines[0]);
+}
+
+/**
+ * How often a task is given out again because the check of its result failed. After that the check's report
+ * stands, for whoever gave out the work. Once: whoever does it again is shown what the check found, which settles
+ * a slip. What fails a second time is mostly a rule that can be read two ways, and a third and fourth sub-agent
+ * for every piece does not settle that.
+ */
+export const MAX_REWORK = 1;
+/** How many checks of the whole may fail one after the other on a board before no further one is made: a check that never passes is not asked a fourth time. */
+export const MAX_FAILED_FINALS = 3;
 
 /** A board's name as it is kept: lowercase letters, digits, - and _. */
 export function boardName(wanted: unknown): string {
@@ -218,7 +248,7 @@ export class Boards {
 		return Number((this.db.prepare("SELECT MAX(id) AS n FROM board_items WHERE board = ?").get(board) as any)?.n ?? 0);
 	}
 
-	post(board: Board, o: { kind: "task" | "note"; text: string; data?: unknown; by: string; trust: "owner" | "untrusted"; tainted?: string; after?: number[]; about?: number; cause?: unknown }): BoardItem {
+	post(board: Board, o: { kind: "task" | "note"; text: string; data?: unknown; by: string; trust: "owner" | "untrusted"; tainted?: string; after?: number[]; about?: number; cause?: unknown; long?: boolean }): BoardItem {
 		const text = String(o.text ?? "").trim();
 		if (!text) throw new Error(o.kind === "task" ? "a task needs a text: what is to be done, self-contained" : "a note needs a text");
 		if ((this.db.prepare("SELECT COUNT(*) AS n FROM board_items WHERE board = ?").get(board.id) as any).n >= MAX_ITEMS) throw new Error(`this board holds ${MAX_ITEMS} posts, which is all it takes. Remove what is finished (board_remove with an id, or the whole board), or use a new board`);
@@ -241,7 +271,7 @@ export class Boards {
 		const now = Date.now();
 		const r = this.db
 			.prepare("INSERT INTO board_items (board, kind, text, data, state, by, trust, tainted, after, about, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-			.run(board.id, o.kind, cut(text, o.kind === "task" ? TASK_CHARS : NOTE_CHARS), data, o.kind === "task" ? "open" : "", o.by, o.trust, o.tainted ?? null, after.length ? JSON.stringify(after) : null, o.about ?? null, now, now);
+			.run(board.id, o.kind, cut(text, o.kind === "task" ? (o.long ? LONG_TASK_CHARS : TASK_CHARS) : NOTE_CHARS), data, o.kind === "task" ? "open" : "", o.by, o.trust, o.tainted ?? null, after.length ? JSON.stringify(after) : null, o.about ?? null, now, now);
 		const item = this.item(Number(r.lastInsertRowid))!;
 		this.onChange?.(board, "posted", item, o.cause);
 		return item;
@@ -250,6 +280,14 @@ export class Boards {
 	/** Replace the fields of a post (a pool's note names the tasks it is for, and a later call adds to them). */
 	setData(id: number, data: Record<string, unknown>): void {
 		this.db.prepare("UPDATE board_items SET data = ? WHERE id = ?").run(JSON.stringify(data), id);
+	}
+
+	/** Make an open task wait for more tasks of its board: a check of the whole comes after whatever was added while it waited. */
+	waitFor(id: number, more: number[]): void {
+		const item = this.item(id);
+		if (!item || item.kind !== "task" || item.state !== "open") return;
+		const after = [...new Set([...item.after, ...more.filter((m) => m !== id && this.item(m)?.board === item.board)])];
+		if (after.length !== item.after.length) this.db.prepare("UPDATE board_items SET after = ?, updated = ? WHERE id = ?").run(JSON.stringify(after), Date.now(), id);
 	}
 
 	/** The tasks an open task still waits for: those named in `after` that are not done. */
@@ -333,6 +371,28 @@ export class Boards {
 		// The note is the answer, and says in a field which question it answers: whoever shows it can set the two apart.
 		this.post(board, { kind: "note", text, ...(item.result ? { data: { question: item.result.length > 600 ? `${item.result.slice(0, 600)}…` : item.result } } : {}), by: o.by, trust: o.trust, tainted: o.tainted, about: item.id, cause: o.cause });
 		return this.reopen(id, { cause: o.cause });
+	}
+
+	/**
+	 * The check of a task's result failed (`data.check` of the check names the task): the task is given out
+	 * again with what the check found as a note about it, and the check waits for it once more. At most
+	 * MAX_REWORK times for a task; after that, and for a check that is no task's alone, nothing happens here
+	 * and the check's report stands. Returns whether the work was given out again.
+	 */
+	rework(check: BoardItem, o: { by: string; trust: "owner" | "untrusted"; tainted?: string; cause?: unknown }): boolean {
+		const work = typeof check.data?.check === "number" ? this.item(check.data.check) : undefined;
+		const board = work && this.get(work.board);
+		if (!work || !board || work.board !== check.board || work.kind !== "task" || work.state !== "done" || check.state !== "done") return false;
+		const rounds = Number(work.data?.reworked ?? 0);
+		if (rounds >= MAX_REWORK) return false;
+		const was = work.result ? `\n\nWhat the sub-agent before you answered:\n${cut(work.result, 600)}` : "";
+		// (The task is done again, as it stands: a task that was to look and report is not turned into one that changes
+		// what it looked at because a check found its report wrong.)
+		this.post(board, { kind: "note", text: `A sub-agent did this task before you, and a check found its result wrong or incomplete. Do the task again, as it is written, and get right what the check found. The task has not changed: change files only where the task itself says to (files it had you write are as that sub-agent left them).\n\nWhat the check found:\n${cut(check.result ?? "", 1200)}${was}`, data: { rework: rounds + 1 }, by: o.by, trust: o.trust, tainted: o.tainted, about: work.id, cause: o.cause });
+		this.setData(work.id, { ...(work.data ?? {}), reworked: rounds + 1 });
+		this.reopen(work.id, { cause: o.cause });
+		this.reopen(check.id, { cause: o.cause });
+		return true;
 	}
 
 	/** The tasks a run of pine's holds right now. When the run ends, the daemon settles or gives back each: nothing stays taken for ever. */

@@ -238,6 +238,7 @@ Type `/` and the list appears; keep typing to narrow it, `enter` runs the comman
 | `/code [changes\|turn\|files\|output\|running\|off]` | Open the code pane beside the conversation, on that view; without an argument it opens and closes. `turn` shows what your last message changed |
 | `/stop` | Stop what the agent is doing |
 | `/goal [objective\|pause\|resume\|clear]` | Goal mode: with an objective, the agent keeps working by itself, round after round, until a judge says the objective is met. Without an argument it shows the goal and where it stands; `pause`, `resume` and `clear` do what they say. See "Goals" below |
+| `/swarm [what is to be done\|pause\|resume\|clear]` | A swarm: with a job, the agent leads it instead of doing it. Its sub-agents work the job through on the conversation's board, and pine calls the agent again while tasks there are not done, and has its answer checked before the swarm is done. Without an argument it shows where the swarm stands. See "Swarms" below and [boards.md](boards.md). |
 | `/model [provider/id]` | Switch the agent's model. Without an argument, a list to search and pick from; or type a few letters after it: `/model deepseek` |
 | `/reasoning [level]` | Set how much the model thinks before answering; without an argument, choose from a list. Saved like the model. A model that cannot reason ignores it |
 | `/voice [language]` | Dictate the message instead of typing it; `ctrl+r` does the same. On a Mac. With a language (`/voice de-DE`) it listens for that one from then on. See [Dictating a message](#dictating-a-message) |
@@ -295,6 +296,29 @@ does a message you type: write what you have to say, then `/goal resume`. The ju
 shown to you and never to the agent. The UI only asks the daemon: a goal set here is the same
 one another UI on the same daemon shows.
 
+## Swarms
+
+`/swarm <what is to be done>` starts a swarm in the conversation: the job goes out as your
+message, the agent hands it out to sub-agents on the conversation's board instead of doing it,
+and each time it ends a turn pine looks at the board and calls it again while tasks are not
+done, and once more to have its answer checked. What a swarm is and when it stops is in
+[boards.md](boards.md), "A swarm".
+
+While a swarm is at work, the status line starts with it, and the conversation gets a line for
+each thing pine did about it:
+
+```
+ ⠹ swarm · round 2 of 8 · working · 38s · 2 tool calls · 4 sub-tasks running · esc to stop
+ ◎ swarm started: main leads it
+ ◎ swarm 3 tasks are not done: round 2 of 8 starts
+ ◎ swarm the answer is checked by a sub-agent that did none of the work
+ ✓ swarm done after 3 rounds: 16 tasks, and the answer was checked
+```
+
+`‖` is a swarm that waits for you: paused, at its limit, or its lead asked you something (then
+your answer is its next turn). `/swarm resume` goes on, `/swarm clear` takes it off, and its
+board stays. `esc` stops the round that is running and pauses the swarm.
+
 ## Keys
 
 | Key | Does |
@@ -303,7 +327,7 @@ one another UI on the same daemon shows.
 | `alt+enter` | Send, but let the message wait its turn: it is answered as work of its own when the agent is done with what it is doing |
 | `shift+enter` | New line |
 | `up` / `down` | Earlier inputs |
-| `esc` | Stop what the agent is doing; the conversation shows `■ stopped`. A goal that was being worked on is paused (`/goal resume` goes on). A message you typed while it worked is not stopped with it: it is answered next, and for three seconds a second `esc` leaves it alone (the status line says so). After that `esc` stops it like anything else. While a list or dialog is open, `esc` only closes that |
+| `esc` | Stop what the agent is doing; the conversation shows `■ stopped`. A goal that was being worked on is paused (`/goal resume` goes on), and so is a swarm (`/swarm resume`). A message you typed while it worked is not stopped with it: it is answered next, and for three seconds a second `esc` leaves it alone (the status line says so). After that `esc` stops it like anything else. While a list or dialog is open, `esc` only closes that |
 | `shift+tab` | Next mode for this agent: auto, plan, safe, manual, bypass (while the input is empty) |
 | `tab` | Next tab (while the input is empty) |
 | `alt+1` ... `alt+9` | Go to that tab |
