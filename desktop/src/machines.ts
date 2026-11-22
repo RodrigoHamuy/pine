@@ -184,7 +184,7 @@ export function reachedThrough(host: string, serviceHost?: string): string | und
 export function firstScreen(state: ServiceState, device: "phone" | "browser" = "browser"): { title: string; about: string; code?: string } | undefined {
 	if (state.status !== "starting" || !state.pairing) return undefined;
 	const { code, name } = state.pairing;
-	if (!code) return { title: "Pairing with your computer", about: "Reaching your computer through the link of its code…" };
+	if (!code) return { title: "Pairing with your computer", about: "Reaching your computer through the pairing link…" };
 	return { title: "Confirm on your computer", about: `Your computer asks whether ${name ? `"${name}"` : `this ${device}`} may connect. Press Allow there if it shows ${code}, the same digits as here.`, code };
 }
 

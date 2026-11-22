@@ -136,7 +136,7 @@ test("auto mode, main agent: the owner's whole account without a question, and a
 	const wide = await harness({ pine: asShipped, agents: { main: { agent: { mode: "safe" } }, helper: { agent: { mode: "auto" } }, third: {} }, start: false });
 	const cfg = loadConfig(wide.home);
 	assert.deepEqual([cfg.agents.main.level, cfg.agents.helper.level, cfg.agents.third.level], ["safe", "auto", "safe"]);
-	assert.ok(audit(cfg).some((n) => /agent helper: auto mode\. Its shell and file tools reach your whole account/.test(n)));
+	assert.ok(audit(cfg).some((n) => /agent helper: auto mode\. The agent's shell and file tools reach your whole account/.test(n)));
 	assert.ok(!audit(cfg).some((n) => /agent (main|third)/.test(n)), "an agent in its sandbox is no note");
 	await wide.close();
 	// What said this before the mode did is gone. A file that still has it does not load, and says what to write instead.
@@ -538,7 +538,7 @@ test("download: a server's key goes only with a link that server's own tool retu
 	// Another address on the same server was not handed out: it is fetched as before, without the
 	// key, and the refusal says which links work.
 	await run([{ tools: [call("download", { url: `${origin}/files/b.png`, path: "b.png" }), call("download", { url: `${origin}/files/a.png?x=1`, path: "a2.png" })] }]);
-	for (const out of h.toolResults().slice(-2)) assert.match(out, /HTTP 401: the server wants its key\. pine sends the key only with a link that one of this server's tools returned in this conversation/);
+	for (const out of h.toolResults().slice(-2)) assert.match(out, /HTTP 401: the server wants a key\. pine sends the key only with a link that one of this server's tools returned in this conversation/);
 	assert.ok(!fs.existsSync(path.join(ws, "b.png")) && !fs.existsSync(path.join(ws, "a2.png")));
 
 	// A link that leads on to another server takes no key with it: not this server's, and not the
@@ -670,7 +670,7 @@ test("a machine without a sandbox: a mode nobody chose becomes auto, safe mode b
 	assert.deepEqual([helper.mode, levelOf(helper), levelOf(boxed), levelOf(h.pine.cfg.agents.main)], ["safe", "auto", "safe", "auto"]);
 	const notes = audit(h.pine.cfg);
 	assert.ok(notes.some((n) => /^no sandbox on this machine: .*An agent set to safe mode gets no shell/.test(n)), notes.join("\n"));
-	assert.ok(notes.some((n) => /^agent helper: works in auto mode, with your rights and no sandbox, because this machine has no sandbox and nobody chose its mode/.test(n)), notes.join("\n"));
+	assert.ok(notes.some((n) => /^agent helper: works in auto mode, with your rights and no sandbox, because this machine has no sandbox and nobody chose a mode for the agent/.test(n)), notes.join("\n"));
 	assert.ok(!notes.some((n) => /^agent boxed: works in auto mode/.test(n)));
 
 	await h.pine.agents.run({ agent: "helper", prompt: mockMsg([{ tools: [call("bash", { command: "echo RAN-AS-THE-OWNER" })] }]), ...owner });
@@ -763,7 +763,7 @@ test("bypass paused by outside content is what a caller hands on: auto, not bypa
 	const asked = answering(h, () => true);
 	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("mcp__feed__echo", { text: "x" })] }, { tools: [call("delegate", { agent: "wide", task: "hello" })] }]), ...owner });
 	assert.equal(asked.length, 1);
-	assert.match(asked[0].why, /the other agent's answer can carry its files into it/);
+	assert.match(asked[0].why, /the other agent's answer can bring that agent's files into this conversation/);
 	assert.equal(h.pine.tasks.list({ agent: "wide" }).at(-1)!.meta.level, "auto");
 	await h.close();
 });

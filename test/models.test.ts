@@ -52,10 +52,10 @@ test("a name that is nowhere is said plainly, and pine still starts", async () =
 	keyed(h.home, "$NOT_THERE_KEY", "OTHER=value\n");
 	const { keys, problems } = modelKeys(h.home);
 	assert.deepEqual(keys, {});
-	assert.match(problems[0], /provider "mock" takes its key from NOT_THERE_KEY, which is not in .*\.env.*add a line NOT_THERE_KEY=\.\.\./);
+	assert.match(problems[0], /provider "mock" takes the key from NOT_THERE_KEY, which is not in .*\.env.*add a line NOT_THERE_KEY=\.\.\./);
 
 	await h.restart();
-	assert.ok(h.logs.some((l) => /WARN.*takes its key from NOT_THERE_KEY/.test(l)), "the log says so at the start");
+	assert.ok(h.logs.some((l) => /WARN.*takes the key from NOT_THERE_KEY/.test(l)), "the log says so at the start");
 	assert.ok(!(await h.pine.agents.availableModels()).includes("mock/m"), "its models are not offered");
 	await h.close();
 });
@@ -174,7 +174,7 @@ test("a server is written by pine and taken out again without a trace; its key i
 	const before = fs.readFileSync(file, "utf8");
 	const models = [{ id: "qwen-test", contextWindow: 32768, images: true, reasoning: false }, { id: "small", images: false, reasoning: true }];
 
-	assert.throws(() => addModelServer(h.home, { name: "studio", baseUrl: "http://100.64.0.7:8080/v1", models }), /does not say how much context its model small gets/);
+	assert.throws(() => addModelServer(h.home, { name: "studio", baseUrl: "http://100.64.0.7:8080/v1", models }), /does not say how much context the model small gets/);
 	assert.equal(fs.readFileSync(file, "utf8"), before, "nothing is written when something is missing");
 	assert.deepEqual(addModelServer(h.home, { name: "studio", baseUrl: "http://100.64.0.7:8080/v1", key: "typed-by-the-owner", models: [models[0]] }), ["studio/qwen-test"]);
 	assert.deepEqual(JSON.parse(fs.readFileSync(file, "utf8")).providers.studio, {
@@ -230,7 +230,7 @@ test("the main agent adds a model server by tool call: the owner confirms the ad
 	await h.pine.agents.run({ agent: "main", prompt: add, ...owner });
 	assert.match(h.toolResults().at(-1)!, /not added \(test\)\. Do not retry; tell your owner they can add it themselves with: pine model add studio http:\/\/127\.0\.0\.1:\d+\/v1/);
 	assert.equal(asked.length, 1, "asked even in bypass mode");
-	assert.ok(asked[0].summary.includes(`add the model server "studio" at ${box.url}/v1`) && /sends its conversations there/.test(asked[0].summary));
+	assert.ok(asked[0].summary.includes(`add the model server "studio" at ${box.url}/v1`) && /sends whole conversations there/.test(asked[0].summary));
 	assert.equal(box.seen.length, 0, "no request leaves pine before the owner has said yes");
 
 	// Confirmed, but the key is not given: nothing is written either.
@@ -249,7 +249,7 @@ test("the main agent adds a model server by tool call: the owner confirms the ad
 	// The right one: the entry names the key, .env holds it, and neither the agent nor its model sees it.
 	answer = (req) => ({ allow: true, values: req.inputs ? { key: "key-typed-into-the-dialog" } : undefined });
 	await h.pine.agents.run({ agent: "main", prompt: add, ...owner });
-	assert.match(h.toolResults().at(-1)!, /Your owner confirmed it\. Added the model server "studio" with studio\/qwen-test\. Its key is in pine's \.env file\..*\/model studio\/qwen-test/);
+	assert.match(h.toolResults().at(-1)!, /Your owner confirmed it\. Added the model server "studio" with studio\/qwen-test\. The server's key is in pine's \.env file\..*\/model studio\/qwen-test/);
 	const entry = JSON.parse(fs.readFileSync(path.join(h.home, "models.json"), "utf8")).providers.studio;
 	assert.equal(entry.apiKey, "$PINE_MODEL_STUDIO_API_KEY");
 	assert.deepEqual([entry.models[0].contextWindow, entry.models[0].input], [32768, ["text", "image"]]);

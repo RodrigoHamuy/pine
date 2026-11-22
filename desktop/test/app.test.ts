@@ -968,7 +968,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await scheduleForm.getByRole("button", { name: "Add schedule" }).click();
 	await page.waitForSelector("[data-slot=dialog-content]", { state: "detached" });
 	await sees("[data-slot=settings-page] [data-slot=item-title] >> text=morning");
-	await sees("[data-slot=settings-page] [data-slot=item-description] >> text=wake every agent, each in its main conversation");
+	await sees("[data-slot=settings-page] [data-slot=item-description] >> text=wake all agents, each in their main conversation");
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"morning"/);
 	await shot("08-settings-schedules");
 	// Events: a route, as When and Then. Only the fields of the action chosen are shown, and only they are sent.
@@ -1003,7 +1003,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	assert.match(fs.readFileSync(path.join(home, "auth.json"), "utf8"), /opencode/);
 	// A sign-in changes no agent's model, so the dialog offers the new ones for all agents.
 	await page.locator("[data-slot=dialog-content]").getByRole("button", { name: "Choose the model your agents run on" }).click();
-	await sees("[data-slot=dialog-title] >> text=Model for every agent that has none of its own");
+	await sees("[data-slot=dialog-title] >> text=Model for all agents without a model of their own");
 	const offered = await page.$$eval("[data-slot=command-item] > :first-child", (els: Element[]) => els.map((e) => e.textContent ?? ""));
 	assert.ok(offered.length > 0 && offered.every((m) => m.startsWith("opencode/")), JSON.stringify(offered.slice(0, 5)));
 	await page.click("[data-slot=command-item] >> nth=0");
@@ -1024,7 +1024,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees("[data-slot=settings-page] h1 >> text=Models");
 	// "Change" offers every model that can be used now.
 	await page.locator("[data-setting=fallback-model]").getByRole("button", { name: "Change" }).click();
-	await sees("[data-slot=dialog-title] >> text=Model for every agent that has none of its own");
+	await sees("[data-slot=dialog-title] >> text=Model for all agents without a model of their own");
 	await page.getByRole("option", { name: "mock/m" }).click();
 	await sees("[data-slot=toast] >> text=Your agents now run on mock/m");
 	await page.waitForSelector("[data-slot=item-group] [data-slot=alert]", { state: "detached" });

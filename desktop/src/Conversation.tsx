@@ -3,12 +3,13 @@
 // The parts are shadcn's chat components, composed the way its AI Elements pages show: the thread
 // is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
-import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CommandIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PaperclipIcon, PlayIcon, SearchIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Sound } from "@/components/sound";
-import { Alert, AlertAction, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Attachment, AttachmentContent, AttachmentGroup, AttachmentMedia, AttachmentTitle } from "@/components/ui/attachment";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { ModelNotice } from "@/components/model-notice";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Breadcrumb, BreadcrumbItem, BreadcrumbLink, BreadcrumbList, BreadcrumbPage, BreadcrumbSeparator } from "@/components/ui/breadcrumb";
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 import { type AgentDetail, api, media, type TranscriptEntry } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Composer } from "./Composer.tsx";
+import { WelcomeLetter } from "./WelcomeLetter.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
 import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
@@ -169,7 +171,7 @@ function Child({ part }: { part: Extract<Part, { p: "child" }> }) {
 				<TraceTitle className={STEPPED}>
 					↳ {part.agent} · {childKind(part.kind)} #{part.task}
 					{part.how ? ` ${part.how}` : part.label ? `: ${part.label}` : ""}
-					<span className="sr-only"> (opens in a tab of its own)</span>
+					<span className="sr-only"> (opens in a new tab)</span>
 				</TraceTitle>
 				<TraceIcon>
 					<ArrowUpRightIcon />
@@ -452,6 +454,11 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 				</Marker>
 			);
 		}
+		case "model": {
+			// Drawn from what is known now: once a model answers, the notice is gone.
+			const info = store.agent(item.agent);
+			return info?.modelProblem ? <ModelNotice agent={item.agent} model={info.model} problem={info.modelProblem} retry onModels={() => store.openSettings("models")} /> : null;
+		}
 		case "event":
 			return (
 				<Alert className="select-text">
@@ -516,7 +523,7 @@ function Checkpoint({ tab }: { tab: Tab }) {
 				<HoverTooltip>
 					<TooltipTrigger render={<Button size="xs" variant="outline" onClick={() => void store.undo(tab, false)} />}>Take back</TooltipTrigger>
 					<TooltipContent>
-						Its files are restored, the conversation forgets it, its text returns to the input
+						Undo your last message. Files the agent changed for it go back to how they were, the agent's answer is removed, and what you wrote goes back into the message box so you can edit it and send it again.
 						<Kbd>⇧⌘Z</Kbd>
 					</TooltipContent>
 				</HoverTooltip>
@@ -525,7 +532,28 @@ function Checkpoint({ tab }: { tab: Tab }) {
 	);
 }
 
-/** Where a conversation begins: who this agent is, what it runs on and reaches, and what it has. */
+/** pine's welcome letter, bound to the app: what it links to, and words put into this conversation's input. */
+function Letter({ tab }: { tab: Tab }) {
+	useModel(store);
+	const ready = store.service.status === "ready" ? store.service : undefined;
+	const home = ready?.home;
+	return (
+		<WelcomeLetter
+			main={tab.agent}
+			home={home ? tilde(home) : "~/.pine"}
+			here={Boolean(home) && !store.remote}
+			settings={(section) => store.openSettings(section)}
+			reveal={() => home && void bridge.reveal(home)}
+			say={(text) => {
+				tab.draft = text;
+				tab.touch();
+				store.ask_("focus-input");
+			}}
+		/>
+	);
+}
+
+/** Where a conversation with an agent begins: who it is, what it runs on and reaches, and what it has. It introduces itself when you first write to it. */
 function Welcome({ tab }: { tab: Tab }) {
 	useModel(store);
 	const info = store.agent(tab.agent);
@@ -538,11 +566,6 @@ function Welcome({ tab }: { tab: Tab }) {
 			live = false;
 		};
 	}, [tab.agent]);
-	const say = (text: string) => {
-		tab.draft = text;
-		tab.touch();
-		store.ask_("focus-input");
-	};
 	const mode = MODES.find((m) => m.value === info?.mode);
 	const h = has?.holdings;
 	const counts: Array<[string, number]> = h ? [["skill", h.skills.length], ["event source", h.sources.length], ["schedule", h.schedules.length], ["MCP server", h.servers.length], ["conversation", h.conversations.length]] : [];
@@ -550,7 +573,7 @@ function Welcome({ tab }: { tab: Tab }) {
 		<Empty>
 			<EmptyHeader>
 				<EmptyMedia>
-					<AgentAvatar agent={{ id: tab.agent, color: store.agent(tab.agent)?.color }} size="lg" />
+					<AgentAvatar agent={{ id: tab.agent, color: info?.color, main: info?.main }} size="lg" />
 				</EmptyMedia>
 				<EmptyTitle>
 					<h1>{tab.agent}</h1>
@@ -561,30 +584,12 @@ function Welcome({ tab }: { tab: Tab }) {
 			<EmptyContent>
 				<div className="flex flex-wrap justify-center gap-1.5">
 					<HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}><CpuIcon data-icon="inline-start" /><b>{info?.model ?? "no model"}</b></TooltipTrigger><TooltipContent>The model it runs on</TooltipContent></HoverTooltip>
-					<HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in its sandbox"}</TooltipTrigger><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></HoverTooltip>
+					<HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}><ShieldIcon data-icon="inline-start" /><b>{info?.mode}</b>{info?.mode === "auto" || info?.mode === "bypass" ? "your account, no sandbox" : "in a sandbox"}</TooltipTrigger><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></HoverTooltip>
 					{info?.main ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>administers pine</TooltipTrigger><TooltipContent>It creates and changes the other agents and pine's settings when you ask it to</TooltipContent></HoverTooltip> : null}
-					{info?.delegates.length ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>hands work to <b>{info.delegates.includes("*") ? (info.main ? "every other agent" : "every agent but main") : info.delegates.join(", ")}</b></TooltipTrigger><TooltipContent>Agents it can hand work to</TooltipContent></HoverTooltip> : null}
+					{info?.delegates.length ? <HoverTooltip><TooltipTrigger render={<Badge variant="outline" />}>hands work to <b>{info.delegates.includes("*") ? (info.main ? "all other agents" : `all agents except ${store.agents.find((a) => a.main)?.id ?? "the main one"}`) : info.delegates.join(", ")}</b></TooltipTrigger><TooltipContent>Agents it can hand work to</TooltipContent></HoverTooltip> : null}
 					{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 				</div>
-				{info?.modelProblem ? (
-					<Alert className="text-left">
-						<TriangleAlertIcon />
-						<AlertDescription>{info.modelProblem} Sign in to a provider (a Claude, ChatGPT or Copilot subscription, or an API key) or add a model server of your own, then choose the model {tab.agent} runs on.</AlertDescription>
-						<AlertAction>
-							<Button variant="outline" size="xs" onClick={() => store.openSettings("models")}>Models…</Button>
-						</AlertAction>
-					</Alert>
-				) : null}
-				<p className="text-faint wrap-anywhere">
-					{tab.session === "main" ? "Its main conversation: the one it keeps for good, and where what it is subscribed to as an agent arrives." : `Conversation ${tab.session}.`} {tab.folder ? `It works in ${tilde(tab.folder)}.` : "It works in its own workspace."}
-				</p>
-				<div className="flex flex-wrap justify-center gap-1.5">
-					{/* A suggestion: a Button that puts its words into the input. */}
-					<Button variant="outline" size="xs" onClick={() => say("What can you do for me, and what are you set up with?")}>What can you do?</Button>
-					<Button variant="outline" size="xs" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
-					<Button variant="outline" size="xs" onClick={() => void store.pickFolder(tab)}><FolderIcon data-icon="inline-start" />Give it a folder</Button>
-					<Button variant="outline" size="xs" onClick={() => void store.command("palette")}><CommandIcon data-icon="inline-start" />Commands <Kbd>⌘K</Kbd></Button>
-				</div>
+				{info?.modelProblem ? <ModelNotice agent={tab.agent} model={info.model} problem={info.modelProblem} onModels={() => store.openSettings("models")} /> : null}
 			</EmptyContent>
 		</Empty>
 	);
@@ -866,10 +871,25 @@ export function Conversation({ tab }: { tab: Tab }) {
 						<MessageScrollerViewport ref={scroller}>
 							{/* The column of the conversation, under the head and above the input. */}
 							<MessageScrollerContent className="mx-auto max-w-3xl px-7 pt-7 pb-2" aria-busy={tab.busy}>
+								{/* The main agent's main conversation begins with pine's welcome, above everything said in it: under the agent while nothing was said yet. */}
+								{chat && tab.session === "main" && store.agent(tab.agent)?.main ? (
+									<>
+										{!tab.items.length ? (
+											<MessageScrollerItem>
+												<Welcome tab={tab} />
+											</MessageScrollerItem>
+										) : null}
+										<MessageScrollerItem>
+											<Letter tab={tab} />
+										</MessageScrollerItem>
+									</>
+								) : null}
 								{!tab.items.length && chat ? (
-									<MessageScrollerItem className="my-auto">
-										<Welcome tab={tab} />
-									</MessageScrollerItem>
+									store.agent(tab.agent)?.main && tab.session === "main" ? null : (
+										<MessageScrollerItem className="my-auto">
+											<Welcome tab={tab} />
+										</MessageScrollerItem>
+									)
 								) : (
 									tab.items.map((item, i) => (
 										<Fragment key={item.id}>

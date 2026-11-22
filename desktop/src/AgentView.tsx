@@ -49,7 +49,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 		<div className="flex flex-col gap-3 pb-2">
 			<Item className="px-3.5 pt-4 pb-0.5">
 				<ItemMedia>
-					<AgentAvatar agent={{ id: tab.agent, color: store.agent(tab.agent)?.color }} size="lg" />
+					<AgentAvatar agent={{ id: tab.agent, color: store.agent(tab.agent)?.color, main: store.agent(tab.agent)?.main }} size="lg" />
 				</ItemMedia>
 				<ItemContent>
 					<ItemTitle>{tab.agent}{info.main ? <Badge>main</Badge> : null}</ItemTitle>
@@ -61,9 +61,9 @@ export function AgentView({ tab }: { tab: Tab }) {
 			</Item>
 			<div className="mt-0.5 flex flex-wrap gap-1.5 px-3.5">
 				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickModel(tab)} />}><CpuIcon data-icon="inline-start" />{info.model}</Badge>} /><TooltipContent>The model it runs on</TooltipContent></HoverTooltip>
-				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickReasoning(tab)} />}><SparkleIcon data-icon="inline-start" />reasoning {info.thinking}</Badge>} /><TooltipContent>How much its model thinks before it answers</TooltipContent></HoverTooltip>
-				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickMode(tab)} />}><ShieldIcon data-icon="inline-start" />{info.mode} · {info.mode === "auto" || info.mode === "bypass" ? "your account" : "in its sandbox"}</Badge>} /><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></HoverTooltip>
-				{info.delegates.length ? <Badge variant="outline">hands work to {info.delegates.includes("*") ? (info.main ? "every other agent" : "every agent but main") : info.delegates.join(", ")}</Badge> : null}
+				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickReasoning(tab)} />}><SparkleIcon data-icon="inline-start" />reasoning {info.thinking}</Badge>} /><TooltipContent>How long the model thinks before it answers</TooltipContent></HoverTooltip>
+				<HoverTooltip><TooltipTrigger render={<Badge variant="outline" render={<button type="button" onClick={() => void s.pickMode(tab)} />}><ShieldIcon data-icon="inline-start" />{info.mode} · {info.mode === "auto" || info.mode === "bypass" ? "your account" : "in a sandbox"}</Badge>} /><TooltipContent>{mode?.about ?? "How much it asks and how far it reaches"}</TooltipContent></HoverTooltip>
+				{info.delegates.length ? <Badge variant="outline">hands work to {info.delegates.includes("*") ? (info.main ? "all other agents" : `all agents except ${store.agents.find((a) => a.main)?.id ?? "the main one"}`) : info.delegates.join(", ")}</Badge> : null}
 			</div>
 
 			{tab.busy || helpers.length || elsewhere.length ? (
@@ -191,10 +191,10 @@ export function AgentView({ tab }: { tab: Tab }) {
 			{memory !== undefined ? (
 				<FieldSet className={SECTION}>
 					<FieldLegend className={TITLE}>What it remembers</FieldLegend>
-					{memory ? <Printed sm text={short(memory, 6000)} className="mx-3.5 w-auto" /> : <div className={NONE}>Its MEMORY.md is empty.</div>}
+					{memory ? <Printed sm text={short(memory, 6000)} className="mx-3.5 w-auto" /> : <div className={NONE}>MEMORY.md is empty.</div>}
 				</FieldSet>
 			) : null}
-			{detail.data ? <div className={cn(NONE, "pb-4")}>Its workspace is {detail.data.workspace}; the Files view shows {tab.folder ? "the folder this conversation works in" : "it"}.</div> : null}
+			{detail.data ? <div className={cn(NONE, "pb-4")}>The agent's workspace is {detail.data.workspace}; the Files view shows {tab.folder ? "the folder this conversation works in" : "it"}.</div> : null}
 		</div>
 		</ScrollArea>
 	);

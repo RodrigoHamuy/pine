@@ -204,7 +204,7 @@ const TRIED: Record<RelayTry | "trying", { result: "trying" | "usable" | "failed
 	usable: { result: "usable", message: `This relay works: it gave this ${COMPUTER} an address.` },
 	refused: { result: "failed", message: "Could not use this relay: it refused the user name or password. It is kept; check them and save again." },
 	silent: { result: "failed", message: "Could not use this relay: it did not answer. It is kept and used when it answers; check the address and that the server is running." },
-	unknown: { result: "failed", message: "Could not use this relay: its name was not found. It is kept; check the address." },
+	unknown: { result: "failed", message: "Could not use this relay: no server was found under that name. It is kept; check the address." },
 	unavailable: { result: "failed", message: "Could not try this relay: browser access cannot connect on this system." },
 };
 
@@ -432,7 +432,7 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 					} catch (e) {
 						// Nothing was changed: the host comes back as it was.
 						await up(options.prefs.read());
-						throw new Error(`The relay's password could not be kept, so nothing was changed: ${e instanceof Error && e.message === NO_KEYCHAIN ? NO_KEYCHAIN : "its file could not be written. Try again."}`);
+						throw new Error(`The relay's password could not be kept, so nothing was changed: ${e instanceof Error && e.message === NO_KEYCHAIN ? NO_KEYCHAIN : "the password file could not be written. Try again."}`);
 					}
 				}
 				options.prefs.write(prefs);

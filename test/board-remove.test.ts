@@ -25,8 +25,8 @@ test("board_remove: a board of the conversation goes without a question, one tha
 
 	// The conversation's own boards: removed, nobody asked.
 	let r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_remove"), call("board_remove", { board: "scratch" })] }]), ...owner });
-	assert.match(r.text, /The board of this conversation is removed, with its 1 task and 0 notes\./);
-	assert.match(r.text, /The board "scratch" \(of this conversation\) is removed, with its 0 tasks and 1 note\./);
+	assert.match(r.text, /The board of this conversation is removed, with 1 task and 0 notes\./);
+	assert.match(r.text, /The board "scratch" \(of this conversation\) is removed, with 0 tasks and 1 note\./);
 	assert.equal(asked.length, 0);
 	assert.deepEqual(names(), ["agent:main:kept", "global::all"]);
 
@@ -34,7 +34,7 @@ test("board_remove: a board of the conversation goes without a question, one tha
 	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_remove", { board: "kept" })] }]), ...owner });
 	assert.equal(asked.length, 1);
 	assert.equal(asked[0].tool, "board_remove");
-	assert.match(asked[0].summary, /^remove the board "kept" \(of main, in all its conversations\) with everything on it\n1 open/);
+	assert.match(asked[0].summary, /^remove the board "kept" \(of main, in all of the agent's conversations\) with everything on it\n1 open/);
 	assert.match(r.text, /not removed \(test\)\. Do not retry; tell your owner\./);
 	assert.deepEqual(names(), ["agent:main:kept", "global::all"]);
 
@@ -89,7 +89,7 @@ test("board_remove: a pool's sub-agent at work on what goes is stopped, by the t
 		prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["first @@REF:asks@@", "second @@REF:long@@"] })] }, { tools: [call("board_remove")] }]),
 		...owner,
 	});
-	assert.match(r.text, /The board of this conversation is removed, with its 2 tasks/);
+	assert.match(r.text, /The board of this conversation is removed, with 2 tasks/);
 	const worker = () => h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 2)!;
 	await until(() => worker().status === "cancelled", 5000, "the sub-agent of the removed task to be stopped");
 	assert.equal(boards.list().length, 0);

@@ -65,7 +65,7 @@ asked you for it (`pine model add`, `add_model_server`); `models.json` names it 
 
 ```json
 {
-  "main": "main",
+  "main": "prime",
   "logLevel": "info",
   "defaults": { "model": "local/deepseek-v4.1-flash", "thinking": "off" },
   "limits": { "maxConcurrentRuns": 2 },
@@ -84,11 +84,12 @@ asked you for it (`pine model add`, `add_model_server`); `models.json` names it 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `main` | none | Id of the main agent. It is the only one that can create agents and set things up for all agents ([setup.md](setup.md)), and the one agent that `*` in another agent's `delegates` leaves out. Without this key, the agent called `main` (or else the first one) is the main agent. |
+| `main` | none | Id of the main agent. It is the only one that can create agents and set things up for all agents ([setup.md](setup.md)), and the one agent that `*` in another agent's `delegates` leaves out. Without this key, the agent called `main` (or else the first one) is the main agent. A new home names `prime`; a home from before has `main`. |
 | `logLevel` | `info` | `debug`, `info`, `warn`, `error`, `silent`. Logs go to stderr; a daemon started inside the terminal UI logs to `data/pine.log`. |
 | `dataDir` | `data` | Where the database, media and control token live. |
-| `defaults.model` | none | `provider/model-id` from `models.json`: the model of every agent whose `agent.json` names none. There is no built-in fallback: an agent with neither is a configuration error, which `pine check` and the start of pine report. |
+| `defaults.model` | none | `provider/model-id` from `models.json`: the model of every agent whose `agent.json` names none. There is no built-in fallback. A new home has no default model: the first model you connect (`pine login`, `pine model add`, Settings > Models) becomes it, and until then an agent with no model named says so instead of answering. |
 | `defaults.judge` | not set | The model of the judge of goal mode (`/goal`), as `provider/model-id`. Not set: the agent's own model. A second, small model keeps the judge's call from pushing the agent's conversation out of a model server's cache. See "Goal mode" in [agents.md](agents.md). |
+| `defaults.introduce` | `true` | Every agent introduces itself once, in its answer to your first message to it. `false`: none does. See "Meeting an agent" in [agents.md](agents.md). |
 | `defaults.thinking` | `off` | Reasoning level for models that can reason: `off`, `minimal`, `low`, `medium`, `high`, `xhigh`, `max`. |
 | `defaults.mode` | not set | The mode of every agent that names none: `auto`, `safe`, `manual`, `bypass` or `plan` (see `mode` below). Not set: `auto` for the main agent, `safe` for all others. Set it to `safe` to keep every agent, the main one too, in its sandbox. See "Modes" in [security.md](security.md). |
 | `defaults.bashTimeoutSec` | `900` | Longest a shell command may run (15 minutes: a build, an install). The model cannot raise it. A server or another program that should keep running, and whatever needs longer, is started in the background, which is not held to it ([coding.md](coding.md)). |
@@ -160,7 +161,7 @@ Every key is optional; `{}` is a valid agent.
 
 | Key | Default | Meaning |
 |---|---|---|
-| `description` | empty | Only for a home from before: what the agent is for, where its `AGENTS.md` does not say it. What an agent is for is the first paragraph of the `AGENTS.md` in its workspace (a heading above it aside), as one line of at most 160 characters: other agents read it when they choose whom to delegate to, and the Pine app and `pine agent list` show it beside its name. Write that paragraph for them ("You are gonzo. Contract law; you know the case files"). Nothing writes `description` any more. |
+| `description` | empty | Only for a home from before: what the agent is for, where its `AGENTS.md` does not say it. What an agent is for is the first paragraph of the `AGENTS.md` in its workspace (a heading above it aside), as one line of at most 240 characters: other agents read it when they choose whom to delegate to, and the Pine app and `pine agent list` show it beside its name. Write that paragraph for them ("You are gonzo. Contract law; you know the case files"). Nothing writes `description` any more. |
 | `color` | none | The agent's own color in the Pine app, written `#rrggbb` (kept in lower case): its avatar is drawn in it, and nothing else: the window keeps the theme's colors. Display only; the terminal UI does not use it. Set it on the agent's avatar in the app (at the top of its page in Settings > Agents, or Color in the side bar's menu on it), with `pine agent update <id> --color #e0805a` (`--color none` takes it away), or ask the main agent ("make scout blue"): `color` of `create_agent` and `update_agent`, which you confirm. Anything that is not `#rrggbb` is a configuration problem. |
 | `workspace` | `agents/<id>/workspace` | The agent's working folder. `AGENTS.md`, `SOUL.md`, `TOOLS.md` and `MEMORY.md` at its top are the agent's instructions and are loaded into its prompt. Must exist when you set it. |
 | `context` | `[]` | Further instruction files to load into the system prompt. |
@@ -211,9 +212,8 @@ Every key is optional; `{}` is a valid agent.
 
 This is pi's own file; pine passes it through. It is only needed for model servers of your own:
 pi already knows the hosted providers (OpenCode, Anthropic, OpenAI and many more), and
-`pine login <provider>` supplies their credentials. `pine init` writes two providers: `dev`
-(Claude through `claude -p`, served by `pine dev-model`; the example's `defaults.model` is
-`dev/claude-haiku`) and `local` for llama.cpp.
+`pine login <provider>` supplies their credentials. `pine init` writes it with no provider in
+it, and `pine.json` with no `defaults.model`: the first model you connect becomes the default.
 
 You do not have to write an entry yourself: `pine model add <name> <address>` asks the server
 what it serves and writes it ([operations.md](operations.md), "With a model server of your

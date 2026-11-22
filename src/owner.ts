@@ -16,13 +16,13 @@ import { browserReady } from "./browser-build.ts";
 import { type AgentConfig, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, purposeOf, SHARED_FILES } from "./config.ts";
 import { login, logout, type Prompter } from "./login.ts";
 import { findServer, piMcp, serverStates } from "./mcp-config.ts";
-import { addModelServer, checkServerName, listModelServers, lookAt, modelKeys, modelServerUsers, removeModelServer, serverUrl } from "./models.ts";
+import { addModelServer, checkServerName, listModelServers, lookAt, modelKeys, modelServerUsers, piDefaults, removeModelServer, serverUrl, suggestModel } from "./models.ts";
 import type { Router } from "./router.ts";
 import { audit, isInside, realish, sandboxAvailable } from "./security.ts";
 import { allSkills, checkSkill, deleteSkill, skillDir, skillsBeside, writeSkill } from "./skills.ts";
 import type { SourceHost } from "./sources.ts";
 import { localTime, type Scheduler } from "./timers.ts";
-import { errText, type Logger, parseDuration } from "./util.ts";
+import { errText, type Logger, onPath, parseDuration } from "./util.ts";
 import { listThemes, themeInForce } from "./themes.ts";
 import { listViews, viewCode, viewInForce } from "./views.ts";
 import { MAX_EDIT, writeText } from "./workspace-view.ts";
@@ -80,6 +80,8 @@ export interface LoginView {
 	done: boolean;
 	error?: string;
 	models?: string[];
+	/** The model the agents run on from now on, when the sign-in made pine choose one (`settleModel`). */
+	chosen?: string;
 }
 
 interface LoginSession extends LoginView {
@@ -106,12 +108,12 @@ export class Logins {
 	private sessions = new Map<string, LoginSession>();
 	private run: LoginRunner;
 	private secret: (value: string) => void;
-	private ended: () => Promise<void>;
+	private ended: (provider: string) => Promise<string | undefined>;
 
-	constructor(run: LoginRunner, opts: { secret?: (value: string) => void; ended?: () => Promise<void> } = {}) {
+	constructor(run: LoginRunner, opts: { secret?: (value: string) => void; ended?: (provider: string) => Promise<string | undefined> } = {}) {
 		this.run = run;
 		this.secret = opts.secret ?? (() => {});
-		this.ended = opts.ended ?? (async () => {});
+		this.ended = opts.ended ?? (async () => undefined);
 	}
 
 	private tidy(): void {
@@ -157,7 +159,7 @@ export class Logins {
 			async (models) => {
 				if (s.done) return;
 				s.models = models;
-				await this.ended().catch(() => {});
+				s.chosen = await this.ended(provider).catch(() => undefined);
 				this.end(s);
 			},
 			(e) => this.end(s, errText(e)),
@@ -178,7 +180,7 @@ export class Logins {
 	view(id: string): LoginView | undefined {
 		this.tidy();
 		const s = this.sessions.get(id);
-		return s && { lines: s.lines, url: s.url, code: s.code, question: s.question, done: s.done, error: s.error, models: s.models };
+		return s && { lines: s.lines, url: s.url, code: s.code, question: s.question, done: s.done, error: s.error, models: s.models, ...(s.chosen ? { chosen: s.chosen } : {}) };
 	}
 
 	answer(id: string, value: string): boolean {
@@ -232,12 +234,18 @@ export class OwnerApi {
 		this.logins = new Logins(deps.loginRunner ?? ((provider, type, prompter, signal) => login(this.cfg, provider, type, prompter, signal)), {
 			// A key that was typed is a secret from then on, wherever it might turn up.
 			secret: (value) => this.sources?.keepOut([value]),
-			ended: () => this.manager.reloadModels(),
+			ended: (provider) => this.modelsChanged(provider),
 		});
 	}
 
 	stop(): void {
 		this.logins.stop();
+	}
+
+	/** After a sign-in or a model server: models read again, and a default that answers. */
+	private async modelsChanged(provider: string): Promise<string | undefined> {
+		await this.manager.reloadModels();
+		return settleModel(this.cfg, this.manager, this.log, provider);
 	}
 
 	private agent(id: unknown): AgentConfig {
@@ -383,7 +391,7 @@ export class OwnerApi {
 			const agent = this.maybeAgent(body.agent);
 			const session = str(body.session);
 			const found = allSkills(cfg).find((s) => s.name === body.name && (agent ? s.agent === agent.id && (session ? s.session === session : s.scope === "agent") : s.scope === "global"));
-			if (!found) throw new Refusal(404, `there is no skill "${String(body.name)}" ${agent ? `of ${agent.id}${session ? ` in its conversation ${session}` : ""}` : "for all agents"}`);
+			if (!found) throw new Refusal(404, `there is no skill "${String(body.name)}" ${agent ? `of ${agent.id}${session ? ` in the conversation ${session}` : ""}` : "for all agents"}`);
 			if (!found.managed) throw new Refusal(409, `"${found.name}" lies in a folder you named in the configuration (${found.dir}), and stays yours: take it out there`);
 			deleteSkill(found.dir, agent ? agent.dir : cfg.home);
 			await manager.refreshSessions(agent ? [agent.id] : undefined);
@@ -477,8 +485,8 @@ export class OwnerApi {
 			}
 			const context = body.context === undefined || body.context === null || body.context === "" ? undefined : Number(body.context);
 			const models = addModelServer(cfg.home, { name, baseUrl, key, models: look.models, context, reasoning: typeof body.reasoning === "boolean" ? body.reasoning : undefined });
-			await manager.reloadModels();
-			return { models };
+			const chosen = await this.modelsChanged(name);
+			return { models, ...(chosen ? { chosen } : {}) };
 		}
 		if (at === "models/servers/remove") {
 			const name = String(body.name ?? "");
@@ -551,3 +559,30 @@ const safe = <T>(fn: () => T, otherwise: T): T => {
 		return otherwise;
 	}
 };
+
+/**
+ * When the model the agents run on by default cannot answer and one can now, the default becomes
+ * one that answers: pi's choice for the provider just signed in to (or the model server just
+ * added), else for any. So a sign-in is all it takes to bring the agents to life. A default that
+ * answers is the owner's choice and stays. Returns the model chosen, if one was.
+ */
+export async function settleModel(cfg: PineConfig, manager: AgentManager, log: Logger, provider?: string): Promise<string | undefined> {
+	try {
+		const available = await manager.availableModels();
+		const known = new Set(available);
+		const claude = onPath("claude");
+		if (!manager.modelProblem(cfg.defaults.model, known, claude)) return undefined;
+		const usable = available.filter((m) => !manager.modelProblem(m, known, claude));
+		const choices = await piDefaults();
+		const chosen = suggestModel(usable, choices, provider) ?? suggestModel(usable, choices);
+		if (!chosen) return undefined;
+		applySetting(cfg, checkSetting(cfg, "defaults.model", chosen, available));
+		await manager.refreshSessions();
+		manager.settingChanged("defaults.model");
+		log.info(`agents now run on ${chosen} by default: the model before could not answer`);
+		return chosen;
+	} catch (e) {
+		log.warn(`could not choose a model that answers: ${errText(e)}`);
+		return undefined;
+	}
+}

@@ -64,7 +64,7 @@ function standIn(): Omit<Bridge, AccessCalls | UpdateCalls> {
 		},
 		forgetHost: async () => ({ ...prefs }),
 		// No system dialog in a browser: a folder is named by its path.
-		pickFolder: async (title?: string) => window.prompt(`${title ?? "Choose a folder"}: its path`)?.trim() || undefined,
+		pickFolder: async (title?: string) => window.prompt(`${title ?? "Choose a folder"}: the folder's path`)?.trim() || undefined,
 		saveText: async (name: string, text: string) => {
 			const a = document.createElement("a");
 			a.href = URL.createObjectURL(new Blob([text], { type: "text/plain" }));

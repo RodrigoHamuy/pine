@@ -194,7 +194,7 @@ export function classify(tool: string, input: any, ctx: ActionContext): Action {
 	if (tool === "download") return { cls: ctx.reachable(input?.url) ? "local" : "reach" };
 	// What another agent hands back can carry its files into this conversation, and one that read
 	// outside content could send them on: after outside content every delegation is put to the owner.
-	if (tool === "delegate") return { cls: "send", note: "hands a task to another agent, whose answer can carry its files back" };
+	if (tool === "delegate") return { cls: "send", note: "hands a task to another agent, whose answer can bring that agent's files back" };
 	return { cls: "local" };
 }
 

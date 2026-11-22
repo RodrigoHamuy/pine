@@ -23,7 +23,7 @@ import { useLoad } from "./use-load.ts";
 const SUB = "flex min-h-9 flex-none items-center gap-1.5 border-b border-line-soft px-2.5 py-1.5 text-xs text-muted-foreground";
 
 /** A board as the owner calls it. */
-export const boardLabel = (b: BoardBrief) => (b.scope === "global" ? `${b.name} · all agents` : b.scope === "agent" ? `${b.name} · every conversation of ${b.agent}` : b.name || "This conversation");
+export const boardLabel = (b: BoardBrief) => (b.scope === "global" ? `${b.name} · all agents` : b.scope === "agent" ? `${b.name} · all conversations of ${b.agent}` : b.name || "This conversation");
 
 /** Where a task stands, in a few words. */
 export function taskLine(t: BoardItem): string {
@@ -174,7 +174,7 @@ export function BoardList({ view, actions }: { view: BoardView; actions: BoardAc
 						))}
 					</div>
 				) : null}
-				{!view.tasks.length && !loose.length ? <EmptyView icon={ClipboardListIcon} title="Nothing on this board yet">Add a task below, or ask the agent to split a job among its sub-agents.</EmptyView> : null}
+				{!view.tasks.length && !loose.length ? <EmptyView icon={ClipboardListIcon} title="Nothing on this board yet">Add a task below, or ask the agent to split a job among sub-agents.</EmptyView> : null}
 			</div>
 		</ScrollArea>
 	);
@@ -261,7 +261,7 @@ export function BoardTab({ tab }: { tab: Tab }) {
 					<AlertDialogContent>
 						<AlertDialogHeader>
 							<AlertDialogTitle>Remove this board?</AlertDialogTitle>
-							<AlertDialogDescription>Its tasks, their results and the notes go with it. A sub-agent that is working on one of its tasks finishes without it.</AlertDialogDescription>
+							<AlertDialogDescription>The tasks on it, their results and the notes are deleted too. A sub-agent working on one of these tasks finishes without the board.</AlertDialogDescription>
 						</AlertDialogHeader>
 						<AlertDialogFooter>
 							<AlertDialogCancel>Cancel</AlertDialogCancel>

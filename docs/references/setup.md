@@ -414,6 +414,7 @@ What holds for them:
 | `defaults.model` | Model: the model every agent runs on, unless the agent has one of its own |
 | `defaults.thinking` | Reasoning: how much a model thinks before it answers, for every agent that does not set its own |
 | `defaults.mode` | Mode: how freely agents work, and with that how far they reach, for every agent that does not set its own. A rule or a preference for all agents (how to behave, a default for a tool) is not a setting: the main agent writes it into `AGENTS.md` or `TOOLS.md` in pine's home ([agents.md](agents.md), "What holds for all agents") |
+| `defaults.introduce` | Every agent introduces itself in its answer to the first message its owner writes to it, once |
 | `defaults.judge` | Judge of goal mode: the model that says after each round whether a goal is met. Not set: the agent's own |
 | `defaults.bashTimeoutSec` | Longest shell command, in seconds. From the next start |
 | `defaults.taskTimeoutSec` | Longest task, in seconds: how long an agent may work on one message or event. From the next start |

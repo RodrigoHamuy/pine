@@ -1,13 +1,14 @@
 // Settings: everything about pine that is otherwise a command in a shell or a sentence to the
 // main agent. Each page asks the daemon what there is and tells it what to change; the daemon
 // checks every change as it checks the main agent's, and nothing here writes a file itself.
-import { ArrowLeftIcon, AudioLinesIcon, BookIcon, MonitorSmartphoneIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowLeftIcon, AudioLinesIcon, BookIcon, MonitorSmartphoneIcon, LaptopIcon, ServerIcon, CheckIcon, ChevronRightIcon, ChevronLeftIcon, ClockIcon, CpuIcon, ExternalLinkIcon, FolderIcon, GitBranchIcon, InfoIcon, MessageSquareIcon, PencilIcon, PlugIcon, PlusIcon, RotateCwIcon, SearchIcon, SettingsIcon, SlidersHorizontalIcon, Trash2Icon, TriangleAlertIcon, Undo2Icon, UsersIcon, XIcon, ZapIcon } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Field, FieldContent, FieldDescription, FieldGroup, FieldLabel, FieldLegend, FieldSeparator, FieldSet, FieldTitle } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Pulse } from "@/components/pulse";
@@ -16,7 +17,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "cn";
 import { Fragment, type ReactNode, useEffect, useId, useRef, useState } from "react";
-import { type AgentDetail, api, type LoginState, type Route, type Setting, type SourceType } from "./api.ts";
+import { type AgentDetail, api, type LoginState, type Provider, type Route, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, type UpdatePhase, useModel } from "./model.ts";
@@ -35,6 +36,7 @@ import { APP_DOWNLOAD, computerWord, isPaired, meetingLine, reachedThrough, rela
 import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
+import { ModelNotice } from "@/components/model-notice";
 import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 import { BrowserAccess } from "./BrowserAccess.tsx";
 import { PairLinkField } from "./Pairing.tsx";
@@ -168,7 +170,7 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 					{s.title ? (
 						<HoverTooltip>
 							<TooltipTrigger render={<span className="font-mono font-normal text-muted-foreground">{s.key}</span>} />
-							<TooltipContent>Its name in pine.json, and for the main agent</TooltipContent>
+							<TooltipContent>The setting's name in pine.json, which is also how the main agent knows it</TooltipContent>
 						</HoverTooltip>
 					) : null}
 					{s.live ? null : <Badge variant="secondary">from the next start</Badge>}
@@ -255,9 +257,9 @@ function Checks({ label, all, value, onChange, id }: { label: string; all: strin
 }
 
 const FILES: Array<{ key: "instructions" | "soul" | "tooling" | "memory" | "rules"; label: string; name: string; about: string; edit: boolean }> = [
-	{ key: "instructions", label: "AGENTS.md", name: "AGENTS.md", about: "Its purpose and how it works. The agent keeps this file itself, and you can shape it here.", edit: true },
+	{ key: "instructions", label: "AGENTS.md", name: "AGENTS.md", about: "What the agent is for and how it works. The agent keeps this file itself, and you can shape it here.", edit: true },
 	{ key: "soul", label: "SOUL.md", name: "SOUL.md", about: "Who it is: character and tone.", edit: true },
-	{ key: "tooling", label: "TOOLS.md", name: "TOOLS.md", about: "Its own defaults and preferences for its tools, on top of those for all agents. May be empty.", edit: true },
+	{ key: "tooling", label: "TOOLS.md", name: "TOOLS.md", about: "The agent's own defaults and preferences for tools, on top of those for all agents. May be empty.", edit: true },
 	{ key: "memory", label: "MEMORY.md", name: "MEMORY.md", about: "What it wrote down to outlive a conversation. The agent's own; shown, not changed here.", edit: false },
 	{ key: "rules", label: "Your rules", name: "agents/<id>/AGENTS.md", about: "Rules of yours that the agent reads and cannot change. Kept in pine's home; edit the file there.", edit: false },
 ];
@@ -292,8 +294,8 @@ function AgentHeading({ id, color }: { id: string; color?: string }) {
 	const [editing, setEditing] = useState(false);
 	return (
 		<span className="flex items-center gap-2">
-			<AgentColorPicker agent={{ id, color }} onChange={(c) => void store.colorAgent(id, c)} trigger={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Color of ${id}`} title="Change its color" />}>
-				<AgentAvatar agent={{ id, color }} />
+			<AgentColorPicker agent={{ id, color, main: store.agent(id)?.main }} onChange={(c) => void store.colorAgent(id, c)} trigger={<Button variant="ghost" size="icon" className="rounded-full" aria-label={`Color of ${id}`} title="Change the agent's color" />}>
+				<AgentAvatar agent={{ id, color, main: store.agent(id)?.main }} />
 			</AgentColorPicker>
 			{editing ? (
 				<AgentNameInput id={id} className="max-w-60" onDone={(to) => (setEditing(false), to && void store.renameAgent(id, to))} />
@@ -336,7 +338,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 		const done = await store.attempt(() => api.updateAgent(id, body));
 		setBusy(false);
 		if (!done) return;
-		store.flash(`Updated ${id}; it holds from its next message on.${done.warnings.length ? ` Note: ${done.warnings.join("; ")}` : ""}`, done.warnings.length ? "warn" : "good", done.warnings.length ? 9000 : 3500);
+		store.flash(`Updated ${id}; the change applies from the next message on.${done.warnings.length ? ` Note: ${done.warnings.join("; ")}` : ""}`, done.warnings.length ? "warn" : "good", done.warnings.length ? 9000 : 3500);
 		detail.reload();
 		store.agents = await store.askAgents().catch(() => store.agents);
 		store.touch();
@@ -357,7 +359,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 	return (
 		<Page
 			title={<AgentHeading id={d.id} color={(store.agent(d.id) ?? d).color} />}
-			lead={d.main ? "The main agent: it administers pine, and may hand work to every other agent." : `An agent with its own workspace at ${tilde(d.workspace)}.`}
+			lead={d.main ? "The main agent: it administers pine, and may hand work to all other agents." : `An agent with a workspace at ${tilde(d.workspace)}.`}
 			actions={
 				<>
 					<Button variant="outline" onClick={() => void store.openTab(id, "main")}><MessageSquareIcon data-icon="inline-start" />Open</Button>
@@ -403,7 +405,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 							</SelectGroup>
 						</SelectContent>
 					</Select>
-					<FieldDescription>How much its model thinks before it answers.</FieldDescription>
+					<FieldDescription>How long the model thinks before it answers.</FieldDescription>
 				</Field>
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-mode`}>Mode</FieldLabel>
@@ -424,18 +426,18 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 				<Field className="col-span-full">
 					<FieldLabel htmlFor={`${field}-delegates`}>May hand work to</FieldLabel>
 					{others.length ? <Checks id={`${field}-delegates`} label="May hand work to" all={["*", ...others]} value={now("delegates")} onChange={(v) => put("delegates", v)} /> : <p id={`${field}-delegates`} className="text-muted-foreground">There is no other agent yet.</p>}
-					<FieldDescription>{d.main ? "Agents it can give a task to with its delegate tool; * is every other agent." : "Agents it can give a task to with its delegate tool; * is every agent but the main one."} The task runs in the other agent's mode or in this one's, whichever is stricter.</FieldDescription>
+					<FieldDescription>{d.main ? "Agents it can give a task to with the delegate tool; * means all other agents." : "Agents it can give a task to with the delegate tool; * means all agents except the main one."} The task runs in the other agent's mode or in this one's, whichever is stricter.</FieldDescription>
 				</Field>
 				<Field orientation="horizontal" className="col-span-full">
 					<FieldContent>
-						<FieldLabel htmlFor={`${field}-network`}>Network from its shell</FieldLabel>
-						<FieldDescription>In its sandbox (safe and manual mode) its commands have no network unless this is on. With it, a command can send what the agent reads anywhere.</FieldDescription>
+						<FieldLabel htmlFor={`${field}-network`}>Network for shell commands</FieldLabel>
+						<FieldDescription>In the sandbox (safe and manual mode) the agent's commands have no network unless this is on. With it, a command can send what the agent reads anywhere.</FieldDescription>
 					</FieldContent>
 					<Switch id={`${field}-network`} checked={now("network")} onCheckedChange={(on) => put("network", on)} />
 				</Field>
 				<FieldSet className="col-span-full">
-					<FieldLegend variant="label">Folders outside its workspace</FieldLegend>
-					<FieldDescription>What it may reach in its sandbox besides its own folders.</FieldDescription>
+					<FieldLegend variant="label">Folders outside the workspace</FieldLegend>
+					<FieldDescription>What the agent may reach in the sandbox besides the agent's own folders.</FieldDescription>
 					<ItemGroup>
 						{[...d.read.map((p) => ({ p, kind: "read" })), ...d.write.map((p) => ({ p, kind: "read and change" }))].map(({ p, kind }) => {
 							const dropped = forget.includes(p);
@@ -526,7 +528,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 					<Item variant="outline">
 						<ItemContent className="min-w-0">
 							<ItemTitle>Remove this agent</ItemTitle>
-							<ItemDescription className="line-clamp-none wrap-anywhere">{`With its conversations, sources, schedules, servers, skills, the routes that wake it, its folder and its private home.${d.holdings.outside ? " Its workspace lies outside pine's home and is left as it is." : ""}`}</ItemDescription>
+							<ItemDescription className="line-clamp-none wrap-anywhere">{`With all of the agent's conversations, sources, schedules, servers and skills, the routes that wake it, and the agent's folder and private home.${d.holdings.outside ? " The workspace lies outside pine's home and is left as it is." : ""}`}</ItemDescription>
 						</ItemContent>
 						<ItemActions>
 							<Button variant="destructive" onClick={() => void remove()}><Trash2Icon data-icon="inline-start" />Remove…</Button>
@@ -568,7 +570,7 @@ function NewAgent({ close, made }: { close: () => void; made: (id: string) => vo
 						<Field>
 							<FieldLabel htmlFor={`${field}-instructions`}>Instructions</FieldLabel>
 							<Textarea id={`${field}-instructions`} className="min-h-24 max-h-64" value={f.instructions} onChange={(e) => setF({ ...f, instructions: e.target.value })} placeholder={`You are ${f.id || "books"}. You keep the household's accounts.\n\nHow you work: …`} />
-							<FieldDescription>Who it is and how it works, written to the agent itself: its AGENTS.md, which it keeps itself from then on. The first paragraph says what it is for; other agents read it when they decide whom to hand work to.</FieldDescription>
+							<FieldDescription>What the new agent is for and how it should work. This becomes the agent's AGENTS.md, which the agent keeps up to date afterwards. Other agents read the first paragraph when they decide who to give work to.</FieldDescription>
 						</Field>
 						<Field>
 							<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
@@ -604,14 +606,15 @@ function Agents() {
 	const setAdding = (on: boolean) => setOpen(on ? "+" : undefined);
 	if (open && s.agents.some((a) => a.id === open)) return <AgentPage id={open} back={() => setOpen(undefined)} />;
 	return (
-		<Page title="Agents" lead="An agent is a folder with a workspace, instructions and a model. Each has its own conversations and reach." actions={<Button onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New agent</Button>}>
+		<Page title="Agents" lead="An agent is a folder with a workspace, instructions and a model. Each has separate conversations and access." actions={<Button onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New agent</Button>}>
 			<ItemGroup>
 				{s.agents.map((a) => (
 					<Item key={a.id} variant="outline" render={<button type="button" />} onClick={() => setOpen(a.id)}>
 						<ItemContent className="min-w-0">
 							<ItemTitle>
 								{a.id}
-								{a.main ? <Badge>main</Badge> : null}
+								{/* Said as on the agent's card: what makes it the main agent, not a word the owner has to look up. */}
+								{a.main ? <Badge variant="outline">administers pine</Badge> : null}
 								<Badge variant={a.mode === "bypass" ? "destructive" : a.mode === "safe" ? "default" : "secondary"}>{a.mode}</Badge>
 							</ItemTitle>
 							<ItemDescription>{a.description || "no description"}</ItemDescription>
@@ -725,8 +728,9 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 							<AlertDescription>{state.models?.length ? `${plural(state.models.length, "model")} available, for example ${state.models.slice(0, 4).join(", ")}.` : "Signed in."}</AlertDescription>
 						</Alert>
 					) : null}
-					{/* A sign-in changes no agent's model: which of the new ones the agents run on is asked here, where they were just made available. */}
-					{state?.done && !state.error && state.models?.length ? <div className="flex items-center gap-2"><DialogClose render={<Button />} onClick={() => void store.chooseDefaultModel(state.models).then(reload)}>Choose the model your agents run on…</DialogClose><span className="text-muted-foreground">Or later: Change, on the Models page.</span></div> : null}
+					{/* Where the agents' model could not answer, pine took one of the new ones (src/owner.ts, settleModel), and says so; else the choice is offered here, where they were just made available. */}
+					{state?.done && !state.error && state.chosen ? <div className="flex items-center gap-2"><span>Your agents run on <b className="font-mono">{state.chosen}</b> now.</span><DialogClose render={<Button variant="outline" />} onClick={() => void store.chooseDefaultModel(state.models).then(reload)}>Another one…</DialogClose></div> : null}
+					{state?.done && !state.error && !state.chosen && state.models?.length ? <div className="flex items-center gap-2"><DialogClose render={<Button />} onClick={() => void store.chooseDefaultModel(state.models).then(reload)}>Choose the model your agents run on…</DialogClose><span className="text-muted-foreground">Or later: Change, on the Models page.</span></div> : null}
 				</div>
 			</ScrollArea>
 			<DialogFooter><DialogClose render={<Button variant={state?.done ? "default" : "outline"} />}>{state?.done ? "Done" : "Cancel"}</DialogClose></DialogFooter>
@@ -734,27 +738,80 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 	);
 }
 
+/**
+ * Subscriptions people are likely to have already, by the provider's id in pi: shown first, with words they know.
+ * Only where the sign-in is the subscription itself (OAuth); everything else is found by searching.
+ */
+const SUBSCRIPTIONS: Record<string, { title: string; about: string }> = {
+	anthropic: { title: "Claude", about: "Sign in with your Claude Pro or Max subscription" },
+	"openai-codex": { title: "ChatGPT", about: "Sign in with your ChatGPT Plus or Pro subscription" },
+	"github-copilot": { title: "GitHub Copilot", about: "Sign in with your GitHub Copilot subscription" },
+};
+
+/** One provider: whether you are signed in, and the way in (a sign-in in the browser, or an API key). */
+function ProviderRow({ p, reload }: { p: Provider; reload: () => void }) {
+	const sub = SUBSCRIPTIONS[p.id];
+	const about = p.signedIn ? `Signed in · ${plural(p.models, "model")}` : sub?.about ?? (p.oauth ? "Sign in with your account, or use an API key" : "Needs an API key");
+	return (
+		<Item variant="outline" data-provider={p.id}>
+			<ItemContent className="min-w-0">
+				<ItemTitle>
+					{sub?.title ?? p.name ?? p.id}
+					{p.signedIn ? <Badge>signed in</Badge> : null}
+				</ItemTitle>
+				<ItemDescription className="line-clamp-none wrap-anywhere">{about}</ItemDescription>
+			</ItemContent>
+			<ItemActions>
+				{p.signedIn ? (
+					<AlertDialog>
+						<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Sign out</AlertDialogTrigger>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Sign out of {sub?.title ?? p.name ?? p.id}?</AlertDialogTitle>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>Cancel</AlertDialogCancel>
+								<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.logout(p.id)).then((r) => r && reload())}>Sign out</AlertDialogCancel>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
+				) : null}
+				{!p.signedIn && p.oauth ? (
+					<Dialog onOpenChange={(open) => open || reload()}>
+						<DialogTrigger render={<Button size="xs" />}>Sign in</DialogTrigger>
+						<DialogContent showCloseButton={false} className="sm:max-w-xl"><SignIn provider={p.id} type="oauth" reload={reload} /></DialogContent>
+					</Dialog>
+				) : null}
+				<Dialog onOpenChange={(open) => open || reload()}>
+					<DialogTrigger render={<Button variant={!p.signedIn && !p.oauth ? "default" : "outline"} size="xs" />}>{p.signedIn ? "New API key" : "API key"}</DialogTrigger>
+					<DialogContent showCloseButton={false} className="sm:max-w-xl"><SignIn provider={p.id} type="api_key" reload={reload} /></DialogContent>
+				</Dialog>
+			</ItemActions>
+		</Item>
+	);
+}
+
+/**
+ * Settings > Models, in the order a newcomer needs it: what is missing, the subscriptions they may have, a model on
+ * their own computer, and which model the agents use once there is one.
+ */
 function Models() {
 	const providers = useLoad(() => api.providers());
 	const servers = useLoad(() => api.modelServers());
-	const models = useLoad(() => api.models());
 	const [f, setF] = useState({ name: "", url: "", key: "", context: "" });
 	const [locked, setLocked] = useState(false);
 	const [busy, setBusy] = useState(false);
-	const [all, setAll] = useState(false);
+	const [query, setQuery] = useState("");
 	const field = useId();
 	const s = useModel(store);
-	// The model of every agent that has none of its own, and the agents whose model cannot answer.
-	const fallback = useLoad(() => api.settings().then((all) => all.find((x) => x.key === "defaults.model")?.now ?? "none"));
-	const details = useLoad(() => Promise.all(store.agents.map((a) => api.agentDetail(a.id))));
-	const own = (details.data ?? []).filter((d) => d.model).map((d) => `${d.id} (${d.model})`);
+	const fallback = useLoad(() => api.settings().then((all) => all.find((x) => x.key === "defaults.model")?.now));
 	const stuck = s.agents.filter((a) => a.modelProblem);
-	const reload = () => (providers.reload(), servers.reload(), models.reload(), fallback.reload(), details.reload(), void store.refreshAgents());
+	const reload = () => (providers.reload(), servers.reload(), fallback.reload(), void store.refreshAgents());
 	const add = async () => {
 		setBusy(true);
 		try {
 			const done = await api.addModelServer({ name: f.name.trim(), url: f.url.trim(), key: f.key.trim() || undefined, context: Number(f.context) > 0 ? Number(f.context) : undefined });
-			store.flash(`Added ${f.name} with ${done.models.join(", ")}.`, "good");
+			store.flash(`Connected ${f.name} with ${done.models.join(", ")}.${done.chosen ? ` Your agents use ${done.chosen} now.` : ""}`, "good");
 			setF({ name: "", url: "", key: "", context: "" });
 			setLocked(false);
 			reload();
@@ -764,157 +821,121 @@ function Models() {
 		}
 		setBusy(false);
 	};
-	const mine = new Set((servers.data ?? []).map((s) => s.name));
-	const hosted = (providers.data ?? []).filter((p) => !mine.has(p.id));
-	const shown = all ? hosted : hosted.filter((p) => p.signedIn);
+	const mine = new Set((servers.data ?? []).map((x) => x.name));
+	const hosted = (providers.data ?? []).filter((p) => !mine.has(p.id) && p.id !== "mock");
+	const q = query.trim().toLowerCase();
+	const nameOf = (p: Provider) => SUBSCRIPTIONS[p.id]?.title ?? p.name ?? p.id;
+	// Without a search: what you are signed in to, then the subscriptions people have. With one: each provider whose
+	// name or id has the words.
+	const rank = (p: Provider) => (p.signedIn ? 0 : SUBSCRIPTIONS[p.id] ? 1 : p.oauth ? 2 : 3);
+	const listed = (q ? hosted.filter((p) => `${nameOf(p)} ${p.id}`.toLowerCase().includes(q)) : hosted.filter((p) => rank(p) < 2)).sort((a, b) => rank(a) - rank(b) || nameOf(a).localeCompare(nameOf(b)));
+	const more = hosted.length - listed.length;
+	const anyModel = Boolean(fallback.data) && !stuck.some((a) => !a.model);
 	return (
-		<Page title="Models" lead="Which models your agents can run on: providers you sign in to, and model servers of your own. An agent's model is chosen on its page, or in the bar under a conversation.">
-			<h2 className="flex items-center gap-2 text-base font-medium">Model servers of your own</h2>
-			<ItemGroup>
-				{servers.data?.length ? (
-					servers.data.map((s) => (
-						<Item key={s.name} variant="outline">
-							<ItemContent className="min-w-0">
-								<ItemTitle>
-									{s.name}
-									<Badge variant="secondary" className="font-mono">{s.baseUrl}</Badge>
-									<Badge variant="secondary">key: {s.key}</Badge>
-								</ItemTitle>
-								<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{s.models.map((m) => `${s.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</ItemDescription>
-							</ItemContent>
-							<ItemActions>
-								<AlertDialog>
-									<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
-									<AlertDialogContent>
-										<AlertDialogHeader>
-											<AlertDialogTitle>Remove the model server {s.name}?</AlertDialogTitle>
-										</AlertDialogHeader>
-										<AlertDialogFooter>
-											<AlertDialogCancel>Cancel</AlertDialogCancel>
-											<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeModelServer(s.name)).then((r) => r && (store.flash(`Removed ${s.name}.`), reload()))}>Remove</AlertDialogCancel>
-										</AlertDialogFooter>
-									</AlertDialogContent>
-								</AlertDialog>
-							</ItemActions>
-						</Item>
-					))
-				) : servers.data ? (
-					<EmptyView icon={CpuIcon} title="No model server yet">Anything that speaks OpenAI's chat API works: llama.cpp, vLLM, LM Studio.</EmptyView>
-				) : servers.error ? (
-					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
-				) : (
-					<Pulse label="Loading" className="m-auto" />
-				)}
-			</ItemGroup>
-			<FieldSet>
-				<FieldLegend>Add a model server</FieldLegend>
-				<FieldGroup className={FORM_GRID}>
-					<Field>
-						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
-						<Input id={`${field}-name`} className="font-mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
-						<FieldDescription>Its models are then called name/model.</FieldDescription>
-					</Field>
-					<Field>
-						<FieldLabel htmlFor={`${field}-url`}>Address</FieldLabel>
-						<Input id={`${field}-url`} className="font-mono" placeholder="http://127.0.0.1:8080" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
-						<FieldDescription>pine asks the server which models it has.</FieldDescription>
-					</Field>
-					{locked || f.key ? (
-						<Field>
-							<FieldLabel htmlFor={`${field}-key`}>API key</FieldLabel>
-							<Input id={`${field}-key`} className="font-mono" type="password" autoComplete="off" value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} />
-							<FieldDescription>The server wants a key. It goes into pine's .env file.</FieldDescription>
-						</Field>
-					) : null}
-					<Field>
-						<FieldLabel htmlFor={`${field}-context`}>Context (tokens)</FieldLabel>
-						<Input id={`${field}-context`} className="font-mono" placeholder="from the server" value={f.context} onChange={(e) => setF({ ...f, context: e.target.value.replace(/\D/g, "") })} />
-						<FieldDescription>Only when the server does not say.</FieldDescription>
-					</Field>
-				</FieldGroup>
-				<Field orientation="horizontal">
-					<FieldDescription>An agent that is given one of its models sends its whole conversations there.</FieldDescription>
-					<Button disabled={!f.name.trim() || !f.url.trim() || busy} onClick={() => void add()}>{busy ? <><Pulse label="Loading" data-icon="inline-start" />Asking the server…</> : "Add server"}</Button>
-				</Field>
-			</FieldSet>
+		<Page title="Models" lead="Your agents need a model to think with. Sign in with a subscription you already have, or connect a model that runs on your own computer.">
+			{/* With no model at all, connecting one is said once, not for every agent. */}
+			{stuck.some((a) => !a.model) ? <ModelNotice agent="" problem="" /> : null}
+			{stuck.filter((a) => a.model).map((a) => (
+				<ModelNotice key={a.id} agent={a.id} model={a.model} problem={a.modelProblem!} />
+			))}
 
-			<h2 className="flex items-center gap-2 text-base font-medium">Providers <Button variant="ghost" size="xs" onClick={() => setAll(!all)}>{all ? "Only those signed in" : `Show all ${hosted.length}`}</Button></h2>
+			<h2 className="text-base font-medium">Subscriptions and API keys</h2>
+			<InputGroup>
+				<InputGroupAddon>
+					<SearchIcon />
+				</InputGroupAddon>
+				<InputGroupInput aria-label="Search providers" placeholder={`Search ${hosted.length || ""} providers: Gemini, Mistral, OpenRouter…`} value={query} onChange={(e) => setQuery(e.target.value)} />
+			</InputGroup>
 			<ItemGroup>
 				{providers.data ? (
-					shown.length ? (
-						shown.map((p) => (
-							<Item key={p.id} variant="outline">
-								<ItemContent className="min-w-0">
-									<ItemTitle>
-										{p.name ?? p.id}
-										{p.name && p.name !== p.id ? <Badge variant="secondary" className="font-mono">{p.id}</Badge> : null}
-										{p.signedIn ? <Badge>signed in</Badge> : null}
-									</ItemTitle>
-									<ItemDescription className="line-clamp-none wrap-anywhere">{plural(p.models, "model")}</ItemDescription>
-								</ItemContent>
-								<ItemActions>
-									{p.signedIn ? <AlertDialog>
-										<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Sign out</AlertDialogTrigger>
-										<AlertDialogContent>
-											<AlertDialogHeader>
-												<AlertDialogTitle>Sign out of {p.name ?? p.id}?</AlertDialogTitle>
-											</AlertDialogHeader>
-											<AlertDialogFooter>
-												<AlertDialogCancel>Cancel</AlertDialogCancel>
-												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.logout(p.id)).then((r) => r && reload())}>Sign out</AlertDialogCancel>
-											</AlertDialogFooter>
-										</AlertDialogContent>
-									</AlertDialog> : null}
-									{p.oauth ? <Dialog onOpenChange={(open) => open || reload()}>
-										<DialogTrigger render={<Button variant="outline" size="xs" />}>Sign in</DialogTrigger>
-										<DialogContent showCloseButton={false} className="sm:max-w-xl"><SignIn provider={p.id} type="oauth" reload={reload} /></DialogContent>
-									</Dialog> : null}
-									<Dialog onOpenChange={(open) => open || reload()}>
-										<DialogTrigger render={<Button variant="outline" size="xs" />}>{p.signedIn ? "New key" : "API key"}</DialogTrigger>
-										<DialogContent showCloseButton={false} className="sm:max-w-xl"><SignIn provider={p.id} type="api_key" reload={reload} /></DialogContent>
-									</Dialog>
-								</ItemActions>
-							</Item>
-						))
-					) : (
-						<EmptyView icon={CpuIcon} title="Signed in to no provider">Show all to pick one (OpenCode, Claude, ChatGPT, …), or add a model server of your own above.</EmptyView>
-					)
+					listed.length ? listed.map((p) => <ProviderRow key={p.id} p={p} reload={reload} />) : <EmptyView icon={SearchIcon} title="No provider by that name">Try another word, or connect a model of your own below.</EmptyView>
 				) : providers.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{providers.error}</AlertDescription></Alert>
 				) : (
 					<Pulse label="Loading" className="m-auto" />
 				)}
 			</ItemGroup>
+			{providers.data && !q && more > 0 ? <p className="text-muted-foreground">{plural(more, "more provider")}, with an API key or an account: search to find one.</p> : null}
 
-			<h2 className="flex items-center gap-2 text-base font-medium">The model your agents run on</h2>
-			<ItemGroup>
-				<Item variant="outline" data-setting="fallback-model">
-					<ItemContent className="min-w-0">
-						<ItemTitle><span className="font-mono">{fallback.data ?? "…"}</span></ItemTitle>
-						<ItemDescription className="line-clamp-none wrap-anywhere">{`Every agent that has no model of its own runs on it${own.length ? `. With a model of their own: ${own.join(", ")}` : ""}.`}</ItemDescription>
-					</ItemContent>
-					<ItemActions>
-						<Button variant="outline" size="xs" onClick={() => void store.chooseDefaultModel().then(reload)}>Change…</Button>
-					</ItemActions>
-				</Item>
-				{stuck.map((a) => (
-					<Alert key={a.id}>
-						<TriangleAlertIcon />
-						<AlertDescription><b>{a.id}</b> cannot answer: {a.modelProblem}</AlertDescription>
-					</Alert>
-				))}
-			</ItemGroup>
+			<h2 className="text-base font-medium">Models on your own computer</h2>
+			<p className="text-muted-foreground">Run a model yourself with LM Studio, Ollama or llama.cpp, then connect it here.</p>
+			{servers.data?.length ? (
+				<ItemGroup>
+					{servers.data.map((x) => (
+						<Item key={x.name} variant="outline">
+							<ItemContent className="min-w-0">
+								<ItemTitle>
+									{x.name}
+									<Badge variant="secondary" className="font-mono">{x.baseUrl}</Badge>
+								</ItemTitle>
+								<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{x.models.map((m) => `${x.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</ItemDescription>
+							</ItemContent>
+							<ItemActions>
+								<AlertDialog>
+									<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
+									<AlertDialogContent>
+										<AlertDialogHeader>
+											<AlertDialogTitle>Remove the model server {x.name}?</AlertDialogTitle>
+										</AlertDialogHeader>
+										<AlertDialogFooter>
+											<AlertDialogCancel>Cancel</AlertDialogCancel>
+											<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeModelServer(x.name)).then((r) => r && (store.flash(`Removed ${x.name}.`), reload()))}>Remove</AlertDialogCancel>
+										</AlertDialogFooter>
+									</AlertDialogContent>
+								</AlertDialog>
+							</ItemActions>
+						</Item>
+					))}
+				</ItemGroup>
+			) : servers.error ? (
+				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
+			) : null}
+			<FieldSet>
+				<FieldGroup className={FORM_GRID}>
+					<Field>
+						<FieldLabel htmlFor={`${field}-url`}>Address</FieldLabel>
+						<Input id={`${field}-url`} className="font-mono" placeholder="http://127.0.0.1:1234/v1" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} />
+						<FieldDescription>Where the server answers: http://127.0.0.1:1234/v1 for LM Studio, http://127.0.0.1:11434/v1 for Ollama.</FieldDescription>
+					</Field>
+					<Field>
+						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
+						<Input id={`${field}-name`} className="font-mono" placeholder="studio" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value.toLowerCase() })} />
+						<FieldDescription>A short name of your choice. A model is then called studio/model.</FieldDescription>
+					</Field>
+					{locked || f.key ? (
+						<Field>
+							<FieldLabel htmlFor={`${field}-key`}>API key</FieldLabel>
+							<Input id={`${field}-key`} className="font-mono" type="password" autoComplete="off" value={f.key} onChange={(e) => setF({ ...f, key: e.target.value })} />
+							<FieldDescription>The server wants a key. pine keeps it in the .env file in pine's home.</FieldDescription>
+						</Field>
+					) : null}
+					<Field>
+						<FieldLabel htmlFor={`${field}-context`}>Context size (tokens)</FieldLabel>
+						<Input id={`${field}-context`} className="font-mono" placeholder="ask the server" value={f.context} onChange={(e) => setF({ ...f, context: e.target.value.replace(/\D/g, "") })} />
+						<FieldDescription>Leave empty: pine asks the server. Fill in only if it cannot tell.</FieldDescription>
+					</Field>
+				</FieldGroup>
+				<Field orientation="horizontal">
+					<Button disabled={!f.name.trim() || !f.url.trim() || busy} onClick={() => void add()}>{busy ? <><Pulse label="Loading" data-icon="inline-start" />Asking the server…</> : "Connect"}</Button>
+				</Field>
+			</FieldSet>
 
-			<h2 className="flex items-center gap-2 text-base font-medium">Models you can use now</h2>
-			{models.data ? (
-				models.data.length ? (
-					<div className="flex flex-wrap gap-1.5">{models.data.map((m) => <Badge key={m} variant="outline" className="font-mono">{m}</Badge>)}</div>
-				) : (
-					<p className="text-muted-foreground">none: sign in to a provider or add a server</p>
-				)
-			) : (
-				<p className="text-muted-foreground">…</p>
-			)}
+			{anyModel ? (
+				<>
+					<h2 className="text-base font-medium">Default model</h2>
+					<ItemGroup>
+						<Item variant="outline" data-setting="fallback-model">
+							<ItemContent className="min-w-0">
+								<ItemTitle><span className="font-mono">{fallback.data}</span></ItemTitle>
+								<ItemDescription className="line-clamp-none wrap-anywhere">Agents use this model unless you pick a different one for an agent, on the agent's page or in the bar under a conversation.</ItemDescription>
+							</ItemContent>
+							<ItemActions>
+								<Button variant="outline" size="xs" onClick={() => void store.chooseDefaultModel().then(reload)}>Change…</Button>
+							</ItemActions>
+						</Item>
+					</ItemGroup>
+				</>
+			) : null}
 		</Page>
 	);
 }
@@ -944,7 +965,7 @@ function Mcp() {
 		const server = f.kind === "remote" ? { url: f.target.trim() } : { command: argv[0], args: argv.slice(1) };
 		const done = await store.attempt(() => api.addMcp(f.name.trim(), { ...server, ...(f.description.trim() ? { description: f.description.trim() } : {}), ...(f.taints ? { taints: true } : {}) }, f.agent || undefined));
 		if (!done) return;
-		store.flash(`Added ${f.name} for ${f.agent || "all agents"}.${f.kind === "remote" ? " If it requires a sign-in, use Sign in on its row." : ""}`, "good", 6000);
+		store.flash(`Added ${f.name} for ${f.agent || "all agents"}.${f.kind === "remote" ? " If it requires a sign-in, use Sign in on the server's row." : ""}`, "good", 6000);
 		setF({ ...f, name: "", target: "", description: "" });
 		reload();
 	};
@@ -956,7 +977,7 @@ function Mcp() {
 		if (r) (setOut(r.out.trim() || (r.code === 0 ? "Signed in." : `It ended with exit ${r.code}.`)), reload());
 	};
 	return (
-		<Page title="MCP servers" lead="Servers that offer tools to your agents: a remote one by its address, or a program on this computer, which runs where the commands of the agent that uses it run.">
+		<Page title="MCP servers" lead="Servers that offer tools to your agents: a remote one by address, or a program on this computer, which runs where the commands of the agent that uses it run.">
 			<ItemGroup>
 				{servers.data ? (
 					servers.data.length ? (
@@ -1014,7 +1035,7 @@ function Mcp() {
 					<Field>
 						<FieldLabel htmlFor={`${field}-name`}>Name</FieldLabel>
 						<Input id={`${field}-name`} className="font-mono" placeholder="home_link" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
-						<FieldDescription>Lowercase letters, digits and _. Its tools appear as mcp__name__tool.</FieldDescription>
+						<FieldDescription>Lowercase letters, digits and _. The server's tools appear as mcp__name__tool.</FieldDescription>
 					</Field>
 					<Field>
 						<FieldLabel htmlFor={`${field}-for`}>For</FieldLabel>
@@ -1043,7 +1064,7 @@ function Mcp() {
 					<Field className="col-span-full">
 						<FieldLabel htmlFor={`${field}-target`}>{f.kind === "remote" ? "Address" : "Command"}</FieldLabel>
 						<Input id={`${field}-target`} className="font-mono" placeholder={f.kind === "remote" ? "https://mcp.example.com/mcp" : "npx -y @example/mcp@latest"} value={f.target} onChange={(e) => setF({ ...f, target: e.target.value })} />
-						<FieldDescription>{f.kind === "remote" ? "Its https URL." : "The program and its arguments, as its documentation gives them. One program, no shell operators."}</FieldDescription>
+						<FieldDescription>{f.kind === "remote" ? "The server's https URL." : "The program and arguments, as the server's documentation gives them. One program, no shell operators."}</FieldDescription>
 					</Field>
 					<Field className="col-span-full">
 						<FieldLabel htmlFor={`${field}-description`}>What it offers</FieldLabel>
@@ -1053,7 +1074,7 @@ function Mcp() {
 					<Field orientation="horizontal" className="col-span-full">
 						<FieldContent>
 							<FieldLabel htmlFor={`${field}-taints`}>Returns outside content</FieldLabel>
-							<FieldDescription>Its results mark a conversation as having read outside content (a server that reads the web, mail or other people's words).</FieldDescription>
+							<FieldDescription>The server's results mark a conversation as having read outside content (a server that reads the web, mail or other people's words).</FieldDescription>
 						</FieldContent>
 						<Switch id={`${field}-taints`} checked={f.taints} onCheckedChange={(taints) => setF({ ...f, taints })} />
 					</Field>
@@ -1316,7 +1337,7 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 							{plan.owner ? (
 								<Alert>
 									<TriangleAlertIcon />
-									<AlertDescription>What it reports is treated as your own words: the agent it wakes gets its full tools.</AlertDescription>
+									<AlertDescription>What it reports is treated as your own words: the agent it wakes has all tools available.</AlertDescription>
 								</Alert>
 							) : null}
 							<FieldGroup>
@@ -1333,7 +1354,7 @@ function NewSource({ types, made }: { types: SourceType[]; made: () => void }) {
 								<Field>
 									<FieldLabel htmlFor={`${field}-note`}>Subscribe right away</FieldLabel>
 									<Input id={`${field}-note`} placeholder="for example: file the scan and tell me what it is" value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
-									<FieldDescription>{`What is to be done when it reports something. With a note, ${f.agent || "every agent"} is woken by its events; without one, nobody is subscribed yet.`}</FieldDescription>
+									<FieldDescription>{`What is to be done when it reports something. With a note, the source's events wake ${f.agent || "all agents"}; without one, nobody is subscribed yet.`}</FieldDescription>
 								</Field>
 							</FieldGroup>
 						</>
@@ -1411,9 +1432,9 @@ function Sources() {
 	const types = useLoad(() => api.sourceTypes());
 	const adding = useRef<DialogRootActions>(null);
 	const subscribe = async (name: string) => {
-		const agent = await store.pick({ title: `Who wakes on ${name}?`, items: [{ value: "*", label: "All agents", about: "each in its main conversation" }, ...s.agents.map((a) => ({ value: a.id, label: a.id, about: "in its main conversation" }))] });
+		const agent = await store.pick({ title: `Who wakes on ${name}?`, items: [{ value: "*", label: "All agents", about: "each in their main conversation" }, ...s.agents.map((a) => ({ value: a.id, label: a.id, about: "in the main conversation" }))] });
 		if (!agent) return;
-		const note = await store.pick({ title: "What is to be done when it reports something?", items: [{ value: "-", label: "Nothing in particular", about: "the agent decides by the event" }], free: true, placeholder: "A note that is shown with every event" });
+		const note = await store.pick({ title: "What is to be done when it reports something?", items: [{ value: "-", label: "Nothing in particular", about: "the agent decides by the event" }], free: true, placeholder: "A note that is shown with each event" });
 		if (note === undefined) return;
 		const details = note === "-" ? {} : { note };
 		const done = await store.attempt(() => (agent === "*" ? api.subscribeAll(name, details) : api.subscribe(agent, name, details)));
@@ -1499,7 +1520,7 @@ const WHEN: Record<"cron" | "every" | "at" | "in", { label: string; name: string
 // A time in milliseconds as pine.json writes it: 5m, 30s, 2h.
 const span = (ms: number) => (ms % 3_600_000 === 0 ? `${ms / 3_600_000}h` : ms % 60_000 === 0 ? `${ms / 60_000}m` : ms % 1000 === 0 ? `${ms / 1000}s` : `${ms}ms`);
 
-const conversationOf = (session: string | undefined) => (!session || session === "main" ? "in its main conversation" : session === "new" ? "in a new conversation" : `in the conversation ${session}`);
+const conversationOf = (session: string | undefined) => (!session || session === "main" ? "in the main conversation" : session === "new" ? "in a new conversation" : `in the conversation ${session}`);
 
 /** A route in the words of the form that makes one: when what arrives, then what happens. */
 function routeSaid(r: Route): { when: string; then: string } {
@@ -1524,12 +1545,12 @@ const ROUTE_DOES = {
 	wake: { label: "Wake an agent", about: "The agent gets the event as a task, in the conversation you name.", takes: ["agent", "session", "prompt"] },
 	set: { label: "Set shared state", about: "A value is written where agents and other routes read it (state.<key>). No agent is woken.", takes: ["set"] },
 	publish: { label: "Publish an event", about: "Another event goes out, for another route, an agent subscribed to it, or a source that sends (out/source/<name>).", takes: ["publish_topic", "publish_payload"] },
-	ask: { label: "Ask a model", about: "One model call, without tools or history. Its answer goes out as an event of your own, the answer in payload.text.", takes: ["call_prompt", "call_system", "call_model", "publish_topic"] },
+	ask: { label: "Ask a model", about: "One model call, without tools or history. The answer goes out as an event of your own, the answer in payload.text.", takes: ["call_prompt", "call_system", "call_model", "publish_topic"] },
 } as const;
 
 // How often a route fires: every event, one and then a pause (throttle), or the last of a burst (debounce).
 const ROUTE_PACE = {
-	every: { label: "Every event", time: "", about: "" },
+	every: { label: "Each event", time: "", about: "" },
 	throttle: { label: "At most one per", time: "At most one per", about: "After one event, the next ones are ignored for this long. For an alarm that repeats." },
 	debounce: { label: "The last of a burst", time: "Once quiet for", about: "Waits until no event has come for this long, then handles the last one. For a camera that uploads five pictures." },
 } as const;
@@ -1540,7 +1561,7 @@ export function NewSchedule({ made }: { made: () => void }) {
 	const [f, setF] = useState({ name: "", kind: "cron" as keyof typeof WHEN, when: "", task: "", agent: "" });
 	const [busy, setBusy] = useState(false);
 	const field = useId();
-	const forItems = [{ value: "", label: "Every agent, each in its main conversation" }, ...s.agents.map((a) => ({ value: a.id, label: `${a.id}, in its main conversation` }))];
+	const forItems = [{ value: "", label: "All agents, each in their main conversation" }, ...s.agents.map((a) => ({ value: a.id, label: `${a.id}, in the main conversation` }))];
 	const add = async () => {
 		setBusy(true);
 		const done = await store.attempt(() => api.addSchedule({ name: f.name.trim(), task: f.task.trim(), [f.kind]: f.when.trim(), agent: f.agent || undefined } as any));
@@ -1597,7 +1618,7 @@ export function NewSchedule({ made }: { made: () => void }) {
 							<Field>
 								<FieldLabel htmlFor={`${field}-task`}>With the task</FieldLabel>
 								<Textarea id={`${field}-task`} className="min-h-14 max-h-44" placeholder="Look at my calendar for today and tell me what is coming." value={f.task} onChange={(e) => setF({ ...f, task: e.target.value })} />
-								<FieldDescription>Written so that it is enough on its own: the agent reads it with nothing else.</FieldDescription>
+								<FieldDescription>Write it so it stands alone: the agent reads it with nothing else.</FieldDescription>
 							</Field>
 						</FieldGroup>
 					</FieldSet>
@@ -1618,7 +1639,7 @@ export function NewSchedule({ made }: { made: () => void }) {
 }
 
 // Whom a schedule wakes, in the words of the form that makes one.
-const wakes = (scope: string, session?: string) => (scope === "global" ? "every agent, each in its main conversation" : `${scope} ${conversationOf(session)}`);
+const wakes = (scope: string, session?: string) => (scope === "global" ? "all agents, each in their main conversation" : `${scope} ${conversationOf(session)}`);
 
 /** Settings › Events › Schedules: what a schedule is, each one as When and Then, and New schedule. */
 export function Schedules() {
@@ -1715,7 +1736,7 @@ export function NewRoute({ made, does: first = "wake" }: { made: () => void; doe
 							<Field>
 								<FieldLabel htmlFor={`${field}-on`}>An event arrives on</FieldLabel>
 								<Input id={`${field}-on`} className="font-mono" placeholder="source/door/message" value={f.on} onChange={(e) => setF({ ...f, on: e.target.value })} />
-								<FieldDescription>Its topic, as the event log shows it. Several: commas between. + is one part (cam/+/motion), # all below (source/door/#).</FieldDescription>
+								<FieldDescription>The event's topic, as the event log shows it. Several: commas between. + is one part (cam/+/motion), # all below (source/door/#).</FieldDescription>
 							</Field>
 							<Field>
 								<FieldLabel htmlFor={`${field}-when`}>Only if</FieldLabel>
@@ -1772,7 +1793,7 @@ export function NewRoute({ made, does: first = "wake" }: { made: () => void; doe
 									<Field>
 										<FieldLabel htmlFor={`${field}-session`}>In the conversation</FieldLabel>
 										<Input id={`${field}-session`} className="font-mono" placeholder="main" value={f.session} onChange={(e) => setF({ ...f, session: e.target.value })} />
-										<FieldDescription>Empty: its main one. “new”: a fresh one for every event. Or a name of your own.</FieldDescription>
+										<FieldDescription>Empty: the agent's main conversation. “new”: a fresh one for each event. Or a name of your own.</FieldDescription>
 									</Field>
 									<Field>
 										<FieldLabel htmlFor={`${field}-prompt`}>Telling it</FieldLabel>
@@ -1942,12 +1963,12 @@ function Instructions() {
 		if (!dirty) return;
 		const done = await store.attempt(() => api.setShared(name, text));
 		if (!done) return;
-		store.flash(`Saved ${name}. It reaches every agent with its next message.`, "good");
+		store.flash(`Saved ${name}. All agents read it from their next message on.`, "good");
 		setTexts((was) => Object.fromEntries(Object.entries(was).filter(([k]) => k !== name)));
 		files.reload();
 	};
 	return (
-		<Page title="Instructions" lead="What holds for all agents: three files in pine's home that are put into every agent's prompt. The main agent keeps them when you tell it something that is for everybody; here you can read and change them yourself." actions={<Button disabled={!dirty} onClick={() => void save()}>Save {name}</Button>}>
+		<Page title="Instructions" lead="What holds for all agents: three files in pine's home that are put into the prompt of all agents. The main agent keeps them when you tell it something that is for everybody; here you can read and change them yourself." actions={<Button disabled={!dirty} onClick={() => void save()}>Save {name}</Button>}>
 			{files.data ? (
 				<FileTabs files={files.data.map((f) => ({ key: f.name, label: f.name, about: f.about }))} value={name} onChange={setName}>
 					{(key) => (
@@ -1963,7 +1984,7 @@ function Instructions() {
 			)}
 			<Alert>
 				<InfoIcon />
-				<AlertDescription>What only one agent should know or do goes into that agent's own files, on its page under Agents.</AlertDescription>
+				<AlertDescription>What only one agent should know or do goes into that agent's own files, on that agent's page under Agents.</AlertDescription>
 			</Alert>
 		</Page>
 	);
@@ -1999,7 +2020,7 @@ export function ThemePicker() {
 			<Field orientation="responsive" data-setting="theme">
 				<FieldContent>
 					<FieldLabel htmlFor={id}>Theme</FieldLabel>
-					<FieldDescription>Any VS Code color theme: put its .json file into {folder}, and it is offered here. The choice is pine's (ui.theme in pine.json), so every Pine app that uses this pine shows it.</FieldDescription>
+					<FieldDescription>Any VS Code color theme: put the theme's .json file into {folder}, and it is offered here. The choice is pine's (ui.theme in pine.json), so all Pine apps that use this pine show it.</FieldDescription>
 				</FieldContent>
 				<Select items={items} value={s.theme} onValueChange={(v) => v && v !== s.theme && void s.setTheme(v)} disabled={!usable.length}>
 					<SelectTrigger id={id} className="w-56">
@@ -2216,8 +2237,8 @@ function Environments() {
 					{/* A port of this computer and its terminal are not said where there is no local machine. */}
 					{s.local ? (
 						<>
-							<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and its name.</p>
-							<p>Its pine stays closed to the network: the app runs pine service there over ssh and forwards a port of this computer to it. Switching shows the other pine and stops none: an agent at work in one goes on. A pine the app started there stops when the app quits; one that was running already goes on.</p>
+							<p>The machine needs pine with a home (pine init there), and ssh that signs you in without a password: a key in ssh-agent, or Tailscale SSH. A machine ssh has not met yet is accepted once from a terminal, with ssh and the machine's name.</p>
+							<p>The pine there stays closed to the network: the app runs pine service there over ssh and forwards a port of this computer to it. Switching shows the other pine and stops none: an agent at work in one goes on. A pine the app started there stops when the app quits; one that was running already goes on.</p>
 							<p>With another machine's pine, a conversation's folder is a path on that machine, and the terminal and the Run button of a command, which are this computer's, are not offered.</p>
 						</>
 					) : (
@@ -2334,7 +2355,7 @@ function AppPage() {
 					{service?.olderThan ? (
 						<Alert data-notice="older-pine">
 							<TriangleAlertIcon />
-							<AlertDescription>{`This pine is ${service.version}, older than the pine of this app (${service.olderThan}). The app did not start it, so it leaves it as it is: restart that pine on ${service.olderThan} (update it with "pine update" if it is an install of its own), or stop it and the app starts its own.`}</AlertDescription>
+							<AlertDescription>{`This pine is ${service.version}, older than the pine of this app (${service.olderThan}). The app did not start it, so it leaves it as it is: restart that pine on ${service.olderThan} (update it with "pine update" if it was installed separately), or stop it and the app starts the pine it came with.`}</AlertDescription>
 						</Alert>
 					) : null}
 					{local ? (
@@ -2371,7 +2392,7 @@ function AppPage() {
 									Browser for the web tools
 									<Badge variant={s.browser ? "default" : "outline"}>{`${s.browser ? "on" : "not on"} this ${computerWord(s.platform)}`}</Badge>
 								</FieldTitle>
-								<FieldDescription>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine drives a browser build of its own, and this one's is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</FieldDescription>
+								<FieldDescription>{s.browser ? "The browser your agents open pages with, in the build this pine drives." : "Each version of pine uses a specific browser build, and the one for this version is not here: it was never fetched, or it is the build of an older pine. About 600 MB, once. Until then the browser tools do not work; web search and reading a page do."}</FieldDescription>
 								{!s.browser && s.initLines.length ? (
 									<CodeBlock size="sm">
 										<CodeBlockContent wrap className="max-h-60 select-text">{s.initLines.slice(-12).join("\n")}</CodeBlockContent>
@@ -2387,7 +2408,7 @@ function AppPage() {
 								<FieldTitle>Home folder</FieldTitle>
 								<FieldDescription>
 									<span className="block font-mono">{tilde((service?.host ? undefined : service?.home) ?? s.prefs.home ?? "~/.pine")}</span>
-									Where this computer's pine keeps its agents and settings. Another one is another pine. Changing it restarts a pine this app started.
+									Where pine keeps the agents and settings on this computer. Another one is another pine. Changing it restarts a pine this app started.
 								</FieldDescription>
 							</FieldContent>
 							<div className="flex items-center gap-1.5">

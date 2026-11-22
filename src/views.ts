@@ -238,6 +238,6 @@ export function viewCode(home: string, id: string): { id: string; code: string }
 	try {
 		return { id, code: stripTypeScriptTypes(text, { mode: "strip" }) };
 	} catch (e) {
-		return { id, problem: `its TypeScript cannot be read: ${(e as Error).message.split("\n")[0]}. A view uses types that can be erased: no enum, no namespace, no parameter properties` };
+		return { id, problem: `the view's TypeScript cannot be read: ${(e as Error).message.split("\n")[0]}. A view uses types that can be erased: no enum, no namespace, no parameter properties` };
 	}
 }

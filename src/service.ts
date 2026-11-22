@@ -60,7 +60,7 @@ export async function ensureDaemon(cfg: PineConfig): Promise<Service> {
 		const token = cfg.http.token ?? (fs.existsSync(tokenFile) ? fs.readFileSync(tokenFile, "utf8").trim() : "");
 		const status = token ? await statusOf(base, token) : undefined;
 		if (!status) {
-			throw new Error(`something answers on ${base}, but it is not the pine of ${cfg.home}: it does not take this home's token. Another pine home uses the same port. Stop that one, or give this home a port of its own ("http": { "port": ... } in ${path.join(cfg.home, "pine.json")}).`);
+			throw new Error(`something answers on ${base}, but it is not the pine of ${cfg.home}: it does not take this home's token. Another pine home uses the same port. Stop that one, or give this home a different port ("http": { "port": ... } in ${path.join(cfg.home, "pine.json")}).`);
 		}
 		// The daemon's own word, never this process's version: it may be another pine's.
 		const version = typeof status.version === "string" ? status.version : undefined;

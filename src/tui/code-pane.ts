@@ -338,7 +338,7 @@ export class CodePane {
 			if (!s.diff.lines) rows.push({ text: c.gray("reading …") });
 			else if (!s.diff.lines.length) rows.push({ text: c.gray("nothing to show for this file (a binary file, or no difference any more)") });
 			else for (const text of s.diff.lines) rows.push({ text, wrap: true });
-			if (s.diff.truncated) rows.push({ text: c.gray("… the diff goes on; this is its first 200 000 characters") });
+			if (s.diff.truncated) rows.push({ text: c.gray("… the diff goes on; these are the first 200 000 characters") });
 			return;
 		}
 		rows.push({ text: `${c.bold("by your last message")} ${c.gray("·")} ${c.accent("▸ since the last commit")}`, run: () => this.go((x) => ((x.scope = undefined), (x.diff = undefined))) });
@@ -372,7 +372,7 @@ export class CodePane {
 			if (!s.diff.lines) rows.push({ text: c.gray("reading …") });
 			else if (!s.diff.lines.length) rows.push({ text: c.gray(entry ? "nothing to show for this file (a folder, or a binary file)" : "no difference to the last commit any more") });
 			else for (const text of s.diff.lines) rows.push({ text, wrap: true });
-			if (s.diff.truncated) rows.push({ text: c.gray("… the diff goes on; this is its first 200 000 characters") });
+			if (s.diff.truncated) rows.push({ text: c.gray("… the diff goes on; these are the first 200 000 characters") });
 			return;
 		}
 		if (!ch.files.length) return void rows.push({ text: c.gray("Nothing has changed since the last commit.") });

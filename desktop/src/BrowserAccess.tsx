@@ -86,7 +86,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 	const relayMoved = relay.address.trim() !== (state.relay?.address ?? "") || relay.username.trim() !== (state.relay?.username ?? "");
 	const relayChanged = relayMoved || relay.password !== "";
 	// A kept password belongs to the relay it was given for: saved with another address or user name, it is forgotten.
-	const passwordHint = !state.relay?.password ? "" : relayMoved && relay.address.trim() ? "Not kept for another address or user name: write its password" : "Kept. Write a new one to change it";
+	const passwordHint = !state.relay?.password ? "" : relayMoved && relay.address.trim() ? "Not kept for another address or user name: enter the password again" : "Kept. Write a new one to change it";
 	const saveRelay = async () => {
 		setRelayError(undefined);
 		try {
@@ -204,7 +204,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 										<AlertDialogContent>
 											<AlertDialogHeader>
 												<AlertDialogTitle className="wrap-anywhere">Remove {d.name}?</AlertDialogTitle>
-												<AlertDialogDescription>Its connection is cut now, and it cannot connect again unless you add it again.</AlertDialogDescription>
+												<AlertDialogDescription>The device is disconnected now, and can only connect again if you add it again.</AlertDialogDescription>
 											</AlertDialogHeader>
 											<AlertDialogFooter>
 												<AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -217,7 +217,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 						))}
 					</ItemGroup>
 				) : (
-					<FieldDescription>No device is paired. Add one with its camera, or with a link you open in its browser.</FieldDescription>
+					<FieldDescription>No device is paired. Add one by scanning a code with the device's camera, or with a link you open in the device's browser.</FieldDescription>
 				)}
 				<div>
 					<Button variant="outline" disabled={state.status === "off"} onClick={actions.add}><PlusIcon data-icon="inline-start" />Add a device</Button>
@@ -250,7 +250,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 					<div data-slot="pairing-dialog" className="contents">
 						<DialogHeader>
 							<DialogTitle>Add a device</DialogTitle>
-							<DialogDescription>{stale ? "This code no longer works: it was used, or its two minutes are over." : "Scan the code with the device's camera, or send yourself the link and open it in the device's browser."}</DialogDescription>
+							<DialogDescription>{stale ? "This code no longer works: it was used, or the two minutes are over." : "Scan the code with the device's camera, or send yourself the link and open it in the device's browser."}</DialogDescription>
 						</DialogHeader>
 						{opened && !stale ? (
 							<>
@@ -272,7 +272,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 					<div data-slot="pairing-request" className="contents">
 						<AlertDialogHeader>
 							<AlertDialogTitle className="wrap-anywhere"><span data-slot="pairing-device">{state.request?.name}</span> wants to connect</AlertDialogTitle>
-							<AlertDialogDescription>Allow it only if its screen shows these four digits:</AlertDialogDescription>
+							<AlertDialogDescription>Allow it only if the device's screen shows these four digits:</AlertDialogDescription>
 						</AlertDialogHeader>
 						<p data-slot="pairing-code" className="text-center font-mono text-3xl font-semibold tracking-widest tabular-nums">{state.request?.code}</p>
 						<AlertDialogFooter>

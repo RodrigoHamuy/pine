@@ -186,7 +186,7 @@ function changesIn(root: string): unknown {
  */
 export function outcome(name: string, wanted: string | undefined, now: string, news = ""): { ok: boolean; text: string } {
 	if (wanted && newer(wanted, now)) {
-		return { ok: false, text: `\nNot updated: pine is still ${now}. npm knows ${wanted} but did not install it; that happens for a few minutes after a version is published. Run "pine update" again in a moment, or install it by its number:\n\n  npm install -g ${name}@${wanted}` };
+		return { ok: false, text: `\nNot updated: pine is still ${now}. npm knows ${wanted} but did not install it; that happens for a few minutes after a version is published. Run "pine update" again in a moment, or install it by version number:\n\n  npm install -g ${name}@${wanted}` };
 	}
 	// The list stands by itself, between the version and what to do about it, so that it is not read over.
 	return { ok: true, text: news ? `\npine is now ${now}.\n\n${news}\n\n${RESTART}` : `\npine is now ${now}. ${RESTART}` };
@@ -222,7 +222,7 @@ export async function update(opts: { check: boolean; out: (line: string) => void
 	if (me.kind === "checkout") {
 		const branch = capture("git", ["rev-parse", "--abbrev-ref", "HEAD"], me.root) ?? "?";
 		if (!capture("git", ["rev-parse", "--abbrev-ref", "@{u}"], me.root)) {
-			out(`This is a checkout in ${me.root}, and its branch ${branch} does not follow one on a server, so there is nothing to update from. Set that up with git, or pull by hand.`);
+			out(`This is a checkout in ${me.root}, and the branch ${branch} does not follow one on a server, so there is nothing to update from. Set that up with git, or pull by hand.`);
 			return 1;
 		}
 		if (spawnSync("git", ["fetch", "--quiet"], { cwd: me.root, stdio: "inherit" }).status !== 0) {

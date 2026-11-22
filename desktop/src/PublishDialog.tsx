@@ -11,7 +11,7 @@ import { store } from "./model.ts";
 /** What is wrong with a topic, if anything. The old one-line form split at the first space, so a topic never had one. */
 function topicError(topic: string): string | undefined {
 	if (!topic.trim()) return "Name the topic.";
-	if (/\s/.test(topic.trim())) return "A topic has no spaces: use / between its parts, such as house/mode.";
+	if (/\s/.test(topic.trim())) return "A topic has no spaces: use / between the parts, such as house/mode.";
 }
 
 /** What is wrong with a payload, if anything: nothing at all is no payload, anything else has to be JSON. */
@@ -54,7 +54,7 @@ export function PublishDialog({ topic: firstTopic = "", payload: firstPayload = 
 				<div data-slot="publish-form" className="contents">
 					<DialogHeader>
 						<DialogTitle>Publish an event</DialogTitle>
-						<DialogDescription>It is published as yours, as the owner: routes and agents subscribed to its topic get it.</DialogDescription>
+						<DialogDescription>It is published as yours, as the owner: routes and agents subscribed to that topic get it.</DialogDescription>
 					</DialogHeader>
 					<FieldGroup>
 						<Field data-invalid={showTopic ? true : undefined}>

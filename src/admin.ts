@@ -84,7 +84,7 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 	if (change.model !== undefined) {
 		const none = change.model === "default" || change.model === "";
 		if (!none && !models.includes(change.model)) throw new Error(`there is no model "${change.model}". Models: ${models.slice(0, 40).join(", ")}`);
-		lines.push(`model: ${agent.model ?? `${cfg.defaults.model} (the default)`} -> ${none ? `${cfg.defaults.model} (the default)` : change.model}`);
+		lines.push(`model: ${agent.model ?? `${cfg.defaults.model ?? "none"} (the default)`} -> ${none ? `${cfg.defaults.model ?? "none"} (the default)` : change.model}`);
 		steps.push((raw) => (none ? delete raw.model : (raw.model = change.model)));
 	}
 	if (change.thinking !== undefined) {
@@ -96,8 +96,8 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 		if (change.mode !== "default" && !MODES.includes(change.mode as Mode)) throw new Error(`"mode" is one of ${MODES.join(", ")}, or default`);
 		const next = change.mode === "default" ? (cfg.defaults.mode ?? (main ? "auto" : "safe")) : (change.mode as Mode);
 		lines.push(`mode: ${agent.mode} -> ${next}${change.mode === "default" ? " (the default)" : ""}`);
-		if (next === "bypass") warnings.push("in bypass mode it never asks, and its shell reaches your whole account and the network");
-		else if (next === "auto" && !unsandboxed(agent.level)) warnings.push("in auto mode its shell and file tools work without a sandbox: they reach your whole user account and the network in your own conversations");
+		if (next === "bypass") warnings.push("in bypass mode it never asks, and the agent's shell reaches your whole account and the network");
+		else if (next === "auto" && !unsandboxed(agent.level)) warnings.push("in auto mode the agent's shell and file tools work without a sandbox: they reach your whole user account and the network in your own conversations");
 		steps.push((raw) => {
 			if (change.mode === "default") delete raw.mode;
 			else raw.mode = change.mode;
@@ -118,8 +118,8 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 		steps.push((raw) => (raw.delegates = change.delegates));
 	}
 	if (change.network !== undefined) {
-		lines.push(`network from its shell: ${agent.sandbox.network ? "yes" : "no"} -> ${change.network ? "yes" : "no"}`);
-		if (change.network && !agent.sandbox.network) warnings.push("with the network its commands can send what it reads anywhere");
+		lines.push(`network for shell commands: ${agent.sandbox.network ? "yes" : "no"} -> ${change.network ? "yes" : "no"}`);
+		if (change.network && !agent.sandbox.network) warnings.push("with the network the agent's commands can send what it reads anywhere");
 		steps.push((raw) => {
 			raw.sandbox = typeof raw.sandbox === "object" && raw.sandbox ? raw.sandbox : {};
 			if (change.network) raw.sandbox.network = true;
@@ -163,16 +163,16 @@ export function checkAgentChange(cfg: PineConfig, agent: AgentConfig, change: Ag
 	const instructions = change.instructions?.trim();
 	if (change.instructions !== undefined) {
 		if (!instructions) throw new Error("instructions cannot be empty: they are who the agent is and how it works");
-		lines.push(`instructions (its AGENTS.md) replaced by:\n${instructions.length > 1200 ? `${instructions.slice(0, 1200)}...` : instructions}`);
+		lines.push(`instructions (the agent's AGENTS.md) replaced by:\n${instructions.length > 1200 ? `${instructions.slice(0, 1200)}...` : instructions}`);
 	}
 	const soul = change.soul?.trim();
 	if (change.soul !== undefined) {
-		if (!soul) throw new Error("soul cannot be empty: it is who the agent is, its character and tone");
-		lines.push(`character and tone (its SOUL.md) replaced by:\n${soul.length > 1200 ? `${soul.slice(0, 1200)}...` : soul}`);
+		if (!soul) throw new Error("soul cannot be empty: it is who the agent is, the agent's character and tone");
+		lines.push(`character and tone (the agent's SOUL.md) replaced by:\n${soul.length > 1200 ? `${soul.slice(0, 1200)}...` : soul}`);
 	}
 	// Its own tooling can be empty: then only what holds for all agents holds for it.
 	const tooling = change.tooling?.trim();
-	if (tooling !== undefined) lines.push(tooling ? `its own defaults and preferences for tools (its TOOLS.md) replaced by:\n${tooling.length > 1200 ? `${tooling.slice(0, 1200)}...` : tooling}` : "its own defaults and preferences for tools (its TOOLS.md) taken back: the file is emptied");
+	if (tooling !== undefined) lines.push(tooling ? `the agent's own defaults and preferences for tools (the agent's TOOLS.md) replaced by:\n${tooling.length > 1200 ? `${tooling.slice(0, 1200)}...` : tooling}` : "the agent's own defaults and preferences for tools (the agent's TOOLS.md) taken back: the file is emptied");
 	if (!lines.length) throw new Error("nothing to change: give at least one of description, color, instructions, soul, tooling, model, thinking, mode, tools, delegates, network, read, write, forget");
 	return { lines, warnings, json: (raw) => steps.forEach((s) => s(raw)), instructions, soul, tooling };
 }
@@ -587,7 +587,7 @@ export function checkRoute(cfg: PineConfig, input: RouteInput, models: string[])
 	} else if (input.publish_payload) throw new Error('publishing needs "publish_topic"');
 	if (input.agent) {
 		if (!cfg.agents[input.agent]) throw new Error(`there is no agent "${input.agent}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
-		if (entry.call) throw new Error("a route makes a model call or wakes an agent, not both. Let the call publish its result, and a second route wake the agent on that topic");
+		if (entry.call) throw new Error("a route makes a model call or wakes an agent, not both. Let the call publish the result, and a second route wake the agent on that topic");
 		entry.agent = input.agent;
 		if (input.prompt) entry.prompt = input.prompt;
 		if (input.session) entry.session = input.session;
@@ -714,17 +714,18 @@ const ms = (n: number) => (n % 60_000 === 0 ? `${n / 60_000}m` : n % 1000 === 0 
  * changed in pine.json by hand (docs/references/configuration.md).
  */
 export const SETTINGS: Record<string, Setting> = {
-	"defaults.model": { title: "Model", about: "The model every agent runs on, unless the agent has one of its own.", kind: "model", now: (c) => String(c.defaults.model ?? "none"), live: true },
-	"defaults.thinking": { title: "Reasoning", about: "How much a model thinks before it answers, for every agent that does not set its own. A higher level takes longer. A model that cannot reason ignores it.", kind: { one: THINKING }, now: (c) => c.defaults.thinking, live: true },
+	"defaults.model": { title: "Model", about: "The model all agents run on, unless an agent is set to a different one.", kind: "model", now: (c) => String(c.defaults.model ?? "none"), live: true },
+	"defaults.thinking": { title: "Reasoning", about: "How much a model thinks before it answers, for all agents that do not set their own. A higher level takes longer. A model that cannot reason ignores it.", kind: { one: THINKING }, now: (c) => c.defaults.thinking, live: true },
 	"defaults.mode": {
 		title: "Mode",
-		about: "How freely agents work, for every agent that does not set its own.\nauto: no sandbox, the whole account and the network; only critical actions ask.\nsafe: in the sandbox, only the agent's own folders.\nmanual: like safe, and every action asks.\nbypass: like auto, and nothing asks.\nplan: it reads and plans and changes nothing.\nNot set: auto for the main agent, safe for the others.",
+		about: "How freely agents work, for all agents that do not set their own.\nauto: no sandbox, the whole account and the network; only critical actions ask.\nsafe: in the sandbox, only the agent's own folders.\nmanual: like safe, and every action asks.\nbypass: like auto, and nothing asks.\nplan: it reads and plans and changes nothing.\nNot set: auto for the main agent, safe for the others.",
 		kind: { one: [...MODES] },
-		now: (c) => c.defaults.mode ?? "not set (main: auto, others: safe)",
+		now: (c) => c.defaults.mode ?? `not set (${mainAgentId(c)}: auto, the other agents: safe)`,
 		live: true,
-		wider: (v) => (v === "bypass" ? "in bypass mode no agent asks, and every agent's shell reaches your whole account and the network" : v === "auto" ? "every agent that names no mode then works without a sandbox: its shell and file tools reach your whole account and the network" : undefined),
+		wider: (v) => (v === "bypass" ? "in bypass mode no agent asks, and the shell of all agents reaches your whole account and the network" : v === "auto" ? "all agents that name no mode then work without a sandbox: their shell and file tools reach your whole account and the network" : undefined),
 	},
 	"defaults.judge": { title: "Judge of goal mode", about: "In goal mode (/goal) a model says after each round whether the goal is met. This is that model. Not set: the agent's own model.", kind: "model", now: (c) => c.defaults.judge ?? "not set (the agent's own model)", live: true },
+	"defaults.introduce": { title: "Agents introduce themselves", about: "Agents introduce themselves in their first answer to the owner, once each.", kind: "boolean", now: (c) => String(c.defaults.introduce), live: true },
 	"defaults.bashTimeoutSec": { title: "Longest shell command", about: "Seconds a shell command may run before it is ended. 900 is 15 minutes. A command started in the background is not held to it.", kind: { from: 5, to: 86_400 }, now: (c) => String(c.defaults.bashTimeoutSec), live: false },
 	"defaults.taskTimeoutSec": { title: "Longest task", about: "Seconds an agent may work on one message or event before it is stopped. 7200 is two hours.", kind: { from: 30, to: 604_800 }, now: (c) => String(c.defaults.taskTimeoutSec), live: false },
 	"limits.maxConcurrentRuns": { title: "Agents at work at once", about: "How many agents and sub-agents work at the same time; the others wait their turn. With a local model server, set it to the number of requests the server answers side by side: more only makes each slower.", kind: { from: 1, to: 64 }, now: (c) => String(c.limits.maxConcurrentRuns), live: false },
@@ -741,7 +742,7 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	"security.bypassWhenTainted": {
 		title: "Bypass after outside content",
-		about: "Off: an agent in bypass mode works as in auto mode once its conversation has read something from outside, so critical actions ask again. On: bypass stays, and nothing asks.",
+		about: "Off: an agent in bypass mode works as in auto mode once the conversation has read something from outside, so critical actions ask again. On: bypass stays, and nothing asks.",
 		kind: "boolean",
 		now: (c) => String(c.security.bypassWhenTainted),
 		live: true,
@@ -749,14 +750,14 @@ export const SETTINGS: Record<string, Setting> = {
 	},
 	"ui.theme": {
 		title: "Theme",
-		about: "The colors of the Pine app: a VS Code color theme, by the name of its file in the themes folder of pine's home (one-dark-pro for one-dark-pro.json). Any VS Code theme file put there can be chosen.",
+		about: "The colors of the Pine app: a VS Code color theme, by the theme's file name in the themes folder of pine's home (one-dark-pro for one-dark-pro.json). Any VS Code theme file put there can be chosen.",
 		kind: "theme",
 		now: (c) => c.ui.theme ?? DEFAULT_THEME,
 		live: true,
 	},
 	"ui.view": {
 		title: "View",
-		about: "What the Pine app's panel draws: a view, by its file's name in the views folder of pine's home (office for office.ts), also picked at the top of the panel. off: no panel, and no button for it. Not set: the view whose name comes first.",
+		about: "What the Pine app's panel draws: a view, by the view's file name in the views folder of pine's home (office for office.ts), also picked at the top of the panel. off: no panel, and no button for it. Not set: the view whose name comes first.",
 		kind: "view",
 		now: (c) => c.ui.view ?? `not set (${viewInForce(undefined, listViews(c.home)) ?? "no view"})`,
 		live: true,

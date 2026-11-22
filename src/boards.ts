@@ -220,7 +220,7 @@ export class Boards {
 
 	post(board: Board, o: { kind: "task" | "note"; text: string; data?: unknown; by: string; trust: "owner" | "untrusted"; tainted?: string; after?: number[]; about?: number; cause?: unknown }): BoardItem {
 		const text = String(o.text ?? "").trim();
-		if (!text) throw new Error(o.kind === "task" ? "a task needs its text: what is to be done, complete on its own" : "a note needs its text");
+		if (!text) throw new Error(o.kind === "task" ? "a task needs a text: what is to be done, self-contained" : "a note needs a text");
 		if ((this.db.prepare("SELECT COUNT(*) AS n FROM board_items WHERE board = ?").get(board.id) as any).n >= MAX_ITEMS) throw new Error(`this board holds ${MAX_ITEMS} posts, which is all it takes. Remove what is finished (board_remove with an id, or the whole board), or use a new board`);
 		let data: string | null = null;
 		if (o.data !== undefined && o.data !== null && o.data !== "") {

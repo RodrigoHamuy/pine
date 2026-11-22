@@ -619,7 +619,7 @@ export function relay(o: BrowserOptions, io: BrowserServer): { line(line: string
 	const turn = async (msg: any) => {
 		const show = msg.params.name === "browser_show";
 		const say = (text: string, isError = false) => answered({ jsonrpc: "2.0", id: msg.id, result: { content: [{ type: "text", text }], ...(isError ? { isError: true } : {}) } });
-		if (headed === show) return say(show ? "The browser is already a window on your owner's screen." : embedded ? "The browser has no window of its own. Your owner sees it in the Pine app, at the right of this conversation's window." : "The browser has no window.");
+		if (headed === show) return say(show ? "The browser is already a window on your owner's screen." : embedded ? "The browser has no separate window. Your owner sees it in the Pine app, at the right of this conversation's window." : "The browser has no window.");
 		// The owner's own window shows the browser already: nothing is started anew, and no second window opens.
 		if (show && embedded) {
 			if (page !== undefined) seen ??= await tabsNow();

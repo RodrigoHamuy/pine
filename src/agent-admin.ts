@@ -60,7 +60,7 @@ export function createAgent(cfg: PineConfig, spec: NewAgent): AgentConfig {
 		fs.writeFileSync(path.join(dir, "workspace", "AGENTS.md"), `${spec.instructions.trim()}\n`, { mode: 0o600 });
 		// The rest starts as the stubs a new home has.
 		for (const name of WORKSPACE_FILES.slice(1)) {
-			const stub = path.join(PINE_ROOT, "examples", "home", "agents", "main", "workspace", name);
+			const stub = path.join(PINE_ROOT, "examples", "home", "agents", "prime", "workspace", name);
 			if (fs.existsSync(stub)) fs.copyFileSync(stub, path.join(dir, "workspace", name)), fs.chmodSync(path.join(dir, "workspace", name), 0o600);
 		}
 		const made = loadConfig(cfg.home).agents[spec.id];

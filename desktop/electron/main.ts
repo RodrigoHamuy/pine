@@ -781,7 +781,7 @@ function wire(): void {
 			if (!isMac) throw new Error(NOT_HERE);
 			launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
 			const source = path.join(pineRoot(launch) ?? "", "src", "tui", "voice.swift");
-			if (!fs.existsSync(source)) throw new Error("this pine has no voice input: its helper's source was not found. Update pine.");
+			if (!fs.existsSync(source)) throw new Error("this pine has no voice input: the source of the voice helper was not found. Update pine.");
 			command = [await buildVoice(path.join(app.getPath("userData"), "voice"), source)];
 		}
 		const mine: Listening = new Listening(command, lang, {

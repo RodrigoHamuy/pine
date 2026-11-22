@@ -171,7 +171,7 @@ test("serial: only a serial port is read; lines come out of bytes clean and whol
 	assert.throws(() => portOf("ttyUSB0"), /"port" is the device's path/);
 	assert.throws(() => portOf("/dev/ttyUSB-pine-none"), /is not there\. Is the device plugged in\?/);
 	// Devices of the same kind that are not serial ports: nothing to read lines from, or somebody's keyboard.
-	assert.throws(() => portOf("/dev/null"), /is not a serial port by its name[\s\S]*A terminal is never read/);
+	assert.throws(() => portOf("/dev/null"), /is not a serial port by name[\s\S]*A terminal is never read/);
 	if (fs.existsSync("/dev/tty")) assert.throws(() => portOf("/dev/tty"), /is not a serial port/);
 	assert.throws(() => portOf("/dev/../etc/hosts"), /is not a device|is not there/);
 	fs.rmSync(path.dirname(file), { recursive: true, force: true });
@@ -232,7 +232,7 @@ test("serial: a source whose device is unplugged says so and stays", async () =>
 	const h = await harness({ pine: { sources: { meter: { type: "serial", port: "/dev/cu.pine-test-none", baud: 115200, start: "always" }, odd: { type: "serial", port: "/dev/null", start: "always" } } }, agents: { main: {} } });
 	await until(() => /waiting for cu\.pine-test-none: it is not there \(unplugged\?\)/.test(infoOf(h, "meter").status ?? ""), 4000, "the status");
 	assert.equal(infoOf(h, "meter").running, true);
-	assert.match(infoOf(h, "odd").error ?? "", /is not a serial port by its name/);
+	assert.match(infoOf(h, "odd").error ?? "", /is not a serial port by name/);
 	assert.equal(h.pine.bus.query({ topic: "source/#" }).length, 0);
 	await h.close();
 });
@@ -534,7 +534,7 @@ test("devices by asking: each type says what it will do, refuses what cannot wor
 		/"http:\/\/192\.168\.1\.60" is not an address\. A Modbus device's looks like 192\.168\.1\.60/,
 		/"every" must be at least "2s"/,
 		/is not a device: a serial port lies under \/dev/,
-		/is not a serial port by its name/,
+		/is not a serial port by name/,
 		/is not an address\. A camera's looks like 192\.168\.1\.40/,
 		/"8\.8\.8\.8" is not an address on your owner's own network/,
 		/needs "hosts" \(devices by address[\s\S]*or "services"/,
@@ -548,7 +548,7 @@ test("devices by asking: each type says what it will do, refuses what cannot wor
 	assert.deepEqual(asked[1].inputs.map((i: any) => i.name), ["password"]);
 	assert.match(asked[2].summary, /It will: look every 30s whether phone \(192\.168\.1\.23\), tv \(tv\.local\) are on your network, with one ping each; ask your network every 30s which devices offer _airplay\._tcp; report a device when it joins, and when it has not answered for 15m\./);
 	const done = h.toolResults().slice(-3);
-	assert.match(done[0], /Added the event source "inverter" \(modbus\)\. Its first look is the starting point/);
+	assert.match(done[0], /Added the event source "inverter" \(modbus\)\. The first look is the starting point/);
 	assert.match(done[1], /Added the event source "door" \(onvif\)/);
 	assert.match(done[2], /Added the event source "home" \(presence\)\. Who is there now is the starting point/);
 	const entry = JSON.parse(fs.readFileSync(path.join(h.home, "agents", "main", "agent.json"), "utf8")).sources;

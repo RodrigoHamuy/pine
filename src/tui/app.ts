@@ -42,6 +42,7 @@ import { CodePane, PANE_VIEWS, type PaneView } from "./code-pane.ts";
 import { redoText, undoText } from "./undo.ts";
 import { isAudioFile, isImageFile, isVideoFile, mimeOf, Picture, picturesAsText, picturesIn, prepare, prepareSound, prepareVideo, Slot, Sound, type SoundPlayer, soundPlayer, stopSounds, stopVideos, Video } from "./picture.ts";
 import { Answer, c, editorTheme, selectTheme, SPINNER } from "./theme.ts";
+import { welcome } from "./welcome.ts";
 
 interface Tab {
 	id: number;
@@ -700,7 +701,7 @@ class Work implements Component {
 }
 
 const SCOPES = ["local", "agent", "global"];
-const SCOPE_HELP: Record<string, string> = { local: "only this conversation, until it is closed", agent: "the agent, in its main conversation", global: "every agent" };
+const SCOPE_HELP: Record<string, string> = { local: "only this conversation, until it is closed", agent: "the agent, in the main conversation", global: "all agents" };
 
 const PANE_HELP: Record<string, string> = { changes: "what git says changed in the folder, with the diff of each file", files: "the files of the folder", output: "what the agent's tool calls printed", running: "servers and other programs the agent left running, each with a way to stop it", turn: "what your last message changed in the folder (what /undo would restore)", off: "close the pane" };
 
@@ -899,7 +900,7 @@ class ConversationList implements Component {
 			}
 			const conv = shown[i - 1];
 			const main = conv.session === "main";
-			const state = main ? "the agent's own, always kept" : conv.pinned ? "pinned" : conv.group ? "kept in its group" : conv.open ? "open in a tab" : conv.expires ? until(conv.expires) : "kept";
+			const state = main ? "the agent's own, always kept" : conv.pinned ? "pinned" : conv.group ? "kept in a group" : conv.open ? "open in a tab" : conv.expires ? until(conv.expires) : "kept";
 			// The agent's own conversation is kept without a pin: it has the mark of one.
 			const mark = conv.pinned || main ? c.accent("★") : " ";
 			const label = short(conv.session, name - 1).padEnd(name);
@@ -944,8 +945,8 @@ const REASONING_ITEMS: SelectItem[] = [
 
 const MODE_ITEMS: SelectItem[] = [
 	{ value: "auto", label: "auto", description: "no sandbox: your whole account and the network; critical actions are checked" },
-	{ value: "safe", label: "safe", description: "works inside its sandbox, asks for the rest" },
-	{ value: "manual", label: "manual", description: "inside its sandbox, and asks before every action" },
+	{ value: "safe", label: "safe", description: "works inside a sandbox, asks for the rest" },
+	{ value: "manual", label: "manual", description: "inside a sandbox, and asks before each action" },
 	{ value: "bypass", label: "bypass", description: "no sandbox, and never asks" },
 	{ value: "plan", label: "plan", description: "looks, reads and asks, changes nothing: you get a plan first" },
 ];
@@ -1061,7 +1062,7 @@ class ApprovalDialog implements Component {
 			...wrapTextWithAnsi(c.gray(`Why you are asked: ${this.req.why}`), inner),
 			...(this.req.holds ? wrapTextWithAnsi(c.gray(`"Allow" holds for ${this.req.holds}: you are not asked about it again there.`), inner) : []),
 			...(this.req.remember ? wrapTextWithAnsi(c.gray(`"Always here" stops asking about ${this.req.remember} in this conversation.`), inner) : []),
-			...(!this.req.remember && !this.req.holds && !this.fields.length ? wrapTextWithAnsi(c.gray("This one is asked every time: there is no \"always\" for it."), inner) : []),
+			...(!this.req.remember && !this.req.holds && !this.fields.length ? wrapTextWithAnsi(c.gray("You are asked about this each time: there is no \"always\" for it."), inner) : []),
 		];
 		// Each value is a block of its own: its name, what it is, and a bar to type into, with an empty
 		// line before it. Run together, two tokens read as one paragraph.
@@ -1088,8 +1089,8 @@ class ApprovalDialog implements Component {
 			const hint = !this.fields.some((f) => f.secret)
 				? "Type it here and press enter. Without it, this cannot be allowed."
 				: this.fields.length > 1
-					? "Type or paste each one into its bar; tab goes to the next. They are not shown, go into pine's .env file, and never reach the agent or its model."
-					: "Type or paste it here. It is not shown, goes into pine's .env file, and never reaches the agent or its model.";
+					? "Type or paste each one; tab goes to the next field. They are not shown, go into pine's .env file, and never reach the agent or the model."
+					: "Type or paste it here. It is not shown, goes into pine's .env file, and never reaches the agent or the model.";
 			body.push("", ...wrapTextWithAnsi(c.gray(hint), inner));
 		}
 		body.push("");
@@ -1479,6 +1480,10 @@ export class PineTui {
 		this.say(tab, c.gray(`${c.bold(agent)}${info?.description ? ` · ${info.description}` : ""}\nsession ${session} · model ${info?.model ?? "?"}${tab.folder ? ` · works in ${tilde(tab.folder)}` : ""}${tab.worktree ? ` (worktree ${tab.worktree.branch} of ${tab.worktree.base})` : ""} · type a message, / for commands, or click the bar below`));
 		try {
 			const history = (await this.client.history(agent, session)).filter((t) => t.depth === 0).reverse();
+			// The main agent's main conversation begins with pine's welcome while nothing was said in it: in a terminal it
+			// would stand between the line above and what was said, every time. pine's home is where the main agent's
+			// folder lies (agents/main/workspace).
+			if (!history.length && info?.main && session === "main") this.say(tab, welcome(info.id, info.modelProblem, tilde(path.dirname(path.dirname(path.dirname(info.workspace))))));
 			if (history.length) this.say(tab, c.gray(`── earlier in this session (${history.length}) ──`));
 			for (const t of history) this.renderPast(tab, t);
 			this.takeStats(tab, history.at(-1)?.meta?.stats);
@@ -1588,7 +1593,7 @@ export class PineTui {
 	private async endLocal(tab: Tab, say = true): Promise<void> {
 		if (tab.kind !== "chat" || tab.session === "main" || this.tabs.some((t) => t !== tab && t.kind === "chat" && t.agent === tab.agent && t.session === tab.session)) return;
 		const ended = (await this.client.closeSession(tab.agent, tab.session).catch(() => ({ unsubscribed: [] as string[] }))).unsubscribed;
-		if (ended.length && say) this.flash(`closed ${tab.agent}·${tab.session}: its subscription${ended.length === 1 ? "" : "s"} to ${ended.join(", ")} ended with it`, 6000);
+		if (ended.length && say) this.flash(`closed ${tab.agent}·${tab.session}: subscription${ended.length === 1 ? "" : "s"} to ${ended.join(", ")} ended with it`, 6000);
 	}
 
 	private closeTab(tab: Tab): void {
@@ -1665,7 +1670,7 @@ export class PineTui {
 	}
 
 	private worktreeMade(made: { branch: string; path: string; base?: string; copied: string[] }): string {
-		return `${c.gray("this conversation now works in the worktree")} ${c.bold(made.branch)} ${c.gray(`at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a checkout of its own, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} /worktree merges it back.`)}`;
+		return `${c.gray("this conversation now works in the worktree")} ${c.bold(made.branch)} ${c.gray(`at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a separate checkout, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} /worktree merges it back.`)}`;
 	}
 
 	/** What can be done with a conversation's worktree: merge it, bring its base in, discard it. */
@@ -1677,7 +1682,7 @@ export class PineTui {
 		if (w.mergeable && w.ahead) items.push({ value: "merge", label: `Merge into ${w.base}`, description: stand }, { value: "squash", label: `Squash into ${w.base}`, description: "all of it as one commit" });
 		if (w.behind) items.push({ value: "update", label: `Update from ${w.base}`, description: `bring the ${w.behind} new commit${w.behind === 1 ? "" : "s"} of ${w.base} into the worktree` });
 		if (w.dirty) items.push({ value: "commit", label: "Ask the agent to commit", description: "a merge takes what is committed" });
-		items.push({ value: "discard", label: "Discard the worktree…", description: w.merged && !w.dirty ? "everything of it is merged" : "its changes and its branch are deleted" });
+		items.push({ value: "discard", label: "Discard the worktree…", description: w.merged && !w.dirty ? "everything in it is merged" : "the worktree's changes and branch are deleted" });
 		items.push({ value: "keep", label: "Discard, keep the branch", description: `the folder goes, ${w.branch} stays for git` });
 		const chosen = await this.pick(`${w.branch} · ${stand}`, items, items[0].value);
 		if (!chosen) return;
@@ -1697,7 +1702,7 @@ export class PineTui {
 				}
 				const r = await this.client.discardWorktree(t.agent, t.session, chosen === "keep");
 				await this.followWorktree(t);
-				this.say(t, c.gray(`the worktree is gone${chosen === "keep" ? `; its branch ${w.branch} stays` : ""}. This conversation works in ${r.folder ? tilde(r.folder) : "its agent's workspace"} again.`));
+				this.say(t, c.gray(`the worktree is gone${chosen === "keep" ? `; the branch ${w.branch} stays` : ""}. This conversation works in ${r.folder ? tilde(r.folder) : "the agent's workspace"} again.`));
 			}
 		} catch (e) {
 			this.say(t, c.red(errText(e)));
@@ -2255,8 +2260,8 @@ export class PineTui {
 			this.adopt(tab, task);
 			if (steered !== undefined) {
 				tab.awaiting = tab.awaiting.filter((p) => p !== text);
-				this.flash("given to the agent while it works (alt+enter makes a message wait its turn instead)", 2500);
-			} else if (busy) this.flash("waits its turn: it is answered when the work that is running is done", 2500);
+				this.flash("given to the agent while it works (alt+enter makes a message wait until the agent is done instead)", 2500);
+			} else if (busy) this.flash("queued: it is answered when the agent is done with the current work", 2500);
 		} catch (e) {
 			tab.awaiting = tab.awaiting.filter((p) => p !== text);
 			tab.attachments.unshift(...files);
@@ -2356,7 +2361,7 @@ export class PineTui {
 				}
 				this.saveTabs();
 				// What was set up for it alone went with it; say so, since it is gone for good.
-				const with_ = [...(gone.sources.length ? [`its event source${gone.sources.length === 1 ? "" : "s"} ${gone.sources.join(", ")}`] : gone.unsubscribed.length ? [`its subscription${gone.unsubscribed.length === 1 ? "" : "s"} to ${gone.unsubscribed.join(", ")}`] : []), ...(gone.servers.length ? [`its MCP server${gone.servers.length === 1 ? "" : "s"} ${gone.servers.join(", ")}`] : [])];
+				const with_ = [...(gone.sources.length ? [`event source${gone.sources.length === 1 ? "" : "s"} ${gone.sources.join(", ")}`] : gone.unsubscribed.length ? [`subscription${gone.unsubscribed.length === 1 ? "" : "s"} to ${gone.unsubscribed.join(", ")}`] : []), ...(gone.servers.length ? [`MCP server${gone.servers.length === 1 ? "" : "s"} ${gone.servers.join(", ")}`] : [])];
 				this.flash(`removed the conversation ${conv.session} of ${agent}${with_.length ? `, with ${with_.join(" and ")}` : ""}`, with_.length ? 7000 : 4000);
 				return true;
 			},
@@ -2427,13 +2432,13 @@ export class PineTui {
 				await this.client.setMode(t.agent, mode);
 				info.mode = "bypass";
 				await this.openTab(t.agent, `s${Date.now().toString(36)}`);
-				return void this.say(this.active, `${c.gray(`${t.agent} is in`)} ${c.bold("bypass")} ${c.gray("mode in this new conversation.")}${c.yellow(" Nothing waits for approval, and its shell and file tools reach your whole account and the network.")}`);
+				return void this.say(this.active, `${c.gray(`${t.agent} is in`)} ${c.bold("bypass")} ${c.gray("mode in this new conversation.")}${c.yellow(" Nothing waits for approval, and the agent's shell and file tools reach your whole account and the network.")}`);
 			}
 		}
 		await this.client.setMode(t.agent, mode, anyway);
 		info.mode = mode as any;
 		t.pauseNoted = false;
-		const note = mode === "bypass" ? c.yellow(" Nothing waits for approval now, and its shell and file tools reach your whole account and the network.") : mode === "plan" ? c.gray(" It looks, reads and asks, and changes nothing: ask for what you want, read its plan, then switch the mode back to have it carried out.") : mode === "auto" ? c.gray(" Its shell and file tools work without a sandbox: your whole account and the network. What is critical is still checked.") : mode === "safe" ? c.gray(" Its shell and file tools work inside its sandbox: its own folders, and what you allow it.") : "";
+		const note = mode === "bypass" ? c.yellow(" Nothing waits for approval now, and the agent's shell and file tools reach your whole account and the network.") : mode === "plan" ? c.gray(" It looks, reads and asks, and changes nothing: ask for what you want, read the plan, then switch the mode back to have it carried out.") : mode === "auto" ? c.gray(" The agent's shell and file tools work without a sandbox: your whole account and the network. What is critical is still checked.") : mode === "safe" ? c.gray(" The agent's shell and file tools work inside a sandbox: the agent's own folders, and what you allow.") : "";
 		this.say(t, `${c.gray(`${t.agent} is now in`)} ${c.bold(mode)} ${c.gray(mode === "bypass" || mode === "plan" ? "mode (until pine restarts)." : "mode. It is saved, and holds after a restart too.")}${note}`);
 		await this.refreshTaints();
 	}
@@ -2588,7 +2593,7 @@ export class PineTui {
 			{ name: "tab", description: "Go to tab number", argumentHint: "<n>", run: (args) => (this.tabs[Number(args) - 1] ? this.activate(this.tabs[Number(args) - 1]) : this.flash("no such tab")) },
 			{ name: "close", description: "Close this tab (the conversation stays in the list)", run: () => this.closeTab(this.active) },
 			{
-				name: "rename", description: "Give this conversation, and its tab, another name", argumentHint: "<name>",
+				name: "rename", description: "Give this conversation a new name", argumentHint: "<name>",
 				run: async (args) => {
 					const t = chat();
 					if (!t) return;
@@ -2638,7 +2643,7 @@ export class PineTui {
 						return void this.say(t, c.gray(now ? `this conversation is in the group ${c.bold(now)} · /group - takes it out` : "this conversation is in no group · /group <name> puts it into one"));
 					}
 					const r = await this.client.setGroup(t.agent, t.session, name === "-" ? null : name);
-					const along = r.moved.length > 1 ? `, with its branch${r.moved.length === 2 ? "" : "es"} ${r.moved.slice(1).join(", ")}` : "";
+					const along = r.moved.length > 1 ? `, with the conversation${r.moved.length === 2 ? "" : "s"} branched from it: ${r.moved.slice(1).join(", ")}` : "";
 					this.say(t, c.gray(r.group ? `this conversation is in the group ${c.bold(r.group)}${along}: it is kept however long it is not used` : `this conversation is in no group now${along}`));
 				},
 			},
@@ -2652,7 +2657,7 @@ export class PineTui {
 				},
 			},
 			{
-				name: "branch", description: "Go on in a new conversation from one of your messages, or from all of this one; this one stays as it is. --worktree: the new one works in a worktree of its own", argumentHint: "[--worktree] [name]",
+				name: "branch", description: "Go on in a new conversation from one of your messages, or from all of this one; this one stays as it is. --worktree: the new one works in a separate worktree", argumentHint: "[--worktree] [name]",
 				run: async (raw) => {
 					const t = chat();
 					if (!t) return;
@@ -2679,7 +2684,7 @@ export class PineTui {
 					if (r.worktree) this.say(this.active, this.worktreeMade({ ...r.worktree, base: t.worktree?.branch ?? "" }));
 				},
 			},
-			{ name: "undo", description: "Take back your last message: its files are restored, the conversation forgets it, its text returns to the input", run: () => this.undo(false) },
+			{ name: "undo", description: "Undo your last message: files the agent changed for it go back to how they were, and what you wrote goes back into the message box", run: () => this.undo(false) },
 			{ name: "redo", description: "Bring back what the last /undo took, until you send a new message", run: () => this.undo(true) },
 			{
 				name: "folder", description: "The folder this conversation works in: open one, or none", argumentHint: "[path|none]",
@@ -2692,7 +2697,7 @@ export class PineTui {
 				},
 			},
 			{
-				name: "worktree", description: "Work in a checkout of the folder's repository of its own (a worktree); in one: merge it, update it, or discard it", argumentHint: "[name]",
+				name: "worktree", description: "Work in a separate checkout of the folder's repository (a worktree); in one: merge it, update it, or discard it", argumentHint: "[name]",
 				run: async (args) => {
 					const t = chat();
 					if (!t) return;
@@ -2740,7 +2745,7 @@ export class PineTui {
 					if (!args.trim()) return this.pickModel();
 					await this.client.setModel(t.agent, args.trim());
 					info.model = args.trim();
-					this.say(t, c.gray(`${t.agent} now uses ${c.bold(info.model)} (saved as its model)`));
+					this.say(t, c.gray(`${t.agent} now uses ${c.bold(info.model)} (saved)`));
 				},
 			},
 			{
@@ -2769,7 +2774,7 @@ export class PineTui {
 					[
 						{ value: "auto", label: "auto", description: "no sandbox: shell and files reach your whole account; critical actions are checked" },
 						{ value: "safe", label: "safe", description: "work freely inside the sandbox, ask for the rest" },
-						{ value: "manual", label: "manual", description: "inside the sandbox, and ask before every action" },
+						{ value: "manual", label: "manual", description: "inside the sandbox, and ask before each action" },
 						{ value: "bypass", label: "bypass", description: "no sandbox, and never ask" },
 						{ value: "plan", label: "plan", description: "look and plan only; nothing is changed or sent" },
 					].filter((m) => m.value.startsWith(prefix.trim())),
@@ -2809,9 +2814,9 @@ export class PineTui {
 				run: async () => {
 					const list = await this.client.sources();
 					const t = this.active;
-					if (!list.length) return void this.say(t, c.gray(`no event sources configured. They go into "sources" in pine.json (for every agent) or an agent.json; docs/references/source-types.md has the types.`));
+					if (!list.length) return void this.say(t, c.gray(`no event sources configured. They go into "sources" in pine.json (for all agents) or an agent.json; docs/references/source-types.md has the types.`));
 					this.say(t, list.map((x) => `${c.bold(x.name)}${x.scope === "global" ? "" : c.gray(` (of ${x.scope})`)} ${c.gray(x.type)} ${x.error ? c.red(`not running: ${x.error}`) : x.running ? c.green("running") : c.gray("idle")}${x.description ? c.gray(` · ${x.description}`) : ""}${x.status ? `\n  ${x.status}` : ""}\n${c.gray(`  subscribers: ${x.subscribers.join(", ") || "none"} · ${x.last ? `last event ${new Date(x.last.ts).toLocaleTimeString("sv-SE")}, ${x.events} since start` : "no events since start"}`)}`).join("\n"));
-					this.say(t, c.gray("/subscribe <source> [what to do] wakes this tab's agent on its events · /unsubscribe <source> stops that"), false);
+					this.say(t, c.gray("/subscribe <source> [what to do] wakes this tab's agent on the source's events · /unsubscribe <source> stops that"), false);
 				},
 			},
 			{
@@ -2836,11 +2841,11 @@ export class PineTui {
 					const details = { note: note.join(" ") || undefined };
 					if (scope === "global") {
 						const info = await this.client.subscribeAll(source, details);
-						return void this.say(t, `${c.green("✓")} ${c.gray(`all agents are subscribed to ${source} (${info.running ? "running" : "not running"}). Each event wakes ${info.agents.join(", ") || "nobody yet"}, each in its main conversation.`)}`);
+						return void this.say(t, `${c.green("✓")} ${c.gray(`all agents are subscribed to ${source} (${info.running ? "running" : "not running"}). Each event wakes ${info.agents.join(", ") || "nobody yet"}, each in their main conversation.`)}`);
 					}
 					const local = scope === "local" && t.session !== "main";
 					const info = await this.client.subscribeTo(t.agent, source, { ...details, session: local ? t.session : "main" });
-					this.say(t, `${c.green("✓")} ${c.bold(t.agent)} ${c.gray(`is subscribed to ${source} (${info.running ? "running" : "not running"}). ${local ? "Each event arrives here, in this conversation, and wakes it. Closing this conversation ends the subscription." : `Each event arrives in its main conversation${t.session === "main" ? ", here," : ""} and wakes it.`}`)}`);
+					this.say(t, `${c.green("✓")} ${c.bold(t.agent)} ${c.gray(`is subscribed to ${source} (${info.running ? "running" : "not running"}). ${local ? "Each event arrives here, in this conversation, and wakes it. Closing this conversation ends the subscription." : `Each event arrives in the agent's main conversation${t.session === "main" ? ", here," : ""} and wakes it.`}`)}`);
 				},
 			},
 			{
@@ -2857,7 +2862,7 @@ export class PineTui {
 					const session = scope === "agent" ? "main" : t.session;
 					const r = await this.client.unsubscribeFrom(t.agent, source, session);
 					const what = session === "main" ? t.agent : "this conversation";
-					this.say(t, c.gray(r.unsubscribed ? `${what} is no longer subscribed to ${source}` : `${what} was not subscribed to ${source} on its own (see /sources for who is)`));
+					this.say(t, c.gray(r.unsubscribed ? `${what} is no longer subscribed to ${source}` : `${what} was not subscribed to ${source} directly (see /sources for who is)`));
 				},
 			},
 			{
@@ -2901,7 +2906,7 @@ export class PineTui {
 					});
 					if (code !== 0) return void this.say(t, c.red(`sign-in to ${name} did not complete`), false);
 					await this.client.post("/mcp/refresh").catch(() => {});
-					this.say(t, `${c.green("✓")} signed in to ${c.bold(name)}${c.gray(". Its tools are available from your next message.")}`, false);
+					this.say(t, `${c.green("✓")} signed in to ${c.bold(name)}${c.gray(". The server's tools are available from your next message.")}`, false);
 				},
 			},
 			{ name: "events", description: "Open the live event log", run: () => this.openEvents() },
@@ -2963,7 +2968,7 @@ export class PineTui {
 				},
 			},
 			{
-				name: "compact", description: "Shorten this conversation: its earlier part becomes a summary, which frees the model's context",
+				name: "compact", description: "Shorten this conversation: the earlier part becomes a summary, which frees the model's context",
 				run: async () => {
 					const t = chat();
 					if (t) this.adopt(t, (await this.client.compact(t.agent, t.session)).task);
@@ -3019,7 +3024,7 @@ export class PineTui {
 	private help(): void {
 		const cmds = this.commands.filter((x) => x.name !== "exit").map((x) => `  ${c.accent(`/${x.name}`)}${x.argumentHint ? c.gray(` ${x.argumentHint}`) : ""}${" ".repeat(Math.max(1, 24 - x.name.length - (x.argumentHint?.length ?? -1) - 2))}${x.description}`);
 		const keys = [
-			["enter", "send; while the agent works, the message goes into that work at its next step"], ["alt+enter", "send, but let it wait until the agent is done with what it is doing"], ["shift+enter", "new line"], ["esc", "stop the agent"], ["tab", "next tab (when the input is empty)"], ["shift+tab", "next mode: auto, plan, manual, bypass (when the input is empty)"],
+			["enter", "send; while the agent works, the message goes into that work at the agent's next step"], ["alt+enter", "send, but let it wait until the agent is done with what it is doing"], ["shift+enter", "new line"], ["esc", "stop the agent"], ["tab", "next tab (when the input is empty)"], ["shift+tab", "next mode: auto, plan, manual, bypass (when the input is empty)"],
 			["alt+1..9", "go to tab"], ["ctrl+t", "new conversation"], ["ctrl+w", "close tab"], ["ctrl+g", "open or close the code pane (changes, files, tool output)"], ["ctrl+r", "dictate the message instead of typing it (on a Mac); enter ends it"], ["pgup / pgdn", "scroll"], ["mouse", "click a tab, its ×, +, ▤ code, a web address, a thought (to open it, and anywhere on it to close it), or agent / conversation / folder / model / reasoning / mode in the bottom bar; drop files to attach"], ["ctrl+c twice, ctrl+d", "quit"],
 		].map(([k, d]) => `  ${c.accent(k.padEnd(22))} ${d}`);
 		this.say(this.active, [c.bold("Commands"), ...cmds, "", c.bold("Keys"), ...keys].join("\n"));
@@ -3182,7 +3187,7 @@ export class PineTui {
 					tab.stopped.spared.add(p.task);
 				}
 			} else if (p.compact) {
-				this.say(tab, c.gray("⟲ shortening the conversation: its earlier part becomes a summary…"));
+				this.say(tab, c.gray("⟲ shortening the conversation: the earlier part becomes a summary…"));
 			} else if (p.requeued) {
 				// A message that was given to work which ended, or was stopped, before reading it. It is on
 				// screen already and is answered now; an esc pressed for the old work is not meant for it.
@@ -3463,7 +3468,7 @@ export class PineTui {
 			for (const t of this.tabs) {
 				if (t.kind !== "chat" || t.pauseNoted || !this.bypassPaused(t)) continue;
 				t.pauseNoted = true;
-				this.say(t, c.yellow(`bypass is paused in this conversation: it has read outside content (${this.taints.get(`${t.agent}:${t.session}`)}).\n`) + c.gray("The agent is back inside its sandbox and asks before sending things out. /mode bypass offers a clean conversation or bypass here anyway; /reset starts over."));
+				this.say(t, c.yellow(`bypass is paused in this conversation: it has read outside content (${this.taints.get(`${t.agent}:${t.session}`)}).\n`) + c.gray("The agent is back inside the sandbox and asks before sending things out. /mode bypass offers a clean conversation or bypass here anyway; /reset starts over."));
 			}
 			this.tui.requestRender();
 		} catch {
@@ -3527,7 +3532,7 @@ export class PineTui {
 		else if (this.voice) {
 			const v = this.voice;
 			line = v.fetching
-				? c.yellow("● the system is fetching its speech model for this language (once) …")
+				? c.yellow("● macOS is downloading the speech model for this language (once) …")
 				: v.state === "starting"
 					? c.gray("● getting ready to listen …")
 					: v.state === "finishing"

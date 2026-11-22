@@ -328,7 +328,7 @@ test("agents are told how pine works and can read its manual, but not pi's or pi
 	assert.equal(r.status, "done");
 	const system = h.system(h.mock.state.requests[0]);
 	assert.ok(system.startsWith("You are an agent in pine"), system.slice(0, 80));
-	assert.ok(system.includes("pine's setup is changed through tools, never by writing its files") && /look it up in (pine's|the) manual/.test(system) && /you search with the manual tool|\(the manual tool\)/.test(system));
+	assert.ok(system.includes("pine's setup is changed through tools, never by writing pine's files") && /look it up in (pine's|the) manual/.test(system) && /you search with the manual tool|\(the manual tool\)/.test(system));
 	assert.ok(system.includes("You are the main agent, and pine's administrator:") && system.includes("you change with your tools, and you never tell them to edit pine's files") && !system.includes("{{ROLE}}"));
 	assert.ok(!system.includes("<name>pine</name>") && h.toolsOffered(h.mock.state.requests[0]).includes("manual"), "the manual is searched with a tool, not carried in the prompt as a skill");
 	assert.ok(!system.includes("pi-coding-agent") && !system.includes("running inside pi,"), "nothing points at pi's manuals, which agents cannot read");
@@ -342,11 +342,11 @@ test("agents are told how pine works and can read its manual, but not pi's or pi
 	await h.close();
 });
 
-test("an agent is told its MCP servers and the exact prefix of their tools", async () => {
+test("an agent is told the MCP servers and the exact prefix of their tools", async () => {
 	const h = await harness({ agents: { main: { agent: { mcp: { "my-notes": { command: process.execPath, args: [path.resolve(import.meta.dirname, "../baseline/tests/mcp-stdio-server.mjs")] } } } } } });
 	await h.pine.agents.run({ agent: "main", prompt: "hi", trust: "owner" });
 	const system = h.system(h.mock.state.requests[0]);
-	assert.ok(system.includes('my-notes (one tool, "my_notes", with an action for each of its tools)'), system.slice(-600));
+	assert.ok(system.includes('my-notes (one tool, "my_notes", with an action for each of the server\'s tools)'), system.slice(-600));
 	assert.ok(h.toolsOffered(h.mock.state.requests[0]).includes("mcp__my_notes__echo"));
 	await h.close();
 });
@@ -359,7 +359,7 @@ test("an agent is told which servers are reached over the network, and that thei
 	const h = await harness({ agents: { main: { agent: { mcp: { near: { url: near.url }, studio: { url: "https://studio.invalid:8443/mcp" } } } } } });
 	await h.pine.agents.run({ agent: "main", prompt: "hi", trust: "owner" });
 	const system = h.system(h.mock.state.requests[0]);
-	assert.ok(system.includes("Reached over the network: studio. Such a server can run on another computer, and a file path in its answer is then a path there, not on yours. When a file from it is needed on your computer, fetch the link from its answer with the download tool; do not copy the path."), system.slice(-900));
+	assert.ok(system.includes("Reached over the network: studio. Such a server can run on another computer, and a file path in the server's answer is then a path there, not on yours. When a file from it is needed on your computer, fetch the link from the server's answer with the download tool; do not copy the path."), system.slice(-900));
 	assert.ok(system.includes("A picture that came with a tool's answer is already on your owner's screen: do not show it again."));
 	assert.ok(system.includes("pine shows or plays it: never play a sound yourself with a command."));
 	assert.ok(!/Reached over the network: [^.]*near/.test(system), "a server on this computer is not one of them");
@@ -488,7 +488,7 @@ test("conversations stay until they are removed or unused for too long; pinned, 
 	assert.deepEqual(users(h.mock.state.requests.at(-1)), ["the code word is OKAPI", "and now"]);
 	assert.deepEqual(names(), ["ears", "keep", "main", "old", "tabbed", "tax_2026"]);
 	assert.equal(h.pine.tasks.list({ agent: "main", session: "tax_2026" }).length, 2);
-	await assert.rejects(h.pine.agents.renameSession("main", "main", "x"), /keeps its name/);
+	await assert.rejects(h.pine.agents.renameSession("main", "main", "x"), /cannot be renamed/);
 	await assert.rejects(h.pine.agents.renameSession("main", "old", "keep"), /already has a conversation called keep/);
 
 	// Nothing said for eight days. One is pinned, one is open in a tab, one listens to a source.

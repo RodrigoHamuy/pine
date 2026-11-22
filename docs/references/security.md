@@ -901,7 +901,7 @@ limit.
 
 ## A layout that keeps the pieces apart
 
-The example home starts with one agent, `main`, that has web search and the browser, and your
+The example home starts with one agent, `prime`, the main agent, that has web search and the browser, and your
 account in your own conversations. What stands between the two is small: once a
 conversation has read the web, you are asked before it sends something out, and before a
 critical action as always ("What asks you"). Its shell is not looked at. That is the
@@ -943,7 +943,7 @@ you once it has read a page, which is a question you would have to answer for ev
   the files for all agents the same way (`AGENTS.md`, `TOOLS.md` and `USER.md` in pine's
   home), and what it is talked into writing there is read by every agent. The first paragraph
   of an agent's own `AGENTS.md` is also what the agents that may hand it work read about it
-  (one line of at most 160 characters, read only from the plain file, never through a link),
+  (one line of at most 240 characters, read only from the plain file, never through a link),
   so what it is talked into writing there reaches them too. Look into those
   files now and then; rules it must never change go into `agents/<id>/AGENTS.md`, which it
   cannot write.

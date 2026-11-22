@@ -135,7 +135,7 @@ export async function startAccessHost(options: AccessHostOptions): Promise<Acces
 	if (service.protocol !== "https:" && service.protocol !== "http:") throw new Error(`The address of the meeting service has to start with https:// (it is ${options.service.slice(0, 80)}).`);
 	const origin = service.origin;
 	const vault = options.vault ?? (options.folder ? fileVault(path.join(options.folder, options.cipher ? ACCESS_FILE.sealed : ACCESS_FILE.plain), options.cipher) : undefined);
-	if (!vault) throw new Error("Browser access needs a folder to keep its key in.");
+	if (!vault) throw new Error("Browser access needs a folder to keep this computer's key in.");
 	const store = await AccessStore.open(vault);
 	const machineId = store.machineId();
 	const parsed = ssh2.utils.parseKey(store.hostKey());

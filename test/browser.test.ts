@@ -606,7 +606,7 @@ test("browser view: where the owner's own window shows the browser, showing it o
 	b.view.embed(true);
 	const shown = await b.call("browser_show");
 	assert.ok(!shown.failed && shown.text.startsWith("Your owner sees the browser in the Pine app, in the browser at the right of this conversation's window"), shown.text);
-	assert.match((await b.call("browser_hide")).text, /no window of its own\. Your owner sees it in the Pine app/);
+	assert.match((await b.call("browser_hide")).text, /no separate window\. Your owner sees it in the Pine app/);
 	assert.deepEqual(b.log().filter((l) => l.startsWith("start")), ["start hidden"], "the browser was not started anew");
 	// From then on the owner uses it too: what they open is noticed.
 	await b.view.open("https://other.example/");

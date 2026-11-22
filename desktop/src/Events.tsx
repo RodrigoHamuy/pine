@@ -46,7 +46,7 @@ export function Events({ tab }: { tab: Tab }) {
 					<InputGroupAddon>
 						<SearchIcon />
 					</InputGroupAddon>
-					<InputGroupInput aria-label="Filter the events" placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
+					<InputGroupInput aria-label="Filter the events" placeholder="Filter by word or topic (agent/#)" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
 				</InputGroup>
 				<span className="whitespace-nowrap text-faint">{shown.length} shown · text deltas are left out</span>
 				<span className="min-w-0 flex-1" />

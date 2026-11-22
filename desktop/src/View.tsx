@@ -278,7 +278,7 @@ function Marks({ j }: { j: Job }) {
 					<TooltipTrigger render={<span className="flex-none text-warn" />}>
 						<TriangleAlertIcon className="size-3" aria-label="read outside content" />
 					</TooltipTrigger>
-					<TooltipContent>Its conversation read outside content ({outside}): sending something out asks you</TooltipContent>
+					<TooltipContent>The conversation read outside content ({outside}): sending something out asks you</TooltipContent>
 				</HoverTooltip>
 			) : null}
 		</>
@@ -293,7 +293,7 @@ function ModeBadge({ mode }: { mode: string }) {
 				{open ? <ShieldOffIcon data-icon="inline-start" /> : <ShieldIcon data-icon="inline-start" />}
 				{mode}
 			</TooltipTrigger>
-			<TooltipContent>{open ? "Works with your account, without a sandbox" : mode === "plan" ? "Plans: looks and changes nothing" : "Works in its sandbox"}{mode === "bypass" ? ", and asks nothing" : mode === "manual" ? ", and asks before every action" : ""}</TooltipContent>
+			<TooltipContent>{open ? "Works with your account, without a sandbox" : mode === "plan" ? "Plans: looks and changes nothing" : "Works in a sandbox"}{mode === "bypass" ? ", and asks nothing" : mode === "manual" ? ", and asks before each action" : ""}</TooltipContent>
 		</HoverTooltip>
 	);
 }
@@ -496,7 +496,7 @@ function NeedsYou({ pick }: { pick: (s: Sel) => void }) {
 				<Item key={j.id} size="xs" className="py-1">
 					<ItemContent className="min-w-0">
 						<ItemTitle className="w-full min-w-0">
-							<AgentAvatar agent={{ id: j.agent, color: colorOf(j.agent) }} size="sm" className="size-4" />
+							<AgentAvatar agent={{ id: j.agent, color: colorOf(j.agent), main: store.agent(j.agent)?.main }} size="sm" className="size-4" />
 							<button type="button" className="truncate text-start" onClick={() => pick({ k: "job", id: j.id })}>
 								<b>{j.agent}</b> asks you: {j.ask!.summary}
 							</button>
@@ -558,7 +558,7 @@ function AgentDetail({ id, now, pick }: { id: string; now: number; pick: (s: Sel
 	return (
 		<>
 			<div className="flex items-center gap-2">
-				<AgentAvatar agent={{ id, color: colorOf(id) }} size="sm" />
+				<AgentAvatar agent={{ id, color: colorOf(id), main: store.agent(id)?.main }} size="sm" />
 				<span className="truncate text-sm font-medium">{id}</span>
 				{a.main ? <Badge variant="secondary" className="h-4.5">main</Badge> : null}
 				<ModeBadge mode={a.mode} />
@@ -665,7 +665,7 @@ function JobDetail({ j, now, pick }: { j: Job; now: number; pick: (s: Sel) => vo
 	return (
 		<>
 			<div className="flex items-center gap-2">
-				<AgentAvatar agent={{ id: j.agent, color: colorOf(j.agent) }} size="sm" />
+				<AgentAvatar agent={{ id: j.agent, color: colorOf(j.agent), main: store.agent(j.agent)?.main }} size="sm" />
 				<span className="min-w-0 flex-1 truncate text-sm font-medium">{j.label || "(no text)"}</span>
 				<Button variant="outline" size="xs" onClick={() => openJob(j)}><ExternalLinkIcon data-icon="inline-start" />Open</Button>
 				<Button variant="ghost" size="icon-xs" aria-label="Back to what happened" onClick={() => pick(undefined)}><XIcon /></Button>

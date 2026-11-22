@@ -505,7 +505,7 @@ function Output({ tab }: { tab: Tab }) {
 
 /** What the conversation's commands left running, and the way to stop each. */
 function Running({ tab }: { tab: Tab }) {
-	if (!tab.programs.length) return <EmptyView icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</EmptyView>;
+	if (!tab.programs.length) return <EmptyView icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after the agent is done. It is listed here, and stopped from here.</EmptyView>;
 	return (
 		<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 			{tab.programs.map((p) => (

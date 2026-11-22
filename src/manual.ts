@@ -38,6 +38,7 @@ const SYNONYMS: string[][] = [
 	["source", "watch", "monitor", "observe", "listen", "trigger", "event", "sensor", "feed"],
 	["subscribe", "subscription", "listen", "follow", "wake", "notify", "notification"],
 	["unsubscribe", "stop", "mute", "silence"],
+	["introduce", "introduction", "hello", "hatch", "greet", "greeting", "welcome", "onboarding", "meet"],
 	["mcp", "server", "connector", "integration", "plugin", "extension", "tool"],
 	["skill", "procedure", "howto", "recipe", "playbook", "instruction", "knowhow"],
 	["secret", "token", "password", "key", "credential", "apikey", "env"],
@@ -504,7 +505,7 @@ export function showSearch(manual: Manual, queries: string[], limit = 6): string
 		out.push(`"${q}": ${r.hits.length} of ${r.total} parts, the best first`);
 		r.hits.forEach((h, i) => out.push(`${i + 1}. ${h.id}   (${h.where}${h.note ? `, ${h.note}` : h.kind === "section" ? `, ${h.chars} characters` : ", one row of a table"})\n   ${h.line}`));
 	}
-	out.push(`Read a part in full by its id (the first word of an entry), several at once if you like. A line above is only the line that matched: read the part before you rely on it.`);
+	out.push(`Read a part in full by id (the first word of an entry), several at once if you like. A line above is only the line that matched: read the part before you rely on it.`);
 	return out.join("\n");
 }
 
@@ -519,7 +520,7 @@ export function showRead(manual: Manual, ids: string[], budget = 14_000): string
 			continue;
 		}
 		if (used && used + r.text.length > budget) {
-			out.push(`(not shown, to keep this answer short: ${id}. Read it on its own.)`);
+			out.push(`(not shown, to keep this answer short: ${id}. Read it separately.)`);
 			continue;
 		}
 		used += r.text.length;

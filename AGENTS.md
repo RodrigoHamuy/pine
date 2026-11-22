@@ -98,6 +98,8 @@ src/
   router.ts         routes: filter, debounce, set / publish / call / agent
   timers.ts         the scheduler: cron, intervals and one-offs; a schedule with a task wakes an agent
   goals.ts          goal mode (`/goal`): a conversation's objective, the judge that says whether it is met, the task that calls the agent again
+  hatch.ts          agents introduce themselves once, in their answer to the owner's first message to them: the note in front
+                    of it (`INTRODUCE`). No agent starts a conversation by itself
   browser-view.ts   the bundled browser of a conversation for a UI that shows it itself (the Pine app's panel): the
                     daemon's way through the door of the browser's server, for the control API alone
   programs.ts       what a conversation's commands left running: found by process group, listed, stopped;
@@ -137,6 +139,8 @@ src/
                     picture.ts (pictures, video and sound: conversion with sips or ffmpeg, Kitty-protocol or half-block drawing, the system's player for sound),
                     levels.ts (the bars of a sound: its levels by frequency band for each tenth of a second, from a wav file or a decoder's samples;
                     the Pine app's page is built with this file too, so nothing in it runs or imports Node's own when it is loaded),
+                    welcome.ts (pine's welcome at the top of the main agent's empty main conversation, as the Pine app's
+                    `desktop/src/WelcomeLetter.tsx` says it),
                     voice.ts (dictating a message: builds and runs voice.swift, the macOS helper that listens and has the system
                     recognise the words on the device; on another system a sentence and nothing else)
   types.ts, util.ts shared types; topics, templates, filters, durations, logger; the folded parts of a text (`foldsIn`, for the
@@ -827,6 +831,7 @@ upgrade pi (`npm run baseline`, then `npm test`).
 | Skills and `AGENTS.md` are discovered in the user's home and above the workspace | `skillsOverride` / `agentsFilesOverride` keep only configured locations |
 | `tools: [...]` is a strict allow-list that hides extension tools | `excludeTools` for built-ins instead |
 | The default system prompt describes a coding assistant inside pi and points at pi's manuals | `systemPromptOverride` supplies `BASE_PROMPT`; `docs/` is searched by every agent with the `manual` tool |
+| pi's choice of model for each provider (`defaultModelPerProvider`) is not exported | `piDefaults()` in `src/models.ts` reads it from pi's `core/model-resolver.js`; when that fails, `suggestModel` takes the provider's first model. `test/hatch.test.ts` signs in to a provider and checks that one of its models is taken |
 
 ## Releases
 

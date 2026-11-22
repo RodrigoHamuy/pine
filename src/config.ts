@@ -288,7 +288,7 @@ export interface PineConfig {
 	logLevel: LogLevel;
 	main?: string;
 	/** `mode`: for every agent that names none. Not set: auto for the main agent, safe for the others. */
-	defaults: { model?: string; /** The model that judges whether a goal is met, as "provider/id". Not set: the agent's own. */ judge?: string; thinking: string; mode?: Mode; bashTimeoutSec: number; taskTimeoutSec: number; idleMs: number; settings: Record<string, unknown> };
+	defaults: { model?: string; /** The model that judges whether a goal is met, as "provider/id". Not set: the agent's own. */ judge?: string; /** Agents introduce themselves in their answer to the first message their owner writes to them. */ introduce: boolean; thinking: string; mode?: Mode; bashTimeoutSec: number; taskTimeoutSec: number; idleMs: number; settings: Record<string, unknown> };
 	limits: {
 		maxConcurrentRuns: number;
 		maxDelegationDepth: number;
@@ -430,7 +430,7 @@ function loadAgent(id: string, dir: string, raw: any, cfg: PineConfig, problems:
 	// The mode is the one setting that says whether an agent works in a sandbox and how far it
 	// reaches. What said it before is gone, and a file that still has it says what to write instead.
 	if (raw.sandbox === false || raw.sandbox?.enabled === false) problems.push(`${where}: "sandbox": false is gone. The mode says whether an agent works in a sandbox: set "mode" to "auto" to work without one, and take the "sandbox" entry out`);
-	if (raw.sandbox?.scope !== undefined) problems.push(`${where}: sandbox.scope is gone. The mode says how far an agent reaches: set "mode" to "auto" (your whole account, no sandbox) or "safe" (its own folders, in the sandbox), and take the "scope" entry out`);
+	if (raw.sandbox?.scope !== undefined) problems.push(`${where}: sandbox.scope is gone. The mode says how far an agent reaches: set "mode" to "auto" (your whole account, no sandbox) or "safe" (the agent's own folders, in the sandbox), and take the "scope" entry out`);
 	const chosen: Mode | undefined = raw.mode ?? cfg.defaults.mode;
 	const sub = raw.subagents === false ? { enabled: false } : raw.subagents === true || raw.subagents === undefined ? {} : raw.subagents;
 	const state = raw.state ?? {};
@@ -569,7 +569,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 	const raw = interpolate(readJson(file, problems), "pine.json", problems, env);
 	noPlugins(raw?.plugins, "pine.json: plugins", problems);
 	const d = raw.defaults ?? {};
-	if (d.scope !== undefined) problems.push('pine.json: defaults.scope is gone. The mode says how far an agent reaches: set defaults.mode to "safe" to keep every agent in its sandbox or to "auto" to give every agent your whole account, and take the "scope" entry out');
+	if (d.scope !== undefined) problems.push('pine.json: defaults.scope is gone. The mode says how far an agent reaches: set defaults.mode to "safe" to keep all agents in the sandbox or to "auto" to give all agents your whole account, and take the "scope" entry out');
 	// Source types of the owner's own: a name and the module behind it.
 	const sourceTypes: Record<string, string> = {};
 	for (const [name, file] of Object.entries(raw.sourceTypes && typeof raw.sourceTypes === "object" ? raw.sourceTypes : {})) {
@@ -586,6 +586,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 		defaults: {
 			model: d.model,
 			judge: typeof d.judge === "string" && d.judge ? d.judge : undefined,
+			introduce: d.introduce !== false,
 			thinking: d.thinking ?? "off",
 			mode: d.mode,
 			bashTimeoutSec: d.bashTimeoutSec ?? 900,
@@ -635,8 +636,8 @@ export function loadConfig(home = defaultHome()): PineConfig {
 	for (const key of ["review", "reviewer", "reviewTimeout", "rules"]) {
 		if (raw.security?.[key] !== undefined) problems.push(`pine.json: security.${key} is gone: pine has no reviewer any more. In auto and safe mode you are asked about critical actions, and after outside content about what is sent out. Take the entry out${key === "reviewer" ? ' (the model that judges goals is "defaults.judge" now)' : ""}`);
 	}
-	if (raw.ui?.theme !== undefined && !(typeof raw.ui.theme === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.theme))) problems.push('pine.json: ui.theme names a theme by its file in the themes folder, without .json, for example "pmndre"');
-	if (raw.ui?.view !== undefined && !(typeof raw.ui.view === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.view))) problems.push('pine.json: ui.view names a view by its file in the views folder, without .ts, for example "house", or is "off"');
+	if (raw.ui?.theme !== undefined && !(typeof raw.ui.theme === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.theme))) problems.push('pine.json: ui.theme names a theme by the file name in the themes folder, without .json, for example "pmndre"');
+	if (raw.ui?.view !== undefined && !(typeof raw.ui.view === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.view))) problems.push('pine.json: ui.view names a view by the file name in the views folder, without .ts, for example "house", or is "off"');
 	if (d.judge !== undefined && !/^[^/\s]+\/\S+$/.test(String(d.judge))) problems.push("pine.json: defaults.judge names a model as provider/model-id");
 	if (cfg.http) {
 		for (const [name, h] of Object.entries<any>(raw.http?.hooks ?? {})) {
@@ -669,7 +670,6 @@ export function loadConfig(home = defaultHome()): PineConfig {
 		if (!a.modeSet) a.mode = plain;
 		a.level = a.mode === "plan" || !MODES.includes(a.mode) ? plain : a.mode;
 		if (!MODES.includes(a.mode)) problems.push(`agents/${a.id}/agent.json: mode must be one of ${MODES.join(", ")} (got "${a.mode}")`);
-		if (!(a.model ?? cfg.defaults.model)) problems.push(`agents/${a.id}/agent.json: no model (set "model" or defaults.model in pine.json)`);
 		for (const t of a.delegates) if (t !== "*" && !cfg.agents[t]) problems.push(`agents/${a.id}/agent.json: delegates names unknown agent "${t}"`);
 		if (Array.isArray(a.globalMcp)) for (const n of a.globalMcp) if (!cfg.mcp[n]) problems.push(`agents/${a.id}/agent.json: globalMcp names unknown server "${n}"`);
 		for (const n of Object.keys(a.mcp)) if (!/^[A-Za-z0-9_-]+$/.test(n)) problems.push(`agents/${a.id}/agent.json: invalid MCP server name "${n}"`);
@@ -723,7 +723,7 @@ export const sharedFiles = (cfg: PineConfig): string[] => SHARED_FILES.map((f) =
  */
 export const globalSkillsDir = (cfg: Pick<PineConfig, "home">) => path.join(cfg.home, "skills");
 /** The most of an agent's purpose that is shown: one line, for other agents' rosters and the owner's lists. */
-const PURPOSE_MAX = 160;
+const PURPOSE_MAX = 240;
 const purposes = new Map<string, { stamp: string; text: string }>();
 
 /**
@@ -923,7 +923,7 @@ export function delegatesText(cfg: PineConfig, a: AgentConfig): string {
 	const main = mainAgentId(cfg);
 	const named = a.delegates.filter((d) => d !== "*");
 	if (!a.delegates.includes("*")) return named.join(", ") || "nobody";
-	const all = a.id === main ? "every other agent" : `every agent but the main one (${main})`;
+	const all = a.id === main ? "all other agents" : `all agents except the main one (${main})`;
 	return `${all} ("*")${named.length ? `, and ${named.join(", ")}` : ""}`;
 }
 

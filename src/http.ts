@@ -8,7 +8,7 @@ import { type Approvals, timingSafeEqual } from "./security.ts";
 import type { Bus, State, TaskStore } from "./store.ts";
 import { addServer, listServers, removeServer } from "./mcp-config.ts";
 import { changes, diffOf, listDir, MAX_EDIT, readText, findFiles } from "./workspace-view.ts";
-import { type LoginRunner, OwnerApi, Refusal } from "./owner.ts";
+import { type LoginRunner, OwnerApi, Refusal, settleModel } from "./owner.ts";
 import type { Router } from "./router.ts";
 import type { SourceHost } from "./sources.ts";
 import { pineVersion } from "./service.ts";
@@ -292,9 +292,10 @@ export class HttpServer {
 				return send(202, { task: task.id });
 			}
 			if (url.pathname === "/models/refresh") {
-				// The owner added or removed a model server with the pine command.
+				// The owner signed in, or added or removed a model server, with the pine command.
 				await this.manager.reloadModels();
-				return send(200, { ok: true });
+				const chosen = await settleModel(this.cfg, this.manager, this.log, typeof body.provider === "string" ? body.provider : undefined);
+				return send(200, { ok: true, ...(chosen ? { chosen } : {}) });
 			}
 			if (url.pathname === "/mcp/refresh") {
 				await this.manager.refreshSessions();
@@ -430,7 +431,7 @@ export class HttpServer {
 				try {
 					if (parts[2] === "group") return send(200, m.setGroup(id, text(body.session, "session: the conversation's name"), typeof body.group === "string" ? body.group : null));
 					if (body.action === "add") return send(200, m.addGroup(id, text(body.name, "name: the group's name")));
-					if (body.action === "rename") return send(200, m.renameGroup(id, text(body.name, "name: the group's name"), text(body.to, "to: its new name")));
+					if (body.action === "rename") return send(200, m.renameGroup(id, text(body.name, "name: the group's name"), text(body.to, "to: the group's new name")));
 					if (body.action === "remove") return send(200, await m.removeGroup(id, text(body.name, "name: the group's name")));
 					if (body.action === "order") return send(200, m.setGroupOrder(id, body.to));
 				} catch (e) {

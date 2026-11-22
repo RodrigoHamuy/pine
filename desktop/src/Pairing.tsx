@@ -54,7 +54,7 @@ export function PairConfirm({ link, device, onPair, onCancel }: { link: PairLink
 					</AlertDialogDescription>
 					{other ? (
 						<AlertDialogDescription data-slot="pair-service">
-							It is found through <span className="font-mono wrap-anywhere text-foreground">{other}</span>, which is not Pine's own service. Every connection to that computer goes through it. Pair only if it is the service the computer's owner set up.
+							It is found through <span className="font-mono wrap-anywhere text-foreground">{other}</span>, which is not Pine's own service. All connections to that computer go through it. Pair only if it is the service the computer's owner set up.
 						</AlertDialogDescription>
 					) : null}
 				</AlertDialogHeader>

@@ -52,9 +52,10 @@ pine init
 sets everything up in one step:
 
 - From a fresh checkout, `bin/pine` first installs pine's dependencies (`npm install`), once.
-- It copies the example home to `~/.pine`: one agent, `main`, with web search, the browser and,
+- It copies the example home to `~/.pine`: one agent, `prime`, the main agent, with web search, the browser and,
   on a Mac, app control ([computer.md](computer.md)), a `models.json`, an empty `.env`. Nothing
-  is overwritten if you run it again.
+  is overwritten if you run it again, and a home whose main agent has another name (`main`, in a
+  home from before) keeps it.
 - On Linux it makes the sandbox work. If bubblewrap is missing it installs the package (apt,
   dnf, yum, pacman, zypper or apk), and on Ubuntu 24.04 and later it writes and loads the
   AppArmor rule bubblewrap needs there. It shows the commands first and asks once; they run
@@ -84,22 +85,12 @@ pine start
 ```
 
 and from another terminal `pine` (attaches to it) or
-`pine send main "Say hello and list your tools."`.
+`pine send prime "Say hello and list your tools."`.
 
 ### Choosing a model
 
-The example home uses `dev/claude-haiku`: an OpenAI-compatible endpoint whose answers come from
-`claude -p`, so it needs Claude Code installed and signed in. The UI starts it on demand; for
-`pine start`, run it yourself:
-
-```bash
-pine dev-model
-```
-
-Every model call starts a `claude` process: expect about five seconds per call and usage on
-your Claude plan. It is for trying things out, not for a daemon that runs all day.
-
-For a hosted provider, sign in once and pick a model:
+A new home has no model: until you connect one, every agent says so instead of answering. Sign
+in to a provider once:
 
 ```bash
 pine login opencode-go
@@ -114,9 +105,12 @@ pine login openai-codex
 ```
 
 The first asks for an API key (typed without echo); the other two open a browser sign-in for a
-Claude or ChatGPT subscription. Credentials go to `~/.pine/auth.json` (mode 600). Then set
-`defaults.model` in `pine.json`, for example `"opencode-go/deepseek-v4.1-flash"`, or switch in
-the UI with `/model`. `pine login <unknown>` lists every provider pi knows.
+Claude or ChatGPT subscription. Credentials go to `~/.pine/auth.json` (mode 600). Where there is
+no model yet, or the one in force cannot answer, pine takes the provider's usual one by itself: at once
+when the daemon is running (`pine login` tells it and says which), else at its next start; so
+does `pine model add`. To pick: set `defaults.model` in `pine.json`, for example
+`"opencode-go/deepseek-v4.1-flash"`, or switch in the UI with `/model`. `pine login <unknown>`
+lists every provider pi knows.
 
 ### With a model server of your own
 
@@ -486,7 +480,7 @@ has the token is you. An error is answered with `{ "error": "..." }` and what to
 | The browser tools fail with "Executable doesn't exist" | Run `pine init` again (or `pine browser-install`): the browser is missing or pine was updated to a newer one. `pine check` says so on its `browser` line, and the Pine app asks at its start and fetches it from Settings > App. |
 | A source reported something and the agent was not woken, now and then: a click on a page it made, a second message shortly after the first | The subscription's throttle. After an event that woke the agent, the source is ignored for ten seconds unless the subscription says otherwise; what arrives meanwhile is in the event log and starts no turn. Have the agent subscribe again with `throttle: "0s"` (or `pine subscribe <agent> <source> --throttle 0s`) where every event counts ([sources.md](sources.md)). |
 | A page in the agent's browser cannot open a WebSocket or load something from this computer: `Establishing a tunnel via proxy server failed`, or a request that fails | The page reached for a local address nobody allowed. A yes for a local address is for one host and one port: a page on `localhost:8100` does not reach `localhost:8101` by it. The browser carries a WebSocket on a port that is allowed. Have the agent serve everything from one port, or open the other address once with `browser_navigate`, which asks you ([mcp.md](mcp.md), [interfaces.md](interfaces.md)). |
-| The first message fails with "this computer has no such command" | `dev/claude-haiku`, what the example home starts with, is Claude through the `claude` command of Claude Code, and that is not installed. Sign in to a provider (`pine login <provider>`, or Settings > Models in the Pine app) and pick one of what it offers with `/model`. |
+| The first message fails with "No model yet" | A new home has no model. Sign in to a provider (`pine login <provider>`, or Settings > Models in the Pine app) or add a model server of your own (`pine model add`); the first one becomes the default, and you send the message again. |
 | The browser cannot open `localhost` or a page says "not reachable from the browser" | Local addresses need your yes. The agent opens the address with `browser_navigate` and you are asked; see "Local addresses" in [mcp.md](mcp.md). A server the agent started itself also needs network access for its shell. |
 | The agent says macOS does not let pine operate apps, or take pictures of the screen | macOS has to be told once: System Settings > Privacy & Security > Accessibility (and Screen & System Audio Recording for pictures), switch on the terminal app pine runs in. See "What macOS has to be told, once" in [computer.md](computer.md). |
 | The agent has no tools to click or type in apps | App control is for an agent that reaches your whole account, in your own conversations, on macOS. `pine check` says which under `apps`. See [computer.md](computer.md). |

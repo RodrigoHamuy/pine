@@ -109,12 +109,12 @@ export function Gate() {
 			]
 		: state.status === "starting"
 			? host
-				? connecting(paired ? `Reaching ${s.nameOf(host)}, then its pine…` : "Reaching its pine over SSH, or starting one there…")
+				? connecting(paired ? `Reaching ${s.nameOf(host)}, then the pine there…` : "Reaching pine on that machine over SSH, or starting it there…")
 				: ["Starting pine", "Looking for a running pine, or starting one…", <Pulse label="Loading" key="s" />]
 			: state.status === "error" && state.kind === "no-home"
 				? [
 						"Welcome to pine",
-						`pine keeps its agents, their workspaces and its settings in a home folder (${s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser its web tools drive (about 600 MB, once).`,
+						`pine keeps your agents, their workspaces and pine's settings in a home folder (${s.prefs.home ?? s.home ?? "~/.pine"}). There is none yet. Setting it up copies the example home and fetches the browser that the web tools use (about 600 MB, once).`,
 						<>
 							{s.initLines.length ? <Printed sm className="w-full text-start" text={s.initLines.slice(-40).join("\n")} /> : null}
 							<div className="flex items-center gap-2">
@@ -155,7 +155,7 @@ export function Gate() {
 							]
 						: host
 							? // Another machine's pine answered and its agents are being asked for over SSH.
-								connecting("Loading its agents…")
+								connecting("Loading the agents…")
 							: ["Loading your agents…", "", <Pulse label="Loading" key="s" />];
 	// Before pine answers there is nothing to show yet: stock Empty, in a frame that moves the window.
 	return (
@@ -251,7 +251,7 @@ function ConversationRow({ agent, c, depth = 0, inset = 0 }: { agent: string; c:
 			if (to?.trim()) await s.rename(agent, c.session, to.trim());
 		}
 		if (picked === "remove") {
-			const sure = await s.pick({ title: `Remove the conversation ${c.session} of ${agent}?`, items: [{ value: "yes", label: "Remove it for good", about: "Its history, what it may do without asking, what it listens to and whatever was set up for it alone all go.", tone: "bad" }, { value: "no", label: "Cancel" }] });
+			const sure = await s.pick({ title: `Remove the conversation ${c.session} of ${agent}?`, items: [{ value: "yes", label: "Remove it for good", about: "The messages, what the agent may do without asking here, what it listens to and whatever was set up only for this conversation are all deleted.", tone: "bad" }, { value: "no", label: "Cancel" }] });
 			if (sure === "yes") await s.removeConversation(agent, c.session);
 		}
 		if (picked === "reset") {
@@ -434,8 +434,9 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 						</div>
 					) : (
 						<>
-							{/* What folds the group is the agent's line but its buttons. Under the pointer the line makes room for all three. */}
-							<CollapsibleTrigger render={<SidebarMenuButton className="group-hover/menu-item:pr-20" />}>
+							{/* What folds the group is the agent's line but its buttons. Under the pointer the line makes room for all three: `!`, since the
+							    stock button's room for one action (pr-8) comes later in the stylesheet and would win. */}
+							<CollapsibleTrigger render={<SidebarMenuButton className="group-hover/menu-item:pr-20!" />}>
 								{folded ? <ChevronRightIcon className="text-faint" /> : <ChevronDownIcon className="text-faint" />}
 								<AgentAvatar agent={a} size="sm" />
 								{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
@@ -485,7 +486,7 @@ function Sidebar() {
 					<SidebarGroup className="pt-1 pb-0">
 						<SidebarMenu>
 							<SidebarMenuItem className="app-no-drag">
-								<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => void s.command("palette")} />}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></TooltipTrigger><TooltipContent>Find a conversation by its name or by what was said in it, or a command, an agent, a settings page</TooltipContent></HoverTooltip>
+								<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => void s.command("palette")} />}><SearchIcon /><span className="grow min-w-0 flex-1">Search</span><Kbd>⌘K</Kbd></TooltipTrigger><TooltipContent>Find a conversation by name or by what was said in it, or a command, an agent, a settings page</TooltipContent></HoverTooltip>
 							</SidebarMenuItem>
 						</SidebarMenu>
 					</SidebarGroup>
@@ -612,7 +613,7 @@ function TabButton({ tab, index }: { tab: Tab; index: number }) {
 					title={tab.kind === "chat" ? `${tab.agent} · ${tab.session}${tab.folder ? ` · ${tab.folder}` : ""}` : tab.kind === "task" ? `task #${tab.task}` : tab.kind}
 				>
 					<span className="grid min-w-3.5 flex-none place-items-center">
-						{tab.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : tab.busy ? <Pulse /> : tab.unread ? <Badge className="size-2 p-0" /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <AgentAvatar agent={{ id: tab.agent, color: s.agent(tab.agent)?.color }} size="sm" />}
+						{tab.approvals.size ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : tab.busy ? <Pulse /> : tab.unread ? <Badge className="size-2 p-0" /> : tab.kind === "events" ? <AudioLinesIcon size={12} /> : tab.kind === "settings" ? <SettingsIcon size={12} /> : tab.kind === "task" ? <ListIcon size={12} /> : <AgentAvatar agent={{ id: tab.agent, color: s.agent(tab.agent)?.color, main: s.agent(tab.agent)?.main }} size="sm" />}
 					</span>
 					<span data-slot="tab-name" className="truncate">
 						{tab.kind === "events" ? "Events" : tab.kind === "settings" ? "Settings" : tab.kind === "task" ? <><b className="font-medium">{tab.agent}</b> #{tab.task}</> : tab.session === "main" ? <b className="font-medium">{tab.agent}</b> : <><b className="font-medium">{tab.agent}</b> · {s.titleOf(tab.agent, tab.session)}</>}
@@ -679,7 +680,7 @@ function TitleBar() {
 			</ScrollArea>
 			<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon" className="app-no-drag" onClick={() => void s.newConversation()} aria-label={with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"} />}><PlusIcon /></TooltipTrigger><TooltipContent>{with_ ? `New conversation with ${with_}` : "New conversation: you are asked with which agent"}<Kbd>⌘T</Kbd></TooltipContent></HoverTooltip>
 			<span className="min-w-0 flex-1" />
-			<BesideToggle which="code" label="Side panel: the agent, its files, changes, output and what is running" keys="⌥⌘B" icon={<PanelRightIcon />} />
+			<BesideToggle which="code" label="Side panel: the agent, files, changes, output and what is running" keys="⌥⌘B" icon={<PanelRightIcon />} />
 			<BesideToggle which="aside" label="Browser: the page the agent works in" keys="⇧⌘B" icon={<GlobeIcon />} />
 			{s.hasView ? <BesideToggle which="view" label={`View: all of pine at a glance, drawn by ${s.view}`} keys="⇧⌘O" icon={<RadarIcon />} /> : null}
 		</header>
@@ -695,7 +696,7 @@ function NoTab() {
 			<EmptyHeader>
 				<EmptyMedia variant="icon"><MessageSquareIcon /></EmptyMedia>
 				<EmptyTitle>No tab is open</EmptyTitle>
-				<EmptyDescription>Every conversation is still in the side bar. Open one there, or start a new one.</EmptyDescription>
+				<EmptyDescription>All conversations are still in the side bar. Open one there, or start a new one.</EmptyDescription>
 			</EmptyHeader>
 			<EmptyContent className="flex-row justify-center">
 				<Button onClick={() => void s.newConversation()}>New conversation<Kbd>⌘T</Kbd></Button>
@@ -717,8 +718,8 @@ function Asking() {
 
 function Help({ close }: { close: () => void }) {
 	const keys: Array<[string, string]> = [
-		["↩", "Send. While the agent works, the message is given to that work and read at its next step"],
-		["⌥↩", "Send, but let the message wait its turn"],
+		["↩", "Send. While the agent works, the message is given to that work and read at the agent's next step"],
+		["⌥↩", "Send, but let the message wait until the agent is done"],
 		["⇧↩", "New line"],
 		["↑ ↓", "Earlier inputs, while the input is empty"],
 		["esc", "Stop what the agent is doing"],
@@ -864,7 +865,7 @@ function BrowserAsk() {
 					<DialogTitle>The browser for the web tools is not on this {computerWord(s.platform)}</DialogTitle>
 				</DialogHeader>
 				<div className="flex flex-col gap-3 select-text">
-					<p className="text-muted-foreground">Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine drives a build of its own, and this one's is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
+					<p className="text-muted-foreground">Your agents open pages that need a real browser with one that pine fetches for itself. Each version of pine uses a specific browser build, and the one for this version is not here yet: it was never fetched, or it is the build of an older pine. It is about 600 MB and is fetched once. Until then the browser tools do not work; web search and reading a page do.</p>
 					{s.initLines.length ? <Printed sm text={s.initLines.slice(-12).join("\n")} /> : null}
 				</div>
 				<DialogFooter>

@@ -200,22 +200,22 @@ pine init
 pine
 ```
 
-One agent, `main`, with web search and a browser, and the terminal UI to talk to it. Everything
+One agent, `prime` (the main agent), with web search and a browser, and the terminal UI to talk to it. Everything
 below is added on top of that when you need it.
 
 `~/.pine/pine.json`:
 
 ```json
 {
-  "main": "main",
-  "defaults": { "model": "dev/claude-haiku" }
+  "main": "prime",
+  "defaults": { "model": "opencode-go/deepseek-v4.1-flash" }
 }
 ```
 
-(An excerpt. `pine init` also writes the web, browser and app control servers and the limits;
-put the model you use where `dev/claude-haiku` stands. `dev/claude-haiku` answers through
-`claude -p` and needs Claude Code installed and signed in; for another model see "Choosing a
-model" in [references/operations.md](references/operations.md).)
+(An excerpt. `pine init` also writes the web, browser and app control servers and the limits.
+It leaves this line out: it is written when you first sign in to a provider (`pine login
+<provider>`) or add a server of your own. See "Choosing a model" in
+[references/operations.md](references/operations.md).)
 
 Telegram as a second way in is set up by asking the main agent: "watch Telegram". The dialog
 you confirm has a field for the bot's token; then you write to the bot and type the six-digit

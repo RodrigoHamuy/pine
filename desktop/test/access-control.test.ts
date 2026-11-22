@@ -322,7 +322,7 @@ test("access control: the try says why a relay cannot be used, and the relay is 
 		assert.equal(prefs().relay?.address, `turn:127.0.0.1:${turn.port}`, "kept");
 		assert.match((await result(`turn:127.0.0.1:${silent.port}`, TURN_PASSWORD)).message, /^Could not use this relay: it did not answer\. It is kept/);
 		assert.equal(prefs().relay?.address, `turn:127.0.0.1:${silent.port}`, "kept");
-		assert.match((await result("turn:relay.example.invalid:3478", TURN_PASSWORD)).message, /its name was not found/);
+		assert.match((await result("turn:relay.example.invalid:3478", TURN_PASSWORD)).message, /no server was found under that name/);
 	} finally {
 		await silent.close();
 		await turn.close();

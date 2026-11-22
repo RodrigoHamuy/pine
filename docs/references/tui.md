@@ -29,7 +29,7 @@ running it attaches to it; otherwise it starts one inside the same process, logs
  /mo                                                                       ← input
 ──────────────────────────────────────────────────────────────────────────
  → model       [provider/id] — Show or switch this agent's model          ← command suggestions
- main · main · no folder · dev/claude-haiku · reasoning off · auto · context 12% · ↑ 1.4k t/s ↓ 42 t/s      /help
+ main · main · no folder · opencode-go/deepseek-v4.1-flash · reasoning off · auto · context 12% · ↑ 1.4k t/s ↓ 42 t/s      /help
 ```
 
 `pine .` or `pine <folder>` opens the same UI with one more tab: a conversation that works in
@@ -726,17 +726,23 @@ that tab stops only that task. The tab is read-only; `ctrl+w` closes it.
 
 ## Models to try it with
 
-The footer shows the model of the tab's agent.
+A new home has no model; the first one you connect becomes the default. The footer shows the model of the tab's agent.
 
 | You have | Do |
 |---|---|
-| Claude Code installed | Nothing: the example home uses `dev/claude-haiku`, the `claude -p` stand-in. About five seconds per model call. |
 | An OpenCode Zen or Go key | `pine login opencode` or `pine login opencode-go`, paste the key, then `/model opencode-go/deepseek-v4.1-flash` |
 | A Claude or ChatGPT subscription | `pine login anthropic` or `pine login openai-codex` (signs in through the browser), then `/model` |
 | A model server of your own (llama.cpp, vLLM, LM Studio) | `pine model add studio http://127.0.0.1:8080`, then `/model studio/<model>` |
 
 `pine login` uses pi's own sign-in and stores the credential in `auth.json` in pine's home,
 mode 600, where agents cannot read it. The key you type is not echoed.
+Where your agents' model cannot answer, pine takes one of the new ones by itself and says which
+(see [operations.md](operations.md)); `/model` is then only needed for another one.
+
+While nothing was said in it yet, the main agent's main conversation begins with pine's welcome, as in the Pine app: what the main
+agent is for, chatting, code and events, a prompt to try, and where pine's home is. Every agent,
+main included, introduces itself in its answer to the first message you write to it ([agents.md](agents.md),
+"Meeting an agent").
 
 ## Notes
 

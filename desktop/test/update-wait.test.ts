@@ -48,7 +48,7 @@ const WARNING = "[data-slot=alert-dialog-content]";
 test("while an update waits for the work to end, Settings > App and the update dialog show the wait and call it off, and offer no second restart", async () => {
 	const port = await freePort();
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
-	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port }, defaults: { model: "mock/m", mode: "safe" } }));
+	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port }, defaults: { model: "mock/m", mode: "safe", introduce: false } }));
 	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({}));
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent.\n\nYou are the main agent.\n");
 	const browsers = path.join(home, "browsers");

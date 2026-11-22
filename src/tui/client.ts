@@ -58,6 +58,8 @@ export interface AgentInfo {
 	mode: "manual" | "safe" | "auto" | "bypass" | "plan";
 	thinking: string;
 	delegates: string[];
+	/** Why its model cannot answer, when it cannot. */
+	modelProblem?: string;
 }
 
 /** Talks to a pine daemon over its control API. */

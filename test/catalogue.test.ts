@@ -740,6 +740,6 @@ test("catalogue: a server's tool is declared under the name pine tells the agent
 	assert.equal(serverTool("mcp__manual"), "mcp_manual", "pine's own manual keeps its name");
 	for (const server of ["notes", "manual"]) {
 		assert.ok(named(req).includes(serverTool(`mcp__${server}`)), `${serverTool(`mcp__${server}`)} in ${named(req).join(", ")}`);
-		assert.match(req.wire.messages.map((m: any) => rawTextOf(m.content)).join("\n"), new RegExp(`${server} \\(one tool, "${serverTool(`mcp__${server}`)}", with an action for each of its tools\\)`));
+		assert.match(req.wire.messages.map((m: any) => rawTextOf(m.content)).join("\n"), new RegExp(`${server} \\(one tool, "${serverTool(`mcp__${server}`)}", with an action for each of the server's tools\\)`));
 	}
 });

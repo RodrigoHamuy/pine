@@ -377,6 +377,8 @@ export interface LoginState {
 	done: boolean;
 	error?: string;
 	models?: string[];
+	/** The model the agents run on from now on: pine chose it, since the one before could not answer. */
+	chosen?: string;
 }
 
 export interface Overview {
@@ -543,7 +545,7 @@ export const api = {
 	removeMcp: (name: string, agent?: string) => post<{ ok: boolean }>("/mcp", { name, agent, remove: true }),
 	mcpLogin: (name: string, agent?: string) => post<{ code: number; out: string }>("/mcp/login", { name, agent }),
 	modelServers: () => get<ModelServer[]>("/models/servers"),
-	addModelServer: (body: { name: string; url: string; key?: string; context?: number }) => post<{ models: string[] }>("/models/servers", body),
+	addModelServer: (body: { name: string; url: string; key?: string; context?: number }) => post<{ models: string[]; chosen?: string }>("/models/servers", body),
 	removeModelServer: (name: string) => post<{ removed: boolean }>("/models/servers/remove", { name }),
 	providers: () => get<Provider[]>("/models/providers"),
 	login: (provider: string, type?: "api_key" | "oauth") => post<{ id: string }>("/models/login", { provider, type }),

@@ -398,7 +398,7 @@ test("boards: with a check, every task of a pool is followed by a second sub-age
 	assert.equal(r.status, "done");
 	const tasks = boards.items(1, { kind: "task" });
 	assert.deepEqual(tasks.map((t) => [t.id, t.state, t.after]), [[1, "done", []], [2, "done", []], [3, "done", [1]], [4, "done", [2]]]);
-	assert.match(tasks[2].text, /^CHECK-IT against the chapter\n\nYou check the work of another sub-agent\. You do not do it again and you change nothing\. Its task was:\nwrite one @@REF:w1@@\n\nIt was told:\nTWO-SENTENCES each$/);
+	assert.match(tasks[2].text, /^CHECK-IT against the chapter\n\nYou check the work of another sub-agent\. You do not do it again and you change nothing\. That sub-agent's task was:\nwrite one @@REF:w1@@\n\nIt was told:\nTWO-SENTENCES each$/);
 	// The note is for the work, not for the checks, which carry it in their own words.
 	assert.deepEqual(boards.items(1, { kind: "note" })[0].data, { tasks: [1, 2] });
 	const checker = h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 3)!;
@@ -425,7 +425,7 @@ test("boards: tasks split over several pool calls in one answer are one pool, no
 	const [first, second] = r.text.replace(/^FINAL:: /, "").split(" || ");
 	// One call works all four; the other says its tasks were added, and brings nothing twice.
 	const [worked, added] = /added to the pool/.test(first) ? [second, first] : [first, second];
-	assert.match(added, /^2 tasks added to the pool that is at work on this board\. Its call brings their results/);
+	assert.match(added, /^2 tasks added to the pool that is at work on this board\. The call that started the pool brings their results/);
 	for (const n of [1, 2, 3, 4]) assert.match(worked, new RegExp(`## Task #\\d+: done\\nanswer ${n}`));
 	assert.match(worked, /All 4 tasks of the board are done\. If the job has pieces that were not given as tasks yet, it is not done: /);
 	assert.ok(Math.max(...taken) <= 2, `never more at once than the agent's sub-agents may be (${Math.max(...taken)})`);
@@ -439,7 +439,7 @@ test("boards: a new board with a name says whom it is for, and with a scope exac
 	const h = await harness({ agents: { main: {}, helper: {} } });
 	// Without a scope nothing is made: a board for one conversation by default would look to its maker like one that others use.
 	let r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", kind: "task", text: "fix a" })] }]), ...owner });
-	assert.match(r.text, /there is no board "bugs" yet\. To make it, post again with "scope", which says whom it is for: "local" \(this conversation and its sub-agents, nobody else\), "agent" \(all your conversations\), "global" \(all agents\)\./);
+	assert.match(r.text, /there is no board "bugs" yet\. To make it, post again with "scope", which says whom it is for: "local" \(this conversation and the sub-agents it starts, nobody else\), "agent" \(all your conversations\), "global" \(all agents\)\./);
 	assert.deepEqual(h.pine.agents.boards.list(), []);
 	// Another agent is not offered what it cannot make.
 	r = await h.pine.agents.run({ agent: "helper", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", text: "x" })] }]), ...owner });
@@ -447,7 +447,7 @@ test("boards: a new board with a name says whom it is for, and with a scope exac
 	assert.doesNotMatch(r.text, /global/);
 	// Said to be for this conversation, it is made, and the answer says who sees it.
 	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", scope: "local", kind: "task", text: "fix a" })] }]), ...owner });
-	assert.match(r.text, /Posted task #1 on the board "bugs" \(of this conversation\)\. The board is new\. Only this conversation and its sub-agents see it: no other agent does, and a post on it wakes nobody\./);
+	assert.match(r.text, /Posted task #1 on the board "bugs" \(of this conversation\)\. The board is new\. Only this conversation and the sub-agents it starts see it: no other agent does, and a post on it wakes nobody\./);
 	// With a scope the board of that place is meant, not the nearer one of the same name; without one, the nearest.
 	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", scope: "global", kind: "task", text: "fix b" }), call("board_post", { board: "bugs", text: "a note" })] }]), ...owner });
 	assert.match(r.text, /Posted task #2 on the board "bugs" \(for all agents\)\. The board is new\. Every agent can use it\./);
@@ -692,6 +692,6 @@ test("boards: a sub-agent whose answer ends with a question leaves its task bloc
 	assert.match(last, /## Task #1: done\nCOUNT-A 12 lines: 0\.12 hours/);
 	assert.match(last, /## Task #2: done\nCOUNT-B 30 lines: 0\.3 hours/);
 	// And a sub-agent is told so before it answers.
-	assert.match(h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 1)!.prompt, /Do not end it with a question: an answer that ends by asking something is taken for a question, and the task waits for its answer\./);
+	assert.match(h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 1)!.prompt, /Do not end it with a question: an answer that ends by asking something is taken for a question, and the task waits for the answer\./);
 	await h.close();
 });

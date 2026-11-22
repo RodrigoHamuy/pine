@@ -213,7 +213,7 @@ test("tui: enter on a highlighted suggestion picks it and runs the command", asy
 	t.term.type("/model mo");
 	await t.sees(/→ mock\/m/);
 	t.term.type([KEY.enter]);
-	await t.sees("gonzo now uses mock/m (saved as its model)");
+	await t.sees("gonzo now uses mock/m (saved)");
 	assert.ok(!t.text().includes("is not defined in models.json"));
 	assert.equal(JSON.parse(fs.readFileSync(path.join(t.h.home, "agents", "gonzo", "agent.json"), "utf8")).model, "mock/m", "the choice is written to the agent's configuration");
 	assert.equal(JSON.parse(fs.readFileSync(path.join(t.h.home, "agents", "gonzo", "agent.json"), "utf8")).description, "law", "and the rest of the file is kept");
@@ -385,7 +385,7 @@ test("tui: the mouse works on tabs, their close buttons, the bottom bar and the 
 
 	await click("safe", last());
 	await t.sees("│ Mode for main");
-	await click("asks before every action");
+	await click("asks before each action");
 	await t.sees("main is now in manual mode");
 	await t.sees(/main · main · no folder · mock\/m · reasoning off · manual/);
 
@@ -761,7 +761,7 @@ test("tui: two values asked for at once are two blocks: a name, what it is, a ba
 	assert.equal(rows()[first - 1], "", "and one before the first");
 	const bars = () => rows().filter((l) => /^>( |$)|^  (•|empty)/.test(l));
 	assert.deepEqual(bars().map((l) => l.trim()), [">", "empty"], "the bar that is not typed into says that it is empty");
-	assert.ok(t.text().includes("Type or paste each one into its bar; tab goes to the next."));
+	assert.ok(t.text().includes("Type or paste each one; tab goes to the next field."));
 
 	t.term.type("abc");
 	await until(() => bars()[0]?.trim() === "> •••");
@@ -836,7 +836,7 @@ test("tui: an event from a subscribed source arrives in the conversation the age
 	await t.send("/sources");
 	await t.sees(/clock custom idle · a tick every second/);
 	await t.send("/subscribe clock say tock");
-	await t.sees("main is subscribed to clock (running). Each event arrives in its main conversation, here, and wakes it.");
+	await t.sees("main is subscribed to clock (running). Each event arrives in the agent's main conversation, here,");
 	// The tick shows up here as an event, not as something typed, and the agent answers it here.
 	await t.sees("⚡ clock: source/clock/tick", 5000);
 	await t.sees(/ECHO\[\[You are subscribed to the event source "clock"/, 5000);
@@ -854,7 +854,7 @@ test("tui: an event from a subscribed source arrives in the conversation the age
 	assert.deepEqual(t.h.pine.cfg.agents.main.subscribe.map((x) => `${x.source}@${x.session}`), ["clock@side"]);
 	await t.sees("⚡ clock: source/clock/tick", 5000);
 	t.term.type([KEY.ctrlW]);
-	await t.sees("closed main·side: its subscription to clock ended with it");
+	await t.sees("closed main·side: the subscription to clock ended with it");
 	assert.deepEqual(t.h.pine.cfg.agents.main.subscribe, []);
 	assert.equal(t.h.pine.sources.list()[0].running, false);
 	await t.close();
@@ -1362,7 +1362,7 @@ test("tui: a message typed while the agent works goes into that work; alt+enter 
 	await t.sees("● bash sleep 0.4; echo again");
 	t.term.type("and this afterwards");
 	t.term.type(["\x1b\r"]);
-	await t.sees("waits its turn");
+	await t.sees("queued");
 	await t.sees("THIRD-DONE");
 	await t.sees("ECHO[and this afterwards]");
 	assert.equal(t.h.pine.tasks.list({}).find((x) => x.prompt === "and this afterwards")!.meta.steered, undefined);

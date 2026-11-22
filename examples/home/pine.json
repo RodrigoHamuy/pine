@@ -1,7 +1,6 @@
 {
-  "main": "main",
+  "main": "prime",
   "defaults": {
-    "model": "dev/claude-haiku",
     "thinking": "off"
   },
   "limits": {

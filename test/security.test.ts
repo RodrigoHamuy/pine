@@ -497,7 +497,7 @@ test("a tainted session needs approval to hand work to any agent: what comes bac
 	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "mcp__feed__echo", args: { text: "x" } }] }, { tools: [to("gonzo"), to("scout")] }]), ...owner });
 	// gonzo cannot send anything out, and is asked about all the same: its answer would bring its files into a conversation that can.
 	assert.deepEqual(asked.map((a) => a.summary.split("\n")[0].slice(0, 15)), ["delegate: gonzo", "delegate: scout"]);
-	assert.match(asked[0].why, /has read content from outside .* the other agent's answer can carry its files into it/);
+	assert.match(asked[0].why, /has read content from outside .* the other agent's answer can bring that agent's files into this conversation/);
 	assert.ok(!r.text.includes("[gonzo] ECHO") && !r.text.includes("[scout] ECHO"), r.text);
 	assert.equal((r.text.match(/not approved \(timeout\)/g) ?? []).length, 2, r.text);
 	await h.close();

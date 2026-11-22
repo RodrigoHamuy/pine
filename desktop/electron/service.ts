@@ -205,7 +205,7 @@ export function connect(launch: Launch, opts: { home?: string; keep?: boolean } 
 			try {
 				said = JSON.parse(out.slice(0, end));
 			} catch {
-				return fail(new ServiceError("failed", `pine answered with something that is not its service line: ${out.slice(0, 200)}`));
+				return fail(new ServiceError("failed", `pine answered with something other than the expected service line: ${out.slice(0, 200)}`));
 			}
 			if (said.error) return fail(new ServiceError(/pine init|no pine home/i.test(said.error) ? "no-home" : "failed", String(said.error)));
 			settled = true;

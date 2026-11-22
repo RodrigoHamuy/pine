@@ -121,7 +121,7 @@ export function Composer({ tab }: { tab: Tab }) {
 			bridge.onVoice((m: { type: string; text?: string; state?: string; error?: string }) => {
 				if (!hearing.current) return;
 				if (m.type === "ready") setVoice("listening");
-				else if (m.type === "model") setVoiceNote(m.state === "downloading" ? "the system is fetching its speech model for this language, once" : "");
+				else if (m.type === "model") setVoiceNote(m.state === "downloading" ? "macOS is downloading the speech model for this language, once" : "");
 				else if (m.type === "partial") set(heard(m.text ?? ""));
 				else if (m.type === "done") {
 					hearing.current = false;
@@ -282,7 +282,7 @@ export function Composer({ tab }: { tab: Tab }) {
 			{goal && goal.status !== "active" ? (
 				<Alert className="mb-2">
 					<ClockIcon />
-					<AlertTitle>Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}</AlertTitle>
+					<AlertTitle>Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "limit reached"}</AlertTitle>
 					<AlertDescription className="truncate">{goal.note}</AlertDescription>
 					<AlertAction>
 						<Button variant="link" size="xs" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
@@ -449,7 +449,7 @@ export function Composer({ tab }: { tab: Tab }) {
 						<HoverTooltip>
 							<TooltipTrigger render={<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)} aria-label={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} />}>
 								<FolderIcon />
-								<span className="truncate @max-sm/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
+								<span className="truncate @max-sm/bar:hidden">{tab.folder ? baseName(tab.folder) : "workspace"}</span>
 							</TooltipTrigger>
 							<TooltipContent>{tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"}</TooltipContent>
 						</HoverTooltip>
@@ -484,9 +484,9 @@ export function Composer({ tab }: { tab: Tab }) {
 							<HoverTooltip>
 								{/* Said as disabled, not disabled: a disabled button inside an InputGroup dims the whole
 								    composer (`has-disabled:`). With nothing to send, `send` does nothing. */}
-								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" onClick={() => void send("steer")} aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
+								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" onClick={() => void send("steer")} aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits until it is done" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
 								<TooltipContent>
-									{tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"}
+									{tab.busy ? "Give it to the agent while it works · ⌥↩ waits until it is done" : "Send"}
 									<Kbd>↩</Kbd>
 								</TooltipContent>
 							</HoverTooltip>

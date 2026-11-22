@@ -61,6 +61,8 @@ export type Item = Base &
 		| { t: "work"; parts: Part[]; done: boolean; open: boolean; startedAt: number; ms?: number }
 		| { t: "note"; tone: Tone; text: string; lines?: Array<{ text: string; tone?: Tone }>; action?: { label: string; run: () => void } }
 		| { t: "event"; label: string; body: string }
+		/** A message was not answered because the agent has no model that answers (`ModelNotice`). */
+		| { t: "model"; agent: string }
 		| { t: "approval"; req: Approval; state: "open" | "allowed" | "denied" | "gone"; by?: string; always?: boolean }
 		| { t: "steps"; task: number; items: Todo[] }
 		| { t: "media"; name: string; url: string; kind: "image" | "video" | "audio" }
@@ -213,7 +215,7 @@ const HOME_SCREEN_KEY = "pine.homeScreen";
 const sessionName = () => `s${Date.now().toString(36)}`;
 /** What a conversation is told when it moves into a worktree. */
 const worktreeNote = (made: WorktreeMade) =>
-	`This conversation now works in the worktree ${made.branch} at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a checkout of its own, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} Merge it back from the folder's chip.`;
+	`This conversation now works in the worktree ${made.branch} at ${tilde(made.path)}${made.base ? `, made from ${made.base}` : ""}: a separate checkout, so other conversations' files are not touched. What is not committed in the folder stayed there.${made.copied.length ? ` Copied from .worktreeinclude: ${made.copied.join(", ")}.` : ""} Merge it back from the folder's chip.`;
 
 /** Where the app's update of a newer release stands (`Store.updatePhase`), with what a view of it says. */
 export type UpdatePhase = { phase: "waiting" | "ready" | "downloading" | "link"; version: string; mine: string; url: string; reason?: string };
@@ -470,8 +472,8 @@ export class Store extends Model {
 		const how = await this.pick({
 			title: `Remove the agent ${id}?`,
 			items: [
-				{ value: "erase", label: "Remove it with everything it has", about: `its ${plural(d.holdings.conversations.length, "conversation")}, sources, schedules, servers, skills and its folder. This cannot be undone`, tone: "bad" },
-				{ value: "keep", label: "Remove it, but keep its folder", about: "the folder is moved to removed/ in pine's home" },
+				{ value: "erase", label: "Remove it with everything it has", about: `the agent's ${plural(d.holdings.conversations.length, "conversation")}, sources, schedules, servers, skills and folder. This cannot be undone`, tone: "bad" },
+				{ value: "keep", label: "Remove it, but keep the agent's folder", about: "the folder is moved to removed/ in pine's home" },
 				{ value: "no", label: "Cancel" },
 			],
 		});
@@ -479,7 +481,7 @@ export class Store extends Model {
 		const gone = await this.attempt(() => api.eraseAgent(id, how === "keep"));
 		if (!gone) return false;
 		if (gone.problem) this.flash(`${id} is taken out, but what is left of the configuration does not load: ${gone.problem}`, "bad", 12_000);
-		else this.flash(`Removed the agent ${id}.${gone.kept ? ` Its folder is kept at ${tilde(gone.kept)}.` : ""}`, "good");
+		else this.flash(`Removed the agent ${id}.${gone.kept ? ` The agent's folder is kept at ${tilde(gone.kept)}.` : ""}`, "good");
 		this.agents = await this.askAgents().catch(() => this.agents);
 		this.tabs = this.tabs.filter((t) => t.agent !== id || t.kind === "events");
 		if (this.active?.agent === id) this.active = this.tabs[0];
@@ -515,7 +517,7 @@ export class Store extends Model {
 		this.agents = await this.askAgents().catch(() => this.agents);
 		void this.refreshConversations(to);
 		if (done.problem) this.flash(`${from} is called ${to} now, but the configuration does not load: ${done.problem}`, "bad", 12_000);
-		else this.flash(`${from} is called ${to} now.${done.addresses.length ? ` Its webhook address${done.addresses.length === 1 ? " is" : "es are"} now ${done.addresses.join(", ")}: give ${done.addresses.length === 1 ? "it" : "them"} to whoever calls.` : ""}`, done.addresses.length ? "warn" : "good", done.addresses.length ? 12_000 : 3500);
+		else this.flash(`${from} is called ${to} now.${done.addresses.length ? ` The webhook address${done.addresses.length === 1 ? " is" : "es are"} now ${done.addresses.join(", ")}: give ${done.addresses.length === 1 ? "it" : "them"} to whoever calls.` : ""}`, done.addresses.length ? "warn" : "good", done.addresses.length ? 12_000 : 3500);
 		this.touch();
 		return true;
 	}
@@ -725,7 +727,7 @@ export class Store extends Model {
 			const sure = await this.pick({
 				title: `Forget ${name}?`,
 				items: [
-					{ value: "forget", label: `Forget it on this ${this.device}`, about: `this ${this.device} no longer lists it. Its access stays open until you remove this ${this.device} in the Pine app on ${name}: Settings > Browser access, Remove`, tone: "bad" },
+					{ value: "forget", label: `Forget it on this ${this.device}`, about: `this ${this.device} no longer lists it. Access stays open until you remove this ${this.device} in the Pine app on ${name}: Settings > Browser access, Remove`, tone: "bad" },
 					{ value: "no", label: "Cancel" },
 				],
 			});
@@ -1164,6 +1166,12 @@ export class Store extends Model {
 		this.touch();
 	}
 
+	/** Where there is no model to choose from yet: the way to Settings › Models, in place of an empty list. */
+	async connectModel(): Promise<void> {
+		const go = await this.pick({ title: "Connect a model first", items: [{ value: "models", label: "Settings › Models", about: "Sign in to a subscription or add a model server of your own." }] });
+		if (go) this.openSettings("models");
+	}
+
 	/**
 	 * Choose the model of every agent that has none of its own (`defaults.model`), from `among` or
 	 * from all that can be used now. Offered where a model was just made available, and where an
@@ -1171,13 +1179,14 @@ export class Store extends Model {
 	 */
 	async chooseDefaultModel(among?: string[]): Promise<void> {
 		const models = among?.length ? among : await this.attempt(() => api.models());
-		if (!models?.length) return this.flash("There is no model to choose yet: sign in to a provider or add a model server first.", "warn");
+		if (!models) return;
+		if (!models.length) return this.connectModel();
 		const now = (await this.attempt(() => api.settings()))?.find((x) => x.key === "defaults.model")?.now;
-		const model = await this.pick({ title: "Model for every agent that has none of its own", items: models.map((m) => ({ value: m, label: m })), current: now, placeholder: "Search models" });
+		const model = await this.pick({ title: "Model for all agents without a model of their own", items: models.map((m) => ({ value: m, label: m })), current: now, placeholder: "Search models" });
 		if (!model || model === now) return;
 		if (!(await this.attempt(() => api.setSetting("defaults.model", model)))) return;
 		await this.refreshAgents();
-		this.flash(`Your agents now run on ${model}. An agent with a model of its own keeps it.`, "good", 6000);
+		this.flash(`Your agents now run on ${model}. Agents with a model of their own keep it.`, "good", 6000);
 	}
 
 	/** Open or close the form that publishes an event as the owner. What waits for an answer is asked once it is closed. */
@@ -1320,6 +1329,16 @@ export class Store extends Model {
 		tab.touch();
 	}
 
+	/**
+	 * A task that failed. Where the agent has no model that answers, that is what is said, with the way
+	 * to one.
+	 */
+	private failed(tab: Tab, error?: string): void {
+		const info = this.agent(tab.agent);
+		if (!info?.modelProblem) return void tab.note(`Failed${error ? `: ${error}` : ""}`, "bad");
+		tab.add({ t: "model", agent: tab.agent });
+	}
+
 	private past(tab: Tab, t: Task): void {
 		if (t.meta?.compact) return void tab.note(t.status === "done" ? (t.result ?? "The earlier part of the conversation was summarised.") : `Shortening the conversation: ${t.status}${t.error ? ` (${t.error})` : ""}`);
 		if (t.kind === "event" && t.meta?.label) tab.add({ t: "event", label: t.meta.label, body: eventBody(t.prompt) });
@@ -1331,7 +1350,8 @@ export class Store extends Model {
 		if (t.status === "done") {
 			if (t.result) tab.lastAnswer = t.result;
 			tab.add({ t: "answer", task: t.id, agent: t.agent, text: t.result || "(no answer)", live: false });
-		} else if (t.status === "failed" || t.status === "cancelled") tab.note(t.status === "cancelled" ? "Stopped" : `Failed${t.error ? `: ${t.error}` : ""}`, t.status === "cancelled" ? "muted" : "bad");
+		} else if (t.status === "cancelled") tab.note("Stopped", "muted");
+		else if (t.status === "failed") this.failed(tab, t.error);
 	}
 
 	/** A tab on one task, typically a sub-agent: what it was given, thought and wrote, and every tool call. */
@@ -1418,7 +1438,7 @@ export class Store extends Model {
 			if (tab.session !== "main") {
 				void api
 					.closeSession(tab.agent, tab.session)
-					.then((r) => r.unsubscribed.length && this.flash(`Closed ${tab.agent} · ${tab.session}: its ${plural(r.unsubscribed.length, "subscription")} to ${r.unsubscribed.join(", ")} ended with it.`, "muted", 6000))
+					.then((r) => r.unsubscribed.length && this.flash(`Closed ${tab.agent} · ${tab.session}: ${plural(r.unsubscribed.length, "subscription")} to ${r.unsubscribed.join(", ")} ended with it.`, "muted", 6000))
 					.catch(() => {});
 			}
 		}
@@ -1529,13 +1549,13 @@ export class Store extends Model {
 		const picked = await this.pick({ title: `Move ${this.titleOf(agent, session)} to`, items, placeholder: "A group" });
 		if (!picked) return;
 		if (picked === "out") return this.moveToGroup(agent, session, null);
-		const name = picked === "new" ? await this.pick({ title: "A new group", items: [], free: true, placeholder: "Its name" }) : picked.slice(3);
+		const name = picked === "new" ? await this.pick({ title: "A new group", items: [], free: true, placeholder: "Group name" }) : picked.slice(3);
 		if (name?.trim()) await this.moveToGroup(agent, session, name.trim());
 	}
 
 	/** Make an empty group under an agent, for conversations to be dragged into. */
 	async newGroup(agent: string): Promise<void> {
-		const name = await this.pick({ title: `A new group for ${agent}'s conversations`, items: [], free: true, placeholder: "Its name" });
+		const name = await this.pick({ title: `A new group for ${agent}'s conversations`, items: [], free: true, placeholder: "Group name" });
 		if (!name?.trim()) return;
 		if (await this.attempt(() => api.addGroup(agent, name.trim()))) await this.refreshConversations(agent);
 	}
@@ -1557,7 +1577,7 @@ export class Store extends Model {
 		const goes = inIt.filter((c) => c.session !== "main").map((c) => this.titleOf(agent, c.session));
 		const stays = inIt.some((c) => c.session === "main");
 		const about = goes.length ? `${goes.join(", ")}: what was said in ${goes.length === 1 ? "it" : "them"}, and what was set up for ${goes.length === 1 ? "it" : "them"} alone, is deleted. This cannot be undone.${stays ? ` The main conversation stays, under ${agent}.` : ""}` : stays ? `There is no conversation in it to remove: the main conversation stays, under ${agent}.` : "There is no conversation in it.";
-		const sure = await this.pick({ title: goes.length ? `Remove the group ${name} and its ${plural(goes.length, "conversation")} for good?` : `Remove the group ${name}?`, items: [{ value: "yes", label: goes.length ? "Remove them for good" : "Remove the group", about, tone: goes.length ? "bad" : undefined }, { value: "no", label: "Cancel" }] });
+		const sure = await this.pick({ title: goes.length ? `Remove the group ${name} and the ${plural(goes.length, "conversation")} in it for good?` : `Remove the group ${name}?`, items: [{ value: "yes", label: goes.length ? "Remove them for good" : "Remove the group", about, tone: goes.length ? "bad" : undefined }, { value: "no", label: "Cancel" }] });
 		if (sure !== "yes") return;
 		const gone = await this.attempt(() => api.removeGroup(agent, name));
 		if (!gone) return;
@@ -1628,7 +1648,7 @@ export class Store extends Model {
 		const w = (await this.attempt(() => api.worktree(tab.agent, tab.session)))?.worktree;
 		if (w === undefined) return;
 		if (!w) {
-			const make = await this.pick({ title: "Work in a worktree?", items: [{ value: "make", label: "Make a worktree of this folder", about: "A checkout of its own of the repository, on a branch pine/<name>: other conversations' files are not touched, and you merge it back when it is done." }, { value: "no", label: "Cancel" }] });
+			const make = await this.pick({ title: "Work in a worktree?", items: [{ value: "make", label: "Make a worktree of this folder", about: "A separate checkout of the repository, on a branch pine/<name>: other conversations' files are not touched, and you merge it back when it is done." }, { value: "no", label: "Cancel" }] });
 			return make === "make" ? this.makeWorktree(tab) : undefined;
 		}
 		const stand = `${plural(w.ahead, "commit")} ahead of ${w.base}${w.behind ? `, ${w.behind} behind` : ""}${w.dirty ? `, ${plural(w.dirty, "file")} not committed` : ""}`;
@@ -1636,7 +1656,7 @@ export class Store extends Model {
 		if (w.mergeable && w.ahead) items.push({ value: "merge", label: `Merge into ${w.base}`, about: stand }, { value: "squash", label: `Squash into ${w.base}`, about: "All of it as one commit" });
 		if (w.behind) items.push({ value: "update", label: `Update from ${w.base}`, about: `Bring the ${plural(w.behind, "new commit")} of ${w.base} into the worktree` });
 		if (w.dirty) items.push({ value: "commit", label: "Ask the agent to commit", about: "A merge takes what is committed" });
-		items.push({ value: "discard", label: "Discard the worktree…", about: w.merged && !w.dirty ? "Everything of it is merged" : "Its changes and its branch are deleted", tone: w.merged && !w.dirty ? undefined : "bad" });
+		items.push({ value: "discard", label: "Discard the worktree…", about: w.merged && !w.dirty ? "Everything in it is merged" : "The worktree's changes and branch are deleted", tone: w.merged && !w.dirty ? undefined : "bad" });
 		items.push({ value: "keep", label: "Discard, keep the branch", about: `The folder goes, ${w.branch} stays for git` });
 		const chosen = await this.pick({ title: `${w.branch} · ${stand}`, items });
 		if (!chosen) return;
@@ -1654,7 +1674,7 @@ export class Store extends Model {
 				if (sure !== "yes") return;
 			}
 			const r = await this.attempt(() => api.discardWorktree(tab.agent, tab.session, chosen === "keep"));
-			if (r) tab.note(`The worktree is gone${chosen === "keep" ? `; its branch ${w.branch} stays` : ""}. This conversation works in ${r.folder ? tilde(r.folder) : "its agent's workspace"} again.`);
+			if (r) tab.note(`The worktree is gone${chosen === "keep" ? `; the branch ${w.branch} stays` : ""}. This conversation works in ${r.folder ? tilde(r.folder) : "the agent's workspace"} again.`);
 		}
 		await this.followWorktree(tab.agent, tab.session);
 	}
@@ -1758,8 +1778,8 @@ export class Store extends Model {
 			if (steered === undefined) (mine.task = task), mine.v++;
 			if (steered !== undefined) {
 				tab.awaiting = tab.awaiting.filter((p) => p !== text);
-				this.flash("Given to the agent while it works. ⌥↩ makes a message wait its turn instead.", "muted", 3000);
-			} else if (busy) this.flash("It waits its turn: it is answered when the work that is running is done.", "muted", 3000);
+				this.flash("Given to the agent while it works. ⌥↩ makes a message wait until the agent is done instead.", "muted", 3000);
+			} else if (busy) this.flash("Queued: it is answered when the agent is done with the current work.", "muted", 3000);
 		} catch (e) {
 			tab.awaiting = tab.awaiting.filter((p) => p !== text);
 			tab.attachments.unshift(...files);
@@ -1813,7 +1833,7 @@ export class Store extends Model {
 
 	async reset(tab: Tab): Promise<void> {
 		if (tab.kind !== "chat") return;
-		const ok = await this.pick({ title: `Start the conversation ${tab.session} of ${tab.agent} over?`, items: [{ value: "yes", label: "Forget it and start fresh", about: "What was said is gone; what it may do without asking, its goal and what it listens to on its own go with it.", tone: "bad" }, { value: "no", label: "Cancel" }] });
+		const ok = await this.pick({ title: `Start the conversation ${tab.session} of ${tab.agent} over?`, items: [{ value: "yes", label: "Forget it and start fresh", about: "The messages are deleted, along with what the agent may do without asking here, the goal and what only this conversation listens to.", tone: "bad" }, { value: "no", label: "Cancel" }] });
 		if (ok !== "yes") return;
 		if (!(await this.attempt(() => api.reset(tab.agent, tab.session)))) return;
 		this.freshen(tab);
@@ -1855,6 +1875,7 @@ export class Store extends Model {
 		const info = this.agent(tab.agent);
 		const models = await this.attempt(() => api.models());
 		if (!info || !models) return;
+		if (!models.length) return this.connectModel();
 		const model = await this.pick({ title: `Model for ${tab.agent}`, items: models.map((m) => ({ value: m, label: m })), current: info.model, placeholder: "Search models" });
 		if (!model || model === info.model) return;
 		if (!(await this.attempt(() => api.setModel(tab.agent, model)))) return;
@@ -1907,7 +1928,7 @@ export class Store extends Model {
 				if (!(await this.attempt(() => api.setMode(t.agent, mode)))) return;
 				info.mode = "bypass";
 				await this.openTab(t.agent, sessionName());
-				this.active?.note(`${t.agent} is in bypass mode in this new conversation. Nothing waits for approval, and its shell and file tools reach your whole account and the network.`, "warn");
+				this.active?.note(`${t.agent} is in bypass mode in this new conversation. Nothing waits for approval, and the agent's shell and file tools reach your whole account and the network.`, "warn");
 				return void this.active?.touch();
 			}
 		}
@@ -1915,11 +1936,11 @@ export class Store extends Model {
 		info.mode = mode as AgentInfo["mode"];
 		t.pauseNoted = false;
 		const more: Record<string, string> = {
-			bypass: "Nothing waits for approval now, and its shell and file tools reach your whole account and the network.",
-			plan: "It looks, reads and asks, and changes nothing: ask for what you want, read its plan, then switch the mode back to have it carried out.",
-			auto: "Its shell and file tools work without a sandbox: your whole account and the network. What is critical is still asked about.",
-			safe: "Its shell and file tools work inside its sandbox: its own folders, and what you allow it.",
-			manual: "Every command, edit and message waits for your go-ahead.",
+			bypass: "Nothing waits for approval now, and the agent's shell and file tools reach your whole account and the network.",
+			plan: "It looks, reads and asks, and changes nothing: ask for what you want, read the plan, then switch the mode back to have it carried out.",
+			auto: "The agent's shell and file tools work without a sandbox: your whole account and the network. What is critical is still asked about.",
+			safe: "The agent's shell and file tools work inside a sandbox: the agent's own folders, and what you allow.",
+			manual: "Each command, edit and message waits for your go-ahead.",
 		};
 		t.note(`${t.agent} is now in ${mode} mode${mode === "bypass" || mode === "plan" ? " (until pine restarts)" : "; it is saved, and holds after a restart too"}.`, mode === "bypass" ? "warn" : "muted", { lines: [{ text: more[mode] ?? "" }] });
 		t.touch();
@@ -1984,7 +2005,7 @@ export class Store extends Model {
 
 	async askRename(tab: Tab): Promise<void> {
 		if (tab.kind !== "chat") return;
-		if (tab.session === "main") return this.flash("An agent's main conversation keeps its name.");
+		if (tab.session === "main") return this.flash("An agent's main conversation cannot be renamed.");
 		const to = await this.pick({ title: `Another name for ${tab.session}`, items: [], free: true, placeholder: "The new name" });
 		if (to?.trim()) await this.rename(tab.agent, tab.session, to.trim());
 	}
@@ -1993,7 +2014,7 @@ export class Store extends Model {
 		const gone = await this.attempt(() => api.removeSession(agent, session));
 		if (!gone) return;
 		this.dropTabs(agent, session);
-		const with_ = [...(gone.sources.length ? [`its ${plural(gone.sources.length, "event source")} ${gone.sources.join(", ")}`] : gone.unsubscribed.length ? [`its ${plural(gone.unsubscribed.length, "subscription")} to ${gone.unsubscribed.join(", ")}`] : []), ...(gone.servers.length ? [`its ${plural(gone.servers.length, "MCP server")} ${gone.servers.join(", ")}`] : [])];
+		const with_ = [...(gone.sources.length ? [`${plural(gone.sources.length, "event source")} ${gone.sources.join(", ")}`] : gone.unsubscribed.length ? [`${plural(gone.unsubscribed.length, "subscription")} to ${gone.unsubscribed.join(", ")}`] : []), ...(gone.servers.length ? [`${plural(gone.servers.length, "MCP server")} ${gone.servers.join(", ")}`] : [])];
 		this.flash(`Removed the conversation ${session} of ${agent}${with_.length ? `, with ${with_.join(" and ")}` : ""}.`, "muted", with_.length ? 7000 : 4000);
 		void this.refreshConversations(agent);
 	}
@@ -2184,7 +2205,7 @@ export class Store extends Model {
 		const ok = runnable(code);
 		if (!ok.ok) return this.flash(ok.why, "warn", 8000);
 		const tab = this.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === session) ?? (this.active?.kind === "chat" ? this.active : undefined);
-		if (!tab) return this.flash("This answer's conversation is not open in a tab: open it to run its code.", "warn");
+		if (!tab) return this.flash("This answer's conversation is not open in a tab: open it to run the code.", "warn");
 		tab.runs.push(ok.text);
 		tab.touch();
 		if (this.active !== tab) this.activate(tab);
@@ -2369,7 +2390,8 @@ export class Store extends Model {
 			return;
 		}
 		// A theme chosen in another UI, or by the main agent: the window follows.
-		if (e.topic === "pine/settings") return void (p.key === "ui.theme" ? this.refreshThemes() : p.key === "ui.view" && this.refreshViews());
+		// The model agents run on: whether it can answer is in what is said about each agent (modelProblem).
+		if (e.topic === "pine/settings") return void (p.key === "ui.theme" ? this.refreshThemes() : p.key === "ui.view" ? this.refreshViews() : p.key === "defaults.model" && this.refreshAgents());
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
 
@@ -2433,7 +2455,7 @@ export class Store extends Model {
 					tab.stopped.waiting--;
 					tab.stopped.spared.add(p.task);
 				}
-			} else if (p.compact) tab.note("Shortening the conversation: its earlier part becomes a summary…");
+			} else if (p.compact) tab.note("Shortening the conversation: the earlier part becomes a summary…");
 			else if (p.requeued) {
 				if (tab.stopped && Date.now() - tab.stopped.at < STOP_GRACE) tab.stopped.spared.add(p.task);
 			} else if (!tab.roots.has(p.task)) {
@@ -2723,7 +2745,8 @@ export class Store extends Model {
 					if (p.text) tab.lastAnswer = p.text;
 					if (!item && !tab.streamed.has(p.task) && p.text) tab.add({ t: "answer", task: p.task, agent: p.agent ?? tab.agent, text: p.text, live: false, ...(tab === this.active ? { arrived: { heard: false } } : {}) });
 				} else if (p.status === "cancelled") tab.note("Stopped");
-				else tab.note(`${p.status === "failed" ? "Failed" : p.status}${p.error && p.error !== p.status ? `: ${p.error}` : ""}`, "bad");
+				else if (p.status === "failed") this.failed(tab, p.error);
+				else tab.note(`${p.status}${p.error && p.error !== p.status ? `: ${p.error}` : ""}`, "bad");
 				tab.streamed.delete(p.task);
 				if (tab.kind === "task") tab.add({ t: "divider", text: taskSummary(p.status, p.stats) });
 				else void this.refreshTaints();

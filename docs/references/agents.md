@@ -23,7 +23,7 @@ agents/gonzo/
 Ask the main agent ("create an agent that keeps my books"): it calls `create_agent`, you confirm
 what it proposes, and the folder above is made with `agent.json` and a workspace that holds its
 instructions (`AGENTS.md`) and stubs of `SOUL.md`, `TOOLS.md` and `MEMORY.md`. The agent exists at once,
-without a restart. Only the main agent has this tool; the
+without a restart, and its conversation opens in a tab beside yours. Only the main agent has this tool; the
 others tell you to ask it. See [setup.md](setup.md).
 
 By hand: make the folder with an `agent.json` (`{}` is enough) and a `workspace/AGENTS.md`,
@@ -34,6 +34,21 @@ instructions), to give it another name or to remove it, ask the main agent as we
 `update_agent`, `rename_agent` and `remove_agent`, described in [setup.md](setup.md) under
 "Changing and removing an agent" and "Renaming an agent". Nobody has to edit
 `agent.json` or delete a folder by hand.
+
+## Meeting an agent
+
+Each agent introduces itself once, when it first meets its owner. No agent starts a conversation by itself: pine sends a model nothing you did not write.
+
+| When | What happens |
+|---|---|
+| Your first message to an agent | The first time you write to an agent, the main agent included, a note in front of your message tells it to begin its answer by introducing itself in two or three sentences: its name, what it is for, what it can do for you |
+| Only once | It is kept in pine's database (`introduced:<agent>`), and only once the turn ended well: a model that failed has met nobody. An event from outside, a task from another agent or a sub-agent never counts as the first meeting. An agent that answered you before this existed does not introduce itself |
+| `defaults.introduce` | `false` in `pine.json` (or `set_setting`) and no agent introduces itself |
+
+Before any model answers, the main agent's main conversation begins with pine's welcome: what the
+main agent is for, the three things pine is for (chatting, code, acting on events), a prompt to
+try, and where pine's home is. pine wrote it, not a model; it stays at the top of that
+conversation and is no part of what the model reads ([desktop.md](desktop.md), "The first start").
 
 ## The files an agent keeps itself
 
@@ -590,7 +605,7 @@ delegate(agent, task, wait?, thread?, worktree?)
   ([boards.md](boards.md)).
 
 What an agent is for, as the agents that delegate to it read it, is the first paragraph of its
-`AGENTS.md` (a heading above it aside), one line of at most 160 characters. Write it for the
+`AGENTS.md` (a heading above it aside), one line of at most 240 characters. Write it for the
 delegating model: "You are gonzo. Contract law; you know the case files in your workspace"
 works; "Gonzo" does not. An agent keeps its `AGENTS.md` itself, so it can change that line too.
 pine reads the file only as the plain file it is (not through a link, nor a file with a second
