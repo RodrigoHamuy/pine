@@ -180,7 +180,7 @@ test("tui: tabs, slash commands and keys", async () => {
 	assert.ok(!/4 events/.test(t.text()));
 	t.term.type([KEY.alt(1)]);
 	await t.send("/status");
-	await t.sees("model slots 0/2 busy");
+	await t.sees("model slots 0/8 busy");
 	await t.send("/reset");
 	await t.sees("fresh conversation");
 	await t.send("after reset");

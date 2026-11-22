@@ -121,7 +121,7 @@ test("instructions: a home from before gets the files for all agents; as pine st
 	const h = await harness({ agents: { main: {}, gonzo: {} } });
 	const rules = path.join(h.home, "AGENTS.md"), tools = path.join(h.home, "TOOLS.md");
 	for (const f of [rules, tools, path.join(h.home, "USER.md")]) assert.equal(fs.statSync(f).mode & 0o777, 0o600, f);
-	assert.match(fs.readFileSync(tools, "utf8"), /^# Tools\n/);
+	assert.equal(fs.readFileSync(tools, "utf8"), "", "it starts empty");
 	await h.pine.agents.run({ agent: "gonzo", prompt: "hello", ...owner });
 	assert.ok(!h.system(h.mock.state.requests.at(-1)).includes("# Tools") && !h.system(h.mock.state.requests.at(-1)).includes("# All agents"), "a file nobody has written into is not read to a small model");
 	// The main agent writes a default for all agents: the conversation gonzo is in is told, and which file it is.

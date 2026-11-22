@@ -1593,7 +1593,7 @@ export class PineTui {
 	private async endLocal(tab: Tab, say = true): Promise<void> {
 		if (tab.kind !== "chat" || tab.session === "main" || this.tabs.some((t) => t !== tab && t.kind === "chat" && t.agent === tab.agent && t.session === tab.session)) return;
 		const ended = (await this.client.closeSession(tab.agent, tab.session).catch(() => ({ unsubscribed: [] as string[] }))).unsubscribed;
-		if (ended.length && say) this.flash(`closed ${tab.agent}·${tab.session}: subscription${ended.length === 1 ? "" : "s"} to ${ended.join(", ")} ended with it`, 6000);
+		if (ended.length && say) this.flash(`closed ${tab.agent}·${tab.session}: the subscription${ended.length === 1 ? "" : "s"} to ${ended.join(", ")} ended with it`, 6000);
 	}
 
 	private closeTab(tab: Tab): void {

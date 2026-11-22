@@ -239,7 +239,7 @@ test("conversations are kept in groups: one made from the agent's menu is filled
 
 	// A group is made from the agent's menu, empty, with a name the owner types.
 	assert.ok((await choose(agentLine, "group")).includes("Sort by Last Used ✓"), "the list is sorted by when a conversation was last used, as it was");
-	await page.fill("[data-slot=dialog-content] input[placeholder='Its name']", "Okapi");
+	await page.fill("[data-slot=dialog-content] input[placeholder='Group name']", "Okapi");
 	await page.keyboard.press("Enter");
 	await group("Okapi").waitFor();
 	// (A branch made through the control API is in the list the side bar asked for after that.)
@@ -290,7 +290,7 @@ test("conversations are kept in groups: one made from the agent's menu is filled
 
 	// Removing the group asks first, and takes its conversations with it.
 	await choose(group("Okapi 2026").locator("[data-slot=group-label]"), "remove");
-	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the group Okapi 2026 and its 3 conversations for good?");
+	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the group Okapi 2026 and the 3 conversations in it for good?");
 	await page.click("[data-slot=command-item]:has-text('Remove them for good')");
 	await sees("[data-slot=toast] >> text=Removed the group Okapi 2026 with 3 conversations.");
 	await group("Okapi 2026").waitFor({ state: "detached" });

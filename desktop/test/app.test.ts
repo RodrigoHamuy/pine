@@ -715,7 +715,9 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	await confirm("[data-slot=dialog-title] >> text=Which agent works in");
 	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=pine-desktop-folder");
 	await page.click(CODE_TOGGLE);
-	// The panel begins with the agent: who it is and what it runs on.
+	// The panel opens on the files; its Agent view says who the agent is and what it runs on.
+	await sees("[data-slot=code-panel] [role=tab][aria-selected=true] >> text=Files");
+	await page.locator("[data-slot=code-panel]").getByRole("tab", { name: "Agent" }).click();
 	await sees("[data-slot=code-panel] [data-slot=item-title] >> text=main");
 	assert.match(await page.textContent("[data-slot=code-panel]"), /it administers pine[\s\S]*mock\/m[\s\S]*hands work to scout/);
 	// The panel is as wide as it is dragged, by the edge before it, and the keyboard moves that edge too.
@@ -934,7 +936,9 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees(`${list} [role=option][data-highlighted]`);
 	await page.keyboard.press("Escape");
 	await page.waitForSelector(list, { state: "detached" });
-	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
+	// Focus comes back once the list has finished closing (it fades out after it is closed).
+	const backOnIt = () => page.waitForFunction(() => document.activeElement?.matches("[data-setting-key='defaults.thinking'] [role=combobox]"), null, { timeout: 3000 });
+	await backOnIt();
 	await page.keyboard.press("Enter");
 	await sees(`${list} [role=option][data-highlighted]`);
 	const before = await page.textContent(`${list} [role=option][data-highlighted]`);
@@ -944,7 +948,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.keyboard.press("Enter");
 	await page.waitForFunction((v) => [...document.querySelectorAll("[data-slot=toast]")].some((t) => t.textContent?.includes(`Reasoning: ${v}`)), chosen);
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.thinking, chosen);
-	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
+	await backOnIt();
 	// Agents: make one.
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=Agents");
 	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "New agent" }).click();
@@ -995,8 +999,9 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await shot("08b-settings-routes");
 	// Models: sign in to a provider with a key. It is typed into a field of its own and not shown.
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=Models");
-	await page.locator("[data-slot=settings-page] h2").getByRole("button", { name: /Show all/ }).click();
-	const row = page.locator("[data-slot=settings-page] [data-slot=item]", { has: page.locator("[data-slot=badge]", { hasText: /^opencode$/ }) }).first();
+	// The usual providers are listed; any other is found by searching.
+	await page.fill("[data-slot=settings-page] input[aria-label='Search providers']", "opencode");
+	const row = page.locator("[data-slot=settings-page] [data-provider=opencode]");
 	await row.getByRole("button", { name: "API key" }).click();
 	await sees("[data-slot=dialog-content] input[type=password]");
 	await page.fill("[data-slot=dialog-content] input[type=password]", "sk-test-not-a-real-key-0123456789");
@@ -1016,22 +1021,22 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees(`[data-setting=fallback-model] [data-slot=field-label] >> text=${offered[0]}`);
 	// Signed out again, that model cannot answer: the page says so for each agent it leaves without
 	// one, and so does the welcome of such an agent's conversation, with the way to this page.
-	const signedIn = page.locator("[data-slot=settings-page] [data-slot=item]", { has: page.locator("[data-slot=badge]", { hasText: /^opencode$/ }) }).first();
+	const signedIn = page.locator("[data-slot=settings-page] [data-provider=opencode]");
 	await signedIn.getByRole("button", { name: "Sign out" }).click();
 	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=/^Sign out of /");
 	await page.locator("[role=alertdialog]").getByRole("button", { name: "Sign out" }).click();
-	await sees("[data-slot=item-group] [data-slot=alert] >> text=/main cannot answer: .* needs a sign-in to opencode/");
+	await sees("[data-slot=settings-page] [data-slot=model-notice] >> text=/main cannot answer: .* needs a sign-in to opencode/");
 	await page.click("[data-slot=tab]:has-text('pine-desktop-folder')");
-	await sees("[data-slot=empty] [data-slot=alert] >> text=/needs a sign-in to opencode/");
+	await sees("[data-slot=empty] [data-slot=model-notice] >> text=/needs a sign-in to opencode/");
 	await shot("09-no-model");
-	await page.locator("[data-slot=empty] [data-slot=alert]").getByRole("button", { name: "Models" }).click();
+	await page.locator("[data-slot=empty] [data-slot=model-notice]").getByRole("button", { name: "Models" }).click();
 	await sees("[data-slot=settings-page] h1 >> text=Models");
 	// "Change" offers every model that can be used now.
 	await page.locator("[data-setting=fallback-model]").getByRole("button", { name: "Change" }).click();
 	await sees("[data-slot=dialog-title] >> text=Model for all agents without a model of their own");
 	await page.getByRole("option", { name: "mock/m" }).click();
 	await sees("[data-slot=toast] >> text=Your agents now run on mock/m");
-	await page.waitForSelector("[data-slot=item-group] [data-slot=alert]", { state: "detached" });
+	await page.waitForSelector("[data-slot=settings-page] [data-slot=model-notice]", { state: "detached" });
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, "mock/m");
 	// MCP servers: a remote one is added, pine says whether it connects, and "Sign in" runs pi's own
 	// sign-in for it (which for a server that wants none says so; a browser opens only where one is needed).
@@ -1097,13 +1102,13 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await sees("[data-slot=settings-page] [data-slot=item-title] >> text=scans");
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"scans"/);
 	await shot("09-settings-sources");
-	for (const [nav, title] of [["Models", "Models"], ["MCP servers", "MCP servers"], ["Skills", "Skills"], ["Instructions", "Instructions"], ["App", "App"]]) {
+	for (const [nav, title] of [["Models", "Models"], ["MCP servers", "MCP servers"], ["Skills", "Skills"], ["Agents", "Agents"], ["General", "General"]]) {
 		await page.click(`[role=navigation] [data-sidebar=menu-button] >> text=${nav}`);
 		await sees(`[data-slot=settings-page] h1 >> text=${title}`);
 		await page.waitForTimeout(400);
 		await shot(`09-settings-${nav.toLowerCase().replace(/\s+/g, "-")}`);
 	}
-	// App: the browser of the web tools is still not there, and can be fetched from here. (The
+	// General, where what was the App page went: the browser of the web tools is still not there, and can be fetched from here. (The
 	// test fetches nothing: PINE_SKIP_DOWNLOADS. What the command printed is shown.)
 	await sees("[data-setting=browser] [data-slot=badge][data-variant=outline] >> text=not on this Mac");
 	await page.locator("[data-setting=browser]").getByRole("button", { name: "Fetch it" }).click();

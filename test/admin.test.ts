@@ -147,7 +147,7 @@ test("admin: the main agent lists agents and changes one by tool call; what is w
 	await main(call("update_agent", { id: "helper", tooling: "" }));
 	assert.match(asked[asks2].summary, /the agent's own defaults and preferences for tools \(the agent's TOOLS\.md\) replaced by:\nSearch with ripgrep, never with grep\./);
 	assert.match(more[0], /The agent's own defaults and preferences for tools \(TOOLS\.md in the agent's workspace, on top of the TOOLS\.md for all agents; update_agent "tooling" replaces it\):\nSearch with ripgrep, never with grep\./);
-	assert.match(asked[asks2 + 1].summary, /\(its TOOLS\.md\) taken back: the file is emptied/);
+	assert.match(asked[asks2 + 1].summary, /\(the agent's TOOLS\.md\) taken back: the file is emptied/);
 	assert.equal(fs.readFileSync(tooling, "utf8"), "");
 	assert.equal(fs.readFileSync(soul, "utf8"), "Cool and technical. No commentary nobody asked for.\n", "its character is another file and stays");
 	// Opened as a file, it is another agent's: the refusal names the tools that are for it.

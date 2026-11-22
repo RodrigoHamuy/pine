@@ -68,7 +68,7 @@ test("an agent proposes a remote server, the owner confirms, and it works withou
 	// server: it does not mark the conversation as having read outside content.
 	allow = true;
 	const yes = await h.pine.agents.run({ agent: "main", prompt: propose, ...owner });
-	assert.match(yes.text, /Your owner confirmed it\. Added "notes" for all agents.*the actions of a tool called "notes".*\/mcp login notes/);
+	assert.match(yes.text, /Your owner confirmed it\. Added "notes" for all agents.*the actions of a tool called "notes".*sign_in_mcp_server/);
 	assert.deepEqual(JSON.parse(fs.readFileSync(path.join(h.home, "pine.json"), "utf8")).mcp.notes, { url: stub.url, description: "the owner's notes", approve: "tainted" });
 	const used = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("mcp__notes__lookup", { q: "grundbuch" })] }]), ...owner });
 	assert.equal(used.text, "FINAL:: looked up: grundbuch");
@@ -198,7 +198,7 @@ test("a server that only one conversation has: the agent is told where it is, an
 
 	// Having it already is said as that, with where its tools are.
 	await run("third", [{ tools: [call("add_mcp_server", { name: "notes", url: stub.url }), call("add_mcp_server", { name: "notes", url: stub.url, scope: "agent" })] }]);
-	for (const result of h.toolResults().slice(-2)) assert.match(result, /a server named "notes" exists already: you have it, in all your conversations\. Its tools are the actions of your tool "notes"/);
+	for (const result of h.toolResults().slice(-2)) assert.match(result, /a server named "notes" exists already: you have it, in all your conversations\. The server\'s tools are the actions of your tool "notes"/);
 	await h.close();
 });
 
