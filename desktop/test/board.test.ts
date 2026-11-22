@@ -38,7 +38,7 @@ before(async () => {
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ updates: false }));
 	// What the sub-agents do: one leaves a note with markup in it, one asks a question.
-	mock.state.scripts.a = [{ tools: [{ name: "board_post", args: { text: "The reference is tokens.css <b>not bold</b>" } }] }, { text: "a is consistent" }];
+	mock.state.scripts.a = [{ tools: [{ name: "board_post", args: { type: "note", text: "The reference is tokens.css <b>not bold</b>" } }] }, { text: "a is consistent" }];
 	mock.state.scripts.b = [{ tools: [{ name: "board_done", args: { id: 2, outcome: "blocked", result: "teal or blue?" } }] }, { text: "asked" }];
 
 	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });

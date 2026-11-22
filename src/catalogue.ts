@@ -112,7 +112,7 @@ const BRIEF: Record<string, string> = {
 	add_skill: 'write down how something is done, so that you can do it again without being told ("remember how to do this"); the same name replaces it. A fact belongs into MEMORY.md instead',
 	remove_skill: "remove a skill (to change one: add it again under the same name)",
 	agents: "pine's agents: what each is for, the model, mode, reach and what each has; with \"id\", one agent in full with the instructions",
-	create_agent: "create a new agent when your owner asks for one: it has a separate job, workspace and instructions, and exists at once. The job goes into the agent's instructions and belongs to that agent from then on: do not start on it yourself",
+	create_agent: "create a new agent when your owner asks for one: it has a separate job, workspace and instructions, and exists at once. Never for sub-agents: those are copies of an agent for one task, started with subagent, and are not created. The job goes into the agent's instructions and belongs to that agent from then on: do not start on it yourself",
 	update_agent: "change an agent when your owner asks: color, instructions (the first paragraph is what the agent is for), model, reasoning, mode, tools, whom it may hand work to, reach. Give only what changes",
 	rename_agent: "give an agent another id when your owner asks; everything that names it follows",
 	remove_agent: "remove an agent for good, with everything it has and the agent's folders",
@@ -129,7 +129,7 @@ const BRIEF: Record<string, string> = {
 	stop_program: "stop a program one of your commands left running",
 	boards: "the boards you can use and how many tasks on each are open, taken and done",
 	board_read: "a board's tasks with who has each and what came of it; with id, one task in full",
-	board_post: 'post a task (kind "task"; "after": tasks it waits for, whose results it is shown) or a note; without "board", this conversation\'s board',
+	board_post: 'post a task (type "task": work somebody takes; "after": tasks it waits for, whose results it is shown) or a note (type "note": something to know); without "board", this conversation\'s board',
 	board_answer: "answer a blocked task's question: it goes back to work with your answer",
 	board_claim: "take a task so that nobody else does: by id, or the oldest that is ready",
 	board_done: "what became of a task: done with the result, failed with why, blocked with your question, open to give it back",
@@ -307,8 +307,8 @@ const SHORT: Record<string, string> = {
 	read: "Read a file: text, or an image (jpg, png, gif, webp, bmp). Text is cut at 2000 lines or 50KB: use offset and limit for the rest.",
 	bash: "Run a bash command in the current folder; returns stdout and stderr (long output is cut to the last 2000 lines, the whole is saved to a file).",
 	edit: "Change a file by exact text replacement. Each edits[].oldText must match the file exactly and only once, edits must not overlap, and all changes to one file go into one call.",
-	delegate: 'Hand a task to another agent and get the answer. It sees only what you write in "task", so include everything it needs. To give tasks to several agents at once, call delegate for each of them in the same message: they work side by side, and you get every answer.',
-	subagent: "Run independent sub-tasks in parallel, as many as the job has pieces. Each is a copy of you with an empty context and returns only the answer, so each task must be self-contained. Split a job only after you know the pieces: list the folders or files yourself first, then give one task per piece, each naming one piece by path. Never one task for the whole job, and never \"the first folder\". For research or checks that would fill your context. With \"model\" the copies run on another model than yours, for work it does better (models lists them). With \"worktree\" each changes files on a separate checkout, and the work comes back as a branch.",
+	delegate: 'Hand a task to another agent and get the answer. Not for sub-agents: those are copies of you, started with subagent. It sees only what you write in "task", so include everything it needs. What your owner asked for goes in their words, never reworded: "sub-agents" stays "sub-agents", and tasks of a board go with the board\'s name and the tasks\' numbers. To give tasks to several agents at once, call delegate for each of them in the same message: they work side by side, and you get every answer.',
+	subagent: "Start sub-agents: copies of you that run independent sub-tasks in parallel, as many as the job has pieces. When a task says \"sub-agents\", also \"create new sub-agents\", this is the tool: you start them yourself, nothing is created. Each has an empty context and returns only the answer, so each task must be self-contained. Split a job only after you know the pieces: list the folders or files yourself first, then give one task per piece, each naming one piece by path. Never one task for the whole job, and never \"the first folder\". For research or checks that would fill your context. With \"model\" the copies run on another model than yours, for work it does better (models lists them). With \"worktree\" each changes files on a separate checkout, and the work comes back as a branch.",
 	todo: "Keep a short list of the steps of a task that has several. Send the whole list each time: at the start, when a step begins (in_progress, one at a time) and when one is done. Your owner sees it. An empty list clears it.",
 	question: "Ask your owner one question you cannot go on without. Offer two to six short answers when you can, the one you recommend first. Not for permission: that is asked by itself.",
 	manual: 'Search pine\'s own manual: how pine works and is set up (your tools, event sources and their options, schedules, MCP servers, skills, agents, every configuration key, modes and approvals, the sandbox, the terminal UI, the pine command). "search": short queries in plain words, one thing each. "read": ids of parts to read in full. Search first, then read the part that fits.',
@@ -375,7 +375,7 @@ export function shortTool(name: string, description: string, parameters: any): {
 	// A session that may put a command into the background is told how; one that may not is not told of it.
 	const more = name === "bash" && parameters?.properties?.background ? " For a command that takes long or does not end by itself (a build, tests, an install, a server) set background: true: the call returns at once and pine tells you when the command has ended." : "";
 	// A session whose sub-agents can share a board is told of the pool.
-	const pool = name === "subagent" && parameters?.properties?.pool ? ' With "pool": all the tasks in one call, every piece of the job and never one first to try it out, worked through a few at a time. "note": what all of them need, said once and in full (read it first). "check": a second copy checks each result. It comes back early when a copy asks or fails: board_answer, then call again without tasks.' : "";
+	const pool = name === "subagent" && parameters?.properties?.pool ? ' With "pool": all the tasks in one call, every piece of the job and never one first to try it out, worked through a few at a time. "note": what all of them need, said once and in full (read it first). "check": a second copy checks each result. It comes back early when a copy asks or fails: board_answer, then call again without tasks. Tasks you were given on a board: their numbers in "ids", never their text in "tasks", so that the copies settle those very tasks.' : "";
 	return { description: `${SHORT[name] ?? lead(description, 200)}${more}${pool}`, parameters: leanSchema(parameters, name in SHORT ? "first" : "all") };
 }
 
@@ -495,6 +495,11 @@ export function ease(name: string, args: any): any {
 			args.name = args[k];
 			delete args[k];
 		}
+	}
+	// A post's type under the name it had before ("kind"), which a conversation may still use.
+	if (local === "board_post" && args.type === undefined && (args.kind === "task" || args.kind === "note")) {
+		args.type = args.kind;
+		delete args.kind;
 	}
 	if (local === "create_agent" && typeof args.model === "string" && /^(default|pine'?s default|)$/i.test(args.model.trim())) delete args.model;
 	// A setting by the end of its name, when only one ends so.
@@ -754,7 +759,8 @@ export function families(opts: { servers: Array<{ name: string; namespace: strin
 		const mine = Object.keys(t.parameters?.properties ?? {});
 		let args: Record<string, unknown> = {};
 		const stray: string[] = [];
-		for (const [k, v] of Object.entries(p ?? {})) {
+		// Old names of arguments are taken as the new ones before anything is called a stray (`ease`, which runs again below).
+		for (const [k, v] of Object.entries(ease(t.name, { ...(p ?? {}) }) ?? {})) {
 			if (k === f.key || (f.id === "lists" && ["action", "list", "lists"].includes(k)) || (["action", "tool", "call", "which"].includes(k) && !mine.includes(k) && typeof v === "string" && f.action.has(v))) continue;
 			if (mine.includes(k)) args[k] = v;
 			// An argument of another action of the family, filled in because the declaration has it: named, not passed on.

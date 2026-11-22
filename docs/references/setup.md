@@ -163,7 +163,7 @@ Which model the agent runs on is told to it with your message, so it needs no to
 | **Not setup: the other tools pine gives an agent** | |
 | `request_access` [`path`] [`write`] [`network`] `reason` | Asks you for access the conversation does not have: a file or folder outside the workspace (`path`; with `write: true` also to change it), or the network from the shell (`network: true`). You decide; a yes holds for the conversation until it is reset or pine restarts. pine's home is never granted. An agent does not have to call it: when a file tool or a shell command needs something outside, pine asks you the same question itself. See "When a call needs something outside" and "Modes" in [security.md](security.md). |
 | `delegate` `agent` `task` [`wait`] [`thread`] | Hands a task to another agent and gets its answer. Only there when the agent's `delegates` list is not empty, which by default names every agent but the main one. The other agent works in its own mode or the caller's, whichever is stricter. See [agents.md](agents.md). |
-| `subagent` `tasks` [`model`] [`thinking`] [`pool`] [`note`] [`check`] | Runs several copies of the agent side by side, one task each, and returns their answers. With `pool` there can be many more tasks than run at once: they are worked through on the conversation's board ([boards.md](boards.md)). With `model` the copies run on another model than the agent's, with `thinking` at another reasoning level. They never ask you anything. See [agents.md](agents.md), "Sub-agents". |
+| `subagent` `tasks` [`model`] [`thinking`] [`pool`] [`ids`] [`note`] [`check`] | Runs several copies of the agent side by side, one task each, and returns their answers. With `pool` there can be many more tasks than run at once: they are worked through on the conversation's board ([boards.md](boards.md)). With `ids` the copies work tasks that are on a board already and settle them there. With `model` the copies run on another model than the agent's, with `thinking` at another reasoning level. They never ask you anything. See [agents.md](agents.md), "Sub-agents". |
 | `models` | Lists the models that are set up, as `provider/model`, with what each can do (see pictures, reason) and which one is the agent's own. This is how an agent answers "which models are there", and where it finds what `subagent` takes as `model`. |
 | `download` `url` `path` | Fetches a file from a web address into the workspace, byte for byte. It is how an agent gets a file that a remote MCP server made: by the link in the tool's answer, never by a file path from it. See "Downloads" in [security.md](security.md) and "Files and pictures from a remote server" in [mcp.md](mcp.md). |
 | `boards`, `board_read`, `board_post`, `board_claim`, `board_done`, `board_answer`, `board_remove` | The tasks of a job that several work on: a conversation and its sub-agents, or several agents. A task is taken by one at a time, its result stays on the board, and one that cannot be done without a decision asks and is answered. A board whose work is finished is removed with `board_remove`; one that others use only after your yes. See [boards.md](boards.md). |
@@ -204,6 +204,10 @@ no stored key can be pointed at another address. You can do the same yourself wi
 in [configuration.md](configuration.md), "models.json".
 
 ## Creating an agent
+
+Sub-agents are no new agents. Asked to "create new sub-agents", any agent starts them itself
+with `subagent`, copies of itself for one task each, and needs nobody for it: no agent is made,
+and the main agent is not asked ([agents.md](agents.md), "Sub-agents").
 
 Ask the main agent: "create an agent that keeps my books". It calls `create_agent` with an id,
 its instructions, whose first paragraph says what the agent is for (other agents read that

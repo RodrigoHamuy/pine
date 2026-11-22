@@ -74,7 +74,7 @@ They are the actions of the family `pine_board`; the list `boards` is one of `pi
 |---|---|
 | `boards` | Lists the boards the conversation can use, whom each is for, and how many tasks on each are open, taken, done, failed and blocked. |
 | `board_read` [`board`] [`id`] | A board's tasks with who has each and what became of it, and the notes on it (the last 30). With `id`, one task in full with its result and the notes about it. |
-| `board_post` `text` [`kind`] [`board`] [`on`] [`after`] [`scope`] | Posts a note, or with `"kind": "task"` a task. `on`: the task a note is about. `after`: tasks that have to be done before this one can be taken; whoever does it is shown what came of them. `scope`: whom a board with a name is for, needed when the name is new. The answer says so when it made a board and who sees it, and lists the notes others left since the agent last looked. |
+| `board_post` `text` `type` [`board`] [`on`] [`after`] [`scope`] | Posts a task (`"type": "task"`: work somebody takes) or a note (`"type": "note"`: something whoever works on the board should know). A post without a type is refused: a task posted as a note would be one nobody can take. `on`: the task a note is about. `after`: tasks that have to be done before this one can be taken; whoever does it is shown what came of them. `scope`: whom a board with a name is for, needed when the name is new. The answer says so when it made a board and who sees it, and lists the notes others left since the agent last looked. |
 | `board_claim` [`id`] [`board`] | Takes a task: the one with that number, or the oldest that is ready. The answer is the task in full. It is the agent's until `board_done`, or until the turn ends. |
 | `board_done` `id` [`result`] [`outcome`] | Says what became of a task the agent took. `outcome`: `done` (the default) with its result, `failed` with why, `blocked` with the question that has to be answered before it can go on, `open` to give it back. The conversation that gave out the work also closes with it a task of its own board that nobody has: a question whose answer is the result already. |
 | `board_remove` [`board`] [`id`] | Removes a board with everything on it, or with `id` one task or note (a task with the notes about it; tasks that waited for it no longer do). Without `board`, the conversation's own board. A board of this conversation goes without a question; one for all the agent's conversations, or for all agents (only the main agent's to remove), is put to you first, in every mode. A sub-agent of a pool that works on a task that goes is stopped, and a board a pool is at work on cannot be removed until its call has come back. Not for a sub-agent, nor for a run started from outside. What is removed cannot be brought back. |
@@ -110,6 +110,19 @@ Two runs that ask for the same task at the same moment never both get it.
 conversation's board, and that many sub-agents at a time work through them. Tasks that were on the board already (yours from the
 Board tab, or posted with `board_post`) are worked too, and a call with `"pool": true` and no
 tasks goes on with what is there.
+
+Tasks on another board, such as a board for all agents on which an agent was given tasks, are
+worked where they are: `subagent` with their numbers in `ids` (all of one board) gives each to a
+sub-agent, and that sub-agent's answer settles that very task on that board. On such a board the
+pool works those tasks and nothing else there, since the others may be somebody else's, and
+`tasks`, `note` and `check` of the same call go onto that board too. A call with no tasks goes on
+where the last one worked. Copying such a task's text into `tasks` would make a new task on the
+conversation's board, and the one that was given out would stay open: the tool's description
+tells the agent to use `ids` instead.
+
+```
+subagent(ids: [2, 3])
+```
 
 ```
 subagent(tasks: ["Check src/components/a for ...", "Check src/components/b for ...", ...40 more], pool: true,
@@ -196,7 +209,7 @@ A check changes nothing and does not do the work again: it reports, and the agen
 report with the work's result and decides what to do about it. A call that has a `check` is a
 pool whether it says `pool` or not.
 
-By hand it is the same thing: a task posted with `after` (`board_post` with `"kind": "task"`)
+By hand it is the same thing: a task posted with `after` (`board_post` with `"type": "task"`)
 waits until the tasks it names are done, and whoever does it is shown their results.
 
 ## When a pool pays, and what it costs

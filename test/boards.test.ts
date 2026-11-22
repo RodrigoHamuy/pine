@@ -86,7 +86,7 @@ test("boards: a conversation's own board is its list of work; a board with a nam
 
 test("boards: a pool of sub-agents works through more tasks than run at once, and each sees what the others noted", async () => {
 	const h = await harness({ pine: { limits: { maxConcurrentRuns: 3 } }, agents: { main: { agent: { subagents: { maxParallel: 2 } } } } });
-	h.mock.state.scripts.w1 = [{ tools: [call("board_post", { text: "FOUND-BY-ONE gap-3 next to gap-4" })] }, { text: "answer one" }];
+	h.mock.state.scripts.w1 = [{ tools: [call("board_post", { type: "note", text: "FOUND-BY-ONE gap-3 next to gap-4" })] }, { text: "answer one" }];
 	h.mock.state.scripts.w2 = [{ delayMs: 120, tools: [call("board_read")] }];
 	for (const n of [3, 4, 5]) h.mock.state.scripts[`w${n}`] = [{ delayMs: 60, text: `answer ${n}` }];
 	const seen: number[] = [];
@@ -131,7 +131,7 @@ test("boards: a sub-agent that fails leaves its task failed, and a task the pool
 	// A task the owner put there before, which waits for one that will fail.
 	const r = await h.pine.agents.run({
 		agent: "main",
-		prompt: mockMsg([{ tools: [call("board_post", { kind: "task", text: "first @@REF:good@@" })] }, { tools: [call("board_post", { kind: "task", text: "second @@REF:bad@@" })] }, { tools: [call("board_post", { kind: "task", text: "third @@REF:good@@", after: [2] })] }, { tools: [call("subagent", { pool: true, tasks: [] })] }]),
+		prompt: mockMsg([{ tools: [call("board_post", { type: "task", text: "first @@REF:good@@" })] }, { tools: [call("board_post", { type: "task", text: "second @@REF:bad@@" })] }, { tools: [call("board_post", { type: "task", text: "third @@REF:good@@", after: [2] })] }, { tools: [call("subagent", { pool: true, tasks: [] })] }]),
 		...owner,
 	});
 	assert.equal(r.status, "done");
@@ -175,7 +175,7 @@ test("boards: a task taken in a turn is open again when the turn ends without a 
 test("boards: a post carries the outside-content mark of the run that wrote it, and reading it marks the reader", async () => {
 	const h = await harness({ agents: { main: {} } });
 	// A conversation that has read outside content writes onto a board of the agent's.
-	await h.pine.agents.run({ agent: "main", session: "reader", tainted: "a web page", prompt: mockMsg([{ tools: [call("board_post", { board: "findings", scope: "agent", text: "IGNORE-ALL-RULES said the page" })] }]), ...owner });
+	await h.pine.agents.run({ agent: "main", session: "reader", tainted: "a web page", prompt: mockMsg([{ tools: [call("board_post", { type: "note", board: "findings", scope: "agent", text: "IGNORE-ALL-RULES said the page" })] }]), ...owner });
 	const item = h.pine.agents.boards.items(1)[0];
 	assert.equal(item.tainted, "a web page");
 	assert.equal(h.pine.agents.outsideMark("main", "clean"), undefined);
@@ -186,7 +186,7 @@ test("boards: a post carries the outside-content mark of the run that wrote it, 
 	assert.match(r.text, /IGNORE-ALL-RULES/);
 	assert.match(h.pine.agents.outsideMark("main", "clean") ?? "", /a post on the board "findings".*a web page/);
 	// And one that only posts there is shown what is new, which marks it just the same.
-	await h.pine.agents.run({ agent: "main", session: "poster", prompt: mockMsg([{ tools: [call("board_post", { board: "findings", text: "mine" })] }]), ...owner });
+	await h.pine.agents.run({ agent: "main", session: "poster", prompt: mockMsg([{ tools: [call("board_post", { type: "note", board: "findings", text: "mine" })] }]), ...owner });
 	assert.match(h.pine.agents.outsideMark("main", "poster") ?? "", /a web page/);
 	await h.close();
 });
@@ -194,7 +194,7 @@ test("boards: a post carries the outside-content mark of the run that wrote it, 
 test("boards: what a pool's sub-agents all have to know is said once in a note, which each is shown when it starts", async () => {
 	const h = await harness({ agents: { main: { agent: { subagents: { maxParallel: 2 } } } } });
 	for (const n of [1, 2]) h.mock.state.scripts[`w${n}`] = [{ text: `answer ${n}` }];
-	h.mock.state.scripts.w3 = [{ tools: [call("board_post", { on: 3, text: "half way" })] }, { text: "answer 3" }];
+	h.mock.state.scripts.w3 = [{ tools: [call("board_post", { type: "note", on: 3, text: "half way" })] }, { text: "answer 3" }];
 	// A note makes the call a pool, said or not: three tasks where two run at once.
 	const r = await h.pine.agents.run({ agent: "main", session: "audit", prompt: mockMsg([{ tools: [call("subagent", { note: "THE-REFERENCE is src/styles/tokens.css", tasks: [1, 2, 3].map((n) => `check part ${n} @@REF:w${n}@@`) })] }]), ...owner });
 	assert.equal(r.status, "done");
@@ -222,7 +222,7 @@ test("boards: what a pool's sub-agents all have to know is said once in a note, 
 	assert.doesNotMatch(checker.prompt, /THE-REFERENCE/);
 	// A note posted for all with board_post is for every task, of any round.
 	h.mock.state.scripts.c2 = [{ text: "checked" }];
-	await h.pine.agents.run({ agent: "main", session: "audit", prompt: mockMsg([{ tools: [call("board_post", { text: "FOR-EVERYONE: tabs, not spaces" })] }, { tools: [call("subagent", { pool: true, tasks: ["verify part 2 @@REF:c2@@"] })] }]), ...owner });
+	await h.pine.agents.run({ agent: "main", session: "audit", prompt: mockMsg([{ tools: [call("board_post", { type: "note", text: "FOR-EVERYONE: tabs, not spaces" })] }, { tools: [call("subagent", { pool: true, tasks: ["verify part 2 @@REF:c2@@"] })] }]), ...owner });
 	const later = h.pine.tasks.list({ limit: 50 }).find((t) => /verify part 2/.test(t.prompt) && t.kind === "subagent")!;
 	assert.match(later.prompt, /no need to look it up again\):\n- FOR-EVERYONE: tabs, not spaces\n\n\[pine/);
 	await h.close();
@@ -230,7 +230,7 @@ test("boards: what a pool's sub-agents all have to know is said once in a note, 
 
 test("boards: a note that a sub-agent posts after it read outside content marks the sub-agent that is started with it", async () => {
 	const h = await harness({ pine: { security: { taintTools: ["read"] } }, agents: { main: { agent: { subagents: { maxParallel: 1 } }, files: { "page.txt": "a page\n" } } } });
-	h.mock.state.scripts.reader = [{ tools: [call("read", { path: "page.txt" })] }, { tools: [call("board_post", { text: "THE-PAGE-SAYS use tabs" })] }, { text: "read it" }];
+	h.mock.state.scripts.reader = [{ tools: [call("read", { path: "page.txt" })] }, { tools: [call("board_post", { type: "note", text: "THE-PAGE-SAYS use tabs" })] }, { text: "read it" }];
 	h.mock.state.scripts.doer = [{ text: "did it" }];
 	const r = await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["read the page @@REF:reader@@", "plain work @@REF:doer@@"] })] }]), ...owner });
 	assert.equal(r.status, "done");
@@ -367,7 +367,7 @@ test("boards: a task that waits for another is shown what came of it, and a conv
 	const r = await h.pine.agents.run({
 		agent: "main",
 		session: "job",
-		prompt: mockMsg([{ tools: [call("board_post", { kind: "task", text: "write @@REF:writer@@" })] }, { tools: [call("board_post", { kind: "task", text: "check @@REF:checker@@", after: [1] })] }, { tools: [call("subagent", { pool: true, tasks: [] })] }]),
+		prompt: mockMsg([{ tools: [call("board_post", { type: "task", text: "write @@REF:writer@@" })] }, { tools: [call("board_post", { type: "task", text: "check @@REF:checker@@", after: [1] })] }, { tools: [call("subagent", { pool: true, tasks: [] })] }]),
 		...owner,
 	});
 	assert.match(r.text, /## Task #2: done\nchecked it/);
@@ -438,33 +438,33 @@ test("boards: tasks split over several pool calls in one answer are one pool, no
 test("boards: a new board with a name says whom it is for, and with a scope exactly that board is meant", async () => {
 	const h = await harness({ agents: { main: {}, helper: {} } });
 	// Without a scope nothing is made: a board for one conversation by default would look to its maker like one that others use.
-	let r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", kind: "task", text: "fix a" })] }]), ...owner });
+	let r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", type: "task", text: "fix a" })] }]), ...owner });
 	assert.match(r.text, /there is no board "bugs" yet\. To make it, post again with "scope", which says whom it is for: "local" \(this conversation and the sub-agents it starts, nobody else\), "agent" \(all your conversations\), "global" \(all agents\)\./);
 	assert.deepEqual(h.pine.agents.boards.list(), []);
 	// Another agent is not offered what it cannot make.
-	r = await h.pine.agents.run({ agent: "helper", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", text: "x" })] }]), ...owner });
+	r = await h.pine.agents.run({ agent: "helper", prompt: mockMsg([{ tools: [call("board_post", { type: "note", board: "bugs", text: "x" })] }]), ...owner });
 	assert.match(r.text, /"agent" \(all your conversations\)\.$/m);
 	assert.doesNotMatch(r.text, /global/);
 	// Said to be for this conversation, it is made, and the answer says who sees it.
-	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", scope: "local", kind: "task", text: "fix a" })] }]), ...owner });
+	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", scope: "local", type: "task", text: "fix a" })] }]), ...owner });
 	assert.match(r.text, /Posted task #1 on the board "bugs" \(of this conversation\)\. The board is new\. Only this conversation and the sub-agents it starts see it: no other agent does, and a post on it wakes nobody\./);
 	// With a scope the board of that place is meant, not the nearer one of the same name; without one, the nearest.
-	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", scope: "global", kind: "task", text: "fix b" }), call("board_post", { board: "bugs", text: "a note" })] }]), ...owner });
+	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", scope: "global", type: "task", text: "fix b" }), call("board_post", { type: "note", board: "bugs", text: "a note" })] }]), ...owner });
 	assert.match(r.text, /Posted task #2 on the board "bugs" \(for all agents\)\. The board is new\. Every agent can use it\./);
 	assert.match(r.text, /Posted note #3 on the board "bugs" \(of this conversation\)\.(?! The board is new)/);
 	assert.deepEqual(h.pine.agents.boards.list().map((b) => `${b.scope}:${b.name}`), ["local:bugs", "global:bugs"]);
 	// A scope without a name names no board.
-	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { scope: "global", text: "x" })] }]), ...owner });
+	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { type: "note", scope: "global", text: "x" })] }]), ...owner });
 	assert.match(r.text, /a board for all agents needs a name: give "board" too/);
 	await h.close();
 });
 
 test("boards: only the main agent makes a board for all agents, a sub-agent makes none beyond its conversation, and another agent's board is closed", async () => {
 	const h = await harness({ agents: { main: {}, helper: {} } });
-	h.mock.state.scripts.sub = [{ tools: [call("board_post", { board: "wide", scope: "agent", text: "x" })] }];
-	let r = await h.pine.agents.run({ agent: "helper", prompt: mockMsg([{ tools: [call("board_post", { board: "bugs", scope: "global", text: "x" }), call("board_post", { board: "own", scope: "agent", text: "helper's own" })] }]), ...owner });
+	h.mock.state.scripts.sub = [{ tools: [call("board_post", { type: "note", board: "wide", scope: "agent", text: "x" })] }];
+	let r = await h.pine.agents.run({ agent: "helper", prompt: mockMsg([{ tools: [call("board_post", { type: "note", board: "bugs", scope: "global", text: "x" }), call("board_post", { type: "note", board: "own", scope: "agent", text: "helper's own" })] }]), ...owner });
 	assert.match(r.text, /Only the main agent \(main\) can make a board for all agents/);
-	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_read", { board: "own" }), call("board_read", { id: 1 }), call("board_post", { board: "bugs", scope: "global", kind: "task", text: "for everyone" }), call("subagent", { tasks: ["@@REF:sub@@"] })] }]), ...owner });
+	r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_read", { board: "own" }), call("board_read", { id: 1 }), call("board_post", { board: "bugs", scope: "global", type: "task", text: "for everyone" }), call("subagent", { tasks: ["@@REF:sub@@"] })] }]), ...owner });
 	assert.match(r.text, /There is no board "own" that you can use/);
 	assert.match(r.text, /there is no #1 on a board of yours/);
 	assert.match(r.text, /You are a sub-agent: this is not yours to do/);
@@ -478,8 +478,8 @@ test("boards: only the main agent makes a board for all agents, a sub-agent make
 
 test("boards: a task handed to another agent works on the board of the conversation that handed it on", async () => {
 	const h = await harness({ agents: { main: { agent: { delegates: ["helper"] } }, helper: {} } });
-	h.mock.state.scripts.helper = [{ tools: [call("board_read")] }, { tools: [call("board_post", { text: "HELPER-FOUND the cause" })] }, { text: "done by helper" }];
-	const r = await h.pine.agents.run({ agent: "main", session: "proj", prompt: mockMsg([{ tools: [call("board_post", { text: "MAIN-NOTE the reference is tokens.css" })] }, { tools: [call("delegate", { agent: "helper", task: "@@REF:helper@@" })] }, { tools: [call("board_read")] }]), ...owner });
+	h.mock.state.scripts.helper = [{ tools: [call("board_read")] }, { tools: [call("board_post", { type: "note", text: "HELPER-FOUND the cause" })] }, { text: "done by helper" }];
+	const r = await h.pine.agents.run({ agent: "main", session: "proj", prompt: mockMsg([{ tools: [call("board_post", { type: "note", text: "MAIN-NOTE the reference is tokens.css" })] }, { tools: [call("delegate", { agent: "helper", task: "@@REF:helper@@" })] }, { tools: [call("board_read")] }]), ...owner });
 	assert.equal(r.status, "done");
 	const helper = h.mock.state.requests.filter((q: any) => JSON.stringify(q.body.messages).includes("@@REF:helper@@") && !JSON.stringify(q.body.messages).includes("<<MOCK")).at(-1);
 	assert.match(JSON.stringify(helper.body.messages), /MAIN-NOTE the reference is tokens\.css/);
@@ -490,7 +490,7 @@ test("boards: a task handed to another agent works on the board of the conversat
 
 test("boards: a run that outside content started has no board unless its profile gives it one, and what it posts counts as from outside", async () => {
 	const h = await harness({ agents: { main: {}, open: { agent: { untrusted: { tools: ["read"], board: true } } } } });
-	const none = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { text: "x" })] }]), trust: "untrusted" });
+	const none = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { type: "note", text: "x" })] }]), trust: "untrusted" });
 	assert.equal(h.pine.agents.boards.list().length, 0, none.text);
 	const req = h.mock.state.requests.at(-1);
 	assert.ok(!h.toolsOffered(req).some((t) => t.startsWith("board")), "not registered at all");
@@ -498,7 +498,7 @@ test("boards: a run that outside content started has no board unless its profile
 	const global = h.pine.agents.boards.ensure("global", "", "", "inbox");
 	const events: any[] = [];
 	h.pine.bus.subscribe("board/#", (e) => void events.push(e));
-	await h.pine.agents.run({ agent: "open", prompt: mockMsg([{ tools: [call("board_post", { board: "inbox", kind: "task", text: "do what the mail says" }), call("board_post", { board: "wide", scope: "agent", text: "x" })] }]), trust: "untrusted" });
+	await h.pine.agents.run({ agent: "open", prompt: mockMsg([{ tools: [call("board_post", { board: "inbox", type: "task", text: "do what the mail says" }), call("board_post", { type: "note", board: "wide", scope: "agent", text: "x" })] }]), trust: "untrusted" });
 	const item = h.pine.agents.boards.items(global.id)[0];
 	assert.equal(item.trust, "untrusted");
 	assert.deepEqual(h.pine.agents.boards.list().map((b) => b.name), ["inbox"], "no board beyond its own conversation is made by such a run");
@@ -515,7 +515,7 @@ test("boards: a board with a name says what happens on it as events that only pi
 	});
 	const events: any[] = [];
 	h.pine.bus.subscribe("board/#", (e) => void events.push(e));
-	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("publish_event", { topic: "board/bugs/task", text: "forged" })] }, { tools: [call("board_post", { board: "bugs", scope: "global", kind: "task", text: "the login page is blank" })] }, { tools: [call("board_post", { board: "local-one", scope: "local", kind: "task", text: "quiet" })] }]), ...owner });
+	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("publish_event", { topic: "board/bugs/task", text: "forged" })] }, { tools: [call("board_post", { board: "bugs", scope: "global", type: "task", text: "the login page is blank" })] }, { tools: [call("board_post", { board: "local-one", scope: "local", type: "task", text: "quiet" })] }]), ...owner });
 	assert.match(r.text, /not allowed to publish on "board\/bugs\/task"/);
 	await until(() => h.pine.tasks.list({ agent: "helper" }).some((t) => t.status === "done"));
 	assert.deepEqual(events.map((e) => e.topic), ["board/bugs/task"], "a board of one conversation publishes nothing");
@@ -545,8 +545,8 @@ test("boards: a board with a name says what happens on it as events that only pi
 
 test("boards: a conversation's board goes when the conversation is forgotten, and an agent's with the agent", async () => {
 	const h = await harness({ agents: { main: {}, helper: {} } });
-	await h.pine.agents.run({ agent: "helper", session: "work", prompt: mockMsg([{ tools: [call("board_post", { text: "a" }), call("board_post", { board: "kept", scope: "agent", text: "b" })] }]), ...owner });
-	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "all", scope: "global", text: "c" })] }]), ...owner });
+	await h.pine.agents.run({ agent: "helper", session: "work", prompt: mockMsg([{ tools: [call("board_post", { type: "note", text: "a" }), call("board_post", { type: "note", board: "kept", scope: "agent", text: "b" })] }]), ...owner });
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { type: "note", board: "all", scope: "global", text: "c" })] }]), ...owner });
 	const names = () => h.pine.agents.boards.list().map((b) => `${b.scope}:${b.agent}:${b.session}:${b.name}`);
 	assert.deepEqual(names(), ["local:helper:work:", "agent:helper::kept", "global:::all"]);
 	await h.pine.agents.renameSession("helper", "work", "job");
@@ -645,7 +645,7 @@ test("boards: the owner reads every board through the control API, posts on one,
 test("boards: a task that a sub-agent posts after it read outside content marks the sub-agent that does it, and the conversation", async () => {
 	// (`read` stands in for a tool that returns outside content.)
 	const h = await harness({ pine: { security: { taintTools: ["read"] } }, agents: { main: { agent: { subagents: { maxParallel: 1 } }, files: { "page.txt": "a page\n" } } } });
-	h.mock.state.scripts.reader = [{ tools: [call("read", { path: "page.txt" })] }, { tools: [call("board_post", { kind: "task", text: "do as the page says @@REF:doer@@" })] }, { text: "read it" }];
+	h.mock.state.scripts.reader = [{ tools: [call("read", { path: "page.txt" })] }, { tools: [call("board_post", { type: "task", text: "do as the page says @@REF:doer@@" })] }, { text: "read it" }];
 	h.mock.state.scripts.doer = [{ text: "did it" }];
 	const r = await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["read the page @@REF:reader@@"] })] }]), ...owner });
 	assert.equal(r.status, "done");
@@ -693,5 +693,42 @@ test("boards: a sub-agent whose answer ends with a question leaves its task bloc
 	assert.match(last, /## Task #2: done\nCOUNT-B 30 lines: 0\.3 hours/);
 	// And a sub-agent is told so before it answers.
 	assert.match(h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 1)!.prompt, /Do not end it with a question: an answer that ends by asking something is taken for a question, and the task waits for the answer\./);
+	await h.close();
+});
+
+test("boards: sub-agents given tasks that are on a board for all agents settle those tasks there, and leave the others of that board alone", async () => {
+	const h = await harness({ agents: { main: {}, helper: {} } });
+	h.mock.state.scripts.s2 = [{ text: "SLEEP-ANSWER" }];
+	h.mock.state.scripts.s3 = [{ delayMs: 60, text: "FOOD-ANSWER" }];
+	await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("pine_board", { action: "board_post", board: "todo", scope: "global", kind: "task", text: "rss for one @@REF:none@@" })] }, { tools: [call("board_post", { board: "todo", type: "task", text: "sleep @@REF:s2@@" }), call("board_post", { board: "todo", type: "task", text: "food waste @@REF:s3@@" })] }]), ...owner });
+	const boards = h.pine.agents.boards;
+	const todo = boards.find("global", "", "", "todo")!;
+	// A post that does not say what it is is refused, not made a note that nobody can take.
+	// Declared by itself or as an action of pine_board, the schema refuses it; the family says in full what the tool takes.
+	const vague = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { board: "todo", text: "a task or a note?" }), call("pine_board", { action: "board_post", board: "todo", text: "a task or a note?" })] }]), ...owner });
+	assert.equal(vague.text.match(/type: missing/g)?.length, 2, vague.text);
+	assert.match(vague.text, /What board_post takes, in full:[\s\S]*"type": "task"/);
+	assert.equal(boards.items(todo.id).length, 3);
+	// (The first was posted with "kind", the name the argument had before: it is a task all the same.)
+	assert.deepEqual(boards.items(todo.id, { kind: "task" }).map((t) => t.state), ["open", "open", "open"]);
+
+	const r = await h.pine.agents.run({ agent: "helper", session: "work", prompt: mockMsg([{ tools: [call("subagent", { ids: [2, 3] })] }]), ...owner });
+	assert.equal(r.status, "done");
+	assert.match(r.text, /## Task #2: done\nSLEEP-ANSWER/);
+	assert.match(r.text, /## Task #3: done\nFOOD-ANSWER/);
+	assert.match(r.text, /All 2 tasks you gave out on the board "todo" \(for all agents\) are done/);
+	// The very tasks that were given out are done, by the helper's sub-agents; the one nobody gave it is still open.
+	assert.deepEqual(boards.items(todo.id, { kind: "task" }).map((t) => `${t.state}:${t.holder ?? ""}:${t.result ?? ""}`), ["open::", "done:helper:SLEEP-ANSWER", "done:helper:FOOD-ANSWER"]);
+	// No copies: the helper's own board has no tasks.
+	const own = boards.find("local", "helper", "work", "");
+	assert.equal(own ? boards.items(own.id, { kind: "task" }).length : 0, 0);
+	assert.equal(h.pine.agents.poolAt.has("helper:work"), false);
+
+	// A task that is settled already, or on a board the run cannot use, is refused with what to do.
+	const again = await h.pine.agents.run({ agent: "helper", session: "work", prompt: mockMsg([{ tools: [call("subagent", { ids: [2] })] }]), ...owner });
+	assert.match(again.text, /"ids": task #2 is done already\. Leave it out/);
+	await h.pine.agents.run({ agent: "main", session: "mine", prompt: mockMsg([{ tools: [call("board_post", { type: "task", text: "main's own" })] }]), ...owner });
+	const closed = await h.pine.agents.run({ agent: "helper", session: "work", prompt: mockMsg([{ tools: [call("subagent", { ids: [4] })] }]), ...owner });
+	assert.match(closed.text, /"ids": there is no task #4 on a board of yours/);
 	await h.close();
 });

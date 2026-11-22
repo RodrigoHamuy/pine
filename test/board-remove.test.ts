@@ -18,7 +18,7 @@ test("board_remove: a board of the conversation goes without a question, one tha
 	const names = () => boards.list().map((b) => `${b.scope}:${b.agent}:${b.name}`);
 	await h.pine.agents.run({
 		agent: "main",
-		prompt: mockMsg([{ tools: [call("board_post", { kind: "task", text: "own" }), call("board_post", { board: "scratch", scope: "local", text: "n" }), call("board_post", { board: "kept", scope: "agent", kind: "task", text: "a" }), call("board_post", { board: "all", scope: "global", text: "c" })] }]),
+		prompt: mockMsg([{ tools: [call("board_post", { type: "task", text: "own" }), call("board_post", { type: "note", board: "scratch", scope: "local", text: "n" }), call("board_post", { board: "kept", scope: "agent", type: "task", text: "a" }), call("board_post", { type: "note", board: "all", scope: "global", text: "c" })] }]),
 		...owner,
 	});
 	assert.deepEqual(names(), ["local:main:", "local:main:scratch", "agent:main:kept", "global::all"]);
@@ -62,10 +62,10 @@ test("board_remove: a sub-agent and a run from outside are never given it, and a
 	const h = await harness({ agents: { main: {}, open: { agent: { untrusted: { tools: ["read"], board: true } } } } });
 	h.mock.state.scripts.sub = [{ tools: [call("pine_board", { action: "board_remove" })] }];
 	// A sub-agent is declared what its conversation is (for the model server's cache), and is told it is not its to do.
-	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { text: "keep me" }), call("subagent", { tasks: ["@@REF:sub@@"] })] }]), ...owner });
+	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [call("board_post", { type: "note", text: "keep me" }), call("subagent", { tasks: ["@@REF:sub@@"] })] }]), ...owner });
 	assert.match(r.text, /You are a sub-agent: this is not yours to do/);
 	assert.equal(h.pine.agents.boards.list().length, 1);
-	await h.pine.agents.run({ agent: "open", prompt: mockMsg([{ tools: [call("board_post", { text: "x" }), call("board_remove")] }]), trust: "untrusted" });
+	await h.pine.agents.run({ agent: "open", prompt: mockMsg([{ tools: [call("board_post", { type: "note", text: "x" }), call("board_remove")] }]), trust: "untrusted" });
 	const outside = h.mock.state.requests.at(-1);
 	assert.ok(h.toolsOffered(outside).includes("board_post") && !h.toolsOffered(outside).includes("board_remove"), "a run from outside has a board, but not this");
 	assert.equal(h.pine.agents.boards.list().length, 2, "its board is still there");

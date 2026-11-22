@@ -92,8 +92,8 @@ function basePrompt(cfg: PineConfig, agent: AgentConfig, trust: Trust = "owner")
 	const mainId = mainAgentId(cfg);
 	const role =
 		agent.id === mainId
-			? `You are the main agent, and pine's administrator: what your owner wants changed about pine, you change with your tools, and you never tell them to edit pine's files or delete pine's folders by hand. Only you can create, change, rename and remove agents (create_agent, update_agent, rename_agent, remove_agent; agents lists them), change pine's settings (settings, set_setting) and routes (routes, add_route, remove_route), set things up for all agents (scope "global") and bring in a new kind of event source (add_source_type). And you can do for another agent what it can do for itself: each tool for event sources, MCP servers, schedules and skills takes "agent". Your owner confirms what matters.`
-			: `Creating, changing and removing agents, pine's settings, and anything that is for all agents, is the main agent's job (the main agent is ${mainId}): you have no tools for it. When your owner wants that, tell them to ask ${mainId}.`;
+			? `You are the main agent, and pine's administrator: what your owner wants changed about pine, you change with your tools, and you never tell them to edit pine's files or delete pine's folders by hand. Only you can create, change, rename and remove agents (create_agent, update_agent, rename_agent, remove_agent; agents lists them), change pine's settings (settings, set_setting) and routes (routes, add_route, remove_route), set things up for all agents (scope "global") and bring in a new kind of event source (add_source_type). And you can do for another agent what it can do for itself: each tool for event sources, MCP servers, schedules and skills takes "agent". Your owner confirms what matters. Sub-agents are not agents: every agent starts its own with subagent, and nothing is created for them.`
+			: `Creating, changing and removing agents, pine's settings, and anything that is for all agents, is the main agent's job (the main agent is ${mainId}): you have no tools for it. When your owner wants that, tell them to ask ${mainId}. Sub-agents are not agents: you start them yourself with subagent, also when you are asked to "create" them.`;
 	// What holds for all agents: the main agent is told that it keeps these files and what goes into which,
 	// every other agent that they are in its instructions and whom to tell.
 	const [rules, tools, user] = sharedFiles(cfg);
@@ -2551,8 +2551,14 @@ export class AgentManager {
 	 * In memory: after a restart a conversation is told once more what is settled on its board.
 	 */
 	private poolTold = new Map<number, Map<number, number>>();
-	/** The boards a pool is at work on now: one at a time, and a second call adds its tasks to the first. */
-	pooling = new Set<number>();
+	/** The pools at work now, by board and conversation ("<board>:<agent>:<session>"): one at a time, and a second call adds its tasks to the first. */
+	pooling = new Set<string>();
+	/**
+	 * Where a conversation's pool works, by "<agent>:<session>", while it has work left there: a board other than
+	 * the conversation's own when it was given tasks that were on one already, and then those tasks alone
+	 * (`only`), since the rest of that board may be somebody else's. A call that goes on finds it here.
+	 */
+	poolAt = new Map<string, { board: number; only?: Set<number> }>();
 	/** The tasks a pool gave out again by itself because their question was answered for all already: once each. */
 	poolReasked = new Set<number>();
 	toldOf(board: number): Map<number, number> {
@@ -2573,11 +2579,12 @@ export class AgentManager {
 		return run?.meta.boardTask === item.id && run.kind === "subagent" && (run.status === "running" || run.status === "pending") ? run : undefined;
 	}
 
-	/** Stop the sub-agents that work through a conversation's own board. Their tasks are open again (`boardsAfter`). */
+	/** Stop the sub-agents that work through a conversation's own board, and those it gave tasks of another board. Their tasks are open again (`boardsAfter`). */
 	private stopPool(agent: string, session: string): void {
-		const board = this.boards.find("local", agent, session, "");
-		if (!board) return;
-		for (const item of this.boards.items(board.id, { kind: "task" })) {
+		const at = this.poolAt.get(`${agent}:${session}`);
+		const local = this.boards.find("local", agent, session, "");
+		const items = [...(local ? this.boards.items(local.id, { kind: "task" }) : []), ...(at?.only ? [...at.only].map((id) => this.boards.item(id)).filter((x): x is BoardItem => !!x) : [])];
+		for (const item of items) {
 			const worker = this.poolWorker(item);
 			if (worker) this.cancel(worker.id);
 		}

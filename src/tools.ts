@@ -182,22 +182,34 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 	 * others work on. The conversation answers and calls again, and that call takes over the sub-agents
 	 * that still work. With nobody asking, it comes back when nothing is left to do.
 	 */
-	const workPool = async (r: ReturnType<typeof run>, texts: string[], signal: AbortSignal | undefined, model?: string, thinking?: string, note?: string, check?: string): Promise<string> => {
-		const board = boards.ensure("local", who.conversation.agent, who.conversation.session, "");
+	const workPool = async (r: ReturnType<typeof run>, texts: string[], signal: AbortSignal | undefined, model?: string, thinking?: string, note?: string, check?: string, on?: { board: Board; ids: number[] }): Promise<string> => {
+		// Tasks that are on a board already are worked where they are, so that the task that was given out is the one
+		// that is settled: a copy on this conversation's board would be done while the one given out stays open. On
+		// such a board only these tasks are this pool's: the others there may be somebody else's. A call that goes on
+		// (no tasks) goes on where the last one worked.
+		const local = boards.ensure("local", who.conversation.agent, who.conversation.session, "");
+		const last = texts.length || on ? undefined : manager.poolAt.get(live.board);
+		const board = on?.board ?? (last ? (boards.get(last.board) ?? local) : local);
+		const only = board.id === local.id ? undefined : new Set([...(last?.only ?? []), ...(on?.ids ?? [])]);
 		// What all of them have to know is on the board before the first one starts: sub-agents that start together cannot tell each other.
 		// A call that is made again with what it had the first time (a model that repeats itself) adds nothing: the
 		// same note is on the board once, and a task that is there and not settled is not there twice.
 		const same = (a: string, b: string) => a.replace(/\s+/g, " ").trim() === b.replace(/\s+/g, " ").trim();
-		const there = boards.items(board.id);
-		const given = texts.map((t) => there.find((x) => x.kind === "task" && x.state !== "done" && x.state !== "failed" && same(x.text, t))?.id ?? boards.post(board, { kind: "task", text: t, ...postedAs() }).id);
+		const there = boards.items(board.id).filter((x) => !only || x.kind !== "task" || only.has(x.id));
+		const posted = texts.map((t) => there.find((x) => x.kind === "task" && x.state !== "done" && x.state !== "failed" && same(x.text, t))?.id ?? boards.post(board, { kind: "task", text: t, ...postedAs() }).id);
+		const given = [...(on?.ids ?? []), ...posted];
+		given.forEach((id) => only?.add(id));
 		// A check is a task after the work it checks, for a second sub-agent, which is shown that work's result when it
 		// starts: what a sub-agent says it did is a claim, and the check is what makes it more than that.
 		if (check?.trim()) {
-			given.forEach((id, i) => {
-				const text = `${check.trim()}\n\nYou check the work of another sub-agent. You do not do it again and you change nothing. That sub-agent's task was:\n${texts[i]}${note?.trim() ? `\n\nIt was told:\n${note.trim()}` : ""}`;
-				if (!boards.items(board.id, { kind: "task" }).some((x) => x.after.includes(id) && same(x.text, text))) boards.post(board, { kind: "task", text, after: [id], ...postedAs() });
-			});
+			for (const id of given) {
+				const text = `${check.trim()}\n\nYou check the work of another sub-agent. You do not do it again and you change nothing. That sub-agent's task was:\n${boards.item(id)?.text ?? ""}${note?.trim() ? `\n\nIt was told:\n${note.trim()}` : ""}`;
+				const found = boards.items(board.id, { kind: "task" }).find((x) => x.after.includes(id) && same(x.text, text));
+				const made = found?.id ?? boards.post(board, { kind: "task", text, after: [id], ...postedAs() }).id;
+				only?.add(made);
+			}
 		}
+		manager.poolAt.set(live.board, { board: board.id, only });
 		// The note is for the tasks of the call it came with (`data.tasks`), not for whatever else the board holds:
 		// a second round on the same board (a check after the work) has a note of its own.
 		let mine = 0;
@@ -208,12 +220,13 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		}
 		// A pool is at work on this board already (a model that splits its tasks over several calls in one answer):
 		// these tasks are its now, and that call brings their results. Two loops on one board would start twice as many.
-		if (manager.pooling.has(board.id)) return `${given.length} task${given.length === 1 ? "" : "s"} added to the pool that is at work on this board. The call that started the pool brings their results: wait for it, and call subagent with "pool": true again only after it has come back.`;
-		manager.pooling.add(board.id);
+		const key = `${board.id}:${live.board}`;
+		if (manager.pooling.has(key)) return `${given.length} task${given.length === 1 ? "" : "s"} added to the pool that is at work on this board. The call that started the pool brings their results: wait for it, and call subagent with "pool": true again only after it has come back.`;
+		manager.pooling.add(key);
 		try {
 			return await workTasks();
 		} finally {
-			manager.pooling.delete(board.id);
+			manager.pooling.delete(key);
 		}
 		async function workTasks(): Promise<string> {
 		/** Whether a note that is about no one task is for this task: one for all is, and a pool's note for the tasks it came with. */
@@ -228,7 +241,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					return `- ${x.by === "owner" ? "your owner: " : ""}${flat(x.text, 1000)}${Object.keys(fields).length ? ` ${truncate(JSON.stringify(fields), 300)}` : ""}`;
 				})
 				.join("\n");
-		const tasksNow = () => boards.items(board.id, { kind: "task" });
+		const tasksNow = () => boards.items(board.id, { kind: "task" }).filter((t) => !only || only.has(t.id));
 		const settled = (t: BoardItem) => t.state === "done" || t.state === "failed" || t.state === "blocked";
 		const told = manager.toldOf(board.id);
 		const news = () => tasksNow().filter((t) => settled(t) && told.get(t.id) !== t.updated);
@@ -315,13 +328,14 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		const again = (t: BoardItem) => boards.items(board.id, { about: t.id }).some(asked);
 		const asks = blocked.map((t) => `## Task #${t.id} asks${again(t) ? " again, after an answer" : ""}\n${t.result ?? "(no question given)"}\n${again(t) ? `Close it yourself: board_done with id ${t.id} and the result.` : `To answer: board_answer with id ${t.id} and your answer.`}`);
 		const goOn = working.length || open.some((t) => boards.ready(t));
+		if (!goOn && !blocked.length) manager.poolAt.delete(live.board);
 		const next = [
 			...(blocked.length
 				? [
 						`${blocked.length === 1 ? `Answer task #${blocked[0].id}` : `Answer tasks ${blocked.map((t) => `#${t.id}`).join(", ")}`} with board_answer: only that puts a task back to work, and the next sub-agent is shown the question and your answer. Your answer has to come from what you know for sure, can look up, or your owner told you. A value or a choice nobody gave you is your owner's: ask them (question) and pass on what they say with board_answer. An answer you make up is still a guess, and asking your owner does not by itself answer the task. Where other tasks have or will have the same question, give "all": true: one answer then does for all of them. Where your answer is the task's result already, close it yourself with board_done (id, result).`,
 					]
 				: []),
-			...(fresh.some((t) => t.state === "failed") ? ["A task that failed stays failed, and tasks that wait for it are never started. Post it again as a new task (board_post with kind task) if it should be tried again."] : []),
+			...(fresh.some((t) => t.state === "failed") ? ["A task that failed stays failed, and tasks that wait for it are never started. Post it again as a new task (board_post with type task) if it should be tried again."] : []),
 			...(started >= poolMax() ? [`${poolMax()} tasks were started in this call.`] : []),
 			...(goOn ? [`${blocked.length ? "Then call" : "Call"} subagent with "pool": true to go on: it comes back when the next sub-agent asks or fails, or when all are done.`] : blocked.length ? ['After you answered, call subagent with "pool": true to have the answered tasks done. Until then another call starts nothing.'] : []),
 		];
@@ -330,7 +344,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			...(notes.length ? [`## Notes the sub-agents left on the board${notes.length > 40 ? ` (the last 40 of ${notes.length}; board_read shows all)` : ""}\n${notes.slice(-40).map((x) => noteLine(x)).join("\n")}`] : []),
 			...(working.length ? [`## Still being worked\n${working.map((t) => taskLine(t)).join("\n")}`] : []),
 			...(open.length ? [`## Not done\n${open.map((t) => taskLine(t)).join("\n")}`] : []),
-			...(next.length ? [`## What to do now\n${next.join("\n")}`] : [`All ${all.length} task${all.length === 1 ? "" : "s"} of the board ${all.every((t) => t.state === "done") ? (all.length === 1 ? "is" : "are") + " done" : "are settled"}. If the job has pieces that were not given as tasks yet, it is not done: give them all now (subagent with "pool": true and "tasks"), with what was answered in "note".`]),
+			...(next.length ? [`## What to do now\n${next.join("\n")}`] : [`All ${all.length} task${all.length === 1 ? "" : "s"} ${only ? `you gave out on ${boardLabel(board)}` : "of the board"} ${all.every((t) => t.state === "done") ? (all.length === 1 ? "is" : "are") + " done" : "are settled"}. If the job has pieces that were not given as tasks yet, it is not done: give them all now (subagent with "pool": true and "tasks"), with what was answered in "note".`]),
 		].join("\n\n");
 		}
 	};
@@ -341,10 +355,10 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			defineTool({
 				name: "delegate",
 				label: "Delegate",
-				description: `Hand a task to another agent and get the answer. Each agent has a separate workspace, knowledge and tools, and sees only what you write in "task", so include everything it needs. To give tasks to several agents at once, call delegate for each of them in the same message: they work side by side, and you get every answer. Agents: ${roster}`,
+				description: `Hand a task to another agent, one of those listed below, and get the answer. Not for sub-agents: a sub-agent is a copy of you, started with subagent, and "sub-agents" always means subagent, never delegate or a new agent. Each agent has a separate workspace, knowledge and tools, and sees only what you write in "task", so include everything it needs. To give tasks to several agents at once, call delegate for each of them in the same message: they work side by side, and you get every answer. Agents: ${roster}`,
 				parameters: Type.Object({
 					agent: Type.String({ description: "Id of the agent" }),
-					task: Type.String({ description: "The complete task, self-contained" }),
+					task: Type.String({ description: "Your owner's words as they gave them, never reworded, and all the agent needs. It sees nothing else: never other words for what your owner asked, and never a tool they did not name. Tasks of a board: the board's name and the tasks' numbers" }),
 					wait: Type.Optional(Type.Boolean({ description: "false: do not wait; the answer arrives later as a message. Default true." })),
 					thread: Type.Optional(Type.String({ description: "Name of an ongoing thread with that agent, so it remembers earlier tasks of the same thread. Omit for a fresh start." })),
 					...(live.trust === "owner" ? { worktree: Type.Optional(Type.Boolean({ description: WORKTREE_PARAM })) } : {}),
@@ -424,9 +438,10 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			defineTool({
 				name: "subagent",
 				label: "Sub-agents",
-				description: `Run independent sub-tasks in parallel, as many as the job has pieces (${agent.subagents.maxParallel} work at a time). Each runs as a copy of you with a fresh, empty context in the same workspace and returns only the final answer. Use it for research or checks that would otherwise fill your context. Each task text must be self-contained. Split a job only after you know the pieces: list the folders or files yourself first, then give one task per piece, each naming one piece by path. Never one task for the whole job, and never "the first folder". A copy has your files and tools and what your owner allowed this conversation.${profile.board ? ` With "pool" there can be many more tasks than ${agent.subagents.maxParallel}: they go onto this conversation's board and the copies work through them ${agent.subagents.maxParallel} at a time. Use it for many pieces of one job (one task per file or folder). Give all the tasks in one call, every piece of the job: never one task first to try it out. A question one copy asks is answered once for all of them. What all of them need, say once and in full in "note" (the values and the rules themselves, as you read them or your owner said them, so that no copy has to look them up again). Look first: a note that is wrong is wrong for every one of them. The call comes back when all are done, or earlier when a copy asks a question or fails: answer it (board_answer) and call again with "pool": true and no tasks, and the others have worked on meanwhile. With "check" every result is checked by a second copy as soon as it is there.` : ""}${choose ? ' With "model" the copies run on another model than yours, for work it does better (a model that sees pictures, a small fast one); with "thinking" they reason more or less than you.' : ""}`,
+				description: `Start sub-agents: copies of you that run independent sub-tasks in parallel, as many as the job has pieces (${agent.subagents.maxParallel} work at a time). When a task says "sub-agents", also "create new sub-agents", this is the tool: you start them yourself, and nothing has to be created or asked of another agent. Each runs with a fresh, empty context in the same workspace and returns only the final answer. Use it for research or checks that would otherwise fill your context. Each task text must be self-contained. Split a job only after you know the pieces: list the folders or files yourself first, then give one task per piece, each naming one piece by path. Never one task for the whole job, and never "the first folder". A copy has your files and tools and what your owner allowed this conversation.${profile.board ? ` With "pool" there can be many more tasks than ${agent.subagents.maxParallel}: they go onto this conversation's board and the copies work through them ${agent.subagents.maxParallel} at a time. Use it for many pieces of one job (one task per file or folder). Give all the tasks in one call, every piece of the job: never one task first to try it out. A question one copy asks is answered once for all of them. What all of them need, say once and in full in "note" (the values and the rules themselves, as you read them or your owner said them, so that no copy has to look them up again). Look first: a note that is wrong is wrong for every one of them. The call comes back when all are done, or earlier when a copy asks a question or fails: answer it (board_answer) and call again with "pool": true and no tasks, and the others have worked on meanwhile. With "check" every result is checked by a second copy as soon as it is there. Tasks that are on a board already (tasks you were given there) are worked where they are: give their numbers in "ids", never their text in "tasks", and each copy settles that very task.` : ""}${choose ? ' With "model" the copies run on another model than yours, for work it does better (a model that sees pictures, a small fast one); with "thinking" they reason more or less than you.' : ""}`,
 				parameters: Type.Object({
 					tasks: profile.board ? Type.Optional(Type.Array(Type.String(), { description: 'One complete task per sub-agent, naming the files by path and what to report. With "pool" it can be left out, to go on with the tasks that are on the board' })) : Type.Array(Type.String(), { description: "One complete task per sub-agent, naming the files by path and what to report" }),
+					...(profile.board ? { ids: Type.Optional(Type.Array(Type.Number(), { description: 'Tasks that are on a board already, by their numbers (board_read shows them): one sub-agent for each, which settles that very task on its board. For tasks you were given on a board, use this and never copy their text into "tasks": a copy is a new task, and the one you were given stays open. Makes the call a pool' })) } : {}),
 					...(profile.board ? { pool: Type.Optional(Type.Boolean({ description: `Give all the tasks in this one call, however many: they are worked through ${agent.subagents.maxParallel} at a time on this conversation's board. Tasks that are on the board already are worked too, and a call with no tasks goes on with what is there` })), check: Type.Optional(Type.String({ description: 'A second sub-agent checks each task\'s result. It is a task of its own that starts when the work is done and is shown the task and what came of it: say what to check and against what (the file, the rule), and what to report. Makes the call a pool' })), note: Type.Optional(Type.String({ description: 'What every one of these sub-agents needs, said once and in full, so that none has to look it up again. The values themselves and the rules, not where to find them: only what you have read yourself or your owner said, never a guess, since all of them will go by it. It goes onto the board as a note that each is shown when it starts. Makes the call a pool' })) } : {}),
 					...(choose
 						? {
@@ -442,11 +457,23 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					const check = typeof p.check === "string" && profile.board ? p.check.trim() : "";
 					// A note and a check are for a pool: a call that has one is a pool, whether it said so or not.
 					if (!Array.isArray(p.tasks)) p.tasks = [];
+					// Tasks that are on a board already: all on one board this run may use, and still to be done.
+					const onBoard: number[] = profile.board && Array.isArray(p.ids) ? [...new Set<number>(p.ids.map(Number))] : [];
+					let on: { board: Board; ids: number[] } | undefined;
+					for (const id of onBoard) {
+						const item = boards.item(id);
+						const board = item ? boards.get(item.board) : undefined;
+						if (!item || item.kind !== "task" || !board || !boards.may(board, who)) throw new Error(`"ids": there is no task #${id} on a board of yours. board_read shows what there is.`);
+						if (on && on.board.id !== board.id) throw new Error('"ids": these tasks are on different boards. Give the tasks of one board in a call, and call again for the other board');
+						if (item.state === "done" || item.state === "failed") throw new Error(`"ids": task #${id} is ${item.state} already. Leave it out`);
+						if (item.state === "taken" && !manager.poolWorker(item)) throw new Error(`"ids": task #${id} is taken by ${item.holder ?? "another run"}. Leave it out`);
+						on = { board, ids: [...(on?.ids ?? []), id] };
+					}
 					// And so is one with more tasks than run at once: they are worked through, not refused.
-					const pooled = (p.pool === true || !!note || !!check || (p.tasks.length > agent.subagents.maxParallel && p.worktree !== true)) && profile.board;
+					const pooled = (p.pool === true || !!note || !!check || !!on || (p.tasks.length > agent.subagents.maxParallel && p.worktree !== true)) && profile.board;
 					if (!pooled && !p.tasks.length) throw new Error("give at least one task");
 					if (!pooled && p.tasks.length > agent.subagents.maxParallel) throw new Error(`at most ${agent.subagents.maxParallel} sub-tasks per call${profile.board ? '. For more, give "pool": true: they are worked through a few at a time' : ""}`);
-					if (check && !p.tasks.length) throw new Error('"check" is for the tasks of the call it comes with: give the tasks too');
+					if (check && !p.tasks.length && !on) throw new Error('"check" is for the tasks of the call it comes with: give the tasks too');
 					if (pooled && p.tasks.length > poolMax()) throw new Error(`at most ${poolMax()} tasks per call`);
 					if (pooled && p.worktree === true) throw new Error('"pool" (and "note" and "check", which make a pool) and "worktree" do not go together: leave one out');
 					if ((p.model || p.thinking) && !choose) throw new Error('sub-agents of this run work on your own model and at your own reasoning level: leave out "model" and "thinking"');
@@ -454,7 +481,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					const thinking = p.thinking ? String(p.thinking).trim().toLowerCase() : undefined;
 					if (thinking && !THINKING_LEVELS.includes(thinking)) throw new Error(`"thinking" is one of ${THINKING_LEVELS.join(", ")}`);
 					if (p.worktree === true && !choose) throw new Error('sub-agents of this run work where you do: leave out "worktree"');
-					if (pooled) return ok(await workPool(r, p.tasks.map(String), signal, model, thinking, note, check));
+					if (pooled) return ok(await workPool(r, p.tasks.map(String), signal, model, thinking, note, check, on));
 					const trees = p.worktree === true ? await apart(p.tasks.length) : [];
 					const ids = p.tasks.map(
 						(t: string, i: number) =>
@@ -1331,7 +1358,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				defineTool({
 					name: "create_agent",
 					label: "Create agent",
-					description: `Create a new agent, when your owner asks for one: an agent with a separate job, workspace and instructions (for example a researcher, a home agent, a bookkeeper). Only you, the main agent, can do this. Your owner sees what you propose and confirms it. The agent exists at once, without a restart: your owner can open it in the terminal UI, and you can hand it work with delegate. Existing agents: ${Object.keys(cfg.agents).join(", ")}.`,
+					description: `Create a new agent, when your owner asks for one: an agent with a separate job, workspace and instructions (for example a researcher, a home agent, a bookkeeper). Never for sub-agents, also "new sub-agents": those are copies of an agent for one task, started with subagent by the agent that is to have them, and nothing is created for them. Only you, the main agent, can do this. Your owner sees what you propose and confirms it. The agent exists at once, without a restart: your owner can open it in the terminal UI, and you can hand it work with delegate. Existing agents: ${Object.keys(cfg.agents).join(", ")}.`,
 					parameters: Type.Object({
 						id: Type.String({ description: "The agent's name: lowercase letters, digits, - and _ (for example research, home, books)" }),
 						instructions: Type.String({ description: "Who it is and how it works, written to the agent itself (\"You are ...\"): the agent's job, what it should and should not do, how it reports. This becomes the agent's instruction file. The first paragraph says in a sentence or two what the agent is for: other agents read that line when they decide whom to hand work to" }),
@@ -2086,10 +2113,10 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 			defineTool({
 				name: "board_post",
 				label: "Post on a board",
-				description: `Post on a board. A task ("kind": "task"): a piece of work for somebody to take, self-contained. With "after" it waits for other tasks, and whoever does it is shown what came of them: this is how a check follows the work it checks. A note (the default): something whoever works on the board should know, short, one thing per note; with "on" it is about one task, and whoever does that task is shown it.`,
+				description: `Post on a board. A task ("type": "task"): a piece of work for somebody to take, self-contained. With "after" it waits for other tasks, and whoever does it is shown what came of them: this is how a check follows the work it checks. A note ("type": "note"): something whoever works on the board should know, short, one thing per note; with "on" it is about one task, and whoever does that task is shown it.`,
 				parameters: Type.Object({
 					text: Type.String({ description: "The note, or the task: what is to be done, self-contained" }),
-					kind: Type.Optional(Type.Union([Type.Literal("note"), Type.Literal("task")], { description: 'note (default) or task' })),
+					type: Type.Union([Type.Literal("task"), Type.Literal("note")], { description: 'task (work for somebody to take) or note (something to know)' }),
 					board: boardParam,
 					on: Type.Optional(Type.Number({ description: "For a note: the number of the task it is about" })),
 					after: Type.Optional(Type.Array(Type.Number(), { description: "For a task: numbers of tasks that have to be done before this one can be taken" })),
@@ -2115,7 +2142,8 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						board = boards.ensure(...place(scope));
 						if (wanted) made = scope === "global" ? " The board is new. Every agent can use it." : scope === "agent" ? " The board is new. All your conversations can use it." : " The board is new. Only this conversation and the sub-agents it starts see it: no other agent does, and a post on it wakes nobody.";
 					}
-					const kind = p.kind === "task" ? "task" : "note";
+					// (Required by the schema, which refuses a post without it: a task posted as a note would be one nobody can take.)
+					const kind: "task" | "note" = p.type;
 					const item = boards.post(board, { kind, text: String(p.text ?? ""), after: p.after, about: p.on, ...postedAs() });
 					const said = kind === "task" ? `Posted task #${item.id} on ${boardLabel(board)}${item.after.length ? `; it can be taken when ${item.after.map((a) => `#${a}`).join(", ")} ${item.after.length === 1 ? "is" : "are"} done` : ""}.` : `Posted note #${item.id} on ${boardLabel(board)}.`;
 					return ok(`${said}${made}${news(board, item.id)}`);
@@ -2229,7 +2257,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 									return { board, item: undefined };
 								})();
 					const { board, item } = target;
-					if (!item && manager.pooling.has(board.id)) throw new Error(`sub-agents are at work on ${boardLabel(board)} for a call of yours that has not come back. Wait for it, then remove the board.`);
+					if (!item && manager.pooling.has(`${board.id}:${live.board}`)) throw new Error(`sub-agents are at work on ${boardLabel(board)} for a call of yours that has not come back. Wait for it, then remove the board.`);
 					// A board of this conversation (with a name or without) is its own list of work. One for all its
 					// conversations or for all agents is used by others too: taking it away is the owner's to say.
 					const shared = board.scope !== "local";
