@@ -470,7 +470,7 @@ test("admin: pine's settings are listed and changed by tool call, each value che
 	let out = await main(call("settings"));
 	for (const key of Object.keys(SETTINGS)) assert.ok(out[0].includes(`${key} = `), key);
 	assert.match(out[0], /defaults\.mode = safe\n    Mode\. How freely agents work, for all agents that do not set their own\.\n    auto: no sandbox/);
-	assert.match(out[0], /limits\.maxConcurrentRuns = 2\n[^\n]*A change holds from the next start of pine\./);
+	assert.match(out[0], /limits\.maxConcurrentRuns = 8\n[^\n]*A change holds from the next start of pine\./);
 
 	// What is wrong is said, and nobody is asked.
 	const before = fs.readFileSync(file, "utf8");
@@ -506,7 +506,7 @@ test("admin: pine's settings are listed and changed by tool call, each value che
 	out = await main(call("set_setting", { key: "limits.maxConcurrentRuns", value: "3" }));
 	assert.match(out[0], /limits\.maxConcurrentRuns is now 3\. It is saved, and holds from the next start of pine: tell your owner that pine has to be restarted for it\./);
 	assert.equal(json(file).limits.maxConcurrentRuns, 3);
-	assert.equal(h.pine.cfg.limits.maxConcurrentRuns, 2);
+	assert.equal(h.pine.cfg.limits.maxConcurrentRuns, 8);
 	// "default" takes the entry out.
 	await main(call("set_setting", { key: "defaults.mode", value: "default" }));
 	assert.equal(json(file).defaults.mode, undefined);

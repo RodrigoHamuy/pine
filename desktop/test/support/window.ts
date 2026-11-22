@@ -94,7 +94,7 @@ async function open(): Promise<void> {
 	home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-")));
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text", "image"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
 	// A port of its own (0: the system picks one), so that a pine the developer has running is left alone.
-	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe", introduce: false }, security: { askAccess: false }, ...(process.env.PINE_DESKTOP_THEME ? { ui: { theme: process.env.PINE_DESKTOP_THEME } } : {}) }, null, 2));
+	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe", introduce: false, thinking: "off" }, security: { askAccess: false }, ...(process.env.PINE_DESKTOP_THEME ? { ui: { theme: process.env.PINE_DESKTOP_THEME } } : {}) }, null, 2));
 	write(path.join(home, "agents", "main", "agent.json"), JSON.stringify({ delegates: ["scout"], approve: ["bash"] }));
 	write(path.join(home, "agents", "main", "workspace", "AGENTS.md"), "The main agent: it administers pine.\n\nYou are the main agent.\n");
 	write(path.join(home, "agents", "main", "workspace", "notes.md"), "# Notes\n\nfirst line\n");
@@ -135,7 +135,7 @@ process.stdin.resume();
 	// `-O forward -L` asks for, or says it cannot, as ssh does.
 	far = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "pine-desktop-far-")));
 	write(path.join(far, "models.json"), fs.readFileSync(path.join(home, "models.json"), "utf8"));
-	write(path.join(far, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe", introduce: false }, security: { askAccess: false } }, null, 2));
+	write(path.join(far, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port: 0 }, main: "main", defaults: { model: "mock/m", mode: "safe", introduce: false, thinking: "off" }, security: { askAccess: false } }, null, 2));
 	write(path.join(far, "agents", "main", "agent.json"), JSON.stringify({}));
 	write(path.join(far, "agents", "main", "workspace", "AGENTS.md"), "The main agent of the other machine.\n\nYou are the main agent there.\n");
 	write(path.join(far, "agents", "helper", "agent.json"), JSON.stringify({}));

@@ -1,7 +1,7 @@
-// The panel beside a conversation: the agent itself (AgentView.tsx), then its work: the files
-// with an editor, what changed in the folder (git), what the last message changed, what the
-// agent's tool calls printed, what its commands left running, and the board it shares with its
-// sub-agents (Board.tsx). Everything is read through the control API; a file is written through it too, by
+// The panel beside a conversation: the files with an editor, what changed in the folder (git, or
+// what the last message changed), what the agent's tool calls printed, the owner's terminal, the
+// agent itself (AgentView.tsx), and, while there is something in them, what its commands left
+// running and the board it shares with its sub-agents (Board.tsx). Everything is read through the control API; a file is written through it too, by
 // the daemon, inside a sandbox that reaches only this folder.
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -576,21 +576,28 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			onClose={() => void store.command("code")}
 			bar={
 				<>
-					{/* Seven or eight tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
-					    for the line under the tab in front, which stock draws below the list. */}
+					{/* What is always there first, in the order it is used: the folder (Files, Changes), what ran (Output, the
+					    owner's Terminal), then the agent. After them the two that are there only while they hold something,
+					    with their number, so that the others never move. In a narrow panel the row scrolls sideways, and fades
+					    where it is cut. The padding is the room for the line under the tab in front, which stock draws below the list. */}
 					<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 					<div className="pb-1.5">
-					<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+					{/* Last turn is a range of Changes, chosen inside that view: one tab for both. */}
+					<Tabs value={view === "turn" ? "changes" : view} onValueChange={(v) => setView(v as CodeView)}>
 						<TabsList variant="line" activateOnFocus>
-							<TabsTrigger value="agent">Agent</TabsTrigger>
 							<TabsTrigger value="files">Files</TabsTrigger>
 							<TabsTrigger value="changes">Changes</TabsTrigger>
-							<TabsTrigger value="turn">Last turn</TabsTrigger>
 							<TabsTrigger value="output">Output</TabsTrigger>
-							<TabsTrigger value="running">
-								Running
-								{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
-							</TabsTrigger>
+							{/* A shell of this computer: a conversation of another machine's pine does not work here. */}
+							{store.remote ? null : <TabsTrigger value="terminal">Terminal</TabsTrigger>}
+							<TabsTrigger value="agent">Agent</TabsTrigger>
+							{/* Only while a command of the conversation's is still running, or the owner asked for the tab. */}
+							{tab.programs.length || view === "running" ? (
+								<TabsTrigger value="running">
+									Running
+									{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
+								</TabsTrigger>
+							) : null}
 							{/* Only while the conversation has a board, or the owner asked for the tab: most conversations have none. */}
 							{tab.boards.length || view === "board" ? (
 								<TabsTrigger value="board">
@@ -598,8 +605,6 @@ export function CodePanel({ tab }: { tab: Tab }) {
 									{unsettled ? <Badge variant="secondary">{unsettled}</Badge> : null}
 								</TabsTrigger>
 							) : null}
-							{/* A shell of this computer: a conversation of another machine's pine does not work here. */}
-							{store.remote ? null : <TabsTrigger value="terminal">Terminal</TabsTrigger>}
 						</TabsList>
 					</Tabs>
 					</div>
@@ -613,7 +618,18 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			{view === "agent" ? (
 				<AgentView tab={tab} />
 			) : view === "changes" || view === "turn" ? (
-				<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
+				<>
+					{/* Which changes: all that git knows of in the folder, or what the owner's last message changed. */}
+					<div className={SUB}>
+						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+							<TabsList activateOnFocus aria-label="Which changes">
+								<TabsTrigger value="changes">All changes</TabsTrigger>
+								<TabsTrigger value="turn">Last turn</TabsTrigger>
+							</TabsList>
+						</Tabs>
+					</div>
+					<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
+				</>
 			) : view === "files" ? (
 				<Files tab={tab} file={state.file} setFile={setFile} />
 			) : view === "output" ? (

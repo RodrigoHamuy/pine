@@ -3,7 +3,7 @@
 // The parts are shadcn's chat components, composed the way its AI Elements pages show: the thread
 // is Message Scroller, a turn is Message (and Bubble for the owner's), the work of a turn is Trace
 // (Task, Tool, Reasoning, Subagent and Plan), a request is an Item (Confirmation), a note is a Marker.
-import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PaperclipIcon, PlayIcon, SearchIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
+import { ArrowUpIcon, ArrowUpRightIcon, BrainIcon, CheckIcon, ChevronDownIcon, CircleCheckIcon, CircleDotIcon, CircleIcon, ClockIcon, CpuIcon, FolderIcon, GitBranchIcon, InfoIcon, ListChecksIcon, type LucideIcon, MessageCircleQuestionIcon, PaperclipIcon, PlayIcon, SearchIcon, SettingsIcon, ShieldIcon, SquareIcon, StarIcon, TargetIcon, TriangleAlertIcon, Undo2Icon, XIcon, ZapIcon } from "lucide-react";
 import { Fragment, memo, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Sound } from "@/components/sound";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -590,6 +590,8 @@ function Welcome({ tab }: { tab: Tab }) {
 					{counts.filter(([, n]) => n > 0).map(([what, n]) => <Badge variant="outline" key={what}><b>{n}</b>{n === 1 ? what : `${what}s`}</Badge>)}
 				</div>
 				{info?.modelProblem ? <ModelNotice agent={tab.agent} model={info.model} problem={info.modelProblem} onModels={() => store.openSettings("models")} /> : null}
+				{/* The way on to what the card only names: the agent's own page, where its model, mode, tools and instructions are changed. */}
+				<Button variant="outline" size="sm" data-slot="agent-settings" onClick={() => store.openSettings("agents", tab.agent)}><SettingsIcon data-icon="inline-start" />Agent settings</Button>
 			</EmptyContent>
 		</Empty>
 	);

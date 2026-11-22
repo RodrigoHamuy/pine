@@ -2,18 +2,19 @@ import fs from "node:fs";
 import path from "node:path";
 import { defineTool } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { type AgentConfig, delegatesText, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpServerConfig, PINE_ROOT, purposeOf, RESERVED_TOPICS, SOURCE_TYPES, unsandboxed } from "./config.ts";
+import { type AgentConfig, delegatesText, effectiveMcp, EVERYDAY_TYPES, mainAgentId, type McpServerConfig, ownText, PINE_ROOT, purposeOf, RESERVED_TOPICS, SOURCE_TYPES, unsandboxed } from "./config.ts";
 import { AGENT_TOOLS, checkNewAgent, createAgent } from "./agent-admin.ts";
-import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkAgentId, checkRoute, checkSetting, dropRoute, namedBy, routesText, SETTINGS, settingsText } from "./admin.ts";
+import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentChange, checkAgentId, checkRoute, checkSetting, dropRoute, namedBy, routesText, SETTINGS, settingsText, settleModel } from "./admin.ts";
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
 import { finish as finishWorktree, type Worktree, worktreeName } from "./worktrees.ts";
 import { NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
 import { type Board, type BoardItem, boardName, type BoardScope, type Who } from "./boards.ts";
 import type { PineEvent, TaskResult } from "./types.ts";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
-import { addServer, mcpEnvName, removeServer, splitCommand, validateServer } from "./mcp-config.ts";
+import { addServer, findServer, mcpEnvName, piMcp, removeServer, splitCommand, validateServer } from "./mcp-config.ts";
+import { login, logout, type Prompter } from "./login.ts";
 import { setEnv } from "./env-file.ts";
-import { isInside, levelOf, realish } from "./security.ts";
+import { type ApprovalRequest, isInside, levelOf, realish } from "./security.ts";
 import { type Part, pineManual, showRead, showSearch } from "./manual.ts";
 import { addModelServer, checkServerName, listModelServers, lookAt, modelServerUsers, removeModelServer, serverUrl } from "./models.ts";
 import { allSkills, checkSkill, deleteSkill, listSkills, skillDir, skillsBeside, writeSkill } from "./skills.ts";
@@ -168,8 +169,8 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 			...(notes.length ? [`Notes${notes.length > keep ? ` (the last ${keep} of ${notes.length})` : ""}:`, ...notes.slice(-keep).map((x) => noteLine(x))] : []),
 		].join("\n");
 	};
-	/** How many tasks one call of subagent puts onto a board and starts at most. */
-	const POOL_MAX = 100;
+	/** How many tasks one call of subagent puts onto a board and starts at most: pine's setting, read at each call. */
+	const poolMax = () => cfg.limits.maxPoolTasks;
 	/**
 	 * Work through the tasks of this conversation's board with sub-agents, a few at a time. The daemon
 	 * takes each task for the sub-agent it starts for it, and when that sub-agent ends, its answer is the
@@ -259,7 +260,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		try {
 			await r.slot.suspend(async () => {
 				for (;;) {
-					while (!waits() && active.size < agent.subagents.maxParallel && started < POOL_MAX && !signal?.aborted) {
+					while (!waits() && active.size < agent.subagents.maxParallel && started < poolMax() && !signal?.aborted) {
 						const next = tasksNow().find((t) => boards.ready(t));
 						if (!next) break;
 						// What was noted about the task goes with it: the answer to a question it was blocked on, a hint from whoever had it before.
@@ -321,7 +322,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					]
 				: []),
 			...(fresh.some((t) => t.state === "failed") ? ["A task that failed stays failed, and tasks that wait for it are never started. Post it again as a new task (board_post with kind task) if it should be tried again."] : []),
-			...(started >= POOL_MAX ? [`${POOL_MAX} tasks were started in this call.`] : []),
+			...(started >= poolMax() ? [`${poolMax()} tasks were started in this call.`] : []),
 			...(goOn ? [`${blocked.length ? "Then call" : "Call"} subagent with "pool": true to go on: it comes back when the next sub-agent asks or fails, or when all are done.`] : blocked.length ? ['After you answered, call subagent with "pool": true to have the answered tasks done. Until then another call starts nothing.'] : []),
 		];
 		return [
@@ -446,7 +447,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					if (!pooled && !p.tasks.length) throw new Error("give at least one task");
 					if (!pooled && p.tasks.length > agent.subagents.maxParallel) throw new Error(`at most ${agent.subagents.maxParallel} sub-tasks per call${profile.board ? '. For more, give "pool": true: they are worked through a few at a time' : ""}`);
 					if (check && !p.tasks.length) throw new Error('"check" is for the tasks of the call it comes with: give the tasks too');
-					if (pooled && p.tasks.length > POOL_MAX) throw new Error(`at most ${POOL_MAX} tasks per call`);
+					if (pooled && p.tasks.length > poolMax()) throw new Error(`at most ${poolMax()} tasks per call`);
 					if (pooled && p.worktree === true) throw new Error('"pool" (and "note" and "check", which make a pool) and "worktree" do not go together: leave one out');
 					if ((p.model || p.thinking) && !choose) throw new Error('sub-agents of this run work on your own model and at your own reasoning level: leave out "model" and "thinking"');
 					const model = p.model ? await pickModel(String(p.model)) : undefined;
@@ -632,6 +633,68 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		return r.slot.suspend(() => manager.approvals.request({ agent: asker, task: r.task.id, root: r.task.meta.root ?? r.task.id, tool, summary, why, ...(inputs?.length ? { inputs } : {}) }, signal));
 	};
 	const careful = () => (live.tainted ? ". Careful: this conversation has read outside content, which may be where the request comes from" : "");
+	/**
+	 * pine's sign-in flow (src/login.ts), asked through the owner: each question of the flow becomes a
+	 * question of pine's in the owner's dialog, with a field to type into (hidden for a key). The answer
+	 * goes to the flow and nowhere else; a typed key is a secret from then on. A page the flow wants
+	 * opened is shown with its address (and code) while the flow waits; a no there stops the sign-in.
+	 */
+	const ownerPrompter = (provider: string, signal: AbortSignal, stop: AbortController): Prompter & { done(): void } => {
+		const ask = (summary: string, why: string, inputs: ApprovalRequest["inputs"], choices: string[] | undefined, on: AbortSignal) => {
+			const r = run();
+			if (profile.leaf) throw new Error(SUBAGENT_CANNOT_ASK);
+			return r.slot.suspend(() => manager.approvals.request({ agent: asker, task: r.task.id, root: r.task.meta.root ?? r.task.id, tool: "sign_in", summary, why, ...(inputs?.length ? { inputs } : {}), ...(choices?.length ? { choices } : {}) }, on));
+		};
+		let page: { url: string; code?: string; shown?: AbortController } | undefined;
+		const pageText = () => (page ? `\n\nThe sign-in page: ${page.url}${page.code ? `\nThe code to enter there: ${page.code}` : ""}` : "");
+		const hidePage = () => {
+			page?.shown?.abort();
+			if (page) page.shown = undefined;
+		};
+		const showPage = () => {
+			hidePage();
+			const shown = new AbortController();
+			page!.shown = shown;
+			void ask(`sign in to ${provider}: open this page in your browser and sign in there.${pageText()}`, "pine waits until the provider says you are signed in. Say no to stop the sign-in", undefined, undefined, AbortSignal.any([signal, shown.signal])).then(
+				(d) => {
+					if (!d.allow && d.by !== "aborted") stop.abort();
+				},
+				() => undefined,
+			);
+		};
+		const question = async (message: string, secret: boolean, choices?: string[]) => {
+			hidePage();
+			const d = await ask(`sign in to ${provider}: ${message}${pageText()}`, secret ? "it goes to pine's sign-in and never to the agent" : "your answer goes to pine's sign-in, not to the agent", [{ name: "answer", label: message, secret }], choices, signal);
+			if (!d.allow) {
+				stop.abort();
+				throw new Error("cancelled");
+			}
+			const value = String(d.values?.answer ?? "");
+			// A key that was typed is a secret from then on, wherever it might turn up.
+			if (secret) manager.sources?.keepOut([value]);
+			return value;
+		};
+		return {
+			text: (message) => question(message, false),
+			secret: (message) => question(message, true),
+			select: async (message, options) => {
+				const picked = await question(message, false, options.map((o) => o.label));
+				const option = options.find((o) => o.label === picked || o.id === picked);
+				if (!option) throw new Error(`"${picked}" is not one of: ${options.map((o) => o.label).join(", ")}`);
+				return option.id;
+			},
+			say: () => undefined,
+			open: (url) => {
+				page = { url };
+				showPage();
+			},
+			device: (url, code) => {
+				page = { url, code };
+				showPage();
+			},
+			done: hidePage,
+		};
+	};
 	const whoIs = (scope: "local" | "agent" | "global") => (scope === "global" ? "ALL agents" : scope === "agent" ? `agent ${agent.id} (all of that agent's conversations)` : `this conversation of ${agent.id} only`);
 
 	// Event sources. Looking is always possible, so that "what are you subscribed to?" has an answer
@@ -1070,7 +1133,9 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					}
 					const signIn = p.command
 						? `If the server needs a sign-in, the server's documentation names the command for it (often the same command with "login" at the end). Run that in your shell, give your owner the link it prints, and wait for them.`
-						: `If the server requires sign-in, they stay missing until your owner signs in: /mcp login ${p.name} in the terminal UI, or "pine mcp login ${p.name}" in a shell. Tell them that.`;
+						: isMain
+							? `If the server requires sign-in, they stay missing until your owner signs in: with sign_in_mcp_server, which you start and they finish in the browser, or with Sign in under Settings > MCP servers.`
+							: `If the server requires sign-in, they stay missing until your owner signs in: Sign in under Settings > MCP servers, /mcp login ${p.name} in the terminal UI, or "pine mcp login ${p.name}" in a shell. Tell them that.`;
 					const when = goesOn
 						? `You do not have the server's tools in this turn yet. Finish what else there is to do now (a sign-in, if it needs one) and end your turn with one short line: pine calls you again at once, in this same conversation, and then the tools are in your tool list. Do not tell your owner to start a new chat or to send another message`
 						: `The server's tools are available from your next message on, in this same conversation`;
@@ -1348,6 +1413,87 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						return ok(`Removed the model server "${p.name}".`);
 					},
 				}),
+				// Signing in, to a model provider or to a remote MCP server: pine's own flows, the ones
+				// Settings runs. Whatever a flow asks for (a key, a code, a choice) is put to the owner as a
+				// question of pine's, and the answer goes from the owner's dialog to the flow: never through a
+				// model, never into an event. A page to open is shown to the owner with its address and code;
+				// the browser is where the owner sits, so pine opens nothing there by itself.
+				defineTool({
+					name: "sign_in",
+					label: "Sign in to a model provider",
+					description: `Sign pine in to a model provider when your owner asks: with an account or subscription in the browser (Claude, ChatGPT, GitHub Copilot), or with an API key (OpenAI, Gemini, Mistral, OpenRouter and the other providers pine knows). pine runs the sign-in itself. Your owner confirms it, then pine's own dialog shows them the page to open, or a field to type the key into. What they type goes to pine and never to you: never ask for a key in the conversation, and never take one from it. Afterwards the provider's models can be used, and if the agents had no model that answers, pine chooses one of the new ones. Not possible in a conversation that has read outside content.`,
+					parameters: Type.Object({
+						provider: Type.String({ description: "The provider's id: anthropic (Claude), openai-codex (ChatGPT), github-copilot, openai, google, mistral, openrouter, and so on. A wrong one is answered with the list" }),
+						way: Type.Optional(Type.Union([Type.Literal("browser"), Type.Literal("key")], { description: "browser: sign in with an account or subscription; key: with an API key. Left out: the provider's usual way" })),
+					}),
+					execute: async (_id, p, signal) => {
+						run();
+						if (live.tainted) throw new Error(`This conversation has read outside content (${live.tainted}), and no sign-in is started from such a conversation. Tell your owner: in a new conversation you can do it, or they sign in under Settings > Models, or with: pine login ${p.provider}`);
+						const known = manager.models.getProviders().map((x: any) => String(x.id));
+						if (!known.includes(p.provider)) throw new Error(`there is no provider "${p.provider}". Known: ${known.sort().join(", ")}`);
+						const type = p.way === "browser" ? ("oauth" as const) : p.way === "key" ? ("api_key" as const) : undefined;
+						const decision = await confirm("sign_in", `sign pine in to ${p.provider}${type ? (type === "oauth" ? " with your account, in the browser" : " with an API key") : ""}\npine then asks you here for what the sign-in needs (a page to open, a key, a code). What you type goes to pine, not to the agent, and the credential is kept in auth.json in pine's home, which no agent can read.`, "this lets pine use a model provider in your name", signal);
+						if (!decision.allow) throw new Error(`not signed in (${decision.by}). Do not retry; tell your owner they can sign in under Settings > Models, or with: pine login ${p.provider}`);
+						const stop = new AbortController();
+						const both = signal ? AbortSignal.any([signal, stop.signal]) : stop.signal;
+						const prompter = ownerPrompter(p.provider, both, stop);
+						let models: string[];
+						try {
+							models = await login(cfg, p.provider, type, prompter, both);
+						} catch (e) {
+							throw new Error(`not signed in: ${stop.signal.aborted ? "your owner stopped the sign-in" : errText(e)}. Do not retry by yourself; your owner can sign in under Settings > Models, or with: pine login ${p.provider}`);
+						} finally {
+							prompter.done();
+						}
+						await manager.reloadModels();
+						const chosen = await settleModel(cfg, manager, manager.log, p.provider);
+						return ok(`Signed in to ${p.provider}. ${models.length ? `${models.length} model${models.length === 1 ? " is" : "s are"} available now, for example ${models.slice(0, 5).join(", ")}.` : "pine lists no models of that provider yet."}${type === "api_key" || (!type && models.length === 0) ? " A key is checked with the first message that uses it." : ""}${chosen ? ` The agents had no model that answered, so they run on ${chosen} now.` : ""} A model is chosen with set_setting (defaults.model) for all agents, or with update_agent for one.`);
+					},
+				}),
+				defineTool({
+					name: "sign_out",
+					label: "Sign out of a model provider",
+					description: "Remove pine's sign-in to a model provider (the stored key or account) when your owner asks. Agents that run on that provider's models stop answering until it is signed in again or they get another model. Your owner confirms it.",
+					parameters: Type.Object({ provider: Type.String({ description: "The provider's id, as sign_in takes it" }) }),
+					execute: async (_id, p, signal) => {
+						run();
+						if (live.tainted) throw new Error(`This conversation has read outside content (${live.tainted}), and no sign-in is removed from such a conversation. Tell your owner: they sign out under Settings > Models, or with: pine logout ${p.provider}`);
+						const known = manager.models.getProviders().map((x: any) => String(x.id));
+						if (!known.includes(p.provider)) throw new Error(`there is no provider "${p.provider}". Known: ${known.sort().join(", ")}`);
+						const on = (m: string | undefined) => Boolean(m?.startsWith(`${p.provider}/`));
+						const users = [...(on(cfg.defaults.model) ? ["the default model"] : []), ...Object.values(cfg.agents).filter((a) => on(a.model)).map((a) => a.id)];
+						const decision = await confirm("sign_out", `sign pine out of ${p.provider}\nThe stored key or account is removed from auth.json in pine's home.${users.length ? ` In use by ${users.join(", ")}: those stop answering until ${p.provider} is signed in again or they get another model.` : ""}`, `this takes a model provider away from pine${careful()}`, signal);
+						if (!decision.allow) throw new Error(`not signed out (${decision.by}). Do not retry; tell your owner they can sign out under Settings > Models, or with: pine logout ${p.provider}`);
+						await logout(cfg, p.provider, () => {});
+						await manager.reloadModels();
+						return ok(`Signed out of ${p.provider}.${users.length ? ` ${users.join(", ")} used it: give ${users.length === 1 ? "it" : "them"} another model (set_setting defaults.model, update_agent "model") if your owner wants.` : ""}`);
+					},
+				}),
+				defineTool({
+					name: "sign_in_mcp_server",
+					label: "Sign in to an MCP server",
+					description: "Sign in to a remote MCP server that needs one (its tools stay missing until then), when your owner asks or after add_mcp_server said it needs a sign-in. pine runs the server's sign-in: your owner confirms it, and a page opens in the browser of the computer pine runs on, where they sign in. The token is kept by pine; you never see it. Only for a remote server (an https address); a local one signs in by its own command.",
+					parameters: Type.Object({
+						name: Type.String({ description: "The server's name, as mcp_servers lists it" }),
+						agent: Type.Optional(Type.String({ description: "The agent the server belongs to, when it is one agent's own and not for all agents" })),
+					}),
+					execute: async (_id, p, signal) => {
+						run();
+						if (live.tainted) throw new Error(`This conversation has read outside content (${live.tainted}), and no sign-in is started from such a conversation. Tell your owner: they press Sign in on the server's row under Settings > MCP servers, or run: pine mcp login ${p.name}`);
+						if (p.agent && !cfg.agents[p.agent]) throw new Error(`there is no agent "${p.agent}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
+						const server = findServer(cfg, p.name, p.agent);
+						if (!server) throw new Error(`there is no MCP server "${p.name}"${p.agent ? ` of ${p.agent}` : ""}. mcp_servers lists them`);
+						if (!server.url) throw new Error(`"${p.name}" is a local server: it has no sign-in of pine's. If it needs one, the server's documentation names the command for it`);
+						const decision = await confirm("sign_in_mcp_server", `sign in to the MCP server "${p.name}" at ${server.url}\nA page opens in the browser of the computer pine runs on: sign in there. pine keeps the token; the agent never sees it.`, "this gives pine access to a service in your name", signal);
+						if (!decision.allow) throw new Error(`not signed in (${decision.by}). Do not retry; tell your owner they can press Sign in on the server's row under Settings > MCP servers, or run: pine mcp login ${p.name}`);
+						const done = await piMcp(cfg, { [p.name]: server }, ["login", p.name], { capture: true });
+						// Conversations that began before the sign-in get the server's tools with their next message.
+						if (done.code === 0) await manager.refreshSessions();
+						const said = truncate(done.out.trim(), 1500);
+						if (done.code !== 0) throw new Error(`the sign-in did not finish (exit ${done.code})${said ? `:\n${said}` : ""}`);
+						return ok(`Signed in to "${p.name}".${said ? `\n${said}` : ""} The server's tools are there from the next message on.`);
+					},
+				}),
 			);
 			// The agents themselves, and pine's settings: what only the main agent administers
 			// (src/admin.ts). A change is a few named values, each checked; the owner confirms it; and
@@ -1376,8 +1522,10 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						const a = cfg.agents[p.id];
 						if (!a) throw new Error(`there is no agent "${p.id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
 						const text = readOwn(path.join(a.workspace, "AGENTS.md"), 6000);
-						const soul = readOwn(path.join(a.workspace, "SOUL.md"), 3000);
-						const tooling = readOwn(path.join(a.workspace, "TOOLS.md"), 3000);
+						// What pine once put into a file nobody wrote in reads as empty here too.
+						const kept = (t: string | undefined) => (t === undefined ? t : ownText(t));
+						const soul = kept(readOwn(path.join(a.workspace, "SOUL.md"), 3000));
+						const tooling = kept(readOwn(path.join(a.workspace, "TOOLS.md"), 3000));
 						return ok(`${about(a)}\n    workspace: ${a.workspace}\n    may hand work to: ${delegatesText(cfg, a)}\n\nInstructions (AGENTS.md in the agent's workspace, which the agent also keeps itself; update_agent "instructions" replaces them):\n${text === undefined ? "(none, or not readable)" : text.trim() || "(empty)"}\n\nCharacter and tone (SOUL.md in the agent's workspace; update_agent "soul" replaces it):\n${soul === undefined ? "(none, or not readable)" : soul.trim() || "(empty)"}\n\nThe agent's own defaults and preferences for tools (TOOLS.md in the agent's workspace, on top of the TOOLS.md for all agents; update_agent "tooling" replaces it):\n${tooling === undefined ? "(none, or not readable)" : tooling.trim() || "(empty)"}`);
 					},
 				}),

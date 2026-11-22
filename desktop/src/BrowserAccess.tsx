@@ -11,14 +11,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel, FieldLegend, FieldSet } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Switch } from "@/components/ui/switch";
 import { QrCode } from "@/components/qr-code";
+import { EmptyView } from "@/components/empty-view";
 import { type AccessChange, type AccessDevice, type AccessState, bridge } from "./bridge.ts";
 import { computerWord } from "./machines.ts";
 import { store } from "./model.ts";
+import { Section } from "./settings-parts.tsx";
 import { ago, errText } from "./text.ts";
 
 /** The pairing the dialog shows: the link and when it stops working, and whether a device has asked with it. */
@@ -117,8 +119,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 
 	return (
 		<>
-			<FieldSet>
-				<FieldLegend>This {computer}</FieldLegend>
+			<Section title={`This ${computer}`}>
 				<FieldGroup>
 					<Field orientation="horizontal" data-setting="access">
 						<FieldContent>
@@ -157,12 +158,47 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 						{serviceError ? <FieldError>{serviceError}</FieldError> : null}
 					</Field>
 				</FieldGroup>
-			</FieldSet>
+			</Section>
+
+			<Section title="Devices" actions={<Button variant="outline" disabled={state.status === "off"} onClick={actions.add}><PlusIcon data-icon="inline-start" />Add a device</Button>}>
+				{state.devices.length ? (
+					<ItemGroup>
+						{state.devices.map((d) => (
+							<Item key={d.id} variant="outline" size="sm" data-slot="access-device">
+								<ItemMedia variant="icon"><LaptopIcon /></ItemMedia>
+								<ItemContent className="min-w-0">
+									{/* `flex` again after `line-clamp-none`, which sets `display: block`: the badge keeps its gap, and goes under a long name. */}
+									<ItemTitle className="line-clamp-none flex w-full min-w-0 flex-wrap">
+										<span className="min-w-0 wrap-anywhere">{d.name}</span>
+										{d.connected ? <Badge>connected now</Badge> : null}
+									</ItemTitle>
+									<ItemDescription className="line-clamp-none">{deviceLine(d, now)}</ItemDescription>
+								</ItemContent>
+								<ItemActions>
+									<AlertDialog>
+										<AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Remove</AlertDialogTrigger>
+										<AlertDialogContent>
+											<AlertDialogHeader>
+												<AlertDialogTitle className="wrap-anywhere">Remove {d.name}?</AlertDialogTitle>
+												<AlertDialogDescription>The device is disconnected now, and can only connect again if you add it again.</AlertDialogDescription>
+											</AlertDialogHeader>
+											<AlertDialogFooter>
+												<AlertDialogCancel>Cancel</AlertDialogCancel>
+												<AlertDialogCancel variant="destructive" onClick={() => actions.remove(d.id)}>Remove</AlertDialogCancel>
+											</AlertDialogFooter>
+										</AlertDialogContent>
+									</AlertDialog>
+								</ItemActions>
+							</Item>
+						))}
+					</ItemGroup>
+				) : (
+					<EmptyView icon={LaptopIcon} title="No device is paired">Add one by scanning a code with the device's camera, or with a link you open in the device's browser.</EmptyView>
+				)}
+			</Section>
 
 			{/* A set of its own: inside the group of This Mac, its fields were drawn with no height once the try's line appeared. */}
-			<FieldSet data-setting="access-relay" data-invalid={relayError ? true : undefined}>
-				<FieldLegend>Relay server (TURN)</FieldLegend>
-				<FieldDescription>Used when no direct connection can be made, for example from some mobile networks. Leave it empty if you have none.</FieldDescription>
+			<Section title="Relay server (TURN)" about="Used when no direct connection can be made, for example from some mobile networks. Leave it empty if you have none." data-setting="access-relay" data-invalid={relayError ? true : undefined}>
 				<FieldGroup>
 					<Field>
 						<FieldLabel htmlFor={`${field}-relay`}>Address</FieldLabel>
@@ -181,48 +217,7 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 					</div>
 					{relayError ? <FieldError>{relayError}</FieldError> : check ? <FieldDescription data-slot="relay-check" data-result={check.result} className="data-[result=failed]:text-destructive">{check.message}</FieldDescription> : null}
 				</FieldGroup>
-			</FieldSet>
-
-			<FieldSet>
-				<FieldLegend>Devices</FieldLegend>
-				{state.devices.length ? (
-					<ItemGroup>
-						{state.devices.map((d) => (
-							<Item key={d.id} variant="outline" data-slot="access-device">
-								<ItemMedia variant="icon"><LaptopIcon /></ItemMedia>
-								<ItemContent className="min-w-0">
-									{/* `flex` again after `line-clamp-none`, which sets `display: block`: the badge keeps its gap, and goes under a long name. */}
-									<ItemTitle className="line-clamp-none flex w-full min-w-0 flex-wrap">
-										<span className="min-w-0 wrap-anywhere">{d.name}</span>
-										{d.connected ? <Badge>connected now</Badge> : null}
-									</ItemTitle>
-									<ItemDescription className="line-clamp-none">{deviceLine(d, now)}</ItemDescription>
-								</ItemContent>
-								<ItemActions>
-									<AlertDialog>
-										<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Remove</AlertDialogTrigger>
-										<AlertDialogContent>
-											<AlertDialogHeader>
-												<AlertDialogTitle className="wrap-anywhere">Remove {d.name}?</AlertDialogTitle>
-												<AlertDialogDescription>The device is disconnected now, and can only connect again if you add it again.</AlertDialogDescription>
-											</AlertDialogHeader>
-											<AlertDialogFooter>
-												<AlertDialogCancel>Cancel</AlertDialogCancel>
-												<AlertDialogCancel variant="destructive" onClick={() => actions.remove(d.id)}>Remove</AlertDialogCancel>
-											</AlertDialogFooter>
-										</AlertDialogContent>
-									</AlertDialog>
-								</ItemActions>
-							</Item>
-						))}
-					</ItemGroup>
-				) : (
-					<FieldDescription>No device is paired. Add one by scanning a code with the device's camera, or with a link you open in the device's browser.</FieldDescription>
-				)}
-				<div>
-					<Button variant="outline" disabled={state.status === "off"} onClick={actions.add}><PlusIcon data-icon="inline-start" />Add a device</Button>
-				</div>
-			</FieldSet>
+			</Section>
 
 			{/* Turned on the first time: open at login is offered, checked. */}
 			<AlertDialog open={turningOn} onOpenChange={setTurningOn}>

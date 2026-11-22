@@ -22,7 +22,8 @@ agents/gonzo/
 
 Ask the main agent ("create an agent that keeps my books"): it calls `create_agent`, you confirm
 what it proposes, and the folder above is made with `agent.json` and a workspace that holds its
-instructions (`AGENTS.md`) and stubs of `SOUL.md`, `TOOLS.md` and `MEMORY.md`. The agent exists at once,
+instructions (`AGENTS.md`) and an empty `SOUL.md`, `TOOLS.md` and `MEMORY.md`, which the agent fills
+when it has something for them: what each is for is in its prompt, not in the file. The agent exists at once,
 without a restart, and its conversation opens in a tab beside yours. Only the main agent has this tool; the
 others tell you to ask it. See [setup.md](setup.md).
 
@@ -152,6 +153,8 @@ Its system prompt is put together from, in this order:
    then `MEMORY.md`. See "The files an agent keeps itself".
    After them the instruction files of a folder opened for the conversation, and any files in
    `context`. All of them are in the table below.
+   A file that is empty is left out, and so is one that still holds only the line on what it is
+   for that pine wrote into new homes before they started with empty files.
 
 ### Every file that is read as instructions
 
@@ -236,10 +239,10 @@ declares them in **families**, which is about 11 500:
 | `pine_list` | What there is: `sources`, `schedules`, `mcp_servers`, `skills`, `boards`, and for the main agent `agents`, `settings`, `routes`, `conversations`. `what` takes several at once (`["sources", "schedules"]`) |
 | `pine_sources` | `subscribe`, `unsubscribe`, `add_source`, `send`, `read_source`, `remove_source`, `publish_event`, and for the main agent `add_source_type`, `remove_source_type` |
 | `pine_schedules` | `add_schedule`, `remove_schedule` |
-| `pine_mcp` | `add_mcp_server`, `remove_mcp_server`, and the three tools for a server's resources |
+| `pine_mcp` | `add_mcp_server`, `remove_mcp_server`, `sign_in_mcp_server` (the main agent's), and the three tools for a server's resources |
 | `pine_skills` | `add_skill`, `remove_skill` |
 | `pine_agents` | The main agent's: `create_agent`, `update_agent`, `rename_agent`, `remove_agent` |
-| `pine_settings` | The main agent's: `set_setting`, `add_route`, `remove_route`, `add_model_server`, `remove_model_server` |
+| `pine_settings` | The main agent's: `set_setting`, `add_route`, `remove_route`, `add_model_server`, `remove_model_server`, `sign_in`, `sign_out` |
 | `pine_board` | `board_read`, `board_post`, `board_claim`, `board_done`, `board_answer`, `board_remove`: the tasks of a job that several work on ([boards.md](boards.md)) |
 | `pine_other` | `request_access`, `stop_program`, `state_get`, `state_set` |
 | `pine_conversations` | The main agent's: `read_conversation`, `set_conversation`, `remove_conversation` |
@@ -615,7 +618,7 @@ has no such paragraph is shown with `description` from its `agent.json`.
 ## Sub-agents
 
 `subagent(tasks: string[], model?, thinking?, worktree?, pool?, note?, check?)` runs up to `subagents.maxParallel` copies of the
-same agent at once (4 unless the agent's `agent.json` says otherwise). Given more tasks than
+same agent at once (pine's `limits.maxSubagents`, 4 unless you changed it in Settings > General, or what the agent's `agent.json` says). Given more tasks than
 that, it works through them that many at a time, as a pool ([boards.md](boards.md)).
 Each copy has the agent's workspace, instructions and tools but an empty conversation, cannot
 delegate or spawn further, and returns only its final answer. Use it for searches and checks

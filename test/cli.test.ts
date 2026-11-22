@@ -66,7 +66,7 @@ test("the command line drives a running daemon", async (t) => {
 	assert.match(await pine("emit", "test/topic", '{"n":1}'), /event #\d+/);
 	assert.match(await pine("events", "--topic", "test/#"), /test\/topic\s+owner\s+api\s+\{"n":1\}/);
 	assert.deepEqual(JSON.parse(await pine("agents")).map((a: any) => a.id), ["main"]);
-	assert.equal(JSON.parse(await pine("status")).limiter.max, 2);
+	assert.equal(JSON.parse(await pine("status")).limiter.max, 8);
 	await until(async () => /#2 .* done .* main\/side/.test(await pine("tasks")), 5000, "task 2 in the task list");
 	assert.equal(JSON.parse(await pine("task", "1")).result, "ECHO[hello from the shell]");
 	assert.equal(await pine("approvals"), "nothing waits for approval");

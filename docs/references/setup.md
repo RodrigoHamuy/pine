@@ -156,6 +156,10 @@ Which model the agent runs on is told to it with your message, so it needs no to
 | **Model servers** | |
 | `add_model_server` `name` `url` [`context`] | Main agent only. Adds a model server of your own by its address; pine asks the server for its models. See "Adding a model server". |
 | `remove_model_server` `name` | Main agent only. Takes one out again, with the key pine keeps for it. Refused while an agent, the default or the judge of goals (`defaults.judge`) uses one of its models. You are asked. |
+| **Signing in** | |
+| `sign_in` `provider` [`way`] | Main agent only. Signs pine in to a model provider: `way` is `browser` (an account or subscription: Claude, ChatGPT, GitHub Copilot) or `key` (an API key); left out, the provider's usual way. You confirm it, then pine's own dialog asks you for what the sign-in needs: the page to open (with its address and, for some providers, a code), the key in a hidden field, or a code to paste back. What you type goes to pine and never to the agent; the credential is kept in `auth.json`, which no agent can read. Say no to the page's question to stop the sign-in. When the agents had no model that answers, pine chooses one of the new ones. Refused in a conversation that has read outside content. The same as Settings > Models in the Pine app and `pine login`. |
+| `sign_out` `provider` | Main agent only. Removes pine's sign-in to a model provider; you are told which agents use its models, and asked. |
+| `sign_in_mcp_server` `name` [`agent`] | Main agent only. Signs in to a remote MCP server that needs one: you confirm it, and the server's page opens in the browser of the computer pine runs on, where you sign in. pine keeps the token. The same as Sign in under Settings > MCP servers and `pine mcp login <name>`. |
 | **Not setup: the other tools pine gives an agent** | |
 | `request_access` [`path`] [`write`] [`network`] `reason` | Asks you for access the conversation does not have: a file or folder outside the workspace (`path`; with `write: true` also to change it), or the network from the shell (`network: true`). You decide; a yes holds for the conversation until it is reset or pine restarts. pine's home is never granted. An agent does not have to call it: when a file tool or a shell command needs something outside, pine asks you the same question itself. See "When a call needs something outside" and "Modes" in [security.md](security.md). |
 | `delegate` `agent` `task` [`wait`] [`thread`] | Hands a task to another agent and gets its answer. Only there when the agent's `delegates` list is not empty, which by default names every agent but the main one. The other agent works in its own mode or the caller's, whichever is stricter. See [agents.md](agents.md). |
@@ -418,7 +422,9 @@ What holds for them:
 | `defaults.judge` | Judge of goal mode: the model that says after each round whether a goal is met. Not set: the agent's own |
 | `defaults.bashTimeoutSec` | Longest shell command, in seconds. From the next start |
 | `defaults.taskTimeoutSec` | Longest task, in seconds: how long an agent may work on one message or event. From the next start |
-| `limits.maxConcurrentRuns` | Agents at work at once; the others wait their turn. From the next start |
+| `limits.maxConcurrentRuns` | Agents at work at once, all conversations together; the others wait their turn. 8 unless you changed it. From the next start |
+| `limits.maxSubagents` | Sub-agents at a time: how many sub-agents one conversation runs at once, for every agent that does not set its own. 4 unless you changed it |
+| `limits.maxPoolTasks` | Largest batch of sub-agent tasks: the most tasks one batch (a pool) takes. 100 unless you changed it |
 | `limits.maxDownloadMb` | Largest download, in megabytes |
 | `security.askAccess` | Ask when an agent needs more: whether pine asks you when an agent in the sandbox needs a file or folder outside it, or the network |
 | `security.approvalTimeout` | How long a question waits for your answer before it counts as a no. From the next start |

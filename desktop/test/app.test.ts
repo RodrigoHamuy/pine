@@ -96,9 +96,9 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	await menu("updates");
 	await sees(`[data-slot=toast] >> text=Pine ${mine} is the latest version.`);
 	await page.waitForSelector("[data-slot=sidebar-footer] [data-sidebar=menu-button]:has-text('is available')", { state: "detached" });
-	// Settings > App has the same, and the switch for the question at the start.
+	// Settings > General has the same, and the switch for the question at the start.
 	await menu("settings");
-	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
 	await sees("[data-setting=updates] [data-slot=badge][data-variant=default] >> text=the latest version");
 	releases.tag = "v9.9.9";
 	await page.locator("[data-setting=updates]").getByRole("button", { name: "Check now" }).click();
@@ -108,13 +108,13 @@ test("a newer app is said at the start and when asked, with a link to its page o
 	assert.deepEqual(await opened(), [link, link, link]);
 	const prefs = () => JSON.parse(fs.readFileSync(path.join(home, "desktop-data", "prefs.json"), "utf8"));
 	assert.equal(await page.$("[data-slot=field]:has-text('Update automatically')"), null);
-	await page.click("[data-slot=field]:has-text('Look for a newer version at the start') [data-slot=switch]");
+	await page.click("[data-slot=field]:has-text('Check for updates at start') [data-slot=switch]");
 	for (let i = 0; i < 50 && prefs().updates !== false; i++) await new Promise((r) => setTimeout(r, 40));
 	assert.equal(prefs().updates, false);
 	// It is a switch to assistive technology too, and Space turns it back on.
-	await sees("[data-slot=field]:has-text('Look for a newer version at the start') [role=switch][aria-checked=false]");
+	await sees("[data-slot=field]:has-text('Check for updates at start') [role=switch][aria-checked=false]");
 	await page.keyboard.press("Space");
-	await sees("[data-slot=field]:has-text('Look for a newer version at the start') [role=switch][aria-checked=true]");
+	await sees("[data-slot=field]:has-text('Check for updates at start') [role=switch][aria-checked=true]");
 	// (The settings open where they were left: back to their first page for the tests that follow.)
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
 	await menu("settings");
@@ -738,7 +738,7 @@ test("a folder is opened for a conversation: changes, and a file edited and save
 	assert.equal(Math.round(await page.$eval("[data-slot=code-panel]", (el: Element) => el.getBoundingClientRect().width)), wide);
 	// However narrow the panel is, the names of its views stay whole on one line.
 	// (On one line: no taller than the control's own height, 32 pixels.)
-	assert.ok((await page.$eval("[data-slot=code-panel] [data-slot=tabs-trigger] >> text=Last turn", (b: Element) => b.getBoundingClientRect().height)) <= 32);
+	assert.ok((await page.$eval("[data-slot=code-panel] [data-slot=tabs-trigger] >> text=Changes", (b: Element) => b.getBoundingClientRect().height)) <= 32);
 	await page.locator("[data-slot=code-panel]").getByRole("tab", { name: "Changes" }).click();
 	// Its views are a tab list: the arrow keys move the choice, as in any segmented control.
 	await page.keyboard.press("ArrowLeft");
@@ -907,16 +907,18 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	// The settings are a tab like any other, beside the conversations.
 	assert.equal(await page.textContent("[data-slot=tab][data-active] [data-slot=tab-name]"), "Settings");
 	assert.ok((await page.$$eval("[data-slot=tab]", (els: Element[]) => els.length)) >= 3);
-	await sees("[data-slot=field-label] [data-slot=tooltip-trigger] >> text=limits.maxDownloadMb");
-	// A setting is called by a few words; its key stands beside them. What only tunes pine is not on the page.
-	assert.match(await page.locator("[data-slot=field]", { has: page.locator("[data-slot=tooltip-trigger]", { hasText: /^limits\.maxDownloadMb$/ }) }).locator("[data-slot=field-label]").textContent(), /^Largest download/);
+	await sees("[data-setting-key='limits.maxDownloadMb'] [data-slot=field-label] >> text=Largest download");
+	// A setting is called by a few words; its key in pine.json is said when you point at them. What only tunes pine is not on the page.
+	assert.match(await page.locator("[data-setting-key='limits.maxDownloadMb'] [data-slot=field-label]").textContent(), /^Largest download/);
+	// The limits on how much works at once are together.
+	assert.deepEqual(await page.$$eval("[data-setting-key^='limits.']", (els: Element[]) => els.map((e) => e.getAttribute("data-setting-key"))), ["limits.maxConcurrentRuns", "limits.maxSubagents", "limits.maxPoolTasks", "limits.maxDownloadMb"]);
 	assert.doesNotMatch(await page.textContent("[data-slot=settings-page]"), /warmSlots|slotPages|catalogue|maxDelegationDepth/);
 	await shot("06-settings-general");
 	// A setting of pine's: checked by the daemon, written into pine.json, in force at once.
-	const limit = page.locator("[data-slot=field]", { has: page.locator("[data-slot=tooltip-trigger]", { hasText: /^limits\.maxDownloadMb$/ }) }).locator("input");
+	const limit = page.locator("[data-setting-key='limits.maxDownloadMb'] input");
 	await limit.fill("123");
 	await limit.press("Enter");
-	await page.waitForFunction(() => [...document.querySelectorAll("[data-slot=toast]")].some((t) => /limits\.maxDownloadMb is now 123/.test(t.textContent ?? "")));
+	await page.waitForFunction(() => [...document.querySelectorAll("[data-slot=toast]")].some((t) => /Largest download: 123/.test(t.textContent ?? "")));
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).limits.maxDownloadMb, 123);
 	// One that cannot be is refused, and the file stays as it is.
 	await limit.fill("0");
@@ -925,7 +927,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).limits.maxDownloadMb, 123);
 	// A setting chosen from a list is chosen with the keyboard alone: Escape closes the list and gives
 	// focus back to it, Enter opens it, the arrows move, Enter chooses.
-	const reasoning = page.locator("[data-slot=field]", { has: page.locator("[data-slot=tooltip-trigger]", { hasText: /^defaults\.thinking$/ }) }).locator("[role=combobox]");
+	const reasoning = page.locator("[data-setting-key='defaults.thinking'] [role=combobox]");
 	const list = "[data-slot=select-content][data-open]";
 	await reasoning.focus();
 	await page.keyboard.press("Enter");
@@ -940,7 +942,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	const chosen = (await page.textContent(`${list} [role=option][data-highlighted]`))?.trim();
 	assert.notEqual(chosen, before?.trim());
 	await page.keyboard.press("Enter");
-	await page.waitForFunction((v) => [...document.querySelectorAll("[data-slot=toast]")].some((t) => t.textContent?.includes(`defaults.thinking is now ${v}`)), chosen);
+	await page.waitForFunction((v) => [...document.querySelectorAll("[data-slot=toast]")].some((t) => t.textContent?.includes(`Reasoning: ${v}`)), chosen);
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.thinking, chosen);
 	assert.equal(await reasoning.evaluate((el: Element) => el === document.activeElement), true);
 	// Agents: make one.
@@ -949,6 +951,9 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.fill("[data-slot=dialog-content] [data-slot=field]:nth-of-type(1) input", "books");
 	await page.fill("[data-slot=dialog-content] textarea", "You are books. You keep the books.\n\nYou answer in one line.");
 	await page.locator("[data-slot=dialog-content]").getByRole("button", { name: "Create agent" }).click();
+	// Its conversation opens in a tab, where it is met; the card at its top leads on to its settings.
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=books");
+	await page.click("[data-slot=agent-settings]");
 	await sees("[data-slot=settings-page] h1 >> text=books");
 	assert.ok(fs.existsSync(path.join(home, "agents", "books", "agent.json")));
 	// What it is for is the first paragraph of its instructions, and nothing else keeps it.
@@ -959,7 +964,6 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await shot("07-settings-agent");
 	// Events: a schedule.
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=Events");
-	await page.locator("[data-slot=settings-page]").getByRole("tab", { name: "Schedules" }).click();
 	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "New schedule" }).click();
 	const scheduleForm = page.locator("[data-slot=dialog-content]");
 	await scheduleForm.getByLabel("Times").fill("0 7 * * *");
@@ -972,14 +976,14 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	assert.match(fs.readFileSync(path.join(home, "pine.json"), "utf8"), /"morning"/);
 	await shot("08-settings-schedules");
 	// Events: a route, as When and Then. Only the fields of the action chosen are shown, and only they are sent.
-	await page.locator("[data-slot=settings-page]").getByRole("tab", { name: "Routes" }).click();
 	await sees("[data-slot=settings-page] [data-slot=empty] >> text=No routes");
 	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "New route" }).click();
 	const routeForm = page.locator("[data-slot=dialog-content]");
 	await routeForm.getByLabel("An event arrives on").fill("source/house/message");
 	await routeForm.getByLabel("Only if").fill('{"payload.topic": "house/mode"}');
 	await routeForm.getByRole("textbox", { name: "Telling it" }).fill("left behind under another action");
-	await routeForm.getByRole("button", { name: "Set shared state" }).click();
+	await routeForm.getByLabel("What happens").click();
+	await page.getByRole("option", { name: "Set shared state" }).click();
 	assert.equal(await routeForm.getByLabel("Agent", { exact: true }).count(), 0);
 	await routeForm.getByLabel("Shared state").fill('{"house/mode": "{{payload.value}}"}');
 	await routeForm.getByLabel("Name", { exact: true }).fill("mode");
@@ -1009,7 +1013,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	await page.click("[data-slot=command-item] >> nth=0");
 	await sees(`[data-slot=toast] >> text=Your agents now run on ${offered[0]}`);
 	assert.equal(JSON.parse(fs.readFileSync(path.join(home, "pine.json"), "utf8")).defaults.model, offered[0]);
-	await sees(`[data-setting=fallback-model] [data-slot=item-title] >> text=${offered[0]}`);
+	await sees(`[data-setting=fallback-model] [data-slot=field-label] >> text=${offered[0]}`);
 	// Signed out again, that model cannot answer: the page says so for each agent it leaves without
 	// one, and so does the welcome of such an agent's conversation, with the way to this page.
 	const signedIn = page.locator("[data-slot=settings-page] [data-slot=item]", { has: page.locator("[data-slot=badge]", { hasText: /^opencode$/ }) }).first();
@@ -1034,10 +1038,11 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	const remote = await httpMcp({});
 	try {
 		await page.click("[role=navigation] [data-sidebar=menu-button] >> text=MCP servers");
-		await page.fill("input[placeholder='home_link']", "notes");
-		await page.fill("input[placeholder='https://mcp.example.com/mcp']", remote.url);
-		await putAwayToasts();
 		await page.locator("[data-slot=settings-page]").getByRole("button", { name: "Add server" }).click();
+		await page.fill("[data-slot=dialog-content] input[placeholder='home_link']", "notes");
+		await page.fill("[data-slot=dialog-content] input[placeholder='https://mcp.example.com/mcp']", remote.url);
+		await putAwayToasts();
+		await page.locator("[data-slot=dialog-content]").getByRole("button", { name: "Add server" }).click();
 		const server = page.locator("[data-slot=settings-page] [data-slot=item]", { has: page.locator("[data-slot=item-title]", { hasText: /^notes/ }) });
 		await server.waitFor({ timeout: 15_000 });
 		await page.waitForFunction(() => /connected, 1 tool/.test(document.querySelector("[data-slot=settings-page] [data-slot=item-group]")?.textContent ?? ""), undefined, { timeout: 30_000 });
@@ -1108,7 +1113,7 @@ test("settings: a setting is changed, an agent made, a schedule added, a provide
 	const places = (await browserPlaces()) ?? [];
 	for (const place of places) write(path.join(browsers, path.basename(place), "INSTALLATION_COMPLETE"), "");
 	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=Models");
-	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
 	await sees("[data-setting=browser] [data-slot=badge][data-variant=default] >> text=on this Mac");
 	await menu("settings");
 });
@@ -1161,7 +1166,7 @@ test("a theme picked in Settings draws the window and is pine's setting; a VS Co
 	write(path.join(home, "themes", "broken.json"), `{ "name": "Broken", "colors": {} }`);
 	try {
 		await menu("settings");
-		await page.locator("[role=navigation]").getByRole("button", { name: "App", exact: true }).click();
+		await page.locator("[role=navigation]").getByRole("button", { name: "General", exact: true }).click();
 		await sees("[data-setting=theme]");
 		await sees("text=broken.json: it names no color for the page");
 

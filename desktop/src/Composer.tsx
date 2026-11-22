@@ -269,7 +269,7 @@ export function Composer({ tab }: { tab: Tab }) {
 	const goal = tab.goal && tab.goal.status !== "met" ? tab.goal : undefined;
 
 	const model = info?.model ?? "none";
-	const thinking = info?.thinking ?? "off";
+	const thinking = info?.thinking ?? "medium";
 	// A menu's popup lies elsewhere on the page but inside the Input Group's addon for React, so a
 	// click in it would reach the addon's own handler (a click there puts focus into the input) and
 	// take focus from the button the menu gives it back to.

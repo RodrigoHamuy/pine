@@ -16,7 +16,9 @@ import { isInside, realish } from "./security.ts";
 import { placeOf } from "./snapshots.ts";
 import type { Kv, TaskStore } from "./store.ts";
 import type { Boards } from "./boards.ts";
-import { errText, matchesAny, parseDuration } from "./util.ts";
+import { errText, type Logger, matchesAny, onPath, parseDuration } from "./util.ts";
+import { piDefaults, suggestModel } from "./models.ts";
+import type { AgentManager } from "./agents.ts";
 
 export const THINKING = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -710,7 +712,7 @@ const ms = (n: number) => (n % 60_000 === 0 ? `${n / 60_000}m` : n % 1000 === 0 
  * tools of their own (sources, MCP servers, skills, schedules, source types, model servers,
  * agents), and what tunes pine to a model server or guards against a loop
  * (`limits.warmSlots`, `limits.slotPages`, `limits.maxDelegationDepth` and the other
- * limits). Those have defaults that are right for nearly everybody, and are
+ * limits that are not about how much works at once). Those have defaults that are right for nearly everybody, and are
  * changed in pine.json by hand (docs/references/configuration.md).
  */
 export const SETTINGS: Record<string, Setting> = {
@@ -728,7 +730,9 @@ export const SETTINGS: Record<string, Setting> = {
 	"defaults.introduce": { title: "Agents introduce themselves", about: "Agents introduce themselves in their first answer to the owner, once each.", kind: "boolean", now: (c) => String(c.defaults.introduce), live: true },
 	"defaults.bashTimeoutSec": { title: "Longest shell command", about: "Seconds a shell command may run before it is ended. 900 is 15 minutes. A command started in the background is not held to it.", kind: { from: 5, to: 86_400 }, now: (c) => String(c.defaults.bashTimeoutSec), live: false },
 	"defaults.taskTimeoutSec": { title: "Longest task", about: "Seconds an agent may work on one message or event before it is stopped. 7200 is two hours.", kind: { from: 30, to: 604_800 }, now: (c) => String(c.defaults.taskTimeoutSec), live: false },
-	"limits.maxConcurrentRuns": { title: "Agents at work at once", about: "How many agents and sub-agents work at the same time; the others wait their turn. With a local model server, set it to the number of requests the server answers side by side: more only makes each slower.", kind: { from: 1, to: 64 }, now: (c) => String(c.limits.maxConcurrentRuns), live: false },
+	"limits.maxConcurrentRuns": { title: "Agents at work at once", about: "How many agents and sub-agents work at the same time, all conversations together; the others wait their turn. An agent that only waits (for its sub-agents, another agent or an approval) does not count. With a model on your own computer, set it to how many requests your model server answers side by side: more only makes each slower.", kind: { from: 1, to: 64 }, now: (c) => String(c.limits.maxConcurrentRuns), live: false },
+	"limits.maxSubagents": { title: "Sub-agents at a time", about: "How many sub-agents one conversation runs at the same time, for all agents that do not set their own. More tasks wait for a free place. They also count towards Agents at work at once.", kind: { from: 1, to: 32 }, now: (c) => String(c.limits.maxSubagents), live: true },
+	"limits.maxPoolTasks": { title: "Largest batch of sub-agent tasks", about: "When an agent splits a big job into many tasks (one per file, say), sub-agents work through at most this many in one go, a few at a time.", kind: { from: 1, to: 1000 }, now: (c) => String(c.limits.maxPoolTasks), live: true },
 	"limits.maxDownloadMb": { title: "Largest download", about: "The largest file an agent may download, in megabytes.", kind: { from: 1, to: 100_000 }, now: (c) => String(c.limits.maxDownloadMb), live: true },
 	"security.askAccess": { title: "Ask when an agent needs more", about: "When an agent in the sandbox needs a file or folder outside it, or the network, pine asks the owner whether to allow it. Off: nothing is asked, and the agent gets more only by asking for it itself.", kind: "boolean", now: (c) => String(c.security.askAccess), live: true },
 	"security.approvalTimeout": { title: "How long a question waits", about: "How long a request for approval waits for an answer, for example 5m. After that it counts as a no.", kind: "duration", now: (c) => ms(c.security.approvalTimeoutMs), live: false },
@@ -850,5 +854,33 @@ export function applySetting(cfg: PineConfig, checked: { key: string; setting: S
 	Object.assign(cfg.security, { ...fresh.security, approvalTimeoutMs: cfg.security.approvalTimeoutMs });
 	// What an agent takes from the defaults when it does not say.
 	if (checked.key === "defaults.thinking") for (const a of Object.values(cfg.agents)) a.thinking = fresh.agents[a.id]?.thinking ?? a.thinking;
+	if (checked.key === "limits.maxSubagents") for (const a of Object.values(cfg.agents)) a.subagents.maxParallel = fresh.agents[a.id]?.subagents.maxParallel ?? a.subagents.maxParallel;
 	if (checked.key === "defaults.mode") for (const a of Object.values(cfg.agents)) Object.assign(a, { mode: fresh.agents[a.id]?.mode ?? a.mode, level: fresh.agents[a.id]?.level ?? a.level, modeSet: fresh.agents[a.id]?.modeSet ?? a.modeSet });
+}
+
+/**
+ * When the model the agents run on by default cannot answer and one can now, the default becomes
+ * one that answers: pi's choice for the provider just signed in to (or the model server just
+ * added), else for any. So a sign-in is all it takes to bring the agents to life. A default that
+ * answers is the owner's choice and stays. Returns the model chosen, if one was.
+ */
+export async function settleModel(cfg: PineConfig, manager: AgentManager, log: Logger, provider?: string): Promise<string | undefined> {
+	try {
+		const available = await manager.availableModels();
+		const known = new Set(available);
+		const claude = onPath("claude");
+		if (!manager.modelProblem(cfg.defaults.model, known, claude)) return undefined;
+		const usable = available.filter((m) => !manager.modelProblem(m, known, claude));
+		const choices = await piDefaults();
+		const chosen = suggestModel(usable, choices, provider) ?? suggestModel(usable, choices);
+		if (!chosen) return undefined;
+		applySetting(cfg, checkSetting(cfg, "defaults.model", chosen, available));
+		await manager.refreshSessions();
+		manager.settingChanged("defaults.model");
+		log.info(`agents now run on ${chosen} by default: the model before could not answer`);
+		return chosen;
+	} catch (e) {
+		log.warn(`could not choose a model that answers: ${errText(e)}`);
+		return undefined;
+	}
 }

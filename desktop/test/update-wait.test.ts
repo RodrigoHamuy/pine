@@ -1,5 +1,5 @@
 // A wait for the end of the work before an update ("Restart when they are done") is one state that
-// every view of the update shows alike: the side bar's foot, Settings > App and the dialog of
+// every view of the update shows alike: the side bar's foot, Settings > General and the dialog of
 // "Check for Updates…" say that it waits and call it off, and none of them offers a second restart.
 // Driven through the real app on a stand-in for GitHub (PINE_DESKTOP_RELEASES) and for macOS's
 // updater (PINE_DESKTOP_UPDATER), as self-update.test.ts does.
@@ -45,7 +45,7 @@ const RESTART = "[data-slot=sidebar-footer] [data-sidebar=menu-button]:has-text(
 const PENDING = "[data-slot=sidebar-footer] [data-sidebar=menu-button]:has-text('Restarts when the work is done')";
 const WARNING = "[data-slot=alert-dialog-content]";
 
-test("while an update waits for the work to end, Settings > App and the update dialog show the wait and call it off, and offer no second restart", async () => {
+test("while an update waits for the work to end, Settings > General and the update dialog show the wait and call it off, and offer no second restart", async () => {
 	const port = await freePort();
 	write(path.join(home, "models.json"), JSON.stringify({ providers: { mock: { name: "Mock", baseUrl: mock.baseUrl, api: "openai-completions", apiKey: "sk-mock", models: [{ id: "m", name: "Mock", contextWindow: 128000, maxTokens: 4096, input: ["text"], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } }] } } }));
 	write(path.join(home, "pine.json"), JSON.stringify({ http: { host: "127.0.0.1", port }, defaults: { model: "mock/m", mode: "safe", introduce: false } }));
@@ -86,9 +86,9 @@ test("while an update waits for the work to end, Settings > App and the update d
 		await dialog.waitFor({ state: "detached" });
 		await page.waitForSelector(PENDING);
 
-		// Settings > App: the same.
+		// Settings > General: the same.
 		await menu("settings");
-		await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+		await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
 		const field = page.locator("[data-setting=updates]");
 		await field.getByText("once no conversation is at work").waitFor();
 		assert.equal(await field.getByRole("button", { name: "Restart to update" }).count(), 0);

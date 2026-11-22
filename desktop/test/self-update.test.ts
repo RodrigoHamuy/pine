@@ -124,7 +124,7 @@ test("with Update automatically off the release page is offered and nothing is d
 	await page.waitForSelector("[data-slot=sidebar-footer] >> text=Pine 9.9.9 is available", { timeout: 20_000 });
 	assert.deepEqual(t.calls(), []);
 	await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", "settings"));
-	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
 	const sw = "[data-slot=field]:has-text('Update automatically') [role=switch]";
 	await page.waitForSelector(`${sw}[aria-checked=false]`);
 	// Turned on, it downloads at once: this one fails, which is said in the app's own words, with the link beside it.
@@ -216,7 +216,7 @@ test("with an update downloaded, turning Update automatically off offers the rel
 	const { app, page } = await t.launch();
 	await page.waitForSelector(RESTART, { timeout: 20_000 });
 	await app.evaluate(({ BrowserWindow }: any) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", "settings"));
-	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
 	const sw = "[data-slot=field]:has-text('Update automatically') [role=switch]";
 	await page.click(`${sw}[aria-checked=true]`);
 	await page.waitForSelector(`${sw}[aria-checked=false]`);

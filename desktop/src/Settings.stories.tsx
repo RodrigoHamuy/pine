@@ -93,6 +93,12 @@ const answers: Record<string, unknown> = {
 	"/mcp/states": { linear: "needs sign-in", notes: "connected" },
 	"/routes": routes,
 	"/schedules": schedules,
+	// The files for all agents, under the list on the Agents page: one written, two still empty.
+	"/shared": [
+		{ name: "AGENTS.md", about: "Traits and behaviour for all agents: how every agent is to be and to act.", text: "Answer in English, briefly.\n" },
+		{ name: "TOOLS.md", about: "Tooling for all agents: defaults and preferences for the tools, and other technical details of your setup.", text: "" },
+		{ name: "USER.md", about: "What every agent knows about you.", text: "" },
+	],
 };
 
 window.pine.call = async (_method, url) => (url in answers ? { ok: true, status: 200, data: answers[url] } : { ok: false, status: 404, data: { error: `no stand-in for ${url}` } });
@@ -267,9 +273,9 @@ export const EnvironmentsHostKeyToConfirm: Story = {
 	},
 };
 
-/** The App page under a bridge with no local machine: the theme, the agent accent, notifications and the pine in use, without what only this computer has (its home folder, Keep running, Restart, the pine command, the browser build, the Electron version). */
+/** General under a bridge with no local machine: the theme, the agent accent, notifications and the pine in use, without what only this computer has (its home folder, Keep running, Restart, the pine command, the browser build, the Electron version). */
 export const AppWithoutLocal: Story = {
-	args: { section: "app", local: false },
+	args: { section: "general", local: false },
 	play: async ({ canvasElement, canvas }) => {
 		await canvas.findByText("Theme");
 		await noLocalMachine(canvasElement);
@@ -279,9 +285,9 @@ export const AppWithoutLocal: Story = {
 // The app's preferences as the main process keeps them: what is set is answered back, as `pine:prefs` does.
 window.pine.prefs = async (change) => ({ ...store.prefs, ...change });
 
-/** The theme of the App page: pine's themes, pmndre in force, and a file in the folder that is not a theme. */
+/** The theme picker of General: pine's themes, pmndre in force, and a file in the folder that is not a theme. */
 export const Theme: Story = {
-	args: { section: "app" },
+	args: { section: "general" },
 	render: () => {
 		store.themes = [...THEMES, { id: "half-done", name: "half-done", problem: 'it names no color for the page: a theme needs "editor.background" and "editor.foreground" in "colors"' } satisfies ThemeEntry];
 		store.theme = "pmndre";

@@ -450,7 +450,7 @@ const worded = (c: Command) => ({ ...c, text: said(c) });
 /**
  * Once, the first time an app that carries pine is started from where it will stay: the link is
  * made where that takes no password. Where it takes one, nothing is asked out of nowhere; the
- * menu and Settings > App offer it. Not in a second set of data for tests and trying things out.
+ * menu and Settings > General offer it. Not in a second set of data for tests and trying things out.
  */
 async function firstCommand(): Promise<void> {
 	if (prefs.commandTried || process.env.PINE_DESKTOP_DATA) return;

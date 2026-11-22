@@ -291,6 +291,10 @@ export interface PineConfig {
 	defaults: { model?: string; /** The model that judges whether a goal is met, as "provider/id". Not set: the agent's own. */ judge?: string; /** Agents introduce themselves in their answer to the first message their owner writes to them. */ introduce: boolean; thinking: string; mode?: Mode; bashTimeoutSec: number; taskTimeoutSec: number; idleMs: number; settings: Record<string, unknown> };
 	limits: {
 		maxConcurrentRuns: number;
+		/** Sub-agents one conversation runs at a time: the default of `subagents.maxParallel` for an agent that names none. */
+		maxSubagents: number;
+		/** The most tasks one call of `subagent` puts onto a board and starts (a pool). */
+		maxPoolTasks: number;
 		maxDelegationDepth: number;
 		/** Largest file the download tool fetches. */
 		maxDownloadMb: number;
@@ -454,7 +458,7 @@ function loadAgent(id: string, dir: string, raw: any, cfg: PineConfig, problems:
 		skills: paths(raw.skills, dir),
 		context: paths(raw.context, dir),
 		delegates: strings(raw.delegates, ["*"]),
-		subagents: { enabled: sub.enabled ?? true, maxParallel: sub.maxParallel ?? 4, tools: sub.tools, mcp: sub.mcp ?? true },
+		subagents: { enabled: sub.enabled ?? true, maxParallel: sub.maxParallel ?? cfg.limits.maxSubagents, tools: sub.tools, mcp: sub.mcp ?? true },
 		publish: strings(raw.publish, []),
 		state: { read: strings(state.read, ["#"]), write: strings(state.write, [`agent/${id}/#`]), inject: strings(state.inject, []) },
 		trustWorkspace: raw.trustWorkspace === true,
@@ -587,7 +591,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 			model: d.model,
 			judge: typeof d.judge === "string" && d.judge ? d.judge : undefined,
 			introduce: d.introduce !== false,
-			thinking: d.thinking ?? "off",
+			thinking: d.thinking ?? "medium",
 			mode: d.mode,
 			bashTimeoutSec: d.bashTimeoutSec ?? 900,
 			taskTimeoutSec: d.taskTimeoutSec ?? 7200,
@@ -595,7 +599,9 @@ export function loadConfig(home = defaultHome()): PineConfig {
 			settings: d.settings ?? {},
 		},
 		limits: {
-			maxConcurrentRuns: l.maxConcurrentRuns ?? 2,
+			maxConcurrentRuns: l.maxConcurrentRuns ?? 8,
+			maxSubagents: l.maxSubagents ?? 4,
+			maxPoolTasks: l.maxPoolTasks ?? 100,
 			maxDelegationDepth: l.maxDelegationDepth ?? 3,
 			maxDownloadMb: l.maxDownloadMb ?? 200,
 			warmSlots: l.warmSlots ?? true,
@@ -714,6 +720,24 @@ export const WORKSPACE_FILES = ["AGENTS.md", "SOUL.md", "TOOLS.md", "MEMORY.md"]
  * known about the owner. An agent's own files say what is different for it.
  */
 export const SHARED_FILES = ["AGENTS.md", "TOOLS.md", "USER.md"];
+
+/**
+ * What pine put into the files an agent keeps (and the files for all agents) before they started empty:
+ * a line on what the file is for, which the prompt and the Settings page say anyway. A home made then
+ * still has it wherever nobody wrote anything. It is read as an empty file: left out of the prompt
+ * (`instructionFiles` in src/agents.ts) and shown empty to the owner (src/owner.ts).
+ */
+export const FORMER_TEMPLATES = new Set([
+	"# All agents\n\nTraits and behaviour for every agent: how your owner wants agents to be and to act, whoever\ndoes the work. Nothing yet. The main agent writes it here.",
+	"# Tools\n\nTooling for every agent: defaults and preferences for the tools (skills, MCP servers, shell\ncommands, schedules, event sources), and other technical or functional details of this setup.\nNothing yet. The main agent writes it here.",
+	"# User\n\nWhat every agent knows about its owner: their name, what they do, how they like to be\nanswered. Nothing yet. The main agent adds to it as it learns.",
+	"# Soul\n\nWho you are: your character and your tone. Nothing is set yet. Write it down as it takes\nshape, in your own words.",
+	"# Tools\n\nHow you use your tools: your own defaults and preferences for them, and technical or\nfunctional details of your work. What holds for all agents is in the TOOLS.md of pine's home;\nthis file says what is different or more for you. Nothing yet.",
+	"# Memory\n\nWhat matters beyond a single conversation: decisions, facts, preferences, open ends. Nothing\nyet. Add to it as you learn, and tidy it when it grows long.",
+]);
+
+/** A file's text as pine reads it: empty where it still says only what pine once put there. */
+export const ownText = (text: string): string => (FORMER_TEMPLATES.has(text.trim()) ? "" : text);
 export const sharedFiles = (cfg: PineConfig): string[] => SHARED_FILES.map((f) => path.join(cfg.home, f));
 
 /**

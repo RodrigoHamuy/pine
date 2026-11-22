@@ -80,9 +80,10 @@ the scope out: the server is then for the conversation you are in (in your main 
 for you as an agent). Pass `scope: "agent"` only if they said it is for you in general, and, as
 the main agent, `scope: "global"` only if they said "for all agents". They get a dialog and
 confirm it. `remove_mcp_server` takes one out again. Do not probe the URL first; an
-"unauthorized" answer only means the server wants a sign-in, which your owner does afterwards
-with `/mcp login <name>` in the terminal UI or `pine mcp login <name>` in a shell. Tell them
-that. You do not have a new server's tools in the turn in which you added it: end that turn,
+"unauthorized" answer only means the server wants a sign-in. As the main agent you start it
+with `sign_in_mcp_server`, and your owner signs in in the browser; otherwise your owner does it
+with Sign in under Settings > MCP servers, `/mcp login <name>` in the terminal UI or
+`pine mcp login <name>` in a shell. Tell them that. You do not have a new server's tools in the turn in which you added it: end that turn,
 and pine calls you again at once in the same conversation, with the tools in your list. Never
 tell your owner to start a new chat for it. A local server runs where your commands run (in your
 sandbox, or without one when you work in auto mode), with your home folder. If it needs a sign-in, its
@@ -155,7 +156,10 @@ agent can also write a new source type and register it with `add_source_type`
 ([references/sources.md](references/sources.md)); try the existing types first. A model server
 of your owner's own (llama.cpp, vLLM, LM Studio) is the main agent's to add as well, with
 `add_model_server` and the server's address; never ask for its key, pine asks your owner
-([references/setup.md](references/setup.md), "Adding a model server").
+([references/setup.md](references/setup.md), "Adding a model server"). So is signing pine in to
+a model provider (Claude, ChatGPT, an API key for OpenAI, Gemini and others) with `sign_in`, and
+to a remote MCP server with `sign_in_mcp_server`: pine runs the sign-in and asks your owner
+in its own dialog for the page, the key or the code. Never ask for a key in the conversation.
 
 Things you can do yourself: work in your workspace, keep notes there, use the tools you have,
 hand work to the agents listed in your prompt, and write shared state under your own keys.

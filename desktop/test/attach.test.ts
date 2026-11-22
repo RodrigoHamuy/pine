@@ -113,9 +113,9 @@ test("a pine that runs is said to be older than the app's own when it is", async
 	const version = JSON.parse(fs.readFileSync(path.join(root, "..", "package.json"), "utf8")).version;
 	const line = await page.waitForSelector("[data-slot=sidebar-footer] [data-notice=older-pine]", { timeout: 10_000 });
 	assert.match((await line.textContent()) ?? "", /older pine/i);
-	// Settings > App says which versions, and what to do.
+	// Settings > General says which versions, and what to do.
 	await menu(app, "settings");
-	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
+	await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
 	const said = (await (await page.waitForSelector("[data-slot=settings-page] [data-notice=older-pine]", { timeout: 10_000 })).textContent()) ?? "";
 	assert.ok(said.includes(version) && said.includes("0.0.1"), `the notice names both versions: ${said}`);
 	assert.match(said, /restart/i);

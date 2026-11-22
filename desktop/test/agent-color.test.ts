@@ -114,7 +114,7 @@ test("a preset color picked on the agent's avatar is kept in its agent.json at o
 	await page.waitForFunction(() => document.documentElement.dataset.theme === "pmndre");
 
 	// Its conversation: the tab and the empty conversation carry it too.
-	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "Open" }).click();
+	await page.locator("[data-slot=settings-page]").getByRole("button", { name: "Open conversation" }).click();
 	await page.waitForSelector("[data-slot=empty] [data-slot=avatar][data-agent=books]");
 	assert.ok((await avatars()).length >= 3, "the side bar, the tab and the empty conversation");
 	await avatarsAre(drawnIn("#e0805a"), "every avatar of books");

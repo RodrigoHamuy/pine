@@ -3586,7 +3586,7 @@ export class PineTui {
 			.add(sep)
 			.add(c.gray(info?.model ?? ""), () => void this.pickModel())
 			.add(sep)
-			.add(c.gray(`reasoning ${info?.thinking ?? "off"}`), () => void this.pickReasoning());
+			.add(c.gray(`reasoning ${info?.thinking ?? "medium"}`), () => void this.pickReasoning());
 		const modeShown = mode === "bypass" ? c.red(modeText) : mode === "manual" ? c.cyan(modeText) : mode === "plan" ? c.magenta(modeText) : mode === "safe" ? c.green(modeText) : c.gray(modeText);
 		const figures: string[] = [];
 		// How full the context window is. pi compacts the conversation by itself when it gets close to full.

@@ -120,7 +120,7 @@ export async function harness(spec: { pine?: Record<string, unknown>; agents: Re
 	// them: every agent works in safe mode, in its sandbox, unless a test asks for another by name.
 	// And no agent introduces itself (src/hatch.ts): its note would change what the mock echoes.
 	// test/hatch.test.ts turns it on.
-	const defaults = { model: "mock/m", mode: "safe", introduce: false, ...((spec.pine?.defaults as Record<string, unknown> | undefined) ?? {}) };
+	const defaults = { model: "mock/m", mode: "safe", introduce: false, thinking: "off", ...((spec.pine?.defaults as Record<string, unknown> | undefined) ?? {}) };
 	// For the question pine asks itself when a call needs something outside the sandbox: a
 	// test that is not about it gets the plain refusal, which is what it is about (test/access.test.ts asks for it).
 	const security = { askAccess: false, ...((spec.pine?.security as Record<string, unknown> | undefined) ?? {}) };

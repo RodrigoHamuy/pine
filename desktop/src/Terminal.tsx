@@ -82,7 +82,7 @@ export function TerminalView({ tab }: { tab: Tab }) {
 		});
 		resize.observe(host.current!);
 		const recolor = () => (xterm.options.theme = theme());
-		// A new theme (Settings > App) sets the root element's variables (its style attribute).
+		// A new theme (Settings > General) sets the root element's variables (its style attribute).
 		const restyled = new MutationObserver(recolor);
 		restyled.observe(document.documentElement, { attributes: true });
 		bridge

@@ -288,6 +288,8 @@ export class Store extends Model {
 	/** The page the settings tab shows, and the agent whose page is open there. */
 	section = "general";
 	settingsAgent?: string;
+	/** Whether the dialog that makes a new agent is open: over whatever is in front, from the side bar's + and from Settings > Agents. */
+	newAgent = false;
 	/** Conversations in which an agent is at work right now, whether a tab shows them or not: "agent:session". */
 	busy = new Map<string, Set<number>>();
 	/** What was said lately, in every conversation: for finding one by its words, and for naming one that has no name of its own. */
@@ -303,7 +305,7 @@ export class Store extends Model {
 	sidebar = localStorage.getItem("pine.sidebar") !== "hidden";
 	/** Whether the side panel is open. Kept by the daemon with the tabs, for the next start. */
 	code = false;
-	codeView: CodeView = "agent";
+	codeView: CodeView = "files";
 	/** Whether the browser's aside is open: a matter of this window alone, kept like the side bar. */
 	aside = localStorage.getItem("pine.aside") === "shown";
 	/** Whether the view's panel is open: kept like the aside. */
@@ -604,7 +606,7 @@ export class Store extends Model {
 	}
 
 	/**
-	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > App
+	 * Whether there is a newer app. At the start it is only noted (the side bar and Settings > General
 	 * show it); when the owner asked (the menu, the settings), the answer is said too.
 	 */
 	async lookForUpdate(asked = false): Promise<void> {
@@ -1140,7 +1142,7 @@ export class Store extends Model {
 		this.touch();
 	}
 
-	/** Not now: it is not asked again until pine is another version. Settings > App still offers it. */
+	/** Not now: it is not asked again until pine is another version. Settings > General still offers it. */
 	async browserLater(): Promise<void> {
 		this.browserAsk = false;
 		this.touch();
@@ -1162,7 +1164,7 @@ export class Store extends Model {
 		this.browserFetching = false;
 		await this.checkBrowser();
 		if (this.browser) this.flash(`The browser of the web tools is on this ${computerWord(this.platform)} now.`, "good");
-		else this.flash(code === 0 ? "The browser is still not there. What was said is shown in Settings > App." : "The browser could not be fetched. What was said is shown in Settings > App; try again when you are online.", "bad", 8000);
+		else this.flash(code === 0 ? "The browser is still not there. What was said is shown in Settings > General." : "The browser could not be fetched. What was said is shown in Settings > General; try again when you are online.", "bad", 8000);
 		this.touch();
 	}
 

@@ -25,7 +25,7 @@ import { Events } from "./Events.tsx";
 import { type Beside, ROOM, store, type Tab, type UpdatePhase, useModel, useSignal } from "./model.ts";
 import { ASIDE_KEY, BrowserAside } from "./Browser.tsx";
 import { VIEW_KEY, ViewAside } from "./View.tsx";
-import { Breakable, MachineList, Settings } from "./Settings.tsx";
+import { Breakable, MachineList, NewAgent, Settings } from "./Settings.tsx";
 import { computerWord, firstScreen, isPaired, noMachineSaid } from "./machines.ts";
 import { ApprovalDialog } from "./ApprovalDialog.tsx";
 import { Palette } from "./Palette.tsx";
@@ -48,6 +48,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Pulse } from "@/components/pulse";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Printed } from "@/components/printed";
+
+/**
+ * How long a line that slides to show its end takes (`animate-slide-end`): long enough to read at the pace one
+ * reads, about ten characters a second, and never less than the five seconds a short line takes.
+ */
+const slideFor = (text: string) => `${Math.max(5, Math.round(text.length / 10))}s`;
 
 // Pieces of the frame drawn the same in several places.
 const DOT = "size-2 flex-none rounded-full";
@@ -443,7 +449,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 								    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
 								<span data-slot="agent-label" className="flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
 									<span className="min-w-0 flex-initial truncate">{a.id}</span>
-									<span className="@container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none">{a.description || a.model}</span></span>
+									<span className="@container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none" style={{ animationDuration: slideFor(a.description || a.model) }}>{a.description || a.model}</span></span>
 								</span>
 								{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Pulse /> : unread && folded ? <Badge className="size-2 p-0" /> : null}
 							</CollapsibleTrigger>
@@ -492,7 +498,7 @@ function Sidebar() {
 					</SidebarGroup>
 					<SidebarGroup>
 						<SidebarGroupLabel>Agents</SidebarGroupLabel>
-						<HoverTooltip><TooltipTrigger render={<SidebarGroupAction className="app-no-drag" onClick={() => s.openSettings("agents", "+")} aria-label="New agent" />}><PlusIcon /></TooltipTrigger><TooltipContent>New agent</TooltipContent></HoverTooltip>
+						<HoverTooltip><TooltipTrigger render={<SidebarGroupAction className="app-no-drag" onClick={() => ((s.newAgent = true), s.touch())} aria-label="New agent" />}><PlusIcon /></TooltipTrigger><TooltipContent>New agent</TooltipContent></HoverTooltip>
 						<SidebarGroupContent className="flex flex-col gap-1">{s.agents.map((a) => <AgentGroup key={a.id} a={a} />)}</SidebarGroupContent>
 					</SidebarGroup>
 				</ScrollArea>
@@ -502,7 +508,7 @@ function Sidebar() {
 					{update ? <SidebarMenuItem className="app-no-drag"><UpdateButton update={update} /></SidebarMenuItem> : null}
 					{older ? (
 						<SidebarMenuItem className="app-no-drag" data-notice="older-pine">
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.openSettings("app")} />}><TriangleAlertIcon /><span className="grow min-w-0 flex-1 truncate">An older pine runs</span></TooltipTrigger><TooltipContent>{`The pine this app attached to is ${older.version}, older than the app's own (${older.olderThan}). Restart it on the newer one: Settings › App says how.`}</TooltipContent></HoverTooltip>
+							<HoverTooltip><TooltipTrigger render={<SidebarMenuButton onClick={() => s.openSettings("general")} />}><TriangleAlertIcon /><span className="grow min-w-0 flex-1 truncate">An older pine runs</span></TooltipTrigger><TooltipContent>{`The pine this app attached to is ${older.version}, older than the app's own (${older.olderThan}). Restart it on the newer one: Settings › General says how.`}</TooltipContent></HoverTooltip>
 						</SidebarMenuItem>
 					) : null}
 					<SidebarMenuItem className="app-no-drag">
@@ -699,7 +705,7 @@ function NoTab() {
 				<EmptyDescription>All conversations are still in the side bar. Open one there, or start a new one.</EmptyDescription>
 			</EmptyHeader>
 			<EmptyContent className="flex-row justify-center">
-				<Button onClick={() => void s.newConversation()}>New conversation<Kbd>⌘T</Kbd></Button>
+				<Button onClick={() => void s.newConversation()}>New conversation<Kbd className="bg-black/15 text-current">⌘T</Kbd></Button>
 				{main ? <Button variant="outline" onClick={() => void s.openTab(main.id, "main")}>Open {main.id}</Button> : null}
 			</EmptyContent>
 		</Empty>
@@ -852,7 +858,7 @@ function HomeScreenTip() {
 
 /**
  * The browser the web tools drive is not on this computer in the build this pine needs: asked at the
- * start, once for a version of pine. Settings > App offers the same at any time. While it is
+ * start, once for a version of pine. Settings > General offers the same at any time. While it is
  * fetched, the dialog stays.
  */
 function BrowserAsk() {
@@ -960,6 +966,8 @@ export function App() {
 			{s.pairAsk ? <PairConfirm key={s.pairAsk.link} link={s.pairAsk} device={s.device} onPair={() => void s.confirmPair()} onCancel={() => s.dropPair()} /> : null}
 			{s.picker ? <PickDialog key={s.picker.title} p={s.picker} /> : null}
 			{s.publishing ? <PublishDialog /> : null}
+			{/* A new agent is met in its conversation: once made, that opens in a tab, wherever the dialog was opened from. */}
+			{s.newAgent ? <NewAgent close={() => ((s.newAgent = false), s.touch())} made={(id) => ((s.newAgent = false), s.touch(), void s.openTab(id, "main"))} /> : null}
 			{s.palette ? <Palette /> : null}
 			<Asking />
 			{help ? <Help close={() => setHelp(false)} /> : null}

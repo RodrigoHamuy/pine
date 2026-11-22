@@ -47,11 +47,11 @@ app and stays as it is.
 | | |
 |---|---|
 | At the start | The app asks GitHub once for pine's last release. When that is newer than the app, it is downloaded without a dialog; a line at the foot of the side bar says **Downloading Pine <version>…**, then **Restart to update**. Nothing is said when the app is the latest, or when nobody answers |
-| `Restart to update` | At the foot of the side bar, in Settings > App and in the dialog of **Check for Updates…**. Every pine this app started in this run is stopped first, also one kept with **Keep pine running**, so that it does not go on with the old version; the new app starts it again. A pine the app only attached to (started in a terminal or at login) is left alone: restart it yourself. While agents are working it first warns how many conversations would be cut off |
+| `Restart to update` | At the foot of the side bar, in Settings > General and in the dialog of **Check for Updates…**. Every pine this app started in this run is stopped first, also one kept with **Keep pine running**, so that it does not go on with the old version; the new app starts it again. A pine the app only attached to (started in a terminal or at login) is left alone: restart it yourself. While agents are working it first warns how many conversations would be cut off |
 | `Restart when they are done` | The warning's choice beside **Restart now** and **Cancel**: **Restarts when the work is done** stays at the foot of the side bar until then. Click it there to call it off |
 | Quitting | With an update downloaded, quitting Pine installs it. What stops with the app is what stops at any quit |
 | `Check for Updates…` | In the **Pine** menu (and `updates` in the command palette): asks again now and says what it found. A newer release is downloaded, or ready to install with a restart |
-| Settings > App | The app's version and whether it is the latest, **Check now**, the switch **Look for a newer version at the start** for the question at the start, and the switch **Update automatically** (on unless you turn it off). The menu asks whatever the first switch says |
+| Settings > General | The app's version and whether it is the latest, **Check now**, the switch **Check for updates at start** for the question at the start, and the switch **Update automatically** (on unless you turn it off). The menu asks whatever the first switch says |
 | `Pine <version> is available` | What the app says instead when it does not update itself: **Update automatically** is off, or the download or the install failed (one line says so, in the app's own words). A click opens the release's page on GitHub in your browser: download the disk image there, quit Pine and put the new app in place of the old one |
 
 A release counts as a newer app once its disk image and its update feed for your kind of Mac
@@ -80,7 +80,7 @@ web tools drive. It asks for each where it is missing.
 | Nothing to answer with | A new home has nothing to run on: the agent's card at the top of a conversation says **Connect a model first**, with a button to Settings > Models (the main agent's too, above pine's welcome); that page lists every agent that cannot answer, with the reason (nothing connected yet, or nobody signed in to its provider). A message sent meanwhile says so; send it again once a model is there |
 | A sign-in in Settings > Models | A Claude, ChatGPT or Copilot subscription is signed in to through the browser (**Sign in**), any provider with an API key. Where the choice in force cannot answer, pine switches to the provider's usual one (pi's choice) and the dialog says which, with **Another one…**; so does adding a server of your own. Otherwise nothing switches by itself and the dialog offers **Choose the model your agents run on**. The page keeps it (`defaults.model`) with **Change** |
 | The first message | No agent writes first. Main, and every other agent, introduces itself in its answer to the first message you write to it. Once each; `defaults.introduce` turns it off ([agents.md](agents.md), "Meeting an agent") |
-| The browser is not there in the build this pine drives | Each version of pine drives a browser build of its own. A home that an older pine set up, or a new app in place of an old one, has the old build or none. The app asks once for each version of pine whether to fetch it, and Settings > App shows whether it is there, with **Fetch it** (`pine browser-install`, run by the app's pine). Until then the browser tools do not work; web search and reading a page do |
+| The browser is not there in the build this pine drives | Each version of pine drives a browser build of its own. A home that an older pine set up, or a new app in place of an old one, has the old build or none. The app asks once for each version of pine whether to fetch it, and Settings > General shows whether it is there, with **Fetch it** (`pine browser-install`, run by the app's pine). Until then the browser tools do not work; web search and reading a page do |
 
 ### `pine` in a terminal
 
@@ -92,12 +92,12 @@ shell's PATH to a small launcher inside the app, which runs the app's pine on th
 | When | What happens |
 |---|---|
 | The first start of the app from Applications | The link is made by itself where that needs no password: in `~/.local/bin` or `~/bin` if your PATH has one of them, else in `/usr/local/bin` or `/opt/homebrew/bin` if you may write there |
-| No such folder | Nothing is done by itself. **Pine > pine in a Terminal…** in the menu, or Settings > App, sets it up in `/usr/local/bin`; macOS asks for your password |
+| No such folder | Nothing is done by itself. **Pine > pine in a Terminal…** in the menu, or Settings > General, sets it up in `/usr/local/bin`; macOS asks for your password |
 | Your shell already has a `pine` (from npm, from a checkout) | It is left alone, and the app says where it is. The app still runs its own |
 | The app was opened from the disk image or from Downloads | Nothing is set up: macOS runs it from a place that changes. Move it into Applications first |
-| The app was moved | The old link leads nowhere. Set it up again in Settings > App |
+| The app was moved | The old link leads nowhere. Set it up again in Settings > General |
 
-Settings > App shows where the link is and takes it away again (Remove). Only a link the app
+Settings > General shows where the link is and takes it away again (Remove). Only a link the app
 made is ever removed or replaced.
 
 ## Starting it from a checkout
@@ -191,7 +191,7 @@ for the daemon of your home, so you never have to start pine first:
 | What it finds | What happens |
 |---|---|
 | A pine is running for this home (started in a terminal, at login, by the terminal UI) | The app attaches to it. The side bar says `attached`. Quitting the app leaves it running |
-| `An older pine runs` | The pine the app attached to is older than the pine the app carries. Said at the foot of the side bar and in Settings > App, with both versions. Restart that pine on the newer version yourself, or stop it and let the app start its own. Never said of a pine the app started |
+| `An older pine runs` | The pine the app attached to is older than the pine the app carries. Said at the foot of the side bar and in Settings > General, with both versions. Restart that pine on the newer version yourself, or stop it and let the app start its own. Never said of a pine the app started |
 | Nothing runs | The app starts one, as the terminal UI does, logging to `data/pine.log`. The side bar says `started here`. Quitting the app stops it, cleanly |
 | There is no pine home yet | A first screen offers to set pine up (`pine init`): the example home and the browser its web tools drive |
 | No Node, or no pine | A screen that says what to install |
@@ -199,11 +199,11 @@ for the daemon of your home, so you never have to start pine first:
 Which pine it runs, in this order: what `PINE_CLI` names; the checkout the app lies in; the
 pine packed into the app; the `pine` of your shell.
 
-| Setting (Settings > App) | What it does |
+| Setting (Settings > General) | What it does |
 |---|---|
 | Keep pine running after the app quits | A pine the app starts goes on in the background when the app is closed: schedules fire, sources report and Telegram answers. It then runs until it is stopped (`pine status` finds it; the next start of the app attaches to it) |
 | Home folder | Another pine home than `~/.pine`. Another home is another pine |
-| pine in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
+| The pine command in a terminal | Whether your shell has the `pine` command and whose it is; Set up and Remove for the app's own. See "`pine` in a terminal". Only in an app that carries pine |
 | Theme | The window's colors: one of the themes in the `themes` folder of pine's home, dark ones and light ones. It is pine's setting `ui.theme` (see "Themes" below), so every Pine app on that pine shows it, and the main agent can change it when you ask. A theme file pine cannot read is named under the list, with what is wrong with it |
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
@@ -226,7 +226,7 @@ force; pmndre when it names none.
 
 pine puts these into the folder the first time it starts without one (and `pine init` does).
 After that the folder is yours: a theme you delete stays deleted, and pmndre is there even without
-its file. To add a theme, copy its `.json` into the folder and pick it in Settings > App: a theme's
+its file. To add a theme, copy its `.json` into the folder and pick it in Settings > General: a theme's
 file is in its VS Code extension (in its repository, usually under `themes/`), and Shiki's
 collection (`@shikijs/themes`, the `tm-themes` repository) has many more. Comments and trailing
 commas in the file are fine. A theme that builds on another file (`include`) cannot be read; use one
@@ -260,7 +260,7 @@ An agent can have a color of its own (on its page under Agents, or ask the main 
 blue"). Its avatar is drawn in it in every theme, in the side bar, on its tabs and on its
 page; the rest of the window keeps the theme's colors.
 
-A value is a hex color, `#rrggbb` or `#rrggbbaa`. Settings > App lists a file pine cannot read with
+A value is a hex color, `#rrggbb` or `#rrggbbaa`. Settings > General lists a file pine cannot read with
 what is wrong with it. The theme is pine's setting, not the app's: every Pine app that uses this pine
 shows it, the main agent can set it (`set_setting ui.theme`), and with another machine's pine
 (Settings > Environments) the window takes that pine's theme.
@@ -315,7 +315,7 @@ What is this computer's stays this computer's. With another machine's pine:
 | Folders | A conversation's folder is a path on that machine: choosing one asks for the path instead of opening the Finder, and a folder dropped from the Finder is refused. Show in the Finder is not offered |
 | The terminal and Run | The terminal beside a conversation and the Run button of a command in an answer are shells of this computer: they are not offered, and that pine's agents are not told about them |
 | The browser | The Browser aside shows the browser on that machine; an address you type there (`localhost:3000`) is one of that machine |
-| Settings > App | About the app and this computer's pine (home folder, Keep pine running, the browser build). It says which machine's pine is in use |
+| Settings > General | About the app and this computer's pine (home folder, Keep pine running, the browser build). It says which machine's pine is in use |
 
 ## Browser access: a browser with no SSH to set up
 
@@ -393,7 +393,7 @@ if you have none.
 ```
  ● ● ●          ◧   M main   M main · notes ×   ⚙ Settings   +           ← tabs
  ⌕ Search and commands ╭──────────────────────────────╮ ╭───────────────────────╮
- Agents              + │ M main / notes   ▢ ~/dev/x  7% ◨ │ Changes Last turn Files … │
+ Agents              + │ M main / notes   ▢ ~/dev/x  7% ◨ │ Files Changes Output …   │
  ▾ M main            + │                              │ │                       │
      the main agent    │        what do the notes say?│ │  M index.ts  src +1 −1│
      ★ main conversation ▸ 1 tool call · read · 148 ms│ │                       │
@@ -419,7 +419,7 @@ it is never a question whom it is for.
 | The folder (when the pointer is on the line) | Opens a folder of yours for a new conversation with that agent |
 | The gear (when the pointer is on the line) | That agent's page in the settings |
 | A right click | A new conversation, a folder, **Rename** (its name in the side bar turns into a field: Enter or leaving it renames the agent, Escape keeps the name), **Color** (its colors open over its avatar, and a pick is kept at once) and the settings as a menu, and **Remove** for every agent but the main one, which administers pine and stays. Remove asks first, and how: with everything the agent has, or with its folder kept |
-| `+` beside "Agents" | A new agent |
+| `+` beside "Agents" | A new agent: a dialog over whatever is in front (a name, its instructions, a model), without opening Settings. Once it is made, its conversation opens in a tab. The card at the top of an agent's empty conversation (its name, what it is for, its model and mode) has **Agent settings**, which opens its page in Settings |
 
 An agent that somebody else makes while the app is open (the main agent when you ask it to,
 `pine agent add`, the terminal UI) appears in the side bar within a few seconds, and one that
@@ -544,7 +544,7 @@ daemon's doing. What differs is how it is drawn and reached.
 | Menus and keys | Everything is in the menu bar, with its key |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
-| Themes | Any VS Code color theme, chosen in Settings > App: the window, code in answers, diffs and the editor, and the terminal all follow it. See "Themes" |
+| Themes | Any VS Code color theme, chosen in Settings > General: the window, code in answers, diffs and the editor, and the terminal all follow it. See "Themes" |
 | Several views at once | A conversation, its changes and a file in the editor side by side |
 | A terminal | A shell of yours beside each conversation, and ▶ on an answer's shell code blocks to run them in it: see "The terminal" |
 | `/browser` | A command of the app's own, which the terminal UI does not have: the browser at the right of the window (`⇧⌘B`, View > Toggle Browser). See "The browser" |
@@ -591,20 +591,21 @@ What is different from the terminal UI:
 
 ## The code panel and the editor
 
-The panel beside a conversation (`⌥⌘B`) begins with the agent and goes on to its work. The
-work is that of the folder the conversation works in (the folder you opened for it, else the
-agent's workspace):
+The panel beside a conversation (`⌥⌘B`) opens on the files. First come the views that are
+always there, in the order they are used: the folder (Files, Changes), what ran (Output, your
+Terminal), then the agent. After them the two that are there only while they hold something,
+Running and Board. The work is that of the folder the conversation works in (the folder you
+opened for it, else the agent's workspace):
 
 | View | Shows |
 |---|---|
-| Agent | The agent of this conversation: what it is for, its model, reasoning and mode (a click changes each), whom it hands work to; what is at work right now (this conversation, the sub-agents and delegated tasks it started, the agent's other conversations), each to open; what it listens to (event sources, and whether this conversation, the agent or all agents are subscribed); its schedules, skills and MCP servers; and what it remembers (its `MEMORY.md`). Buttons lead to the settings pages where each is changed |
 | Files | The folder as a tree, a search by name, and the editor. The tree is one Tab stop: the arrow keys move, open and close folders, typing goes to a name, Enter opens a file; the search's results and the changes are lists the arrow keys move in the same way |
-| Changes | What differs from the last commit (git): each file with its counts, and its diff on a click |
-| Last turn | What your last message changed, whatever git says, with "Take back" (`/undo`) |
+| Changes | Two ranges, chosen at the top of the view. **All changes**: what differs from the last commit (git), each file with its counts, and its diff on a click. **Last turn**: what your last message changed, whatever git says, with "Take back" (`/undo`); `/code turn` opens it |
 | Output | The tool calls of the last messages, each with all it printed |
-| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the conversation's browser, at the right of the window, where the agent sees the same page; only where the conversation has no browser does it open in your own |
-| Board | The tasks and notes this conversation shares with its sub-agents and with the agents it hands work to: see "The Board tab" below. The tab is there while the conversation has a board, and `/code board` opens it before that |
 | Terminal | A shell of your own for the conversation, in its folder: see "The terminal" below (`` ⌃` ``, View > Terminal, `/terminal`) |
+| Agent | The agent of this conversation: what it is for, its model, reasoning and mode (a click changes each), whom it hands work to; what is at work right now (this conversation, the sub-agents and delegated tasks it started, the agent's other conversations), each to open; what it listens to (event sources, and whether this conversation, the agent or all agents are subscribed); its schedules, skills and MCP servers; and what it remembers (its `MEMORY.md`). Buttons lead to the settings pages where each is changed |
+| Running | What the conversation's commands left running (a dev server, a watcher): its ports as links, its last output, and Stop. A port's link opens that address in the conversation's browser, at the right of the window, where the agent sees the same page; only where the conversation has no browser does it open in your own. The tab is there while something is running, with how many, and `/code running` opens it before that |
+| Board | The tasks and notes this conversation shares with its sub-agents and with the agents it hands work to: see "The Board tab" below. The tab is there while the conversation has a board, and `/code board` opens it before that |
 
 While an agent keeps a list of steps, the open steps stand at the top of the panel.
 
@@ -845,16 +846,14 @@ of pine's: the app is your own hand, like a `pine` command.
 
 | Page | What you do there | The same by command or by asking the main agent |
 |---|---|---|
-| General | pine's settings, each by a name with its key in `pine.json` beside it and a sentence on what it does: the model, reasoning and mode agents start from, how long a command and a task may run, how many agents work at once, and what pine asks you about. What only tunes pine to a model server is not there: that is written into `pine.json` by hand ([setup.md](setup.md), "pine's settings"). And the notes `pine check` would print about this setup | `set_setting`; `pine check` |
-| Agents | Every agent. On an agent's page: at the top its avatar, which opens its color (None, a preset, or Other with any color, kept at once: its avatar in the side bar, on its tabs, in its panel and on an empty conversation is drawn in it, and the window takes its primary while its conversation is in front), and its name, which a click turns into a field that renames it (Enter or leaving the field; Escape keeps the name); then its model, reasoning, mode, built-in tools, whom it may hand work to, network from its shell, folders outside its workspace, and the files it is told (`AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown). What it is for, beside its name in the side bar and in the list, is the first paragraph of its `AGENTS.md`. New agent (a name and its instructions, the first paragraph saying what it is for); Remove, with or without its folder | `create_agent`, `update_agent`, `rename_agent`, `remove_agent`; `pine agent …` |
-| Models | First what is missing: **Connect a model first**, or each agent whose model cannot answer, with the reason. **Subscriptions and API keys**: Claude, ChatGPT and GitHub Copilot, and whatever you are signed in to; a search finds the other providers. Sign in through the browser or with an API key, sign out; after a sign-in, the choice of the default model. **Models on your own computer**: model servers you connected, removed with Remove, and a form to connect one by address and name (with a key when the server wants one). **Default model** (`defaults.model`), once there is a model: the one agents use unless one is set for an agent, with Change | `add_model_server`; `pine model …`, `pine login`, `pine logout`; `set_setting` |
-| MCP servers | Every server with whom it is for and whether it connects. Add a remote one (its https address) or a program on this computer, for all agents or one. Sign in to a remote one through the browser. Remove | `add_mcp_server`; `pine mcp …` |
+| General | From the top: **This app** (the theme, the app's version and whether there is a newer one with Check now, whether that is asked at the start, Update automatically, notifications); **pine**, the pine the app talks to (its version, started here or attached, the main agent, whether there is a sandbox, Show log, Restart, Keep pine running after the app quits, the `pine` command for a terminal, whether the browser of the web tools is on this computer with Fetch it, the home folder); **Worth a look**, the notes `pine check` would print about this setup; then pine's settings in three framed groups, **Defaults for agents**, **Limits** and **Security**: the model, reasoning and mode agents start from, how long a command and a task may run, how many agents work at once, and what pine asks you about. Each setting has a name and a sentence on what it does; its key in `pine.json` is shown when you point at the name. A number or a time is saved with Enter or when you leave the field. What only tunes pine to a model server is not there: that is written into `pine.json` by hand ([setup.md](setup.md), "pine's settings") | `set_setting`; `pine check`; `pine browser-install` |
+| Agents | Every agent. On an agent's page: at the top its avatar, which opens its color (None, a preset, or Other with any color, kept at once: its avatar in the side bar, on its tabs, in its panel and on an empty conversation is drawn in it, and the window takes its primary while its conversation is in front), and its name, which a click turns into a field that renames it (Enter or leaving the field; Escape keeps the name); then Model (model and reasoning), Instructions (the files it reads: `AGENTS.md`, `SOUL.md`, `TOOLS.md`; its `MEMORY.md` and your rules for it are shown), Permissions (mode, network for its shell commands, built-in tools and the agents it can delegate to, as checkboxes), Folders outside the workspace (with Add folder, read only or read and write), What this agent has, and Remove. A change waits in a bar at the foot of the page, Unsaved changes, with Discard and Save changes. What it is for, beside its name in the side bar and in the list, is the first paragraph of its `AGENTS.md`. New agent (a name and its instructions, the first paragraph saying what it is for; the same dialog as `+` beside "Agents" in the side bar, and the new agent's conversation opens in a tab); Remove, with or without its folder. Under the list, **Instructions for all agents**: the three files in pine's home that every agent reads (`AGENTS.md`, `TOOLS.md`, `USER.md`), one tab each, saved with the same bar | `create_agent`, `update_agent`, `rename_agent`, `remove_agent`; `pine agent …`; telling the main agent something that is for all agents |
+| Models | First what is missing: **Connect a model first**, or each agent whose model cannot answer, with the reason. **Subscriptions and API keys**: Claude, ChatGPT and GitHub Copilot, and whatever you are signed in to; a search finds the other providers. Sign in through the browser or with an API key, sign out; after a sign-in, the choice of the default model. **Default model** (`defaults.model`), once there is a model: the one agents use unless one is set for an agent, with Change. **Subscriptions and API keys** as above. **Models on your own computer**: model servers you connected, removed with Remove, and **Connect a server**, a dialog that takes an address and a name (and a key when the server wants one) | `add_model_server`; `pine model …`, `pine login`, `pine logout`; `set_setting` |
+| MCP servers | Every server with whom it is for and whether it connects. **Add server** opens a dialog: a remote one (its https address) or a program on this computer, for all agents or one. Sign in to a remote one through the browser. Remove | `add_mcp_server`; `pine mcp …` |
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
-| Events | **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: each schedule said as When and Then (whom it wakes, with what task); New schedule opens a form in the same words: When (at set times, every so often, once at a time, once after a while), Then which agent (or every agent) and the task, then a name; remove. **Routes**: first when you need one at all (an agent that reacts to a source is subscribed to it, a time is a schedule); each route said as When and Then; New route opens a form in the same words: When (the topic, an optional condition, how often), Then one of wake an agent, set shared state, publish an event, ask a model once and publish its answer, with only that one's fields shown and sent; remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
-| Instructions | The three files for all agents in pine's home: `AGENTS.md`, `TOOLS.md`, `USER.md` | Telling the main agent something that is for all agents |
+| Events | Three sections one under the other, so that nothing set up is out of sight, each with its button to add one. **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: each schedule said as When and Then (whom it wakes, with what task); New schedule opens a form in the same words: When (at set times, every so often, once at a time, once after a while), Then which agent (or every agent) and the task, then a name; remove. **Routes**: first when you need one at all (an agent that reacts to a source is subscribed to it, a time is a schedule); each route said as When and Then; New route opens a form in the same words: When (the topic, an optional condition, how often), Then one of wake an agent, set shared state, publish an event, ask a model once and publish its answer, with only that one's fields shown and sent; remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Environments | This computer and the machines whose pine the app can use, over SSH: add one by its host, use one, forget one. See "Environments: the pine of another machine" | `ssh` to the machine and `pine` there |
 | Browser access | Devices paired by a QR code, and the switch that lets them in. Its section follows Environments | None: it is the app's own, not pine's |
-| App | The app's own settings (the theme, notifications, whether there is a newer app and whether that is asked at the start), and the pine it talks to: started here or attached, restart, home folder, the `pine` command for a terminal, and whether the browser of the web tools is on this computer, with Fetch it when it is not | `pine browser-install` |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
 key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is
@@ -1029,7 +1028,7 @@ desktop/
   returns the same `Bridge` type, and so does the web client's (`web/src/frame-bridge.ts`,
   [web.md](web.md)). Four parts of the bridge are optional and only those two give them: `local: false` in `state()` (no machine of its own: the page hides This Mac (This computer
   off macOS), Use this Mac, Set up pine, the local row of Settings > Environments, the local-only parts of
-  Settings > App and the palette's "Use the pine on this Mac" (each of these names this computer by
+  Settings > General and the palette's "Use the pine on this Mac" (each of these names this computer by
   `computerWord` in `src/machines.ts`: Mac on macOS, computer elsewhere), and never sends `use(undefined)`),
   `mediaBase` (where pictures, video and sound are fetched, in place of `pine-media://daemon`)
   `deviceKey` (the client's own SSH key, with Copy and Share in Settings > Environments) and
@@ -1053,6 +1052,19 @@ desktop/
 The page is React with Tailwind v4 (through its Vite plugin) and shadcn's components on Base UI.
 There is no hand-written stylesheet: everything is utilities in the components, and `index.css`
 holds only tokens and base rules.
+
+A button's look says what it does, the same on every page:
+
+| Look | For | Examples |
+|---|---|---|
+| Filled (the theme's primary color) | The one action that finishes what you are doing. At most one in view | The button that submits a dialog, Save changes, Restart to update, Trust this key, Allow |
+| Outline | Everything that opens, adds, changes or shows something | New agent, Add server, New source, Connect a server, Sign in, API key, Change…, Subscribe, Rename, Show, Event log |
+| Ghost | Taking something away or backing out | Remove on a row (it asks first), Sign out, Forget, Discard, the way back above a page's title |
+| Destructive (red) | The last step of something that cannot be undone | Remove… on an agent's page, the button that confirms a removal |
+
+A button inside a row of a list is a size smaller than the others. A key shown on a filled or red
+button (Allow `a`, New conversation `⌘T`) is a darker shade of that button, in the button's own
+text color. Settings keeps to this; other parts of the page are brought to it as they are changed.
 
 | Piece | What it is for |
 |---|---|
@@ -1099,7 +1111,7 @@ holds only tokens and base rules.
   and by the highlighter's theme for code in answers (`CODE_THEME` in `markdown.tsx`, a Shiki theme
   whose colors are those variables), so code looks the same everywhere and follows the theme. The
   terminal (`Terminal.tsx`) reads `--term-*`, the theme's own sixteen colors.
-- The model asks pine for its themes when it connects, when Settings > App is opened, and when pine
+- The model asks pine for its themes when it connects, when Settings > General is opened, and when pine
   says a setting changed (`pine/settings`, published when the owner or the main agent sets one): the
   window follows a theme chosen in another UI. The main process keeps the last theme (`look` in
   `prefs.json`, made safe by `cleanLook` when it is set and when it is read): the window opens in it

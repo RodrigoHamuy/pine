@@ -9,20 +9,20 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { addRoute, applySetting, checkRoute, checkSetting, dropRoute, type RouteInput, SETTINGS } from "./admin.ts";
+import { addRoute, applySetting, checkRoute, checkSetting, dropRoute, type RouteInput, SETTINGS, settleModel } from "./admin.ts";
 import { AGENT_TOOLS } from "./agent-admin.ts";
 import type { AgentManager } from "./agents.ts";
 import { browserReady } from "./browser-build.ts";
-import { type AgentConfig, loadConfig, mainAgentId, PINE_ROOT, type PineConfig, purposeOf, SHARED_FILES } from "./config.ts";
+import { type AgentConfig, loadConfig, mainAgentId, ownText, PINE_ROOT, type PineConfig, purposeOf, SHARED_FILES } from "./config.ts";
 import { login, logout, type Prompter } from "./login.ts";
 import { findServer, piMcp, serverStates } from "./mcp-config.ts";
-import { addModelServer, checkServerName, listModelServers, lookAt, modelKeys, modelServerUsers, piDefaults, removeModelServer, serverUrl, suggestModel } from "./models.ts";
+import { addModelServer, checkServerName, listModelServers, lookAt, modelKeys, modelServerUsers, removeModelServer, serverUrl } from "./models.ts";
 import type { Router } from "./router.ts";
 import { audit, isInside, realish, sandboxAvailable } from "./security.ts";
 import { allSkills, checkSkill, deleteSkill, skillDir, skillsBeside, writeSkill } from "./skills.ts";
 import type { SourceHost } from "./sources.ts";
 import { localTime, type Scheduler } from "./timers.ts";
-import { errText, type Logger, onPath, parseDuration } from "./util.ts";
+import { errText, type Logger, parseDuration } from "./util.ts";
 import { listThemes, themeInForce } from "./themes.ts";
 import { listViews, viewCode, viewInForce } from "./views.ts";
 import { MAX_EDIT, writeText } from "./workspace-view.ts";
@@ -288,7 +288,8 @@ export class OwnerApi {
 		}
 		if (parts[0] === "agents" && parts[2] === "detail" && parts.length === 3) {
 			const a = this.agent(parts[1]);
-			const file = (name: string) => textOf(path.join(a.workspace, name));
+			// What pine once put into a file nobody wrote in is shown as what it is: an empty file.
+			const file = (name: string) => { const t = textOf(path.join(a.workspace, name)); return t === undefined ? t : ownText(t); };
 			const files = { instructions: file("AGENTS.md"), soul: file("SOUL.md"), tooling: file("TOOLS.md"), memory: file("MEMORY.md"), rules: textOf(path.join(a.dir, "AGENTS.md")) };
 			return {
 				id: a.id, main: a.id === mainAgentId(cfg), description: purposeOf(a), ...(a.color ? { color: a.color } : {}), workspace: a.workspace, dir: a.dir,
@@ -310,7 +311,7 @@ export class OwnerApi {
 			return { view: viewInForce(cfg.ui.view, listViews(cfg.home)) ?? null, chosen: cfg.ui.view ?? null, views };
 		}
 		if (parts[0] === "views" && parts.length === 2) return viewCode(cfg.home, parts[1]);
-		if (at === "shared") return SHARED_FILES.map((name) => ({ name, about: SHARED_ABOUT[name] ?? "", text: textOf(path.join(cfg.home, name)) ?? "" }));
+		if (at === "shared") return SHARED_FILES.map((name) => ({ name, about: SHARED_ABOUT[name] ?? "", text: ownText(textOf(path.join(cfg.home, name)) ?? "") }));
 		if (at === "skills") return allSkills(cfg).map((s) => ({ ...s, instructions: skillBody(s.dir) }));
 		if (at === "schedules") return this.need(this.schedules, "a scheduler").list();
 		if (at === "routes") return cfg.routes.map((r) => ({ name: r.name, on: r.on, when: r.when, throttleMs: r.throttleMs, debounceMs: r.debounceMs, agent: r.agent, prompt: r.prompt, session: r.session, set: r.set, publish: r.publish, call: r.call, trust: r.trust }));
@@ -560,29 +561,5 @@ const safe = <T>(fn: () => T, otherwise: T): T => {
 	}
 };
 
-/**
- * When the model the agents run on by default cannot answer and one can now, the default becomes
- * one that answers: pi's choice for the provider just signed in to (or the model server just
- * added), else for any. So a sign-in is all it takes to bring the agents to life. A default that
- * answers is the owner's choice and stays. Returns the model chosen, if one was.
- */
-export async function settleModel(cfg: PineConfig, manager: AgentManager, log: Logger, provider?: string): Promise<string | undefined> {
-	try {
-		const available = await manager.availableModels();
-		const known = new Set(available);
-		const claude = onPath("claude");
-		if (!manager.modelProblem(cfg.defaults.model, known, claude)) return undefined;
-		const usable = available.filter((m) => !manager.modelProblem(m, known, claude));
-		const choices = await piDefaults();
-		const chosen = suggestModel(usable, choices, provider) ?? suggestModel(usable, choices);
-		if (!chosen) return undefined;
-		applySetting(cfg, checkSetting(cfg, "defaults.model", chosen, available));
-		await manager.refreshSessions();
-		manager.settingChanged("defaults.model");
-		log.info(`agents now run on ${chosen} by default: the model before could not answer`);
-		return chosen;
-	} catch (e) {
-		log.warn(`could not choose a model that answers: ${errText(e)}`);
-		return undefined;
-	}
-}
+// In src/admin.ts, where the main agent's sign_in uses it too; said here for those who import it from here.
+export { settleModel };

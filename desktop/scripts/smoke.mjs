@@ -161,12 +161,12 @@ try {
 		if (found.length !== 3 || stray.length) throw new Error(`pine did not find the helpers the app carries: ${found.join(", ")}`);
 		for (const f of found) execFileSync("/usr/bin/codesign", ["--verify", "--strict", f]);
 		console.log(`ok: the daemon runs on the app's Node; ${said} through a link; the three helpers are the app's`);
-		// Settings > App says what `pine` in a terminal is. (Only looked at: nothing is set up from here.)
+		// Settings > General says what `pine` in a terminal is. (Only looked at: nothing is set up from here.)
 		await page.locator("[data-slot=sidebar-footer]").getByRole("button", { name: "Settings" }).click();
-		await page.click("[role=navigation] [data-sidebar=menu-button] >> text=App");
-		const row = (await page.textContent("[data-slot=field]:has-text('pine in a terminal')", { timeout: 15_000 })) ?? "";
-		if (!/pine in a terminal/.test(row) || !/(Not set up|is the pine of this app|another pine|Move Pine)/.test(row)) throw new Error(`Settings > App says about the command: ${row.slice(0, 300)}`);
-		console.log(`ok: Settings > App: ${row.replace(/\s+/g, " ").trim()}`);
+		await page.click("[role=navigation] [data-sidebar=menu-button] >> text=General");
+		const row = (await page.textContent("[data-slot=field]:has-text('pine command in a terminal')", { timeout: 15_000 })) ?? "";
+		if (!/pine command in a terminal/.test(row) || !/(Not set up|is the pine of this app|another pine|Move Pine)/.test(row)) throw new Error(`Settings > General says about the command: ${row.slice(0, 300)}`);
+		console.log(`ok: Settings > General: ${row.replace(/\s+/g, " ").trim()}`);
 		if (process.argv[3]) await page.screenshot({ path: process.argv[3].replace(/(\.\w+)?$/, "-app$1") });
 	}
 	await browser.close();

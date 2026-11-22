@@ -18,7 +18,7 @@ import {
 } from "@earendil-works/pi-coding-agent";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { dropConversationSkills, renameConversationSkills, skillDirs } from "./skills.ts";
-import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, PINE_ROOT, type PineConfig, purposeOf, sharedFiles, stricter, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
+import { type AgentConfig, loadConfig, agentSkillsDir, conversationsDir, delegateTargets, effectiveMcp, type Level, mainAgentId, type McpServerConfig, mcpTaints, type Mode, MODES, ownText, PINE_ROOT, type PineConfig, purposeOf, sharedFiles, stricter, toPiMcp, unsandboxed, WORKSPACE_FILES } from "./config.ts";
 import { Limiter, type Slot } from "./limiter.ts";
 import { modelRuntime } from "./models.ts";
 import { families, NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
@@ -372,7 +372,7 @@ export class AgentManager {
 	private slotsTold = new Map<string, boolean>();
 	/** How the key of a model server is had, from the session that used it last. By server. */
 	private serverKeys = new Map<string, () => Promise<string | undefined>>();
-	private log: Logger;
+	readonly log: Logger;
 	/** Event sources and subscriptions. Set by the daemon once both exist. */
 	sources?: SourceHost;
 	/** Set by pine.ts. Routes of pine.json that are added or removed while the daemon runs go through it. */
@@ -4331,14 +4331,10 @@ export class AgentManager {
 		const all = [rules, path.join(agent.dir, "AGENTS.md"), own("AGENTS.md"), own("CLAUDE.md"), own("SOUL.md"), tools, own("TOOLS.md"), user, own("MEMORY.md"), ...(folder ? [path.join(folder, "AGENTS.md"), path.join(folder, "CLAUDE.md")] : []), ...agent.context];
 		const seen = new Set<string>();
 		const found = all.filter((f) => fs.existsSync(f) && fs.statSync(f).isFile() && !seen.has(realish(f)) && Boolean(seen.add(realish(f))));
-		// A file that still says what pine started it with says nothing: it is left out, which a small model reads faster.
+		// An empty file says nothing, and nor does one that still holds only what pine once put there: it is left out, which a small model reads faster.
 		const untouched = (f: string) => {
-			const name = path.basename(f);
-			const forAll = shared.includes(f);
-			if (!forAll && !["SOUL.md", "TOOLS.md", "MEMORY.md"].includes(name)) return false;
-			const template = path.join(PINE_ROOT, "examples", "home", forAll ? name : path.join("agents", "prime", "workspace", name));
 			try {
-				return fs.readFileSync(f, "utf8").trim() === fs.readFileSync(template, "utf8").trim();
+				return ownText(fs.readFileSync(f, "utf8")).trim() === "";
 			} catch {
 				return false;
 			}

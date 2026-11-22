@@ -103,8 +103,10 @@ Two runs that ask for the same task at the same moment never both get it.
 
 ## A pool of sub-agents
 
-`subagent` runs `subagents.maxParallel` sub-agents at a time (4 unless you changed it). With
-`"pool": true`, or simply with more tasks than run at once, it takes up to 100: they go onto the
+`subagent` runs `subagents.maxParallel` sub-agents at a time: pine's setting `limits.maxSubagents`
+(Settings > General > Limits, 4 unless you changed it), or what the agent's `agent.json` says. With
+`"pool": true`, or simply with more tasks than run at once, it takes up to `limits.maxPoolTasks`
+(100 unless you changed it): they go onto the
 conversation's board, and that many sub-agents at a time work through them. Tasks that were on the board already (yours from the
 Board tab, or posted with `board_post`) are worked too, and a call with `"pool": true` and no
 tasks goes on with what is there.
