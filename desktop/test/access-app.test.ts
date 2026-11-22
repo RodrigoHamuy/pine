@@ -220,6 +220,8 @@ test("Settings > Browser access: the open-at-login switch and the service addres
 	await address.fill("https://pine.other.invalid");
 	await page.locator(`${section} [data-setting=access-service]`).getByRole("button", { name: "Save" }).click();
 	await until("the address is kept", async () => (await bridge("access")).service === "https://pine.other.invalid");
+	// The page has it too (nothing left to save): what is typed before that is put back to what the page is told was kept.
+	await page.locator(`${section} [data-setting=access-service] button:disabled`, { hasText: "Save" }).waitFor();
 	await address.fill(SERVICE);
 	await page.locator(`${section} [data-setting=access-service]`).getByRole("button", { name: "Save" }).click();
 	await until("the address is back", async () => (await bridge("access")).service === SERVICE);

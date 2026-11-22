@@ -16,7 +16,7 @@ to change the code.
 | `npm run baseline` | The 59 pi SDK checks in `baseline/`. Run it after upgrading pi. |
 | `node src/cli.ts <command>` | The CLI without installing it. |
 | `npm run desktop` | The desktop app (`desktop/`, Electron), built and opened. It has its own `package.json` and `node_modules`: `npm install` in `desktop/` once. `npm run dev` there reloads the page as you edit. |
-| `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. It builds the app once for the run into a temp folder of its own and every test starts that build (`desktop/scripts/test.mjs`, `desktop/test/support/app.ts`), so runs of several checkouts at once never test each other's build; two files at a time, two minutes at most a test. A few minutes; needs a screen. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
+| `npm run desktop:test` | The desktop app from end to end: the real app, through its real window, on a pine home of its own with the scripted model server. It builds the app once for the run into a temp folder of its own and every test starts that build (`desktop/scripts/test.mjs`, `desktop/test/support/app.ts`), so runs of several checkouts at once never test each other's build. The app's window is drawn and never shown, so a run takes no place on the screen and the owner's pointer and keys never reach a test (`PINE_DESKTOP_SHOW=1` shows the windows, to watch a test). As many files side by side as the computer has room for (one for every two idle processors, six at most, two at least), two minutes at most a test; a file with a failure is run again alone, and one that passes then is named and does not fail the run. Under a minute. Run it when you change `desktop/`, the control API the app uses (`src/http.ts`, `src/owner.ts`) or `pine service`. `npm run check` in `desktop/` is its type check. |
 | `npm run dev:preview` (in `desktop/`) | The app's page in an ordinary browser on a throwaway pine; `dev:preview:home` on `~/.pine`, whose daemon it never stops. Each checkout has ports of its own, from its path (`desktop/scripts/launch-json.mjs`), and `.claude/launch.json` is written with them by `npm install` in `desktop/` (it is not in git). After pulling, or when the preview pane lists no `desktop-preview`, run `node desktop/scripts/launch-json.mjs` (or `npm install` in `desktop/`). A preview and `npm run dev` end with whatever started them (`desktop/scripts/leash.mjs`). |
 | `npm run storybook` (in `desktop/`) | Storybook for the parts of the app's page, at port 6006: a story sits beside the file of what it shows (`desktop/src/<File>.stories.tsx`, `desktop/src/components/<name>.stories.tsx`: `desktop/src/ApprovalDialog.stories.tsx`, `desktop/src/components/printed.stories.tsx`, `desktop/src/components/logo.stories.tsx`); `npm run build-storybook` builds it. Chromatic publishes the stories on every pull request and every push to `next`, whose build is accepted as the baseline (`.github/workflows/chromatic.yml`, secret `CHROMATIC_PROJECT_TOKEN`), each in light and dark at a phone's width (360) and the window's (1280) through its modes (`desktop/.storybook/modes.ts`), so no dark or phone twin of a story is written. Add or update a story when you change a part in `desktop/src/components/` (outside `ui/`, which is stock). |
 | `npm run desktop:pack` | `desktop/release/mac-arm64/Pine.app` (`mac/` on Intel), with the package of `npm run build` and its dependencies, the Node it runs on, pine's helpers built (`scripts/helpers.mjs`) and `pine` for a terminal inside, signed with the hardened runtime. `node desktop/scripts/smoke.mjs` starts that app from a folder of its own and checks that it runs on the pine and the Node it carries. Run both when you change `desktop/scripts/`, a helper's build function, `src/prebuilt.ts`, a native module of browser access (`ssh2`, `node-datachannel`) or `desktop/electron/service.ts`, and the smoke test also after a change to the page's markup that it finds the page by (`data-slot` names): no workflow runs it. |
@@ -957,14 +957,36 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   by `npm test`: they start the real app (Electron, driven by Playwright through its window)
   on a temp home with the mock model server, and a daemon of its own on port 0, so a pine the
   developer has running is left alone. They start the build of the run (`launchApp` in
-  `desktop/test/support/app.ts`), never `desktop/dist`. A test that waits for a daemon, or for one
+  `desktop/test/support/app.ts`), never `desktop/dist`. `launchApp` starts the app without a
+  screen (`PINE_DESKTOP_HEADLESS`, for tests only: `electron/main.ts` makes the window and never
+  shows it, and the page goes on drawing as in a window in front), so a run can be left alone
+  on a computer that is being used, and nothing the owner does there reaches a test. It also
+  notes what the app would do in the owner's own session instead of doing it (`quiet`: a
+  notification, the clipboard, an address opened in the browser, a file shown in the Finder,
+  open at login, a dialog of the system's), in `globalThis.quiet` of the main process; a test
+  about one of them replaces it again. A new thing the main process does outside its window
+  goes into `quiet`. Start the app only with `launchApp`. The runner (`desktop/scripts/test.mjs`)
+  gives a run a temp folder of its own (`TMPDIR`), ends what a test left running and removes
+  the folder, and runs a file with a failure again, alone: a wait that ran out on a busy
+  computer passes then and is named, a broken test fails twice. A test never waits for what
+  may not come with Playwright's default of 30 seconds (`page.textContent(...).catch()` on a
+  part that is not there): ask for what is there (`$`, `$$eval`). A test that reads a file the
+  daemon writes reads it so that an empty one is "not yet" (`json()` in `desktop/test/support/window.ts`).
+  The tests of the app's one window are two files, `app.test.ts` (the start, a conversation, the
+  panel beside it, the settings) and `app-around.test.ts` (the side bar, the palette, tabs, a
+  narrow window, another machine), which run side by side, each with an app and a home of its
+  own made by `desktop/test/support/window.ts`; what both use to look at the window and drive it
+  is there too. Within a file the tests follow each other in the one window; nothing in one
+  file may need what the other set up. A file of these that grows past half a minute is split
+  the same way: the longest file is how long a run takes. A test that waits for a daemon, or for one
   to be gone, asks `/overview` with the test home's token (`desktop/test/support/daemon.ts`), never
   `/health`, which any daemon answers: runs of several checkouts start daemons side by side. `sees()` there waits for something on screen and says
   what is there instead when it does not come. What a menu item does is sent as the menu
   sends it (`menu()`): keys typed into the page do not reach the system's menus. Voice input
   is tested with a stand-in for the helper (`PINE_DESKTOP_VOICE`, for tests only); the `live:`
   test in `desktop/test/voice-live.test.ts` (`PINE_LIVE=1`) puts the real helper behind it,
-  listening to a recording. No test shows the app's real window with its title bar: after a
+  listening to a recording. No test shows the app's real window with its title bar (only
+  `view-perf.test.ts` puts a window on the screen, to measure it in front): after a
   change to the frame (`app-drag` and `app-no-drag` in `src/index.css`, the parts of
   `src/App.tsx` that carry them: `TitleBar`, `Sidebar` and `Gate`; the side panel's sheet in a
   narrow window, in `src/CodePanel.tsx`, whose header lies under the Mac window buttons and over

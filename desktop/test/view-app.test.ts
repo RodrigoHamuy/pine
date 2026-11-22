@@ -61,7 +61,7 @@ before(async () => {
 	write(path.join(home, "agents", "books", "workspace", "AGENTS.md"), "Keeps the books.\n\nYou keep the books.\n");
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ updates: false }));
-	app = await launchApp({ ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
+	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
 	page = await app.firstWindow();
 	await page.setViewportSize?.({ width: 1280, height: 820 }).catch(() => {});
 	await page.waitForSelector("[data-slot=empty] h1", { timeout: 30_000 });
@@ -175,7 +175,7 @@ export default defineView((host) => {
 	assert.deepEqual(reached, [], "nothing reached the server on this computer");
 	// The panel showed books, as asked, and opened nothing for an agent there is none of.
 	assert.match(await page.textContent("[data-slot=view-inspector]"), /books/);
-	assert.ok(!(await page.textContent("[data-slot=tabs]").catch(() => "")).includes("nobody"));
+	assert.ok(!(await page.$$eval("[data-slot=tab]", (tabs: Element[]) => tabs.map((t) => t.textContent).join("\n"))).includes("nobody"));
 });
 
 test("a view names a board's task by its numbers and the panel says what the task is; the view itself is told none of it", async () => {

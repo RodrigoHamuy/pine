@@ -1007,13 +1007,16 @@ desktop/
                    launcher that becomes Resources/bin/pine), preview.ts (the page in an ordinary
                    browser, `npm run dev:preview`: Vite's server makes every call for the page,
                    on a throwaway pine or the home `--home` names), test.mjs (`npm test`: the
-                   app built once for the run), launch-json.mjs (the checkout's ports and
+                   app built once for the run, a temp folder of the run's own, a file that
+                   failed run again alone), launch-json.mjs (the checkout's ports and
                    .claude/launch.json), leash.mjs (a preview or `dev` ends with its starter),
                    update-feed.ts (the names of a release's zip and update feed, and the feed)
-  test/            the app from end to end, driven through its real window; command.test.ts,
-                   updates.test.ts, daemon.test.ts and preview.test.ts need no window.
-                   support/: the build a test starts (app.ts), and a daemon of the test's own
-                   told from another run's by its token (daemon.ts)
+  test/            the app from end to end, driven through its real window, which is drawn
+                   and never put on the screen; command.test.ts, updates.test.ts,
+                   daemon.test.ts and preview.test.ts need no window.
+                   support/: the build a test starts, without a screen (app.ts), the one
+                   window of app.test.ts and app-around.test.ts (window.ts), and a daemon
+                   of the test's own told from another run's by its token (daemon.ts)
 ```
 
 - The page asks for something new through `preload.ts` and a handler in `main.ts`, never by

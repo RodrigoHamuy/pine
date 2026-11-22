@@ -60,7 +60,7 @@ before(async () => {
 	}
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ updates: false }));
-	app = await launchApp({ ...process.env, PINE_DESKTOP_BACKGROUND: "", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
+	app = await launchApp({ ...process.env, PINE_DESKTOP_HEADLESS: "", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
 	page = await app.firstWindow();
 	// In front and drawn: a window in the background is throttled, and would measure nothing.
 	await app.evaluate(({ app: a, BrowserWindow }: any) => {

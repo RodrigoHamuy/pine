@@ -31,9 +31,16 @@ const originOf = (url: string) => {
 };
 const ORIGIN = DEV_URL ? originOf(DEV_URL) : "app://pine";
 const isMac = process.platform === "darwin";
-/** Tests only: the window opens behind the owner's windows and the app never takes the focus or a place in the Dock. */
-const BACKGROUND = Boolean(process.env.PINE_DESKTOP_BACKGROUND);
-if (BACKGROUND && isMac) app.setActivationPolicy("accessory");
+/**
+ * Tests only: the app runs without a screen. Its window is made and drawn like any other and never
+ * shown, so it takes no place on the owner's screen, no click, key or pointer of theirs reaches it,
+ * and it never comes to the front; the app has no place in the Dock. The page goes on drawing as it
+ * does in a window in front (`backgroundThrottling` below), and a test reads and drives it through
+ * the debugger (test/support/app.ts, which also keeps the app from the owner's notifications,
+ * clipboard and browser).
+ */
+const HEADLESS = Boolean(process.env.PINE_DESKTOP_HEADLESS);
+if (HEADLESS && isMac) app.setActivationPolicy("accessory");
 /**
  * Tests only: browser access runs on its stand-in (access/stand-in.ts), which needs no network;
  * the value is how long its phone waits before it uses a pairing's link, in milliseconds. The
@@ -395,9 +402,11 @@ function createWindow(): void {
 			webSecurity: true,
 			spellcheck: true,
 			navigateOnDragDrop: false,
+			// A window that is never shown would stop drawing once the system counted it as hidden.
+			...(HEADLESS ? { backgroundThrottling: false } : {}),
 		},
 	});
-	win.once("ready-to-show", () => (BACKGROUND ? win?.showInactive() : win?.show()));
+	win.once("ready-to-show", () => void (HEADLESS || win?.show()));
 	win.webContents.setWindowOpenHandler(({ url }) => (openOutside(url), { action: "deny" }));
 	win.webContents.on("will-navigate", (e, url) => {
 		// The page stays the page. (Reloading it during development is the one navigation there is.)
@@ -424,12 +433,10 @@ function createWindow(): void {
 function show(): void {
 	if (!win) createWindow();
 	else {
+		if (HEADLESS) return;
 		if (win.isMinimized()) win.restore();
-		if (BACKGROUND) win.showInactive();
-		else {
-			win.show();
-			win.focus();
-		}
+		win.show();
+		win.focus();
 	}
 }
 

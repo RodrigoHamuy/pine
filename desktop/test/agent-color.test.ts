@@ -46,7 +46,14 @@ async function avatarsAre(want: string, why: string): Promise<void> {
 
 const menu = (name: string) => app.evaluate(({ BrowserWindow }: any, n: string) => BrowserWindow.getAllWindows()[0].webContents.send("pine:menu", n), name);
 
-const kept = (): string | undefined => JSON.parse(fs.readFileSync(agentFile(), "utf8")).color;
+/** The color in the agent's file; none while the daemon is writing the file, when a reader can find it empty. */
+const kept = (): string | undefined => {
+	try {
+		return JSON.parse(fs.readFileSync(agentFile(), "utf8")).color;
+	} catch {
+		return undefined;
+	}
+};
 /** Waits until the agent's file keeps that color (none: undefined): a pick is saved at once, with no button to press. */
 async function keeps(want: string | undefined, why: string): Promise<void> {
 	for (let i = 0; i < 100 && kept() !== want; i++) await new Promise((r) => setTimeout(r, 30));
@@ -74,7 +81,7 @@ before(async () => {
 	write(path.join(home, "agents", "books", "workspace", "AGENTS.md"), "Keeps the books.\n\nYou keep the books.\n");
 	fs.mkdirSync(path.join(home, "browsers"), { recursive: true });
 	write(path.join(home, "desktop-data", "prefs.json"), JSON.stringify({ updates: false }));
-	app = await launchApp({ ...process.env, PINE_DESKTOP_BACKGROUND: "1", PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
+	app = await launchApp({ ...process.env, PLAYWRIGHT_BROWSERS_PATH: path.join(home, "browsers"), PINE_HOME: home, PINE_DESKTOP_DATA: path.join(home, "desktop-data"), PINE_SKIP_DOWNLOADS: "1", PINE_DESKTOP_DEV_URL: "", PINE_DESKTOP_RELEASES: "" });
 	page = await app.firstWindow();
 	await page.setViewportSize?.({ width: 1280, height: 820 }).catch(() => {});
 	await page.waitForSelector("[data-slot=empty] h1", { timeout: 30_000 });
