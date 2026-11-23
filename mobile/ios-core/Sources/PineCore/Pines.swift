@@ -333,14 +333,17 @@ public final class Pines: @unchecked Sendable {
 
 	/**
 	 * Pairs with a computer found on the network (`nearbyComputer`), without a code: as `pair`, as
-	 * user `nearby`. `id` is the machine id it announced, `service` its meeting service, an https
-	 * origin as `nearbyComputer` writes it; anything else, or a pairing under way, is refused here.
+	 * user `nearby.<nonce>`. `id` is the machine id it announced, `service` its meeting service, an
+	 * https origin as `nearbyComputer` writes it, `nonce` the nonce of its announcement; anything
+	 * else, or a pairing under way, is refused here. On a yes the service kept is the one the computer
+	 * named on the pairing channel, which the pairing checked to be the announced one
+	 * (`PairWords.nearbyService`).
 	 * The page is told the computer's name with the four digits (`pairing.computer`), and a request
 	 * the computer did not let in as an error in `PairWords.notLetIn`.
 	 */
-	public func pairNearby(id: String, service: String, name: String) throws {
-		guard pairedFingerprint(id) != nil, httpsOrigin(service)?.origin == service else { throw RemoteError("ssh", PairWords.notNearby) }
-		let computer = NearbyComputer(id: id, service: service)
+	public func pairNearby(id: String, service: String, nonce: String, name: String) throws {
+		guard pairedFingerprint(id) != nil, httpsOrigin(service)?.origin == service, nearbyNonce(nonce) else { throw RemoteError("ssh", PairWords.notNearby) }
+		let computer = NearbyComputer(id: id, service: service, nonce: nonce)
 		try begin(id: id, service: service, name: name, nearby: true) { phone, on in self.remote.pairNearby(computer, name: phone, on: on) }
 	}
 

@@ -18,9 +18,10 @@ import pine.mobile.core.NEARBY_TYPE
 import pine.mobile.core.NearbyFound
 import pine.mobile.core.nearbyComputer
 import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.TimeUnit
 
-/** `changed` is told the whole list (`{computers: [...]}`) at each start and at each change. */
+/** `changed` is told the whole list (`{computers: [{id, service, nonce}]}`) at each start and at each change. */
 internal class NearbyBrowser(context: Context, private val changed: (JSONObject) -> Unit) {
 	private val nsd = context.getSystemService(Context.NSD_SERVICE) as NsdManager
 	/** Everything here happens on this one thread: NsdManager calls back on threads of its own. */
@@ -35,17 +36,17 @@ internal class NearbyBrowser(context: Context, private val changed: (JSONObject)
 	private val queue = ArrayDeque<NsdServiceInfo>()
 	private var resolving = false
 
-	fun start() = loop.execute {
-		if (discovery != null) return@execute
+	fun start() = onLoop {
+		if (discovery != null) return@onLoop
 		val mine = ++look
 		found.clear()
 		tell()
 		val listener = object : NsdManager.DiscoveryListener {
 			override fun onDiscoveryStarted(serviceType: String) {}
 			override fun onDiscoveryStopped(serviceType: String) {}
-			override fun onServiceFound(service: NsdServiceInfo) = loop.execute { if (mine == look) resolve(service, mine) }
-			override fun onServiceLost(service: NsdServiceInfo) = loop.execute { if (mine == look) lost(service.serviceName) }
-			override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) = loop.execute { if (discovery === this) discovery = null }
+			override fun onServiceFound(service: NsdServiceInfo) = onLoop { if (mine == look) resolve(service, mine) }
+			override fun onServiceLost(service: NsdServiceInfo) = onLoop { if (mine == look) lost(service.serviceName) }
+			override fun onStartDiscoveryFailed(serviceType: String, errorCode: Int) = onLoop { if (discovery === this) discovery = null }
 			override fun onStopDiscoveryFailed(serviceType: String, errorCode: Int) {}
 		}
 		discovery = listener
@@ -53,8 +54,8 @@ internal class NearbyBrowser(context: Context, private val changed: (JSONObject)
 		runCatching { nsd.discoverServices(NEARBY_TYPE, NsdManager.PROTOCOL_DNS_SD, listener) }.onFailure { discovery = null }
 	}
 
-	fun stop() = loop.execute {
-		val listener = discovery ?: return@execute
+	fun stop() = onLoop {
+		val listener = discovery ?: return@onLoop
 		discovery = null
 		look++
 		runCatching { nsd.stopServiceDiscovery(listener) }
@@ -62,6 +63,24 @@ internal class NearbyBrowser(context: Context, private val changed: (JSONObject)
 		watched.clear()
 		queue.clear()
 		found.clear()
+	}
+
+	/**
+	 * Runs `block` on `loop`; nothing once `close()` ended it, for a callback of NsdManager that comes
+	 * late, on a thread where a throw would end the app.
+	 */
+	private fun onLoop(block: () -> Unit) {
+		try {
+			loop.execute(block)
+		} catch (e: RejectedExecutionException) {
+			// Closed.
+		}
+	}
+
+	/** Stops looking for good: the look is stopped and the thread ends after it. Nothing starts again. */
+	fun close() {
+		stop()
+		loop.shutdown()
 	}
 
 	private fun tell() = changed(found.event())
@@ -92,11 +111,11 @@ internal class NearbyBrowser(context: Context, private val changed: (JSONObject)
 		resolving = true
 		val done = { resolving = false; next(look) }
 		val listener = object : NsdManager.ResolveListener {
-			override fun onServiceResolved(info: NsdServiceInfo) = loop.execute {
+			override fun onServiceResolved(info: NsdServiceInfo) = onLoop {
 				record(info, mine)
 				done()
 			}
-			override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) = loop.execute {
+			override fun onResolveFailed(info: NsdServiceInfo, errorCode: Int) = onLoop {
 				// Busy with a resolve of a look that was stopped: this one is tried again in a moment.
 				if (errorCode == NsdManager.FAILURE_ALREADY_ACTIVE && mine == look) {
 					queue.addFirst(service)

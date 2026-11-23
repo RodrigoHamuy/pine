@@ -140,14 +140,16 @@ class Pines(
 
 	/**
 	 * Pairs with a computer found on the network (`nearbyComputer`), without a code: as `pair`, as
-	 * user `nearby`. `id` is the machine id it announced, `service` its meeting service, an https
-	 * origin as `nearbyComputer` writes it; anything else, or a pairing under way, is refused here.
-	 * The page is told the computer's name with the four digits (`pairing.computer`), and a request
-	 * the computer did not let in as an error in `PairWords.NOT_LET_IN`.
+	 * user `nearby.<nonce>`. `id` is the machine id it announced, `service` its meeting service, an
+	 * https origin as `nearbyComputer` writes it, `nonce` the nonce of its announcement; anything
+	 * else, or a pairing under way, is refused here. The page is told the computer's name with the
+	 * four digits (`pairing.computer`), and a request the computer did not let in as an error in
+	 * `PairWords.NOT_LET_IN`. On a yes the service kept is the one the computer named on the pairing
+	 * channel, which the pairing checked to be the announced one (`PairWords.NEARBY_SERVICE`).
 	 */
-	fun pairNearby(id: String, service: String, name: String) {
-		if (pairedFingerprint(id) == null || httpsOrigin(service)?.first != service) throw RemoteError("ssh", PairWords.NOT_NEARBY)
-		val computer = NearbyComputer(id, service)
+	fun pairNearby(id: String, service: String, nonce: String, name: String) {
+		if (pairedFingerprint(id) == null || httpsOrigin(service)?.first != service || !nearbyNonce(nonce)) throw RemoteError("ssh", PairWords.NOT_NEARBY)
+		val computer = NearbyComputer(id, service, nonce)
 		begin(id, service, name, nearby = true) { on -> remote.pairNearby(computer, name, on) }
 	}
 

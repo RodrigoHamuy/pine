@@ -5,7 +5,9 @@
 // machine id stands for, and one command that names the phone. The computer answers the four digits
 // it shows the owner (and its own name), then the owner's answer. Only a yes keeps anything, and that
 // is Pines' to keep. A computer found on the network (Nearby.swift) is asked the same way without a
-// code: as user `nearby`, which the computer lets in only while it keeps itself visible there.
+// code: as user `nearby.<nonce>`, with the nonce of its announcement, which the computer lets in only
+// while it keeps itself visible there. Its first line names its meeting service too: a codeless
+// pairing goes no further when that is not the service it announced, since that is the one the phone keeps.
 //
 // The surface, the same in the Kotlin core: `Remote.pair(link, name, on)` starts a pairing and
 // returns a `Pairing`, whose `cancel()` ends it and whose `result()` is its end;
@@ -18,8 +20,8 @@ import NIOSSH
 
 /** The user name of a pairing session, before its code (desktop/electron/access/pairing.ts `PAIR_USER`). */
 let PAIR_USER = "pair."
-/** The user name of a codeless pairing session, from a phone that found the computer on the network (`NEARBY_USER`). */
-let NEARBY_USER = "nearby"
+/** The user name of a codeless pairing session, before the nonce of the announcement (`NEARBY_USER`). */
+let NEARBY_USER = "nearby."
 /** The command of the pairing request: this word, a space, and base64url of `{"name": ...}` (`PAIR_COMMAND`). */
 let PAIR_COMMAND = "pine-pair"
 /** How long a pairing waits for the owner's answer at most: the computer ends it after two minutes itself. */
@@ -55,6 +57,8 @@ enum PairWords {
 	static let nearbyExpired = "Your computer did not answer in time: nothing was kept. Try again, or pair with the code from Pine > Add a device."
 	/** A computer found on the network whose host key is not the machine id it announced. */
 	static let nearbyImpostor = "The computer that answered is not the one found on this network: nothing was trusted. Pair with the code from Pine > Add a device instead."
+	/** A computer found on the network whose pairing names another meeting service than its announcement. */
+	static let nearbyService = "The computer found on this network names another meeting service than its announcement: nothing was kept. Pair with the code from Pine > Add a device instead."
 	/** What was found on the network is not a computer this phone can pair with. */
 	static let notNearby = "That is not a computer this phone can pair with. Look again, or pair with the code from Pine > Add a device."
 
@@ -81,13 +85,13 @@ enum PairWords {
 
 /**
  * Whom a pairing asks and how: the meeting service, the computer's machine id, and the SSH user
- * (`pair.<code>` for a link, `nearby` for a computer found on the network).
+ * (`pair.<code>` for a link, `nearby.<nonce>` for a computer found on the network).
  */
 struct PairAs: Sendable {
 	let service: String
 	let id: String
 	let user: String
-	var nearby: Bool { user == NEARBY_USER }
+	var nearby: Bool { user.hasPrefix(NEARBY_USER) }
 	var impostor: String { nearby ? PairWords.nearbyImpostor : PairWords.impostor }
 }
 
@@ -149,11 +153,12 @@ extension Remote {
 	}
 
 	/**
-	 * Pairs with a computer found on the network, without a code: as `pair`, as user `nearby`. The
-	 * machine id it announced is checked as a link's is: only its host key is taken.
+	 * Pairs with a computer found on the network, without a code: as `pair`, as user
+	 * `nearby.<nonce>`. The machine id it announced is checked as a link's is: only its host key is
+	 * taken; and the pairing ends when the computer names another meeting service than it announced.
 	 */
 	public func pairNearby(_ computer: NearbyComputer, name: String, on: @escaping @Sendable (PairingState) -> Void) -> Pairing {
-		pair(PairAs(service: computer.service, id: computer.id, user: NEARBY_USER), name: name, on: on)
+		pair(PairAs(service: computer.service, id: computer.id, user: NEARBY_USER + computer.nonce), name: name, on: on)
 	}
 
 	private func pair(_ link: PairAs, name: String, on: @escaping @Sendable (PairingState) -> Void) -> Pairing {
@@ -252,14 +257,19 @@ extension Remote {
 		do {
 			let command = try await ChannelDuplex.of(exec, limit: read)
 			try await exec.triggerUserOutboundEvent(SSHChannelRequestEvent.ExecRequest(command: pairCommand(name), wantReply: false)).get()
-			return .end(await answer(command, pairing, tell: tell))
+			return .end(await answer(link, command, pairing, tell: tell))
 		} catch {
 			return .end(.expired)
 		}
 	}
 
-	/** The computer's lines: the four digits, then the owner's answer. A channel that ends without one is expired. */
-	private func answer(_ command: ChannelDuplex, _ pairing: Pairing, tell: @Sendable (PairingState) -> Void) async -> PairingState {
+	/**
+	 * The computer's lines: the four digits, then the owner's answer. A channel that ends without one is
+	 * expired. A codeless pairing ends before the digits are shown when the first line names another
+	 * meeting service than the announcement (or none): the phone would keep the announced one. A link's
+	 * service is the one the owner's computer put in it, and a Pine app before this line said none.
+	 */
+	private func answer(_ link: PairAs, _ command: ChannelDuplex, _ pairing: Pairing, tell: @Sendable (PairingState) -> Void) async -> PairingState {
 		let until = ContinuousClock.now + PAIR_WAIT
 		var text: [UInt8] = []
 		while ContinuousClock.now < until {
@@ -279,6 +289,9 @@ extension Remote {
 				text.removeFirst(nl + 1)
 				guard let said = (try? JSONSerialization.jsonObject(with: line)) as? [String: Any] else { continue }
 				if let code = said["code"] as? String, wholeMatch("[0-9]{4}", code) != nil {
+					if link.nearby, (said["service"] as? String).flatMap({ httpsOrigin($0)?.origin }) != link.service {
+						return .failed(message: PairWords.nearbyService)
+					}
 					let computer = cleanName(said["computer"] as? String ?? "")
 					tell(.pairing(code: code, computer: computer.isEmpty ? nil : computer))
 				} else if let ok = said["ok"] as? Bool {

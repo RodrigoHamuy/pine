@@ -24,8 +24,13 @@ extension PeerRig {
 	/** A pairing opened at the computer, as the phone reads its link (the service said as an https origin). */
 	func opened() async throws -> PairLink {
 		let link = try #require(try await host.command("open")["link"] as? String)
-		#expect(link.hasPrefix(host.service + "/#pair="))
-		return try #require(pairLink(TEST_SERVICE + link.dropFirst(host.service.count)))
+		#expect(link.hasPrefix(TEST_SERVICE + "/#pair="))
+		return try #require(pairLink(link))
+	}
+
+	/** The computer as the phone found it on the network, under the https name the test routes to the helper. */
+	func found(service: String = TEST_SERVICE, nonce: String? = nil) -> NearbyComputer {
+		NearbyComputer(id: host.machineId, service: service, nonce: nonce ?? host.nonce)
 	}
 
 	func devices() async throws -> [[String: Any]] {
@@ -145,7 +150,7 @@ struct PairingTests {
 			#expect(try await rig.host.command("nearby on")["on"] as? Bool == true)
 			try await rig.host.command("allow")
 			let told = Told()
-			let end = await rig.remote.pairNearby(NearbyComputer(id: rig.host.machineId, service: TEST_SERVICE), name: "Pine on iPhone 17 Pro") { told.add($0) }.result()
+			let end = await rig.remote.pairNearby(rig.found(), name: "Pine on iPhone 17 Pro") { told.add($0) }.result()
 			#expect(end == .allowed(name: "Test Mac"))
 			try await eventually("the owner asked") { !rig.host.events("asked").isEmpty }
 			let asked = try #require(rig.host.events("asked").first)
@@ -160,7 +165,7 @@ struct PairingTests {
 		try await withPeer(known: false) { rig in
 			try await rig.host.command("allow")
 			let told = Told()
-			let end = await rig.remote.pairNearby(NearbyComputer(id: rig.host.machineId, service: TEST_SERVICE), name: "Pine on iPhone 17 Pro") { told.add($0) }.result()
+			let end = await rig.remote.pairNearby(rig.found(), name: "Pine on iPhone 17 Pro") { told.add($0) }.result()
 			#expect(end == .failed(message: PairWords.notLetIn))
 			#expect(told.states == [.failed(message: PairWords.notLetIn)])
 			#expect(rig.host.events("asked").isEmpty)
@@ -173,10 +178,44 @@ struct PairingTests {
 		try await withPeer(known: false) { rig in
 			try await rig.host.command("nearby on")
 			try await rig.host.command("refuse")
-			let found = NearbyComputer(id: rig.host.machineId, service: TEST_SERVICE)
+			let found = rig.found()
 			#expect(await rig.remote.pairNearby(found, name: "Pine on a test") { _ in }.result() == .refused)
 			try await rig.host.command("meeting swap")
 			#expect(await rig.remote.pairNearby(found, name: "Pine on a test") { _ in }.result() == .failed(message: PairWords.nearbyImpostor))
+			#expect(try await rig.devices().isEmpty)
+		}
+	}
+
+	@Test("a codeless request with a nonce the computer did not announce, or no longer does, is not let in")
+	func nearbyNonce() async throws {
+		try await withPeer(known: false) { rig in
+			try await rig.host.command("nearby on")
+			try await rig.host.command("allow")
+			let nonce = rig.host.nonce
+			let wrong = (nonce.hasPrefix("A") ? "B" : "A") + nonce.dropFirst()
+			let told = Told()
+			#expect(await rig.remote.pairNearby(rig.found(nonce: wrong), name: "Pine on a test") { told.add($0) }.result() == .failed(message: PairWords.notLetIn))
+			try await rig.host.rotate()
+			try await rig.host.rotate()
+			#expect(await rig.remote.pairNearby(rig.found(nonce: nonce), name: "Pine on a test") { told.add($0) }.result() == .failed(message: PairWords.notLetIn))
+			#expect(told.states == [.failed(message: PairWords.notLetIn), .failed(message: PairWords.notLetIn)])
+			#expect(rig.host.events("asked").isEmpty)
+			#expect(try await rig.devices().isEmpty)
+		}
+	}
+
+	@Test("a computer found on the network that names another meeting service than its announcement is not paired with")
+	func nearbyOtherService() async throws {
+		try await withPeer(known: false) { rig in
+			// Another name that reaches the helper, whose pairing channel names TEST_SERVICE.
+			rig.routes.set("https://elsewhere.test", rig.host.service)
+			try await rig.host.command("nearby on")
+			let told = Told()
+			let end = await rig.remote.pairNearby(rig.found(service: "https://elsewhere.test"), name: "Pine on a test") { told.add($0) }.result()
+			#expect(end == .failed(message: PairWords.nearbyService))
+			#expect(told.states == [.failed(message: PairWords.nearbyService)], "the four digits are never shown")
+			try await eventually("the session ended at the computer") { !rig.host.events("left").isEmpty }
+			try await rig.host.command("allow")
 			#expect(try await rig.devices().isEmpty)
 		}
 	}

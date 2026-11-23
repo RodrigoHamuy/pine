@@ -135,13 +135,15 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	}
 
 	/**
-	 * The owner's tap on a computer found on the network: paired without a code, as user `nearby`. The
-	 * core checks the id and the service again (a machine id, an https origin), and refuses a second pairing.
+	 * The owner's tap on a computer found on the network: paired without a code, as user
+	 * `nearby.<nonce>` with the nonce of its announcement. The core checks the id, the service and the
+	 * nonce again (a machine id, an https origin, 22 base64url characters), and refuses a second pairing.
 	 */
 	@objc func pairNearby(_ call: CAPPluginCall) {
 		let id = call.getString("id") ?? ""
 		let service = call.getString("service") ?? ""
-		later(call) { [phone] in try $0.pairNearby(id: id, service: service, name: phone); return nil }
+		let nonce = call.getString("nonce") ?? ""
+		later(call) { [phone] in try $0.pairNearby(id: id, service: service, nonce: nonce, name: phone); return nil }
 	}
 
 	/**
@@ -254,7 +256,8 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
  * Bonjour record) with NWBrowser, their TXT records read by the core (`nearbyComputer`) and listed
  * once per machine id. A record is never trusted: only the owner's tap starts a pairing, which
  * checks the host key against the machine id. When iOS refuses the local network to the app, the
- * page is told so (`denied`), so that it can say where to allow it.
+ * page is told so (`denied`), so that it can say where to allow it. A browser that failed is started
+ * again while the page still asks, after a wait that doubles from one second to thirty.
  */
 private final class NearbyBrowser: @unchecked Sendable {
 	/** DNS-SD's "the system's policy refuses this" (dns_sd.h `kDNSServiceErr_PolicyDenied`): the local network is not allowed. */
@@ -268,21 +271,35 @@ private final class NearbyBrowser: @unchecked Sendable {
 	private var told: [NearbyComputer]?
 	private var toldDenied = false
 	private var denied = false
+	/** The wait before a browser that failed is started again; back to the first once one is ready. */
+	private var wait = NearbyBrowser.firstWait
+	private var again: DispatchWorkItem?
+	private static let firstWait: TimeInterval = 1
+	private static let longestWait: TimeInterval = 30
 
 	init(_ tell: @escaping ([String: Any]) -> Void) {
 		self.tell = tell
 	}
 
-	func start() { queue.async { self.wanted = true; self.begin() } }
+	func start() {
+		queue.async {
+			self.wanted = true
+			self.wait = Self.firstWait
+			self.begin()
+		}
+	}
 	func stop() { queue.async { self.wanted = false; self.end() } }
 	func pause() { queue.async { self.end() } }
 	func resume() { queue.async { if self.wanted { self.begin() } } }
 
-	private func begin() {
+	/** `retry`: a browser that failed is started again, and the page keeps what it was told meanwhile. */
+	private func begin(retry: Bool = false) {
 		guard browser == nil else { return }
-		told = nil
-		denied = false
-		say([])
+		if !retry {
+			told = nil
+			denied = false
+			say([])
+		}
 		let browser = NWBrowser(for: .bonjourWithTXTRecord(type: NEARBY_TYPE, domain: nil), using: NWParameters())
 		browser.stateUpdateHandler = { [weak self, weak browser] state in
 			guard let self, let browser, self.browser === browser else { return }
@@ -292,8 +309,12 @@ private final class NearbyBrowser: @unchecked Sendable {
 					self.denied = true
 					self.say([])
 				}
-				if case .failed = state { self.end() }
+				if case .failed = state {
+					self.end()
+					self.later()
+				}
 			case .ready:
+				self.wait = Self.firstWait
 				if self.denied {
 					self.denied = false
 					self.found(browser.browseResults)
@@ -310,9 +331,25 @@ private final class NearbyBrowser: @unchecked Sendable {
 		browser.start(queue: queue)
 	}
 
+	/** Ends the browser, and a start again that waits. */
 	private func end() {
+		again?.cancel()
+		again = nil
 		browser?.cancel()
 		browser = nil
+	}
+
+	/** Starts a browser again after `wait`, while the page still asks; the wait doubles up to `longestWait`. */
+	private func later() {
+		guard wanted else { return }
+		let item = DispatchWorkItem { [weak self] in
+			guard let self, self.wanted, self.browser == nil else { return }
+			self.again = nil
+			self.begin(retry: true)
+		}
+		again = item
+		queue.asyncAfter(deadline: .now() + wait, execute: item)
+		wait = min(wait * 2, Self.longestWait)
 	}
 
 	/** The whole list again from what the browser holds now; the page is told when it changed. */

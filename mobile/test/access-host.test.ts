@@ -179,12 +179,35 @@ test("helper: a request it is told to refuse is refused; a decision given before
 	assert.equal(await h.exited, 0);
 });
 
-test("helper: with --nearby a codeless request is let in and asked about; nearby off refuses one before the owner hears of it", async () => {
-	const h = helper(["--nearby", "--computer-name", "Studio Mac"]);
+/**
+ * A codeless session as user `nearby.<nonce>`: whether the computer let it in. One that was let in
+ * holds the computer's one place until it ended there, which is waited for.
+ */
+async function letIn(h: ReturnType<typeof helper>, nonce: string): Promise<boolean> {
+	const { service, machineId } = h.lines[0];
+	const meeting = join(service, machineId);
+	const ssh = sshOver(await meeting.channel, machineId, newEd25519Key().private, { username: `nearby.${nonce}` });
+	// Refused, the computer lets go of the channel: SSH's goodbye after that finds it closed, which is no fault.
+	ssh.client.on("error", () => {});
+	const gone = new Promise<void>((resolve) => ssh.client.once("close", () => resolve()));
+	const yes = await ssh.ready.then(
+		() => true,
+		() => false,
+	);
+	ssh.client.end();
+	await gone;
+	meeting.close();
+	if (yes) await h.next((l) => l.t === "left" && String(l.id).startsWith("pairing:"), "the codeless session ended at the computer");
+	return yes;
+}
+
+test("helper: with --nearby a codeless request with the announced nonce is let in and asked about; nearby off refuses one before the owner hears of it", async () => {
+	const h = helper(["--nearby", "--computer-name", "Studio Mac", "--service-name", "https://pine.test"]);
 	const ready = await h.next((l) => l.t === "ready", "ready");
+	assert.match(ready.nonce, /^[A-Za-z0-9_-]{22}$/);
 	const phone = newEd25519Key();
 	const meeting = join(ready.service, ready.machineId);
-	const ssh = sshOver(await meeting.channel, ready.machineId, phone.private, { username: "nearby" });
+	const ssh = sshOver(await meeting.channel, ready.machineId, phone.private, { username: `nearby.${ready.nonce}` });
 	const session = await ssh.ready;
 	const request = await exec(session, `pine-pair ${Buffer.from(JSON.stringify({ name: "Pine on Pixel 9" })).toString("base64url")}`);
 	let said = "";
@@ -198,7 +221,7 @@ test("helper: with --nearby a codeless request is let in and asked about; nearby
 	assert.equal(asked.kind, "nearby");
 	await h.say("allow");
 	const [digits, outcome] = await lines;
-	assert.deepEqual(digits, { code: asked.code, computer: "Studio Mac" });
+	assert.deepEqual(digits, { code: asked.code, computer: "Studio Mac", service: "https://pine.test" }, "the computer names the service --service-name gave");
 	assert.deepEqual(outcome, { ok: true, name: "Studio Mac" });
 	// The data channel is closed only once SSH has said goodbye over it.
 	const ended = new Promise<void>((resolve) => ssh.client.once("close", () => resolve()));
@@ -206,16 +229,32 @@ test("helper: with --nearby a codeless request is let in and asked about; nearby
 	await ended;
 	meeting.close();
 
-	assert.deepEqual(await h.say("nearby off"), { t: "nearby", on: false });
-	const other = join(ready.service, ready.machineId);
-	const refused = sshOver(await other.channel, ready.machineId, newEd25519Key().private, { username: "nearby" });
-	// Refused, the computer lets go of the channel: SSH's goodbye after that finds it closed, which is no fault.
-	refused.client.on("error", () => {});
-	const gone = new Promise<void>((resolve) => refused.client.once("close", () => resolve()));
-	await assert.rejects(refused.ready);
-	await gone;
-	other.close();
+	assert.deepEqual(await h.say("nearby off"), { t: "nearby", on: false, nonce: ready.nonce });
+	assert.equal(await letIn(h, ready.nonce), false);
 	assert.equal(h.lines.filter((l) => l.t === "asked").length, 1, "the refused request never reached the owner");
+	await h.say("stop");
+});
+
+test("helper: a codeless request is let in with the current nonce or the one before it, never with another", async () => {
+	const h = helper(["--nearby"]);
+	const ready = await h.next((l) => l.t === "ready", "ready");
+	const wrong = ready.nonce.startsWith("A") ? `B${ready.nonce.slice(1)}` : `A${ready.nonce.slice(1)}`;
+	assert.equal(await letIn(h, wrong), false, "a nonce that was never announced");
+	assert.equal(await letIn(h, ""), false, "no nonce");
+
+	const first = await h.say("rotate");
+	assert.match(first.nonce, /^[A-Za-z0-9_-]{22}$/);
+	assert.notEqual(first.nonce, ready.nonce);
+	assert.deepEqual(await h.say("nearby on"), { t: "nearby", on: true, nonce: first.nonce });
+	assert.equal(await letIn(h, ready.nonce), true, "the one before still works right after a rotation");
+	assert.equal(await letIn(h, first.nonce), true, "the current one");
+
+	const second = await h.say("rotate");
+	assert.notEqual(second.nonce, first.nonce);
+	assert.equal(await letIn(h, ready.nonce), false, "two rotations ago");
+	assert.equal(await letIn(h, first.nonce), true);
+	assert.equal(await letIn(h, second.nonce), true);
+	assert.equal(h.lines.filter((l) => l.t === "asked").length, 0, "no request was made");
 	await h.say("stop");
 });
 

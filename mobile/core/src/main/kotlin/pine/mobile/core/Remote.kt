@@ -230,16 +230,17 @@ class Remote internal constructor(
 	 * hears what the pairing reports (`PairingState`, Pairing.kt). Nothing is kept here: on
 	 * `Allowed` the caller keeps the computer (`Pines.addPaired`) and connects to it as a paired phone.
 	 */
-	fun pair(link: PairLink, name: String, on: (PairingState) -> Unit): Pairing = pairAs(link.asked, link.service, name, on)
+	fun pair(link: PairLink, name: String, on: (PairingState) -> Unit): Pairing = pairAs(link.asked, name, on)
 
 	/**
-	 * Pairs with a computer found on the network, without a code: as `pair`, as user `nearby`. The
-	 * machine id it announced is checked as a link's is: only its host key is taken.
+	 * Pairs with a computer found on the network, without a code: as `pair`, as user
+	 * `nearby.<nonce>`. The machine id it announced is checked as a link's is: only its host key is
+	 * taken; and the pairing ends when the computer names another meeting service than it announced.
 	 */
-	fun pairNearby(computer: NearbyComputer, name: String, on: (PairingState) -> Unit): Pairing = pairAs(computer.asked, computer.service, name, on)
+	fun pairNearby(computer: NearbyComputer, name: String, on: (PairingState) -> Unit): Pairing = pairAs(computer.asked, name, on)
 
-	private fun pairAs(asked: PairAs, service: String, name: String, on: (PairingState) -> Unit): Pairing =
-		startPairing(asked, name, on, key, open = { openPeer(meeting(service), asked.id, http, webrtc, openMs) }, client = {
+	private fun pairAs(asked: PairAs, name: String, on: (PairingState) -> Unit): Pairing =
+		startPairing(asked, name, on, key, open = { openPeer(meeting(asked.service), asked.id, http, webrtc, openMs) }, client = {
 			// The owner may take the computer's two minutes to answer: a read waits as long as the pairing does.
 			client(readMs = PAIR_WAIT_MS.toInt())
 		})

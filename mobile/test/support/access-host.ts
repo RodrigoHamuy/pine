@@ -18,19 +18,24 @@
 //   --service-line <json>    the line `pine service` answers with, for a stand-in daemon of the test's
 //                            own; without it the helper runs its own stand-in daemon and names it
 //   --desktop <folder>       the desktop package to load the access host from (default the checkout's)
-//   --nearby                 codeless requests (user `nearby`) are let in from the start, as when the
+//   --nearby                 codeless requests (user `nearby.<nonce>`) are let in from the start, as when the
 //                            owner keeps the computer visible on the network; without it they are refused
+//   --service-name <origin>  the meeting service the computer names, in a pairing link and on the pairing
+//                            channel (default the loopback meeting service's origin): an https name that a
+//                            test routes to `service`, as the announcement of a real computer names one
 //
 // First line, once the access host waits at the meeting:
-//   {"t":"ready","service":"http://127.0.0.1:<port>","machineId":"<43 chars>","daemon":{"base":"http://127.0.0.1:<port>","token":"<token>"},"home":"<temp folder>"}
-//   `service` is the meeting service's origin (what a pairing link starts with). `daemon` is the
-//   stand-in daemon (absent with --service-line). Instead, when a package is missing, and then it exits with 2:
+//   {"t":"ready","service":"http://127.0.0.1:<port>","machineId":"<43 chars>","nonce":"<22 chars>","daemon":{"base":"http://127.0.0.1:<port>","token":"<token>"},"home":"<temp folder>"}
+//   `service` is the meeting service's origin (what a pairing link starts with, unless --service-name
+//   names another). `nonce` is the one the computer's announcement carries now, which a codeless request
+//   names (`nearby.<nonce>`). `daemon` is the stand-in daemon (absent with --service-line). Instead, when
+//   a package is missing, and then it exits with 2:
 //   {"t":"missing","message":"..."}
 //
 // Commands, each answered by exactly one line, in the order they came, whose `t` is the command's
 // first word (or {"t":"error","to":"<word>","message":"..."} when it cannot be done):
 //   open                         opens a pairing (closing the one that was open)
-//                                -> {"t":"open","link":"<service>/#pair=<machine id>.<code>","expires":"<ISO date>"}
+//                                -> {"t":"open","link":"<service name>/#pair=<machine id>.<code>","expires":"<ISO date>"}
 //   cancel                       closes the open pairing -> {"t":"cancel"}
 //   allow | refuse               answers the pairing request that waits for the owner; with none waiting,
 //                                the answer is kept for the next request -> {"t":"allow","waiting":true|false}
@@ -41,7 +46,9 @@
 //   remove <id>                  forgets a device and cuts its connections -> {"t":"remove","id","removed":bool}
 //   cut [<id>]                   cuts the live connections of a device (of every device without an id),
 //                                which stays paired -> {"t":"cut","count":<connections cut>}
-//   nearby on|off                whether codeless requests are let in now -> {"t":"nearby","on":bool}
+//   nearby on|off                whether codeless requests are let in now -> {"t":"nearby","on":bool,"nonce":"<current>"}
+//   rotate                       a new nonce, as the announcement gets every few minutes: the one before it
+//                                still works, the one before that no longer -> {"t":"rotate","nonce":"<new>"}
 //   meeting <mode>               how the meeting service treats a phone that joins this computer's id:
 //                                normal; swap (put through to another computer, with another host key,
 //                                which has no device: a service that lies); hold (told the computer is
@@ -101,7 +108,7 @@ type AccessHost = {
 	remove(id: string): Promise<boolean>;
 	stop(): Promise<void>;
 };
-type Pairing = { open(): { link: string; expires: Date }; cancel(): void; admit: Admit };
+type Pairing = { open(): { link: string; expires: Date }; cancel(): void; admit: Admit; nearbyNonce(): string; rotateNearbyNonce(): void };
 type Plain = { send(text: string): void; close(code: number, reason: string): void };
 type MeetModule = {
 	route(url: URL): { kind: "host" | "join"; id: string } | null;
@@ -200,10 +207,13 @@ const host = await waitingHost(
 	(context) => {
 		pairing = createPairing({
 			...context,
+			service: option("service-name") ?? context.service,
 			computerName: () => option("computer-name") ?? "Test Mac",
 			pairingMs: option("pairing-ms") ? Number(option("pairing-ms")) : undefined,
 			answerMs: option("answer-ms") ? Number(option("answer-ms")) : undefined,
 			nearby: () => visible,
+			// The cores' tests ask in a row; the least time between codeless sessions is the desktop tests' to check.
+			nearbyGapMs: 0,
 			paired: (device: Device) => write({ t: "paired", id: device.id, name: device.name }),
 			ask: (request: { name: string; code: string; kind?: string }, signal: AbortSignal) => {
 				write({ t: "asked", name: request.name, code: request.code, kind: request.kind ?? "code" });
@@ -223,7 +233,7 @@ const host = await waitingHost(
 	(event) => write({ t: event.kind, id: event.id }),
 );
 machineId = host.machineId;
-write({ t: "ready", service, machineId, ...(daemon && { daemon }), home });
+write({ t: "ready", service, machineId, nonce: pairing!.nearbyNonce(), ...(daemon && { daemon }), home });
 
 let stopping: Promise<void> | undefined;
 function stop() {
@@ -286,8 +296,11 @@ async function run(words: string[]): Promise<object> {
 		case "nearby": {
 			if (rest[0] !== "on" && rest[0] !== "off") throw new Error("Say nearby on, or nearby off.");
 			visible = rest[0] === "on";
-			return { on: visible };
+			return { on: visible, nonce: pairing!.nearbyNonce() };
 		}
+		case "rotate":
+			pairing!.rotateNearbyNonce();
+			return { nonce: pairing!.nearbyNonce() };
 		case "meeting": {
 			const next = rest[0] as Mode;
 			if (!["normal", "swap", "hold", "limits"].includes(next)) throw new Error("The modes are normal, swap, hold and limits.");
@@ -298,7 +311,7 @@ async function run(words: string[]): Promise<object> {
 		case "stop":
 			return {};
 		default:
-			throw new Error(`Unknown command. The commands are open, cancel, allow, refuse, devices, add, remove, cut, nearby, meeting and stop.`);
+			throw new Error(`Unknown command. The commands are open, cancel, allow, refuse, devices, add, remove, cut, nearby, rotate, meeting and stop.`);
 	}
 }
 

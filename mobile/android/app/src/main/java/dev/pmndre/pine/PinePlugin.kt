@@ -203,11 +203,14 @@ class PinePlugin : Plugin() {
 	}
 
 	/**
-	 * The owner's tap on a computer found on the network: paired without a code, as user `nearby`. The
-	 * core checks the id and the service again (a machine id, an https origin), and refuses a second pairing.
+	 * The owner's tap on a computer found on the network: paired without a code, as user
+	 * `nearby.<nonce>` with the nonce of its announcement. The core checks the id, the service and the
+	 * nonce again (a machine id, an https origin, 22 base64url characters), and refuses a second pairing.
 	 */
 	@PluginMethod
-	fun pairNearby(call: PluginCall) = later(call) { pines.pairNearby(call.getString("id") ?: "", call.getString("service") ?: "", phone).let { null } }
+	fun pairNearby(call: PluginCall) = later(call) {
+		pines.pairNearby(call.getString("id") ?: "", call.getString("service") ?: "", call.getString("nonce") ?: "", phone).let { null }
+	}
 
 	/**
 	 * The app was opened with an address of the web: an App Link of Pine's meeting service (the
@@ -364,7 +367,7 @@ class PinePlugin : Plugin() {
 	}
 
 	override fun handleOnDestroy() {
-		if (::browser.isInitialized) browser.stop()
+		if (::browser.isInitialized) browser.close()
 		if (::pines.isInitialized) work.execute { pines.close() }
 	}
 

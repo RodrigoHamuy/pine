@@ -223,7 +223,7 @@ class PairedPinesTest {
 	fun `a computer found on the network is paired without a code, the page sees its name with the digits, and a yes keeps it`() {
 		pines.ready()
 		computer.command("nearby on")
-		pines.pairNearby(computer.machineId, SERVICE, "Pine on Pixel 9")
+		pines.pairNearby(computer.machineId, SERVICE, computer.nonce, "Pine on Pixel 9")
 		val code = computer.event("asked").getString("code")
 		val asking = sees("the four digits") { it.optJSONObject("pairing")?.has("code") == true }
 		assertEquals("""{"pairing":{"code":"$code","computer":"Test Mac","name":"Pine on Pixel 9"},"status":"starting"}""", sorted(asking))
@@ -238,7 +238,7 @@ class PairedPinesTest {
 	@Test
 	fun `a codeless request the computer does not let in is told to the page, and keeps nothing`() {
 		pines.ready()
-		pines.pairNearby(computer.machineId, SERVICE, "Pine on Pixel 9")
+		pines.pairNearby(computer.machineId, SERVICE, computer.nonce, "Pine on Pixel 9")
 		val told = sees("the request not let in") { it.optString("status") == "error" }
 		assertEquals(PairWords.NOT_LET_IN, told.getString("message"))
 		assertEquals("ssh", told.getString("kind"))
@@ -247,13 +247,14 @@ class PairedPinesTest {
 	}
 
 	@Test
-	fun `a codeless pairing with an id or a service of another shape, or while another is open, is refused`() {
+	fun `a codeless pairing with an id, a service or a nonce of another shape, or while another is open, is refused`() {
 		pines.ready()
-		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby("nope", SERVICE, "Pine on Pixel 9") }.message)
-		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, "http://meet.test", "Pine on Pixel 9") }.message)
-		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, "https://meet.test/", "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby("nope", SERVICE, computer.nonce, "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, "http://meet.test", computer.nonce, "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, "https://meet.test/", computer.nonce, "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, SERVICE, "short", "Pine on Pixel 9") }.message)
 		pines.pair(link(), "Pine on Pixel 9")
-		assertEquals(PairWords.BUSY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, SERVICE, "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.BUSY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, SERVICE, computer.nonce, "Pine on Pixel 9") }.message)
 	}
 
 	/** A state as text, its keys in order, so that it is compared whole. */

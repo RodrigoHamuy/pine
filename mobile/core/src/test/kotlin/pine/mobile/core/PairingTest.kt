@@ -142,7 +142,7 @@ class PairingTest {
 	}
 
 	/** The computer as the phone found it on the network, under the https name the test routes to the helper. */
-	private fun found(): NearbyComputer = NearbyComputer(computer.machineId, SERVICE)
+	private fun found(service: String = SERVICE, nonce: String = computer.nonce): NearbyComputer = NearbyComputer(computer.machineId, service, nonce)
 
 	@Test
 	fun `a computer found on the network is paired without a code, and its name comes with the four digits`() {
@@ -179,6 +179,33 @@ class PairingTest {
 		computer.command("meeting swap")
 		computer.command("allow")
 		assertEquals(PairingState.Failed(PairWords.NEARBY_IMPOSTOR), remote.pairNearby(found(), "Pine on Pixel 9") { told.add(it) }.result(20_000))
+		nothingKept()
+	}
+
+	@Test
+	fun `a codeless request with a nonce the computer did not announce, or no longer does, is not let in`() {
+		computer.command("nearby on")
+		computer.command("allow")
+		val wrong = (if (computer.nonce[0] == 'A') "B" else "A") + computer.nonce.drop(1)
+		assertEquals(PairingState.Failed(PairWords.NOT_LET_IN), remote.pairNearby(found(nonce = wrong), "Pine on Pixel 9") { told.add(it) }.result(20_000))
+		val old = computer.nonce
+		computer.rotate()
+		computer.rotate()
+		assertEquals(PairingState.Failed(PairWords.NOT_LET_IN), remote.pairNearby(found(nonce = old), "Pine on Pixel 9") { told.add(it) }.result(20_000))
+		assertEquals(0, told.count { it is PairingState.Pairing }, "the owner was never asked")
+		nothingKept()
+	}
+
+	@Test
+	fun `a computer found on the network that names another meeting service than its announcement is not paired with`() {
+		// Every name reaches the helper, whose pairing channel names SERVICE.
+		val anywhere = Remote(key, KnownHosts(vault), answerMs = 5_000, webrtc = LibDataChannelRtc, route = { computer.service })
+		computer.command("nearby on")
+		val end = anywhere.pairNearby(found(service = "https://elsewhere.test"), "Pine on Pixel 9") { told.add(it) }.result(20_000)
+		assertEquals(PairingState.Failed(PairWords.NEARBY_SERVICE), end)
+		assertEquals(listOf<PairingState>(PairingState.Failed(PairWords.NEARBY_SERVICE)), told.toList(), "the four digits are never shown")
+		computer.event("left")
+		computer.command("allow")
 		nothingKept()
 	}
 }

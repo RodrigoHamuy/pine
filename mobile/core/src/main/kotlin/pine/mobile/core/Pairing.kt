@@ -5,7 +5,9 @@
 // machine id stands for, and one command that names the phone. The computer answers the four digits
 // it shows the owner (and its own name), then the owner's answer. Only a yes keeps anything, and that
 // is Pines' to keep. A computer found on the network (Nearby.kt) is asked the same way without a code:
-// as user `nearby`, which the computer lets in only while it keeps itself visible there.
+// as user `nearby.<nonce>`, with the nonce of its announcement, which the computer lets in only while
+// it keeps itself visible there. Its first line names its meeting service too: a codeless pairing
+// goes no further when that is not the service it announced, since that is the one the phone keeps.
 //
 // The surface, the same in the Swift core (Pairing.swift):
 //   - `Remote.pair(link, name, on)` starts a pairing from a link (`pairLink`) as the phone called
@@ -15,7 +17,7 @@
 //   - `Pairing.result(ms)` waits for its end (null when it was cancelled);
 //   - `on` is told `PairingState.Pairing(code, computer)` once the computer shows the four digits,
 //     then exactly one of `Allowed(name)`, `Refused`, `Expired` or `Failed(message)`.
-// `Pines.pair(link, name)`, `Pines.pairNearby(id, service, name)` and `Pines.cancelPairing()` are the
+// `Pines.pair(link, name)`, `Pines.pairNearby(id, service, nonce, name)` and `Pines.cancelPairing()` are the
 // same for the page, in its states (`{status: "starting", pairing: {name, code?, computer?}}`), and
 // keep the computer on a yes.
 package pine.mobile.core
@@ -33,8 +35,8 @@ import kotlin.concurrent.thread
 /** The user name of a pairing session, before its code (desktop/electron/access/pairing.ts `PAIR_USER`). */
 const val PAIR_USER = "pair."
 
-/** The user name of a codeless pairing session, from a phone that found the computer on the network (`NEARBY_USER`). */
-const val NEARBY_USER = "nearby"
+/** The user name of a codeless pairing session, before the nonce of the announcement (`NEARBY_USER`). */
+const val NEARBY_USER = "nearby."
 
 /** The command of the pairing request: this word, a space, and base64url of `{"name": ...}` (`PAIR_COMMAND`). */
 const val PAIR_COMMAND = "pine-pair"
@@ -78,6 +80,8 @@ object PairWords {
 	const val NEARBY_EXPIRED = "Your computer did not answer in time: nothing was kept. Try again, or pair with the code from Pine > Add a device."
 	/** A computer found on the network whose host key is not the machine id it announced. */
 	const val NEARBY_IMPOSTOR = "The computer that answered is not the one found on this network: nothing was trusted. Pair with the code from Pine > Add a device instead."
+	/** A computer found on the network whose pairing names another meeting service than its announcement. */
+	const val NEARBY_SERVICE = "The computer found on this network names another meeting service than its announcement: nothing was kept. Pair with the code from Pine > Add a device instead."
 	/** What was found on the network is not a computer this phone can pair with. */
 	const val NOT_NEARBY = "That is not a computer this phone can pair with. Look again, or pair with the code from Pine > Add a device."
 	/** After the owner's yes, when the list has no room for the computer. */
@@ -104,15 +108,15 @@ object PairWords {
 }
 
 /**
- * Whom a pairing asks and how: the computer's machine id, and the SSH user (`pair.<code>` for a
- * link, `nearby` for a computer found on the network).
+ * Whom a pairing asks and how: the computer's machine id, the SSH user (`pair.<code>` for a link,
+ * `nearby.<nonce>` for a computer found on the network), and the meeting service it was found with.
  */
-internal data class PairAs(val id: String, val user: String) {
-	val nearby: Boolean get() = user == NEARBY_USER
+internal data class PairAs(val id: String, val user: String, val service: String) {
+	val nearby: Boolean get() = user.startsWith(NEARBY_USER)
 }
 
-internal val PairLink.asked: PairAs get() = PairAs(id, PAIR_USER + code)
-internal val NearbyComputer.asked: PairAs get() = PairAs(id, NEARBY_USER)
+internal val PairLink.asked: PairAs get() = PairAs(id, PAIR_USER + code, service)
+internal val NearbyComputer.asked: PairAs get() = PairAs(id, NEARBY_USER + nonce, service)
 
 /** The pairing request for a phone called `name`. */
 internal fun pairCommand(name: String): String {
@@ -229,11 +233,16 @@ private fun attempt(link: PairAs, name: String, pairing: Pairing, key: DeviceKey
 	} catch (e: IOException) {
 		return PairingState.Expired
 	}
-	return answer(command.inputStream, tell)
+	return answer(link, command.inputStream, tell)
 }
 
-/** The computer's lines: the four digits, then the owner's answer. A channel that ends without one is expired. */
-private fun answer(input: java.io.InputStream, tell: (PairingState) -> Unit): PairingState {
+/**
+ * The computer's lines: the four digits, then the owner's answer. A channel that ends without one is
+ * expired. A codeless pairing ends before the digits are shown when the first line names another
+ * meeting service than the announcement (or none): the phone would keep the announced one. A link's
+ * service is the one the owner's computer put in it, and a Pine app before this line said none.
+ */
+private fun answer(link: PairAs, input: java.io.InputStream, tell: (PairingState) -> Unit): PairingState {
 	val line = ByteArrayOutputStream()
 	try {
 		while (true) {
@@ -249,8 +258,10 @@ private fun answer(input: java.io.InputStream, tell: (PairingState) -> Unit): Pa
 			if (said == null) continue
 			val code = said.opt("code") as? String
 			val ok = said.opt("ok") as? Boolean
-			if (code != null && Regex("^[0-9]{4}$").matches(code)) tell(PairingState.Pairing(code, (said.opt("computer") as? String)?.let(::cleanName)?.ifEmpty { null }))
-			else if (ok == false) return if (said.opt("reason") == "refused") PairingState.Refused else PairingState.Expired
+			if (code != null && Regex("^[0-9]{4}$").matches(code)) {
+				if (link.nearby && (said.opt("service") as? String)?.let { httpsOrigin(it)?.first } != link.service) return PairingState.Failed(PairWords.NEARBY_SERVICE)
+				tell(PairingState.Pairing(code, (said.opt("computer") as? String)?.let(::cleanName)?.ifEmpty { null }))
+			} else if (ok == false) return if (said.opt("reason") == "refused") PairingState.Refused else PairingState.Expired
 			else if (ok == true) return PairingState.Allowed(cleanName(said.opt("name") as? String ?: "").ifEmpty { YOUR_COMPUTER })
 		}
 	} catch (e: IOException) {
