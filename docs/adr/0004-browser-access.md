@@ -2,7 +2,8 @@
 
 Status: accepted. Amends what ADR 0001 says about a network of the app's own, and ADR 0003 on
 how a host key is trusted and what the Worker carries. Amended since: the mobile app pairs too
-(see the end).
+(see the end), and a device on the same network pairs without a code
+([0005](0005-pairing-from-nearby-devices.md)).
 
 ## Context
 
@@ -38,7 +39,9 @@ both values are in the fragment, which no server sees. The machine id is the fin
 computer's host key, so the link is how the browser trusts that key: a second way, beside the owner's
 press on "Trust this key", for that machine alone, and never over a key kept already. The
 browser shows four digits and the app asks the owner with the device's name and the same digits:
-only Allow stores the key. Pairing happens at that computer and nowhere else.
+only Allow stores the key. Pairing happens at that computer and nowhere else. *(Amended by
+[0005](0005-pairing-from-nearby-devices.md): a device on the same network may start a pairing
+without a code; the owner still allows it at that computer and nowhere else.)*
 
 **Named as the browser knows it.** The browser cannot tell what kind of computer it pairs with.
 It keeps a paired computer among its machines as `paired:<machine id>`, and names it by the name

@@ -327,33 +327,49 @@ web client's address and connects by itself. The browser and this computer talk 
 to peer; the service in between only introduces them. The app calls this computer "This Mac" on
 macOS and "This computer" on another system; the browser, which cannot tell what kind of
 computer it reaches, says "your computer" until it is paired and then the name this computer gave
-it (its computer name). What the browser side looks like is in
+it (its computer name). The Pine app on a phone on the same network needs no code at all: it finds
+this computer and asks, and you still allow it here. What the browser side looks like is in
 [web.md](web.md#a-computer-paired-by-qr-code-a-browser-with-no-ssh-to-set-up), and why it is built so in
-[ADR 0004](../adr/0004-browser-access.md).
+[ADR 0004](../adr/0004-browser-access.md) and [ADR 0005](../adr/0005-pairing-from-nearby-devices.md).
 
 ### From a phone without SSH
 
 A phone needs no SSH for this computer's pine: pair the Pine app on the phone, or the phone's
 browser, with the same QR code. On Android the code opens the app when it is installed; on an
 iPhone it opens Safari, which offers to open the app instead
-([mobile.md](mobile.md#pairing-with-a-computer-that-runs-the-pine-app)). The app is listed here
-as a device like a browser, by the phone's name ("Pine on Pixel 9", "Pine on iPhone").
+([mobile.md](mobile.md#pairing-with-a-computer-that-runs-the-pine-app)). On the same Wi-Fi the
+app needs no code: it lists this computer under "On this network" while "Visible on this network"
+is on, and a tap asks it. The app is listed here as a device like a browser, by the phone's name
+("Pine on Pixel 9", "Pine on iPhone").
 
 ### Pairing a device
 
 It is in Settings > Browser access, under This Mac (This computer on another system), shown only
 while the app uses this computer's own pine. Until you switch it on, the app contacts no
-service and lets nobody in.
+service, says nothing on the local network and lets nobody in. Add a device and the question
+when a device asks are not tied to that section: they show wherever you are in the app.
 
 | What | How |
 |---|---|
 | `Browser access` | The switch. On, the app waits at the service for the browsers you paired, while Pine is open. Switched back, it contacts no service and accepts nobody; your devices are kept, so switching it on again needs no new scan. The badge beside it says waiting, off, or that the service cannot be reached (the app then tries again by itself, and nothing else stops) |
 | `Open Pine at login` | Offered, checked, the first time you switch browser access on, and changed here later: so that this computer can be reached after a restart with no need to open the app. The computer has to be awake and Pine open |
 | `Service address` | Where browsers open the web client and find this computer. By default the project's own service, `https://pine-main.drcmda.workers.dev`. Write the address of a deployment of your own instead (see "Deploying it" in [web.md](web.md#deploying-it)), or of one of the project's other channels, `https://pine-next.drcmda.workers.dev` or a pull request's `https://pine-pr-<number>.drcmda.workers.dev`, to try pairing there. Only `https://` and `http://` addresses are kept. Changing it makes the browsers paired at the old address pair again: a browser's key and its machines belong to the address it opened |
-| `Add a device` | Shows a QR code, and Copy link for a computer that has no camera (send yourself the link and open it in that browser). The code works once, for two minutes, and stops when you close the dialog; New code makes another. Five wrong codes close it. Only one is open at a time, and only at this computer: nobody pairs a browser from afar |
-| `Allow` and `Refuse` | When a browser or the mobile app uses the code, the app names it ("Chrome on Android", "Pine on Pixel 9") and shows four digits; the browser shows the same four. Allow it only if they are the same. Allow keeps its key and the browser is in your conversations; Refuse, two minutes with no answer, or a browser that leaves keep nothing. A macOS notification says each device that was added |
+| `Add a device` | Here, or anywhere: `Add a Device…` in the Pine menu (File on another system), `⌘⇧D`, the Dock's menu on a Mac, `device` in the palette. Shows a QR code, and Copy link for a computer that has no camera (send yourself the link and open it in that browser). The code works once, for two minutes, and stops when you close the dialog; New code makes another. Five wrong codes close it. Only one is open at a time. With browser access off it says to turn it on first |
+| `Allow` and `Refuse` | When a device asks, with the code or from the network, the app names it ("Chrome on Android", "Pine on Pixel 9") and shows four digits; the device shows the same four. Allow it only if they are the same. The question is a toast at the top of the window, wherever you are, that never takes the keyboard and stays while the question stands; with the window behind others, a system notification with the digits, whatever the notification setting, whose click brings Pine forward. Allow keeps its key and the device is in your conversations; Refuse, two minutes with no answer, or a device that leaves keep nothing. A notification says each device that was added |
 | `Devices` | Each paired browser by its name, the day it was paired and its last connection; "connected now" and how (same network, direct IPv4, direct IPv6, or relayed through your relay server) while it is connected. No notification for a reconnection |
 | `Remove` | Removes a paired phone, tablet or computer, so that the phone can no longer reach this computer, and a connection it has is cut at once. Its key is refused from then on; to use it again, add it again |
+
+### Without scanning a code
+
+A phone with the Pine app on the same network finds this computer and asks; a browser on this
+computer opens Pine by a link. Either way you still compare four digits and press Allow here
+([ADR 0005](../adr/0005-pairing-from-nearby-devices.md)).
+
+| What | How |
+|---|---|
+| `Visible on this network` | Under the switch, on unless you turn it off. While browser access is on, the app announces this computer on the local network (Bonjour), so that the Pine app on a phone on the same Wi-Fi lists it and can ask to connect without a code. You still allow it here, after comparing four digits. Off: nothing is announced and a request without a code is refused; the code of Add a device works as before. Turning it on ends a pause after refusals |
+| `Requests without a code` | From a phone that found this computer on the network. Only while `Visible on this network` is on, and one at a time: none while another is under way or while you are asked about a code's request. After you refuse one, every request without a code is refused for 30 seconds; three refusals within ten minutes pause visibility for an hour (nothing is announced, no request without a code is let in), and a toast says "Visibility paused after 3 refusals", with Turn on now. A request you leave unanswered counts as no refusal. What is refused that way is refused without a word: you see only the requests that reach you |
+| `pine://pair` | What "Open Pine on this computer" opens, in the web client on this computer ([web.md](web.md#a-computer-paired-by-qr-code-a-browser-with-no-ssh-to-set-up)). The browser asks first whether to open Pine. While browser access is on, the app opens a pairing, opens its link in your default browser, and shows the same code in the Add a device dialog, for a browser that is not the default one. With browser access off nothing happens, and so for any other `pine:` address. Any site can open it: the link goes only to this computer's browser, and nothing is kept without Allow. The app is the handler of `pine:` once it is installed (packed); from a checkout only with `PINE_DESKTOP_PROTOCOL=1` |
 
 ### What a paired browser can do
 
@@ -364,8 +380,8 @@ service and lets nobody in.
 | Pictures, video and sound | As in the window |
 | This computer's identity | The QR code carries the fingerprint of this computer's key: the browser refuses any computer whose key differs, so there is no fingerprint to compare by hand. The key is kept encrypted by the system's keychain in the app's data folder (`access.bin`), so a copy of that folder does not carry this computer's identity. Where the keychain cannot be used, the switch stays off and the section says why |
 
-What is kept: the switch, the service address and Open Pine at login in the app's
-`prefs.json` (`access`); this computer's key and the paired devices in `access.bin` beside it. Nothing
+What is kept: the switch, Visible on this network (only when off), the service address and Open
+Pine at login in the app's `prefs.json` (`access`); this computer's key and the paired devices in `access.bin` beside it. Nothing
 is written into pine's home.
 
 ### A relay server of your own, for a phone that cannot connect from mobile data
@@ -388,6 +404,8 @@ if you have none.
 | The phone says "This browser is no longer known to <name>" ("This phone" in the mobile app) | Its device was removed here, or the browser's data was cleared there (the mobile app's key is new: an iPhone reinstalled under another Apple ID). Add it again |
 | The section says the service cannot be reached | The app is offline, or the service address is wrong. Everything else in the app works |
 | A browser on a Mac asks about the local network | macOS may ask whether that browser may find devices on the local network. Allow it for a direct connection on the same Wi-Fi |
+| Nothing finds this computer on the same Wi-Fi | Browser access and Visible on this network must be on, and Pine open. A Wi-Fi that keeps its devices apart (for guests, in an office) shows nothing. After three refusals visibility is paused for an hour: turn it on again here. The code of Add a device works meanwhile |
+| macOS asks whether Pine may find devices on the local network | macOS 15 and later may ask the first time Pine announces this computer. Allow it to be found on the network; without it, pair with the code |
 
 ## The window
 
@@ -870,7 +888,7 @@ lists the same results under In Settings.
 | Skills | Every skill with whom it is for. Read one, change it, add one for all agents or one agent, remove one. A skill that lies in a folder of yours that the configuration names is shown and not changed | `add_skill`, `remove_skill`; `pine skills` |
 | Events | Three sections one under the other, so that nothing set up is out of sight, each with its button to add one. **Sources**: what runs, who is subscribed, the last event; add one by type (the type's options as a form, what it will do said before it is added, a password or token typed into a field of its own), subscribe an agent or all agents, end a subscription, remove. **Schedules**: each schedule said as When and Then (whom it wakes, with what task); New schedule opens a form in the same words: When (at set times, every so often, once at a time, once after a while), Then which agent (or every agent) and the task, then a name; remove. **Routes**: first when you need one at all (an agent that reacts to a source is subscribed to it, a time is a schedule); each route said as When and Then; New route opens a form in the same words: When (the topic, an optional condition, how often), Then one of wake an agent, set shared state, publish an event, ask a model once and publish its answer, with only that one's fields shown and sent; remove | `add_source`, `subscribe`, `add_schedule`, `add_route`; `pine sources`, `pine subscribe`, `pine schedules` |
 | Environments | This computer and the machines whose pine the app can use, over SSH: add one by its host, use one, forget one. See "Environments: the pine of another machine" | `ssh` to the machine and `pine` there |
-| Browser access | Devices paired by a QR code, and the switch that lets them in. Its section follows Environments | None: it is the app's own, not pine's |
+| Browser access | Devices paired by a QR code or on the network, and the switches that let them in. Its section follows Environments | None: it is the app's own, not pine's |
 
 A secret you type on these pages (a model server's key, a source's token, a provider's API
 key) goes from the field to the daemon and from there into pine's `.env` or `auth.json`. It is
@@ -908,6 +926,7 @@ the agent to write. So:
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
 | The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
 | Browser access | Off until you turn it on. Then the app's SSH server of its own (not the system's SSH server, Remote Login on macOS) accepts only the keys you allowed at this computer, by key and never by password, and gives them this computer's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
+| On the local network | While browser access and Visible on this network are on, a Bonjour record (`_pine._tcp`) named "Pine" and the start of this computer's key fingerprint, never its name, with that fingerprint and the service's address. Nothing listens behind it: a phone still goes through the service and checks the key, and the four digits are what you compare. Requests without a code are one at a time and paused after refusals. While visibility is off the app has no socket on port 5353 |
 | What the app itself asks the web | GitHub, for pine's last release and, when it is newer, its update (see "A newer version"). The question and the update's feed send the user agent `Pine` and nothing else; the update's zip is fetched by macOS's updater, whose user agent names the app's version and the version of macOS. Of the answer only the release's number is used, and the link and the update's address are made by the app and lead to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
 
 The app does not reach into pine's home: it reads no configuration file and no token file
@@ -974,7 +993,9 @@ desktop/
                    web client's smoke): server.ts the access server (ssh2 on any duplex stream: the
                    remote command answered with this computer's service line, direct-tcpip to that loopback
                    port, nothing else), store.ts this computer's host key and the paired devices,
-                   pairing.ts the one-time code and the four digits, peer.ts the WebRTC data channel
+                   pairing.ts the one-time code, the request without a code and its limits, and the four
+                   digits, nearby.ts this computer on the local network (Bonjour) and `pine://pair`,
+                   peer.ts the WebRTC data channel
                    (node-datachannel), host.ts what waits at the meeting service and hands each
                    channel to the server, control.ts the switch, the address and what the page reads
                    (`OFFICIAL_SERVICE`), stand-in.ts a host without network for the app's tests
@@ -995,8 +1016,11 @@ desktop/
                    is what a view is told of it (names and states, no text); view-frame.ts (view.html) is the
                    frame a view runs in, with "pine/view" (../src/view-kit.ts)
     Settings.tsx   the settings pages; settings-index.ts is what their search finds and where it is
-    BrowserAccess.tsx, machines.ts  Settings > Browser access (with its QR code, components/qr-code.tsx);
-                   how the page names a machine and draws a pairing on the first screen
+    BrowserAccess.tsx, machines.ts  Settings > Browser access; how the page names a machine and draws a
+                   pairing on the first screen
+    DevicePairing.tsx  the Add a device dialog (its QR code, components/qr-code.tsx), the toast when a
+                   device asks, and the one when visibility is paused, beside the app wherever you are
+    Pairing.tsx    a pasted pairing link, and the computers found on the network (the mobile app's)
     commands.ts    the commands: one list for the palette, the menus and what is typed after a slash
     components/ui/ shadcn's components, as its CLI added them (`npx shadcn@latest add <name>`)
     components/    only what stock components cannot express when composed in place (printed.tsx:

@@ -388,6 +388,10 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["why does the android app want to see the network state", /^mobile#what-the-app-is-careful-about/],
 		["unpair the phone app from my computer", /^(mobile#a-paired-computer|desktop#pairing-a-device)/],
 		["the deeplink does not open the android app", /^mobile#how-the-link-reaches-the-app/],
+		// Pairing without a code on the same network (ADR 0005), asked for by somebody who does not know it exists.
+		["can my phone find my mac on the wifi without scanning a code", /^(mobile#a-computer-on-this-network|desktop#(without-scanning-a-code|from-a-phone-without-ssh|browser-access))/],
+		["stop phones on the same network from seeing my computer", /^desktop#(without-scanning-a-code|pairing-a-device|what-the-app-is-careful-about)/],
+		["the phone app lists no computer under on this network", /^(mobile#a-computer-on-this-network|desktop#when-a-paired-device-does-not-connect)/],
 	];
 	const missed = cases.filter(([q, want]) => !top(q).some((id) => want.test(id))).map(([q]) => `${q} → ${top(q).join(", ")}`);
 	assert.deepEqual(missed, []);
