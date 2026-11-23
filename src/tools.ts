@@ -8,7 +8,7 @@ import { addRoute, type AgentChange, applyAgentChange, applySetting, checkAgentC
 import { type AgentManager, type Live, type Profile, THINKING_LEVELS } from "./agents.ts";
 import { finish as finishWorktree, type Worktree, worktreeName } from "./worktrees.ts";
 import { NOT_A_SUBAGENTS, SUBAGENT_CANNOT_ASK, serverTool } from "./catalogue.ts";
-import { type Board, type BoardItem, boardName, type BoardScope, MAX_FAILED_FINALS, MAX_REWORK, verdictOf, type Who } from "./boards.ts";
+import { type Board, type BoardItem, boardName, type BoardScope, MAX_FAILED_FINALS, MAX_REWORK, verdictOf, type Who, JOB_NOTE_CHARS, TASK_CHARS } from "./boards.ts";
 import type { PineEvent, TaskResult } from "./types.ts";
 import { mcpNamespace } from "@earendil-works/pi-mcp";
 import { addServer, findServer, mcpEnvName, piMcp, removeServer, splitCommand, validateServer } from "./mcp-config.ts";
@@ -192,6 +192,10 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 	 */
 	const workPool = async (r: ReturnType<typeof run>, job: { texts: string[]; stages?: string[][]; note?: string; check?: string; verify?: string; on?: { board: Board; ids: number[] } }, signal: AbortSignal | undefined, model?: string, thinking?: string): Promise<string> => {
 		const { note, check, verify, on } = job;
+		// (Refused before anything is posted: cut short without a word, the sub-agents would each make up its end.)
+		const tooLong = on ? -1 : (job.stages?.length ? job.stages.flat() : job.texts).findIndex((t) => t.length > TASK_CHARS);
+		if (tooLong >= 0) throw new Error(`task ${tooLong + 1} is ${(job.stages?.length ? job.stages.flat() : job.texts)[tooLong].length} characters, at most ${TASK_CHARS}. Say what all tasks share once in "note", and write what is long into a file that the task names`);
+		if ((note ?? "").length > JOB_NOTE_CHARS) throw new Error(`"note" is ${note!.length} characters, at most ${JOB_NOTE_CHARS}. Write what is long into a file and name the file in the note: every sub-agent can read it`);
 		// Stages: each is a list of tasks that run side by side, and waits for the one before it (and for its checks).
 		const layers = job.stages?.length ? job.stages : [job.texts];
 		const texts = layers.flat();
@@ -252,7 +256,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 		if (note?.trim()) {
 			const old = there.find((x) => x.kind === "note" && !x.about && same(x.text, note));
 			const forThese = [...given, ...(final ? [final] : [])];
-			if (!old) mine = boards.post(board, { kind: "note", text: note, ...(forThese.length ? { data: { tasks: forThese } } : {}), ...postedAs() }).id;
+			if (!old) mine = boards.post(board, { kind: "note", text: note, long: true, ...(forThese.length ? { data: { tasks: forThese } } : {}), ...postedAs() }).id;
 			else if (Array.isArray(old.data?.tasks)) boards.setData(old.id, { ...old.data, tasks: [...new Set([...(old.data.tasks as number[]), ...forThese])] });
 		}
 		// A pool is at work on this board already (a model that splits its tasks over several calls in one answer):
@@ -275,6 +279,10 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					// An answer says what was asked and what the answer is, each on its own line: it is not to be read past.
 					// (One that another task asked says so: read without that, its question is taken for the task to do.)
 					if (typeof question === "string") return `- Asked${typeof of === "number" ? ` by the sub-agent of another task (#${of}), about its own task` : ""}: ${flat(question, 600)}\n  Answer${x.by === "owner" ? " (from your owner)" : ""}: ${flat(x.text, 1000)}`;
+					// What the conversation gave the tasks of a job to go by (`tasks` names them) is shown whole and as it was
+					// written: its rules and the form of the report are often at its end, and cut short the sub-agents
+					// each make up what is missing.
+					if (Array.isArray(_for) && x.about === undefined) return `- ${x.text.trim()}`;
 					// (No number: whoever reads this has no use for it, and whoever wrote the note does not know it by one.)
 					return `- ${x.by === "owner" ? "your owner: " : ""}${flat(x.text, 1000)}${Object.keys(fields).length ? ` ${truncate(JSON.stringify(fields), 300)}` : ""}`;
 				})
@@ -377,11 +385,14 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 				const head = `## ${what}: ${verdict ? verdict.toUpperCase() : t.state}${again ? ` (done again ${again === 1 ? "once" : `${again} times`} after its check failed)` : ""}${verdict === "fail" && typeof t.data?.check === "number" ? `, still, after the work was done ${MAX_REWORK + 1} times: it is yours to decide what is done about it` : ""}`;
 				// A check that passed is one line: what it looked at is in the work's own result.
 				const body = verdict === "pass" ? truncate((t.result ?? "").replace(/^\W*pass\W*\n/i, "").replace(/\n\W*pass(ed)?\W*$/i, "").trim(), 300) : (t.result ?? (t.state === "done" ? "(no result given)" : t.state));
-				return `${head}${body ? `\n${body}` : ""}${log.length ? `\nNotes about it:\n${said(log)}` : ""}`;
+				// What the task was, in its own words, before what came of it: a result often does not say which piece it is
+				// about ("no faults found"), and by its number alone the conversation cannot tell among two dozen.
+				const was = t.data?.check === undefined ? `\nThe task: ${flat(t.text, 160)}\nIts result:` : "";
+				return `${head}${was}${body ? `\n${body}` : ""}${log.length ? `\nNotes about it:\n${said(log)}` : ""}`;
 			});
 		// A question is said every time, until it is answered: it is what the conversation has to act on.
 		const again = (t: BoardItem) => boards.items(board.id, { about: t.id }).some(asked);
-		const asks = blocked.map((t) => `## Task #${t.id} asks${again(t) ? " again, after an answer" : ""}\n${t.result ?? "(no question given)"}\n${again(t) ? `Close it yourself: board_done with id ${t.id} and the result.` : `To answer: board_answer with id ${t.id} and your answer.`}`);
+		const asks = blocked.map((t) => `## Task #${t.id} asks${again(t) ? " again, after an answer" : ""}\nThe task: ${flat(t.text, 160)}\nIts question:\n${t.result ?? "(no question given)"}\n${again(t) ? `Close it yourself: board_done with id ${t.id} and the result.` : `To answer: board_answer with id ${t.id} and your answer.`}`);
 		const goOn = working.length || open.some((t) => boards.ready(t));
 		if (!goOn && !blocked.length) manager.poolAt.delete(live.board);
 		const next = [

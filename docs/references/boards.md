@@ -178,7 +178,9 @@ The call does not wait for the last task. It comes back to the conversation
 - when a sub-agent **fails**;
 - or when nothing is left to do.
 
-It comes back with what is settled since the conversation last looked, each result once, and
+It comes back with what is settled since the conversation last looked, each result once and
+under what its task was in the task's own words (a result often does not say which piece it is
+about), and
 with every question that is open, each time until it is answered. The other sub-agents work on
 meanwhile; no new ones are started until the conversation calls again.
 The agent answers the question with `board_answer`, from what it knows for sure, can look up or
@@ -514,8 +516,8 @@ from a run that had read outside content marks the run that takes it.
 
 | What | Limit |
 |---|---|
-| A task's text, a result | 4000 characters; more is cut. The check of the whole that pine posts in a swarm holds the lead's report up to 12 000 characters, so that nothing it lists is taken for missing |
-| A note | 2000 characters |
+| A task's text, a result | 4000 characters. A pool call with a longer task is refused and says what to do (what all tasks share goes into `note`, what is long into a file); a longer result is cut and says so in its last line. The check of the whole that pine posts in a swarm holds the lead's report up to 12 000 characters, so that nothing it lists is taken for missing |
+| A note | 2000 characters. The `note` of a pool call: 8000, and each sub-agent is shown it whole, as it was written; a longer one is refused |
 | Posts on one board | 500. Remove what is finished (`board_remove` with an `id`), or use a new board |
 | Boards | 200. Remove the ones whose work is finished (`board_remove`, or the Board tab) |
 | Sub-agents started by one `subagent` call with `pool` | 100 |

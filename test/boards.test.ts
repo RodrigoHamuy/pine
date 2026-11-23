@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { asksAtEnd, boardName, Boards, MAX_REWORK, verdictOf } from "../src/boards.ts";
+import { asksAtEnd, boardName, Boards, MAX_REWORK, verdictOf, JOB_NOTE_CHARS, NOTE_CHARS, TASK_CHARS } from "../src/boards.ts";
 import { classify } from "../src/actions.ts";
 import { harness, mockMsg, until } from "./support/harness.ts";
 
@@ -94,10 +94,12 @@ test("boards: a pool of sub-agents works through more tasks than run at once, an
 
 	const r = await h.pine.agents.run({ agent: "main", session: "audit", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: [1, 2, 3, 4, 5].map((n) => `check part ${n} @@REF:w${n}@@`) })] }]), ...owner });
 	assert.equal(r.status, "done");
-	assert.match(r.text, /## Task #1: done\nanswer one/);
-	for (const n of [3, 4, 5]) assert.match(r.text, new RegExp(`## Task #${n}: done\\nanswer ${n}`), r.text);
+	// Each result comes with what its task was, in the task's own words: a result often does not say which piece it is
+	// about, and by its number alone the conversation could not tell among many.
+	assert.match(r.text, /## Task #1: done\nThe task: check part 1 @@REF:w1@@\nIts result:\nanswer one/);
+	for (const n of [3, 4, 5]) assert.match(r.text, new RegExp(`## Task #${n}: done\\nThe task: [^\\n]*\\nIts result:\\nanswer ${n}`), r.text);
 	// The second one read the board after the first had posted: it saw the note, and its answer is the task's result.
-	assert.match(r.text, /## Task #2: done\nFINAL:: The board of this conversation: .*Tasks:.*#1 \[.*FOUND-BY-ONE/s);
+	assert.match(r.text, /## Task #2: done\nThe task: [^\n]*\nIts result:\nFINAL:: The board of this conversation: .*Tasks:.*#1 \[.*FOUND-BY-ONE/s);
 	assert.match(r.text, /## Notes the sub-agents left on the board\n#6 note by main: FOUND-BY-ONE gap-3 next to gap-4/);
 	assert.ok(Math.max(...seen) <= 2, `never more than two at once (${Math.max(...seen)})`);
 
@@ -157,7 +159,7 @@ test("boards: a sub-agent that the model server refuses for now (a rate limit) h
 	const r = await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["count it @@REF:ok@@"] })] }]), ...owner });
 	const [task] = boards.items(1, { kind: "task" });
 	assert.deepEqual([task.state, task.result, task.data], ["done", "counted: 12", { retried: 1 }]);
-	assert.match(r.text, /## Task #1: done\ncounted: 12/);
+	assert.match(r.text, /## Task #1: done\nThe task: [^\n]*\nIts result:\ncounted: 12/);
 	assert.doesNotMatch(r.text, /failed|429/, "the conversation is not called for a failure that passed");
 	assert.equal(h.pine.tasks.list({ limit: 20 }).filter((t) => t.meta.boardTask === 1).length, 2);
 	// Refused every time: after two more tries the task is failed, and says why.
@@ -266,6 +268,37 @@ test("boards: what a pool's sub-agents all have to know is said once in a note, 
 	await h.close();
 });
 
+test("boards: the note of a job is kept and shown to its sub-agents whole, with its line breaks; one too long to keep is refused before anything is posted", async () => {
+	const h = await harness({ agents: { main: { agent: { subagents: { maxParallel: 2 } } } } });
+	h.mock.state.scripts.w = [{ text: "did it" }];
+	// Longer than a note anybody else leaves, and with what matters at its end: where a sub-agent is told how to report.
+	const note = `RULES-START\n${"One more rule about the work.\n".repeat(70)}Report in three lines. RULES-END`;
+	assert.ok(note.length > NOTE_CHARS && note.length < JOB_NOTE_CHARS, String(note.length));
+	const r = await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["piece one @@REF:w@@", "piece two @@REF:w@@"], note })] }]), ...owner });
+	assert.equal(r.status, "done");
+	assert.equal(h.pine.agents.boards.items(1, { kind: "note" })[0].text, note);
+	for (const t of h.pine.tasks.list({ limit: 20 }).filter((x) => x.kind === "subagent")) assert.ok(t.prompt.includes(`no need to look it up again):\n- ${note}\n\n[pine: this is task #`), `sub-agent #${t.id} was shown the whole note`);
+	// A note that somebody leaves on the board while working stays short: it is cut, as before.
+	h.pine.agents.boards.post(h.pine.agents.boards.get(1)!, { kind: "note", text: "x".repeat(NOTE_CHARS + 500), by: "main", trust: "owner" });
+	assert.equal(h.pine.agents.boards.items(1, { kind: "note" }).at(-1)!.text.length, NOTE_CHARS + 1);
+	// Too long even for a job's note: the call is refused, says what to do, and has posted nothing.
+	const before = h.pine.agents.boards.items(1).length;
+	await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["piece three @@REF:w@@"], note: "y".repeat(JOB_NOTE_CHARS + 1) })] }]), ...owner });
+	assert.match(h.toolResults().at(-1)!, new RegExp(`"note" is ${JOB_NOTE_CHARS + 1} characters, at most ${JOB_NOTE_CHARS}\\. Write what is long into a file and name the file in the note`));
+	assert.equal(h.pine.agents.boards.items(1).length, before);
+	// The same for a task that is too long, which would reach its sub-agent without its end.
+	await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["short @@REF:w@@", "z".repeat(TASK_CHARS + 1)] })] }]), ...owner });
+	assert.match(h.toolResults().at(-1)!, new RegExp(`task 2 is ${TASK_CHARS + 1} characters, at most ${TASK_CHARS}\\. Say what all tasks share once in "note"`));
+	assert.equal(h.pine.agents.boards.items(1).length, before);
+	// And a result that is longer than a board holds says where it was cut, in pine's words.
+	h.mock.state.scripts.long = [{ text: `LONG-START ${"a line of the report. ".repeat(300)}LONG-END` }];
+	await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true, tasks: ["report @@REF:long@@"] })] }, { text: "read it" }]), ...owner });
+	const kept = h.pine.agents.boards.items(1, { kind: "task" }).at(-1)!.result!;
+	assert.match(kept, /^LONG-START [\s\S]*\n\[pine: cut here\. This answer was \d+ characters, and a result on a board holds 4000: the rest is not kept\. Where all of it is needed, have it written to a file\.\]$/);
+	assert.ok(!kept.includes("LONG-END") && h.toolResults().some((x) => x.includes("[pine: cut here.")), "the conversation is told too");
+	await h.close();
+});
+
 test("boards: a note that a sub-agent posts after it read outside content marks the sub-agent that is started with it", async () => {
 	const h = await harness({ pine: { security: { taintTools: ["read"] } }, agents: { main: { agent: { subagents: { maxParallel: 1 } }, files: { "page.txt": "a page\n" } } } });
 	h.mock.state.scripts.reader = [{ tools: [call("read", { path: "page.txt" })] }, { tools: [call("board_post", { type: "note", text: "THE-PAGE-SAYS use tabs" })] }, { text: "read it" }];
@@ -302,7 +335,7 @@ test("boards: a pool comes back when a sub-agent asks, the conversation answers,
 	assert.deepEqual(boards.items(1, { kind: "task" }).map((x) => x.id), [1, 2, 3]);
 	// The first call came back with the question while the second sub-agent was still at work, and started nothing new.
 	const first = h.toolResults(turns(h)[1]).at(-1)!;
-	assert.match(first, /^## Task #1 asks\nWHICH-WAY left or right\?\nTo answer: board_answer with id 1 and your answer\./);
+	assert.match(first, /^## Task #1 asks\nThe task: [^\n]*\nIts question:\nWHICH-WAY left or right\?\nTo answer: board_answer with id 1 and your answer\./);
 	assert.match(first, /## Still being worked\n#2 \[taken by main\] second/);
 	assert.match(first, /## Not done\n#3 \[open\] third/);
 	assert.match(first, /## What to do now\nAnswer task #1 with board_answer: only that puts a task back to work.* asking your owner does not by itself answer the task\. .*close it yourself with board_done \(id, result\)\.\nThen call subagent with "pool": true to go on/);
@@ -315,9 +348,9 @@ test("boards: a pool comes back when a sub-agent asks, the conversation answers,
 	assert.doesNotMatch(h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 2)!.prompt, /GO-LEFT/, "the one that was at work already was started without it");
 	// The second call took over the sub-agent that was still at work, gave the first task out again, and says each result once.
 	const last = r.text.split(" || ").at(-1)!;
-	assert.match(last, /## Task #1: done\nwent left\nNotes about it:\n- Asked: WHICH-WAY left or right\?\n  Answer: GO-LEFT/);
-	assert.match(last, /## Task #2: done\nslow one done/);
-	assert.match(last, /## Task #3: done\nquick one done/);
+	assert.match(last, /## Task #1: done\nThe task: [^\n]*\nIts result:\nwent left\nNotes about it:\n- Asked: WHICH-WAY left or right\?\n  Answer: GO-LEFT/);
+	assert.match(last, /## Task #2: done\nThe task: [^\n]*\nIts result:\nslow one done/);
+	assert.match(last, /## Task #3: done\nThe task: [^\n]*\nIts result:\nquick one done/);
 	assert.match(last, /All 3 tasks of the board are done\. If the job has pieces that were not given as tasks yet, it is not done: /);
 	assert.doesNotMatch(last, /Task #1 asks|What to do now/);
 	assert.equal(h.pine.tasks.list({ limit: 50 }).filter((t) => t.kind === "subagent").length, 4, "one sub-agent per task, and one more for the task that was asked about");
@@ -357,8 +390,8 @@ test("boards: one answer does for every task that has the same question: those t
 	});
 	assert.equal(r.status, "done");
 	const [first, answered, last] = [h.toolResults(turns(h)[1]).at(-1)!, h.toolResults(turns(h)[2]).at(-1)!, r.text.split(" || ").at(-1)!];
-	assert.match(first, /## Task #1 asks\nWHAT-RATE for a\?/);
-	assert.match(first, /## Task #2 asks\nWHAT-RATE for b\?/);
+	assert.match(first, /## Task #1 asks\nThe task: [^\n]*\nIts question:\nWHAT-RATE for a\?/);
+	assert.match(first, /## Task #2 asks\nThe task: [^\n]*\nIts question:\nWHAT-RATE for b\?/);
 	assert.match(first, /## Still being worked\n#3 \[taken by main\]/);
 	assert.equal(answered, "Answered. Task #1 is open again, and whoever takes it is shown the question and your answer. Task #2, which asked too, is open again with the same answer. The 1 other task that is not finished is shown it as well.");
 	// Each task that asked has the answer beside its own question, and the one still at work is named in the note for all.
@@ -390,12 +423,12 @@ test("boards: a conversation whose turn ended is told at its next pool call what
 	await until(() => boards.item(2)!.state === "done", 5000, "the sub-agent that was still at work to finish");
 	// A call without an answer comes back at once and does not ask the same question as news again.
 	const idle = await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("subagent", { pool: true })] }]), ...owner });
-	assert.match(idle.text, /## Task #2: done\nslow one done/);
-	assert.match(idle.text, /## Task #1 asks\nWHICH-WAY\?/, "a question is said again until it is answered");
+	assert.match(idle.text, /## Task #2: done\nThe task: [^\n]*\nIts result:\nslow one done/);
+	assert.match(idle.text, /## Task #1 asks\nThe task: [^\n]*\nIts question:\nWHICH-WAY\?/, "a question is said again until it is answered");
 	assert.match(idle.text, /After you answered, call subagent with "pool": true to have the answered tasks done\. Until then another call starts nothing\.$/);
 	h.mock.state.scripts.asks = [{ text: "did it" }];
 	const r = await h.pine.agents.run({ agent: "main", session: "job", prompt: mockMsg([{ tools: [call("board_answer", { id: 1, text: "THAT-WAY" })] }, { tools: [call("subagent", { pool: true, tasks: [] })] }]), ...owner });
-	assert.match(r.text, /## Task #1: done\ndid it/);
+	assert.match(r.text, /## Task #1: done\nThe task: [^\n]*\nIts result:\ndid it/);
 	assert.doesNotMatch(r.text, /## Task #2/);
 	await h.close();
 });
@@ -411,7 +444,7 @@ test("boards: a task that waits for another is shown what came of it, and a conv
 		prompt: mockMsg([{ tools: [call("board_post", { type: "task", text: "write @@REF:writer@@" })] }, { tools: [call("board_post", { type: "task", text: "check @@REF:checker@@", after: [1] })] }, { tools: [call("subagent", { pool: true, tasks: [] })] }]),
 		...owner,
 	});
-	assert.match(r.text, /## Task #2: done\nchecked it/);
+	assert.match(r.text, /## Task #2: done\nThe task: [^\n]*\nIts result:\nchecked it/);
 	const checker = h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 2)!;
 	assert.match(checker.prompt, /^check @@REF:checker@@\n\nThis task waited for another one, which is done\. What came of it:\n- task #1 \(write @@REF:writer@@\): WROTE-THE-SUMMARY in out\/a\.md\n\n\[pine: this is task #2/);
 
@@ -493,7 +526,7 @@ test("boards: a check that fails gives the work out again with what it found, an
 	assert.equal(runs.length, 2);
 	assert.match(runs[1].prompt, /Notes about this task:\n- A sub-agent did this task before you, and a check found its result wrong or incomplete\. Do the task again, as it is written, and get right what the check found\. The task has not changed: change files only where the task itself says to .*What the check found: The summary has three sentences, not two\. FAIL What the sub-agent before you answered: WROTE-V1/);
 	// The conversation is told the result as it stands, that the work was done again, and of the check only that it passed.
-	assert.match(r.text, /## Task #1: done \(done again once after its check failed\)\nWROTE-V2/);
+	assert.match(r.text, /## Task #1: done \(done again once after its check failed\)\nThe task: [^\n]*\nIts result:\nWROTE-V2/);
 	assert.match(r.text, /## Check of task #1 \(#2\): PASS\nTwo sentences, every fact from the chapter\./);
 	assert.doesNotMatch(r.text, /three sentences, not two|WROTE-V1|Notes about it/);
 
@@ -506,7 +539,7 @@ test("boards: a check that fails gives the work out again with what it found, an
 	Object.defineProperty(h.mock.state.scripts, "self", { get: () => (said++ === 0 ? [{ tools: [call("board_done", { id: mine(), result: "One row is missing.\nFAIL" })] }, { text: "settled it" }] : said === 2 ? [{ text: "x" }, { text: "settled it" }] : [{ text: "PASS" }]) });
 	const own = await h.pine.agents.run({ agent: "main", session: "job1b", prompt: mockMsg([{ tools: [call("subagent", { check: "LOOK-AT-IT @@REF:self@@", tasks: ["make it @@REF:w3@@"] })] }]), ...owner });
 	assert.equal(made, 2, own.text);
-	assert.match(own.text, /## Task #\d+: done \(done again once after its check failed\)\nMADE-2/);
+	assert.match(own.text, /## Task #\d+: done \(done again once after its check failed\)\nThe task: [^\n]*\nIts result:\nMADE-2/);
 
 	// A check that keeps failing: the work is given out again MAX_REWORK times, then the report is the conversation's to act on.
 	let again = 0;
@@ -514,7 +547,7 @@ test("boards: a check that fails gives the work out again with what it found, an
 	h.mock.state.scripts.never = [{ text: "Still wrong.\nFAIL" }];
 	const stuck = await h.pine.agents.run({ agent: "main", session: "job2", prompt: mockMsg([{ tools: [call("subagent", { check: "IS-IT-RIGHT @@REF:never@@", tasks: ["do it @@REF:w2@@"] })] }]), ...owner });
 	assert.equal(again, MAX_REWORK + 1);
-	assert.match(stuck.text, new RegExp(`## Task #\\d+: done \\(done again ${MAX_REWORK === 1 ? "once" : `${MAX_REWORK} times`} after its check failed\\)\\nTRIED-${MAX_REWORK + 1}`));
+	assert.match(stuck.text, new RegExp(`## Task #\\d+: done \\(done again ${MAX_REWORK === 1 ? "once" : `${MAX_REWORK} times`} after its check failed\\)\\nThe task: [^\\n]*\\nIts result:\\nTRIED-${MAX_REWORK + 1}`));
 	assert.match(stuck.text, new RegExp(`## Check of task #\\d+ \\(#\\d+\\): FAIL, still, after the work was done ${MAX_REWORK + 1} times: it is yours to decide what is done about it\\nStill wrong\\.`));
 	await h.close();
 });
@@ -587,7 +620,7 @@ test("boards: tasks split over several pool calls in one answer are one pool, no
 	// One call works all four; the other says its tasks were added, and brings nothing twice.
 	const [worked, added] = /added to the pool/.test(first) ? [second, first] : [first, second];
 	assert.match(added, /^2 tasks added to the pool that is at work on this board\. The call that started the pool brings their results/);
-	for (const n of [1, 2, 3, 4]) assert.match(worked, new RegExp(`## Task #\\d+: done\\nanswer ${n}`));
+	for (const n of [1, 2, 3, 4]) assert.match(worked, new RegExp(`## Task #\\d+: done\\nThe task: [^\\n]*\\nIts result:\\nanswer ${n}`));
 	assert.match(worked, /All 4 tasks of the board are done\. If the job has pieces that were not given as tasks yet, it is not done: /);
 	assert.ok(Math.max(...taken) <= 2, `never more at once than the agent's sub-agents may be (${Math.max(...taken)})`);
 	assert.equal(boards.items(1, { kind: "note" }).length, 1, "the same note once");
@@ -761,11 +794,15 @@ test("boards: the owner reads every board through the control API, posts on one,
 	assert.equal(view.notes[0].by, "owner");
 	// Taken back, it is open again and the pool gives it to a new sub-agent; removed, that one is stopped too and the pool ends.
 	const first = view.tasks[0].run;
+	// (Once it is at the model, like the one after it below: a task is taken the moment its sub-agent is started, and on
+	// a busy machine that is some time before the sub-agent's first request, from which on stopping reaches it.)
+	const atModel = () => h.mock.state.requests.filter((q: any) => JSON.stringify(q.body.messages).includes("this is task #1 of a board")).length;
+	await until(() => atModel() >= 1);
 	assert.deepEqual((await req("POST", "/boards/items/1", { action: "reopen" })).body, { ok: true });
 	await until(() => h.pine.tasks.get(first)!.status === "cancelled" && h.pine.agents.boards.item(1)!.state === "taken");
 	assert.notEqual(h.pine.agents.boards.item(1)!.run, first);
 	// (Once the new one is at the model: stopping a run reaches it from there on.)
-	await until(() => h.mock.state.requests.filter((q: any) => JSON.stringify(q.body.messages).includes("this is task #1 of a board")).length >= 2);
+	await until(() => atModel() >= 2);
 	await req("POST", "/boards/items/1", { action: "remove" });
 	const r = await working;
 	assert.equal(r.status, "done");
@@ -844,14 +881,14 @@ test("boards: a sub-agent whose answer ends with a question leaves its task bloc
 	});
 	assert.equal(r.status, "done");
 	const first = h.toolResults(turns(h)[1]).at(-1)!;
-	assert.match(first, /## Task #1 asks\nCOUNT-A 12 lines\.\n\nWhat reviewer rate should I use, in lines per hour\?\nTo answer: board_answer with id 1/);
+	assert.match(first, /## Task #1 asks\nThe task: [^\n]*\nIts question:\nCOUNT-A 12 lines\.\n\nWhat reviewer rate should I use, in lines per hour\?\nTo answer: board_answer with id 1/);
 	assert.match(first, /## Still being worked\n#2 \[taken by main\] count b/);
 	assert.doesNotMatch(first, /## Task #\d: done/);
 	// The second asks the same a moment after the answer for all: blocked, not done, and given out again with the answer.
 	assert.match(h.toolResults(turns(h)[2]).at(-1)!, /The 1 other task that is not finished is shown it as well\./);
 	const last = r.text.split(" || ").at(-1)!;
-	assert.match(last, /## Task #1: done\nCOUNT-A 12 lines: 0\.12 hours/);
-	assert.match(last, /## Task #2: done\nCOUNT-B 30 lines: 0\.3 hours/);
+	assert.match(last, /## Task #1: done\nThe task: [^\n]*\nIts result:\nCOUNT-A 12 lines: 0\.12 hours/);
+	assert.match(last, /## Task #2: done\nThe task: [^\n]*\nIts result:\nCOUNT-B 30 lines: 0\.3 hours/);
 	// And a sub-agent is told so before it answers.
 	assert.match(h.pine.tasks.list({ limit: 50 }).find((t) => t.meta.boardTask === 1)!.prompt, /Do not end it with a question: an answer that ends by asking something is taken for a question, and the task waits for the answer\./);
 	await h.close();
@@ -875,8 +912,8 @@ test("boards: sub-agents given tasks that are on a board for all agents settle t
 
 	const r = await h.pine.agents.run({ agent: "helper", session: "work", prompt: mockMsg([{ tools: [call("subagent", { ids: [2, 3] })] }]), ...owner });
 	assert.equal(r.status, "done");
-	assert.match(r.text, /## Task #2: done\nSLEEP-ANSWER/);
-	assert.match(r.text, /## Task #3: done\nFOOD-ANSWER/);
+	assert.match(r.text, /## Task #2: done\nThe task: [^\n]*\nIts result:\nSLEEP-ANSWER/);
+	assert.match(r.text, /## Task #3: done\nThe task: [^\n]*\nIts result:\nFOOD-ANSWER/);
 	assert.match(r.text, /All 2 tasks you gave out on the board "todo" \(for all agents\) are done/);
 	// The very tasks that were given out are done, by the helper's sub-agents; the one nobody gave it is still open.
 	assert.deepEqual(boards.items(todo.id, { kind: "task" }).map((t) => `${t.state}:${t.holder ?? ""}:${t.result ?? ""}`), ["open::", "done:helper:SLEEP-ANSWER", "done:helper:FOOD-ANSWER"]);

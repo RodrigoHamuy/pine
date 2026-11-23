@@ -92,12 +92,16 @@ export const TASK_CHARS = 4000;
 /** A task that holds a report to be checked in full (the check of the whole that pine posts in a swarm): cut short, the check would miss what was left out and call it missing. */
 export const LONG_TASK_CHARS = 16_000;
 export const NOTE_CHARS = 2000;
+/** The note a conversation gives a job's sub-agents: all of them go by it, so it is kept and shown whole, up to this. */
+export const JOB_NOTE_CHARS = 8000;
 export const RESULT_CHARS = 4000;
 export const DATA_CHARS = 2000;
 export const MAX_ITEMS = 500;
 export const MAX_BOARDS = 200;
 
 const cut = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…` : s);
+/** A result that is longer than a board holds says so where it ends: a bare "…" reads like the end of what the sub-agent wrote, or like a fault of whoever shows it. */
+const cutResult = (s: string) => (s.length > RESULT_CHARS ? `${s.slice(0, RESULT_CHARS)}\n[pine: cut here. This answer was ${s.length} characters, and a result on a board holds ${RESULT_CHARS}: the rest is not kept. Where all of it is needed, have it written to a file.]` : s);
 const parse = (s: unknown) => {
 	try {
 		return typeof s === "string" && s.length ? JSON.parse(s) : undefined;
@@ -271,7 +275,7 @@ export class Boards {
 		const now = Date.now();
 		const r = this.db
 			.prepare("INSERT INTO board_items (board, kind, text, data, state, by, trust, tainted, after, about, created, updated) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
-			.run(board.id, o.kind, cut(text, o.kind === "task" ? (o.long ? LONG_TASK_CHARS : TASK_CHARS) : NOTE_CHARS), data, o.kind === "task" ? "open" : "", o.by, o.trust, o.tainted ?? null, after.length ? JSON.stringify(after) : null, o.about ?? null, now, now);
+			.run(board.id, o.kind, cut(text, o.kind === "task" ? (o.long ? LONG_TASK_CHARS : TASK_CHARS) : o.long ? JOB_NOTE_CHARS : NOTE_CHARS), data, o.kind === "task" ? "open" : "", o.by, o.trust, o.tainted ?? null, after.length ? JSON.stringify(after) : null, o.about ?? null, now, now);
 		const item = this.item(Number(r.lastInsertRowid))!;
 		this.onChange?.(board, "posted", item, o.cause);
 		return item;
@@ -338,7 +342,7 @@ export class Boards {
 		// What a run that read outside content wrote as the result is marked like a post of its own.
 		this.db
 			.prepare("UPDATE board_items SET state = ?, result = ?, run = NULL, tainted = COALESCE(tainted, ?), trust = CASE WHEN ? THEN 'untrusted' ELSE trust END, updated = ? WHERE id = ?")
-			.run(outcome, cut(String(result ?? "").trim(), RESULT_CHARS) || null, o.tainted ?? null, o.untrusted ? 1 : 0, Date.now(), id);
+			.run(outcome, cutResult(String(result ?? "").trim()) || null, o.tainted ?? null, o.untrusted ? 1 : 0, Date.now(), id);
 		const settled = this.item(id)!;
 		const board = this.get(item.board);
 		if (board) this.onChange?.(board, "settled", settled, o.cause);
