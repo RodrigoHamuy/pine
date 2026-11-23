@@ -945,6 +945,9 @@ Publishing needs no stored secret: on npmjs.com the package names this repositor
   ends at the first `>>`.
 - Keep tests fast: no sleeps above a few hundred milliseconds, no network, no real model. Time
   limits accept fractions (`taskTimeoutSec: 0.25`).
+- Where steps of several scripted runs have to come in an order, say so with `until` on a step
+  (a function: the mock answers the step when it returns true), not with `delayMs`: a delay that
+  is long enough on an idle machine is not on a busy one, and test files run side by side.
 - Test files run in parallel. Use port 0 and temp folders; never a fixed port or a shared path.
 - UI tests type, click (`term.click(x, y)`) and drop files (`term.paste(path)`) on `FakeTerminal`
   and assert on `app.screen()`. Send keys one at a time

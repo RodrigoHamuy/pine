@@ -337,11 +337,12 @@ test("boards: one answer does for every task that has the same question: those t
 	const h = await harness({ pine: { limits: { maxConcurrentRuns: 5 } }, agents: { main: { agent: { subagents: { maxParallel: 3 } } } } });
 	const boards = h.pine.agents.boards;
 	// Three sub-agents need the same value: two ask at once, the third is still at work when the answer is given and asks then.
-	// (The pool comes back when the first of them has ended. Each ends a moment after it asked, so that on a busy
-	// machine too the second has asked by then; and the third asks well after that.)
-	h.mock.state.scripts.a = [{ tools: [call("board_done", { id: 1, outcome: "blocked", result: "WHAT-RATE for a?" })] }, { delayMs: 300, text: "stopped" }];
-	h.mock.state.scripts.b = [{ tools: [call("board_done", { id: 2, outcome: "blocked", result: "WHAT-RATE for b?" })] }, { delayMs: 300, text: "stopped" }];
-	h.mock.state.scripts.c = [{ delayMs: 1100, tools: [call("board_done", { id: 3, outcome: "blocked", result: "WHAT-RATE for c?" })] }, { text: "stopped" }];
+	// (The pool comes back when the first of them has ended. Each ends when the other has asked too, and the third
+	// asks when the answer is on the board: by what happened, not by the clock, which a busy machine does not keep.)
+	const blocked = (id: number) => boards.item(id)?.state === "blocked";
+	h.mock.state.scripts.a = [{ tools: [call("board_done", { id: 1, outcome: "blocked", result: "WHAT-RATE for a?" })] }, { until: () => blocked(2), text: "stopped" }];
+	h.mock.state.scripts.b = [{ tools: [call("board_done", { id: 2, outcome: "blocked", result: "WHAT-RATE for b?" })] }, { until: () => blocked(1), text: "stopped" }];
+	h.mock.state.scripts.c = [{ until: () => boards.items(1, { kind: "note" }).length > 0, tools: [call("board_done", { id: 3, outcome: "blocked", result: "WHAT-RATE for c?" })] }, { text: "stopped" }];
 	const asked = new Set<number>();
 	h.pine.bus.subscribe("pine/board", () => {
 		// Whoever is given a task after it was asked about does it.
