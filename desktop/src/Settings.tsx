@@ -945,10 +945,16 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 	const runs = x.runs ?? 8;
 	// What holds for a model without a number of its own: its server's, or pine's.
 	const forAll = x.limit ?? runs;
-	const numbers = (own?: number) => [...new Set([...RUNS, ...(own ? [own] : [])])].sort((a, b) => a - b).map((n) => ({ value: String(n), label: n === 1 ? "1, one after the other" : `${n} at the same time` }));
+	const numbers = (own?: number) => [...new Set([...RUNS, ...(own ? [own] : [])])].sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n} at a time` }));
 	const set = (v: string, model?: string) => void store.attempt(() => api.limitModelServer(x.name, v === "default" ? null : Number(v), model)).then((r) => r && reload());
+	// Every line of a server is the same kind of row with the same column at its right, so that the page reads as a list.
+	const pick = (id: string, items: Array<{ value: string; label: string }>, value: string, onChange: (v: string) => void) => (
+		<div className="w-48 shrink-0">
+			<Choose id={id} items={items} value={value} onChange={onChange} />
+		</div>
+	);
 	return (
-		<div className="flex flex-col gap-2" data-find={`model-server:${x.name}`} data-server={x.name}>
+		<ItemGroup data-find={`model-server:${x.name}`} data-server={x.name}>
 			<Item variant="outline" size="sm">
 				<ItemMedia variant="icon"><ServerIcon /></ItemMedia>
 				<ItemContent className="min-w-0">
@@ -970,46 +976,33 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 					</AlertDialog>
 				</ItemActions>
 			</Item>
-			{/* (Its models stand in under its name: they are the server's. Each says how many agents may use it at once,
-			    since one server can serve models that are set up differently.) */}
-			{x.models.length ? (
-				<ItemGroup className="pl-7">
-					{x.models.map((m) => {
-						const ref = `${x.name}/${m.id}`;
-						return (
-							<Item key={m.id} variant="muted" size="sm" data-model={ref}>
-								<ItemContent className="min-w-0">
-									<ItemTitle className="font-mono wrap-anywhere">
-										{m.id}
-										{ref === fallback ? <Badge variant="secondary" className="font-sans">default model</Badge> : null}
-									</ItemTitle>
-									<ItemDescription>{[m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k tokens of context` : "", m.images ? "sees pictures" : "text only", m.reasoning ? "can reason" : ""].filter(Boolean).join(" · ")}</ItemDescription>
-								</ItemContent>
-								<ItemActions data-setting={`model-runs:${ref}`}>
-									<Choose id={`model-runs-${ref}`} items={[{ value: "default", label: `${forAll} at the same time, as the server` }, ...numbers(m.limit)]} value={m.limit ? String(m.limit) : "default"} onChange={(v) => set(v, m.id)} />
-								</ItemActions>
-							</Item>
-						);
-					})}
-				</ItemGroup>
-			) : (
-				<p className="pl-7 text-muted-foreground">This server lists no models.</p>
-			)}
-			<FieldGroup className="pl-7">
-				<Field orientation="responsive" data-setting={`server-runs:${x.name}`}>
-					<FieldContent className="min-w-0">
-						<FieldTitle>At the same time</FieldTitle>
-						<FieldDescription>
-							How many agents and sub-agents use a model of this server at once, for each model that has no number of its own above. The rest wait their turn. A model on your own computer usually handles 1 or 2.
-							{inUse.length ? ` Used by ${inUse.join(", ")}.` : ""}
-						</FieldDescription>
-					</FieldContent>
-					<Control>
-						<Choose id={`server-runs-${x.name}`} items={[{ value: "default", label: `${runs}, as everywhere` }, ...numbers(x.limit)]} value={x.limit ? String(x.limit) : "default"} onChange={(v) => set(v)} />
-					</Control>
-				</Field>
-			</FieldGroup>
-		</div>
+			{/* (Each model says how many agents may use it at once: one server can serve models that are set up differently.) */}
+			{x.models.map((m) => {
+				const ref = `${x.name}/${m.id}`;
+				return (
+					<Item key={m.id} variant="outline" size="sm" data-model={ref}>
+						<ItemContent className="min-w-0">
+							<ItemTitle className="font-mono wrap-anywhere">
+								{m.id}
+								{ref === fallback ? <Badge variant="secondary" className="font-sans">default</Badge> : null}
+							</ItemTitle>
+							<ItemDescription>{[m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k context` : "", m.images ? "sees pictures" : "text only", m.reasoning ? "can reason" : ""].filter(Boolean).join(" · ")}</ItemDescription>
+						</ItemContent>
+						<ItemActions data-setting={`model-runs:${ref}`}>{pick(`model-runs-${ref}`, [{ value: "default", label: `As the server (${forAll})` }, ...numbers(m.limit)], m.limit ? String(m.limit) : "default", (v) => set(v, m.id))}</ItemActions>
+					</Item>
+				);
+			})}
+			<Item variant="outline" size="sm" data-setting={`server-runs:${x.name}`}>
+				<ItemContent className="min-w-0">
+					<ItemTitle>{x.models.length ? "Every model of this server" : "This server lists no models"}</ItemTitle>
+					<ItemDescription className="line-clamp-none">
+						How many agents use a model at once; the rest wait. A model on your own computer usually handles 1 or 2.
+						{inUse.length ? ` Used by ${inUse.join(", ")}.` : ""}
+					</ItemDescription>
+				</ItemContent>
+				<ItemActions>{pick(`server-runs-${x.name}`, [{ value: "default", label: `As everywhere (${runs})` }, ...numbers(x.limit)], x.limit ? String(x.limit) : "default", (v) => set(v))}</ItemActions>
+			</Item>
+		</ItemGroup>
 	);
 }
 
