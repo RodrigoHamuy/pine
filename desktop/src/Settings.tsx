@@ -933,26 +933,18 @@ function NewModelServer({ made }: { made: () => void }) {
  * Settings > Models, in the order a newcomer needs it: what is missing, which model the agents use once there is
  * one, the subscriptions they may have, and a model on their own computer.
  */
-/** How many runs a server may be given at a time, as the choices of a select: pine's own limit first. */
+/** How many runs a model may be given at a time, as the choices of a select: pine's own limit first. */
 const RUNS = [1, 2, 3, 4, 6, 8, 12, 16];
 
 /**
  * A model server of the owner's own: where it is, each of its models on a line of its own with what it can do,
- * who uses it, and how many runs it takes at a time. A model on one's own computer serves one or two requests at
- * once, so that number is the server's, not pine's.
+ * who uses it, and for each model how many runs it takes at a time: pine's own limit unless it was given a number.
+ * A model on one's own computer serves one or two requests at once, and one server's models are set up differently.
  */
 function ModelServerCard({ server: x, inUse, fallback, reload }: { server: ModelServer; inUse: string[]; fallback?: string; reload: () => void }) {
 	const runs = x.runs ?? 8;
-	// What holds for a model without a number of its own: its server's, or pine's.
-	const forAll = x.limit ?? runs;
 	const numbers = (own?: number) => [...new Set([...RUNS, ...(own ? [own] : [])])].sort((a, b) => a - b).map((n) => ({ value: String(n), label: `${n} at a time` }));
-	const set = (v: string, model?: string) => void store.attempt(() => api.limitModelServer(x.name, v === "default" ? null : Number(v), model)).then((r) => r && reload());
-	// Every line of a server is the same kind of row with the same column at its right, so that the page reads as a list.
-	const pick = (id: string, items: Array<{ value: string; label: string }>, value: string, onChange: (v: string) => void) => (
-		<div className="w-full @lg/settings:w-48 @lg/settings:shrink-0">
-			<Choose id={id} items={items} value={value} onChange={onChange} />
-		</div>
-	);
+	const set = (v: string, model: string) => void store.attempt(() => api.limitModel(x.name, model, v === "default" ? null : Number(v))).then((r) => r && reload());
 	return (
 		<ItemGroup data-find={`model-server:${x.name}`} data-server={x.name}>
 			<Item variant="outline" size="sm">
@@ -960,6 +952,8 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 				<ItemContent className="min-w-0">
 					<ItemTitle>{x.name}</ItemTitle>
 					<ItemDescription className="font-mono wrap-anywhere">{x.baseUrl}</ItemDescription>
+					{inUse.length ? <ItemDescription>Used by {inUse.join(", ")}.</ItemDescription> : null}
+					{x.models.length ? null : <ItemDescription>This server lists no models.</ItemDescription>}
 				</ItemContent>
 				<ItemActions>
 					<AlertDialog>
@@ -976,7 +970,7 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 					</AlertDialog>
 				</ItemActions>
 			</Item>
-			{/* (Each model says how many agents may use it at once: one server can serve models that are set up differently.) */}
+			{/* (Each model says how many agents may use it at once, pine's own limit unless it was given a number: one server can serve models that are set up differently.) */}
 			{x.models.map((m) => {
 				const ref = `${x.name}/${m.id}`;
 				return (
@@ -988,20 +982,12 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 							</ItemTitle>
 							<ItemDescription>{[m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k context` : "", m.images ? "sees pictures" : "text only", m.reasoning ? "can reason" : ""].filter(Boolean).join(" · ")}</ItemDescription>
 						</ItemContent>
-						<ItemActions className="w-full @lg/settings:w-auto" data-setting={`model-runs:${ref}`}>{pick(`model-runs-${ref}`, [{ value: "default", label: `Server default (${forAll})` }, ...numbers(m.limit)], m.limit ? String(m.limit) : "default", (v) => set(v, m.id))}</ItemActions>
+						<ItemActions className="w-full @lg/settings:w-48 @lg/settings:shrink-0" data-setting={`model-runs:${ref}`}>
+							<Choose id={`model-runs-${ref}`} items={[{ value: "default", label: `Pine default (${runs})` }, ...numbers(m.limit)]} value={m.limit ? String(m.limit) : "default"} onChange={(v) => set(v, m.id)} />
+						</ItemActions>
 					</Item>
 				);
 			})}
-			<Item variant="outline" size="sm" data-setting={`server-runs:${x.name}`}>
-				<ItemContent className="min-w-0 basis-full @lg/settings:basis-0">
-					<ItemTitle>{x.models.length ? "Every model of this server" : "This server lists no models"}</ItemTitle>
-					<ItemDescription className="line-clamp-none">
-						How many agents use a model at once; the rest wait. A model on your own computer usually handles 1 or 2.
-						{inUse.length ? ` Used by ${inUse.join(", ")}.` : ""}
-					</ItemDescription>
-				</ItemContent>
-				<ItemActions className="w-full @lg/settings:w-auto">{pick(`server-runs-${x.name}`, [{ value: "default", label: `Pine default (${runs})` }, ...numbers(x.limit)], x.limit ? String(x.limit) : "default", (v) => set(v))}</ItemActions>
-			</Item>
 		</ItemGroup>
 	);
 }
@@ -1072,7 +1058,7 @@ function Models() {
 			<Section
 				title="Models on your own computer"
 				data-find="model-servers"
-				about="Run a model yourself with LM Studio, Ollama or llama.cpp, then connect it here."
+				about="Run a model yourself with LM Studio, Ollama or llama.cpp, then connect it here. Set how many agents use a model at once: on your own computer usually 1 or 2."
 				actions={
 					<Dialog actionsRef={connecting}>
 						<DialogTrigger render={<Button variant="outline" />}><PlusIcon data-icon="inline-start" />Connect a server</DialogTrigger>

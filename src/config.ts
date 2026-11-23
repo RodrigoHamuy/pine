@@ -292,14 +292,9 @@ export interface PineConfig {
 	limits: {
 		maxConcurrentRuns: number;
 		/**
-		 * Runs at a time on one model server or provider, by its name (the part of a model before the "/"), where
-		 * that is to be fewer or more than `maxConcurrentRuns`: a model on the owner's own computer serves one or two
-		 * at once, a hosted one many. Such a server has a queue of its own.
-		 */
-		servers: Record<string, number>;
-		/**
-		 * The same for one model, by its whole name ("local/qwen3-coder"): one endpoint can serve models that are set
-		 * up differently. A model's own number comes before its server's, and it has a queue of its own.
+		 * Runs at a time on one model, by its whole name ("local/qwen3-coder"), where that is to be fewer or more than
+		 * `maxConcurrentRuns`: a model on the owner's own computer serves one or two at once, a hosted one many, and
+		 * one endpoint can serve models that are set up differently. Such a model has a queue of its own.
 		 */
 		models: Record<string, number>;
 		/** Sub-agents one conversation runs at a time: the default of `subagents.maxParallel` for an agent that names none. */
@@ -571,15 +566,15 @@ function loadSchedules(raw: unknown, problems: string[], file = "pine.json", age
 }
 
 /** Read `<home>/pine.json`, `<home>/.env` and every `<home>/agents/<id>/agent.json`. Throws ConfigError. */
-/** The most runs at a time a model server can be given. */
-export const MAX_SERVER_RUNS = 64;
+/** The most runs at a time a model can be given. */
+export const MAX_MODEL_RUNS = 64;
 /** The name of a model server or provider, as it stands before the "/" of a model. */
 export const SERVER_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,60}$/;
-export const serverLimit = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= MAX_SERVER_RUNS;
-/** `limits.servers` as it is used: only what is a name and a number that can be one. (What is wrong with the rest, `problems` says.) */
+export const modelLimit = (n: unknown): n is number => Number.isInteger(n) && (n as number) >= 1 && (n as number) <= MAX_MODEL_RUNS;
 /** A model's whole name: its server or provider, a "/", and its id as the server names it. */
 export const MODEL_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]{0,60}\/[A-Za-z0-9._:@/+=,()[\]-]{1,160}$/;
-const serverLimits = (raw: unknown, key: RegExp): Record<string, number> => Object.fromEntries(Object.entries(raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}).filter(([name, n]) => key.test(name) && serverLimit(n))) as Record<string, number>;
+/** `limits.models` as it is used: only what is a model's name and a number that can be one. (What is wrong with the rest, `problems` says.) */
+const modelLimits = (raw: unknown): Record<string, number> => Object.fromEntries(Object.entries(raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {}).filter(([name, n]) => MODEL_KEY.test(name) && modelLimit(n))) as Record<string, number>;
 
 export function loadConfig(home = defaultHome()): PineConfig {
 	const problems: string[] = [];
@@ -624,8 +619,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 		},
 		limits: {
 			maxConcurrentRuns: l.maxConcurrentRuns ?? 8,
-			servers: serverLimits(l.servers, SERVER_KEY),
-			models: serverLimits(l.models, MODEL_KEY),
+			models: modelLimits(l.models),
 			maxSubagents: l.maxSubagents ?? 4,
 			maxPoolTasks: l.maxPoolTasks ?? 100,
 			maxDelegationDepth: l.maxDelegationDepth ?? 3,
@@ -672,8 +666,7 @@ export function loadConfig(home = defaultHome()): PineConfig {
 	if (raw.ui?.theme !== undefined && !(typeof raw.ui.theme === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.theme))) problems.push('pine.json: ui.theme names a theme by the file name in the themes folder, without .json, for example "pmndre"');
 	if (raw.ui?.view !== undefined && !(typeof raw.ui.view === "string" && /^[a-z0-9][a-z0-9._-]{0,63}$/.test(raw.ui.view))) problems.push('pine.json: ui.view names a view by the file name in the views folder, without .ts, for example "house", or is "off"');
 	if (d.judge !== undefined && !/^[^/\s]+\/\S+$/.test(String(d.judge))) problems.push("pine.json: defaults.judge names a model as provider/model-id");
-	if (l.servers !== undefined && (typeof l.servers !== "object" || !l.servers || Array.isArray(l.servers) || Object.entries(l.servers).some(([name, n]) => !SERVER_KEY.test(name) || !serverLimit(n)))) problems.push(`pine.json: limits.servers gives a model server or provider (by its name) the number of runs it takes at a time, a whole number from 1 to ${MAX_SERVER_RUNS}: { "local": 2 }`);
-	if (l.models !== undefined && (typeof l.models !== "object" || !l.models || Array.isArray(l.models) || Object.entries(l.models).some(([name, n]) => !MODEL_KEY.test(name) || !serverLimit(n)))) problems.push(`pine.json: limits.models gives a model (as provider/model-id) the number of runs it takes at a time, a whole number from 1 to ${MAX_SERVER_RUNS}: { "local/qwen3-coder": 2 }`);
+	if (l.models !== undefined && (typeof l.models !== "object" || !l.models || Array.isArray(l.models) || Object.entries(l.models).some(([name, n]) => !MODEL_KEY.test(name) || !modelLimit(n)))) problems.push(`pine.json: limits.models gives a model (as provider/model-id) the number of runs it takes at a time, a whole number from 1 to ${MAX_MODEL_RUNS}: { "local/qwen3-coder": 2 }`);
 	if (d.checker !== undefined && !/^[^/\s]+\/\S+$/.test(String(d.checker))) problems.push("pine.json: defaults.checker names a model as provider/model-id");
 	if (cfg.http) {
 		for (const [name, h] of Object.entries<any>(raw.http?.hooks ?? {})) {

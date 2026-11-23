@@ -9,7 +9,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { addRoute, applyServerLimit, applySetting, checkRoute, checkServerLimit, checkSetting, dropRoute, type RouteInput, SETTINGS, settleModel } from "./admin.ts";
+import { addRoute, applyModelLimit, applySetting, checkModelLimit, checkRoute, checkSetting, dropRoute, type RouteInput, SETTINGS, settleModel } from "./admin.ts";
 import { AGENT_TOOLS } from "./agent-admin.ts";
 import type { AgentManager } from "./agents.ts";
 import { browserReady } from "./browser-build.ts";
@@ -316,8 +316,8 @@ export class OwnerApi {
 		if (at === "schedules") return this.need(this.schedules, "a scheduler").list();
 		if (at === "routes") return cfg.routes.map((r) => ({ name: r.name, on: r.on, when: r.when, throttleMs: r.throttleMs, debounceMs: r.debounceMs, agent: r.agent, prompt: r.prompt, session: r.session, set: r.set, publish: r.publish, call: r.call, trust: r.trust }));
 		if (at === "sources/types") return this.need(this.sources, "event sources").typeList().map((t) => ({ name: t.name, summary: t.summary, options: t.options, own: t.name in cfg.sourceTypes }));
-		// (Each with its own number of runs at a time, where it has one; and what holds for the others.)
-		if (at === "models/servers") return listModelServers(cfg.home).map((x) => ({ ...x, models: x.models.map((m) => ({ ...m, ...(cfg.limits.models[`${x.name}/${m.id}`] !== undefined ? { limit: cfg.limits.models[`${x.name}/${m.id}`] } : {}) })), ...(cfg.limits.servers[x.name] !== undefined ? { limit: cfg.limits.servers[x.name] } : {}), runs: cfg.limits.maxConcurrentRuns }));
+		// (Each model with its own number of runs at a time, where it has one; and what holds for the others.)
+		if (at === "models/servers") return listModelServers(cfg.home).map((x) => ({ ...x, models: x.models.map((m) => ({ ...m, ...(cfg.limits.models[`${x.name}/${m.id}`] !== undefined ? { limit: cfg.limits.models[`${x.name}/${m.id}`] } : {}) })), runs: cfg.limits.maxConcurrentRuns }));
 		if (at === "models/providers") {
 			// What pi says of each provider. `signedIn` is "pi has a credential or a key for it", which
 			// for a model server of the owner's own without a key is true as well; `oauth` is "its
@@ -491,17 +491,17 @@ export class OwnerApi {
 			return { models, ...(chosen ? { chosen } : {}) };
 		}
 		if (at === "models/servers/limit") {
-			// How many runs a model server (or a provider) takes at a time: a number, or nothing for pine's own limit.
-			// (Of a server by its name; of one of its models with "model", the id the server gives it.)
-			const known = [...new Set([...listModelServers(cfg.home).flatMap((x) => [x.name, ...x.models.map((m) => `${x.name}/${m.id}`)]), ...(await manager.availableModels())])];
-			let checked: ReturnType<typeof checkServerLimit>;
+			// How many runs a model takes at a time: a number, or nothing for pine's own limit.
+			// (By its server's name and "model", the id the server gives it.)
+			const known = [...new Set([...listModelServers(cfg.home).flatMap((x) => x.models.map((m) => `${x.name}/${m.id}`)), ...(await manager.availableModels())])];
+			let checked: ReturnType<typeof checkModelLimit>;
 			try {
-				checked = checkServerLimit(known, body.name, body.limit, body.model);
+				checked = checkModelLimit(known, body.name, body.model, body.limit);
 			} catch (e) {
 				throw new Refusal(400, errText(e));
 			}
-			applyServerLimit(cfg, checked);
-			return { name: checked.name, ...(checked.model !== undefined ? { model: checked.model } : {}), ...(checked.limit !== undefined ? { limit: checked.limit } : {}), runs: cfg.limits.maxConcurrentRuns };
+			applyModelLimit(cfg, checked);
+			return { name: checked.name, model: checked.model, ...(checked.limit !== undefined ? { limit: checked.limit } : {}), runs: cfg.limits.maxConcurrentRuns };
 		}
 		if (at === "models/servers/remove") {
 			const name = String(body.name ?? "");

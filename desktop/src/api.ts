@@ -374,8 +374,7 @@ export interface ModelServer {
 	key: string;
 	/** `limit`: how many runs that model takes at a time, where it has a number of its own. */
 	models: Array<{ id: string; contextWindow?: number; images: boolean; reasoning: boolean; limit?: number }>;
-	/** How many runs it takes at a time, where it has a number of its own; and `runs`, what holds for a server that has none. */
-	limit?: number;
+	/** What holds for a model that has no number of its own: pine's limit for all. */
 	runs?: number;
 }
 
@@ -566,8 +565,8 @@ export const api = {
 	mcpLogin: (name: string, agent?: string) => post<{ code: number; out: string }>("/mcp/login", { name, agent }),
 	modelServers: () => get<ModelServer[]>("/models/servers"),
 	addModelServer: (body: { name: string; url: string; key?: string; context?: number }) => post<{ models: string[]; chosen?: string }>("/models/servers", body),
-	/** How many runs a model server takes at a time: a number, or `null` for pine's own limit. */
-	limitModelServer: (name: string, limit: number | null, model?: string) => post<{ name: string; model?: string; limit?: number; runs: number }>("/models/servers/limit", { name, limit, ...(model ? { model } : {}) }),
+	/** How many runs a model takes at a time: a number, or `null` for pine's own limit. */
+	limitModel: (name: string, model: string, limit: number | null) => post<{ name: string; model: string; limit?: number; runs: number }>("/models/servers/limit", { name, model, limit }),
 	removeModelServer: (name: string) => post<{ removed: boolean }>("/models/servers/remove", { name }),
 	providers: () => get<Provider[]>("/models/providers"),
 	login: (provider: string, type?: "api_key" | "oauth") => post<{ id: string }>("/models/login", { provider, type }),

@@ -7,7 +7,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { AGENT_TOOLS } from "./agent-admin.ts";
-import { type AgentConfig, delegatesText, isColor, loadConfig, mainAgentId, MAX_SERVER_RUNS, MODEL_KEY, type Mode, MODES, PINE_ROOT, SERVER_KEY, serverLimit, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
+import { type AgentConfig, delegatesText, isColor, loadConfig, mainAgentId, MAX_MODEL_RUNS, MODEL_KEY, modelLimit, type Mode, MODES, PINE_ROOT, SERVER_KEY, type PineConfig, RESERVED_TOPICS, type RouteConfig, unsandboxed } from "./config.ts";
 import { renameEnv, secretName, unsetEnv } from "./env-file.ts";
 import { DEFAULT_THEME, listThemes } from "./themes.ts";
 import { listViews, viewInForce } from "./views.ts";
@@ -860,44 +860,43 @@ export function applySetting(cfg: PineConfig, checked: { key: string; setting: S
 }
 
 /**
- * A model server's own number of runs at a time (`limits.servers`), checked: the server is one there is, by the
- * name its models carry before the "/", and the number is one that can be. No number takes the limit off again, and
- * the server is back in the queue for all.
+ * A model's own number of runs at a time (`limits.models`), checked: the server is one there is, by the name its
+ * models carry before the "/", the model is one that server has, and the number is one that can be. No number takes
+ * the limit off again, and the model is back in the queue for all.
  */
-export function checkServerLimit(known: readonly string[], name: unknown, limit: unknown, model?: unknown): { name: string; model?: string; limit?: number } {
+export function checkModelLimit(known: readonly string[], name: unknown, model: unknown, limit: unknown): { name: string; model: string; limit?: number } {
 	const server = String(name ?? "").trim();
 	if (!SERVER_KEY.test(server) || !known.some((m) => m === server || m.startsWith(`${server}/`))) throw new Error(`there is no model server or provider "${server}". The names are what stands before the "/" of a model: ${[...new Set(known.map((m) => m.split("/")[0]))].slice(0, 30).join(", ") || "none yet"}`);
-	// For one of its models: by the id the server gives it, and only one the server has.
-	const id = model === undefined || model === null || model === "" ? undefined : String(model).trim();
-	if (id !== undefined && (!MODEL_KEY.test(`${server}/${id}`) || !known.includes(`${server}/${id}`))) throw new Error(`"${server}" has no model "${id}". Its models: ${known.filter((m) => m.startsWith(`${server}/`)).map((m) => m.slice(server.length + 1)).slice(0, 30).join(", ") || "none"}`);
-	const of = { name: server, ...(id !== undefined ? { model: id } : {}) };
+	// By the id the server gives it, and only one the server has.
+	const id = String(model ?? "").trim();
+	if ((!MODEL_KEY.test(`${server}/${id}`) || !known.includes(`${server}/${id}`))) throw new Error(`"${server}" has no model "${id}". Its models: ${known.filter((m) => m.startsWith(`${server}/`)).map((m) => m.slice(server.length + 1)).slice(0, 30).join(", ") || "none"}`);
+	const of = { name: server, model: id };
 	if (limit === undefined || limit === null || limit === "") return of;
 	const n = Number(limit);
-	if (!serverLimit(n)) throw new Error(`the number of runs at a time is a whole number from 1 to ${MAX_SERVER_RUNS}, or nothing for ${id !== undefined ? "what holds for the server" : "pine's own limit (limits.maxConcurrentRuns)"}`);
+	if (!modelLimit(n)) throw new Error(`the number of runs at a time is a whole number from 1 to ${MAX_MODEL_RUNS}, or nothing for pine's own limit (limits.maxConcurrentRuns)`);
 	return { ...of, limit: n };
 }
 
-/** Write a checked limit of a model server, or of one of its models, into pine.json and take it over. If the configuration does not load, the file is as it was. */
-export function applyServerLimit(cfg: PineConfig, checked: { name: string; model?: string; limit?: number }): void {
+/** Write a model's checked limit into pine.json and take it over. If the configuration does not load, the file is as it was. */
+export function applyModelLimit(cfg: PineConfig, checked: { name: string; model: string; limit?: number }): void {
 	const file = path.join(cfg.home, "pine.json");
 	const before = fs.readFileSync(file, "utf8");
-	const [table, key] = checked.model !== undefined ? (["models", `${checked.name}/${checked.model}`] as const) : (["servers", checked.name] as const);
+	const key = `${checked.name}/${checked.model}`;
 	let fresh: PineConfig;
 	try {
 		editJson(file, (raw) => {
 			raw.limits = typeof raw.limits === "object" && raw.limits ? raw.limits : {};
-			const all: Record<string, unknown> = typeof raw.limits[table] === "object" && raw.limits[table] && !Array.isArray(raw.limits[table]) ? raw.limits[table] : {};
+			const all: Record<string, unknown> = typeof raw.limits.models === "object" && raw.limits.models && !Array.isArray(raw.limits.models) ? raw.limits.models : {};
 			if (checked.limit === undefined) delete all[key];
 			else all[key] = checked.limit;
-			if (Object.keys(all).length) raw.limits[table] = all;
-			else delete raw.limits[table];
+			if (Object.keys(all).length) raw.limits.models = all;
+			else delete raw.limits.models;
 		});
 		fresh = loadConfig(cfg.home);
 	} catch (e) {
 		fs.writeFileSync(file, before);
 		throw new Error(`not changed: ${errText(e)}`);
 	}
-	cfg.limits.servers = fresh.limits.servers;
 	cfg.limits.models = fresh.limits.models;
 }
 

@@ -96,7 +96,7 @@ const answers: Record<string, unknown> = {
 		{ id: "openai", name: "OpenAI", signedIn: false, oauth: true, models: 12 },
 	],
 	"/models/servers": [
-		{ name: "local", baseUrl: "http://127.0.0.1:8080/v1", key: "none", limit: 2, runs: 8, models: [{ id: "qwen3-coder", contextWindow: 65536, images: false, reasoning: true }, { id: "gemma-4-vision", contextWindow: 32768, images: true, reasoning: false, limit: 1 }, { id: "nomic-embed-text-v2-moe-long-name-of-a-model", contextWindow: 8192, images: false, reasoning: false }] },
+		{ name: "local", baseUrl: "http://127.0.0.1:8080/v1", key: "none", runs: 8, models: [{ id: "qwen3-coder", contextWindow: 65536, images: false, reasoning: true }, { id: "gemma-4-vision", contextWindow: 32768, images: true, reasoning: false, limit: 1 }, { id: "nomic-embed-text-v2-moe-long-name-of-a-model", contextWindow: 8192, images: false, reasoning: false }] },
 		{ name: "studio", baseUrl: "http://studio.local:1234/v1", key: "PINE_MODEL_STUDIO_API_KEY in .env", runs: 8, models: [{ id: "glm-5.3", contextWindow: 131072, images: true, reasoning: true }] },
 	],
 	"/mcp": mcp,
@@ -156,7 +156,7 @@ export const AgentPage: Story = { args: { section: "agents", agent: "scout" } };
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
 export const McpServers: Story = { args: { section: "mcp" } };
 
-/** Models: the default, the providers signed in to, and the owner's own model servers, each with its models on lines of their own and how many runs it takes at a time. */
+/** Models: the default, the providers signed in to, and the owner's own model servers, each with its models on lines of their own, and for each model how many runs it takes at a time. */
 export const Models: Story = {
 	args: { section: "models" },
 	play: async ({ canvasElement }) => {
@@ -164,12 +164,11 @@ export const Models: Story = {
 		await expect(local.closest("[data-server]")).toHaveAttribute("data-server", "local");
 		await expect(canvasElement.querySelectorAll('[data-server="local"] [data-model]')).toHaveLength(3);
 		await expect(within(canvasElement).getByText("66k context · text only · can reason")).toBeInTheDocument();
-		// The server with a number of its own says it; the other says what holds everywhere.
-		await expect(canvasElement.querySelector('[data-setting="server-runs:local"] [data-slot=select-trigger]')).toHaveTextContent("2 at a time");
-		await expect(canvasElement.querySelector('[data-setting="server-runs:studio"] [data-slot=select-trigger]')).toHaveTextContent("Pine default (8)");
-		// And so does each model: one with its own number, one that goes by its server's.
+		// Each model says its number: one has its own, the others what holds everywhere. No number for a whole server.
+		await expect(canvasElement.querySelector('[data-setting^="server-runs:"]')).toBeNull();
+		await expect(canvasElement.querySelector('[data-setting="model-runs:studio/glm-5.3"] [data-slot=select-trigger]')).toHaveTextContent("Pine default (8)");
 		await expect(canvasElement.querySelector('[data-setting="model-runs:local/gemma-4-vision"] [data-slot=select-trigger]')).toHaveTextContent("1 at a time");
-		await expect(canvasElement.querySelector('[data-setting="model-runs:local/qwen3-coder"] [data-slot=select-trigger]')).toHaveTextContent("Server default (2)");
+		await expect(canvasElement.querySelector('[data-setting="model-runs:local/qwen3-coder"] [data-slot=select-trigger]')).toHaveTextContent("Pine default (8)");
 	},
 };
 
