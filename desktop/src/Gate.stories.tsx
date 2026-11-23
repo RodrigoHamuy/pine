@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { expect, fn, within } from "storybook/test";
+import { expect, fn, waitFor, within } from "storybook/test";
 import type { ServiceState } from "./bridge.ts";
 import type { NearbyFound } from "./machines.ts";
 import { Gate } from "./App.tsx";
@@ -407,8 +407,9 @@ const ID = "x8Qk2vJp1mZl3nRt5yWb7cDf9gHs0aEu4iOq6eTr2wA";
 export const PhoneNearbyFound: Story = {
 	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE }, nearby: { computers: [{ id: ID, service: "https://pine-main.drcmda.workers.dev" }, { id: `Zq${ID.slice(2)}`, service: "https://pine.example.org" }] } },
 	play: async ({ canvasElement }) => {
+		// What the bridge found arrives once the list listens (an effect), after the first drawing.
+		await waitFor(() => expect(canvasElement.querySelectorAll('[data-slot="pair-nearby-computer"]')).toHaveLength(2));
 		const found = canvasElement.querySelectorAll('[data-slot="pair-nearby-computer"]');
-		await expect(found).toHaveLength(2);
 		await expect(found[0]).toHaveTextContent("Pine x8Qk2v");
 		await expect(found[1]).toHaveTextContent(/Through pine\.example\.org/);
 		await expect(within(canvasElement).getByText("Or pair with a code")).toBeInTheDocument();
@@ -428,7 +429,7 @@ export const PhoneNearbyEmpty: Story = {
 export const PhoneNearbyRefused: Story = {
 	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE }, nearby: { computers: [], denied: true } },
 	play: async ({ canvasElement }) => {
-		await expect(canvasElement.querySelector('[data-slot="pair-nearby-denied"]')).toHaveTextContent(/Settings > Pine/);
+		await waitFor(() => expect(canvasElement.querySelector('[data-slot="pair-nearby-denied"]')).toHaveTextContent(/Settings > Pine/));
 		await expect(canvasElement.querySelector('[data-slot="pair-link-field"]')).not.toBeNull();
 	},
 };
