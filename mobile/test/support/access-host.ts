@@ -18,6 +18,8 @@
 //   --service-line <json>    the line `pine service` answers with, for a stand-in daemon of the test's
 //                            own; without it the helper runs its own stand-in daemon and names it
 //   --desktop <folder>       the desktop package to load the access host from (default the checkout's)
+//   --nearby                 codeless requests (user `nearby`) are let in from the start, as when the
+//                            owner keeps the computer visible on the network; without it they are refused
 //
 // First line, once the access host waits at the meeting:
 //   {"t":"ready","service":"http://127.0.0.1:<port>","machineId":"<43 chars>","daemon":{"base":"http://127.0.0.1:<port>","token":"<token>"},"home":"<temp folder>"}
@@ -39,6 +41,7 @@
 //   remove <id>                  forgets a device and cuts its connections -> {"t":"remove","id","removed":bool}
 //   cut [<id>]                   cuts the live connections of a device (of every device without an id),
 //                                which stays paired -> {"t":"cut","count":<connections cut>}
+//   nearby on|off                whether codeless requests are let in now -> {"t":"nearby","on":bool}
 //   meeting <mode>               how the meeting service treats a phone that joins this computer's id:
 //                                normal; swap (put through to another computer, with another host key,
 //                                which has no device: a service that lies); hold (told the computer is
@@ -47,7 +50,8 @@
 //   stop                         -> {"t":"stop"}, then it ends everything, removes its home and exits with 0
 //
 // Events, written when they happen, between the answers:
-//   {"t":"asked","name":"<device name>","code":"<4 digits>"}   a pairing request waits for the owner
+//   {"t":"asked","name":"<device name>","code":"<4 digits>","kind":"code"|"nearby"}
+//                                                               a pairing request waits for the owner
 //   {"t":"paired","id","name"}                                  the owner's yes stored a device
 //   {"t":"connected","id"} / {"t":"left","id"}                  an SSH session began or ended (`id` is the
 //                                                               device's, or "pairing:..." for a pairing session)
@@ -179,6 +183,7 @@ const service = await listen(meetingServer);
 let decide: ((yes: boolean) => void) | undefined;
 let early: boolean | undefined;
 let pairing: Pairing | undefined;
+let visible = process.argv.includes("--nearby");
 
 async function waitingHost(folder: string, admit?: (context: AdmitContext) => Admit, report?: (event: SessionEvent) => void) {
 	const host = await startAccessHost({ service, folder, daemon: async () => serviceLine, admit, report, retry: { firstMs: 50, maxMs: 400 } });
@@ -198,9 +203,10 @@ const host = await waitingHost(
 			computerName: () => option("computer-name") ?? "Test Mac",
 			pairingMs: option("pairing-ms") ? Number(option("pairing-ms")) : undefined,
 			answerMs: option("answer-ms") ? Number(option("answer-ms")) : undefined,
+			nearby: () => visible,
 			paired: (device: Device) => write({ t: "paired", id: device.id, name: device.name }),
-			ask: (request: { name: string; code: string }, signal: AbortSignal) => {
-				write({ t: "asked", name: request.name, code: request.code });
+			ask: (request: { name: string; code: string; kind?: string }, signal: AbortSignal) => {
+				write({ t: "asked", name: request.name, code: request.code, kind: request.kind ?? "code" });
 				if (early !== undefined) {
 					const yes = early;
 					early = undefined;
@@ -277,6 +283,11 @@ async function run(words: string[]): Promise<object> {
 			const ids = rest[0] ? [rest[0]] : [...new Set(host.server.connected().map((c) => c.id))];
 			return { count: ids.reduce((sum, id) => sum + host.server.cut(id), 0) };
 		}
+		case "nearby": {
+			if (rest[0] !== "on" && rest[0] !== "off") throw new Error("Say nearby on, or nearby off.");
+			visible = rest[0] === "on";
+			return { on: visible };
+		}
 		case "meeting": {
 			const next = rest[0] as Mode;
 			if (!["normal", "swap", "hold", "limits"].includes(next)) throw new Error("The modes are normal, swap, hold and limits.");
@@ -287,7 +298,7 @@ async function run(words: string[]): Promise<object> {
 		case "stop":
 			return {};
 		default:
-			throw new Error(`Unknown command. The commands are open, cancel, allow, refuse, devices, add, remove, cut, meeting and stop.`);
+			throw new Error(`Unknown command. The commands are open, cancel, allow, refuse, devices, add, remove, cut, nearby, meeting and stop.`);
 	}
 }
 

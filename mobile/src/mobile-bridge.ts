@@ -4,7 +4,7 @@
 // other machines. What only the desktop app can do refuses or does nothing, as the preview's
 // stand-in does (desktop/src/preview-bridge.ts).
 import type { AppState, PageBridge, Prefs } from "../../desktop/src/bridge.ts";
-import { isPaired, readPairLink } from "../../desktop/src/machines.ts";
+import { isPaired, MACHINE_ID, type NearbyFound, readPairLink } from "../../desktop/src/machines.ts";
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
 import { ORIGINS, type PagePrefs, type PinePlugin, type Platform } from "./plugin.ts";
 
@@ -49,7 +49,7 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 	const emit = (event: string, value: unknown) => heard.get(event)?.forEach((fn) => fn(value));
 	// `own` takes a message for the bridge itself, which the page then never hears (the back button).
 	const on =
-		(event: "service" | "events" | "connection" | "focus" | "menu" | "link", unwrap: (data: any) => unknown, own: (value: unknown) => boolean = () => false) =>
+		(event: "service" | "events" | "connection" | "focus" | "menu" | "link" | "nearby", unwrap: (data: any) => unknown, own: (value: unknown) => boolean = () => false) =>
 		(fn: Listener) => {
 			let set = heard.get(event);
 			if (!set) {
@@ -63,6 +63,11 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 			return () => void set.delete(fn);
 		};
 	const never = () => () => undefined;
+	// Whether this build's native side looks on the network (`state().canPairNearby`), known once the page asked the state.
+	let canNearby = false;
+	/** The page's listeners of what is found on the network: the native side looks while there is one. */
+	const finders = new Set<(found: NearbyFound) => void>();
+	const nearbyEvents = on("nearby", (d) => ({ computers: Array.isArray(d?.computers) ? d.computers.filter((c: any) => typeof c?.id === "string" && MACHINE_ID.test(c.id) && typeof c?.service === "string" && /^https:\/\/[^/]+$/.test(c.service)).map((c: any) => ({ id: c.id, service: c.service })) : [], ...(d?.denied === true ? { denied: true } : {}) }));
 
 	return {
 		mediaBase: ORIGINS[platform].media,
@@ -83,6 +88,7 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 		onTermRun: never,
 		state: async (): Promise<AppState> => {
 			const [s] = await Promise.all([plugin.state(), load()]);
+			canNearby = s.canPairNearby === true;
 			bars(prefs.look);
 			return { state: s.state, connected: s.connected, home: s.state.status === "ready" ? s.state.home : undefined, prefs: { ...prefs }, platform, focused: true, updates: false, versions: { app: s.version, electron: "none" }, local: false, canPair: s.canPair === true };
 		},
@@ -141,6 +147,22 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 			await plugin.pair({ link });
 		},
 		stopPairing: () => plugin.cancelPairing(),
+		// The native side looks on the network from the first listener to the last one gone: the page
+		// listens only while it shows how to pair, so that iOS asks for the local network then.
+		nearby: (fn: (found: NearbyFound) => void) => {
+			if (!canNearby) return () => undefined;
+			const stop = nearbyEvents(fn);
+			finders.add(fn);
+			if (finders.size === 1) void plugin.nearby({ on: true }).catch(() => {});
+			return () => {
+				stop();
+				if (finders.delete(fn) && finders.size === 0) void plugin.nearby({ on: false }).catch(() => {});
+			};
+		},
+		pairNearby: async (id: string, service: string) => {
+			if (!canNearby || !MACHINE_ID.test(id) || !/^https:\/\/[^/]+$/.test(service)) throw new Error("That is not a computer this phone can pair with. Look again, or pair with the code from Pine > Add a device.");
+			await plugin.pairNearby({ id, service });
+		},
 		onPairLink: on("link", (d) => (typeof d?.link === "string" ? d.link : ""), (link) => !link),
 		deviceKey: async () => {
 			const { key } = await plugin.publicKey();

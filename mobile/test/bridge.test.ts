@@ -425,3 +425,42 @@ test("saveText: the text goes to the share sheet under its name", async () => {
 	assert.equal(await mobileBridge(plugin, "android").saveText("conversation.md", "# hi"), "conversation.md");
 	assert.deepEqual(calls, [["share", { title: "conversation.md", text: "# hi" }]]);
 });
+
+
+test("nearby: the native side looks only while the page listens, and only where this build can; what it finds reaches the page checked", async () => {
+	const { plugin, calls, emit } = fakePlugin({ state: () => ({ state: { status: "starting" }, connected: false, version: "0.0.0", canPair: true, canPairNearby: true }) });
+	const b = mobileBridge(plugin, "ios");
+	await b.state();
+	assert.equal(calls.some(([m]) => m === "nearby"), false, "nothing looks before the page listens");
+	const got: unknown[] = [];
+	const stop = b.nearby!((found) => void got.push(found));
+	const again = b.nearby!(() => {});
+	await new Promise((r) => setImmediate(r));
+	assert.deepEqual(calls.filter(([m]) => m === "nearby"), [["nearby", { on: true }]], "one look for two listeners");
+	emit("nearby", { computers: [{ id: ID, service: "https://pine-main.drcmda.workers.dev" }, { id: "short", service: "https://x.example" }, { id: ID, service: "http://x.example" }] });
+	emit("nearby", { computers: [], denied: true });
+	assert.deepEqual(got, [{ computers: [{ id: ID, service: "https://pine-main.drcmda.workers.dev" }] }, { computers: [], denied: true }]);
+	stop();
+	again();
+	await new Promise((r) => setImmediate(r));
+	assert.deepEqual(calls.filter(([m]) => m === "nearby").at(-1), ["nearby", { on: false }]);
+});
+
+test("nearby: a build whose native side cannot look is never asked to, and pairNearby is refused before the plugin", async () => {
+	const { plugin, calls } = fakePlugin({ state: () => ({ state: { status: "starting" }, connected: false, version: "0.0.0", canPair: true }) });
+	const b = mobileBridge(plugin, "android");
+	await b.state();
+	b.nearby!(() => {})();
+	await assert.rejects(b.pairNearby!(ID, "https://pine-main.drcmda.workers.dev"), /Pine > Add a device/);
+	assert.equal(calls.some(([m]) => m === "nearby" || m === "pairNearby"), false);
+});
+
+test("pairNearby: a machine id and an https origin reach the plugin; anything else is refused here", async () => {
+	const { plugin, calls } = fakePlugin({ state: () => ({ state: { status: "starting" }, connected: false, version: "0.0.0", canPair: true, canPairNearby: true }) });
+	const b = mobileBridge(plugin, "android");
+	await b.state();
+	await b.pairNearby!(ID, "https://pine-main.drcmda.workers.dev");
+	assert.deepEqual(calls.at(-1), ["pairNearby", { id: ID, service: "https://pine-main.drcmda.workers.dev" }]);
+	for (const [id, service] of [["nope", "https://a.example"], [ID, "http://a.example"], [ID, "https://a.example/path"]]) await assert.rejects(b.pairNearby!(id, service));
+	assert.equal(calls.filter(([m]) => m === "pairNearby").length, 1);
+});

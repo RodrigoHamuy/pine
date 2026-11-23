@@ -12,10 +12,10 @@ import { fileURLToPath } from "node:url";
 
 /** The parts of the desktop's test support the phone is played with (desktop/test/support/meeting.ts, desktop/electron/access/store.ts). */
 type Channel = { write(data: string | Buffer): void; on(event: string, fn: (data: Buffer) => void): void; once(event: string, fn: () => void): void };
-type Client = { end(): void; once(event: string, fn: () => void): void };
+type Client = { end(): void; once(event: string, fn: () => void): void; on(event: string, fn: (e: Error) => void): void };
 type Meeting = {
 	join(service: string, id: string): { channel: Promise<unknown>; closed: Promise<number>; close(): void };
-	sshOver(stream: unknown, id: string, privateKey: string, config?: { username?: string }): { ready: Promise<Client>; seen: string[]; offered(): number };
+	sshOver(stream: unknown, id: string, privateKey: string, config?: { username?: string }): { client: Client; ready: Promise<Client>; seen: string[]; offered(): number };
 	exec(client: Client, command: string): Promise<Channel>;
 	firstLine(channel: Channel): Promise<string>;
 	tunnel(client: Client, host: string, port: number): Promise<Channel>;
@@ -177,6 +177,46 @@ test("helper: a request it is told to refuse is refused; a decision given before
 	assert.deepEqual((await h.say("devices")).devices, []);
 	h.child.stdin.end();
 	assert.equal(await h.exited, 0);
+});
+
+test("helper: with --nearby a codeless request is let in and asked about; nearby off refuses one before the owner hears of it", async () => {
+	const h = helper(["--nearby", "--computer-name", "Studio Mac"]);
+	const ready = await h.next((l) => l.t === "ready", "ready");
+	const phone = newEd25519Key();
+	const meeting = join(ready.service, ready.machineId);
+	const ssh = sshOver(await meeting.channel, ready.machineId, phone.private, { username: "nearby" });
+	const session = await ssh.ready;
+	const request = await exec(session, `pine-pair ${Buffer.from(JSON.stringify({ name: "Pine on Pixel 9" })).toString("base64url")}`);
+	let said = "";
+	const lines = new Promise<Line[]>((resolve) => {
+		request.on("data", (d: Buffer) => {
+			said += d;
+			if (said.includes('"ok"')) resolve(said.trim().split("\n").map((l) => JSON.parse(l)));
+		});
+	});
+	const asked = await h.next((l) => l.t === "asked", "the owner is asked");
+	assert.equal(asked.kind, "nearby");
+	await h.say("allow");
+	const [digits, outcome] = await lines;
+	assert.deepEqual(digits, { code: asked.code, computer: "Studio Mac" });
+	assert.deepEqual(outcome, { ok: true, name: "Studio Mac" });
+	// The data channel is closed only once SSH has said goodbye over it.
+	const ended = new Promise<void>((resolve) => ssh.client.once("close", () => resolve()));
+	session.end();
+	await ended;
+	meeting.close();
+
+	assert.deepEqual(await h.say("nearby off"), { t: "nearby", on: false });
+	const other = join(ready.service, ready.machineId);
+	const refused = sshOver(await other.channel, ready.machineId, newEd25519Key().private, { username: "nearby" });
+	// Refused, the computer lets go of the channel: SSH's goodbye after that finds it closed, which is no fault.
+	refused.client.on("error", () => {});
+	const gone = new Promise<void>((resolve) => refused.client.once("close", () => resolve()));
+	await assert.rejects(refused.ready);
+	await gone;
+	other.close();
+	assert.equal(h.lines.filter((l) => l.t === "asked").length, 1, "the refused request never reached the owner");
+	await h.say("stop");
 });
 
 test("helper: a key added directly is let in as pine, and removing the device cuts its connection", async () => {

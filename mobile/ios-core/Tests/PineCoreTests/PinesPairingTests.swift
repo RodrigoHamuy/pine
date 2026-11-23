@@ -56,7 +56,7 @@ struct PinesPairingTests {
 			let states = page.states
 			let pairing = states.compactMap { $0["pairing"] as? [String: String] }
 			#expect(pairing.first == ["name": "Pine on iPhone 17 Pro"])
-			#expect(pairing.last == ["name": "Pine on iPhone 17 Pro", "code": rig.host.events("asked").first?["code"] as? String ?? "?"])
+			#expect(pairing.last == ["name": "Pine on iPhone 17 Pro", "code": rig.host.events("asked").first?["code"] as? String ?? "?", "computer": "Test Mac"])
 			#expect(states.contains { $0["status"] as? String == "starting" && $0["host"] as? String == host })
 			#expect(page.last?["host"] as? String == host)
 			#expect(page.last?["label"] as? String == "Test Mac")
@@ -195,6 +195,39 @@ struct PinesPairingTests {
 			// Made again whole; a first attempt that a loaded machine lets go of is tried again by itself.
 			try await eventually("ready again") { page.status == "ready" }
 			#expect(rig.connections(device) >= 2)
+		}
+	}
+
+	@Test("a computer found on the network is paired without a code: its name comes with the digits, and a yes keeps it")
+	func nearby() async throws {
+		try await withPairedPines { rig, pines, page in
+			pines.ready()
+			try await rig.host.command("nearby on")
+			try pines.pairNearby(id: rig.host.machineId, service: TEST_SERVICE, name: "Pine on iPhone 17 Pro")
+			try await eventually("the four digits") { (page.last?["pairing"] as? [String: String])?["code"] != nil }
+			let code = try #require(rig.host.events("asked").first?["code"] as? String)
+			#expect(page.last?["pairing"] as? [String: String] == ["name": "Pine on iPhone 17 Pro", "code": code, "computer": "Test Mac"])
+			try await rig.host.command("allow")
+			try await eventually("ready") { page.status == "ready" }
+			let host = "paired:\(rig.host.machineId)"
+			#expect(page.last?["host"] as? String == host)
+			#expect(pines.inUse == host)
+			#expect(pines.paired(host) == PairedComputer(id: rig.host.machineId, service: TEST_SERVICE, name: "Test Mac"))
+		}
+	}
+
+	@Test("a codeless request the computer does not let in is told to the page; an id or service of another shape is refused")
+	func nearbyRefused() async throws {
+		try await withPairedPines { rig, pines, page in
+			#expect(throws: RemoteError.self) { try pines.pairNearby(id: "nope", service: TEST_SERVICE, name: "Pine on a test") }
+			#expect(throws: RemoteError.self) { try pines.pairNearby(id: rig.host.machineId, service: "http://pine.test", name: "Pine on a test") }
+			#expect(throws: RemoteError.self) { try pines.pairNearby(id: rig.host.machineId, service: TEST_SERVICE + "/", name: "Pine on a test") }
+			#expect(page.states.isEmpty)
+			try pines.pairNearby(id: rig.host.machineId, service: TEST_SERVICE, name: "Pine on a test")
+			try await eventually("not let in") { page.status == "error" }
+			#expect(page.last?["message"] as? String == PairWords.notLetIn)
+			#expect(page.last?["host"] == nil)
+			#expect(pines.hosts.isEmpty)
 		}
 	}
 }

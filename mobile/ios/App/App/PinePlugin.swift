@@ -7,6 +7,7 @@
 // the app's life). PineViewController registers it and hardens the web view.
 import Capacitor
 import Foundation
+import Network
 import PineCore
 import UIKit
 import WebKit
@@ -18,7 +19,7 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	public let pluginMethods: [CAPPluginMethod] = [
 		"state", "ready", "call", "retry", "use", "addHost", "forgetHost", "loadPrefs", "savePrefs",
 		"openExternal", "share", "copy", "systemBars", "leave", "publicKey", "trustHostKey", "forgetHostKey",
-		"pair", "cancelPairing",
+		"pair", "cancelPairing", "nearby", "pairNearby",
 	].map { CAPPluginMethod(name: $0, returnType: CAPPluginReturnPromise) }
 
 	private(set) var pines: Pines?
@@ -34,20 +35,26 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	 * name for it, and no model name without a table of hardware ids that would age.
 	 */
 	private var phone = deviceName(nil)
+	/** Computers that announce themselves on this network, looked for only while the page asks (`nearby`). */
+	private var browser: NearbyBrowser?
 
 	override public func load() {
 		phone = deviceName(UIDevice.current.model)
 		let store = KeychainSecretStore()
 		let remote = Remote(key: DeviceKey(store), known: KnownHosts(store))
 		pines = Pines(remote: remote, shelf: DefaultsShelf(), page: PageOut(self))
+		browser = NearbyBrowser { [weak self] event in self?.notifyListeners("nearby", data: event) }
 		// Background keeps nothing on purpose: iOS may cut the link there. On the return the pine in
 		// use is checked (and connected again when it no longer answers) before the page has the focus.
 		let centre = NotificationCenter.default
 		observers.append(centre.addObserver(forName: UIApplication.didEnterBackgroundNotification, object: nil, queue: .main) { [weak self] _ in
+			// Looking for computers stops in the back, and starts again on the return if the page still asks.
+			self?.browser?.pause()
 			self?.notifyListeners("focus", data: ["focused": false])
 		})
 		observers.append(centre.addObserver(forName: UIApplication.willEnterForegroundNotification, object: nil, queue: .main) { [weak self] _ in
 			guard let self, let pines = self.pines else { return }
+			self.browser?.resume()
 			Task {
 				await pines.check()
 				self.notifyListeners("focus", data: ["focused": true])
@@ -102,7 +109,8 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 		guard let pines else { return call.reject("The app has not started yet.") }
 		let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
 		// This build pairs with a computer by its link (the page then offers pairing first).
-		call.resolve(["state": pines.state(), "connected": pines.connected, "version": version, "canPair": true])
+		// It also finds computers on this network and pairs with them without a code.
+		call.resolve(["state": pines.state(), "connected": pines.connected, "version": version, "canPair": true, "canPairNearby": true])
 	}
 
 	/**
@@ -115,6 +123,26 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	}
 
 	@objc func cancelPairing(_ call: CAPPluginCall) { later(call) { $0.cancelPairing(); return nil } }
+
+	/**
+	 * Start or stop looking for computers on this network; what is found comes as `nearby` events,
+	 * none at first. Only this asks iOS for the local network, so its prompt never comes at launch.
+	 */
+	@objc func nearby(_ call: CAPPluginCall) {
+		guard let on = call.getBool("on") else { return call.reject("Say whether to look: on, true or false.") }
+		if on { browser?.start() } else { browser?.stop() }
+		call.resolve()
+	}
+
+	/**
+	 * The owner's tap on a computer found on the network: paired without a code, as user `nearby`. The
+	 * core checks the id and the service again (a machine id, an https origin), and refuses a second pairing.
+	 */
+	@objc func pairNearby(_ call: CAPPluginCall) {
+		let id = call.getString("id") ?? ""
+		let service = call.getString("service") ?? ""
+		later(call) { [phone] in try $0.pairNearby(id: id, service: service, name: phone); return nil }
+	}
 
 	/**
 	 * An address of the app's own scheme the app was opened with (the web client's "Open in the Pine
@@ -219,6 +247,93 @@ public class PinePlugin: CAPPlugin, CAPBridgedPlugin {
 	}
 
 	@objc func forgetHostKey(_ call: CAPPluginCall) { later(call) { [self] in try $0.forgetKey(try hostOf(call)); return nil } }
+}
+
+/**
+ * Looking for computers that announce themselves on this network (`_pine._tcp`, the Pine app's
+ * Bonjour record) with NWBrowser, their TXT records read by the core (`nearbyComputer`) and listed
+ * once per machine id. A record is never trusted: only the owner's tap starts a pairing, which
+ * checks the host key against the machine id. When iOS refuses the local network to the app, the
+ * page is told so (`denied`), so that it can say where to allow it.
+ */
+private final class NearbyBrowser: @unchecked Sendable {
+	/** DNS-SD's "the system's policy refuses this" (dns_sd.h `kDNSServiceErr_PolicyDenied`): the local network is not allowed. */
+	private static let policyDenied: DNSServiceErrorType = -65570
+
+	private let queue = DispatchQueue(label: "pine.nearby")
+	private let tell: ([String: Any]) -> Void
+	private var browser: NWBrowser?
+	/** Whether the page asks to look (kept while the app is in the back, where nothing is looked for). */
+	private var wanted = false
+	private var told: [NearbyComputer]?
+	private var toldDenied = false
+	private var denied = false
+
+	init(_ tell: @escaping ([String: Any]) -> Void) {
+		self.tell = tell
+	}
+
+	func start() { queue.async { self.wanted = true; self.begin() } }
+	func stop() { queue.async { self.wanted = false; self.end() } }
+	func pause() { queue.async { self.end() } }
+	func resume() { queue.async { if self.wanted { self.begin() } } }
+
+	private func begin() {
+		guard browser == nil else { return }
+		told = nil
+		denied = false
+		say([])
+		let browser = NWBrowser(for: .bonjourWithTXTRecord(type: NEARBY_TYPE, domain: nil), using: NWParameters())
+		browser.stateUpdateHandler = { [weak self, weak browser] state in
+			guard let self, let browser, self.browser === browser else { return }
+			switch state {
+			case let .waiting(error), let .failed(error):
+				if case let .dns(code) = error, code == Self.policyDenied {
+					self.denied = true
+					self.say([])
+				}
+				if case .failed = state { self.end() }
+			case .ready:
+				if self.denied {
+					self.denied = false
+					self.found(browser.browseResults)
+				}
+			default:
+				break
+			}
+		}
+		browser.browseResultsChangedHandler = { [weak self, weak browser] results, _ in
+			guard let self, let browser, self.browser === browser else { return }
+			self.found(results)
+		}
+		self.browser = browser
+		browser.start(queue: queue)
+	}
+
+	private func end() {
+		browser?.cancel()
+		browser = nil
+	}
+
+	/** The whole list again from what the browser holds now; the page is told when it changed. */
+	private func found(_ results: Set<NWBrowser.Result>) {
+		let list = NearbyFound()
+		// In a fixed order, so that the same services make the same list.
+		for (name, result) in results.map({ ("\($0.endpoint)|\($0.interfaces.map(\.name))", $0) }).sorted(by: { $0.0 < $1.0 }) {
+			guard case let .bonjour(record) = result.metadata else { continue }
+			list.found(name, nearbyComputer(record.dictionary.mapValues { Optional($0) }))
+		}
+		say(list.list)
+	}
+
+	private func say(_ computers: [NearbyComputer]) {
+		if told == computers, toldDenied == denied { return }
+		told = computers
+		toldDenied = denied
+		var event: [String: Any] = ["computers": computers.map(\.json)]
+		if denied { event["denied"] = true }
+		tell(event)
+	}
 }
 
 /** What the core tells the page, as the plugin's events. */
