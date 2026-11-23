@@ -170,7 +170,7 @@ export const LoadingAgents: Story = {
 		const { canvasElement, userEvent } = context;
 		const canvas = within(canvasElement);
 		await expect(canvas.getByText(/Connecting to/)).toHaveTextContent("Connecting to me@build-box");
-		await expect(canvas.getByText("Loading its agents…")).toBeInTheDocument();
+		await expect(canvas.getByText("Loading the agents…")).toBeInTheDocument();
 		await expect(canvasElement.querySelector('[data-environment="me@build-box"] [data-slot="badge"]')).toHaveTextContent("connecting");
 		await userEvent.click(canvasElement.querySelector<HTMLElement>('[data-environment="me@build-box"] [data-slot="disconnect"]')!);
 		await expect(disconnected).toHaveBeenCalledTimes(1);

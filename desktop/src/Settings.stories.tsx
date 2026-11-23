@@ -330,11 +330,11 @@ async function generalInstead(root: HTMLElement) {
 	await expect(root.querySelector("[data-slot=sidebar-menu-button][aria-current=page]")).toHaveTextContent("General");
 }
 
-/** The desktop app on this computer's pine: Browser access is in the navigation, between Environments and App. */
+/** The desktop app on this computer's pine: Browser access is in the navigation, after Environments. (App is no entry of its own any more: it is a part of General.) */
 export const AccessOffered: Story = {
 	args: { section: "general" },
 	play: async ({ canvasElement }) => {
-		await expect(entries(canvasElement)).toEqual(expect.arrayContaining(["Environments", "Browser access", "App"]));
+		await expect(entries(canvasElement).slice(-2)).toEqual(["Environments", "Browser access"]);
 	},
 };
 
