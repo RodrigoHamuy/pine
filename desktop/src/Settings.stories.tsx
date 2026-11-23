@@ -303,6 +303,9 @@ export const AppWithoutLocal: Story = {
 
 // The app's preferences as the main process keeps them: what is set is answered back, as `pine:prefs` does.
 window.pine.prefs = async (change) => ({ ...store.prefs, ...change });
+// `pine` for a terminal, as General asks about it on this computer: not set up. (Without this the stand-in's answer
+// is a function and no promise, and the page of every story with a local machine throws.)
+window.pine.command = async () => ({ state: "none", text: "" });
 
 /** The theme picker of General: pine's themes, pmndre in force, and a file in the folder that is not a theme. */
 export const Theme: Story = {
