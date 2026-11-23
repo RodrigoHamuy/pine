@@ -30,10 +30,6 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	// On an agent's line, its initial stands beside its name, not half-way down to its description.
 	const line = await page.$eval("[data-slot=sidebar-menu-item]:has([data-slot=agent-label])", (el: Element) => ({ avatar: el.querySelector("[data-slot=avatar]")!.getBoundingClientRect(), name: el.querySelector("[data-slot=agent-label] > :first-child")!.getBoundingClientRect() }));
 	assert.ok(Math.abs(line.avatar.y + line.avatar.height / 2 - (line.name.y + line.name.height / 2)) <= 2, JSON.stringify(line));
-	// A conversation's name begins where its agent's name begins, whatever leads its row.
-	const under = await page.$$eval("[data-slot=collapsible]:has([data-slot=agent-label])", (groups: Element[]) => groups.map((g) => ({ agent: g.querySelector("[data-slot=agent-label] > :first-child")!.getBoundingClientRect().left, names: [...g.querySelectorAll("[role=option] > :last-child")].map((c) => c.getBoundingClientRect().left) })));
-	assert.ok(under.some((g: any) => g.names.length));
-	for (const g of under) for (const left of g.names) assert.equal(left, g.agent, `a conversation's name is not under its agent's: ${JSON.stringify(under)}`);
 	// What the agent is for stands on that line too, after the name and on the line its letters stand on.
 	const one = await page.$eval("[data-slot=sidebar-menu-item]:has([data-slot=agent-label])", (el: Element) => {
 		const stands = (node: Element) => {
@@ -74,18 +70,39 @@ test("the side bar is the agents: one made elsewhere appears, a group folds away
 	assert.equal(Math.round(await page.$eval("#sidebar-panel [data-slot=sidebar]", (el: Element) => el.getBoundingClientRect().width)), wide);
 	await page.reload();
 	await sees("#sidebar-panel [data-slot=agent-label]");
-	// A group folds away on a click on its agent, and comes back.
+	// An agent with one conversation is one line: nothing folds, no conversation is listed under it, and a click opens that conversation.
+	const scoutLine = page.locator("[data-slot=sidebar-menu-item]:has([data-slot=agent-label])", { has: page.locator("[data-slot=agent-label] > :first-child", { hasText: /^scout$/ }) });
 	const group = page.locator("[data-slot=collapsible]:has([data-slot=agent-label])", { has: page.locator("[data-slot=agent-label] > :first-child", { hasText: /^scout$/ }) });
-	assert.equal(await group.locator("[role=option]").count(), 1);
+	await scoutLine.locator("[data-slot=agent-conversation]").waitFor();
+	assert.equal(await group.count(), 0);
+	assert.equal(await scoutLine.locator("[data-slot=agent-count]").count(), 0);
+	await scoutLine.locator("[data-slot=agent-label]").click();
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=scout");
+	await scoutLine.locator("[data-slot=agent-conversation][data-active]").waitFor();
+	await page.click("[data-slot=tab][data-active] button[aria-label='Close this tab']");
+	// The plus on an agent's own line starts a conversation with that agent, and with a second conversation the line is a group that says how many it holds.
+	await scoutLine.locator("button[aria-label='New conversation with scout']").click();
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=new conversation");
+	assert.equal(await page.textContent("[data-slot=empty] h1"), "scout");
+	assert.match(await page.textContent("[data-slot=empty]:has(h1)"), /Looks things up on the web/);
+	await group.locator("[data-slot=agent-count] >> text=2 conversations").waitFor();
+	assert.equal(await scoutLine.locator("[data-slot=agent-conversation]").count(), 0);
+	assert.equal(await group.locator("[role=option]").count(), 2);
+	// A conversation's name begins where its agent's name begins, whatever leads its row.
+	const under = await page.$$eval("[data-slot=collapsible]:has([data-slot=agent-label])", (groups: Element[]) => groups.map((g) => ({ agent: g.querySelector("[data-slot=agent-label] > :first-child")!.getBoundingClientRect().left, names: [...g.querySelectorAll("[role=option] > :last-child")].map((c) => c.getBoundingClientRect().left) })));
+	assert.ok(under.some((g: any) => g.names.length));
+	for (const g of under) for (const left of g.names) assert.equal(left, g.agent, `a conversation's name is not under its agent's: ${JSON.stringify(under)}`);
+	// A group folds away on a click on its agent, and comes back.
 	await group.locator("[data-slot=agent-label]").click();
 	assert.equal(await group.locator("[role=option]").count(), 0);
 	await group.locator("[data-slot=agent-label]").click();
-	assert.equal(await group.locator("[role=option]").count(), 1);
-	// The plus on an agent's own line starts a conversation with that agent.
-	await group.locator("button[aria-label='New conversation with scout']").click();
-	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=scout");
-	assert.equal(await page.textContent("[data-slot=empty] h1"), "scout");
-	assert.match(await page.textContent("[data-slot=empty]:has(h1)"), /Looks things up on the web/);
+	assert.equal(await group.locator("[role=option]").count(), 2);
+	// A new conversation that is closed before anything was said in it is gone, and with one conversation left the agent is one line again.
+	await page.click("[data-slot=tab][data-active] button[aria-label='Close this tab']");
+	await scoutLine.locator("[data-slot=agent-conversation]").waitFor();
+	assert.equal(await group.count(), 0);
+	await scoutLine.locator("button[aria-label='New conversation with scout']").click();
+	await sees("[data-slot=tab][data-active] [data-slot=tab-name] >> text=new conversation");
 	await shot("14-agents");
 	// A conversation that was only started is called by how it began, in the side bar and on its tab.
 	assert.match(await page.textContent("[data-slot=tab][data-active] [data-slot=tab-name]"), /new conversation/);
@@ -173,10 +190,11 @@ test("a right click on an agent renames it in place, colors it, and offers to re
 		}
 		throw new Error(`no menu for ${agent}`);
 	};
-	// Folding is a click on the line and no menu item; the main agent has nothing to remove it with.
-	assert.deepEqual(await shown("main"), ["New conversation with main", "Open a folder with main…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Color…", "Agent settings…"]);
+	// Both agents have one conversation here, so each line is that conversation too: what its row would offer comes first, and one conversation is not sorted.
+	// The main agent has nothing to remove it with.
+	assert.deepEqual(await shown("main"), ["Open", "Move to Group…", "Start over…", "New conversation with main", "Open a folder with main…", "New Group…", "Rename…", "Color…", "Agent settings…"]);
 	// Rename turns its name in the side bar into a field: Escape keeps the name, Enter gives it the new one, and everything follows it.
-	assert.deepEqual(await shown("spare", "rename"), ["New conversation with spare", "Open a folder with spare…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Color…", "Agent settings…", "Remove spare…"]);
+	assert.deepEqual(await shown("spare", "rename"), ["Open", "Move to Group…", "Start over…", "New conversation with spare", "Open a folder with spare…", "New Group…", "Rename…", "Color…", "Agent settings…", "Remove spare…"]);
 	await page.getByLabel("New name for spare").press("Escape");
 	await sees("[data-slot=agent-label] >> text=spare");
 	await shown("spare", "rename");
@@ -192,7 +210,7 @@ test("a right click on an agent renames it in place, colors it, and offers to re
 	for (let i = 0; i < 100 && !json(kept)?.color; i++) await new Promise((r) => setTimeout(r, 30));
 	assert.match(json(kept)?.color, /^#[0-9a-f]{6}$/);
 	await page.keyboard.press("Escape");
-	assert.deepEqual(await shown("spare-hands", "remove"), ["New conversation with spare-hands", "Open a folder with spare-hands…", "New Group…", "Sort by Last Used", "Sort by Name", "Rename…", "Color…", "Agent settings…", "Remove spare-hands…"]);
+	assert.deepEqual(await shown("spare-hands", "remove"), ["Open", "Move to Group…", "Start over…", "New conversation with spare-hands", "Open a folder with spare-hands…", "New Group…", "Rename…", "Color…", "Agent settings…", "Remove spare-hands…"]);
 	// It asks first, and how: nothing is removed by the menu alone.
 	// It is an alert dialog: it does not go away with a stray click beside it.
 	await sees("[role=alertdialog] [data-slot=alert-dialog-title] >> text=Remove the agent spare-hands?");

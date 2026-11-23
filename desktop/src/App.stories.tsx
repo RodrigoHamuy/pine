@@ -1,7 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, within } from "storybook/test";
-import { SidebarFooter, SidebarMenu, SidebarProvider } from "@/components/ui/sidebar";
-import { Machines } from "./App.tsx";
+import { useEffect } from "react";
+import { SidebarFooter, SidebarMenu, SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import type { AgentInfo, Conversation } from "./api.ts";
+import { Machines, Sidebar } from "./App.tsx";
 import { store } from "./model.ts";
 
 // The foot of the side bar, open on its list of machines, without a daemon: the store is set as
@@ -29,8 +31,8 @@ const meta = {
 	parameters: { layout: "padded" },
 	// What a story sets on the store is put back after it: the next story starts from the store as it was.
 	beforeEach: () => {
-		const { local, service, prefs, connected } = store;
-		return () => void Object.assign(store, { local, service, prefs, connected });
+		const { local, service, prefs, connected, agents, conversations, groups, busy, folded } = store;
+		return () => void Object.assign(store, { local, service, prefs, connected, agents, conversations, groups, busy, folded });
 	},
 	// Opened, so that the snapshot shows the list of machines.
 	play: async ({ canvas, userEvent }) => await userEvent.click(canvas.getByRole("button", { name: /The pine the app uses/ })),
@@ -70,5 +72,73 @@ export const MachinesWithoutLocal: Story = {
 		await expect(disconnected).toHaveBeenCalledTimes(1);
 		// Opened again for the snapshot.
 		await meta.play(context);
+	},
+};
+
+// The side bar itself, with agents as the daemon would list them. An agent with one conversation is one
+// line that opens it; one with more is a group that says how many it holds.
+
+const agent = (id: string, description: string, main = false): AgentInfo => ({ id, main, description, workspace: `/home/agents/${id}`, model: "claude-sonnet", mode: "safe", thinking: "medium", delegates: [] });
+const AGENTS = [agent("prime", "Administers pine and is the one to ask", true), agent("scout", "Looks things up on the web"), agent("books", "Keeps the books")];
+const HOUR = 3_600_000;
+const said = (session: string, hoursAgo: number, more: Partial<Conversation> = {}): Conversation => ({ session, tasks: 4, last: Date.now() - hoursAgo * HOUR, pinned: false, open: false, ...more });
+
+/** In a phone-wide window the side bar is a sheet, closed until it is asked for: opened here, so that the snapshot shows it. */
+function Opened() {
+	const { isMobile, setOpenMobile } = useSidebar();
+	useEffect(() => void (isMobile && setOpenMobile(true)), [isMobile, setOpenMobile]);
+	return null;
+}
+
+function Side({ conversations, working = [] }: { conversations: Record<string, Conversation[]>; working?: string[] }) {
+	store.local = true;
+	store.service = { status: "ready", mode: "started here", started: true, home: "~/.pine", version: "0.23.0" } as typeof store.service;
+	store.connected = true;
+	store.agents = AGENTS;
+	store.conversations = new Map(Object.entries(conversations));
+	store.groups = new Map([["books", { order: "recent", groups: conversations.books?.some((c) => c.group) ? [{ name: "Taxes", conversations: 2 }] : [] }]]);
+	store.busy = new Map(working.map((key) => [key, new Set([1])]));
+	store.folded = new Set();
+	return (
+		<SidebarProvider className="h-140 min-h-0 w-72 rounded-lg border bg-sidebar">
+			<Opened />
+			<Sidebar />
+		</SidebarProvider>
+	);
+}
+
+const side = { args: { local: true }, parameters: { layout: "centered" } } as const;
+
+/** Every agent has one conversation: each is one line, with nothing to fold. The first was used two hours ago, the second is at work, the third was never said anything to. */
+export const OneConversationEach: Story = {
+	...side,
+	render: () => <Side conversations={{ prime: [said("main", 2)], scout: [said("main", 0)] }} working={["scout:main"]} />,
+	play: async () => {
+		const page = within(document.body);
+		await page.findByText("Keeps the books");
+		await expect(document.querySelectorAll("[data-slot=agent-conversation]")).toHaveLength(3);
+		await expect(document.querySelector("[data-slot=collapsible]:has([data-slot=agent-label])")).toBeNull();
+		await expect(page.queryByText(/conversations?$/)).toBeNull();
+	},
+};
+
+/** An agent with more than one conversation is a group that says how many it holds; so is one with a group of conversations. The agent with one stays one line. */
+export const SomeWithSeveral: Story = {
+	...side,
+	render: () => (
+		<Side
+			conversations={{
+				prime: [said("main", 2), said("release notes", 5), said("the okapi invoice", 30, { pinned: true })],
+				scout: [said("main", 1)],
+				books: [said("main", 50), said("vat 2026", 3, { group: "Taxes" }), said("receipts", 26, { group: "Taxes" })],
+			}}
+			working={["books:vat 2026"]}
+		/>
+	),
+	play: async () => {
+		const page = within(document.body);
+		await expect((await page.findAllByText("3 conversations")).length).toBe(2);
+		await expect(document.querySelectorAll("[data-slot=collapsible]:has(> ul [data-slot=agent-label])")).toHaveLength(2);
+		await expect(document.querySelectorAll("[data-slot=agent-conversation]")).toHaveLength(1);
 	},
 };

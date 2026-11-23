@@ -183,7 +183,8 @@ export function Gate() {
 }
 
 // ---- the side ----------------------------------------------------------------------------------------
-// The side bar is the agents. Each is a group of its own: who it is, whether it is at work, and
+// The side bar is the agents. One with a single conversation is one line that opens it. One with
+// more is a group of its own: who it is, how many conversations it has, whether it is at work, and
 // under it its conversations. What starts something new stands on the agent's own line, so it
 // is never a question whom a new conversation or a folder is for.
 
@@ -226,6 +227,46 @@ function useDrop(agent: string, group: string | null) {
 	};
 }
 
+/** What a conversation's right click offers. An agent with one conversation offers the same on its own line. */
+function conversationItems(c: Conv, movable: boolean) {
+	const main = c.session === "main";
+	return [
+		{ id: "open", label: "Open" },
+		...(c.tasks ? [{ id: "branch", label: "Branch" }] : []),
+		...(c.tasks && c.folder ? [{ id: "branch-worktree", label: "Branch into a Worktree" }] : []),
+		...(c.worktree ? [{ id: "worktree", label: "Worktree…" }] : []),
+		...(main ? [] : [{ id: "pin", label: c.pinned ? "Unpin" : "Pin" }, { id: "rename", label: "Rename…" }]),
+		...(movable ? [{ id: "move", label: "Move to Group…" }] : []),
+		{ id: "sep", label: "", separator: true },
+		main ? { id: "reset", label: "Start over…" } : { id: "remove", label: "Remove…" },
+	];
+}
+
+/** Does what was picked from a conversation's menu. */
+async function conversationPicked(agent: string, c: Conv, picked: string | undefined | null): Promise<void> {
+	const s = store;
+	if (picked === "open") await s.openTab(agent, c.session);
+	if (picked === "move") await s.askMoveToGroup(agent, c.session, c.group);
+	if (picked === "branch" || picked === "branch-worktree") await s.branch(agent, c.session, undefined, picked === "branch-worktree");
+	if (picked === "worktree") {
+		await s.openTab(agent, c.session);
+		if (s.active?.kind === "chat") await s.worktreeMenu(s.active);
+	}
+	if (picked === "pin") await s.pin({ agent, session: c.session }, !c.pinned);
+	if (picked === "rename") {
+		const to = await s.pick({ title: `Another name for ${c.session}`, items: [], free: true, placeholder: "The new name" });
+		if (to?.trim()) await s.rename(agent, c.session, to.trim());
+	}
+	if (picked === "remove") {
+		const sure = await s.pick({ title: `Remove the conversation ${c.session} of ${agent}?`, items: [{ value: "yes", label: "Remove it for good", about: "The messages, what the agent may do without asking here, what it listens to and whatever was set up only for this conversation are all deleted.", tone: "bad" }, { value: "no", label: "Cancel" }] });
+		if (sure === "yes") await s.removeConversation(agent, c.session);
+	}
+	if (picked === "reset") {
+		await s.openTab(agent, c.session);
+		if (s.active) await s.reset(s.active);
+	}
+}
+
 function ConversationRow({ agent, c, depth = 0, inset = 0 }: { agent: string; c: Conv; depth?: number; inset?: number }) {
 	const s = store;
 	// A conversation is moved with its branches: a branch shown under its original is not moved by itself.
@@ -233,38 +274,7 @@ function ConversationRow({ agent, c, depth = 0, inset = 0 }: { agent: string; c:
 	const tab = s.tabs.find((t) => t.kind === "chat" && t.agent === agent && t.session === c.session);
 	const main = c.session === "main";
 	const { setOpenMobile } = useSidebar();
-	const menu = async () => {
-		const picked = await bridge.contextMenu([
-			{ id: "open", label: "Open" },
-			...(c.tasks ? [{ id: "branch", label: "Branch" }] : []),
-			...(c.tasks && c.folder ? [{ id: "branch-worktree", label: "Branch into a Worktree" }] : []),
-			...(c.worktree ? [{ id: "worktree", label: "Worktree…" }] : []),
-			...(main ? [] : [{ id: "pin", label: c.pinned ? "Unpin" : "Pin" }, { id: "rename", label: "Rename…" }]),
-			...(movable ? [{ id: "move", label: "Move to Group…" }] : []),
-			{ id: "sep", label: "", separator: true },
-			main ? { id: "reset", label: "Start over…" } : { id: "remove", label: "Remove…" },
-		]);
-		if (picked === "open") await s.openTab(agent, c.session);
-		if (picked === "move") await s.askMoveToGroup(agent, c.session, c.group);
-		if (picked === "branch" || picked === "branch-worktree") await s.branch(agent, c.session, undefined, picked === "branch-worktree");
-		if (picked === "worktree") {
-			await s.openTab(agent, c.session);
-			if (s.active?.kind === "chat") await s.worktreeMenu(s.active);
-		}
-		if (picked === "pin") await s.pin({ agent, session: c.session }, !c.pinned);
-		if (picked === "rename") {
-			const to = await s.pick({ title: `Another name for ${c.session}`, items: [], free: true, placeholder: "The new name" });
-			if (to?.trim()) await s.rename(agent, c.session, to.trim());
-		}
-		if (picked === "remove") {
-			const sure = await s.pick({ title: `Remove the conversation ${c.session} of ${agent}?`, items: [{ value: "yes", label: "Remove it for good", about: "The messages, what the agent may do without asking here, what it listens to and whatever was set up only for this conversation are all deleted.", tone: "bad" }, { value: "no", label: "Cancel" }] });
-			if (sure === "yes") await s.removeConversation(agent, c.session);
-		}
-		if (picked === "reset") {
-			await s.openTab(agent, c.session);
-			if (s.active) await s.reset(s.active);
-		}
-	};
+	const menu = async () => conversationPicked(agent, c, await bridge.contextMenu(conversationItems(c, movable)));
 	const kept = main ? "the agent's own, always kept" : c.pinned ? "pinned" : c.group ? `kept in the group ${c.group}` : c.open ? "open in a tab" : c.expires ? `goes ${until(c.expires)}` : "kept";
 	const working = tab?.busy || s.isBusy(agent, c.session);
 	const on = Boolean(tab && tab === s.active);
@@ -390,6 +400,15 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 	const newest = (n: string) => Math.max(-1, ...rows.filter((c) => groupOf(c) === n).map((c) => c.last));
 	const groups = byName ? [...names].sort((x, y) => x.localeCompare(y)) : [...names].sort((x, y) => newest(y) - newest(x));
 	const loose = sort(rows.filter((c) => !groupOf(c)));
+	// One conversation and no group to put one into: the agent's line is that conversation, with nothing to fold.
+	// It is the agent's own (there always is one), so the line is called by the agent and needs no second name.
+	const only = rows.length === 1 && !names.length ? rows[0] : undefined;
+	const onlyTab = only && s.tabs.find((t) => t.kind === "chat" && t.agent === a.id && t.session === only.session);
+	const { setOpenMobile } = useSidebar();
+	// A fold from when it had more is forgotten, so that its conversations show when it has more again.
+	useEffect(() => {
+		if (only && folded) s.toggleFold(a.id);
+	}, [only, folded, s, a.id]);
 	const lineDrop = useDrop(a.id, null);
 	const looseDrop = useDrop(a.id, null);
 	const tabs = s.tabs.filter((t) => t.agent === a.id && t.kind === "chat");
@@ -404,13 +423,14 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 	const [renaming, setRenaming] = useState(false);
 	const [coloring, setColoring] = useState(false);
 	const menu = async () => {
+		// On a line that is a conversation too, what that conversation's own row would offer comes first. One conversation is not sorted.
+		const own = only ? conversationItems(only, true).filter((i) => !("separator" in i)) : [];
 		const picked = await bridge.contextMenu([
+			...(own.length ? [...own, { id: "sep-own", label: "", separator: true }] : []),
 			{ id: "new", label: `New conversation with ${a.id}` },
 			{ id: "folder", label: `Open a folder with ${a.id}…` },
 			{ id: "group", label: "New Group…" },
-			{ id: "sep0", label: "", separator: true },
-			{ id: "recent", label: "Sort by Last Used", checked: !byName },
-			{ id: "name", label: "Sort by Name", checked: byName },
+			...(only ? [] : [{ id: "sep0", label: "", separator: true }, { id: "recent", label: "Sort by Last Used", checked: !byName }, { id: "name", label: "Sort by Name", checked: byName }]),
 			{ id: "sep", label: "", separator: true },
 			{ id: "rename", label: "Rename…" },
 			{ id: "color", label: "Color…" },
@@ -418,6 +438,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 			// The main agent administers pine and stays.
 			...(a.main ? [] : [{ id: "sep2", label: "", separator: true }, { id: "remove", label: `Remove ${a.id}…` }]),
 		]);
+		if (only && own.some((i) => i.id === picked)) return conversationPicked(a.id, only, picked);
 		if (picked === "new") await s.newConversation(a.id);
 		if (picked === "folder") await pickFolder();
 		if (picked === "group") await s.newGroup(a.id);
@@ -427,39 +448,59 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 		if (picked === "settings") s.openSettings("agents", a.id);
 		if (picked === "remove") await s.removeAgent(a.id);
 	};
-	return (
-		<Collapsible open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
-			<SidebarMenu>
-				{/* Dropped on the agent's line, a conversation leaves its group. */}
-				<SidebarMenuItem {...lineDrop} className="app-no-drag rounded-md data-[drop]:bg-accent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
-					<AgentColorPicker agent={a} open={coloring} onOpenChange={setColoring} onChange={(c) => void s.colorAgent(a.id, c)} nativeButton={false} trigger={<span aria-hidden tabIndex={-1} className="pointer-events-none absolute top-1 left-8 size-6" />} />
-					{renaming ? (
-						<div className="flex h-8 items-center gap-2 px-2">
-							<AgentAvatar agent={a} size="sm" />
-							<AgentNameInput id={a.id} className="h-7" onDone={(to) => (setRenaming(false), to && void s.renameAgent(a.id, to))} />
-						</div>
-					) : (
-						<>
-							{/* What folds the group is the agent's line but its buttons. Under the pointer the line makes room for all three: `!`, since the
-							    stock button's room for one action (pr-8) comes later in the stylesheet and would win. */}
+	const count = rows.length === 1 ? "1 conversation" : `${rows.length} conversations`;
+	const what = a.description || a.model;
+	// An agent's name and, beside it on the same line, what it is for; a group says first how many conversations it holds. The name is whole;
+	// the rest takes the room that is left and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back.
+	const label = (
+		<span data-slot="agent-label" className="flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
+			<span className="min-w-0 flex-initial truncate">{a.id}</span>
+			<span className="@container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none" style={{ animationDuration: slideFor(only ? what : `${count} · ${what}`) }}>{only ? null : <><span data-slot="agent-count">{count}</span>{" · "}</>}{what}</span></span>
+		</span>
+	);
+	const line = (
+		<SidebarMenu>
+			{/* Dropped on the agent's line, a conversation leaves its group. */}
+			<SidebarMenuItem {...lineDrop} className="app-no-drag rounded-md data-[drop]:bg-accent" title={`${a.id}: ${a.description || "no description"}\n${a.model} · ${a.mode}${only ? "" : `\n${count}`}`} onContextMenu={(e) => (e.preventDefault(), void menu())}>
+				<AgentColorPicker agent={a} open={coloring} onOpenChange={setColoring} onChange={(c) => void s.colorAgent(a.id, c)} nativeButton={false} trigger={<span aria-hidden tabIndex={-1} className="pointer-events-none absolute top-1 left-8 size-6" />} />
+				{renaming ? (
+					<div className="flex h-8 items-center gap-2 px-2">
+						<AgentAvatar agent={a} size="sm" />
+						<AgentNameInput id={a.id} className="h-7" onDone={(to) => (setRenaming(false), to && void s.renameAgent(a.id, to))} />
+					</div>
+				) : (
+					<>
+						{/* Under the pointer the line makes room for all three buttons: `!`, since the stock button's room for one action (pr-8) comes later in the stylesheet and would win. */}
+						{only ? (
+							// The line is its one conversation: a click opens it, and it shows what that conversation's row would (it waits, works, has something new, when it was last used).
+							// Nothing folds, and the avatar stays where the avatars of the groups are.
+							<SidebarMenuButton data-slot="agent-conversation" isActive={Boolean(onlyTab && onlyTab === s.active)} className="group-hover/menu-item:pr-20!" onClick={() => (setOpenMobile(false), void s.openTab(a.id, only.session))}>
+								<span aria-hidden className="size-4 flex-none" />
+								<AgentAvatar agent={a} size="sm" />
+								{label}
+								{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Pulse /> : unread ? <Badge className="size-2 p-0" /> : only.tasks ? <span className="flex-none text-xs font-normal text-faint tabular-nums group-hover/menu-item:hidden">{ago(only.last).replace(" ago", "")}</span> : null}
+							</SidebarMenuButton>
+						) : (
+							// What folds the group is the agent's line but its buttons.
 							<CollapsibleTrigger render={<SidebarMenuButton className="group-hover/menu-item:pr-20!" />}>
 								{folded ? <ChevronRightIcon className="text-faint" /> : <ChevronDownIcon className="text-faint" />}
 								<AgentAvatar agent={a} size="sm" />
-								{/* An agent's name and, beside it on the same line, what it is for. The name is whole; what it is for takes the room that is left
-								    and is cut off where that ends. With the pointer on the line, what was cut off slides through to its end and back. */}
-								<span data-slot="agent-label" className="flex min-w-0 flex-1 items-baseline gap-2 font-semibold text-foreground">
-									<span className="min-w-0 flex-initial truncate">{a.id}</span>
-									<span className="@container min-w-0 flex-1 truncate text-xs font-normal text-faint group-hover/menu-item:text-clip"><span className="group-hover/menu-item:inline-block group-hover/menu-item:animate-slide-end motion-reduce:animate-none" style={{ animationDuration: slideFor(a.description || a.model) }}>{a.description || a.model}</span></span>
-								</span>
+								{label}
 								{waits ? <Badge variant="destructive" className="size-4 p-0">!</Badge> : working ? <Pulse /> : unread && folded ? <Badge className="size-2 p-0" /> : null}
 							</CollapsibleTrigger>
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)} aria-label={`Settings of ${a.id}`} />}><SettingsIcon /></TooltipTrigger><TooltipContent>{`Settings of ${a.id}`}</TooltipContent></HoverTooltip>
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()} aria-label={`Open a folder for a conversation with ${a.id}`} />}><FolderIcon /></TooltipTrigger><TooltipContent>{`Open a folder for a conversation with ${a.id}`}</TooltipContent></HoverTooltip>
-							<HoverTooltip><TooltipTrigger render={<SidebarMenuAction onClick={() => void s.newConversation(a.id)} aria-label={`New conversation with ${a.id}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation with ${a.id}`}</TooltipContent></HoverTooltip>
-						</>
-					)}
-				</SidebarMenuItem>
-			</SidebarMenu>
+						)}
+						<HoverTooltip><TooltipTrigger render={<SidebarMenuAction className="right-13 hidden group-hover/menu-item:flex" onClick={() => s.openSettings("agents", a.id)} aria-label={`Settings of ${a.id}`} />}><SettingsIcon /></TooltipTrigger><TooltipContent>{`Settings of ${a.id}`}</TooltipContent></HoverTooltip>
+						<HoverTooltip><TooltipTrigger render={<SidebarMenuAction className="right-7 hidden group-hover/menu-item:flex" onClick={() => void pickFolder()} aria-label={`Open a folder for a conversation with ${a.id}`} />}><FolderIcon /></TooltipTrigger><TooltipContent>{`Open a folder for a conversation with ${a.id}`}</TooltipContent></HoverTooltip>
+						<HoverTooltip><TooltipTrigger render={<SidebarMenuAction onClick={() => void s.newConversation(a.id)} aria-label={`New conversation with ${a.id}`} />}><PlusIcon /></TooltipTrigger><TooltipContent>{`New conversation with ${a.id}`}</TooltipContent></HoverTooltip>
+					</>
+				)}
+			</SidebarMenuItem>
+		</SidebarMenu>
+	);
+	if (only) return line;
+	return (
+		<Collapsible open={!folded} onOpenChange={() => s.toggleFold(a.id)}>
+			{line}
 			<CollapsibleContent>
 				{groups.map((n) => <ConversationGroup key={n} agent={a.id} name={n} rows={members(n)} />)}
 				<div {...looseDrop} className="rounded-md data-[drop]:bg-accent">
@@ -472,7 +513,7 @@ function AgentGroup({ a }: { a: AgentInfo }) {
 	);
 }
 
-function Sidebar() {
+export function Sidebar() {
 	const s = useModel(store);
 	const front = s.active;
 	const update = s.updatePhase;
