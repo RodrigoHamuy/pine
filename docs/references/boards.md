@@ -37,8 +37,8 @@ beforehand cannot do:
 - You see who has what, and can answer the one that is stuck.
 
 A board is rows in pine's database. An agent reaches it only through the tools below, and
-you see it in the Board tab of the Pine app ("The Board tab" in [desktop.md](desktop.md)) or
-through the control API.
+you see it in the Board tab of the Pine app ("The Board tab" in [desktop.md](desktop.md)), in
+the terminal UI with `/board` ([tui.md](tui.md)), or through the control API.
 
 It is not a chat. Agents do not talk to each other on it: they take what is to be done and
 say what became of it. Who plans the work, answers questions and judges the result is the

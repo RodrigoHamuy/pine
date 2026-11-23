@@ -705,7 +705,7 @@ class Work implements Component {
 const SCOPES = ["local", "agent", "global"];
 const SCOPE_HELP: Record<string, string> = { local: "only this conversation, until it is closed", agent: "the agent, in the main conversation", global: "all agents" };
 
-const PANE_HELP: Record<string, string> = { changes: "what git says changed in the folder, with the diff of each file", files: "the files of the folder", output: "what the agent's tool calls printed", running: "servers and other programs the agent left running, each with a way to stop it", turn: "what your last message changed in the folder (what /undo would restore)", off: "close the pane" };
+const PANE_HELP: Record<string, string> = { changes: "what git says changed in the folder, with the diff of each file", files: "the files of the folder", output: "what the agent's tool calls printed", running: "servers and other programs the agent left running, each with a way to stop it", board: "the conversation's boards: the tasks a job is split into, who has each, what came of it", turn: "what your last message changed in the folder (what /undo would restore)", off: "close the pane" };
 
 const childKind = (kind: string) => (kind === "subagent" ? "sub-agent" : kind === "delegate" ? "delegated task" : kind);
 
@@ -2717,16 +2717,23 @@ export class PineTui {
 				},
 			},
 			{
-				name: "code", description: "The pane beside the conversation: changes (git), files, tool output", argumentHint: "[changes|files|output|running|turn|off]",
+				name: "code", description: "The pane beside the conversation: changes (git), files, tool output, what runs, the board", argumentHint: "[changes|files|output|running|board|turn|off]",
 				getArgumentCompletions: (prefix) => [...PANE_VIEWS, "turn", "off"].filter((v) => v.startsWith(prefix.trim())).map((v) => ({ value: v, label: v, description: PANE_HELP[v] })),
 				run: (args) => {
 					const word = args.trim().toLowerCase();
-					if (word && word !== "off" && word !== "turn" && !PANE_VIEWS.includes(word as PaneView)) return this.flash("usage: /code [changes|turn|files|output|running|off]");
+					if (word && word !== "off" && word !== "turn" && !PANE_VIEWS.includes(word as PaneView)) return this.flash("usage: /code [changes|turn|files|output|running|board|off]");
 					if (this.active.kind !== "chat") return this.flash("switch to a conversation tab first");
 					// What the last message changed: the changes view, counted from before that message.
 					if (word === "turn") return this.showCode(true), this.code.showTurn();
 					// Without a word it opens and closes, like the button and ctrl+g.
 					this.showCode(word ? word !== "off" : !this.codeOpen, word && word !== "off" ? (word as PaneView) : undefined);
+				},
+			},
+			{
+				name: "board", description: "The conversation's boards in the pane beside it: the tasks a job is split into, who has each, what came of it",
+				run: () => {
+					if (this.active.kind !== "chat") return this.flash("switch to a conversation tab first");
+					this.showCode(true, "board");
 				},
 			},
 			{
@@ -3162,6 +3169,8 @@ export class PineTui {
 			return;
 		}
 		if (e.topic === "pine/conversation") return void this.followed(p);
+		// Something changed on a board: the pane reads it again while it shows the boards.
+		if (e.topic === "pine/board") return void (this.codeOpen && this.code.view === "board" && this.code.touch());
 		if (ns !== "agent") return;
 		if (kind === "goal") return this.goalEvent(p);
 		if (kind === "swarm") return this.swarmEvent(p);

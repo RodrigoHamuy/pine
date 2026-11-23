@@ -76,7 +76,7 @@ Everything in the two bars reacts to a click.
 | The conversation name next to it | This agent's conversations, and "+ new conversation" |
 | The folder next to it (`no folder`, or a path) | The folder this conversation works in: none, where pine was started, one in use elsewhere, or one you pick. See [coding.md](coding.md) |
 | The `🎤` at the right end of the input (on a Mac) | Starts dictating the message, like `ctrl+r`. While it listens it is highlighted, and a click ends the listening. See [Dictating a message](#dictating-a-message) |
-| `▤ code` at the right end of the tab bar | Opens or closes the code pane: changes (git), files, tool output and what the agent left running. In the pane: its four views, `↻` to read again, `×` to close, any file, folder or tool call to open it, `‹ back` to return |
+| `▤ code` at the right end of the tab bar | Opens or closes the code pane: changes (git), files, tool output, what the agent left running, and the conversation's boards. In the pane: its five views, `↻` to read again, `×` to close, any file, folder or tool call to open it, `‹ back` to return |
 | The model | The models you have credentials for |
 | `reasoning <level>` | How much the model thinks before answering: off, minimal, low, medium, high, xhigh, max |
 | The mode (`auto`, `safe`, `manual`, `bypass`, `plan`) | The five modes |
@@ -235,9 +235,10 @@ Type `/` and the list appears; keep typing to narrow it, `enter` runs the comman
 | `/folder [path\|none]` | Open a folder of yours for this conversation: the agent's tools start there and may read and change it. `none` closes it again; without an argument, a list. See [coding.md](coding.md) |
 | `/worktree [name]` | Move this conversation into a worktree of its folder's repository: a checkout of its own on a branch `pine/<name>`, apart from other conversations. In one, a list: merge or squash it into what it was made from, update it, ask the agent to commit, discard it. The bottom bar shows `⎇ pine/<name>`. See [coding.md](coding.md#a-worktree-for-a-conversation) |
 | `/new --worktree [name]` | A new conversation in a worktree of the folder of the one in front |
-| `/code [changes\|turn\|files\|output\|running\|off]` | Open the code pane beside the conversation, on that view; without an argument it opens and closes. `turn` shows what your last message changed |
+| `/code [changes\|turn\|files\|output\|running\|board\|off]` | Open the code pane beside the conversation, on that view; without an argument it opens and closes. `turn` shows what your last message changed |
 | `/stop` | Stop what the agent is doing |
 | `/goal [objective\|pause\|resume\|clear]` | Goal mode: with an objective, the agent keeps working by itself, round after round, until a judge says the objective is met. Without an argument it shows the goal and where it stands; `pause`, `resume` and `clear` do what they say. See "Goals" below |
+| `/board` | The conversation's boards in the code pane (the same as `/code board`): for each how its tasks stand, then every task with who has it (`○` to do, `●` in progress, `?` waiting for an answer, `✓` done, `✗` failed) and the notes for all. A click on a task shows it in full: what it says, what came of it or what it asks, and the notes about it. It follows the board while it is open. It only shows: to answer a task's question or take a task back, tell the agent, or use the Board tab of the Pine app. See [boards.md](boards.md). |
 | `/swarm [what is to be done\|pause\|resume\|clear]` | A swarm: with a job, the agent leads it. Its sub-agents work the job through on the conversation's board (a job of a few steps it does itself), pine calls the agent again while tasks there are not done, and has its answer checked before the swarm is done. Without an argument it shows where the swarm stands. See "Swarms" below and [boards.md](boards.md). |
 | `/model [provider/id]` | Switch the agent's model. Without an argument, a list to search and pick from; or type a few letters after it: `/model deepseek` |
 | `/reasoning [level]` | Set how much the model thinks before answering; without an argument, choose from a list. Saved like the model. A model that cannot reason ignores it |
@@ -320,7 +321,8 @@ each thing pine did about it:
 `‖` is a swarm that waits for you: paused, at its limit, or its lead asked you something (then
 your answer is its next turn). `/swarm resume` goes on, `/swarm clear` takes it off, and its
 board stays. `esc` stops the round that is running and pauses the swarm; while the answer is
-being checked it pauses the swarm, and the check ends by itself.
+being checked it pauses the swarm, and the check ends by itself. `/board` shows the swarm's
+tasks beside the conversation while it works.
 
 ## Keys
 

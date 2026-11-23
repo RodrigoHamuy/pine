@@ -1574,6 +1574,47 @@ test("tui: an agent's question is a dialog with its answers to pick from; a numb
 	await t.close();
 });
 
+test("tui: /board shows the conversation's board in the pane beside it: the tasks with who has each, a task in full on a click, and it follows what happens", async () => {
+	const t = await open({ pine: { limits: { maxConcurrentRuns: 4 } }, agents: { main: { agent: { subagents: { maxParallel: 2 } } } } }, [170, 40]);
+	await t.sees("type a message");
+	await t.send("/board");
+	await t.sees("No board yet.");
+	// A pool of two: the first is done at once, the second takes a while, with a note for both.
+	let finish = false;
+	t.h.mock.state.scripts.one = [{ text: "ONE-RESULT forty rows" }];
+	t.h.mock.state.scripts.two = [{ until: () => finish, text: "TWO-RESULT the sums are right" }];
+	await t.send(mockMsg([{ tools: [{ name: "subagent", args: { pool: true, tasks: ["count the rows @@REF:one@@", "check the sums @@REF:two@@"], note: "USE-TABS in every file" } }] }, { text: "HANDED-OUT and done" }]));
+	// While the second is at work the pane shows the board as it stands, without anybody asking for it again.
+	await t.sees("This conversation's board");
+	await t.sees("✓ #1 count the rows");
+	await t.sees("● #2 check the sums");
+	await t.sees("in progress, a sub-agent of main has it");
+	await t.sees("1 of 2 done");
+	await t.sees("main: USE-TABS in every file");
+	finish = true;
+	await t.sees("HANDED-OUT and done");
+	await t.sees("2 of 2 done");
+	await t.sees("✓ #2 check the sums");
+	// A click on a task shows it in full: what it says, what came of it; and a way back.
+	const row = t.app.screen().findIndex((l) => l.includes("✓ #1 count the rows"));
+	t.term.click(t.app.screen()[row].indexOf("#1 count") + 3, row);
+	await t.sees("‹ back");
+	await t.sees("posted by main · done");
+	await t.sees("Result:");
+	await t.sees("ONE-RESULT forty rows");
+	assert.ok(!t.text().includes("✓ #2 check the sums"), "one task, not the list");
+	const back = t.app.screen().findIndex((l) => l.includes("‹ back"));
+	t.term.click(t.app.screen()[back].indexOf("‹ back") + 2, back);
+	await t.sees("✓ #2 check the sums");
+	// It is one of the pane's views: the same from /code, and its tab is in the pane's head.
+	await t.send("/code files");
+	await until(() => !t.text().includes("This conversation's board"), 4000, "the files view");
+	assert.ok(t.text().includes(" Board "), "the pane names the view");
+	await t.send("/code board");
+	await t.sees("This conversation's board");
+	await t.close();
+});
+
 test("tui: the agent's list of steps is shown and kept up to date, and the agent is reminded of what is open", async () => {
 	const t = await open({ agents: { main: {} } }, [110, 40]);
 	await t.sees("type a message");
