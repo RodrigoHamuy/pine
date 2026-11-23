@@ -446,8 +446,8 @@ async function main(): Promise<void> {
 			if (twice) kept.push(old);
 			return twice;
 		};
-		// The example's main agent goes to the main agent of the home: a home from before it was called
-		// prime keeps its own name for it, and is not given a second one.
+		// The example's main agent goes to the main agent of the home: a home whose main agent has another
+		// name (a new one was called prime for a while) keeps that name for it, and is not given a second one.
 		const example = path.join(PINE_ROOT, "examples", "home");
 		const created: string[] = [];
 		const top = (name: string) => path.join(target, name === ".env.example" ? ".env" : name);
@@ -471,7 +471,7 @@ async function main(): Promise<void> {
 		})();
 		const own = path.join(target, "agents", main);
 		fs.mkdirSync(own, { recursive: true });
-		created.push(...copyDir(path.join(example, "agents", "prime"), own, skip));
+		created.push(...copyDir(path.join(example, "agents", "main"), own, skip));
 		out(created.length ? `Created in ${target}:\n${created.map((f) => `  ${path.relative(target, f)}`).join("\n")}` : `${target} already has every example file; nothing changed.`);
 		for (const old of kept) out(`\n${path.relative(target, old)} stays where it is: there the agent reads it but cannot change it. To let the agent keep up the instructions itself, move the file to ${path.relative(target, path.join(path.dirname(old), "workspace", "AGENTS.md"))}.`);
 		// Everything the built-in tools need comes with it, so that what is set up also works. The

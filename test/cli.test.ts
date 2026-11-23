@@ -27,28 +27,28 @@ test("pine init creates a private home that passes pine check", async (t) => {
 	const init = await run(process.execPath, [CLI, "init", dir]);
 	assert.match(init.stdout, /pine\.json/);
 	assert.equal(fs.statSync(dir).mode & 0o777, 0o700);
-	for (const f of ["pine.json", "models.json", ".env", "USER.md", "AGENTS.md", "TOOLS.md", "agents/prime/workspace/AGENTS.md", "agents/prime/workspace/SOUL.md", "agents/prime/workspace/TOOLS.md", "agents/prime/workspace/MEMORY.md"]) assert.equal(fs.statSync(path.join(dir, f)).mode & 0o777, 0o600, f);
-	assert.ok(!fs.existsSync(path.join(dir, "agents", "prime", "AGENTS.md")), "an agent's instructions are in its workspace, where it can change them");
+	for (const f of ["pine.json", "models.json", ".env", "USER.md", "AGENTS.md", "TOOLS.md", "agents/main/workspace/AGENTS.md", "agents/main/workspace/SOUL.md", "agents/main/workspace/TOOLS.md", "agents/main/workspace/MEMORY.md"]) assert.equal(fs.statSync(path.join(dir, f)).mode & 0o777, 0o600, f);
+	assert.ok(!fs.existsSync(path.join(dir, "agents", "main", "AGENTS.md")), "an agent's instructions are in its workspace, where it can change them");
 	const check = await run(process.execPath, [CLI, "check", "--home", dir]);
-	for (const part of ["agent prime (main)", "mcp        web, browser", "model      none yet", "No security notes."]) assert.ok(check.stdout.includes(part), `${part}\n${check.stdout}`);
-	assert.equal(fs.readdirSync(path.join(dir, "agents")).join(), "prime", "the example starts with one agent");
+	for (const part of ["agent main (main)", "mcp        web, browser", "model      none yet", "No security notes."]) assert.ok(check.stdout.includes(part), `${part}\n${check.stdout}`);
+	assert.equal(fs.readdirSync(path.join(dir, "agents")).join(), "main", "the example starts with one agent");
 	const again = await run(process.execPath, [CLI, "init", dir]);
 	assert.match(again.stdout, /nothing changed/);
 	// A home from before that: its instructions stay where the owner has them, and no second copy is made.
-	fs.renameSync(path.join(dir, "agents", "prime", "workspace", "AGENTS.md"), path.join(dir, "agents", "prime", "AGENTS.md"));
-	fs.rmSync(path.join(dir, "agents", "prime", "workspace", "SOUL.md"));
+	fs.renameSync(path.join(dir, "agents", "main", "workspace", "AGENTS.md"), path.join(dir, "agents", "main", "AGENTS.md"));
+	fs.rmSync(path.join(dir, "agents", "main", "workspace", "SOUL.md"));
 	const older = await run(process.execPath, [CLI, "init", dir]);
-	assert.ok(older.stdout.includes("agents/prime/workspace/SOUL.md") && /agents\/prime\/AGENTS\.md stays where it is.*move the file to agents\/prime\/workspace\/AGENTS\.md/s.test(older.stdout), older.stdout);
-	assert.ok(!fs.existsSync(path.join(dir, "agents", "prime", "workspace", "AGENTS.md")));
+	assert.ok(older.stdout.includes("agents/main/workspace/SOUL.md") && /agents\/main\/AGENTS\.md stays where it is.*move the file to agents\/main\/workspace\/AGENTS\.md/s.test(older.stdout), older.stdout);
+	assert.ok(!fs.existsSync(path.join(dir, "agents", "main", "workspace", "AGENTS.md")));
 
-	// A home from before the main agent was called prime: what is missing is put into its own main agent, and no second one is made.
+	// A home whose main agent has another name (a new home's was called prime for a while): what is missing is put into its own main agent, and no second one is made.
 	const old = path.join(path.dirname(dir), "old");
-	fs.mkdirSync(path.join(old, "agents", "main", "workspace"), { recursive: true });
-	fs.writeFileSync(path.join(old, "pine.json"), JSON.stringify({ main: "main", defaults: { model: "x/y" } }));
+	fs.mkdirSync(path.join(old, "agents", "prime", "workspace"), { recursive: true });
+	fs.writeFileSync(path.join(old, "pine.json"), JSON.stringify({ main: "prime", defaults: { model: "x/y" } }));
 	await run(process.execPath, [CLI, "init", old]);
-	assert.equal(fs.readdirSync(path.join(old, "agents")).join(), "main");
-	assert.ok(fs.existsSync(path.join(old, "agents", "main", "workspace", "SOUL.md")));
-	assert.equal(JSON.parse(fs.readFileSync(path.join(old, "pine.json"), "utf8")).main, "main", "its pine.json is its own");
+	assert.equal(fs.readdirSync(path.join(old, "agents")).join(), "prime");
+	assert.ok(fs.existsSync(path.join(old, "agents", "prime", "workspace", "SOUL.md")));
+	assert.equal(JSON.parse(fs.readFileSync(path.join(old, "pine.json"), "utf8")).main, "prime", "its pine.json is its own");
 });
 
 test("the command line drives a running daemon", async (t) => {

@@ -4,7 +4,7 @@ import { WelcomeLetter } from "./WelcomeLetter.tsx";
 const meta = {
 	component: WelcomeLetter,
 	decorators: [(Story) => <div className="mx-auto max-w-3xl p-7"><Story /></div>],
-	args: { main: "prime", home: "~/.pine", here: true, settings: () => {}, reveal: () => {}, say: () => {} },
+	args: { main: "main", home: "~/.pine", here: true, settings: () => {}, reveal: () => {}, say: () => {} },
 } satisfies Meta<typeof WelcomeLetter>;
 export default meta;
 

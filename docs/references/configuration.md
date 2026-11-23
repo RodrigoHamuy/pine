@@ -65,7 +65,7 @@ asked you for it (`pine model add`, `add_model_server`); `models.json` names it 
 
 ```json
 {
-  "main": "prime",
+  "main": "main",
   "logLevel": "info",
   "defaults": { "model": "local/deepseek-v4.1-flash", "thinking": "off" },
   "limits": { "maxConcurrentRuns": 2 },
@@ -84,7 +84,7 @@ asked you for it (`pine model add`, `add_model_server`); `models.json` names it 
 
 | Key | Default | Meaning |
 |---|---|---|
-| `main` | none | Id of the main agent. It is the only one that can create agents and set things up for all agents ([setup.md](setup.md)), and the one agent that `*` in another agent's `delegates` leaves out. Without this key, the agent called `main` (or else the first one) is the main agent. A new home names `prime`; a home from before has `main`. |
+| `main` | none | Id of the main agent. It is the only one that can create agents and set things up for all agents ([setup.md](setup.md)), and the one agent that `*` in another agent's `delegates` leaves out. Without this key, the agent called `main` (or else the first one) is the main agent. A new home names `main`; a home made while a new one's was called `prime` keeps `prime`. |
 | `logLevel` | `info` | `debug`, `info`, `warn`, `error`, `silent`. Logs go to stderr; a daemon started inside the terminal UI logs to `data/pine.log`. |
 | `dataDir` | `data` | Where the database, media and control token live. |
 | `defaults.model` | none | `provider/model-id` from `models.json`: the model of every agent whose `agent.json` names none. There is no built-in fallback. A new home has no default model: the first model you connect (`pine login`, `pine model add`, Settings > Models) becomes it, and until then an agent with no model named says so instead of answering. |

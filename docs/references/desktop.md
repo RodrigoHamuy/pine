@@ -76,7 +76,7 @@ web tools drive. It asks for each where it is missing.
 | What the app finds | What it does |
 |---|---|
 | No pine home | It offers to set pine up (`pine init`): the example home is copied, and the browser is fetched (about 600 MB, once) |
-| The welcome | The app opens on the main agent's own conversation (`prime` in a new home, with pine's mark as its picture), which begins with pine's welcome: that the main agent is pine's administrator and the one to ask, that agents come first (ask it for one for each purpose: coding, work, automation, chat), that the first conversation is kept and the others are cleared after a while unless pinned, the things pine is for (chatting, code, a folder, acting on events), a prompt to try (one that watches the Downloads folder, which puts its words into the input), and where pine keeps everything (its home, shown in the Finder with a click). pine wrote it, and it is never sent to a model. The terminal UI shows the same there while nothing was said in it yet |
+| The welcome | The app opens on the main agent's own conversation (`main` in a new home, with pine's mark as its picture), which begins with pine's welcome: that the main agent is pine's administrator and the one to ask, that agents come first (ask it for one for each purpose: coding, work, automation, chat), that the first conversation is kept and the others are cleared after a while unless pinned, the things pine is for (chatting, code, a folder, acting on events), a prompt to try (one that watches the Downloads folder, which puts its words into the input), and where pine keeps everything (its home, shown in the Finder with a click). pine wrote it, and it is never sent to a model. The terminal UI shows the same there while nothing was said in it yet |
 | Nothing to answer with | A new home has nothing to run on: the agent's card at the top of a conversation says **Connect a model first**, with a button to Settings > Models (the main agent's too, above pine's welcome); that page lists every agent that cannot answer, with the reason (nothing connected yet, or nobody signed in to its provider). A message sent meanwhile says so; send it again once a model is there |
 | A sign-in in Settings > Models | A Claude, ChatGPT or Copilot subscription is signed in to through the browser (**Sign in**), any provider with an API key. Where the choice in force cannot answer, pine switches to the provider's usual one (pi's choice) and the dialog says which, with **Another one…**; so does adding a server of your own. Otherwise nothing switches by itself and the dialog offers **Choose the model your agents run on**. The page keeps it (`defaults.model`) with **Change** |
 | The first message | No agent writes first. Main, and every other agent, introduces itself in its answer to the first message you write to it. Once each; `defaults.introduce` turns it off ([agents.md](agents.md), "Meeting an agent") |
@@ -267,8 +267,9 @@ shows it, the main agent can set it (`set_setting ui.theme`), and with another m
 
 ## Environments: the pine of another machine
 
-The app can use the pine of another machine instead of the one on this computer: a server, a
-desktop at home, anything you reach with `ssh`. It uses one pine at a time. The foot of the side
+The app can use the pine of another machine instead of the one on this computer: a pine running
+on a server, on a desktop at home, on anything you reach over SSH (with `ssh`). It uses one pine
+at a time. The foot of the side
 bar says which (`pine 0.23.0 · started here`, or `pine 0.23.0 · server`): a click on it lists
 This Mac and the machines you added, and Environments… leads to Settings > Environments, where
 machines are added and forgotten. The palette (`⌘K`) has "Use the pine on …" too. In a terminal,

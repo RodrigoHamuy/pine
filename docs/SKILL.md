@@ -206,14 +206,14 @@ pine init
 pine
 ```
 
-One agent, `prime` (the main agent), with web search and a browser, and the terminal UI to talk to it. Everything
+One agent, `main` (the main agent), with web search and a browser, and the terminal UI to talk to it. Everything
 below is added on top of that when you need it.
 
 `~/.pine/pine.json`:
 
 ```json
 {
-  "main": "prime",
+  "main": "main",
   "defaults": { "model": "opencode-go/deepseek-v4.1-flash" }
 }
 ```

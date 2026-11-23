@@ -52,7 +52,7 @@ pine init
 sets everything up in one step:
 
 - From a fresh checkout, `bin/pine` first installs pine's dependencies (`npm install`), once.
-- It copies the example home to `~/.pine`: one agent, `prime`, the main agent, with web search, the browser and,
+- It copies the example home to `~/.pine`: one agent, `main`, the main agent, with web search, the browser and,
   on a Mac, app control ([computer.md](computer.md)), a `models.json`, an empty `.env`. Nothing
   is overwritten if you run it again, and a home whose main agent has another name (`main`, in a
   home from before) keeps it.
@@ -85,7 +85,7 @@ pine start
 ```
 
 and from another terminal `pine` (attaches to it) or
-`pine send prime "Say hello and list your tools."`.
+`pine send main "Say hello and list your tools."`.
 
 ### Choosing a model
 

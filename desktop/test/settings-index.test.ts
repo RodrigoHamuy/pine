@@ -32,7 +32,7 @@ test("pine's settings, agents and what pine has are found where their pages show
 			{ key: "tuning.warmSlots", about: "Not on the page.", kind: "boolean", now: "true", live: true },
 		],
 		agents: [
-			{ id: "prime", main: true, description: "Runs pine.", workspace: "/w", mode: "safe", thinking: "medium", delegates: [] } as any,
+			{ id: "main", main: true, description: "Runs pine.", workspace: "/w", mode: "safe", thinking: "medium", delegates: [] } as any,
 			{ id: "scout", main: false, description: "Looks things up.", workspace: "/w", mode: "auto", thinking: "low", delegates: [] } as any,
 		],
 		providers: [{ id: "mistral", name: "Mistral", signedIn: false, models: 3, oauth: false }, { id: "mock", signedIn: true, models: 1, oauth: false }],
@@ -51,7 +51,7 @@ test("pine's settings, agents and what pine has are found where their pages show
 	assert.equal(search(list, "mock").filter((e) => e.id.startsWith("provider:")).length, 0);
 	// An agent's fields, for each agent, but the main agent cannot be removed.
 	assert.deepEqual(one("scout network").place, { section: "agents", agent: "scout", find: `[data-find="agent-network"]` });
-	assert.ok(search(list, "remove this agent").every((e) => e.place.agent !== "prime"));
+	assert.ok(search(list, "remove this agent").every((e) => e.place.agent !== "main"));
 	assert.equal(one("studio").place.find, `[data-environment="studio.local"]`);
 });
 

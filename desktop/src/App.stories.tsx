@@ -79,7 +79,7 @@ export const MachinesWithoutLocal: Story = {
 // line that opens it; one with more is a group that says how many it holds.
 
 const agent = (id: string, description: string, main = false): AgentInfo => ({ id, main, description, workspace: `/home/agents/${id}`, model: "claude-sonnet", mode: "safe", thinking: "medium", delegates: [] });
-const AGENTS = [agent("prime", "Administers pine and is the one to ask", true), agent("scout", "Looks things up on the web"), agent("books", "Keeps the books")];
+const AGENTS = [agent("main", "Administers pine and is the one to ask", true), agent("scout", "Looks things up on the web"), agent("books", "Keeps the books")];
 const HOUR = 3_600_000;
 const said = (session: string, hoursAgo: number, more: Partial<Conversation> = {}): Conversation => ({ session, tasks: 4, last: Date.now() - hoursAgo * HOUR, pinned: false, open: false, ...more });
 
@@ -112,7 +112,7 @@ const side = { args: { local: true }, parameters: { layout: "centered" } } as co
 /** Every agent has one conversation: each is one line, with nothing to fold. The first was used two hours ago, the second is at work, the third was never said anything to. */
 export const OneConversationEach: Story = {
 	...side,
-	render: () => <Side conversations={{ prime: [said("main", 2)], scout: [said("main", 0)] }} working={["scout:main"]} />,
+	render: () => <Side conversations={{ main: [said("main", 2)], scout: [said("main", 0)] }} working={["scout:main"]} />,
 	play: async () => {
 		const page = within(document.body);
 		await page.findByText("Keeps the books");
@@ -128,7 +128,7 @@ export const SomeWithSeveral: Story = {
 	render: () => (
 		<Side
 			conversations={{
-				prime: [said("main", 2), said("release notes", 5), said("the okapi invoice", 30, { pinned: true })],
+				main: [said("main", 2), said("release notes", 5), said("the okapi invoice", 30, { pinned: true })],
 				scout: [said("main", 1)],
 				books: [said("main", 50), said("vat 2026", 3, { group: "Taxes" }), said("receipts", 26, { group: "Taxes" })],
 			}}

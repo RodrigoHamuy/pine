@@ -922,7 +922,7 @@ limit.
 
 ## A layout that keeps the pieces apart
 
-The example home starts with one agent, `prime`, the main agent, that has web search and the browser, and your
+The example home starts with one agent, `main`, the main agent, that has web search and the browser, and your
 account in your own conversations. What stands between the two is small: once a
 conversation has read the web, you are asked before it sends something out, and before a
 critical action as always ("What asks you"). Its shell is not looked at. That is the

@@ -4,7 +4,7 @@ import { ModelNotice } from "./model-notice.tsx";
 const meta = {
 	component: ModelNotice,
 	decorators: [(Story) => <div className="mx-auto max-w-xl p-7"><Story /></div>],
-	args: { agent: "prime", problem: "No model yet.", onModels: () => {} },
+	args: { agent: "main", problem: "No model yet.", onModels: () => {} },
 } satisfies Meta<typeof ModelNotice>;
 export default meta;
 
