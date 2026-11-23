@@ -1,0 +1,28 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Pelican Ride</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #10131a; display: grid; place-items: center; }
+  canvas { width: min(100vw, 177.78vh); aspect-ratio: 16 / 9; image-rendering: auto; border-radius: 10px; }
+</style>
+<canvas id="game" width="1280" height="720"></canvas>
+<script>const Game = {};</script>
+<script src="src/world.js"></script>
+<script src="src/bicycle.js"></script>
+<script src="src/pelican.js"></script>
+<script src="src/game.js"></script>
+<script>
+  // Space or a tap makes the pelican jump. A fish is caught by being in the air when it comes by.
+  const ctx = document.getElementById("game").getContext("2d");
+  const jumps = [];
+  const start = performance.now();
+  const now = () => (performance.now() - start) / 1000;
+  const jump = () => { if (Game.lift(now(), jumps) === 0) jumps.push(now()); };
+  addEventListener("keydown", (e) => { if (e.code === "Space") { e.preventDefault(); jump(); } });
+  addEventListener("pointerdown", jump);
+  (function loop() {
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
+    Game.frame(ctx, now(), jumps);
+    requestAnimationFrame(loop);
+  })();
+</script>

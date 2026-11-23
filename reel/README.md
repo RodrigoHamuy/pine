@@ -16,6 +16,8 @@ desktop app, in pictures of the real one (see below).
 | `film-code.js` | such a film: what pine adds for working on code (`--film code`) |
 | `film-view.html`, `film-view.js` | a film with a page of its own: the app's view, with pine's own office view running in it (`--film view`) |
 | `app-shots.mjs` | takes the pictures of the desktop app that `story-front.js` shows |
+| `film-swarm.html`, `film-swarm.js` | a film about boards and swarms: a game built until a critic scores it 8, and a security review of the owner's own demo shop (`--film swarm`; its script is `film-swarm.md`) |
+| `swarm-shots.mjs` | runs the two swarms of `film-swarm.js` in the real desktop app and takes its pictures; `swarm/` holds the game and the shop they work on |
 | `bill/` | the made-up letters the films show, and what draws them |
 | `render.mjs` | draws the film frame by frame in a headless browser and hands the frames to ffmpeg |
 | `sound.py` | makes the typing and click sounds from the cues the render writes down |

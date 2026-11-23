@@ -24,3 +24,6 @@ assets/front/
 # The camera clips of story-watchdog.js and story-front.js, made by a video model (frames with a camera's
 # clock and name on them): too big to keep.
 assets/cam/
+
+# The pictures of the desktop app for film-swarm.js: `node reel/swarm-shots.mjs` takes them again.
+assets/swarm/
