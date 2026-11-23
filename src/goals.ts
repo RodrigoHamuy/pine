@@ -97,7 +97,7 @@ export function parseJudgement(text: string): { verdict: GoalVerdict; reason?: s
 	return undefined;
 }
 
-type Manager = Pick<AgentManager, "cfg" | "kv" | "tasks" | "bus" | "limiter" | "models" | "submit" | "cancel" | "resolveModel" | "modelFor" | "callSlot">;
+type Manager = Pick<AgentManager, "cfg" | "kv" | "tasks" | "bus" | "limiterOf" | "models" | "submit" | "cancel" | "resolveModel" | "modelFor" | "callSlot">;
 
 export class Goals {
 	private m: Manager;
@@ -333,7 +333,7 @@ export class Goals {
 		this.judging.set(id, stop);
 		const { system, user } = judgePrompt(goal.objective, answer, tools);
 		// The model server has as many places as pine has slots; the judge takes one like any other call.
-		const slot = await this.m.limiter.acquire(10);
+		const slot = await this.m.limiterOf(cfg.defaults.judge ?? agent.model ?? cfg.defaults.model).acquire(10);
 		try {
 			if (stop.signal.aborted) return undefined;
 			// A model of its own where one is set: a second, small model keeps the judge from pushing the agent's conversation out of a model server's cache.

@@ -18,7 +18,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "cn";
 import { type ComponentProps, Fragment, type ReactNode, useEffect, useId, useMemo, useRef, useState } from "react";
-import { type AgentDetail, api, type LoginState, type Provider, type Route, type Setting, type SourceType } from "./api.ts";
+import { type AgentDetail, api, type LoginState, type ModelServer, type Provider, type Route, type Setting, type SourceType } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { Editor } from "./CodePanel.tsx";
 import { store, type UpdatePhase, useModel, useSignal } from "./model.ts";
@@ -933,6 +933,86 @@ function NewModelServer({ made }: { made: () => void }) {
  * Settings > Models, in the order a newcomer needs it: what is missing, which model the agents use once there is
  * one, the subscriptions they may have, and a model on their own computer.
  */
+/** How many runs a server may be given at a time, as the choices of a select: pine's own limit first. */
+const RUNS = [1, 2, 3, 4, 6, 8, 12, 16];
+
+/**
+ * A model server of the owner's own: where it is, each of its models on a line of its own with what it can do,
+ * who uses it, and how many runs it takes at a time. A model on one's own computer serves one or two requests at
+ * once, so that number is the server's, not pine's.
+ */
+function ModelServerCard({ server: x, inUse, fallback, reload }: { server: ModelServer; inUse: string[]; fallback?: string; reload: () => void }) {
+	const runs = x.runs ?? 8;
+	// What holds for a model without a number of its own: its server's, or pine's.
+	const forAll = x.limit ?? runs;
+	const numbers = (own?: number) => [...new Set([...RUNS, ...(own ? [own] : [])])].sort((a, b) => a - b).map((n) => ({ value: String(n), label: n === 1 ? "1, one after the other" : `${n} at the same time` }));
+	const set = (v: string, model?: string) => void store.attempt(() => api.limitModelServer(x.name, v === "default" ? null : Number(v), model)).then((r) => r && reload());
+	return (
+		<div className="flex flex-col gap-2" data-find={`model-server:${x.name}`} data-server={x.name}>
+			<Item variant="outline" size="sm">
+				<ItemMedia variant="icon"><ServerIcon /></ItemMedia>
+				<ItemContent className="min-w-0">
+					<ItemTitle>{x.name}</ItemTitle>
+					<ItemDescription className="font-mono wrap-anywhere">{x.baseUrl}</ItemDescription>
+				</ItemContent>
+				<ItemActions>
+					<AlertDialog>
+						<AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Remove</AlertDialogTrigger>
+						<AlertDialogContent>
+							<AlertDialogHeader>
+								<AlertDialogTitle>Remove the model server {x.name}?</AlertDialogTitle>
+							</AlertDialogHeader>
+							<AlertDialogFooter>
+								<AlertDialogCancel>Cancel</AlertDialogCancel>
+								<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeModelServer(x.name)).then((r) => r && (store.flash(`Removed ${x.name}.`), reload()))}>Remove</AlertDialogCancel>
+							</AlertDialogFooter>
+						</AlertDialogContent>
+					</AlertDialog>
+				</ItemActions>
+			</Item>
+			{/* (Its models stand in under its name: they are the server's. Each says how many agents may use it at once,
+			    since one server can serve models that are set up differently.) */}
+			{x.models.length ? (
+				<ItemGroup className="pl-7">
+					{x.models.map((m) => {
+						const ref = `${x.name}/${m.id}`;
+						return (
+							<Item key={m.id} variant="muted" size="sm" data-model={ref}>
+								<ItemContent className="min-w-0">
+									<ItemTitle className="font-mono wrap-anywhere">
+										{m.id}
+										{ref === fallback ? <Badge variant="secondary" className="font-sans">default model</Badge> : null}
+									</ItemTitle>
+									<ItemDescription>{[m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k tokens of context` : "", m.images ? "sees pictures" : "text only", m.reasoning ? "can reason" : ""].filter(Boolean).join(" · ")}</ItemDescription>
+								</ItemContent>
+								<ItemActions data-setting={`model-runs:${ref}`}>
+									<Choose id={`model-runs-${ref}`} items={[{ value: "default", label: `${forAll} at the same time, as the server` }, ...numbers(m.limit)]} value={m.limit ? String(m.limit) : "default"} onChange={(v) => set(v, m.id)} />
+								</ItemActions>
+							</Item>
+						);
+					})}
+				</ItemGroup>
+			) : (
+				<p className="pl-7 text-muted-foreground">This server lists no models.</p>
+			)}
+			<FieldGroup className="pl-7">
+				<Field orientation="responsive" data-setting={`server-runs:${x.name}`}>
+					<FieldContent className="min-w-0">
+						<FieldTitle>At the same time</FieldTitle>
+						<FieldDescription>
+							How many agents and sub-agents use a model of this server at once, for each model that has no number of its own above. The rest wait their turn. A model on your own computer usually handles 1 or 2.
+							{inUse.length ? ` Used by ${inUse.join(", ")}.` : ""}
+						</FieldDescription>
+					</FieldContent>
+					<Control>
+						<Choose id={`server-runs-${x.name}`} items={[{ value: "default", label: `${runs}, as everywhere` }, ...numbers(x.limit)]} value={x.limit ? String(x.limit) : "default"} onChange={(v) => set(v)} />
+					</Control>
+				</Field>
+			</FieldGroup>
+		</div>
+	);
+}
+
 function Models() {
 	const providers = useLoad(() => api.providers());
 	const servers = useLoad(() => api.modelServers());
@@ -1008,33 +1088,11 @@ function Models() {
 				}
 			>
 				{servers.data?.length ? (
-					<ItemGroup>
+					<div className="flex flex-col gap-6">
 						{servers.data.map((x) => (
-							<Item key={x.name} variant="outline" size="sm" data-find={`model-server:${x.name}`}>
-								<ItemContent className="min-w-0">
-									<ItemTitle>
-										{x.name}
-										<Badge variant="secondary" className="font-mono">{x.baseUrl}</Badge>
-									</ItemTitle>
-									<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{x.models.map((m) => `${x.name}/${m.id}${m.contextWindow ? ` (${Math.round(m.contextWindow / 1000)}k${m.images ? ", sees pictures" : ""}${m.reasoning ? ", thinks" : ""})` : ""}`).join(" · ") || "no models"}</ItemDescription>
-								</ItemContent>
-								<ItemActions>
-									<AlertDialog>
-										<AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Remove</AlertDialogTrigger>
-										<AlertDialogContent>
-											<AlertDialogHeader>
-												<AlertDialogTitle>Remove the model server {x.name}?</AlertDialogTitle>
-											</AlertDialogHeader>
-											<AlertDialogFooter>
-												<AlertDialogCancel>Cancel</AlertDialogCancel>
-												<AlertDialogCancel variant="destructive" onClick={() => void store.attempt(() => api.removeModelServer(x.name)).then((r) => r && (store.flash(`Removed ${x.name}.`), reload()))}>Remove</AlertDialogCancel>
-											</AlertDialogFooter>
-										</AlertDialogContent>
-									</AlertDialog>
-								</ItemActions>
-							</Item>
+							<ModelServerCard key={x.name} server={x} inUse={s.agents.filter((a) => (a.model ?? fallback.data ?? "").startsWith(`${x.name}/`)).map((a) => a.id)} fallback={fallback.data} reload={reload} />
 						))}
-					</ItemGroup>
+					</div>
 				) : servers.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
 				) : null}

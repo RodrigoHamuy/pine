@@ -9,7 +9,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { addRoute, applySetting, checkRoute, checkSetting, dropRoute, type RouteInput, SETTINGS, settleModel } from "./admin.ts";
+import { addRoute, applyServerLimit, applySetting, checkRoute, checkServerLimit, checkSetting, dropRoute, type RouteInput, SETTINGS, settleModel } from "./admin.ts";
 import { AGENT_TOOLS } from "./agent-admin.ts";
 import type { AgentManager } from "./agents.ts";
 import { browserReady } from "./browser-build.ts";
@@ -316,7 +316,8 @@ export class OwnerApi {
 		if (at === "schedules") return this.need(this.schedules, "a scheduler").list();
 		if (at === "routes") return cfg.routes.map((r) => ({ name: r.name, on: r.on, when: r.when, throttleMs: r.throttleMs, debounceMs: r.debounceMs, agent: r.agent, prompt: r.prompt, session: r.session, set: r.set, publish: r.publish, call: r.call, trust: r.trust }));
 		if (at === "sources/types") return this.need(this.sources, "event sources").typeList().map((t) => ({ name: t.name, summary: t.summary, options: t.options, own: t.name in cfg.sourceTypes }));
-		if (at === "models/servers") return listModelServers(cfg.home);
+		// (Each with its own number of runs at a time, where it has one; and what holds for the others.)
+		if (at === "models/servers") return listModelServers(cfg.home).map((x) => ({ ...x, models: x.models.map((m) => ({ ...m, ...(cfg.limits.models[`${x.name}/${m.id}`] !== undefined ? { limit: cfg.limits.models[`${x.name}/${m.id}`] } : {}) })), ...(cfg.limits.servers[x.name] !== undefined ? { limit: cfg.limits.servers[x.name] } : {}), runs: cfg.limits.maxConcurrentRuns }));
 		if (at === "models/providers") {
 			// What pi says of each provider. `signedIn` is "pi has a credential or a key for it", which
 			// for a model server of the owner's own without a key is true as well; `oauth` is "its
@@ -336,7 +337,7 @@ export class OwnerApi {
 	/** A POST request. Undefined: not one of these. `long` is called by a request that takes as long as a person does. */
 	async post(parts: string[], body: any, long: () => void = () => {}): Promise<unknown | undefined> {
 		const at = parts.join("/");
-		const mine = ["settings", "shared", "skills", "skills/remove", "schedules", "schedules/remove", "routes", "routes/remove", "sources", "sources/propose", "sources/remove", "models/servers", "models/servers/remove", "models/login", "models/logout", "mcp/login"].includes(at) || (parts[0] === "models" && parts[1] === "login" && parts.length === 3) || (parts[0] === "agents" && parts[2] === "view" && parts[3] === "write" && parts.length === 4);
+		const mine = ["settings", "shared", "skills", "skills/remove", "schedules", "schedules/remove", "routes", "routes/remove", "sources", "sources/propose", "sources/remove", "models/servers", "models/servers/remove", "models/servers/limit", "models/login", "models/logout", "mcp/login"].includes(at) || (parts[0] === "models" && parts[1] === "login" && parts.length === 3) || (parts[0] === "agents" && parts[2] === "view" && parts[3] === "write" && parts.length === 4);
 		if (!mine) return undefined;
 		try {
 			return await this.change(at, parts, body ?? {}, long);
@@ -488,6 +489,19 @@ export class OwnerApi {
 			const models = addModelServer(cfg.home, { name, baseUrl, key, models: look.models, context, reasoning: typeof body.reasoning === "boolean" ? body.reasoning : undefined });
 			const chosen = await this.modelsChanged(name);
 			return { models, ...(chosen ? { chosen } : {}) };
+		}
+		if (at === "models/servers/limit") {
+			// How many runs a model server (or a provider) takes at a time: a number, or nothing for pine's own limit.
+			// (Of a server by its name; of one of its models with "model", the id the server gives it.)
+			const known = [...new Set([...listModelServers(cfg.home).flatMap((x) => [x.name, ...x.models.map((m) => `${x.name}/${m.id}`)]), ...(await manager.availableModels())])];
+			let checked: ReturnType<typeof checkServerLimit>;
+			try {
+				checked = checkServerLimit(known, body.name, body.limit, body.model);
+			} catch (e) {
+				throw new Refusal(400, errText(e));
+			}
+			applyServerLimit(cfg, checked);
+			return { name: checked.name, ...(checked.model !== undefined ? { model: checked.model } : {}), ...(checked.limit !== undefined ? { limit: checked.limit } : {}), runs: cfg.limits.maxConcurrentRuns };
 		}
 		if (at === "models/servers/remove") {
 			const name = String(body.name ?? "");

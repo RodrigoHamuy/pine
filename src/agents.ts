@@ -686,6 +686,32 @@ export class AgentManager {
 		}
 	}
 
+	/** The queues of the model servers and of the models that have a limit of runs of their own (`limits.servers`, `limits.models`), by the server's name or the model's whole name. */
+	private serverQueues = new Map<string, Limiter>();
+
+	/**
+	 * The queue a run on this model waits in: its server's own where the owner gave that server a number of runs
+	 * at a time (a model on their own computer takes one or two), else the one for all. A server's queue is as long
+	 * as it was set the last time it was asked for, so a change holds from the next run on.
+	 */
+	limiterOf(ref: string | undefined): Limiter {
+		const server = ref && ref.includes("/") ? ref.slice(0, ref.indexOf("/")) : undefined;
+		// A model's own number comes before its server's: one endpoint serves models that are set up differently.
+		const own = ref !== undefined ? this.cfg.limits.models[ref] : undefined;
+		const key = own !== undefined ? ref! : server;
+		const max = own ?? (server !== undefined ? this.cfg.limits.servers[server] : undefined);
+		if (key === undefined || max === undefined) return this.limiter;
+		let queue = this.serverQueues.get(key);
+		if (!queue) this.serverQueues.set(key, (queue = new Limiter(max)));
+		queue.max = Math.max(1, max);
+		return queue;
+	}
+
+	/** The model a run of this task is on, as "provider/id": the one a sub-agent was given, its agent's, or the default. */
+	private modelRefOf(task: Task, agent: AgentConfig): string | undefined {
+		return task.meta.model ?? agent.model ?? this.cfg.defaults.model;
+	}
+
 	/** The model a session runs on: its agent's, or the one a sub-agent was given. */
 	private modelOf(agent: AgentConfig, live: Pick<Live, "model">): any {
 		return live.model ? this.resolveModel(live.model) : this.modelFor(agent);
@@ -1091,6 +1117,9 @@ export class AgentManager {
 	status() {
 		return {
 			limiter: this.limiter.stats,
+			// The model servers with a queue of their own, each with how many run and wait there.
+			servers: Object.fromEntries(Object.keys(this.cfg.limits.servers).map((name) => [name, this.limiterOf(`${name}/`).stats])),
+			models: Object.fromEntries(Object.keys(this.cfg.limits.models).map((ref) => [ref, this.limiterOf(ref).stats])),
 			running: [...this.running.values()].map((r) => ({ task: r.task.id, agent: r.task.agent, session: r.task.session, kind: r.task.kind })),
 			sessions: [...this.lives.values()].map((l) => ({ agent: l.agent.id, session: l.key, busy: Boolean(l.current), tainted: l.tainted, trust: l.trust, mode: l.mode(), context: contextOf(l.session) })),
 			modes: Object.fromEntries(Object.values(this.cfg.agents).map((a) => [a.id, a.mode])),
@@ -2181,7 +2210,8 @@ export class AgentManager {
 		if (this.stopping || this.tasks.get(task.id)?.status !== "pending") return;
 		const agent = this.cfg.agents[task.agent];
 		if (!agent) return this.finish(task, "failed", "", `agent ${task.agent} no longer exists`, undefined);
-		const slot = await this.limiter.acquire(task.priority);
+		// (In its model server's own queue, where that server has a limit of its own.)
+		const slot = await this.limiterOf(this.modelRefOf(task, agent)).acquire(task.priority);
 		if (this.stopping || this.tasks.get(task.id)?.status !== "pending") return slot.release();
 		const ctx: RunContext & { live?: Live } = { task, slot };
 		this.running.set(task.id, ctx);

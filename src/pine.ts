@@ -121,7 +121,7 @@ export async function startPine(opts: { home?: string; config?: PineConfig; log?
 		if (!ref) throw new Error(NO_MODEL);
 		const model = agents.resolveModel(ref);
 		const content: any[] = [{ type: "text", text: o.prompt }, ...(o.images ?? []).map((i) => ({ type: "image", data: i.data, mimeType: i.mimeType }))];
-		const slot = await agents.limiter.acquire(5);
+		const slot = await agents.limiterOf(ref).acquire(5);
 		try {
 			const msg: any = await agents.models.completeSimple(model, { systemPrompt: o.system, messages: [{ role: "user", content, timestamp: Date.now() }] } as any, { signal: o.signal, sessionId: "pine-call" } as any);
 			if (msg.stopReason === "error" || msg.stopReason === "aborted") throw new Error(msg.errorMessage ?? `model call ${msg.stopReason}`);

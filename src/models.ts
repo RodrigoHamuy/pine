@@ -287,6 +287,22 @@ export function removeModelServer(cfg: PineConfig, name: string): boolean {
 		delete all[name];
 	});
 	if (ours) unsetEnv(cfg.home, [key]);
+	// The numbers of runs at a time that the owner gave it and its models go with it: the next server of that name starts without.
+	const mine = Object.keys(cfg.limits.models).filter((ref) => ref.startsWith(`${name}/`));
+	if (cfg.limits.servers[name] !== undefined || mine.length) {
+		const file = path.join(cfg.home, "pine.json");
+		const json = read(() => JSON.parse(fs.readFileSync(file, "utf8")), undefined);
+		if (json?.limits && typeof json.limits === "object") {
+			for (const [table, keys] of [["servers", [name]], ["models", mine]] as const) {
+				if (!json.limits[table] || typeof json.limits[table] !== "object") continue;
+				for (const k of keys) delete json.limits[table][k];
+				if (!Object.keys(json.limits[table]).length) delete json.limits[table];
+			}
+			fs.writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`);
+		}
+		delete cfg.limits.servers[name];
+		for (const ref of mine) delete cfg.limits.models[ref];
+	}
 	return true;
 }
 
@@ -295,7 +311,10 @@ export interface ServerInfo {
 	baseUrl: string;
 	/** Where its key comes from, in words. */
 	key: string;
-	models: Array<{ id: string; contextWindow?: number; images: boolean; reasoning: boolean }>;
+	/** `limit`: how many runs that model takes at a time, where the owner gave it a number of its own (`limits.models`). */
+	models: Array<{ id: string; contextWindow?: number; images: boolean; reasoning: boolean; limit?: number }>;
+	/** How many runs it takes at a time, where the owner gave it a number of its own (`limits.servers`). */
+	limit?: number;
 }
 
 /** The model servers in models.json. */

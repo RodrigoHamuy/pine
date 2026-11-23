@@ -89,6 +89,16 @@ const answers: Record<string, unknown> = {
 	"/agents/scout/detail": scout,
 	"/settings": settings,
 	"/models": models,
+	// Signed in to one provider, and two model servers of the owner's own: one with several models and a number of
+	// runs of its own, one as it comes.
+	"/models/providers": [
+		{ id: "anthropic", name: "Anthropic", signedIn: true, oauth: true, models: 6 },
+		{ id: "openai", name: "OpenAI", signedIn: false, oauth: true, models: 12 },
+	],
+	"/models/servers": [
+		{ name: "local", baseUrl: "http://127.0.0.1:8080/v1", key: "none", limit: 2, runs: 8, models: [{ id: "qwen3-coder", contextWindow: 65536, images: false, reasoning: true }, { id: "gemma-4-vision", contextWindow: 32768, images: true, reasoning: false, limit: 1 }, { id: "nomic-embed-text-v2-moe-long-name-of-a-model", contextWindow: 8192, images: false, reasoning: false }] },
+		{ name: "studio", baseUrl: "http://studio.local:1234/v1", key: "PINE_MODEL_STUDIO_API_KEY in .env", runs: 8, models: [{ id: "glm-5.3", contextWindow: 131072, images: true, reasoning: true }] },
+	],
 	"/mcp": mcp,
 	"/mcp/states": { linear: "needs sign-in", notes: "connected" },
 	"/routes": routes,
@@ -145,6 +155,23 @@ export const AgentPage: Story = { args: { section: "agents", agent: "scout" } };
 
 /** MCP servers in each scope and state, with Sign in and Remove, above the form that adds one. */
 export const McpServers: Story = { args: { section: "mcp" } };
+
+/** Models: the default, the providers signed in to, and the owner's own model servers, each with its models on lines of their own and how many runs it takes at a time. */
+export const Models: Story = {
+	args: { section: "models" },
+	play: async ({ canvasElement }) => {
+		const local = await within(canvasElement).findByText("qwen3-coder");
+		await expect(local.closest("[data-server]")).toHaveAttribute("data-server", "local");
+		await expect(canvasElement.querySelectorAll('[data-server="local"] [data-model]')).toHaveLength(3);
+		await expect(within(canvasElement).getByText("66k tokens of context · text only · can reason")).toBeInTheDocument();
+		// The server with a number of its own says it; the other says what holds everywhere.
+		await expect(canvasElement.querySelector('[data-setting="server-runs:local"] [data-slot=select-trigger]')).toHaveTextContent("2 at the same time");
+		await expect(canvasElement.querySelector('[data-setting="server-runs:studio"] [data-slot=select-trigger]')).toHaveTextContent("8, as everywhere");
+		// And so does each model: one with its own number, one that goes by its server's.
+		await expect(canvasElement.querySelector('[data-setting="model-runs:local/gemma-4-vision"] [data-slot=select-trigger]')).toHaveTextContent("1, one after the other");
+		await expect(canvasElement.querySelector('[data-setting="model-runs:local/qwen3-coder"] [data-slot=select-trigger]')).toHaveTextContent("2 at the same time, as the server");
+	},
+};
 
 /** The search at the top of the navigation, with words typed: what fits in place of the page, best first, and the pages with nothing that fits faded. */
 export const Search: Story = {

@@ -56,6 +56,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["/swarm", /^(boards#a-swarm|agents#a-swarm|tui#swarms|tui#.*swarm)/],
 		["the agent should coordinate sub-agents instead of doing the work itself", /^(boards#a-swarm|agents#a-swarm|tui#swarms)/],
 		["how many rounds does a swarm get", /^(configuration#.*swarmrounds|boards#a-swarm)/],
+		["my local model can only handle two requests at once", /^(configuration#|operations#)/],
 		["see the tasks of a board in the terminal", /^(tui#.*board|tui#commands\/board|boards#)/],
 		["have a different model check the swarm's answer", /^(configuration#.*checker|boards#a-swarm|setup#.*checker)/],
 		["tasks that have to wait until other tasks are finished", /^(boards#stages|boards#the-tools|boards#a-pool-of-sub-agents)/],

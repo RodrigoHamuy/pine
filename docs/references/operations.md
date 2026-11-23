@@ -144,7 +144,7 @@ For llama.cpp, start the server with tool-call support:
 llama-server -m /path/to/model.gguf --jinja -c 65536 -np 2 --port 8080
 ```
 
-`-np` (parallel slots) should equal `limits.maxConcurrentRuns`, which is 8 unless you set it: with `-np 2`, set it to 2. The context is shared between
+`-np` (parallel slots) should equal the number of runs pine sends that server at a time: `limits.maxConcurrentRuns`, which is 8 unless you set it, or the server's or the model's own number in `limits.servers` and `limits.models` (Settings > Models), which is the one to set when other agents use a hosted model. With `-np 2`, set it to 2. The context is shared between
 slots, so each run gets `c / np` tokens; that is the number the server reports and pine writes
 down. Add `--alias <name>` to give the model a plain name: without it the name is the path of
 the model file.
@@ -431,7 +431,8 @@ has the token is you. An error is answered with `{ "error": "..." }` and what to
 | `GET /sources/types` | The source types there are: `{ name, summary, options, own }` each, `options` being the schema of what a source of that type takes (a secret option has `secret: true`), `own` whether it was registered in this installation |
 | `POST /sources/propose` `{ name, type, options, agent?, ask? }` | What setting that source up would mean, without writing anything: `{ does, opens, needs, owner?, tell? }`. `needs` lists the secrets only you have (`{ name, label }`), to be sent as `values` |
 | `POST /sources` `{ name, type, description, options, agent?, own?, values?, ask? }`, `POST /sources/remove` `{ name, agent? }` | Set an event source up as `add_source` does after your yes: for all agents, or with `agent` for that one. `values` are the secrets from `needs`; they go into pine's `.env` and the configuration names them. `own: true` treats what it reports as your own words. Nobody is subscribed yet (`POST /agents/<id>/subscribe`). Remove one, with its subscriptions and secrets |
-| `GET /models/servers` | The model servers of your own, as `pine model list` |
+| `GET /models/servers` | The model servers of your own, as `pine model list`, each with `limit` where it has a number of runs of its own (and so each of its models), and `runs`, what holds for the others |
+| `POST /models/servers/limit` `{ name, limit, model? }` | How many runs a model server or provider takes at a time (`limits.servers`), or with `model` (the id the server gives it) one of its models (`limits.models`): a whole number from 1 to 64, or `null` for what holds without it. In force from the next run on |
 | `POST /models/servers` `{ name, url, key?, context?, reasoning? }`, `POST /models/servers/remove` `{ name }` | Add a model server by its address, as `pine model add` does: pine asks it for its models. A server that wants a key answers status 409 with `locked: true` until the right `key` is sent; the key goes into `.env`. Remove one: status 409 with `users` while an agent or a default uses one of its models |
 | `GET /models/providers` | The model providers pi knows: `{ id, name, signedIn, models, oauth }` each. `signedIn`: there is a credential or a key for it; `oauth`: it can be signed in to through a browser |
 | `POST /models/login` `{ provider, type? }` | Start a sign-in to a provider, as `pine login` does (`type`: `api_key` or `oauth`). Answers `{ id }`. The sign-in then waits for you, step by step |
