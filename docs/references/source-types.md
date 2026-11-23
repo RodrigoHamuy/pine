@@ -260,6 +260,14 @@ Event `message`: `{ text, name, username, chatId, messageId, images? }`. A photo
 to 10 MB) is shown to the model. The bot listens only in its private chat with you: what is
 written in a group it was added to reaches no agent.
 
+What an agent sends there, and its answers, are Markdown, and Telegram shows them formatted:
+bold, italic, strikethrough, code and code blocks, quotes. A heading becomes a bold line, a list
+bullets, a table monospace text. A link shows its address beside its text, since an answer can
+repeat a page and a link's text can name another place than it goes to. Tags an agent writes
+itself (HTML) are shown as text. Should Telegram refuse the formatting, the message is sent as
+it was written. Approval requests and the pairing messages are plain text: they show exactly
+what is asked.
+
 What makes it different from the other types:
 
 - **It is a conversation.** Your message reaches the agent as your message, not as a report
