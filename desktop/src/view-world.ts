@@ -151,6 +151,8 @@ export interface Sched {
 
 export type GoalStatus = "active" | "paused" | "met" | "blocked" | "limit";
 const GOAL: GoalStatus[] = ["active", "paused", "met", "blocked", "limit"];
+export type SwarmStatus = "active" | "waiting" | "done" | "paused" | "limit";
+const SWARM: SwarmStatus[] = ["active", "waiting", "done", "paused", "limit"];
 
 /** What changed about conversations between two looks at them: for a view that animates. */
 export type TalkNews = { k: "branched"; agent: string; conversation: number; from?: number; worktree: boolean } | { k: "worktree"; agent: string; conversation: number; made: boolean };
@@ -230,6 +232,8 @@ export class World {
 	boards: BoardRow[] = [];
 	/** The goal of a conversation, by "agent:session": where it stands and the round it is in. */
 	goals = new Map<string, { status: GoalStatus; round: number; task?: number }>();
+	/** The swarm of a conversation, by "agent:session": where it stands, the round of its lead, and the work that checks its answer right now. */
+	swarms = new Map<string, { status: SwarmStatus; round: number; until: number; checking?: number }>();
 	/** The sources that say they failed, and who listens to each. */
 	sourceInfo = new Map<string, { agents: string[]; failing: boolean }>();
 	pulses: Pulse[] = [];
@@ -266,6 +270,7 @@ export class World {
 		this.schedules = [];
 		this.boards = [];
 		this.goals.clear();
+		this.swarms.clear();
 		this.sourceInfo.clear();
 		this.causes.clear();
 		this.pulses = [];
@@ -551,6 +556,14 @@ export class World {
 			if (from) this.causes.set(e.id, from);
 			if (this.causes.size > 2000) this.causes.delete(this.causes.keys().next().value!);
 			return Boolean(from);
+		}
+		// A conversation's swarm: where it stands, in numbers. The job and pine's line about it are never kept.
+		if (ns === "agent" && kind === "swarm" && typeof p.session === "string") {
+			const status = SWARM.includes(p.status) ? (p.status as SwarmStatus) : undefined;
+			const key = `${String(p.agent ?? who)}:${p.session}`;
+			if (!status || p.event === "cleared") this.swarms.delete(key);
+			else this.swarms.set(key, { status, round: Number(p.round) || 0, until: Number(p.until) || 0, ...(typeof p.checking === "number" ? { checking: p.checking } : {}) });
+			return true;
 		}
 		// A conversation's goal (goal mode): where it stands. The objective is never kept.
 		if (ns === "agent" && kind === "goal" && typeof p.session === "string") {

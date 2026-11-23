@@ -48,6 +48,12 @@ export interface ViewConversation {
 	outside: boolean;
 	/** It has a goal (goal mode), and where that stands. */
 	goal?: "active" | "paused" | "met" | "blocked" | "limit";
+	/**
+	 * It has a swarm (its agent leads a job that sub-agents work through on the conversation's board), and where that
+	 * stands: "active" while it works, "waiting" for the owner's answer, "done", "paused", or at its "limit" of
+	 * rounds. `round` of `until` is the lead's turn it is in; `checking` while a sub-agent checks the lead's answer.
+	 */
+	swarm?: { status: "active" | "waiting" | "done" | "paused" | "limit"; round: number; until: number; checking: boolean };
 }
 
 /** Where a piece of work came from. */
@@ -105,6 +111,8 @@ export interface ViewWork {
 	round?: number;
 	/** The board whose task it has taken (`ViewBoard.id`), while it has one. */
 	board?: number;
+	/** Its part in its conversation's swarm: "lead" for a turn of the agent that leads it, "check" for the sub-agent that checks the lead's answer. */
+	swarm?: "lead" | "check";
 }
 
 /**
@@ -238,6 +246,8 @@ export type ViewHappening =
 	| { k: "branched"; agent: string; conversation: number; from?: number; worktree: boolean }
 	| { k: "worktree"; agent: string; conversation: number; made: boolean }
 	| { k: "goal"; agent: string; conversation?: number; status: "active" | "paused" | "met" | "blocked" | "limit" }
+	/** A conversation's swarm changed: it started, its lead was called again, its answer is being checked, it is done or it stopped. */
+	| { k: "swarm"; agent: string; conversation?: number; status: "active" | "waiting" | "done" | "paused" | "limit"; checking: boolean }
 	| { k: "outside"; agent: string; conversation?: number }
 	| { k: "handed"; work: number; from: string; to: string }
 	| { k: "answered"; work: number; from: string; to: string }

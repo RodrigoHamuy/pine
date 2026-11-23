@@ -69,7 +69,7 @@ export default defineView((host) => {
 | `host.root` | The element to draw in: the middle of the panel, empty, sized by the panel. Read its size with `clientWidth` and `clientHeight`, and follow it with a `ResizeObserver` |
 | `host.state()` | All of pine now, a `ViewState`: `agents` (with their MCP servers, skills, sources, schedules and conversations), `work` (running, and what ended in the last half hour), `inputs` (you, the clock, each event source), `schedules` (with when each runs next), `boards` (the boards agents share work on: whose each is, how many of its tasks are open, taken, done, failed or waiting for an answer, and in `tasks` each task's number, state, what it comes after and who has it), `selected`, `dark`, `focused` |
 | `host.on("state", fn)` | `fn(state)` with every new state: a few times a second while work runs, once a second at rest. Returns the function that stops it |
-| `host.on("happening", fn)` | What just happened, as it happens (a `ViewHappening`): work started or ended, a tool, a skill, an event, a schedule due, a task handed on or answered, a copy, a question to you, a branch, a change on a board. For a view that animates |
+| `host.on("happening", fn)` | What just happened, as it happens (a `ViewHappening`): work started or ended, a tool, a skill, an event, a schedule due, a task handed on or answered, a copy, a question to you, a branch, a change on a board, a swarm that started, is being checked or is done. For a view that animates |
 | `host.select(target)` | Shows an agent (`{ agent: "books" }`), a piece of work (`{ work: 12 }`) or a board or one of its tasks (`{ board: 7, task: 3 }`) under the view, in words; `select()` shows the log again. It comes back as `state.selected`. For a task the panel shows what it says: your view is not told that, the panel draws it |
 | `host.open(target)` | Opens the agent's conversation, or the piece of work, in a tab |
 
@@ -77,7 +77,8 @@ Times in a state are the page's clock in milliseconds (`Date.now()`). A piece of
 does in `doing` (`thinking`, `tool`, `writing`, `waiting`, `asking`, `done`, `failed`, `cancelled`),
 and while it is in a tool, its name in `tool`, the MCP server in `mcp`, and a skill it reads in
 `skill`. `copy` is a sub-agent; `from` says where the work came from; `parent` is the work that
-started it; `calls` are its last tool calls by name, with how long each took and whether it went well.
+started it; `swarm` is its part in a swarm (`lead`, or `check` for the sub-agent that checks the
+answer), and a conversation's `swarm` says where that swarm stands and which round it is in; `calls` are its last tool calls by name, with how long each took and whether it went well.
 
 The helpers of `pine/view` need nothing but the language: `running`; for boards `unsettled` (the tasks
 that are not settled), `progress` (how far a board is, 0 to 1), `tasksOf`, `tiling` (a board's tasks

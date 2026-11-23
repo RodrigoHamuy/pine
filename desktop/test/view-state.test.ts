@@ -130,6 +130,50 @@ test("a view is told of conversations, branches and worktrees as numbers, of sch
 	assert.deepEqual(w.setRooms([{ agent: "books", session, busy: true, outside: `a page about ${SECRET}`, mode: "safe", trust: "owner" }]), [{ agent: "books", session }]);
 });
 
+test("a view is told of a swarm as a state and numbers: who leads, which round, whether its answer is being checked, and never the job or pine's line about it", () => {
+	const w = new World();
+	w.setPlaces([{ id: "main", main: true, mode: "safe", description: "" }]);
+	const session = `audit-${SECRET}`;
+	w.setConversations("main", [{ session: "main", last: 1 }, { session, last: 9 }]);
+	const swarm = (more: object) => ev("agent/main/swarm", { agent: "main", session, objective: `check every folder of ${SECRET}`, set: 1, since: 0, checks: 0, ...more }, { source: "pine" });
+	const holdings = new Map();
+	// Its lead works, and a sub-agent has a task of the board.
+	const first = [
+		ev("agent/main/started", { task: 1, agent: "main", session, root: 1, depth: 0, kind: "prompt", prompt: `check every folder of ${SECRET}` }),
+		swarm({ status: "active", round: 1, until: 8, task: 1, note: `started: main leads it ${SECRET}`, event: "set" }),
+		ev("agent/main/started", { task: 2, agent: "main", session: "_t2", root: 1, parent: 1, depth: 1, kind: "subagent", prompt: `Folder ${SECRET}` }),
+	];
+	w.take(first);
+	let state = viewStateOf(w, { colorOf: () => "#336699", holdings, dark: false });
+	const conv = () => state.agents[0].conversations.find((c) => !c.main)!;
+	assert.deepEqual(conv().swarm, { status: "active", round: 1, until: 8, checking: false });
+	assert.deepEqual([state.work.find((x) => x.id === 1)!.swarm, state.work.find((x) => x.id === 2)!.swarm], ["lead", undefined], "the lead is the conversation's own turn; a sub-agent that works a task is none");
+	assert.deepEqual(happeningsOf(first, w, holdings).filter((h) => h.k === "swarm"), [{ k: "swarm", agent: "main", conversation: conv().id, status: "active", checking: false }]);
+	// The lead's turn is over, and pine has its answer checked by a sub-agent it started itself.
+	const second = [
+		ev("agent/main/done", { task: 2, agent: "main", session: "_t2", root: 1, parent: 1, depth: 1, kind: "subagent", status: "done", text: `found ${SECRET}` }),
+		ev("agent/main/done", { task: 1, agent: "main", session, root: 1, depth: 0, kind: "prompt", status: "done", text: `the answer ${SECRET}` }),
+		ev("agent/main/started", { task: 3, agent: "main", session: "_t3", root: 1, parent: 1, depth: 1, kind: "subagent", prompt: `Check the answer below ${SECRET}` }),
+		swarm({ status: "active", round: 1, until: 8, checking: 3, note: `the answer is being checked ${SECRET}`, event: "checking" }),
+	];
+	w.take(second);
+	state = viewStateOf(w, { colorOf: () => "#336699", holdings, dark: false });
+	assert.deepEqual(conv().swarm, { status: "active", round: 1, until: 8, checking: true });
+	assert.deepEqual([state.work.find((x) => x.id === 3)!.swarm, state.work.find((x) => x.id === 1)!.swarm], ["check", undefined], "a turn that has ended leads nothing");
+	const happened = [...happeningsOf(first, w, holdings), ...happeningsOf(second, w, holdings)];
+	// Done, and then taken off: a state, and then nothing.
+	w.take([swarm({ status: "done", round: 1, until: 8, note: `done after 1 round ${SECRET}`, event: "done" })]);
+	state = viewStateOf(w, { colorOf: () => "#336699", holdings, dark: false });
+	assert.deepEqual(conv().swarm, { status: "done", round: 1, until: 8, checking: false });
+	const all = JSON.stringify({ state, happened });
+	assert.ok(!all.includes(SECRET) && !all.includes("audit-") && !all.includes("leads it") && !all.includes("objective"), `no word of the job, of pine's line or of the conversation's name: ${all.slice(Math.max(0, all.indexOf(SECRET) - 80), all.indexOf(SECRET) + 20)}`);
+	w.take([swarm({ status: "paused", round: 1, until: 8, note: "cleared", event: "cleared" })]);
+	assert.equal(viewStateOf(w, { colorOf: () => "#336699", holdings, dark: false }).agents[0].conversations.find((c) => !c.main)!.swarm, undefined);
+	// A state that is none of pine's five is no swarm.
+	w.take([swarm({ status: `anything ${SECRET}`, round: 1, until: 8, event: "set" })]);
+	assert.equal(viewStateOf(w, { colorOf: () => "#336699", holdings, dark: false }).agents[0].conversations.find((c) => !c.main)!.swarm, undefined);
+});
+
 test("what a view asks the panel to show or open is checked against what the panel knows", () => {
 	const { w } = busyWorld();
 	assert.deepEqual(knownTarget(w, { agent: "books" }), { agent: "books" });

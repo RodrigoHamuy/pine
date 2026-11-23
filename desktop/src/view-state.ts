@@ -7,7 +7,8 @@
 // another agent, by name), what it does, the name of the tool it is in, whether it asks you, the mode
 // it runs in and whether its conversation read outside content; the ways in by name and type and who
 // listens to each; the schedules by name, when they run and whom they wake; each agent's conversations
-// as numbers (which is a branch of which, which works in a worktree, which has a goal), the skill a piece
+// as numbers (which is a branch of which, which works in a worktree, which has a goal, which has a swarm and
+// how that stands: a state, the round, whether its answer is being checked), the skill a piece
 // of work reads if its agent has it, and how far its to-do list is; the boards by number, whom each is
 // for, its name if it has one, how many of its tasks are in which state, and which work has one; of a task
 // its number, its state, who posted it (an agent's name or "you"), when, how many notes are about it and whether
@@ -69,7 +70,10 @@ function conversations(world: World, agent: string): ViewConversation[] {
 	return world.talksOf(agent).slice(0, 40).map((t) => {
 		const room = world.rooms.get(`${agent}:${t.session}`);
 		const goal = world.goals.get(`${agent}:${t.session}`)?.status;
-		return { id: t.n, main: t.main, ...(t.branchOf !== undefined ? { branchOf: world.talkId(agent, t.branchOf) } : {}), worktree: t.worktree, busy: Boolean(room?.busy), outside: Boolean(room?.outside), ...(goal ? { goal } : {}) };
+		// A swarm: one of five words and three numbers. Never the job, and never pine's line about it.
+		const sw = world.swarms.get(`${agent}:${t.session}`);
+		const swarm = sw ? { status: sw.status, round: sw.round, until: sw.until, checking: sw.status === "active" && sw.checking !== undefined } : undefined;
+		return { id: t.n, main: t.main, ...(t.branchOf !== undefined ? { branchOf: world.talkId(agent, t.branchOf) } : {}), worktree: t.worktree, busy: Boolean(room?.busy), outside: Boolean(room?.outside), ...(goal ? { goal } : {}), ...(swarm ? { swarm } : {}) };
 	});
 }
 
@@ -124,6 +128,9 @@ function work(world: World, j: Job, holdings: Map<string, Holdings>): ViewWork {
 	const tool = j.doing === "tool" ? toolName(j.tool) : undefined;
 	const page = (t: number) => t - world.skew;
 	const board = world.boards.find((b) => b.runs.includes(j.id))?.id;
+	// Its part in a swarm: the sub-agent that checks the answer is the one the swarm names; the lead is a turn of the conversation's own.
+	const sw = talk ? world.swarms.get(`${talk.agent}:${talk.session}`) : undefined;
+	const part = !sw || sw.status !== "active" || ENDED.includes(j.doing) ? undefined : sw.checking === j.id ? ("check" as const) : j.depth === 0 && j.kind !== "subagent" ? ("lead" as const) : undefined;
 	return {
 		id: j.id,
 		agent: j.agent,
@@ -154,6 +161,7 @@ function work(world: World, j: Job, holdings: Map<string, Holdings>): ViewWork {
 		...(j.steps ? { steps: { done: j.steps.done, total: j.steps.total } } : {}),
 		...(goal && goal.status === "active" && j.depth === 0 && !ENDED.includes(j.doing) ? { round: goal.round } : {}),
 		...(board !== undefined && !ENDED.includes(j.doing) ? { board } : {}),
+		...(part ? { swarm: part } : {}),
 	};
 }
 
@@ -187,6 +195,12 @@ export function happeningsOf(batch: Array<{ topic: string; payload: any; source?
 		else if (e.topic === "pine/board" && typeof p.board === "number" && ["posted", "taken", "released", "settled", "removed"].includes(p.change)) out.push({ k: "board", board: p.board, change: p.change, ...(typeof p.agent === "string" && world.places.has(p.agent) ? { agent: p.agent } : {}), ...(p.kind === "task" && typeof p.item === "number" ? { task: p.item, ...(TASK_STATES.includes(p.state) ? { state: p.state } : {}) } : {}) });
 		else if (e.topic === "approval/requested" && typeof p.task === "number") out.push({ k: "asked", work: p.task, agent: String(p.agent ?? "") });
 		else if (e.topic === "approval/decided") out.push({ k: "decided", allowed: p.allow === true });
+		if (ns === "agent" && kind === "swarm" && typeof p.session === "string" && world.places.has(who)) {
+			const w = world.swarms.get(`${who}:${p.session}`);
+			const t = world.talks.get(`${who}:${p.session}`);
+			if (w) out.push({ k: "swarm", agent: who, ...(t ? { conversation: t.n } : {}), status: w.status, checking: w.status === "active" && w.checking !== undefined });
+			continue;
+		}
 		if (ns === "agent" && kind === "goal" && typeof p.session === "string" && world.places.has(who)) {
 			const g = world.goals.get(`${who}:${p.session}`);
 			const t = world.talks.get(`${who}:${p.session}`);

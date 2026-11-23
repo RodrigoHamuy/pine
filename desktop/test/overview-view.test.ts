@@ -170,6 +170,57 @@ test("a question for you is said at your card and at the agent's", () => {
 	assert.ok(words(contentOf(l.byId.get("agent:books")!, s, T0, 232, 112, measure)).includes("Needs your answer"));
 });
 
+test("a swarm is said in words at its lead's card, keeps the lead on top between its turns, and its board says that it is a swarm's", () => {
+	const swarm = (status: string, more: object = {}) => ({ status, round: 2, until: 8, checking: false, ...more });
+	const led = (sw: object | undefined, works: ViewWork[], more: Partial<ViewState> = {}) => {
+		const agents = AGENTS.map((a) => (a.id === "coder" ? { ...a, conversations: [conv(9, { main: true, ...(sw ? { swarm: sw } : {}) })] } : a));
+		const s = state(works, T0, { agents: agents as ViewAgent[], ...more });
+		const l = layoutOf(s, T0);
+		return { s, l, card: words(contentOf(l.byId.get("agent:coder")!, s, T0, 232, 112, measure)) };
+	};
+	const order = (l: ReturnType<typeof layoutOf>) => l.boxes.filter((b) => b.kind === "agent").map((b) => b.title);
+	// Its lead's turn runs: what it does as ever, and why: it leads a swarm, in the round it is in.
+	const leadWork = work(20, "coder", { started: T0 - 30_000, doing: "waiting", waitingOn: [21], conversation: 9, from: { k: "pine" }, swarm: "lead" });
+	const sub = work(21, "coder", { started: T0 - 20_000, parent: 20, depth: 1, copy: true, from: { k: "copy", id: "coder" }, doing: "tool", tool: "read", conversation: 9, board: 3 });
+	let v = led(swarm("active"), [leadWork, sub]);
+	assert.ok(v.card.includes("Waiting for 1 sub-agent") && v.card.includes("swarm · round 2 of 8"), v.card.join(" | "));
+	assert.equal(order(v.l)[0], "coder");
+	// Between two turns, while its answer is checked: the card says so, the check is named among the sub-agents, and the lead stays where it is.
+	const check = work(22, "coder", { started: T0 - 5000, parent: 20, depth: 1, copy: true, from: { k: "copy", id: "coder" }, doing: "tool", tool: "bash", conversation: 9, board: 3, swarm: "check" });
+	v = led(swarm("active", { checking: true }), [check]);
+	assert.ok(v.card.includes("Checking the answer") && v.card.includes("swarm · round 2 of 8"), v.card.join(" | "));
+	const near = words(contentOf(v.l.byId.get("agent:coder")!, state([leadWork, check], T0, { agents: v.s.agents }), T0, 320, 260, measure));
+	assert.ok(near.some((x) => x.startsWith("Check of the answer · running")), near.join(" | "));
+	// With no work of its own at all for a moment, it is not idle: it leads a swarm, and stays on top.
+	v = led(swarm("active"), []);
+	assert.ok(v.card.includes("Leading a swarm") && v.card.includes("round 2 of 8") && !v.card.includes("Idle"), v.card.join(" | "));
+	assert.deepEqual([order(v.l)[0], v.l.byId.get("agent:coder")!.busy], ["coder", true]);
+	assert.deepEqual([order(led(undefined, []).l).indexOf("coder") > 0, led(undefined, []).card.includes("Idle")], [true, true], "without a swarm it is idle, below those at work");
+	// Its lead asked you something: that is a question for you, at your card, at the agent's, and as a line between the two.
+	v = led(swarm("waiting"), []);
+	assert.ok(v.card.includes("Swarm needs your answer"), v.card.join(" | "));
+	assert.deepEqual([v.l.byId.get("you")!.sub, v.l.byId.get("agent:coder")!.bad], ["1 question", true]);
+	assert.ok(linksOf(v.s, v.l, T0).some((k) => k.from === "agent:coder" && k.to === "you"));
+	// Stopped: said, and the agent is no longer on top or lit.
+	v = led(swarm("paused"), []);
+	assert.ok(v.card.includes("Swarm paused"), v.card.join(" | "));
+	assert.equal(v.l.byId.get("agent:coder")!.busy, false);
+	assert.ok(led(swarm("limit"), []).card.includes("Swarm at its limit"));
+	assert.ok(led(swarm("done"), []).card.includes("Idle"), "a swarm that is done is over");
+	// Its board, in the column of tools, says whose swarm it is; once the swarm is done it is that agent's board again.
+	const board = { id: 3, scope: "conversation" as const, agent: "coder", conversation: 9, open: 2, taken: 1, done: 1, failed: 0, blocked: 0, notes: 0, workers: [21], tasks: [] };
+	const card = (sw: object) => led(sw, [leadWork, sub], { boards: [board] }).l.byId.get("board:3")!;
+	assert.deepEqual([card(swarm("active")).title, card(swarm("active")).sub], ["coder", "swarm · 1 at work"]);
+	assert.equal(card(swarm("done")).sub, "1 in progress · 2 to do");
+	assert.equal(led(swarm("active", { checking: true }), [check], { boards: [{ ...board, open: 0, taken: 0, done: 4 }] }).l.byId.get("board:3")?.sub ?? "gone", "gone", "a board with nothing left on it steps back, as ever");
+	// What just happened, for a moment.
+	const recent = new Recent();
+	recent.hear({ k: "swarm", agent: "coder", conversation: 9, status: "active", checking: true }, T0);
+	assert.equal(recent.notes.get("coder")!.text, "Checking the answer");
+	recent.hear({ k: "swarm", agent: "coder", conversation: 9, status: "done", checking: false }, T0);
+	assert.equal(recent.notes.get("coder")!.text, "Swarm done");
+});
+
 test("a line joins two boxes only while something happens between them", () => {
 	const s = state(STORY(T0));
 	const l = layoutOf(s, T0);

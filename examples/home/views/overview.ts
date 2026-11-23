@@ -9,7 +9,9 @@
 //                       its name what it is doing right now, as a person would say it ("Running a command",
 //                       "Waiting for scout", "Needs your answer", "Idle"), the conversation it works in
 //                       ("main conversation", "branch of main"), why ("for you", "delegated by main",
-//                       "triggered by inbox"), how long, and how far ("4/7")
+//                       "triggered by inbox"), how long, and how far ("4/7"). An agent that leads a swarm says so
+//                       ("swarm · round 2 of 8", "Checking the answer", "Swarm needs your answer")
+//                       and stays on top while the swarm is at work, also between two of its turns
 //   Tools               what agents use. On top the boards, where a job that several work on is kept: a card
 //                       for each, with how far it is ("7/24"), a bar of how its tasks stand, and one small
 //                       tile per task in the order they were posted: an outline for one that is open (a faint
@@ -127,6 +129,24 @@ export function causeOf(w: ViewWork): string {
 const span = (ms: number) => (ms < 1500 ? "now" : ms < 90_000 ? `${Math.round(ms / 1000)} s` : ms < 5_400_000 ? `${Math.round(ms / 60_000)} min` : ms < 129_600_000 ? `${Math.round(ms / 3_600_000)} h` : `${Math.round(ms / 86_400_000)} d`);
 const listOf = (names: string[], max = 3) => (names.length <= max ? names.join(", ") : `${names.slice(0, max - 1).join(", ")} +${names.length - max + 1}`);
 
+/** A conversation's swarm, as a view is told it. */
+type Swarm = NonNullable<ViewConversation["swarm"]>;
+/** The swarm of the conversation a piece of work runs in or for. (An app older than this view tells of none.) */
+const swarmOf = (a: ViewAgent | undefined, conversation: number | undefined): Swarm | undefined => (conversation === undefined ? undefined : a?.conversations.find((c) => c.id === conversation)?.swarm);
+/** The swarm of an agent's that matters most right now: one that waits for you, then one at work, then one that stopped. A finished one is over. */
+export function leadingOf(a: ViewAgent): Swarm | undefined {
+	const all = a.conversations.map((c) => c.swarm).filter((x): x is Swarm => Boolean(x));
+	return all.find((x) => x.status === "waiting") ?? all.find((x) => x.status === "active") ?? all.find((x) => x.status === "paused" || x.status === "limit");
+}
+/** Whether an agent's swarm goes on by itself or waits for you: then the agent is not idle, also between two of its turns. */
+const swarming = (a: ViewAgent) => a.conversations.some((c) => c.swarm?.status === "active" || c.swarm?.status === "waiting");
+const swarmWaits = (a: ViewAgent) => a.conversations.some((c) => c.swarm?.status === "waiting");
+/** A swarm in a few words, as its lead's card says it while no turn of the lead's runs. (Short: the largest words of a card have room for about two dozen letters.) */
+export function swarmWords(w: Swarm): string {
+	return w.status === "waiting" ? "Swarm needs your answer" : w.status === "paused" ? "Swarm paused" : w.status === "limit" ? "Swarm at its limit" : w.status === "done" ? "Swarm done" : w.checking ? "Checking the answer" : "Leading a swarm";
+}
+const roundOf = (w: Swarm) => `round ${w.round} of ${w.until}`;
+
 /** The boards of a state. (An app older than this view tells it none.) */
 const boardsOf = (s: ViewState): ViewBoard[] => s.boards ?? [];
 /** A board by what it is called: its name, or whose it is. A view is never told what stands on it. */
@@ -196,6 +216,9 @@ export class Recent {
 				break;
 			case "goal":
 				note(h.agent, h.status === "met" ? "Goal reached" : `Goal ${h.status}`);
+				break;
+			case "swarm":
+				note(h.agent, h.status === "active" ? (h.checking ? "Checking the answer" : "Swarm at work") : h.status === "done" ? "Swarm done" : h.status === "waiting" ? "Swarm waits for you" : h.status === "limit" ? "Swarm at its limit" : "Swarm paused");
 				break;
 			case "outside":
 				note(h.agent, "Read outside content");
@@ -340,7 +363,7 @@ const handedOf = (s: ViewState, now: number): Array<[from: string, to: string]> 
  */
 function standing(s: ViewState, now: number): ViewAgent[] {
 	const handed = handedOf(s, now);
-	const active = s.agents.filter((a) => atWork(s, a, now) || handed.some(([from]) => from === a.id));
+	const active = s.agents.filter((a) => atWork(s, a, now) || swarming(a) || handed.some(([from]) => from === a.id));
 	const ids = new Set(active.map((a) => a.id));
 	const out: ViewAgent[] = [];
 	const put = (a: ViewAgent) => {
@@ -354,8 +377,8 @@ function standing(s: ViewState, now: number): ViewAgent[] {
 	for (const a of active) put(a);
 	return [...out, ...s.agents.filter((a) => !ids.has(a.id))];
 }
-/** How many questions wait for you: from work that asks, and from tasks of a board whose worker asked. */
-const questionsOf = (s: ViewState) => s.work.filter((w) => !ended(w) && w.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0);
+/** How many questions wait for you: from work that asks, from tasks of a board whose worker asked, and from a swarm whose lead asked. */
+const questionsOf = (s: ViewState) => s.work.filter((w) => !ended(w) && w.asking).length + boardsOf(s).reduce((n, b) => n + b.blocked, 0) + s.agents.filter(swarmWaits).length;
 /** Who listens to an event source: those it names, and those that name it. */
 const listenersOf = (s: ViewState, i: ViewInput) => [...new Set([...i.agents, ...s.agents.filter((a) => a.sources.includes(i.name)).map((a) => a.id)])];
 /** The MCP servers or skills of all agents, those that most agents have first. */
@@ -410,7 +433,7 @@ export function layoutOf(s: ViewState, now: number): Layout {
 	// answer is on its way back, so that the page does not jump twice.
 	for (const a of standing(s, now)) {
 		const mine = s.work.filter((w) => w.agent === a.id && !ended(w));
-		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, agent: a, busy: mine.length > 0, bad: mine.some((w) => w.asking) }, SIZE.agent);
+		put(1, { id: `agent:${a.id}`, kind: "agent", title: a.id, right: a.mode, agent: a, busy: mine.length > 0 || swarming(a), bad: mine.some((w) => w.asking) || swarmWaits(a) }, SIZE.agent);
 	}
 
 	// On the right, first: the boards that have work on them, and those with a name, which are there to stay.
@@ -418,7 +441,11 @@ export function layoutOf(s: ViewState, now: number): Layout {
 	if (boards.length) head(2, "Boards");
 	for (const b of boards) {
 		const all = b.open + b.taken + b.done + b.failed + b.blocked;
-		put(2, { id: `board:${b.id}`, kind: "board", title: b.name ?? b.agent ?? "Board", right: all ? `${b.done}/${all}` : undefined, sub: boardWords(b), board: b, busy: b.taken > 0, bad: b.blocked > 0 }, SIZE.board);
+		// (A swarm's board says so: it is the conversation's own, of an agent that leads a swarm there.)
+		const swarm = b.scope === "conversation" ? swarmOf(s.agents.find((a) => a.id === b.agent), b.conversation) : undefined;
+		// (Short, for a card this narrow: a question comes first as ever, then what the swarm does there.)
+		const led = !swarm || swarm.status === "done" || b.blocked ? undefined : `swarm · ${swarm.checking ? "checking" : b.taken ? `${b.taken} at work` : b.open ? `${b.open} to do` : swarm.status === "active" ? "done" : swarm.status === "limit" ? "at its limit" : swarm.status}`;
+		put(2, { id: `board:${b.id}`, kind: "board", title: b.name ?? b.agent ?? "Board", right: all ? `${b.done}/${all}` : undefined, sub: led ?? boardWords(b), board: b, busy: b.taken > 0, bad: b.blocked > 0 }, SIZE.board);
 	}
 	// Under them: the MCP servers and the skills, those that most agents have first.
 	const servers = ranked(s, (a) => a.mcp);
@@ -439,7 +466,7 @@ export function layoutOf(s: ViewState, now: number): Layout {
 
 /** A conversation in words: never its name, which a view is not told. */
 function convText(c: ViewConversation, a: ViewAgent, i: number): string {
-	return [convName(a, i, true), c.worktree ? "worktree" : "", c.goal ? `goal ${c.goal}` : "", c.outside ? "read outside content" : ""].filter(Boolean).join(" · ");
+	return [convName(a, i, true), c.worktree ? "worktree" : "", c.goal ? `goal ${c.goal}` : "", c.swarm ? `swarm ${c.swarm.status === "limit" ? "at its limit" : c.swarm.status}` : "", c.outside ? "read outside content" : ""].filter(Boolean).join(" · ");
 }
 /** What a conversation is called here: "main conversation", "conversation 3", "branch of main". */
 function convName(a: ViewAgent, i: number, capital = false): string {
@@ -488,6 +515,8 @@ export function linksOf(s: ViewState, l: Layout, now: number = s.at): Link[] {
 		if (w.doing === "tool" && w.skill) add({ from: me, to: `skill:${w.skill}`, color, live: true });
 		else if (w.doing === "tool" && w.mcp) add({ from: me, to: `mcp:${w.mcp}`, color, live: true });
 	}
+	// A swarm whose lead asked you something waits for your answer like a question does.
+	for (const a of s.agents) if (swarmWaits(a)) add({ from: `agent:${a.id}`, to: "you", color: ASK, live: true });
 	for (const w of s.work) {
 		if (!ended(w) || w.copy || w.finished === undefined || now - w.finished > ANSWER_MS || now < w.finished) continue;
 		const me = `agent:${w.agent}`;
@@ -552,7 +581,7 @@ export function tipOf(b: Box | undefined, s: ViewState, now: number, task?: View
 		const br = a.conversations.filter((c) => c.branchOf !== undefined).length;
 		const next = s.schedules.filter((x) => x.agent === a.id && x.next !== undefined && x.next > now).sort((p, q) => p.next! - q.next!)[0];
 		// What it is wired to, the lines on the page show; here is what they do not.
-		return [`${a.id}${a.main ? " (main agent)" : ""}`, `${a.mode} mode`, `${plural(a.conversations.length, "conversation")}${br ? `, ${plural(br, "branch", "branches")}` : ""}`, next ? `${next.name} in ${span(next.next! - now)}` : "", "zoom in for more, double-click to open"].filter(Boolean);
+		return [`${a.id}${a.main ? " (main agent)" : ""}`, `${a.mode} mode`, `${plural(a.conversations.length, "conversation")}${br ? `, ${plural(br, "branch", "branches")}` : ""}`, next ? `${next.name} in ${span(next.next! - now)}` : "", leadingOf(a) ? `${swarmWords(leadingOf(a)!).toLowerCase()}, ${roundOf(leadingOf(a)!)}` : "", "zoom in for more, double-click to open"].filter(Boolean);
 	}
 	if (b.kind === "you") return ["You", "your messages start an agent's work, and its questions wait here"];
 	if (b.kind === "source" || b.kind === "outside") {
@@ -730,8 +759,11 @@ function agentContent(a: ViewAgent, s: ViewState, now: number, W: number, H: num
 	const own = mine.filter((w) => !w.copy);
 	const copies = mine.filter((w) => w.copy);
 	const first = own.find((w) => w.asking) ?? own[0] ?? copies[0];
-	const ask = mine.some((w) => w.asking);
-	const busy = mine.length > 0;
+	// Its swarm: the one of the conversation its work runs in, or with no work running, the one it leads.
+	const swarm = first ? swarmOf(a, first.conversation) : leadingOf(a);
+	const leads = Boolean(swarm && swarm.status === "active");
+	const ask = mine.some((w) => w.asking) || swarmWaits(a);
+	const busy = mine.length > 0 || swarming(a);
 	if (W < 60 || H < 22) {
 		out.push({ k: "avatar", x: W / 2, y: H / 2, r: Math.max(3, Math.min(9, Math.min(W, H) / 2 - 3)), busy, ask });
 		return out;
@@ -745,7 +777,7 @@ function agentContent(a: ViewAgent, s: ViewState, now: number, W: number, H: num
 	let right = W - pad;
 	if (single) {
 		// One line: its name, and at the right one word for how it stands.
-		const word = ask ? "asks you" : !busy ? "idle" : mine.every((w) => w.doing === "waiting") ? "waiting" : "working";
+		const word = ask ? "asks you" : !busy ? "idle" : !mine.length ? "swarm" : mine.every((w) => w.doing === "waiting") ? "waiting" : "working";
 		const ww = m(F.small, word);
 		if (right - nameX - ww - 8 >= 30) {
 			out.push({ k: "text", x: right, y: hy, text: word, font: F.small, tone: ask ? "warn" : busy ? "accent" : "faint", align: "right" });
@@ -771,9 +803,10 @@ function agentContent(a: ViewAgent, s: ViewState, now: number, W: number, H: num
 
 	// What it is doing: what the eye goes to first.
 	if (fits(19)) {
-		const text = first ? sentenceOf(first, s) : "Idle";
-		const font = first ? F.focus : F.idle;
-		out.push({ k: "text", x: L, y: y + 10, text: clip(m, font, text, colW, 0.35), font, tone: ask ? "warn" : first ? "text" : "faint" });
+		// (The sub-agent that checks a swarm's answer is said to do that, whatever tool it is in.)
+		const text = first ? (first.swarm === "check" ? "Checking the answer" : sentenceOf(first, s)) : swarm ? swarmWords(swarm) : "Idle";
+		const font = first || busy ? F.focus : F.idle;
+		out.push({ k: "text", x: L, y: y + 10, text: clip(m, font, text, colW, 0.35), font, tone: ask ? "warn" : first || busy ? "text" : swarm ? "muted" : "faint" });
 		y += 22;
 	}
 	// Where and why: the conversation it works in, who it is for, and for how long. For a moment, what just happened.
@@ -800,12 +833,14 @@ function agentContent(a: ViewAgent, s: ViewState, now: number, W: number, H: num
 					x += cw + 7;
 				}
 			}
-			const words = note ?? causeOf(first);
+			// Why: who it is for, or the swarm it is a part of and the round that is in.
+			// (Short: at the size a card usually has, a longer line would not fit beside the conversation and the time.)
+			const words = note ?? (leads && swarm ? `swarm · ${roundOf(swarm)}` : causeOf(first));
 			const said = words ? clip(m, F.small, words, end - x, 0.7) : "";
 			if (said) out.push({ k: "text", x, y: cy, text: said, font: F.small, tone: note ? "accent" : "faint" });
 		} else {
 			const last = s.work.filter((w) => w.agent === a.id && !w.copy && ended(w) && w.finished !== undefined).sort((p, q) => q.finished! - p.finished!)[0];
-			const words = note ?? (last ? `last active ${span(Math.max(0, now - last.finished!))} ago` : plural(a.conversations.length, "conversation"));
+			const words = note ?? (swarm ? roundOf(swarm) : last ? `last active ${span(Math.max(0, now - last.finished!))} ago` : plural(a.conversations.length, "conversation"));
 			out.push({ k: "text", x, y: cy, text: clip(m, F.small, words, end - x, 0.5), font: F.small, tone: note ? "accent" : "faint" });
 		}
 		y += 20;
@@ -868,7 +903,7 @@ function agentContent(a: ViewAgent, s: ViewState, now: number, W: number, H: num
 				const tw = tail ? m(F.small, tail) + 8 : 0;
 				if (tail) out.push({ k: "text", x: L + colW, y: ry, text: tail, font: F.small, tone: "faint", align: "right" });
 				const id = taskOf(t.w);
-				const text = `${t.other ? t.w.agent : id !== undefined ? `Task ${id}` : "Sub-agent"} · ${sentenceOf(t.w, s).toLowerCase()}`;
+				const text = `${t.other ? t.w.agent : t.w.swarm === "check" ? "Check of the answer" : id !== undefined ? `Task ${id}` : "Sub-agent"} · ${sentenceOf(t.w, s).toLowerCase()}`;
 				out.push({ k: "text", x: L + 24 + dx, y: ry, text: clip(m, F.text, text, colW - 24 - dx - tw), font: F.text, tone: t.w.asking ? "warn" : "muted" });
 				y += 18;
 			});
