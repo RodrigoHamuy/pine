@@ -88,7 +88,7 @@ test("access control: preferences are read off by default, with the official add
 	assert.deepEqual(readAccessPrefs({ enabled: true, service: "https://mine.example/some/path", openAtLogin: true }), { enabled: true, service: "https://mine.example", openAtLogin: true });
 	for (const service of ["file:///etc/passwd", "javascript:alert(1)", "https://user:pw@mine.example", "not an address", 42]) assert.equal(readAccessPrefs({ service }).service, undefined, String(service));
 	assert.equal(readAccessPrefs({ enabled: "yes" }).enabled, false);
-	assert.equal(OFFICIAL_SERVICE, "https://pine.drcmda.workers.dev", "the project's own service");
+	assert.equal(OFFICIAL_SERVICE, "https://pine-main.drcmda.workers.dev", "the project's own service");
 	assert.equal(readAccessPrefs({ service: OFFICIAL_SERVICE }).service, OFFICIAL_SERVICE, "an address the settings accept");
 });
 

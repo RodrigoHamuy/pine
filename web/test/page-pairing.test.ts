@@ -9,7 +9,7 @@ import type { ServiceState } from "../../desktop/src/bridge.ts";
 
 const ID = "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x-_";
 const CODE = "Zx9Yw8Xv7Wu6Vt5Us4Tr3S";
-const LINK = `https://pine.drcmda.workers.dev/#pair=${ID}.${CODE}`;
+const LINK = `https://pine-main.drcmda.workers.dev/#pair=${ID}.${CODE}`;
 const PAIRED = `paired:${ID}`;
 
 // What the page said in a toast, in order.
@@ -88,10 +88,10 @@ test("a pasted pairing link is put to the owner and reaches the bridge's pair on
 test("a link the app was opened with is asked about, and reaches pair only on the owner's yes", async () => {
 	const store = await started();
 	assert.ok(linkListener, "the store listens for links the app is opened with");
-	linkListener(`pine://pair?service=${encodeURIComponent("https://pine.drcmda.workers.dev")}&id=${ID}&code=${CODE}`);
+	linkListener(`pine://pair?service=${encodeURIComponent("https://pine-main.drcmda.workers.dev")}&id=${ID}&code=${CODE}`);
 	await settle();
 	assert.deepEqual(asked("pair"), [], "nothing was paired before the owner's yes");
-	assert.equal(store.pairAsk?.service, "https://pine.drcmda.workers.dev");
+	assert.equal(store.pairAsk?.service, "https://pine-main.drcmda.workers.dev");
 	assert.deepEqual(flashes, []);
 	await store.confirmPair();
 	assert.equal(asked("pair").length, 1);

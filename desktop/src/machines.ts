@@ -22,11 +22,11 @@ export const isPaired = (host: string): boolean => host.startsWith(PAIRED) && MA
 
 /**
  * The address of the project's own service (the web client and the meeting service), which the
- * Pine app uses unless the owner names another: the Worker `pine` of web/relay (`--env official`) on
- * the project's workers.dev account. A browser's key and its paired computers belong to this address, so
+ * Pine app uses unless the owner names another: the Worker `pine-main` of web/relay, deployed from
+ * every push to `main`, on the project's workers.dev account. A browser's key and its paired computers belong to this address, so
  * changing it makes every owner pair again.
  */
-export const OFFICIAL_SERVICE = "https://pine.drcmda.workers.dev";
+export const OFFICIAL_SERVICE = "https://pine-main.drcmda.workers.dev";
 
 /** A pairing code: 16 random bytes, base64url without padding. */
 const PAIR_CODE = /^[A-Za-z0-9_-]{22}$/;

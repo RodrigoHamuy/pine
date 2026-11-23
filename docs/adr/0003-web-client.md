@@ -82,8 +82,10 @@ fails when a deployed configuration sets it.
   machine again.
 - What no suite of `npm test` reaches (the opaque origin, a message from another window, the token
   kept from the page) is proven by `npm run smoke` in `web/`, by hand before a release.
-- Each pull request that touches the web client gets a preview version of the Worker; the live
-  version is deployed by hand only.
+- Each pull request that touches the web client gets a deployment of its own, a Worker
+  `pine-pr-<number>` deleted when it is closed, and `next` and `main` get theirs, `pine-next` and
+  `pine-main`, on every push (amended by ADR 0004: these were first versions of one Worker under
+  preview aliases, and the live version was deployed by hand).
 
 ## Amended by ADR 0004
 

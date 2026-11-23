@@ -107,10 +107,10 @@ test("with no machine in use the first screen's sentence follows the view shown:
 });
 
 test("the relay and the meeting service are said by the deployment's host: SSH through the relay, which cannot read it; a paired computer found there, then reached directly or through a relay server its owner named", () => {
-	const host = "pine.drcmda.workers.dev";
-	assert.equal(relayLine(host), "Connections go through the relay at pine.drcmda.workers.dev. It carries SSH only and cannot read it.");
-	assert.equal(meetingLine(host), "Found through pine.drcmda.workers.dev. The connection is then made between the two devices, directly or through a relay server the computer's owner named.");
-	assert.equal(reachedThrough("me@box.example", host), "Through the relay at pine.drcmda.workers.dev.");
+	const host = "pine-main.drcmda.workers.dev";
+	assert.equal(relayLine(host), "Connections go through the relay at pine-main.drcmda.workers.dev. It carries SSH only and cannot read it.");
+	assert.equal(meetingLine(host), "Found through pine-main.drcmda.workers.dev. The connection is then made between the two devices, directly or through a relay server the computer's owner named.");
+	assert.equal(reachedThrough("me@box.example", host), "Through the relay at pine-main.drcmda.workers.dev.");
 	assert.equal(reachedThrough(PAIRED, host), meetingLine(host));
 	// A bridge that names no service (the desktop and mobile apps) gets no such line.
 	assert.equal(reachedThrough("me@box.example"), undefined);
