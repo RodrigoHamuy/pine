@@ -238,7 +238,7 @@ export const PairingExpired: Story = {
 
 const opened = fn(async () => {});
 
-/** A deployment whose relay is off, nothing paired yet: how to pair in three lines and where the app is; no user@host field, no key for one, no link to SSH. */
+/** A deployment whose relay is off, nothing paired yet: how to pair in two lines (Pine > Add a device, then the code) and where the app is; no user@host field, no key for one, no link to SSH. */
 export const PairFirst: Story = {
 	args: { hosts: [], canAddHost: false, state: { status: "error", kind: "ssh", message: "Pair this browser with the Pine app on your computer: on your computer, choose Pine > Add a device, and scan the code it shows." } },
 	beforeEach: () => {
@@ -252,7 +252,8 @@ export const PairFirst: Story = {
 		const { canvasElement, userEvent } = context;
 		await expect(within(canvasElement).getByText("Pair this browser with your computer")).toBeInTheDocument();
 		await expect(canvasElement).not.toHaveTextContent(/\bMac\b/);
-		await expect(canvasElement.querySelectorAll('[data-slot="pair-how-to"] li')).toHaveLength(3);
+		await expect(canvasElement.querySelectorAll('[data-slot="pair-how-to"] li')).toHaveLength(2);
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).toHaveTextContent("On your computer: Pine > Add a device.");
 		await expect(canvasElement.querySelector("input")).toBeNull();
 		await expect(canvasElement.querySelector('[data-slot="device-key"]')).toBeNull();
 		await expect(within(canvasElement).queryAllByText(/user@host/)).toHaveLength(0);
