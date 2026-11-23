@@ -334,6 +334,8 @@ export default async function telegram(source: SourceApi): Promise<void> {
 		const asked = new Map<string, number>();
 		source.on("approval/requested", async (e) => {
 			const r = e.payload as any;
+			// An agent's own bot carries that agent's questions; a bot for all agents carries every agent's.
+			if (source.agent !== undefined && r.agent !== source.agent && r.of !== source.agent) return;
 			const chat = ownerChat();
 			if (chat === undefined) return;
 			// A question of the agent's with answers to pick from: one button each. (Their own words they type on their machine.)

@@ -37,6 +37,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 	const cases: Array<[string, RegExp]> = [
 		["telegram pairing code", /^source-types#telegram$/],
 		["can the agent use bold text and formatting in telegram messages, markdown", /^source-types#telegram$/],
+		["why do questions of one agent show up in the telegram bot of another agent", /^source-types#telegram$/],
 		["how do sub-agents know which of them looks at which file", /^boards(#a-pool-of-sub-agents)?$/],
 		["ten agents on one project: how do they share what they found", /^boards/],
 		["more than four sub-agents at once", /^boards#a-pool-of-sub-agents$/],

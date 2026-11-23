@@ -628,6 +628,8 @@ export function toolSubject(tool: string, input: any): string {
 export interface ApprovalRequest {
 	id: string;
 	agent: string;
+	/** For a question an event source asks itself (`agent` names the source): the agent that source belongs to, if it is one agent's. */
+	of?: string;
 	task: number;
 	/** The task at the top of the delegation tree this request belongs to. */
 	root?: number;

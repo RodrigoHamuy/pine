@@ -39,6 +39,8 @@ export interface SourceApi {
 	name: string;
 	/** What it is called in events and addresses: its name, or name@agent for an agent's own source. */
 	key: string;
+	/** The agent whose own source this is; absent for a source of all agents. */
+	agent?: string;
 	options: Record<string, any>;
 	/** Folder that relative paths in the options are meant from. */
 	base: string;
@@ -73,7 +75,10 @@ export interface SourceApi {
 	status(line: string): void;
 	/** Look at events of the system (read only): "agent/+/started", "approval/requested", ... */
 	on(pattern: string | string[], handler: (e: PineEvent) => void | Promise<void>): void;
-	/** Approval requests: put a question of its own to the owner, see the open ones, pass on the owner's answer. */
+	/**
+	 * Approval requests: put a question of its own to the owner, see the open ones, pass on the owner's answer.
+	 * An agent's own source sees and answers that agent's requests and no other's.
+	 */
 	approvals: {
 		/** Ask the owner in pine's UI. Resolves with their answer; no answer in time counts as no. */
 		ask(summary: string, why: string): Promise<boolean>;
@@ -568,9 +573,13 @@ export class SourceHost {
 		const ended = new AbortController();
 		run.stops.push(() => ended.abort());
 		const prefix = `source:${key}:`;
+		// An agent's own source is that agent's: another agent's questions are not shown there, nor answered from there.
+		const owner = key.includes("@") ? key.slice(key.lastIndexOf("@") + 1) : undefined;
+		const open = () => (this.approvals?.pending() ?? []).filter((r) => owner === undefined || r.agent === owner || r.of === owner);
 		const api: SourceApi = {
 			name,
 			key,
+			agent: owner,
 			options: source.options,
 			base: source.base,
 			controlPort: this.cfg.http?.port,
@@ -591,12 +600,12 @@ export class SourceHost {
 				}
 			}, `source:${key}`)),
 			approvals: {
-				ask: async (summary, why) => (this.approvals ? (await this.approvals.request({ agent: `${name} (event source)`, task: 0, tool: source.type ?? name, summary, why })).allow : false),
-				request: async (summary, why, inputs) => (this.approvals ? this.approvals.request({ agent: `${name} (event source)`, task: 0, tool: source.type ?? name, summary, why, inputs }) : { allow: false, by: "nobody" }),
-				pending: () => this.approvals?.pending() ?? [],
-				decide: (id, allow, by, always) => this.approvals?.decide(id, allow, by, always) ?? false,
+				ask: async (summary, why) => (this.approvals ? (await this.approvals.request({ agent: `${name} (event source)`, of: owner, task: 0, tool: source.type ?? name, summary, why })).allow : false),
+				request: async (summary, why, inputs) => (this.approvals ? this.approvals.request({ agent: `${name} (event source)`, of: owner, task: 0, tool: source.type ?? name, summary, why, inputs }) : { allow: false, by: "nobody" }),
+				pending: open,
+				decide: (id, allow, by, always) => open().some((r) => r.id === id) && (this.approvals?.decide(id, allow, by, always) ?? false),
 				choose: (id, choice, by) => {
-					const answer = this.approvals?.pending().find((r) => r.id === id)?.choices?.[choice];
+					const answer = open().find((r) => r.id === id)?.choices?.[choice];
 					return answer !== undefined && (this.approvals?.decide(id, true, by, false, { answer }) ?? false);
 				},
 			},

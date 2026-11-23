@@ -327,6 +327,37 @@ test("telegram: what an agent writes in Markdown arrives formatted; pine's own q
 	await h.close();
 });
 
+test("telegram: an agent's own bot carries that agent's questions, and nobody else's are shown or answered there", async (t) => {
+	const forSlack = await fakeTelegram();
+	const forKevin = await fakeTelegram();
+	t.after(() => Promise.all([forSlack.close(), forKevin.close()]));
+	const bot = (tg: { apiBase: string }) => ({ type: "telegram", token: TOKEN, allow: [1001], apiBase: tg.apiBase, trust: "owner", approvals: true });
+	const h = await harness({
+		agents: {
+			slack: { agent: { sources: { "tg-slack": bot(forSlack) }, subscribe: [{ source: "tg-slack" }] } },
+			kevin: { agent: { sources: { "tg-kevin": bot(forKevin) }, subscribe: [{ source: "tg-kevin" }] } },
+		},
+	});
+	await until(() => h.pine.sources.list().filter((s) => s.running).length === 2, 4000, "both bots to run");
+	const asking = h.pine.agents.run({ agent: "slack", prompt: mockMsg([{ tools: [call("question", { question: "Which color for the header?", choices: ["Blue", "Green"] })] }]), ...owner });
+	await until(() => forSlack.sent().some((m) => /slack asks:\nWhich color/.test(m.text)), 5000, "the question on slack's bot");
+	await sleep(150);
+	assert.equal(forKevin.sent().length, 0, "kevin's bot shows nothing of slack's");
+	const id = h.pine.approvals.pending()[0].id;
+	// Nor can it answer one: not by a command, and not by a button it never had.
+	forKevin.message(1001, "/allow");
+	await until(() => forKevin.sent().some((m) => m.text === "No such open request."), 4000, "kevin's bot to say there is none");
+	forKevin.callback(1001, `ap:${id}:c1`);
+	forKevin.message(1001, `/allow ${id}`);
+	await until(() => forKevin.sent().length === 2, 4000, "the second refusal");
+	assert.equal(h.pine.approvals.pending().length, 1, "the question is still open");
+	const question = forSlack.sent().find((m) => /Which color/.test(m.text));
+	forSlack.callback(1001, question.reply_markup.inline_keyboard[1][0].callback_data);
+	const r = await asking;
+	assert.match(r.text, /Your owner answered: Green/);
+	await h.close();
+});
+
 test("mqtt: an agent acts on a device through the source, on the listed topics only", async (t) => {
 	const broker = await Aedes.createBroker();
 	const server = net.createServer(broker.handle);
