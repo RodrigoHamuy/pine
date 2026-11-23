@@ -14,6 +14,7 @@ import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/in
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Sidebar as SidebarRoot, SidebarContent, SidebarGroup, SidebarGroupContent, SidebarHeader, SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarProvider } from "@/components/ui/sidebar";
 import { Pulse } from "@/components/pulse";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "cn";
@@ -143,7 +144,106 @@ function Choose<T extends string>({ id, items, value, onChange }: { id: string; 
 
 // ---- general ----------------------------------------------------------------------------------------
 
-function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reload: () => void }) {
+type SettingsItemProps = Omit<ComponentProps<typeof Item>, "title" | "variant" | "size"> &
+	(
+		| {
+				skeleton?: false;
+				title: ReactNode;
+				/** One line, or a few, each an ItemDescription; `children` follow them, for lines of another shape. */
+				description?: ReactNode | ReactNode[];
+				media?: ReactNode;
+				mediaVariant?: ComponentProps<typeof ItemMedia>["variant"];
+				actions?: ReactNode;
+				titleClassName?: string;
+				descriptionClassName?: string;
+				contentClassName?: string;
+				actionsClassName?: string;
+				/** data-* attributes of the actions, for a test to find a setting by. */
+				actionsProps?: { [data: `data-${string}`]: string };
+			}
+		| { skeleton: true; title?: undefined; description?: undefined; media?: undefined; actions?: undefined }
+	);
+
+/**
+ * The outline row the Settings lists are made of: a title (with its badges), a line or a few below it,
+ * and actions at its end. With `skeleton`, bars of the same shape while its list loads.
+ */
+export function SettingsItem(props: SettingsItemProps) {
+	if (props.skeleton) {
+		const { skeleton: _, title: _t, description: _d, media: _m, actions: _a, children: _c, ...rest } = props;
+		return (
+			<Item data-slot="settings-item" variant="outline" size="sm" {...rest}>
+				<ItemContent className="min-w-0 gap-2">
+					<Skeleton className="h-4 w-32" />
+					<Skeleton className="h-3.5 w-3/4" />
+				</ItemContent>
+				<ItemActions><Skeleton className="h-8 w-20" /></ItemActions>
+			</Item>
+		);
+	}
+	// A real row keeps Item's own data-slot (item): the tests find rows by it.
+	const { skeleton: _, title, description, media, mediaVariant, actions, titleClassName, descriptionClassName, contentClassName, actionsClassName, actionsProps, children, ...rest } = props;
+	const lines = Array.isArray(description) ? description : description === undefined ? [] : [description];
+	return (
+		<Item variant="outline" size="sm" {...rest}>
+			{media ? <ItemMedia variant={mediaVariant}>{media}</ItemMedia> : null}
+			<ItemContent className={cn("min-w-0", contentClassName)}>
+				<ItemTitle className={titleClassName}>{title}</ItemTitle>
+				{lines.map((line, i) => <ItemDescription key={i} className={descriptionClassName}>{line}</ItemDescription>)}
+				{children}
+			</ItemContent>
+			{actions ? <ItemActions className={actionsClassName} {...actionsProps}>{actions}</ItemActions> : null}
+		</Item>
+	);
+}
+
+/** A select whose options are still loading: its place, pending, rather than a partial list. */
+function SelectPending({ id }: { id?: string }) {
+	return <Skeleton id={id} data-pending="" className={cn(CONTROL, "h-8")} />;
+}
+
+/** A field of Settings whose value comes late: its title and line as bars, holding its place. */
+function FieldSkeleton(props: ComponentProps<"div">) {
+	return (
+		<Field orientation="responsive" {...props}>
+			<FieldContent className="min-w-0 gap-2">
+				<Skeleton className="h-4 w-36" />
+				<Skeleton className="h-3.5 w-3/4" />
+			</FieldContent>
+			<Skeleton className="h-8 w-24" />
+		</Field>
+	);
+}
+
+/** A Settings list on its first load: a few skeleton rows in place of its items. */
+function SettingsItemsSkeleton({ count = 3 }: { count?: number }) {
+	return Array.from({ length: count }, (_, i) => <SettingsItem key={i} skeleton />);
+}
+
+/** A group of General's settings while they load: its title and a few rows of bars. */
+function SettingsGroupSkeleton() {
+	return (
+		<section data-slot="settings-group-skeleton" className="flex flex-col gap-3">
+			<div className="flex flex-col gap-1.5">
+				<Skeleton className="h-5 w-40" />
+				<Skeleton className="h-4 w-2/3" />
+			</div>
+			<FieldGroup>
+				{[0, 1, 2].map((i) => (
+					<div key={i} className="flex items-center justify-between gap-4">
+						<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+							<Skeleton className="h-4 w-36" />
+							<Skeleton className="h-3.5 w-3/4" />
+						</div>
+						<Skeleton className="h-8 w-40" />
+					</div>
+				))}
+			</FieldGroup>
+		</section>
+	);
+}
+
+function SettingRow({ s, models, reload }: { s: Setting; models?: string[]; reload: () => void }) {
 	const [draft, setDraft] = useState<string>();
 	const id = useId();
 	const name = s.title ?? s.key;
@@ -162,10 +262,11 @@ function SettingRow({ s, models, reload }: { s: Setting; models: string[]; reloa
 	const unset = /^not set/.test(s.now) || s.now === "none";
 	let control: ReactNode;
 	if (k === "boolean") control = <Switch id={id} checked={s.now === "true"} onCheckedChange={(on) => void set(on)} />;
+	else if (k === "model" && !models) control = <SelectPending id={id} />;
 	else if (k === "model" || (typeof k === "object" && "one" in k)) {
 		const items =
 			k === "model"
-				? [{ value: "", label: unset ? s.now.replace(/^not set \((.+)\)$/, "$1") : "pine's default" },...(!unset && !models.includes(s.now) ? [s.now] : []).concat(models).map((m) => ({ value: m, label: m }))]
+				? [{ value: "", label: unset ? s.now.replace(/^not set \((.+)\)$/, "$1") : "pine's default" },...(!unset && !models!.includes(s.now) ? [s.now] : []).concat(models!).map((m) => ({ value: m, label: m }))]
 				: [...(k.one.includes(s.now) ? [] : [{ value: "", label: s.now }]), ...k.one.map((v) => ({ value: v, label: v }))];
 		const value = k === "model" ? (unset ? "" : s.now) : k.one.includes(s.now) ? s.now : "";
 		control = (
@@ -243,19 +344,20 @@ function General() {
 					</div>
 				</Section>
 			) : null}
+			{!overview.data && !overview.error ? <div data-slot="settings-overview-skeleton"><SettingsItem skeleton /></div> : null}
 			{overview.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{overview.error}</AlertDescription></Alert> : null}
 			{settings.data ? (
 				GROUPS.map((g) => (
 					<Section key={g.prefix} title={g.title} about={g.about}>
 						<FieldGroup>
-							{settings.data!.filter((x) => x.key.startsWith(g.prefix)).map((x) => <SettingRow key={x.key} s={x} models={models.data ?? []} reload={settings.reload} />)}
+							{settings.data!.filter((x) => x.key.startsWith(g.prefix)).map((x) => <SettingRow key={x.key} s={x} models={models.data ?? (models.error ? [] : undefined)} reload={settings.reload} />)}
 						</FieldGroup>
 					</Section>
 				))
 			) : settings.error ? (
 				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{settings.error}</AlertDescription></Alert>
 			) : (
-				<Pulse label="Loading" className="m-auto" />
+				GROUPS.map((g) => <SettingsGroupSkeleton key={g.prefix} />)
 			)}
 			<p className="text-muted-foreground">Pine {s.versions.app}{s.local ? ` · Electron ${s.versions.electron}` : ""}</p>
 		</Page>
@@ -348,6 +450,34 @@ function AgentHeading({ id, color }: { id: string; color?: string }) {
 	);
 }
 
+/** An agent's page on its first load: its heading, a group of fields and the files' editor, as bars. */
+function AgentPageSkeleton() {
+	return (
+		<div data-slot="agent-page-skeleton" className="flex flex-col gap-6">
+			<div className="flex items-center gap-3">
+				<Skeleton className="size-10 rounded-full" />
+				<Skeleton className="h-6 w-40" />
+			</div>
+			<SettingsGroupSkeleton />
+			<FilesSkeleton />
+		</div>
+	);
+}
+
+/** A set of file tabs over an editor, on its first load. */
+function FilesSkeleton() {
+	return (
+		<div data-slot="files-skeleton" className="flex flex-col gap-2">
+			<div className="flex gap-2">
+				<Skeleton className="h-8 w-28" />
+				<Skeleton className="h-8 w-24" />
+				<Skeleton className="h-8 w-24" />
+			</div>
+			<Skeleton className="h-72 w-full" />
+		</div>
+	);
+}
+
 function AgentPage({ id, back }: { id: string; back: () => void }) {
 	const detail = useLoad(() => api.agentDetail(id), [id]);
 	const models = useLoad(() => api.models());
@@ -361,7 +491,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 	if (!d)
 		return (
 			<Page title={id} back={{ label: "Agents", onClick: back }}>
-				{detail.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{detail.error}</AlertDescription></Alert> : <Pulse label="Loading" className="m-auto" />}
+				{detail.error ? <Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{detail.error}</AlertDescription></Alert> : <AgentPageSkeleton />}
 			</Page>
 		);
 	const now = <K extends keyof AgentDetail>(key: K): AgentDetail[K] => (key in change ? (change[key as string] as AgentDetail[K]) : d[key]);
@@ -437,7 +567,7 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 							<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
 							<FieldDescription>The model this agent thinks with.</FieldDescription>
 						</FieldContent>
-						{select(`${field}-model`, modelItems, (change.model as string) ?? d.model ?? "", (v) => put("model", v || "default"))}
+						{models.data || models.error ? select(`${field}-model`, modelItems, (change.model as string) ?? d.model ?? "", (v) => put("model", v || "default")) : <SelectPending id={`${field}-model`} />}
 					</Field>
 					<Field orientation="responsive" data-find="agent-reasoning">
 						<FieldContent className="min-w-0">
@@ -532,19 +662,20 @@ function AgentPage({ id, back }: { id: string; back: () => void }) {
 							const dropped = forget.includes(p);
 							const action = added ? "Leave it out" : dropped ? "Keep it" : "Take it away";
 							return (
-								<Item key={`${added ? "new" : "had"}:${write}:${p}`} variant="outline" size="sm">
-									<ItemMedia variant="icon">{added ? <PlusIcon /> : <FolderIcon />}</ItemMedia>
-									<ItemContent className="min-w-0">
-										<ItemTitle className={cn("font-mono", dropped && "line-through")}>{tilde(p)}</ItemTitle>
-									</ItemContent>
-									<ItemActions>
+								<SettingsItem
+									key={`${added ? "new" : "had"}:${write}:${p}`}
+									media={added ? <PlusIcon /> : <FolderIcon />}
+									mediaVariant="icon"
+									title={tilde(p)}
+									titleClassName={cn("font-mono", dropped && "line-through")}
+									actions={<>
 										<Badge variant="secondary">{`${write ? "read and write" : "read only"}${added ? ", not saved yet" : ""}`}</Badge>
 										<HoverTooltip>
 											<TooltipTrigger render={<Button variant="ghost" size="icon-sm" aria-label={action} onClick={() => (added ? leaveOut(p, write) : put("forget", dropped ? forget.filter((x) => x !== p) : [...forget, p]))}>{dropped ? <Undo2Icon /> : <XIcon />}</Button>} />
 											<TooltipContent>{action}</TooltipContent>
 										</HoverTooltip>
-									</ItemActions>
-								</Item>
+									</>}
+								/>
 							);
 						})}
 					</ItemGroup>
@@ -653,7 +784,8 @@ export function NewAgent({ close, made }: { close: () => void; made: (id: string
 						</Field>
 						<Field>
 							<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
-							<Select items={modelItems} value={f.model} onValueChange={(model) => setF({ ...f, model: model ?? "" })}>
+							{models.data || models.error ? (
+								<Select items={modelItems} value={f.model} onValueChange={(model) => setF({ ...f, model: model ?? "" })}>
 								<SelectTrigger id={`${field}-model`}>
 									<SelectValue />
 								</SelectTrigger>
@@ -667,6 +799,7 @@ export function NewAgent({ close, made }: { close: () => void; made: (id: string
 									</SelectGroup>
 								</SelectContent>
 							</Select>
+							) : <SelectPending id={`${field}-model`} />}
 						</Field>
 					</FieldGroup>
 				</ScrollArea>
@@ -688,20 +821,22 @@ function Agents() {
 		<Page title="Agents" lead="Each agent has separate instructions, a model, a workspace folder and conversations. Open an agent to change what it may do." actions={<Button variant="outline" onClick={() => setAdding(true)}><PlusIcon data-icon="inline-start" />New agent</Button>}>
 			<ItemGroup>
 				{s.agents.map((a) => (
-					<Item key={a.id} variant="outline" size="sm" render={<button type="button" />} onClick={() => setOpen(a.id)}>
-						<ItemContent className="min-w-0">
-							<ItemTitle>
+					<SettingsItem
+						key={a.id}
+						render={<button type="button" />}
+						onClick={() => setOpen(a.id)}
+						title={<>
 								{a.id}
 								{/* Said as on the agent's card: what makes it the main agent, not a word the owner has to look up. */}
 								{a.main ? <Badge variant="outline">administers pine</Badge> : null}
 								{/* A mode is a fact, gray like the mode everywhere else; only bypass, where nothing asks, is marked. */}
 								<Badge variant={a.mode === "bypass" ? "destructive" : "secondary"}>{a.mode}</Badge>
-							</ItemTitle>
-							<ItemDescription>{a.description || "no description"}</ItemDescription>
-							<ItemDescription className="truncate font-mono">{[a.model || "no model yet", `reasoning ${a.thinking}`, tilde(a.workspace)].join(" · ")}</ItemDescription>
-						</ItemContent>
-						<ItemActions><ChevronRightIcon /></ItemActions>
-					</Item>
+						</>}
+						description={a.description || "no description"}
+						actions={<ChevronRightIcon />}
+					>
+						<ItemDescription className="truncate font-mono">{[a.model || "no model yet", `reasoning ${a.thinking}`, tilde(a.workspace)].join(" · ")}</ItemDescription>
+					</SettingsItem>
 				))}
 			</ItemGroup>
 			<SharedInstructions />
@@ -780,12 +915,7 @@ function SignIn({ provider, type, reload }: { provider: string; type?: "api_key"
 								<FieldLegend variant="label">{q.message}</FieldLegend>
 								<ItemGroup>
 									{q.options.map((o) => (
-										<Item key={o.id} variant="outline" size="sm" render={<button type="button" />} onClick={() => void send(o.id)}>
-											<ItemContent className="min-w-0">
-												<ItemTitle>{o.label}</ItemTitle>
-												{o.description ? <ItemDescription>{o.description}</ItemDescription> : null}
-											</ItemContent>
-										</Item>
+										<SettingsItem key={o.id} render={<button type="button" />} onClick={() => void send(o.id)} title={o.label} description={o.description || undefined} />
 									))}
 								</ItemGroup>
 							</FieldSet>
@@ -833,15 +963,15 @@ function ProviderRow({ p, reload }: { p: Provider; reload: () => void }) {
 	const sub = SUBSCRIPTIONS[p.id];
 	const about = p.signedIn ? `Signed in · ${plural(p.models, "model")}` : sub?.about ?? (p.oauth ? "Sign in with your account, or use an API key" : "Needs an API key");
 	return (
-		<Item variant="outline" size="sm" data-provider={p.id}>
-			<ItemContent className="min-w-0">
-				<ItemTitle>
+		<SettingsItem
+			data-provider={p.id}
+			title={<>
 					{sub?.title ?? p.name ?? p.id}
 					{p.signedIn ? <Badge>signed in</Badge> : null}
-				</ItemTitle>
-				<ItemDescription className="line-clamp-none wrap-anywhere">{about}</ItemDescription>
-			</ItemContent>
-			<ItemActions>
+				</>}
+			description={about}
+			descriptionClassName="line-clamp-none wrap-anywhere"
+			actions={<>
 				{p.signedIn ? (
 					<AlertDialog>
 						<AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Sign out</AlertDialogTrigger>
@@ -866,8 +996,8 @@ function ProviderRow({ p, reload }: { p: Provider; reload: () => void }) {
 					<DialogTrigger render={<Button variant="outline" size="sm" />}>{p.signedIn ? "New API key" : "API key"}</DialogTrigger>
 					<DialogContent showCloseButton={false} className="sm:max-w-xl"><SignIn provider={p.id} type="api_key" reload={reload} /></DialogContent>
 				</Dialog>
-			</ItemActions>
-		</Item>
+			</>}
+		/>
 	);
 }
 
@@ -947,15 +1077,13 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 	const set = (v: string, model: string) => void store.attempt(() => api.limitModel(x.name, model, v === "default" ? null : Number(v))).then((r) => r && reload());
 	return (
 		<ItemGroup data-find={`model-server:${x.name}`} data-server={x.name}>
-			<Item variant="outline" size="sm">
-				<ItemMedia variant="icon"><ServerIcon /></ItemMedia>
-				<ItemContent className="min-w-0">
-					<ItemTitle>{x.name}</ItemTitle>
-					<ItemDescription className="font-mono wrap-anywhere">{x.baseUrl}</ItemDescription>
-					{inUse.length ? <ItemDescription>Used by {inUse.join(", ")}.</ItemDescription> : null}
-					{x.models.length ? null : <ItemDescription>This server lists no models.</ItemDescription>}
-				</ItemContent>
-				<ItemActions>
+			<SettingsItem
+				media={<ServerIcon />}
+				mediaVariant="icon"
+				title={x.name}
+				description={x.baseUrl}
+				descriptionClassName="font-mono wrap-anywhere"
+				actions={
 					<AlertDialog>
 						<AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Remove</AlertDialogTrigger>
 						<AlertDialogContent>
@@ -968,24 +1096,29 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 							</AlertDialogFooter>
 						</AlertDialogContent>
 					</AlertDialog>
-				</ItemActions>
-			</Item>
+				}
+			>
+				{inUse.length ? <ItemDescription>Used by {inUse.join(", ")}.</ItemDescription> : null}
+				{x.models.length ? null : <ItemDescription>This server lists no models.</ItemDescription>}
+			</SettingsItem>
 			{/* (Each model says how many agents may use it at once, pine's own limit unless it was given a number: one server can serve models that are set up differently.) */}
 			{x.models.map((m) => {
 				const ref = `${x.name}/${m.id}`;
 				return (
-					<Item key={m.id} variant="outline" size="sm" data-model={ref}>
-						<ItemContent className="min-w-0 basis-full @lg/settings:basis-0">
-							<ItemTitle className="font-mono wrap-anywhere">
+					<SettingsItem
+						key={m.id}
+						data-model={ref}
+						contentClassName="basis-full @lg/settings:basis-0"
+						titleClassName="font-mono wrap-anywhere"
+						title={<>
 								{m.id}
 								{ref === fallback ? <Badge variant="secondary" className="font-sans">default</Badge> : null}
-							</ItemTitle>
-							<ItemDescription>{[m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k context` : "", m.images ? "sees pictures" : "text only", m.reasoning ? "can reason" : ""].filter(Boolean).join(" · ")}</ItemDescription>
-						</ItemContent>
-						<ItemActions className="w-full @lg/settings:w-48 @lg/settings:shrink-0" data-setting={`model-runs:${ref}`}>
-							<Choose id={`model-runs-${ref}`} items={[{ value: "default", label: `Pine default (${runs})` }, ...numbers(m.limit)]} value={m.limit ? String(m.limit) : "default"} onChange={(v) => set(v, m.id)} />
-						</ItemActions>
-					</Item>
+							</>}
+						description={[m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k context` : "", m.images ? "sees pictures" : "text only", m.reasoning ? "can reason" : ""].filter(Boolean).join(" · ")}
+						actionsClassName="w-full @lg/settings:w-48 @lg/settings:shrink-0"
+						actionsProps={{ "data-setting": `model-runs:${ref}` }}
+						actions={<Choose id={`model-runs-${ref}`} items={[{ value: "default", label: `Pine default (${runs})` }, ...numbers(m.limit)]} value={m.limit ? String(m.limit) : "default"} onChange={(v) => set(v, m.id)} />}
+					/>
 				);
 			})}
 		</ItemGroup>
@@ -1000,6 +1133,9 @@ function Models() {
 	const connecting = useRef<DialogRootActions>(null);
 	const s = useModel(store);
 	const fallback = useLoad(() => api.settings().then((all) => all.find((x) => x.key === "defaults.model")?.now));
+	// Only the first load shows a skeleton: a reload with no default set keeps what is there.
+	const [fallbackSeen, setFallbackSeen] = useState(false);
+	if (!fallbackSeen && !fallback.loading) setFallbackSeen(true);
 	const stuck = s.agents.filter((a) => a.modelProblem);
 	const reload = () => (providers.reload(), servers.reload(), fallback.reload(), void store.refreshAgents());
 	const mine = new Set((servers.data ?? []).map((x) => x.name));
@@ -1020,7 +1156,11 @@ function Models() {
 				<ModelNotice key={a.id} agent={a.id} model={a.model} problem={a.modelProblem!} />
 			))}
 
-			{anyModel ? (
+			{!fallbackSeen ? (
+				<Section title="Default model">
+					<ItemGroup><SettingsItemsSkeleton count={1} /></ItemGroup>
+				</Section>
+			) : anyModel ? (
 				<Section title="Default model">
 					<FieldGroup>
 						<Field orientation="responsive" data-setting="fallback-model">
@@ -1049,7 +1189,7 @@ function Models() {
 					) : providers.error ? (
 						<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{providers.error}</AlertDescription></Alert>
 					) : (
-						<Pulse label="Loading" className="m-auto" />
+						<SettingsItemsSkeleton />
 					)}
 				</ItemGroup>
 				{providers.data && !q && more > 0 ? <p className="text-muted-foreground">{plural(more, "more provider")} with an API key or an account. Search to find one.</p> : null}
@@ -1074,7 +1214,9 @@ function Models() {
 					</div>
 				) : servers.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
-				) : null}
+				) : servers.data ? null : (
+					<ItemGroup><SettingsItemsSkeleton count={1} /></ItemGroup>
+				)}
 			</Section>
 		</Page>
 	);
@@ -1198,22 +1340,23 @@ function Mcp() {
 					{servers.data ? (
 						servers.data.length ? (
 							servers.data.map((x) => {
-								const state = !x.enabled ? "turned off" : (states.data?.[x.name] ?? (states.loading ? "…" : x.remote ? "unknown" : "local"));
+								const state = !x.enabled ? "turned off" : (states.data?.[x.name] ?? (states.loading ? undefined : x.remote ? "unknown" : "local"));
 								const agent = x.scope === "global" ? undefined : x.scope;
-								const tone = /connected|ok|local|authenticated/i.test(state) ? "good" : /needs|error|fail|unauth/i.test(state) ? "warn" : undefined;
+								const tone = state === undefined ? undefined : /connected|ok|local|authenticated/i.test(state) ? "good" : /needs|error|fail|unauth/i.test(state) ? "warn" : undefined;
 								return (
-									<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm" data-find={`mcp:${x.scope}:${x.name}`}>
-										<ItemContent className="min-w-0">
-											<ItemTitle>
+									<SettingsItem
+										key={`${x.scope}:${x.name}`}
+										data-find={`mcp:${x.scope}:${x.name}`}
+										title={<>
 												{x.name}
-												<Badge variant={tone === "good" ? "default" : tone === "warn" ? "outline" : "secondary"}>{state}</Badge>
+												{state === undefined ? <Skeleton className="h-5 w-16 rounded-full" /> : <Badge variant={tone === "good" ? "default" : tone === "warn" ? "outline" : "secondary"}>{state}</Badge>}
 												<Badge variant="secondary" className="h-auto max-w-full whitespace-normal">{x.scope === "global" ? "all agents" : x.session ? `${x.scope}, one conversation (${x.session})` : x.scope}</Badge>
 												{x.taints ? <Badge variant="outline">brings in outside content</Badge> : null}
 												{x.approve !== "never" ? <Badge variant="secondary">asks first: {x.approve}</Badge> : null}
-											</ItemTitle>
-											<ItemDescription className="line-clamp-none font-mono wrap-anywhere">{x.target}</ItemDescription>
-										</ItemContent>
-										<ItemActions>
+											</>}
+										description={x.target}
+										descriptionClassName="line-clamp-none font-mono wrap-anywhere"
+										actions={<>
 											{x.remote ? <Button variant="outline" size="sm" disabled={busy === x.name} onClick={() => void login(x.name, agent)}>{busy === x.name ? <><Pulse label="Loading" data-icon="inline-start" />In your browser…</> : "Sign in"}</Button> : null}
 											{x.target.startsWith("bundled:") ? null : <AlertDialog>
 												<AlertDialogTrigger render={<Button variant="ghost" size="sm" />}>Remove</AlertDialogTrigger>
@@ -1227,8 +1370,8 @@ function Mcp() {
 													</AlertDialogFooter>
 												</AlertDialogContent>
 											</AlertDialog>}
-										</ItemActions>
-									</Item>
+										</>}
+									/>
 								);
 							})
 						) : (
@@ -1237,7 +1380,7 @@ function Mcp() {
 					) : servers.error ? (
 						<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{servers.error}</AlertDescription></Alert>
 					) : (
-						<Pulse label="Loading" className="m-auto" />
+						<SettingsItemsSkeleton />
 					)}
 				</ItemGroup>
 				{out ? (
@@ -1321,16 +1464,17 @@ function Skills() {
 						skills.data.map((x) => {
 							const managed = x.managed && x.scope !== "local";
 							return (
-								<Item key={x.dir} variant="outline" size="sm" data-find={`skill:${x.dir}`}>
-									<ItemContent className="min-w-0">
-										<ItemTitle>
+								<SettingsItem
+									key={x.dir}
+									data-find={`skill:${x.dir}`}
+									title={<>
 											{x.name}
 											<Badge variant="secondary">{x.scope === "global" ? "all agents" : x.scope === "agent" ? x.agent : `${x.agent} · ${x.session}`}</Badge>
 											{x.managed ? null : <Badge variant="secondary">from your own folder</Badge>}
-										</ItemTitle>
-										<ItemDescription className="line-clamp-none wrap-anywhere">{short(x.description, 220)}</ItemDescription>
-									</ItemContent>
-									<ItemActions>
+										</>}
+									description={short(x.description, 220)}
+									descriptionClassName="line-clamp-none wrap-anywhere"
+									actions={<>
 										<Button variant="outline" size="sm" onClick={() => setEdit({ name: x.name, description: x.description, instructions: x.instructions ?? "", agent: x.agent ?? "", isNew: false, managed })}>{managed ? "Edit" : "Read"}</Button>
 										{x.managed ? <AlertDialog>
 											<AlertDialogTrigger render={<Button variant="ghost" size="sm" aria-label="Remove this skill" />}>Remove</AlertDialogTrigger>
@@ -1344,8 +1488,8 @@ function Skills() {
 												</AlertDialogFooter>
 											</AlertDialogContent>
 										</AlertDialog> : null}
-									</ItemActions>
-								</Item>
+									</>}
+								/>
 							);
 						})
 					) : (
@@ -1354,7 +1498,7 @@ function Skills() {
 				) : skills.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{skills.error}</AlertDescription></Alert>
 				) : (
-					<Pulse label="Loading" className="m-auto" />
+					<SettingsItemsSkeleton />
 				)}
 			</ItemGroup>
 		</Page>
@@ -1617,30 +1761,22 @@ function Sources() {
 				{sources.data ? (
 					sources.data.length ? (
 						sources.data.map((x) => (
-							<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm" data-find={`source:${x.scope}:${x.name}`}>
-								<ItemMedia><span className={cn("size-2 rounded-full", x.error ? "bg-destructive" : x.running ? "bg-primary" : "bg-muted-foreground")} /></ItemMedia>
-								<ItemContent className="min-w-0">
-									<ItemTitle>
+							<SettingsItem
+								key={`${x.scope}:${x.name}`}
+								data-find={`source:${x.scope}:${x.name}`}
+								media={<span className={cn("size-2 rounded-full", x.error ? "bg-destructive" : x.running ? "bg-primary" : "bg-muted-foreground")} />}
+								title={<>
 										{x.name}
 										<Badge variant="secondary">{x.type}</Badge>
 										<Badge variant="secondary">{scopeText(x.scope)}</Badge>
 										{x.trust === "owner" ? <Badge>yours</Badge> : null}
-									</ItemTitle>
-									<ItemDescription className="line-clamp-none wrap-anywhere">
+									</>}
+								description={<>
 										{x.description ? <>{x.description}<br /></> : null}
 										{x.error ? `not running: ${x.error}` : x.running ? (x.status ?? "running") : "idle, nobody is subscribed"} · {x.last ? `last event ${ago(x.last.ts)}, ${x.events} since start` : "no events since start"}
-									</ItemDescription>
-									<div className="flex flex-wrap items-center gap-1">
-										{x.subscribers.map((who) => (
-											<HoverTooltip key={who}>
-												<TooltipTrigger render={<Button variant="outline" size="sm" aria-label={`End the subscription of ${who}`} onClick={() => void unsubscribe(x.name, who)}>{who}<XIcon data-icon="inline-end" /></Button>} />
-												<TooltipContent>End the subscription of {who}</TooltipContent>
-											</HoverTooltip>
-										))}
-										<Button variant="outline" size="sm" onClick={() => void subscribe(x.name)}><PlusIcon data-icon="inline-start" />Subscribe</Button>
-									</div>
-								</ItemContent>
-								<ItemActions>
+									</>}
+								descriptionClassName="line-clamp-none wrap-anywhere"
+								actions={
 									<AlertDialog>
 										<AlertDialogTrigger render={<Button variant="ghost" size="sm" aria-label="Remove this source" />}>Remove</AlertDialogTrigger>
 										<AlertDialogContent>
@@ -1653,8 +1789,18 @@ function Sources() {
 											</AlertDialogFooter>
 										</AlertDialogContent>
 									</AlertDialog>
-								</ItemActions>
-							</Item>
+								}
+							>
+								<div className="flex flex-wrap items-center gap-1">
+										{x.subscribers.map((who) => (
+											<HoverTooltip key={who}>
+												<TooltipTrigger render={<Button variant="outline" size="sm" aria-label={`End the subscription of ${who}`} onClick={() => void unsubscribe(x.name, who)}>{who}<XIcon data-icon="inline-end" /></Button>} />
+												<TooltipContent>End the subscription of {who}</TooltipContent>
+											</HoverTooltip>
+										))}
+										<Button variant="outline" size="sm" onClick={() => void subscribe(x.name)}><PlusIcon data-icon="inline-start" />Subscribe</Button>
+									</div>
+							</SettingsItem>
 						))
 					) : (
 						<EmptyView icon={ZapIcon} title="No event sources yet">Add one, or ask an agent: “watch ~/Scans”, “tell me when the price drops”.</EmptyView>
@@ -1662,7 +1808,7 @@ function Sources() {
 				) : sources.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{sources.error}</AlertDescription></Alert>
 				) : (
-					<Pulse label="Loading" className="m-auto" />
+					<SettingsItemsSkeleton />
 				)}
 			</ItemGroup>
 		</Section>
@@ -1816,16 +1962,19 @@ export function Schedules() {
 				{list.data ? (
 					list.data.length ? (
 						list.data.map((x) => (
-							<Item key={`${x.scope}:${x.name}`} variant="outline" size="sm" data-find={`schedule:${x.scope}:${x.name}`}>
-								<ItemContent className="min-w-0">
-									<ItemTitle>
+							<SettingsItem
+								key={`${x.scope}:${x.name}`}
+								data-find={`schedule:${x.scope}:${x.name}`}
+								title={<>
 										{x.name}
 										{x.next ? <Badge variant="secondary">next {new Date(x.next).toLocaleString("sv-SE").slice(0, 16)}</Badge> : null}
-									</ItemTitle>
-									<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">When</span> {x.when}</ItemDescription>
-									<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">Then</span> {x.task ? `wake ${wakes(x.scope, x.session)}: “${short(x.task, 160)}”` : `publish ${x.topic}`}</ItemDescription>
-								</ItemContent>
-								<ItemActions>
+									</>}
+								description={[
+									<><span className="font-medium text-foreground">When</span> {x.when}</>,
+									<><span className="font-medium text-foreground">Then</span> {x.task ? `wake ${wakes(x.scope, x.session)}: “${short(x.task, 160)}”` : `publish ${x.topic}`}</>,
+								]}
+								descriptionClassName="line-clamp-none wrap-anywhere"
+								actions={
 									<AlertDialog>
 										<AlertDialogTrigger render={<Button variant="ghost" size="sm" aria-label="Remove this schedule" />}>Remove</AlertDialogTrigger>
 										<AlertDialogContent>
@@ -1838,8 +1987,8 @@ export function Schedules() {
 											</AlertDialogFooter>
 										</AlertDialogContent>
 									</AlertDialog>
-								</ItemActions>
-							</Item>
+								}
+							/>
 						))
 					) : (
 						<EmptyView icon={ClockIcon} title="Nothing is scheduled">An agent schedules something when you ask it to, or add one here.</EmptyView>
@@ -1847,7 +1996,7 @@ export function Schedules() {
 				) : list.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
 				) : (
-					<Pulse label="Loading" className="m-auto" />
+					<SettingsItemsSkeleton />
 				)}
 			</ItemGroup>
 		</Section>
@@ -1981,7 +2130,8 @@ export function NewRoute({ made, does: first = "wake" }: { made: () => void; doe
 									</Field>
 									<Field>
 										<FieldLabel htmlFor={`${field}-model`}>Model</FieldLabel>
-										<Select items={modelItems} value={f.call_model} onValueChange={(m) => setF({ ...f, call_model: m ?? "" })}>
+										{models.data || models.error ? (
+											<Select items={modelItems} value={f.call_model} onValueChange={(m) => setF({ ...f, call_model: m ?? "" })}>
 											<SelectTrigger id={`${field}-model`}>
 												<SelectValue />
 											</SelectTrigger>
@@ -1993,6 +2143,7 @@ export function NewRoute({ made, does: first = "wake" }: { made: () => void; doe
 												</SelectGroup>
 											</SelectContent>
 										</Select>
+							) : <SelectPending id={`${field}-model`} />}
 									</Field>
 									<Field>
 										<FieldLabel htmlFor={`${field}-answer`}>Publish the answer as</FieldLabel>
@@ -2041,16 +2192,19 @@ export function Routes() {
 						list.data.map((r) => {
 							const said = routeSaid(r);
 							return (
-								<Item key={r.name} variant="outline" size="sm" data-find={`route:${r.name}`}>
-									<ItemContent className="min-w-0">
-										<ItemTitle>
+								<SettingsItem
+									key={r.name}
+									data-find={`route:${r.name}`}
+									title={<>
 											{r.name}
 											{r.trust === "owner" ? <Badge variant="outline">counts as your words</Badge> : null}
-										</ItemTitle>
-										<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">When</span> {said.when}</ItemDescription>
-										<ItemDescription className="line-clamp-none wrap-anywhere"><span className="font-medium text-foreground">Then</span> {said.then}</ItemDescription>
-									</ItemContent>
-									<ItemActions>
+										</>}
+									description={[
+										<><span className="font-medium text-foreground">When</span> {said.when}</>,
+										<><span className="font-medium text-foreground">Then</span> {said.then}</>,
+									]}
+									descriptionClassName="line-clamp-none wrap-anywhere"
+									actions={
 										<AlertDialog>
 											<AlertDialogTrigger render={<Button variant="ghost" size="sm" aria-label="Remove this route" />}>Remove</AlertDialogTrigger>
 											<AlertDialogContent>
@@ -2063,8 +2217,8 @@ export function Routes() {
 												</AlertDialogFooter>
 											</AlertDialogContent>
 										</AlertDialog>
-									</ItemActions>
-								</Item>
+									}
+								/>
 							);
 						})
 					) : (
@@ -2073,7 +2227,7 @@ export function Routes() {
 				) : list.error ? (
 					<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{list.error}</AlertDescription></Alert>
 				) : (
-					<Pulse label="Loading" className="m-auto" />
+					<SettingsItemsSkeleton />
 				)}
 			</ItemGroup>
 		</Section>
@@ -2128,7 +2282,7 @@ function SharedInstructions() {
 			) : files.error ? (
 				<Alert variant="destructive"><TriangleAlertIcon /><AlertDescription>{files.error}</AlertDescription></Alert>
 			) : (
-				<Pulse label="Loading" className="m-auto" />
+				<FilesSkeleton />
 			)}
 			{changed.length ? (
 				<div data-slot="unsaved" className="sticky bottom-4 z-10 flex items-center gap-2 rounded-lg border bg-popover py-2 ps-4 pe-2 text-popover-foreground shadow-lg">
@@ -2174,7 +2328,7 @@ export function ThemePicker() {
 					<FieldDescription className="wrap-anywhere">To add a VS Code color theme, put its .json file into {folder}. The choice is saved in pine, so all Pine apps that use this pine show it.</FieldDescription>
 				</FieldContent>
 				<Control>
-					<Select items={items} value={s.theme} onValueChange={(v) => v && v !== s.theme && void s.setTheme(v)} disabled={!usable.length}>
+					{s.themesRead ? <Select items={items} value={s.theme} onValueChange={(v) => v && v !== s.theme && void s.setTheme(v)} disabled={!usable.length}>
 						<SelectTrigger id={id} className={CONTROL}>
 							<SelectValue />
 						</SelectTrigger>
@@ -2196,7 +2350,7 @@ export function ThemePicker() {
 								) : null;
 							})}
 						</SelectContent>
-					</Select>
+					</Select> : <SelectPending id={id} />}
 				</Control>
 			</Field>
 			{broken.length ? (
@@ -2218,23 +2372,29 @@ export function ThemePicker() {
  * on a machine. Nothing under a bridge that has none (the desktop app uses the owner's ssh).
  */
 function DeviceKey() {
-	const [key, setKey] = useState<{ key: string; copy: () => Promise<void>; share: () => Promise<void> }>();
+	// Undefined while it is asked, null when the bridge has none.
+	const [key, setKey] = useState<{ key: string; copy: () => Promise<void>; share: () => Promise<void> } | null>();
 	// (Asked by its answer: Storybook's stand-in answers every name with a function that gives no key.)
-	useEffect(() => void (typeof bridge.deviceKey === "function" && Promise.resolve(bridge.deviceKey()).then((k) => typeof k?.key === "string" && setKey(k), () => undefined)), []);
+	useEffect(() => {
+		if (typeof bridge.deviceKey !== "function") return setKey(null);
+		Promise.resolve(bridge.deviceKey()).then((k) => setKey(typeof k?.key === "string" ? k : null), () => setKey(null));
+	}, []);
+	if (key === undefined) return <SettingsItem skeleton data-slot="device-key-skeleton" />;
 	if (!key) return null;
 	return (
-		<Item variant="outline" size="sm" data-slot="device-key">
-			{/* The key takes the whole line, and the buttons go under it: beside it they would squeeze it into a column. */}
-			<ItemContent className="min-w-0 basis-full">
-				<ItemTitle>This device's key</ItemTitle>
-				<ItemDescription className="line-clamp-none font-mono text-xs wrap-anywhere select-text">{key.key}</ItemDescription>
-				<ItemDescription className="line-clamp-none">Add it as a line of ~/.ssh/authorized_keys of the user you sign in as on each machine.</ItemDescription>
-			</ItemContent>
-			<ItemActions>
+		<SettingsItem
+			data-slot="device-key"
+			// The key takes the whole line, and the buttons go under it: beside it they would squeeze it into a column.
+			contentClassName="basis-full"
+			title="This device's key"
+			actions={<>
 				<Button variant="outline" size="sm" onClick={() => void key.copy().then(() => store.flash("The key is on the clipboard.", "good", 3000), (e: unknown) => store.flash(errText(e), "bad"))}>Copy</Button>
 				<Button variant="outline" size="sm" onClick={() => void store.attempt(() => key.share())}>Share</Button>
-			</ItemActions>
-		</Item>
+			</>}
+		>
+			<ItemDescription className="line-clamp-none font-mono text-xs wrap-anywhere select-text">{key.key}</ItemDescription>
+			<ItemDescription className="line-clamp-none">Add it as a line of ~/.ssh/authorized_keys of the user you sign in as on each machine.</ItemDescription>
+		</SettingsItem>
 	);
 }
 
@@ -2286,23 +2446,23 @@ export function MachineList() {
 	/** What a row says of its machine when nothing is wrong: a paired computer by its name (its id says nothing), user@host as written. */
 	const about = (h: string) => (isPaired(h) ? <>The pine of the Pine app on {s.nameOf(h)}, paired with this {s.device}.</> : <>The pine on <Breakable host={h} />, over SSH.</>);
 	const row = (h: string | undefined) => (
-		<Item key={h ?? ""} variant="outline" size="sm" data-environment={h ?? "local"}>
-			<ItemMedia variant="icon">{h && !isPaired(h) ? <ServerIcon /> : <LaptopIcon />}</ItemMedia>
-			{/* The text asks for 20rem before it shares its line: where the buttons would leave it less (a phone, the Gate, the four of a machine in error), the Item wraps them onto a line of their own. */}
-			<ItemContent className="min-w-0 flex-[1_1_20rem]">
-				{/* A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`. */}
-				<ItemTitle className="name line-clamp-none flex w-full min-w-0 flex-wrap">
+		<SettingsItem
+			key={h ?? ""}
+			data-environment={h ?? "local"}
+			media={h && !isPaired(h) ? <ServerIcon /> : <LaptopIcon />}
+			mediaVariant="icon"
+			// The text asks for 20rem before it shares its line: where the buttons would leave it less (a phone, the Gate, the four of a machine in error), the Item wraps them onto a line of their own.
+			contentClassName="flex-[1_1_20rem]"
+			// A long host (a Tailscale Funnel name and its port) wraps where it breaks naturally, and the badge goes onto the next line: neither spills out of the row. `flex` again after `line-clamp-none`, which sets `display: block`.
+			titleClassName="name line-clamp-none flex w-full min-w-0 flex-wrap"
+			title={<>
 					{/* A machine with a name (a paired computer, one the owner renamed) is shown by it; user@host without one as written, in mono. */}
 					<span className={cn("min-w-0 wrap-anywhere", h && !isPaired(h) && !s.prefs.names?.[h] && "font-mono")}>{h ? isPaired(h) || s.prefs.names?.[h] ? s.nameOf(h) : <Breakable host={h} /> : here}</span>
 					{status(h)}
-				</ItemTitle>
-				<ItemDescription className="line-clamp-none wrap-anywhere">
-					{state.host === h && state.status === "error" ? state.message : h ? about(h) : "The pine on this computer: the one that runs, or one this app starts."}
-				</ItemDescription>
-				{h && reachedThrough(h, s.serviceHost) ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="reached-through">{reachedThrough(h, s.serviceHost)}</ItemDescription> : null}
-				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
-			</ItemContent>
-			<ItemActions>
+				</>}
+			description={state.host === h && state.status === "error" ? state.message : h ? about(h) : "The pine on this computer: the one that runs, or one this app starts."}
+			descriptionClassName="line-clamp-none wrap-anywhere"
+			actions={<>
 				{key && key.host === h ? <Button size="sm" data-slot="trust-host-key" onClick={() => void s.trustHostKey(key)}>Trust this key</Button> : null}
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="sm" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="sm" onClick={() => void s.useMachine(h)}>Use</Button>}
@@ -2310,8 +2470,11 @@ export function MachineList() {
 				{h && s.canRename ? <Button variant="outline" size="sm" data-slot="rename-machine" onClick={() => void s.renameMachine(h)}>Rename</Button> : null}
 				{/* With no local machine to fall back on, the one in use may go when it is not reached (its host key changed, say). */}
 				{h && (state.host !== h || (!s.local && state.status === "error")) ? <Button variant="ghost" size="sm" onClick={() => void forget(h)}>Forget</Button> : null}
-			</ItemActions>
-		</Item>
+			</>}
+		>
+				{h && reachedThrough(h, s.serviceHost) ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="reached-through">{reachedThrough(h, s.serviceHost)}</ItemDescription> : null}
+				{key && key.host === h ? <ItemDescription className="line-clamp-none font-mono text-xs break-all select-text" data-slot="host-key-fingerprint">{key.fingerprint}</ItemDescription> : null}
+		</SettingsItem>
 	);
 	return (
 		<>
@@ -2360,9 +2523,12 @@ export function MachineList() {
 function PairHowTo() {
 	const s = useModel(store);
 	return (
-		<Item variant="outline" size="sm" data-slot="pair-how-to">
-			<ItemContent className="min-w-0 basis-full">
-				<ItemTitle>Pair with your computer</ItemTitle>
+		<SettingsItem
+			data-slot="pair-how-to"
+			contentClassName="basis-full"
+			title="Pair with your computer"
+			actions={<Button variant="outline" size="sm" data-slot="get-the-app" onClick={() => void store.attempt(() => bridge.open(APP_DOWNLOAD))}><ExternalLinkIcon data-icon="inline-start" />Get the Pine app</Button>}
+		>
 				<ol className="list-decimal ps-5 text-sm text-muted-foreground">
 					<li>Open the Pine app on your computer.</li>
 					<li>Go to Settings &gt; Browser access and press Add a device.</li>
@@ -2370,11 +2536,7 @@ function PairHowTo() {
 				</ol>
 				{s.canPasteLink ? <PairLinkField onLink={(text) => s.askToPair(text)} /> : null}
 				{s.serviceHost ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="meeting-line">{meetingLine(s.serviceHost)}</ItemDescription> : null}
-			</ItemContent>
-			<ItemActions>
-				<Button variant="outline" size="sm" data-slot="get-the-app" onClick={() => void store.attempt(() => bridge.open(APP_DOWNLOAD))}><ExternalLinkIcon data-icon="inline-start" />Get the Pine app</Button>
-			</ItemActions>
-		</Item>
+		</SettingsItem>
 	);
 }
 
@@ -2430,11 +2592,12 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 	const service = s.service.status === "ready" ? s.service : undefined;
 	const update = s.updatePhase;
 	// `pine` for a terminal: what the shell has, as the app's main process sees it.
-	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string }>();
+	// (null: the bridge failed to answer, and the field is left out.)
+	const [command, setCommand] = useState<{ state: "none" | "here" | "other" | "unavailable"; why?: string; text: string } | null>();
 	// Under a bridge with no local machine (`s.local`), what only this computer has is neither asked nor shown:
 	// its home folder, Keep running, Restart, the pine command, the browser build, the Electron version.
 	const local = s.local;
-	useEffect(() => void (local && bridge.command().then(setCommand)), [local]);
+	useEffect(() => void (local && bridge.command().then(setCommand, () => setCommand(null))), [local]);
 	// (Looked at again whenever this page is opened: the browser may have been fetched in a terminal.)
 	useEffect(() => void (local && store.checkBrowser()), [local]);
 	// (And the themes: a file may have been put into the folder by hand.)
@@ -2524,6 +2687,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 							<Switch id={`${field}-keep-running`} checked={s.prefs.keepRunning} onCheckedChange={(keepRunning) => void set({ keepRunning })} />
 						</Field>
 					) : null}
+					{local && command === undefined ? <FieldSkeleton data-find="command" /> : null}
 					{local && command && (command.state !== "unavailable" || command.why) ? (
 						<Field orientation="responsive" data-find="command">
 							<FieldContent>
@@ -2540,6 +2704,7 @@ function AppSections({ overview }: { overview?: Awaited<ReturnType<typeof api.ov
 							) : null}
 						</Field>
 					) : null}
+					{local && !s.browserChecked && !s.browserFetching ? <FieldSkeleton data-setting="browser" /> : null}
 					{local && (s.browser !== undefined || s.browserFetching) ? (
 						<Field orientation="responsive" data-setting="browser">
 							<FieldContent>
@@ -2635,13 +2800,16 @@ function Found({ query, list, pick, back }: { query: string; list: Entry[]; pick
 			{list.length ? (
 				<ItemGroup data-slot="settings-results" onKeyDown={move}>
 					{list.slice(0, 60).map((e) => (
-						<Item key={e.id} variant="outline" size="sm" data-result={e.id} render={<button type="button" />} onClick={() => pick(e)}>
-							<ItemContent className="min-w-0">
-								<ItemTitle>{e.title}</ItemTitle>
-								<ItemDescription className="truncate">{[e.path.join(" › "), e.about].filter(Boolean).join(" · ")}</ItemDescription>
-							</ItemContent>
-							<ItemActions><ChevronRightIcon /></ItemActions>
-						</Item>
+						<SettingsItem
+							key={e.id}
+							data-result={e.id}
+							render={<button type="button" />}
+							onClick={() => pick(e)}
+							title={e.title}
+							description={[e.path.join(" › "), e.about].filter(Boolean).join(" · ")}
+							descriptionClassName="truncate"
+							actions={<ChevronRightIcon />}
+						/>
 					))}
 				</ItemGroup>
 			) : (
