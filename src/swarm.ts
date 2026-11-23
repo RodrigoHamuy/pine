@@ -53,6 +53,8 @@ export interface Swarm {
 	since: number;
 	/** Checks of the lead's answer that pine had made. */
 	checks: number;
+	/** What the owner said while the swarm worked: answers to the lead's questions, and messages of their own. For the check: a value they gave is given, not made up. */
+	told?: Array<{ asked: string; said: string }>;
 	/** What happened last, in pine's words. */
 	note: string;
 }
@@ -98,7 +100,7 @@ export const continuePrompts = {
 const excerpt = (text: string, head = 6000, tail = 6000) => (text.length > head + tail ? `${text.slice(0, head)}\n[... ${text.length - head - tail} characters left out here: not missing from the report ...]\n${text.slice(-tail)}` : text);
 
 /** The check of the lead's answer that pine posts when everything on the board is done. */
-export const checkTask = (objective: string, answer: string) =>
+export const checkTask = (objective: string, answer: string, told: Array<{ asked: string; said: string }> = []) =>
 	[
 		"Check the answer below before the one who asked for it relies on it. You did none of the work, and you change nothing.",
 		"First compare it with what was asked, part by part: is everything that was asked for there, in the form that was asked for, and nothing left out? Then do not take its word for it: look at what was left (open the files it names, run what can be run, count again, compare with the source), as far as it takes to be sure. A list you check both ways: every entry on it is true, and nothing that belongs on it is missing. What one command can check in full (a list against the files, a count, a sum), check in full; only where that is not possible, check the parts that matter most and a few picked at random. Tests that pass show only what they test: where the job was to find or fix faults, read the code yourself against what its comments and names say it does, for a fault that is still there.",
@@ -107,6 +109,8 @@ export const checkTask = (objective: string, answer: string) =>
 		"What was asked, in the owner's words:",
 		objective,
 		"",
+		// What the owner said on the way belongs to what was asked: a value they gave is not one the answer made up.
+		...(told.length ? ["What the owner said while the work was done. It is given, like the request: an answer that goes by it is right to.", ...told.map((x) => (x.asked ? `- Asked: ${x.asked}\n  The owner answered: ${x.said}` : `- The owner wrote: ${x.said}`)), ""] : []),
 		"The answer:",
 		excerpt(answer.trim()) || "(nothing)",
 	].join("\n");
@@ -300,11 +304,19 @@ export class Swarms {
 	 * asked them something): the swarm goes on with it, and the turn it starts is looked at like any round.
 	 * While the swarm is at work, their message is one more turn of the lead's; the board is looked at after it too.
 	 */
-	incoming(agent: string, session: string, kind: string, wantsAnswer: boolean): void {
+	incoming(agent: string, session: string, kind: string, wantsAnswer: boolean, text = ""): void {
 		if (this.starting || session.endsWith("~u")) return;
 		if (kind !== "prompt" && !(kind === "event" && wantsAnswer)) return;
 		const swarm = this.m.kv.get<Swarm>(this.id(agent, session));
-		if (swarm?.status === "waiting") this.save({ ...swarm, status: "active", task: undefined, round: swarm.round + 1, until: Math.max(swarm.until, swarm.round + 1), note: "goes on with your answer" }, "resumed");
+		if (swarm?.status === "waiting") this.save({ ...swarm, told: heardToo(swarm.told, "", text), status: "active", task: undefined, round: swarm.round + 1, until: Math.max(swarm.until, swarm.round + 1), note: "goes on with your answer" }, "resumed");
+		else if (swarm?.status === "active" && text.trim()) this.m.kv.set(this.id(agent, session), { ...swarm, told: heardToo(swarm.told, "", text) });
+	}
+
+	/** The owner answered a question of the lead's (the `question` tool) while its swarm works: the check of the answer is told. */
+	heard(agent: string, session: string, asked: string, said: string): void {
+		if (session.endsWith("~u")) return;
+		const swarm = this.m.kv.get<Swarm>(this.id(agent, session));
+		if (swarm && (swarm.status === "active" || swarm.status === "waiting")) this.m.kv.set(this.id(agent, session), { ...swarm, told: heardToo(swarm.told, asked, said) });
 	}
 
 	private live(id: number | undefined): boolean {
@@ -384,7 +396,7 @@ export class Swarms {
 		// The task holds the lead's answer, in full, and carries the mark of the run that wrote it. pine has it done
 		// itself, under the lead's turn that just ended: the lead has no turn for it.
 		const board = boards.find("local", swarm.agent, swarm.session, "") ?? boards.ensure("local", swarm.agent, swarm.session, "");
-		const check = boards.post(board, { kind: "task", text: checkTask(swarm.objective, answer), data: { check: "job", answer: true }, by: swarm.agent, trust: "owner", tainted: this.m.taintOf(task), long: true });
+		const check = boards.post(board, { kind: "task", text: checkTask(swarm.objective, answer, swarm.told), data: { check: "job", answer: true }, by: swarm.agent, trust: "owner", tainted: this.m.taintOf(task), long: true });
 		// (On the model the owner set for it, where they set one: a check on another model does not share the lead's misreadings.)
 		const model = this.m.cfg.defaults.checker;
 		const run = this.m.startBoardTask(task, check, checkPrompt(check), CHECK_LABEL, model);
@@ -418,5 +430,8 @@ export class Swarms {
 		this.again(swarm, continuePrompts.failed(swarm.objective, item.id), `the check of the answer found something: ${swarm.agent} puts it right, round ${swarm.round + 1} of ${swarm.until}`);
 	}
 }
+
+/** One more thing the owner said, kept short and to the last few: it goes into a task on the board. */
+const heardToo = (told: Swarm["told"], asked: string, said: string) => (said.trim() ? [...(told ?? []), { asked: asked.replace(/\s+/g, " ").trim().slice(0, 400), said: said.replace(/\s+/g, " ").trim().slice(0, 600) }].slice(-8) : told);
 
 const plural = (rounds: number) => `${rounds} round${rounds === 1 ? "" : "s"}`;

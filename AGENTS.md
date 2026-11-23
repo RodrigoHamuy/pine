@@ -385,7 +385,8 @@ These are invariants. A change that breaks one needs a test that shows why it is
    word of the lead's answer, of a sub-agent's result or of what a check found (the lead reads
    that from the board with `board_read`, which marks its run). What decides whether it is called
    again is the board (tasks that are not done, a check of the lead's answer that failed), never
-   a model. The check pine posts (`checkTask`) holds the lead's answer: it is a task on the board
+   a model. The check pine posts (`checkTask`) holds the lead's answer, and what the owner said while the
+   swarm worked with the lead's question beside it (`Swarm.told`): it is a task on the board
    with the mark of the lead's run (rule 14), which is how any task the lead writes reaches a
    sub-agent, and never a prompt in the owner's voice. pine starts the sub-agent for it itself
    (`startBoardTask` in `src/agents.ts`), on the model the owner set for it where they set one

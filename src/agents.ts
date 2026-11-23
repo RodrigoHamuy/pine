@@ -784,7 +784,7 @@ export class AgentManager {
 		// A message of the owner's own in a conversation that works on a goal: the goal waits for their word (src/goals.ts).
 		if (trust === "owner" && !ephemeral && !o.parent) this.goals.incoming(agent.id, session, o.kind ?? (o.event ? "event" : "prompt"), Boolean(o.reply));
 		// And one in a conversation whose swarm waits for their answer: the swarm goes on with it (src/swarm.ts).
-		if (trust === "owner" && !ephemeral && !o.parent) this.swarms.incoming(agent.id, session, o.kind ?? (o.event ? "event" : "prompt"), Boolean(o.reply));
+		if (trust === "owner" && !ephemeral && !o.parent) this.swarms.incoming(agent.id, session, o.kind ?? (o.event ? "event" : "prompt"), Boolean(o.reply), o.event ? "" : String(o.prompt ?? ""));
 		let prompt = truncate(o.prompt, Math.max(this.cfg.limits.maxEventChars, 1000) * (trust === "owner" ? 10 : 1));
 		let images = o.images;
 		if (o.attachments?.length) {

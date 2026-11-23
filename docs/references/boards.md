@@ -331,7 +331,7 @@ for sub-agents in your message:
 |---|---|
 | Tasks on the board that are not done | It calls the lead again, with their numbers. A swarm does not end with work lying open. |
 | A task that waits for an answer, and the lead ended its turn with a question to you | The swarm waits. Your answer is its next turn. |
-| All done, and the lead has answered | It puts a check of that answer on the board (your job in your words, and the answer in full) and starts a sub-agent for it itself: one that did none of the work. The lead has no turn for this. |
+| All done, and the lead has answered | It puts a check of that answer on the board (your job in your words, what you answered or wrote while the swarm worked, and the answer in full) and starts a sub-agent for it itself: one that did none of the work. The lead has no turn for this. |
 | The check passed | The swarm is done, and the answer you have stands. |
 | The check failed | It calls the lead with the number of the check. The lead reads on the board what was found, corrects a slip in its answer itself, hands work that is wrong out again, and gives you the whole answer again. That answer is checked once more: two checks in all. If the second fails too, the swarm ends, and its last line names the task on the board that says what was still found. |
 

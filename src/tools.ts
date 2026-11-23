@@ -654,6 +654,8 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 						manager.approvals.request({ agent: asker, task: r.task.id, root: r.task.meta.root ?? r.task.id, tool: "question", summary: truncate(text, 800), why: "the agent needs your answer to go on", choices: choices.length ? choices : undefined, inputs: [{ name: "answer", label: "Your answer", secret: false }] }),
 					);
 					const answer = decision.values?.answer?.trim();
+					// (A swarm's check of the answer is told what the owner said: a value they gave is given, not made up.)
+					if (decision.allow && answer) manager.swarms.heard(r.task.agent, r.task.session, text, answer);
 					if (decision.allow && answer) return ok(`Your owner answered: ${answer}`);
 					return ok(`Your owner did not answer (${decision.by}). Do not ask again now. Go on with the most reasonable assumption and say which one you made, or say what you need and stop.`);
 				},

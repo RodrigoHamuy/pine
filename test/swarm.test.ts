@@ -236,6 +236,24 @@ test("swarm: the answer is checked on the model the owner set for it (defaults.c
 	await none.close();
 });
 
+test("swarm: what the owner answers to a question of the lead's is in the check of its answer, with the question; outside a swarm nothing is kept", async () => {
+	const { h, job } = await swarm(() => [{ tools: [call("question", { question: "Which rate do I count a dollar at?" })] }, { text: "ANSWER at the rate you gave me" }]);
+	h.pine.bus.subscribe("approval/requested", (e: any) => void (e.payload.tool === "question" && h.pine.approvals.decide(e.payload.id, true, "test", false, { answer: "0.90 EUR" })));
+	h.pine.agents.swarms.set("main", "main", job);
+	await settled(h);
+	assert.deepEqual([swarmOf(h)!.status, swarmOf(h)!.told], ["done", [{ asked: "Which rate do I count a dollar at?", said: "0.90 EUR" }]]);
+	const check = h.pine.agents.boards.items(1, { kind: "task" })[0];
+	assert.equal(check.text, checkTask(job, "ANSWER at the rate you gave me", [{ asked: "Which rate do I count a dollar at?", said: "0.90 EUR" }]));
+	assert.match(check.text, /\n- Asked: Which rate do I count a dollar at\?\n  The owner answered: 0\.90 EUR\n\nThe answer:\n/);
+	// Without anything said, the check has no such part.
+	assert.ok(!checkTask(job, "x").includes("What the owner said"));
+	// A question in a conversation without a swarm is answered and kept nowhere.
+	h.mock.state.scripts.plain = [{ tools: [call("question", { question: "Blue or green?" })] }, { text: "ok" }];
+	await h.pine.agents.run({ agent: "main", session: "other", prompt: "pick @@REF:plain@@", ...owner });
+	assert.equal(h.pine.agents.swarms.get("main", "other"), undefined);
+	await h.close();
+});
+
 test("swarm: a check that the model server refuses for now is started again by pine after a pause; one that cannot be done pauses the swarm, and does not count as a check", async () => {
 	// (pi asks again by itself a few times, with seconds in between: switched off here.)
 	const { h, events, job, checks } = await swarm(() => [{ text: "THE-ANSWER" }], { agents: { main: { agent: { subagents: { maxParallel: 2 }, settings: { retry: { enabled: false } } } } } });
@@ -283,7 +301,10 @@ test("swarm: a lead that asks its owner while work is left waits for the answer 
 	await settled(h);
 	assert.deepEqual([swarmOf(h)!.status, swarmOf(h)!.round], ["done", 2]);
 	assert.deepEqual(events.map((e) => e.event), ["set", "waiting", "resumed", "checking", "done"]);
-	assert.equal(h.pine.agents.boards.items(1, { kind: "task" }).at(-1)!.text, checkTask(job, "DONE-WITH-THE-RATE"));
+	// The check is told what the owner said on the way: a value they gave is given, not one the answer made up.
+	const checkText = h.pine.agents.boards.items(1, { kind: "task" }).at(-1)!.text;
+	assert.equal(checkText, checkTask(job, "DONE-WITH-THE-RATE", [{ asked: "", said: "0.9, as always @@REF:answer@@" }]));
+	assert.match(checkText, /What the owner said while the work was done\. It is given, like the request: an answer that goes by it is right to\.\n- The owner wrote: 0\.9, as always @@REF:answer@@\n\nThe answer:\nDONE-WITH-THE-RATE$/);
 	await h.close();
 
 	// A lead that never has its tasks done is called at most limits.swarmRounds times. /swarm resume gives it as many again.
