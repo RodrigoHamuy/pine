@@ -3,7 +3,14 @@
 // that connects with that code under the user name `pair.<code>` may run one command, the pairing request, which
 // names the device. It is shown four digits, the owner is asked with the device's name and the same
 // digits, and only the owner's yes stores the key. No Electron here: the owner's question is a
-// function the caller hands in (a dialog in the app, a direct answer in the tests).
+// function the caller hands in (a toast in the app, a direct answer in the tests).
+//
+// A device on the same network may also ask without a code (ADR 0005): it found this computer's
+// machine id in its announcement and connects under the user name `nearby`, then makes the same
+// request. That is let in only while the owner keeps this computer visible on the network, one
+// request at a time, never in the 30 seconds after the owner refused one, and never for an hour
+// after three refusals in ten minutes. Whatever is refused that way is refused without a word: only
+// a request that reaches the owner shows anything.
 import { createHash, randomBytes, randomInt, timingSafeEqual } from "node:crypto";
 import os from "node:os";
 import type { ServerChannel } from "ssh2";
@@ -24,14 +31,28 @@ export const PAIR_COMMAND = "pine-pair";
 export const NO_NAME = "Unnamed device";
 /** The prefix of the id a pairing session has in the access server's reports and for `cut`. */
 export const PAIRING_ID = "pairing:";
+/** The user name of a codeless pairing session, from a device that found this computer on the network. */
+export const NEARBY_USER = "nearby";
+/** How long codeless requests are refused after the owner refused one. */
+export const NEARBY_PAUSE_MS = 30_000;
+/** Refusals of codeless requests within `NEARBY_WINDOW_MS` that suspend the announcement for `NEARBY_SUSPEND_MS`. */
+export const NEARBY_REFUSALS = 3;
+export const NEARBY_WINDOW_MS = 10 * 60_000;
+export const NEARBY_SUSPEND_MS = 60 * 60_000;
+/** How long a codeless session that was let in has to make its request: its place is the only one. */
+export const NEARBY_REQUEST_MS = 30_000;
 
 /** Why a request did not end in a pairing: the owner said no, time ran out, the device left, the owner closed the pairing. */
 export type Ended = "refused" | "expired" | "closed" | "cancelled";
 
-/** What the owner is asked about: the device's name as plain text, and the four digits its screen shows. */
+/**
+ * What the owner is asked about: the device's name as plain text, the four digits its screen shows,
+ * and how it came: with a pairing's code (`code`), or from the network without one (`nearby`).
+ */
 export interface PairingRequest {
 	name: string;
 	code: string;
+	kind?: "code" | "nearby";
 }
 
 /**
@@ -53,6 +74,15 @@ export interface PairingOptions {
 	paired?: (device: Device) => void;
 	pairingMs?: number;
 	answerMs?: number;
+	/**
+	 * Whether a codeless request may come in now: browser access on, and the owner keeps this computer
+	 * visible on the network. Left out: never.
+	 */
+	nearby?: () => boolean;
+	/** Codeless requests were suspended after too many refusals, until then (the app's toast). */
+	suspended?: (until: Date) => void;
+	/** The clock the pause and the suspension are counted on (a test's own). */
+	now?: () => number;
 }
 
 /** An open pairing, as the settings show it: the link (the QR code encodes it) and when it stops working. */
@@ -68,17 +98,23 @@ export interface Pairing {
 	cancel(): void;
 	/** The open pairing whose code still works. */
 	current(): Opened | undefined;
-	/** The access server's decision: paired keys as `pine`, and an unknown key with the open pairing's code. */
+	/** The access server's decision: paired keys as `pine`, an unknown key with the open pairing's code, and a codeless request while it is let in. */
 	admit: Admit;
+	/** Until when codeless requests are suspended after too many refusals; none when they are not. */
+	suspendedUntil(): Date | undefined;
+	/** The owner turned visibility back on: the suspension, the pause and the refusals counted so far are forgotten. */
+	resume(): void;
 }
 
+/** A request under way: an open pairing's, or a codeless one's (`kind`). */
 interface Open {
+	kind: "code" | "nearby";
 	opened: Opened;
 	/** The SHA-256 of the code: compared in constant time, and of the same length whatever a client sends. */
 	digest: Buffer;
 	/** Wrong codes so far. */
 	wrong: number;
-	/** The code was presented: the pairing is used, and this is its session. */
+	/** The code was presented (or a codeless session let in): the pairing is used, and this is its session. */
 	session?: string;
 	/** The pairing request was made (one per pairing). */
 	asked?: boolean;
@@ -113,11 +149,34 @@ export function createPairing(options: PairingOptions): Pairing {
 	const answerMs = options.answerMs ?? ANSWER_MS;
 	const computerName = options.computerName ?? (() => os.hostname());
 	const paired = pairedKeys(options.store);
+	const clock = options.now ?? Date.now;
 	let open: Open | undefined;
+	/** The one codeless request let in, from its session's start to its end. */
+	let nearby: Open | undefined;
+	/** Codeless requests are refused until then (after a refusal), and until `suspendedUntil` (after too many). */
+	let pausedUntil = 0;
+	let suspendedUntil = 0;
+	/** When the owner refused codeless requests, within the last `NEARBY_WINDOW_MS`. */
+	let refusals: number[] = [];
+
+	/** The owner refused a codeless request: a pause, and after too many in a short time the suspension. */
+	const refusedNearby = () => {
+		const now = clock();
+		pausedUntil = now + NEARBY_PAUSE_MS;
+		refusals = [...refusals.filter((at) => now - at < NEARBY_WINDOW_MS), now];
+		if (refusals.length < NEARBY_REFUSALS) return;
+		refusals = [];
+		suspendedUntil = now + NEARBY_SUSPEND_MS;
+		options.suspended?.(new Date(suspendedUntil));
+	};
 
 	const close = (which: Open, why: Ended) => {
 		clearTimeout(which.timer);
 		if (open === which) open = undefined;
+		if (nearby === which) {
+			nearby = undefined;
+			if (why === "refused") refusedNearby();
+		}
 		if (!which.decided) {
 			which.decided = true;
 			which.abort.abort(why);
@@ -146,10 +205,11 @@ export function createPairing(options: PairingOptions): Pairing {
 		channel.once("close", () => close(which, "closed"));
 		clearTimeout(which.timer);
 		which.timer = setTimeout(() => close(which, "expired"), answerMs);
-		channel.write(`${JSON.stringify({ code })}\n`);
+		// The device is told this computer's name with the digits: it found it by a machine id alone.
+		channel.write(`${JSON.stringify({ code, computer: computerName() })}\n`);
 
 		const withdrawn = new Promise<false>((resolve) => signal.addEventListener("abort", () => resolve(false), { once: true }));
-		Promise.race([Promise.resolve().then(() => options.ask({ name, code }, signal)), withdrawn])
+		Promise.race([Promise.resolve().then(() => options.ask({ name, code, kind: which.kind }, signal)), withdrawn])
 			.then(async (yes) => {
 				if (!signal.aborted) which.decided = true;
 				if (signal.aborted) return finish(false, { ok: false, reason: signal.reason === "expired" ? "expired" : "refused" });
@@ -161,6 +221,7 @@ export function createPairing(options: PairingOptions): Pairing {
 				const device = await options.store.add({ key: key.data, name });
 				finish(true, { ok: true, name: computerName() });
 				if (open === which) open = undefined;
+				if (nearby === which) nearby = undefined;
 				options.paired?.(device);
 			})
 			.catch(() => {
@@ -171,7 +232,22 @@ export function createPairing(options: PairingOptions): Pairing {
 		return true;
 	}
 
+	/** Whether the owner is being asked about a device now, or a codeless session holds its place. */
+	const busy = () => Boolean(nearby || (open?.asked && !open.decided));
+
+	/** A codeless request: let in only while it may come, one at a time, outside the pause and the suspension. Refused without a word. */
+	const admitNearby = (key: Parameters<Admit>[1]) => {
+		const now = clock();
+		if (!options.nearby?.() || busy() || now < pausedUntil || now < suspendedUntil) return false;
+		const which: Open = { kind: "nearby", opened: { link: "", expires: new Date(now + NEARBY_REQUEST_MS) }, digest: Buffer.alloc(0), wrong: 0, abort: new AbortController(), timer: setTimeout(() => close(which, "expired"), NEARBY_REQUEST_MS) };
+		which.session = `${PAIRING_ID}${randomBytes(9).toString("base64url")}`;
+		nearby = which;
+		const admission: Admission = { id: which.session, pine: false, exec: (command, accept) => request(which, key, command, accept), left: () => close(which, "closed") };
+		return admission;
+	};
+
 	const admit: Admit = (user, key) => {
+		if (user === NEARBY_USER) return admitNearby(key);
 		if (!user.startsWith(PAIR_USER)) return paired(user, key);
 		const which = open;
 		// A wrong code, or a code with no pairing open, closes the connection.
@@ -191,7 +267,7 @@ export function createPairing(options: PairingOptions): Pairing {
 			if (open) close(open, "cancelled");
 			const code = randomBytes(16).toString("base64url");
 			const opened = { link: `${options.service.replace(/\/+$/, "")}/#pair=${options.store.machineId()}.${code}`, expires: new Date(Date.now() + pairingMs) };
-			const which: Open = { opened, digest: digestOf(code), wrong: 0, abort: new AbortController(), timer: setTimeout(() => close(which, "expired"), pairingMs) };
+			const which: Open = { kind: "code", opened, digest: digestOf(code), wrong: 0, abort: new AbortController(), timer: setTimeout(() => close(which, "expired"), pairingMs) };
 			open = which;
 			return { ...opened };
 		},
@@ -203,5 +279,11 @@ export function createPairing(options: PairingOptions): Pairing {
 			return { ...open.opened };
 		},
 		admit,
+		suspendedUntil: () => (clock() < suspendedUntil ? new Date(suspendedUntil) : undefined),
+		resume() {
+			suspendedUntil = 0;
+			pausedUntil = 0;
+			refusals = [];
+		},
 	};
 }

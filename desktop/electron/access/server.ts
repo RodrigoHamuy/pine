@@ -46,6 +46,8 @@ export interface Admission {
 	id: string;
 	pine: boolean;
 	exec?: (command: string, accept: () => ServerChannel) => boolean;
+	/** The session's connection ended, whatever ended it. */
+	left?: () => void;
 }
 
 /**
@@ -260,6 +262,7 @@ export function createAccessServer(options: AccessServerOptions): AccessServer {
 			const gone = () => {
 				clearTimeout(timer);
 				if (!live.delete(entry)) return;
+				entry.admission?.left?.();
 				if (entry.admission && reported) options.report?.({ kind: "left", id: entry.admission.id, at: new Date(), tag });
 			};
 			stream.once("close", gone);

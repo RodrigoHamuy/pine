@@ -19,6 +19,8 @@ import { AccessStore, type Device } from "./store.ts";
  */
 export interface AccessPrefs {
 	enabled: boolean;
+	/** Announced on the local network while browser access is on, so that a phone finds it (ADR 0005). Left out: on. */
+	visible?: boolean;
 	service?: string;
 	openAtLogin: boolean;
 	relay?: { address: string; username: string };
@@ -85,7 +87,7 @@ export function readAccessPrefs(raw: unknown): AccessPrefs {
 	} catch {
 		// nor a relay's
 	}
-	return { enabled: said.enabled === true, service, openAtLogin: said.openAtLogin === true, ...(relay ? { relay } : {}) };
+	return { enabled: said.enabled === true, ...(said.visible === false ? { visible: false } : {}), service, openAtLogin: said.openAtLogin === true, ...(relay ? { relay } : {}) };
 }
 
 /** A paired device as the page shows it. `connected`: it is connected now, by this kind of path (unknown while the path is being chosen). */
@@ -110,6 +112,10 @@ export interface AccessProblem {
 /** What the page reads: the contract's state, and `problem` when there is one. */
 export interface AccessState {
 	enabled: boolean;
+	/** "Visible on this network": announced there while browser access is on, and codeless requests let in. */
+	visible: boolean;
+	/** Visibility is suspended after too many refusals, until then (an ISO date). */
+	paused?: string;
 	/** The address in use: the owner's, or the official one (empty while there is none). */
 	service: string;
 	openAtLogin: boolean;
@@ -145,9 +151,20 @@ export interface AccessRelay {
  */
 export interface AccessChange {
 	enabled?: boolean;
+	/** On: also ends a suspension after too many refusals. */
+	visible?: boolean;
 	service?: string;
 	openAtLogin?: boolean;
 	relay?: { address: string; username?: string; password?: string };
+}
+
+/**
+ * What this computer announces on the local network (Bonjour, `_pine._tcp`): its machine id and the
+ * meeting service a device joins it at. Nothing else: its name is told only over the connection.
+ */
+export interface Announcement {
+	id: string;
+	service: string;
 }
 
 /** The access host as the control drives it. `opened` is the stand-in's alone: it tells a stand-in phone the link. */
@@ -175,6 +192,10 @@ export interface AccessControlOptions {
 	start?: (options: AccessHostOptions) => Promise<Host>;
 	/** Tries a relay when it is saved (`tryRelay`). */
 	tryRelay?: (relay: RelayServer) => Promise<RelayTry>;
+	/** Announces this computer on the local network, or with none stops (the app's Bonjour). Called when what is announced changes. */
+	announce?: (what: Announcement | undefined) => void;
+	/** The owner is asked about a device (the app's notification while it is in the background). */
+	asked?: (request: PairingRequest) => void;
 }
 
 export interface AccessControl {
@@ -228,6 +249,10 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	let check: AccessRelay["check"];
 	let tries = 0;
 	let expiry: ReturnType<typeof setTimeout> | undefined;
+	/** The end of a suspension of visibility, when the announcement comes back. */
+	let pauseEnd: ReturnType<typeof setTimeout> | undefined;
+	/** What is announced now, as a key: announced again only when it changes. */
+	let announced = "";
 	/** Starting and stopping the host, one after the other. */
 	let queue: Promise<unknown> = Promise.resolve();
 	const serial = <T>(work: () => Promise<T>): Promise<T> => {
@@ -242,9 +267,27 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 		scheduled = true;
 		setImmediate(() => {
 			scheduled = false;
+			announce();
 			void state().then(options.changed, () => {});
 		});
 	};
+
+	const visibleOf = (prefs: AccessPrefs) => prefs.visible !== false;
+
+	/** Announced while the host waits at the service, browser access and visibility are on, and no suspension holds. */
+	function announce(): void {
+		const prefs = options.prefs.read();
+		let what: Announcement | undefined;
+		if (host && prefs.enabled && visibleOf(prefs) && host.status() === "waiting" && !pairing?.suspendedUntil()) what = { id: host.store.machineId(), service: serviceOf(prefs) };
+		const key = what ? `${what.id} ${what.service}` : "";
+		if (key === announced) return;
+		announced = key;
+		try {
+			options.announce?.(what);
+		} catch {
+			// The network's announcement is a convenience: the code and the link work without it.
+		}
+	}
 
 	const serviceOf = (prefs: AccessPrefs) => prefs.service ?? official;
 
@@ -282,8 +325,11 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 		const status = host?.status();
 		const problem = blocked(prefs) ?? (status === "replaced" ? { kind: "replaced" as const, message: REPLACED } : failure);
 		const opened = pairing?.current();
+		const paused = pairing?.suspendedUntil();
 		return {
 			enabled: prefs.enabled,
+			visible: visibleOf(prefs),
+			...(paused ? { paused: paused.toISOString() } : {}),
 			service: serviceOf(prefs),
 			openAtLogin: prefs.openAtLogin,
 			status: !host ? "off" : status === "waiting" ? "waiting" : "unreachable",
@@ -332,8 +378,9 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	/** The owner is asked about a device: the question stands until answered or withdrawn. */
 	const ask = (request: PairingRequest, signal: AbortSignal) =>
 		new Promise<boolean>((resolve) => {
-			const mine = { request: { name: request.name, code: request.code }, resolve };
+			const mine = { request: { name: request.name, code: request.code, ...(request.kind ? { kind: request.kind } : {}) }, resolve };
 			asking = mine;
+			options.asked?.({ ...mine.request });
 			signal.addEventListener(
 				"abort",
 				() => {
@@ -362,6 +409,17 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 						cut,
 						ask,
 						computerName: options.computerName,
+						// Read at each request: turning visibility off shuts the door at once, whatever was announced.
+						nearby: () => {
+							const now = options.prefs.read();
+							return now.enabled && visibleOf(now);
+						},
+						suspended: (until) => {
+							clearTimeout(pauseEnd);
+							// The announcement comes back by itself when the hour is over.
+							pauseEnd = setTimeout(emit, Math.max(0, until.getTime() - Date.now()) + 50);
+							emit();
+						},
 						paired: (device) => {
 							options.paired(device);
 							emit();
@@ -378,6 +436,7 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 
 	async function down(): Promise<void> {
 		clearTimeout(expiry);
+		clearTimeout(pauseEnd);
 		pairing?.cancel();
 		pairing = undefined;
 		asking = undefined;
@@ -393,6 +452,10 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 			const prefs = { ...options.prefs.read() };
 			if (change.service !== undefined) prefs.service = String(change.service).trim() ? serviceAddress(String(change.service)) : undefined;
 			if (typeof change.enabled === "boolean") prefs.enabled = change.enabled;
+			if (typeof change.visible === "boolean") {
+				if (change.visible) delete prefs.visible;
+				else prefs.visible = false;
+			}
 			if (prefs.enabled && change.enabled === true) {
 				const problem = blocked(prefs);
 				if (problem) throw new Error(problem.message);
@@ -436,6 +499,11 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 					}
 				}
 				options.prefs.write(prefs);
+				// Turned on by the owner: a suspension after refusals ends now.
+				if (change.visible === true) {
+					pairing?.resume();
+					clearTimeout(pauseEnd);
+				}
 				if (host && (!prefs.enabled || moved)) await down();
 				await up(prefs);
 			});

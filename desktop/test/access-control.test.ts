@@ -6,7 +6,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "n
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, test } from "node:test";
-import { type AccessControl, type AccessPrefs, type AccessState, createAccessControl, type Host, readAccessPrefs, relayAddress } from "../electron/access/control.ts";
+import { type AccessControl, type AccessPrefs, type AccessState, type Announcement, createAccessControl, type Host, readAccessPrefs, relayAddress } from "../electron/access/control.ts";
 import { OFFICIAL_SERVICE } from "../src/machines.ts";
 import type { AccessHostOptions, Cipher } from "../electron/access/host.ts";
 import { type RelayServer, type RelayTry, tryRelay } from "../electron/access/peer.ts";
@@ -40,7 +40,7 @@ function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined;
 	folders.push(folder);
 	let prefs: AccessPrefs = { enabled: false, openAtLogin: false, ...more.prefs };
 	const hosts: Host[] = [];
-	const calls = { starts: 0, daemon: 0, login: [] as boolean[], paired: [] as Device[], changes: [] as AccessState[], hostOptions: [] as AccessHostOptions[] };
+	const calls = { starts: 0, daemon: 0, login: [] as boolean[], paired: [] as Device[], changes: [] as AccessState[], hostOptions: [] as AccessHostOptions[], announced: [] as Array<Announcement | undefined>, asked: [] as Array<{ name: string; code: string }> };
 	const control = createAccessControl({
 		folder,
 		cipher: () => ("cipher" in more ? more.cipher : cipher),
@@ -59,6 +59,8 @@ function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined;
 			return host;
 		},
 		tryRelay: more.tryRelay ?? ((relay) => tryRelay(relay, 800)),
+		announce: (what) => void calls.announced.push(what),
+		asked: (request) => void calls.asked.push(request),
 	});
 	controls.push(control);
 	return { control, folder, calls, hosts, prefs: () => prefs };
@@ -374,4 +376,37 @@ test("access control: where the keychain cannot be used, no relay is kept", asyn
 	const { control, prefs } = make({ cipher: undefined });
 	await assert.rejects(control.set({ relay: { address: "turn:relay.example.com:3478", username: "me", password: "pw" } }), /keychain/);
 	assert.equal(prefs().relay, undefined);
+});
+
+test("access control: visible on this network by default while browser access is on; the announcement carries the machine id and the service, and goes when visibility or access is turned off", async () => {
+	const { control, calls, hosts, prefs } = make();
+	await control.start();
+	assert.deepEqual(calls.announced, [], "nothing is announced while browser access is off");
+	await control.set({ enabled: true });
+	await until("announced", () => calls.announced.at(-1) !== undefined);
+	const id = hosts[0].store.machineId();
+	assert.deepEqual(calls.announced.at(-1), { id, service: SERVICE });
+	assert.equal((await control.state()).visible, true);
+
+	await control.set({ visible: false });
+	await until("no longer announced", () => calls.announced.length === 2);
+	assert.equal(calls.announced.at(-1), undefined);
+	assert.equal(prefs().visible, false);
+	assert.equal((await control.state()).visible, false);
+	assert.equal(readAccessPrefs(prefs()).visible, false, "kept off");
+
+	await control.set({ visible: true });
+	await until("announced again", () => calls.announced.at(-1) !== undefined);
+	assert.equal(prefs().visible, undefined, "on is the default, and is not written");
+	await control.set({ enabled: false });
+	await until("gone with browser access", () => calls.announced.at(-1) === undefined);
+});
+
+test("access control: the owner is told each question, so that the app can say it while it is in the background", async () => {
+	const { control, calls } = make();
+	await control.set({ enabled: true });
+	await control.openPairing();
+	await until("asked", () => calls.asked.length === 1);
+	assert.match(calls.asked[0].code, /^\d{4}$/);
+	await control.answer(false);
 });
