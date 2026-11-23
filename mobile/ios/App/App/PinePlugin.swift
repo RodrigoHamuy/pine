@@ -269,6 +269,12 @@ private final class NearbyBrowser: @unchecked Sendable {
 	/** Whether the page asks to look (kept while the app is in the back, where nothing is looked for). */
 	private var wanted = false
 	private var told: [NearbyComputer]?
+	/**
+	 * The TXT record last read for each service still found. While a computer changes its nonce the
+	 * system reports the service without a record for a moment (its goodbye, then the new record): the
+	 * computer stays listed with what was read before, instead of leaving the list and coming back.
+	 */
+	private var lastRead: [String: [String: String?]] = [:]
 	private var toldDenied = false
 	private var denied = false
 	/** The wait before a browser that failed is started again; back to the first once one is ready. */
@@ -297,6 +303,7 @@ private final class NearbyBrowser: @unchecked Sendable {
 		guard browser == nil else { return }
 		if !retry {
 			told = nil
+			lastRead = [:]
 			denied = false
 			say([])
 		}
@@ -356,10 +363,17 @@ private final class NearbyBrowser: @unchecked Sendable {
 	private func found(_ results: Set<NWBrowser.Result>) {
 		let list = NearbyFound()
 		// In a fixed order, so that the same services make the same list.
+		var read: [String: [String: String?]] = [:]
 		for (name, result) in results.map({ ("\($0.endpoint)|\($0.interfaces.map(\.name))", $0) }).sorted(by: { $0.0 < $1.0 }) {
-			guard case let .bonjour(record) = result.metadata else { continue }
-			list.found(name, nearbyComputer(record.dictionary.mapValues { Optional($0) }))
+			if case let .bonjour(record) = result.metadata, record.count > 0 {
+				read[name] = record.dictionary.mapValues { Optional($0) }
+			} else if let before = lastRead[name] {
+				read[name] = before
+			}
+			guard let txt = read[name] else { continue }
+			list.found(name, nearbyComputer(txt))
 		}
+		lastRead = read
 		say(list.list)
 	}
 
