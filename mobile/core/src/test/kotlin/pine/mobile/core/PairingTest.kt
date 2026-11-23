@@ -37,7 +37,7 @@ class PairingTest {
 		val asked = computer.event("asked")
 		assertEquals("Pine on Pixel 9", asked.getString("name"))
 		assertEquals(PairingState.Allowed("Test Mac"), pairing.result(20_000))
-		assertEquals(listOf(PairingState.Pairing(asked.getString("code")), PairingState.Allowed("Test Mac")), told.toList())
+		assertEquals(listOf(PairingState.Pairing(asked.getString("code"), "Test Mac"), PairingState.Allowed("Test Mac")), told.toList())
 		val device = computer.command("devices").getJSONArray("devices").getJSONObject(0)
 		assertEquals("Pine on Pixel 9", device.getString("name"))
 		assertEquals(key.publicKey.split(' ')[1], device.getString("key"))
@@ -56,7 +56,7 @@ class PairingTest {
 		val pairing = remote.pair(link, "Pine on Pixel 9") { told.add(it) }
 		val code = computer.event("asked").getString("code")
 		assertEquals(PairingState.Refused, pairing.result(20_000))
-		assertEquals(listOf(PairingState.Pairing(code), PairingState.Refused), told.toList())
+		assertEquals(listOf(PairingState.Pairing(code, "Test Mac"), PairingState.Refused), told.toList())
 		assertEquals(PairWords.REFUSED, PairWords.of(PairingState.Refused))
 		nothingKept()
 	}
@@ -137,7 +137,75 @@ class PairingTest {
 		assertTrue(computer.event("left").getString("id").startsWith("pairing:"), "the pairing session ended at the computer")
 		computer.command("allow")
 		Thread.sleep(300)
-		assertEquals(listOf<PairingState>(PairingState.Pairing(code)), told.toList(), "nothing told after the cancel")
+		assertEquals(listOf<PairingState>(PairingState.Pairing(code, "Test Mac")), told.toList(), "nothing told after the cancel")
+		nothingKept()
+	}
+
+	/** The computer as the phone found it on the network, under the https name the test routes to the helper. */
+	private fun found(service: String = SERVICE, nonce: String = computer.nonce): NearbyComputer = NearbyComputer(computer.machineId, service, nonce)
+
+	@Test
+	fun `a computer found on the network is paired without a code, and its name comes with the four digits`() {
+		assertEquals(true, computer.command("nearby on").getBoolean("on"))
+		computer.command("allow")
+		val pairing = remote.pairNearby(found(), "Pine on Pixel 9") { told.add(it) }
+		val asked = computer.event("asked")
+		assertEquals("nearby", asked.getString("kind"), "asked without a code")
+		assertEquals(PairingState.Allowed("Test Mac"), pairing.result(20_000))
+		assertEquals(listOf(PairingState.Pairing(asked.getString("code"), "Test Mac"), PairingState.Allowed("Test Mac")), told.toList())
+		assertEquals(key.publicKey.split(' ')[1], computer.command("devices").getJSONArray("devices").getJSONObject(0).getString("key"))
+	}
+
+	@Test
+	fun `a codeless request the computer does not let in fails in words that say so, and the owner never hears of it`() {
+		computer.command("allow")
+		val end = remote.pairNearby(found(), "Pine on Pixel 9") { told.add(it) }.result(20_000)
+		assertEquals(PairingState.Failed(PairWords.NOT_LET_IN), end)
+		assertEquals(listOf<PairingState>(PairingState.Failed(PairWords.NOT_LET_IN)), told.toList())
+		nothingKept()
+	}
+
+	@Test
+	fun `a codeless request the owner refuses ends as refused and keeps nothing`() {
+		computer.command("nearby on")
+		computer.command("refuse")
+		assertEquals(PairingState.Refused, remote.pairNearby(found(), "Pine on Pixel 9") { told.add(it) }.result(20_000))
+		nothingKept()
+	}
+
+	@Test
+	fun `a computer found on the network whose host key is not the machine id it announced is refused`() {
+		computer.command("nearby on")
+		computer.command("meeting swap")
+		computer.command("allow")
+		assertEquals(PairingState.Failed(PairWords.NEARBY_IMPOSTOR), remote.pairNearby(found(), "Pine on Pixel 9") { told.add(it) }.result(20_000))
+		nothingKept()
+	}
+
+	@Test
+	fun `a codeless request with a nonce the computer did not announce, or no longer does, is not let in`() {
+		computer.command("nearby on")
+		computer.command("allow")
+		val wrong = (if (computer.nonce[0] == 'A') "B" else "A") + computer.nonce.drop(1)
+		assertEquals(PairingState.Failed(PairWords.NOT_LET_IN), remote.pairNearby(found(nonce = wrong), "Pine on Pixel 9") { told.add(it) }.result(20_000))
+		val old = computer.nonce
+		computer.rotate()
+		computer.rotate()
+		assertEquals(PairingState.Failed(PairWords.NOT_LET_IN), remote.pairNearby(found(nonce = old), "Pine on Pixel 9") { told.add(it) }.result(20_000))
+		assertEquals(0, told.count { it is PairingState.Pairing }, "the owner was never asked")
+		nothingKept()
+	}
+
+	@Test
+	fun `a computer found on the network that names another meeting service than its announcement is not paired with`() {
+		// Every name reaches the helper, whose pairing channel names SERVICE.
+		val anywhere = Remote(key, KnownHosts(vault), answerMs = 5_000, webrtc = LibDataChannelRtc, route = { computer.service })
+		computer.command("nearby on")
+		val end = anywhere.pairNearby(found(service = "https://elsewhere.test"), "Pine on Pixel 9") { told.add(it) }.result(20_000)
+		assertEquals(PairingState.Failed(PairWords.NEARBY_SERVICE), end)
+		assertEquals(listOf<PairingState>(PairingState.Failed(PairWords.NEARBY_SERVICE)), told.toList(), "the four digits are never shown")
+		computer.event("left")
+		computer.command("allow")
 		nothingKept()
 	}
 }

@@ -82,14 +82,15 @@ is no longer known": pair the iPhone again, and take its old entry off the list 
 ## Pairing with a computer that runs the Pine app
 
 With the Pine app on your computer, the phone needs no SSH, no address and no key in
-`authorized_keys`. It pairs with that computer by the QR code the Pine app shows, and from then
-on reaches its pine directly, peer to peer, from anywhere: the meeting service only introduces
+`authorized_keys`. On the same network it finds that computer by itself and pairs without a code
+(see "A computer on this network"); anywhere else by the QR code the Pine app shows. From then
+on it reaches its pine directly, peer to peer, from anywhere: the meeting service only introduces
 the two devices, as it does for a paired browser
 ([web.md](web.md#a-computer-paired-by-qr-code-a-browser-with-no-ssh-to-set-up)). This is what the
 app's first screen offers; a machine over SSH is behind its link "Or connect to a server over SSH".
 
-1. On the computer, in the Pine app: Settings > Browser access, switch it on, and press Add a
-   device ([desktop.md](desktop.md#pairing-a-device)).
+1. On the computer, in the Pine app: switch on Settings > Browser access once, then choose Pine >
+   Add a device (`⌘⇧D`; [desktop.md](desktop.md#pairing-a-device)).
 2. Scan the QR code with the phone's own camera. Whether the link then opens the app depends on
    the phone (see "How the link reaches the app"). Where it does not, press Copy link at the
    computer, send the link to the phone, and paste it into the field `Pairing link` of the app.
@@ -108,6 +109,24 @@ app's first screen offers; a machine over SSH is behind its link "Or connect to 
 | The computer's identity | The link carries the fingerprint of the computer's host key. The app checks the key the computer presents against it before it offers the phone's key, so a computer that answers with another key is refused ("nothing was trusted") and there is no fingerprint to compare by hand. Once paired, a computer that presents another key is refused for good: forget it and pair again |
 | The meeting service | The service the link names: Pine's own, `https://pine-main.drcmda.workers.dev`, or a deployment of your own ([web.md](web.md#deploying-it)). The app remembers it with the computer, since every reconnection goes through it. It takes `https` only: a link whose service is `http` (a `wrangler dev` on a computer) is refused, and said so plainly. No setting of the app accepts `http` |
 | Twenty machines | The app keeps 20 machines at most, paired and `user@host` together: forget one before you pair another |
+
+### A computer on this network
+
+While the pairing view is shown, the app looks for computers that run the Pine app on the same
+network, and lists them at its top, under "On this network". The computer has to have Browser
+access and "Visible on this network" on (both are on once Browser access is,
+[desktop.md](desktop.md#without-scanning-a-code)). Below the list the code and the `Pairing link` field
+are as before.
+
+| What | How |
+|---|---|
+| `On this network` | Each computer found, as "Pine" and the first six characters of its key's fingerprint: the computer does not say its name to the network. "Through <host>, not Pine's own service" under one that waits at a meeting service of its owner's own. While none is found, a spinner and "No computer found on this network yet. Pine must be open, with Browser access on." |
+| A tap | Asks that computer without a code. The app shows "Confirm on" and the computer's name, which the computer tells only once the connection is made, and four digits; the computer shows the same four beside the phone's name. Press Allow there only if they are the same, and only if the question is on your computer's screen: any computer on the network can announce itself as "Pine". The rest is as with a code |
+| The computer's identity | What the network said is not trusted. The app reaches the computer through the meeting service, as with a link, and checks the key the computer presents against the fingerprint it was announced with, so another computer cannot answer in its place. The computer then says which meeting service it waits at: the app keeps that one, and stops when the announcement named another |
+| The random word | Each announcement carries a random word that changes every five minutes, and the app names it when it asks: only a phone on the same network can ask a computer without a code |
+| `Local Network` | On an iPhone, iOS asks once whether Pine may find devices on your local network, the first time the pairing view is shown, never at launch. Refused, the list says "Pine cannot look on this network" and how to allow it: Settings > Pine > Local Network. On Android nothing is asked |
+| When it is looked for | Only while the pairing view is on screen: the app does not look on the network otherwise |
+| No computer is listed | Pine must be open on the computer, with Browser access and Visible on this network on, and the phone on the same Wi-Fi. A Wi-Fi that keeps its devices apart (for guests, in an office) lists nothing. After three requests that ended without a yes (refused, or left or run out at the phone) the computer stops showing itself for an hour. Pair with the code meanwhile |
 
 ### How the link reaches the app
 
@@ -170,8 +189,9 @@ time. Forget on a machine's line removes it, with its host key; the machine in u
 it is not reached, so that the first screen lists the others again.
 
 On an iPhone, the first time the app reaches a machine on your Wi-Fi, iOS asks whether Pine may
-find and connect to devices on your local network ("Pine connects to the machines you add or
-pair with, some of which are on your local network"). Allow it: without it a machine on the local
+find and connect to devices on your local network ("Pine looks for your computer on this network
+so that you can pair with it without scanning a code, and connects to the machines you add
+there"); the pairing view asks it first, when it looks for computers. Allow it: without it a machine on the local
 network is not reached. You can change it later in Settings > Privacy & Security > Local Network.
 
 When a machine is not reached, the first screen says why, in the words of the desktop app:
@@ -244,7 +264,8 @@ is careful about"). On the phone:
 | No port on the phone | Every request to the daemon goes through a channel of the SSH connection. No port is opened on the phone's loopback, where another app could use it |
 | A paired computer | The calls to the daemon go through the direct connection, which lives in the native part too (Google's libwebrtc on Android, libdatachannel on iOS), never in the page, encrypted end to end: the meeting service passes the few messages that set up the connection, and sees neither key nor token |
 | A link opened in it | Handed to the page as text and read by the same rules as a pasted link; the page asks you before anything is used, naming a service that is not Pine's own |
-| `ACCESS_NETWORK_STATE` | On Android two permissions are asked for: the network, and this one, to read which networks the phone has. Google's libwebrtc reads them to find a way to a paired computer, and cannot run without it. Android grants it at install and never asks you; it reads and changes nothing. No camera, no microphone, nothing else. On an iPhone only the local network is asked for |
+| `ACCESS_NETWORK_STATE` | On Android two permissions are asked for: the network, and this one, to read which networks the phone has. Google's libwebrtc reads them to find a way to a paired computer, and cannot run without it. Android grants it at install and never asks you; it reads and changes nothing. No camera, no microphone, nothing else. Finding a computer on the network needs nothing more: Android's own service (`NsdManager`) looks for it. On an iPhone only the local network is asked for |
+| What the network announces | Only a fingerprint and an `https` meeting service are read from it (`_pine._tcp`, `v=1`), and it is not trusted: the key is checked against the fingerprint, and the four digits are compared on both screens |
 | The page stays the app | It loads nothing from the web, cannot be taken to another address, opens no window and is given no permission. A link opens in your browser, `http` and `https` only. A photo is attached through the system's file chooser |
 | Pictures, video and sound | Answered by the native part from the daemon, under the Mac app's rules: fixed addresses only, never SVG. On iOS they come through a scheme of the app's own (`pine-media:`), the only origin the page's policy allows for them |
 
@@ -297,7 +318,9 @@ The libraries of the direct connection are proven on the JVM and the Mac (the co
 the emulator (Google's libwebrtc, the Android app) and on the simulator (libdatachannel, the iOS
 app). Not tried yet: a real phone, an Android phone that runs with 16 KB memory pages (the
 64-bit libraries are built for them), cellular networks, AltStore and Sideloadly installing the
-IPA that carries libdatachannel, and the iOS app started cold by a `pine:` address.
+IPA that carries libdatachannel, the iOS app started cold by a `pine:` address, and finding a
+computer on a real network (`NsdManager`, `NWBrowser`): the cores' suites test reading the
+announcement and the pairing without a code against the real access host, not the looking.
 
 To try the app on the simulator against the pine of your own Mac: turn on Remote Login (System
 Settings > General > Sharing), run `npm run ios:run`, add the simulator's key (Settings >

@@ -42,7 +42,7 @@ function computer(): Machine {
 	return m;
 }
 
-function client(machine: Machine, options: { store?: ReturnType<typeof memoryStore>; pairLink?: PairLink; config?: WebBridgeDeps["config"]; serviceHost?: string; waitMs?: number } = {}) {
+function client(machine: Machine, options: { store?: ReturnType<typeof memoryStore>; pairLink?: PairLink; config?: WebBridgeDeps["config"]; serviceHost?: string; waitMs?: number; openApp?: () => void } = {}) {
 	const w = windows();
 	const store = options.store ?? memoryStore();
 	const waits: number[] = [];
@@ -60,6 +60,7 @@ function client(machine: Machine, options: { store?: ReturnType<typeof memorySto
 		version: "9.9.9",
 		wait,
 		serviceMs: 500,
+		openApp: options.openApp,
 	});
 	serve(bridge, w.top, () => w.frame);
 	const page = frameBridge(w.parentOfFrame, w.frame);
@@ -416,9 +417,26 @@ test("where user@host machines cannot be added, the first screen is told to pair
 	const s = await off.page.state();
 	assert.equal(s.state.status, "error");
 	assert.doesNotMatch(message(s.state), /user@host|authorized_keys/);
-	assert.match(message(s.state), /^Pair this browser with the Pine app on your computer: open Pine on your computer, go to Settings > Browser access/);
+	assert.match(message(s.state), /^Pair this browser with the Pine app on your computer: on your computer, choose Pine > Add a device/);
 	off.stop();
 	const on = client(computer());
 	assert.match(message((await on.page.state()).state), /user@host/);
 	on.stop();
+});
+
+test("'Open Pine on this computer' is offered where the bridge can open pine://pair and pair; asking for it opens it, and nothing else", async () => {
+	const opened: string[] = [];
+	const meeting = async () => ({ ice: [], relay: true });
+	const here = client(computer(), { config: meeting, openApp: () => void opened.push("pine://pair") });
+	assert.equal((await here.page.state()).canOpenApp, true);
+	await here.page.openApp!();
+	assert.deepEqual(opened, ["pine://pair"]);
+	here.stop();
+	const phone = client(computer(), { config: meeting });
+	assert.equal((await phone.page.state()).canOpenApp, undefined);
+	await assert.rejects(phone.page.openApp!(), /Pine > Add a device/);
+	phone.stop();
+	const noMeeting = client(computer(), { openApp: () => void opened.push("x") });
+	assert.equal((await noMeeting.page.state()).canOpenApp, undefined, "nothing to pair with: not offered");
+	noMeeting.stop();
 });

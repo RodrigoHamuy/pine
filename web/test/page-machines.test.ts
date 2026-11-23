@@ -4,7 +4,7 @@
 // the screen that asks which pine to use is shown, with which controls.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { firstScreen, homeScreenKeeps, isPaired, machineName, machinesView, meetingLine, noMachineSaid, pairingEnded, reachedThrough, relayLine } from "../../desktop/src/machines.ts";
+import { firstScreen, homeScreenKeeps, isDesktopBrowser, isPaired, machineName, machinesView, meetingLine, noMachineSaid, pairingEnded, reachedThrough, relayLine } from "../../desktop/src/machines.ts";
 
 const PAIRED = "paired:q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x-_";
 const ANDROID = "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36";
@@ -38,6 +38,10 @@ test("the first screen during a pairing: what to do before the computer answered
 	assert.match(asked?.about ?? "", /4821/);
 	assert.match(asked?.about ?? "", /Allow/);
 	assert.doesNotMatch(`${before?.title} ${before?.about} ${asked?.title} ${asked?.about}`, /\bMac\b/);
+	// The computer's own name, once it gave it with the digits (a computer found on the network was only "Pine").
+	const named = firstScreen({ status: "starting", pairing: { code: "4821", name: "Pine on Pixel 9", computer: "Studio Mac" } }, "phone");
+	assert.equal(named?.title, "Confirm on Studio Mac");
+	assert.match(named?.about ?? "", /^Studio Mac asks whether "Pine on Pixel 9" may connect/);
 	// No pairing: the first screen is drawn as before.
 	assert.equal(firstScreen({ status: "starting" }), undefined);
 	assert.equal(firstScreen({ status: "starting", host: PAIRED }), undefined);
@@ -115,4 +119,14 @@ test("the relay and the meeting service are said by the deployment's host: SSH t
 	// A bridge that names no service (the desktop and mobile apps) gets no such line.
 	assert.equal(reachedThrough("me@box.example"), undefined);
 	assert.doesNotMatch(`${relayLine(host)} ${meetingLine(host)}`, /\bMac\b/);
+});
+
+test("'Open Pine on this computer' is for a browser on a computer only: not a phone, not a tablet, not an iPad that says it is a Mac", () => {
+	assert.equal(isDesktopBrowser(DESKTOP), true);
+	assert.equal(isDesktopBrowser("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"), true);
+	assert.equal(isDesktopBrowser("Mozilla/5.0 (X11; Linux x86_64; rv:133.0) Gecko/20100101 Firefox/133.0"), true);
+	assert.equal(isDesktopBrowser(ANDROID), false);
+	assert.equal(isDesktopBrowser(IPHONE), false);
+	assert.equal(isDesktopBrowser(IPAD, 5), false);
+	assert.equal(isDesktopBrowser(IPAD, 0), true, "a Mac's Safari has no touch points");
 });

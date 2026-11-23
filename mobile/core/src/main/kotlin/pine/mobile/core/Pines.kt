@@ -135,13 +135,33 @@ class Pines(
 	 */
 	fun pair(link: String, name: String) {
 		val read = pairLink(link) ?: throw RemoteError("ssh", PairWords.NOT_A_LINK)
+		begin(read.id, read.service, name, nearby = false) { on -> remote.pair(read, name, on) }
+	}
+
+	/**
+	 * Pairs with a computer found on the network (`nearbyComputer`), without a code: as `pair`, as
+	 * user `nearby.<nonce>`. `id` is the machine id it announced, `service` its meeting service, an
+	 * https origin as `nearbyComputer` writes it, `nonce` the nonce of its announcement; anything
+	 * else, or a pairing under way, is refused here. The page is told the computer's name with the
+	 * four digits (`pairing.computer`), and a request the computer did not let in as an error in
+	 * `PairWords.NOT_LET_IN`. On a yes the service kept is the one the computer named on the pairing
+	 * channel, which the pairing checked to be the announced one (`PairWords.NEARBY_SERVICE`).
+	 */
+	fun pairNearby(id: String, service: String, nonce: String, name: String) {
+		if (pairedFingerprint(id) == null || httpsOrigin(service)?.first != service || !nearbyNonce(nonce)) throw RemoteError("ssh", PairWords.NOT_NEARBY)
+		val computer = NearbyComputer(id, service, nonce)
+		begin(id, service, name, nearby = true) { on -> remote.pairNearby(computer, name, on) }
+	}
+
+	/** Starts a pairing with the computer `id` reached through `service`; `start` begins it at the remote. */
+	private fun begin(id: String, service: String, name: String, nearby: Boolean, start: ((PairingState) -> Unit) -> Pairing) {
 		val mine = synchronized(lock) {
 			if (pairing != null) throw RemoteError("ssh", PairWords.BUSY)
 			if (closed) return
 			++round
 		}
-		show(mine, asking(name, null), null)
-		val started = remote.pair(read, name) { state -> paired(mine, read, name, state) }
+		show(mine, asking(name, null, null), null)
+		val started = start { state -> paired(mine, id, service, nearby, name, state) }
 		val gone = synchronized(lock) {
 			if (round == mine && !closed && ended != mine) {
 				pairing = started
@@ -156,22 +176,22 @@ class Pines(
 	private var ended = 0
 
 	/** What the pairing `mine` reported. */
-	private fun paired(mine: Int, link: PairLink, name: String, state: PairingState) {
-		if (state is PairingState.Pairing) return show(mine, asking(name, state.code), null)
+	private fun paired(mine: Int, id: String, service: String, nearby: Boolean, name: String, state: PairingState) {
+		if (state is PairingState.Pairing) return show(mine, asking(name, state.code, state.computer), null)
 		synchronized(lock) {
 			ended = mine
 			if (round != mine || closed) return
 			pairing = null
 		}
-		val words = PairWords.of(state) ?: run {
+		val words = PairWords.of(state, nearby) ?: run {
 			try {
-				addPaired(link.id, link.service, (state as PairingState.Allowed).name)
+				addPaired(id, service, (state as PairingState.Allowed).name)
 			} catch (e: RemoteError) {
 				// The link was read already: what can refuse it now is a list that is full.
 				return show(mine, JSONObject().put("status", "error").put("kind", "ssh").put("message", PairWords.FULL), null)
 			}
-			shelf.set(USE, PAIRED + link.id)
-			return start(PAIRED + link.id)
+			shelf.set(USE, PAIRED + id)
+			return start(PAIRED + id)
 		}
 		show(mine, JSONObject().put("status", "error").put("kind", "ssh").put("message", words), null)
 	}
@@ -397,8 +417,11 @@ class Pines(
 
 		fun starting(host: String) = JSONObject().put("status", "starting").put("host", host)
 
-		/** A pairing under way, as the page shows it: the phone's name, and the four digits once the computer shows them. */
-		fun asking(name: String, code: String?) = JSONObject().put("status", "starting").put("pairing", JSONObject().put("name", name).apply { code?.let { put("code", it) } })
+		/** A pairing under way, as the page shows it: the phone's name, and the four digits and the computer's name once the computer shows them. */
+		fun asking(name: String, code: String?, computer: String?) = JSONObject().put("status", "starting").put("pairing", JSONObject().put("name", name).apply {
+			code?.let { put("code", it) }
+			computer?.let { put("computer", it) }
+		})
 
 		fun ready(s: RemoteService) = JSONObject().put("status", "ready").put("mode", "on ${s.label}").put("started", s.started).put("home", "${s.label}:${s.home}").apply { s.version?.let { put("version", it) } }.put("from", if (s.paired) "paired ${s.label}" else "ssh ${s.host}").put("host", s.host).put("label", s.label)
 	}

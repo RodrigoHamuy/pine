@@ -1,8 +1,9 @@
 // Settings > Browser access: the owner's side of reaching this computer's pine from a browser. The
-// switch, whether the app waits at the meeting service, "Add a device" with the QR code of a pairing
-// link, the question when a device asks, and the paired devices. The state is the main process's
+// switch, whether this computer is visible on the network, whether the app waits at the meeting
+// service, "Add a device" (whose dialog and the question when a device asks are DevicePairing.tsx's,
+// shown anywhere in the app), and the paired devices. The state is the main process's
 // (electron/access/control.ts), read through the bridge and told again each time it changes.
-import { CopyIcon, LaptopIcon, PlusIcon, RotateCwIcon, TriangleAlertIcon } from "lucide-react";
+import { LaptopIcon, PlusIcon, TriangleAlertIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { useInterval } from "usehooks-ts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -10,13 +11,11 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescript
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemGroup, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
-import { QrCode } from "@/components/qr-code";
 import { EmptyView } from "@/components/empty-view";
 import { type AccessChange, type AccessDevice, type AccessState, bridge } from "./bridge.ts";
 import { computerWord } from "./machines.ts";
@@ -24,24 +23,12 @@ import { store } from "./model.ts";
 import { Section } from "./settings-parts.tsx";
 import { ago, errText } from "./text.ts";
 
-/** The pairing the dialog shows: the link and when it stops working, and whether a device has asked with it. */
-export interface Opened {
-	link: string;
-	expires: string;
-	asked?: boolean;
-}
-
 /** What the section does: each a call of the bridge in the app, a stand-in in a story. */
 export interface AccessActions {
 	set(change: AccessChange): Promise<void>;
-	/** Opens a pairing; the dialog shows it. */
+	/** Opens a pairing; the Add a device dialog shows it. */
 	add(): void;
-	/** The dialog was closed: its pairing is cancelled. */
-	close(): void;
-	answer(yes: boolean): void;
 	remove(id: string): void;
-	/** Puts the open pairing's link on the clipboard. */
-	copy(): void;
 }
 
 const STATUS = {
@@ -52,12 +39,6 @@ const STATUS = {
 
 /** How a device is connected, in the owner's words. */
 const PATH = { lan: "same network", ipv4: "direct, IPv4", ipv6: "direct, IPv6", relay: "relayed" } as const;
-
-/** Minutes and seconds left, as a clock: 1:58. */
-const left = (ms: number) => {
-	const s = Math.max(0, Math.ceil(ms / 1000));
-	return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
-};
 
 const day = (iso: string) => new Date(iso).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 
@@ -73,7 +54,7 @@ function deviceLine(d: AccessDevice, now: number): string {
  * being written, the checkbox of the first turn on). `now` is the clock the time left is counted on.
  * `platform` names this computer: "This Mac" on macOS, "This computer" elsewhere.
  */
-export function BrowserAccessView({ state, opened, now, platform, actions }: { state: AccessState; opened?: Opened; now: number; platform: string; actions: AccessActions }) {
+export function BrowserAccessView({ state, now, platform, actions }: { state: AccessState; now: number; platform: string; actions: AccessActions }) {
 	const computer = computerWord(platform);
 	const field = useId();
 	const [service, setService] = useState(state.service);
@@ -115,8 +96,6 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 			setServiceError(errText(e));
 		}
 	};
-	// The code no longer works: its time is over, or the device that used it went away without an answer.
-	const stale = opened && (now >= Date.parse(opened.expires) || (opened.asked && !state.request && state.pairing?.link !== opened.link));
 
 	return (
 		<>
@@ -135,6 +114,17 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 							</FieldDescription>
 						</FieldContent>
 						<Switch id={`${field}-on`} data-slot="access-switch" checked={state.enabled} disabled={state.problem?.kind === "keychain"} onCheckedChange={turn} />
+					</Field>
+					<Field orientation="horizontal" data-setting="access-visible" data-disabled={state.enabled ? undefined : true}>
+						<FieldContent>
+							<FieldLabel htmlFor={`${field}-visible`}>Visible on this network</FieldLabel>
+							<FieldDescription>
+								{state.paused
+									? `Paused until ${new Date(state.paused).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })} after 3 refusals. Turn it on to end the pause now.`
+									: `The Pine app on a phone on this network finds this ${computer} and can ask to connect without a code. You still allow it here, after comparing four digits. Off: pair with the code of Add a device.`}
+							</FieldDescription>
+						</FieldContent>
+						<Switch id={`${field}-visible`} data-slot="access-visible" checked={state.visible && !state.paused} disabled={!state.enabled} onCheckedChange={(visible) => change({ visible })} />
 					</Field>
 					{state.problem || error ? (
 						<Alert variant="destructive" data-slot="access-problem">
@@ -240,44 +230,6 @@ export function BrowserAccessView({ state, opened, now, platform, actions }: { s
 				</AlertDialogContent>
 			</AlertDialog>
 
-			{/* Add a device: the QR code of the pairing link while it works, and a new one once it does not. Closing it cancels the pairing. */}
-			<Dialog open={Boolean(opened) && !state.request} onOpenChange={(open) => !open && actions.close()}>
-				<DialogContent className="sm:max-w-sm">
-					<div data-slot="pairing-dialog" className="contents">
-						<DialogHeader>
-							<DialogTitle>Add a device</DialogTitle>
-							<DialogDescription>{stale ? "This code no longer works: it was used, or the two minutes are over." : "Scan the code with the device's camera, or send yourself the link and open it in the device's browser."}</DialogDescription>
-						</DialogHeader>
-						{opened && !stale ? (
-							<>
-								<QrCode value={opened.link} label="QR code of the pairing link" className="mx-auto w-full max-w-56 rounded-lg" />
-								<p className="text-center text-sm text-muted-foreground">Works once, for <span data-slot="pairing-time" className="font-mono tabular-nums">{left(Date.parse(opened.expires) - now)}</span> more.</p>
-							</>
-						) : null}
-						<DialogFooter>
-							{opened && !stale ? <Button variant="outline" onClick={actions.copy}><CopyIcon data-icon="inline-start" />Copy link</Button> : <Button onClick={actions.add}><RotateCwIcon data-icon="inline-start" />New code</Button>}
-						</DialogFooter>
-					</div>
-				</DialogContent>
-			</Dialog>
-
-			{/* A device used the code: its name, as plain text, and the four digits its screen shows. */}
-			{/* It stays until the main process says the question is over, which each answer brings at once. */}
-			<AlertDialog open={Boolean(state.request)}>
-				<AlertDialogContent>
-					<div data-slot="pairing-request" className="contents">
-						<AlertDialogHeader>
-							<AlertDialogTitle className="wrap-anywhere"><span data-slot="pairing-device">{state.request?.name}</span> wants to connect</AlertDialogTitle>
-							<AlertDialogDescription>Allow it only if the device's screen shows these four digits:</AlertDialogDescription>
-						</AlertDialogHeader>
-						<p data-slot="pairing-code" className="text-center font-mono text-3xl font-semibold tracking-widest tabular-nums">{state.request?.code}</p>
-						<AlertDialogFooter>
-							<AlertDialogCancel onClick={() => actions.answer(false)}>Refuse</AlertDialogCancel>
-							<AlertDialogCancel variant="default" onClick={() => actions.answer(true)}>Allow</AlertDialogCancel>
-						</AlertDialogFooter>
-					</div>
-				</AlertDialogContent>
-			</AlertDialog>
 		</>
 	);
 }
@@ -321,16 +273,11 @@ const isState = (s: unknown): s is AccessState => typeof s === "object" && s !==
 export function BrowserAccess() {
 	const [state, setState] = useState<AccessState>();
 	const [loadError, setLoadError] = useState<string>();
-	const [opened, setOpened] = useState<Opened>();
 	const [now, setNow] = useState(Date.now);
-	useInterval(() => setNow(Date.now()), opened || state?.devices.length ? 1000 : null);
+	useInterval(() => setNow(Date.now()), state?.devices.length ? 1000 : null);
 
 	useEffect(() => {
-		const told = (s: AccessState) => {
-			setState(s);
-			if (s.request) setOpened((o) => (o && !o.asked ? { ...o, asked: true } : o));
-		};
-		const stop = bridge.onAccess?.(told);
+		const stop = bridge.onAccess?.(setState);
 		void Promise.resolve(bridge.access?.()).then((s) => isState(s) && setState(s), (e: unknown) => setLoadError(errText(e)));
 		return () => void (typeof stop === "function" && stop());
 	}, []);
@@ -340,22 +287,8 @@ export function BrowserAccess() {
 		async set(change) {
 			setState(await bridge.setAccess!(change));
 		},
-		add: () =>
-			void store.attempt(async () => {
-				const pairing = await bridge.openPairing!();
-				setNow(Date.now());
-				setOpened({ ...pairing });
-			}),
-		close: () => {
-			setOpened(undefined);
-			void store.attempt(() => bridge.cancelPairing!());
-		},
-		answer: (yes) => {
-			setOpened(undefined);
-			void store.attempt(() => bridge.answerPairing!(yes));
-		},
+		add: () => void store.addDevice(),
 		remove: (id) => void store.attempt(() => bridge.removeDevice!(id)),
-		copy: () => void bridge.copyPairingLink!().then(() => store.flash("The link is on the clipboard.", "good", 3000), (e: unknown) => store.flash(errText(e), "bad")),
 	};
-	return <BrowserAccessView state={state} opened={opened} now={now} platform={store.platform} actions={actions} />;
+	return <BrowserAccessView state={state} now={now} platform={store.platform} actions={actions} />;
 }

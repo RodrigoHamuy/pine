@@ -102,13 +102,18 @@ test("browser access in the app: off at first, nothing written; on, it waits; a 
 	const { request } = (await told()).at(-1);
 	assert.equal(request.name, "Stand-in phone");
 	assert.match(request.code, /^\d{4}$/);
-	await bridge("answerPairing", true);
+	await assert.rejects(bridge("answerPairing", true, "not-this-one"), /no longer the one asking/);
+	await bridge("answerPairing", true, request.id);
 	await until("the device is connected", async () => (await told()).at(-1)?.devices[0]?.connected !== undefined);
 	const now = (await told()).at(-1);
 	assert.equal(now.devices[0].name, "Stand-in phone");
 	assert.deepEqual(now.devices[0].connected, { path: "lan" });
 	assert.equal(now.request, undefined);
-	assert.deepEqual((await noted()).notified, [{ title: "Browser access", body: "Stand-in phone can now access Pine." }]);
+	// The window is not in front (a test's never is): the question was said by the system too, with the digits and no Allow; then the device added.
+	assert.deepEqual((await noted()).notified, [
+		{ title: "Stand-in phone wants to connect", body: `Allow it in Pine if the device shows ${request.code}.` },
+		{ title: "Browser access", body: "Stand-in phone can now access Pine." },
+	]);
 
 	assert.equal(await bridge("removeDevice", now.devices[0].id), true);
 	assert.deepEqual((await bridge("access")).devices, []);
@@ -117,7 +122,7 @@ test("browser access in the app: off at first, nothing written; on, it waits; a 
 	const off = await bridge("setAccess", { enabled: false, openAtLogin: false });
 	assert.equal(off.status, "off");
 	assert.deepEqual((await noted()).login, [{ openAtLogin: true }, { openAtLogin: false }]);
-	assert.equal((await noted()).notified.length, 1, "one notification, for the one device added");
+	assert.equal((await noted()).notified.length, 2, "one notification for the question, one for the one device added");
 });
 
 test("browser access in the app: an address that is not http(s) is refused and not kept", async () => {
@@ -268,4 +273,66 @@ test("Settings > Browser access: a relay server is saved from its fields and tri
 	} finally {
 		await turn.close();
 	}
+});
+
+test("adding a device from anywhere: pine://pair opens a pairing and its link in the browser, with the dialog; the device's question is a toast that replaces the dialog and takes no focus; the menu opens the dialog too", async () => {
+	const opened = () => app.evaluate(() => (globalThis as any).quiet?.opened as string[]);
+	const openUrl = (url: string) => app.evaluate(({ app }: any, u: string) => app.emit("open-url", { preventDefault() {} }, u), url);
+
+	// Off: the address is ignored.
+	await bridge("setAccess", { enabled: false });
+	const before = (await opened()).length;
+	await openUrl("pine://pair");
+	await new Promise((r) => setTimeout(r, 300));
+	assert.equal((await opened()).length, before);
+	assert.equal((await bridge("access")).pairing, undefined);
+
+	await bridge("setAccess", { enabled: true });
+	await until("it waits", async () => (await bridge("access")).status === "waiting");
+	// Away from Settings, in a conversation, with the composer focused.
+	await menu("new");
+	await sees("[data-slot=composer] textarea");
+	await page.focus("[data-slot=composer] textarea");
+
+	// Anything else under pine: is ignored, the mobile app's links among them.
+	await openUrl("pine://pair?service=https%3A%2F%2Fpine.example.invalid&id=x&code=y");
+	await new Promise((r) => setTimeout(r, 300));
+	assert.equal((await bridge("access")).pairing, undefined);
+
+	await openUrl("pine://pair");
+	await until("a pairing is open", async () => (await bridge("access")).pairing !== undefined);
+	const { pairing } = await bridge("access");
+	await until("its link went to the browser", async () => (await opened()).at(-1) === pairing.link);
+	await sees("[data-slot=pairing-dialog] [data-slot=qr-code]");
+	assert.equal(await scanned("[data-slot=pairing-dialog] [data-slot=qr-code]"), pairing.link, "the dialog shows the pairing whose link was sent, not another one");
+	// Sent again while that pairing is open (any site may send the address): nothing changes, the owner's pairing stays.
+	const sent = (await opened()).length;
+	await openUrl("pine://pair");
+	await new Promise((r) => setTimeout(r, 300));
+	assert.equal((await bridge("access")).pairing?.link, pairing.link);
+	assert.equal((await opened()).length, sent);
+
+	// The stand-in phone uses the link: the question is a toast, the dialog is put away.
+	await sees("[data-slot=pairing-request] [data-slot=pairing-code]");
+	await page.waitForSelector("[data-slot=pairing-dialog]", { state: "detached" });
+	const { request } = await bridge("access");
+	assert.equal(await page.textContent("[data-slot=pairing-request] [data-slot=pairing-code]"), request.code);
+	// The focus stayed in the composer: an Enter typed there answers nothing.
+	await page.focus("[data-slot=composer] textarea");
+	assert.equal(await page.evaluate(() => document.activeElement?.closest("[data-slot=composer]") !== null), true);
+	await page.keyboard.press("Enter");
+	await new Promise((r) => setTimeout(r, 200));
+	assert.equal(await page.evaluate(() => document.activeElement?.closest("[data-slot=composer]") !== null), true, "the toast took no focus");
+	assert.equal((await bridge("access")).request?.code, request.code, "still asked");
+	await page.locator("[data-slot=pairing-request]").getByRole("button", { name: "Refuse" }).click();
+	await page.waitForSelector("[data-slot=pairing-request]", { state: "detached" });
+	assert.deepEqual((await bridge("access")).devices, []);
+
+	// The menu (and the Dock's) opens the dialog wherever the owner is; closed, its pairing is cancelled.
+	await menu("add-device");
+	await sees("[data-slot=pairing-dialog] [data-slot=qr-code]");
+	await page.keyboard.press("Escape");
+	await page.waitForSelector("[data-slot=pairing-dialog]", { state: "detached" });
+	await until("the pairing is cancelled", async () => (await bridge("access")).pairing === undefined);
+	await bridge("setAccess", { enabled: false });
 });

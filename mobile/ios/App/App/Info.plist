@@ -35,8 +35,12 @@
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_pine._tcp</string>
+	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>Pine connects to the machines you add or pair with, some of which are on your local network.</string>
+	<string>Pine looks for your computer on this network so that you can pair with it without scanning a code, and connects to the machines you add there.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

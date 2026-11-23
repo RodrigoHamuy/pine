@@ -66,6 +66,8 @@ export type WebBridgeDeps = {
 	open?(url: string): void;
 	/** Hands a text to the browser as a file to save (a download), under that name. */
 	save?(name: string, text: string): void;
+	/** Opens `pine://pair`, the Pine app on this computer (ADR 0005); none where the browser is not on a computer. */
+	openApp?(): void;
 };
 
 /** How long to wait before the attempt after the `n`th failed one to connect again: doubling from a second, at most half a minute. */
@@ -170,7 +172,7 @@ const NO_MACHINE: ServiceState = {
 const NO_PAIRED: ServiceState = {
 	status: "error",
 	kind: "ssh",
-	message: "Pair this browser with the Pine app on your computer: open Pine on your computer, go to Settings > Browser access, and scan the code it shows.",
+	message: "Pair this browser with the Pine app on your computer: on your computer, choose Pine > Add a device, and scan the code it shows.",
 };
 
 /** What `pine service` there could not do, in words that say what to do. */
@@ -480,7 +482,7 @@ export function webBridge(deps: WebBridgeDeps) {
 		}
 		let answer: Awaited<ReturnType<typeof askToPair>>;
 		try {
-			answer = await askToPair(connection, name, (code) => mine === round && setState({ status: "starting", pairing: { code, name } }));
+			answer = await askToPair(connection, name, (code, computer) => mine === round && setState({ status: "starting", pairing: { code, name, ...(computer ? { computer } : {}) } }));
 		} catch (e) {
 			void connection.close().catch(() => {});
 			return stop(`The pairing with your computer did not go through. ${e instanceof Error ? e.message : String(e)}`);
@@ -506,7 +508,7 @@ export function webBridge(deps: WebBridgeDeps) {
 			await load();
 			await relearn();
 			answered = true;
-			return { state, connected, home: state.status === "ready" ? state.home : undefined, prefs: prefsOut(), platform: "web", focused: true, updates: false, versions: { app: deps.version, electron: "none" }, local: false, canAddHost, canPair, ...(deps.serviceHost ? { serviceHost: deps.serviceHost } : {}) };
+			return { state, connected, home: state.status === "ready" ? state.home : undefined, prefs: prefsOut(), platform: "web", focused: true, updates: false, versions: { app: deps.version, electron: "none" }, local: false, canAddHost, canPair, ...(canPair && deps.openApp ? { canOpenApp: true } : {}), ...(deps.serviceHost ? { serviceHost: deps.serviceHost } : {}) };
 		},
 		/** The page has started: it is told the state as it is now, and the pairing link is paired with, or else the machine in use connected to (once). */
 		async ready() {
@@ -603,6 +605,11 @@ export function webBridge(deps: WebBridgeDeps) {
 			const daemon = state.status === "ready" ? current?.daemon : undefined;
 			if (!daemon) throw new Error("not found: pine is not connected. Wait until it is, or choose a machine in Settings > Environments.");
 			return mediaOf(daemon, checked);
+		},
+		/** The Pine app on this computer is asked to add this browser: it opens a pairing and sends its link here. */
+		async openApp() {
+			if (!deps.openApp) throw new Error("Open Pine on your computer and choose Pine > Add a device.");
+			deps.openApp();
 		},
 		async open(url: string) {
 			const href = webAddress(url);

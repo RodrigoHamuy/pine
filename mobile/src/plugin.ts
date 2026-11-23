@@ -78,7 +78,7 @@ export interface PinePlugin {
 	 * by its link (`canPair`: true once the platform's native side does; left out, the page offers no
 	 * pairing and is as it was before).
 	 */
-	state(): Promise<{ state: ServiceState; connected: boolean; version: string; canPair?: boolean }>;
+	state(): Promise<{ state: ServiceState; connected: boolean; version: string; canPair?: boolean; canPairNearby?: boolean }>;
 	/** The page has started: send `service` with the state as it is now, and follow the daemon's events (once). */
 	ready(): Promise<void>;
 	/**
@@ -149,6 +149,26 @@ export interface PinePlugin {
 	/** End the pairing that is open, nothing kept: the state is then what it was before the pairing began. Resolves at once when none is open. */
 	cancelPairing(): Promise<void>;
 
+	// Pairing with a computer found on the local network (only where `state()` says `canPairNearby`).
+	/**
+	 * Start (`on: true`) or stop looking for computers that announce themselves on this network with
+	 * Bonjour (`_pine._tcp`, NearbyFound in desktop/src/machines.ts): Android's NsdManager, iOS's
+	 * NWBrowser. Called only while the page shows the pairing view, so that iOS asks for the local
+	 * network only then, never at launch. What is found reaches the page as `nearby` events.
+	 */
+	nearby(options: { on: boolean }): Promise<void>;
+	/**
+	 * Pair with a computer found on the network, without a code: as `pair`, but the SSH user is
+	 * `nearby.<nonce>` (desktop/electron/access/pairing.ts `NEARBY_USER`), the nonce the announcement
+	 * carried, which only a device on that network hears. `id` is the machine id the announcement carried,
+	 * `service` the https origin of its meeting service. The host key is checked against `id` as for a
+	 * link: an announcement is not trusted, the four digits are what the owner compares. The computer
+	 * then states its service with the digits; a pairing whose announcement named another one is
+	 * refused, and the stated one is kept. The states are `pair`'s, with the computer's name once the
+	 * computer gave it (`pairing.computer`). Rejects an id, a service or a nonce of another shape, and a second pairing.
+	 */
+	pairNearby(options: { id: string; service: string; nonce: string }): Promise<void>;
+
 	/** The page's state of the connection changed (as `pine:service` on the desktop). */
 	addListener(event: "service", fn: (data: { state: ServiceState }) => void): Promise<PluginListenerHandle>;
 	/** A batch of the daemon's events, in order (as `pine:events`). */
@@ -166,4 +186,10 @@ export interface PinePlugin {
 	 * link the app was started with waits for the page's listener. Only where `canPair`.
 	 */
 	addListener(event: "link", fn: (data: { link: string }) => void): Promise<PluginListenerHandle>;
+	/**
+	 * The computers found on the network, all of them each time the list changes (none at first), while
+	 * `nearby({on: true})`. `denied`: the system refused the local network to the app (iOS), so that
+	 * nothing can be found until the owner allows it in Settings > Pine.
+	 */
+	addListener(event: "nearby", fn: (data: { computers: { id: string; service: string; nonce: string }[]; denied?: boolean }) => void): Promise<PluginListenerHandle>;
 }

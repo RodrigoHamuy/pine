@@ -48,6 +48,8 @@
 
     <!-- Permissions -->
 
+    <!-- Also all that looking for a computer on the network needs (NsdManager, NearbyBrowser.kt): the
+         system's mDNS service does the multicast, so no multicast lock, NEARBY_WIFI_DEVICES or location. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- libwebrtc (LibWebRtc.kt) reads which networks the phone has, to gather candidates on them, and
          aborts the app without it. A permission given at install, never asked: it reads, and changes nothing. -->

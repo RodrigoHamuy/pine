@@ -328,17 +328,40 @@ public final class Pines: @unchecked Sendable {
 	 */
 	public func pair(_ value: String, name: String) throws {
 		guard let link = pairLink(value) else { throw RemoteError("ssh", "That is not a pairing link this phone can read. Open Pine on your computer and add this device again.") }
+		try begin(id: link.id, service: link.service, name: name, nearby: false) { phone, on in self.remote.pair(link, name: phone, on: on) }
+	}
+
+	/**
+	 * Pairs with a computer found on the network (`nearbyComputer`), without a code: as `pair`, as
+	 * user `nearby.<nonce>`. `id` is the machine id it announced, `service` its meeting service, an
+	 * https origin as `nearbyComputer` writes it, `nonce` the nonce of its announcement; anything
+	 * else, or a pairing under way, is refused here. On a yes the service kept is the one the computer
+	 * named on the pairing channel, which the pairing checked to be the announced one
+	 * (`PairWords.nearbyService`).
+	 * The page is told the computer's name with the four digits (`pairing.computer`), and a request
+	 * the computer did not let in as an error in `PairWords.notLetIn`.
+	 */
+	public func pairNearby(id: String, service: String, nonce: String, name: String) throws {
+		guard pairedFingerprint(id) != nil, httpsOrigin(service)?.origin == service, nearbyNonce(nonce) else { throw RemoteError("ssh", PairWords.notNearby) }
+		let computer = NearbyComputer(id: id, service: service, nonce: nonce)
+		try begin(id: id, service: service, name: name, nearby: true) { phone, on in self.remote.pairNearby(computer, name: phone, on: on) }
+	}
+
+	/** Starts a pairing with the computer `id` reached through `service`; `start` begins it at the remote. */
+	private func begin(id: String, service: String, name: String, nearby: Bool, _ start: (String, @escaping @Sendable (PairingState) -> Void) -> Pairing) throws {
 		let phone = cleanName(name).isEmpty ? deviceName(nil) : cleanName(name)
-		let host = PAIRED + link.id
+		let host = PAIRED + id
 		let (mine, pairing) = try lock.withLock { () throws -> (Int, Pairing) in
 			if closed { throw RemoteError("failed", "The app is closing.") }
 			if pairingNow != nil { throw RemoteError("ssh", "A pairing is open already: cancel it first.") }
 			round += 1
 			let mine = round
 			show(mine, ["status": "starting", "pairing": ["name": phone]], nil)
-			let pairing = remote.pair(link, name: phone) { [weak self] state in
-				guard case let .pairing(code) = state else { return }
-				self?.show(mine, ["status": "starting", "pairing": ["code": code, "name": phone]], nil)
+			let pairing = start(phone) { [weak self] state in
+				guard case let .pairing(code, computer) = state else { return }
+				var shown = ["code": code, "name": phone]
+				if let computer { shown["computer"] = computer }
+				self?.show(mine, ["status": "starting", "pairing": shown], nil)
 			}
 			pairingNow = pairing
 			return (mine, pairing)
@@ -353,9 +376,9 @@ public final class Pines: @unchecked Sendable {
 			}
 			guard still, let end else { return }
 			let fail = { (message: String) in self.show(mine, ["status": "error", "kind": "ssh", "message": message], nil) }
-			guard case let .allowed(computer) = end else { return fail(PairWords.of(end) ?? PairWords.expired) }
+			guard case let .allowed(computer) = end else { return fail(PairWords.of(end, nearby: nearby) ?? PairWords.expired) }
 			do {
-				try self.addPaired(id: link.id, service: link.service, name: computer == YOUR_COMPUTER ? nil : computer)
+				try self.addPaired(id: id, service: service, name: computer == YOUR_COMPUTER ? nil : computer)
 				self.lock.withLock { _ = self.finals.remove(host) }
 				try self.use(host)
 			} catch {

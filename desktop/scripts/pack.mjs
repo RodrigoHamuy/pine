@@ -239,10 +239,15 @@ await packApp({
 				// Dictating a message: the helper that listens asks under its own name, and the app says why too.
 				NSMicrophoneUsageDescription: "Pine listens while you dictate a message.",
 				NSSpeechRecognitionUsageDescription: "Pine turns what you say into text for the message you are writing. The words are recognised on this Mac.",
+				// Visible on this network (ADR 0005): macOS 15 and later ask before an app uses the local network, and say why.
+				NSLocalNetworkUsageDescription: "Pine announces this Mac on your network, so that the Pine app on your phone finds it and can ask to connect.",
+				NSBonjourServices: ["_pine._tcp"],
 				CFBundleDocumentTypes: [{ CFBundleTypeName: "Folder", CFBundleTypeRole: "Viewer", LSHandlerRank: "Alternate", LSItemContentTypes: ["public.folder"] }],
 			},
 		},
 		dmg: { title: `Pine ${pineVersion}` },
+		// `pine://pair` (ADR 0005): a page of the web client opens the app on this computer to add a device.
+		protocols: [{ name: "Pine", schemes: ["pine"] }],
 		linux: { target: ["AppImage"], icon: "assets/icon.png", category: "Development" },
 		win: { target: ["nsis"], icon: "assets/icon.png" },
 	},

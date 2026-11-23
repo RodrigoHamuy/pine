@@ -71,7 +71,7 @@ class PairedPinesTest {
 		pines.pair(link, "Pine on Pixel 9")
 		val code = computer.event("asked").getString("code")
 		val asking = sees("the four digits") { it.optJSONObject("pairing")?.has("code") == true }
-		assertEquals("""{"pairing":{"code":"$code","name":"Pine on Pixel 9"},"status":"starting"}""", sorted(asking))
+		assertEquals("""{"pairing":{"code":"$code","computer":"Test Mac","name":"Pine on Pixel 9"},"status":"starting"}""", sorted(asking))
 		assertTrue(page.states.any { sorted(it) == """{"pairing":{"name":"Pine on Pixel 9"},"status":"starting"}""" }, "the name first")
 		assertTrue(pines.hosts.isEmpty(), "nothing kept before the yes")
 		computer.command("allow")
@@ -217,6 +217,44 @@ class PairedPinesTest {
 		assertEquals("There are 20 machines already: forget one first, then add this device again at your computer.", told.getString("message"))
 		assertEquals(MAX_HOSTS, pines.hosts.size)
 		assertTrue(pines.hosts.none { it.startsWith(PAIRED) })
+	}
+
+	@Test
+	fun `a computer found on the network is paired without a code, the page sees its name with the digits, and a yes keeps it`() {
+		pines.ready()
+		computer.command("nearby on")
+		pines.pairNearby(computer.machineId, SERVICE, computer.nonce, "Pine on Pixel 9")
+		val code = computer.event("asked").getString("code")
+		val asking = sees("the four digits") { it.optJSONObject("pairing")?.has("code") == true }
+		assertEquals("""{"pairing":{"code":"$code","computer":"Test Mac","name":"Pine on Pixel 9"},"status":"starting"}""", sorted(asking))
+		computer.command("allow")
+		val ready = sees("ready") { it.optString("status") == "ready" }
+		val host = PAIRED + computer.machineId
+		assertEquals(host, ready.getString("host"))
+		assertEquals(host, pines.use)
+		assertEquals(PairedComputer(computer.machineId, SERVICE, "Test Mac"), pines.paired(host))
+	}
+
+	@Test
+	fun `a codeless request the computer does not let in is told to the page, and keeps nothing`() {
+		pines.ready()
+		pines.pairNearby(computer.machineId, SERVICE, computer.nonce, "Pine on Pixel 9")
+		val told = sees("the request not let in") { it.optString("status") == "error" }
+		assertEquals(PairWords.NOT_LET_IN, told.getString("message"))
+		assertEquals("ssh", told.getString("kind"))
+		assertFalse(told.has("host"))
+		assertTrue(pines.hosts.isEmpty())
+	}
+
+	@Test
+	fun `a codeless pairing with an id, a service or a nonce of another shape, or while another is open, is refused`() {
+		pines.ready()
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby("nope", SERVICE, computer.nonce, "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, "http://meet.test", computer.nonce, "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, "https://meet.test/", computer.nonce, "Pine on Pixel 9") }.message)
+		assertEquals(PairWords.NOT_NEARBY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, SERVICE, "short", "Pine on Pixel 9") }.message)
+		pines.pair(link(), "Pine on Pixel 9")
+		assertEquals(PairWords.BUSY, assertFailsWith<RemoteError> { pines.pairNearby(computer.machineId, SERVICE, computer.nonce, "Pine on Pixel 9") }.message)
 	}
 
 	/** A state as text, its keys in order, so that it is compared whole. */

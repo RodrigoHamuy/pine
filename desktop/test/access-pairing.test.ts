@@ -8,7 +8,7 @@ import type { Client, ClientChannel, ConnectConfig } from "ssh2";
 import { remoteCommand } from "../../src/remote.ts";
 import { type AccessServer, createAccessServer } from "../electron/access/server.ts";
 import { AccessStore, memoryVault, newEd25519Key } from "../electron/access/store.ts";
-import { type Ask, createPairing, type Pairing, type PairingOptions } from "../electron/access/pairing.ts";
+import { type Ask, createPairing, NEARBY_GAP_MS, NEARBY_PAUSE_MS, NEARBY_REQUEST_MS, NEARBY_SUSPEND_MS, NEARBY_USER, NEARBY_WINDOW_MS, type Pairing, type PairingOptions } from "../electron/access/pairing.ts";
 import { duplexPair } from "../electron/access/stand-in.ts";
 
 const SERVICE = "https://pine.example.workers.dev";
@@ -20,7 +20,7 @@ interface Setup {
 	pairing: Pairing;
 	browser: { private: string; public: Buffer };
 	/** What the owner was asked, in order. */
-	asked: Array<{ name: string; code: string; signal: AbortSignal }>;
+	asked: Array<{ name: string; code: string; kind?: string; signal: AbortSignal }>;
 	/** Answers the owner's next question (or the pending one). */
 	answer(yes: boolean): void;
 	connect(username: string, privateKey?: string): Promise<Client>;
@@ -341,4 +341,225 @@ test("pairing: the caller hears of a device that was paired, and the used pairin
 	assert.deepEqual(added, ["Firefox on Linux"]);
 	assert.equal(s.pairing.current(), undefined);
 	client.end();
+});
+
+// ---- codeless requests from the network (ADR 0005) ----------------------------------------------
+
+/** A clock the test moves: the pause, the suspension and the gap between sessions are counted on it. */
+function clockAt(start = 1_000_000) {
+	let now = start;
+	return { now: () => now, move: (ms: number) => void (now += ms) };
+}
+
+/** A pairing that takes codeless requests, on a clock of the test's own. */
+async function nearbySetup(options: Partial<PairingOptions> = {}) {
+	const clock = clockAt();
+	const s = await setup({ nearby: () => true, now: clock.now, ...options });
+	return { s, clock };
+}
+
+/** The user name of a codeless request with the announcement's nonce. */
+const nearbyUser = (s: Setup, nonce = s.pairing.nearbyNonce()) => `${NEARBY_USER}.${nonce}`;
+
+/** A new codeless session, past the gap after the one before. */
+function nearbyConnect(n: { s: Setup; clock: ReturnType<typeof clockAt> }, user = nearbyUser(n.s)) {
+	n.clock.move(NEARBY_GAP_MS);
+	return n.s.connect(user, newEd25519Key().private);
+}
+
+/** A codeless request on a new session, up to the four digits; rejects when the session is refused. */
+async function nearbyAsking(n: { s: Setup; clock: ReturnType<typeof clockAt> }, name = "Pine on Pixel 9") {
+	const before = n.s.asked.length;
+	const client = await nearbyConnect(n);
+	const answers = lines(await exec(client, request(name)));
+	const shown = await answers.next();
+	await until(() => n.s.asked.length > before);
+	return { client, answers, shown, question: n.s.asked[n.s.asked.length - 1] };
+}
+
+/** A codeless request the owner refuses, to its end. */
+async function refusedNearby(n: { s: Setup; clock: ReturnType<typeof clockAt> }) {
+	const r = await nearbyAsking(n);
+	n.s.answer(false);
+	assert.deepEqual(await r.answers.next(), { ok: false, reason: "refused" });
+	r.client.end();
+	await sleep(30);
+}
+
+/** A codeless request whose requester hangs up once the owner is asked. */
+async function hungUp(n: { s: Setup; clock: ReturnType<typeof clockAt> }) {
+	const r = await nearbyAsking(n);
+	r.client.end();
+	await until(() => r.question.signal.aborted);
+	await sleep(30);
+}
+
+test("nearby: with the announcement's nonce, a device asks while visible; the owner sees its name and the digits; the device is told this computer's name and its service; Allow pairs it", async () => {
+	const n = await nearbySetup();
+	const r = await nearbyAsking(n, "Pine on iPhone");
+	assert.match(r.shown.code, /^\d{4}$/);
+	assert.equal(r.shown.computer, "Studio Mac");
+	assert.equal(r.shown.service, SERVICE);
+	assert.equal(r.question.name, "Pine on iPhone");
+	assert.equal(r.question.code, r.shown.code);
+	assert.equal(r.question.kind, "nearby");
+	n.s.answer(true);
+	assert.deepEqual(await r.answers.next(), { ok: true, name: "Studio Mac" });
+	assert.equal(n.s.store.devices().length, 1);
+	r.client.end();
+});
+
+test("nearby: only the nonce of the announcement lets a device ask: none, a wrong one, or one two changes old is refused; the one before the last change still works", async () => {
+	const n = await nearbySetup();
+	const old = n.s.pairing.nearbyNonce();
+	await assert.rejects(nearbyConnect(n, NEARBY_USER), "the machine id alone, from an old link, is not enough");
+	await assert.rejects(nearbyConnect(n, `${NEARBY_USER}.${"A".repeat(22)}`));
+	await assert.rejects(nearbyConnect(n, `${NEARBY_USER}.`));
+	n.s.pairing.rotateNearbyNonce();
+	(await nearbyConnect(n, nearbyUser(n.s, old))).end();
+	await sleep(30);
+	n.s.pairing.rotateNearbyNonce();
+	await assert.rejects(nearbyConnect(n, nearbyUser(n.s, old)));
+	(await nearbyConnect(n)).end();
+	assert.equal(n.s.asked.length, 0);
+});
+
+test("nearby: refused while this computer is not visible, without asking the owner", async () => {
+	let visible = false;
+	const n = await nearbySetup({ nearby: () => visible });
+	await assert.rejects(nearbyConnect(n));
+	assert.equal(n.s.asked.length, 0);
+	visible = true;
+	(await nearbyConnect(n)).end();
+});
+
+test("nearby: one request at a time; another while one is pending is refused without being shown", async () => {
+	const n = await nearbySetup();
+	const first = await nearbyAsking(n);
+	await assert.rejects(nearbyConnect(n));
+	assert.equal(n.s.asked.length, 1, "the second was never shown");
+	n.s.answer(true);
+	await first.answers.next();
+	first.client.end();
+	await sleep(30);
+	(await nearbyAsking(n)).client.end();
+});
+
+test("nearby: no request while the owner is asked about a pairing's code", async () => {
+	const n = await nearbySetup();
+	const coded = await asking(n.s);
+	await assert.rejects(nearbyConnect(n));
+	assert.equal(n.s.asked.length, 1);
+	coded.client.end();
+});
+
+test("nearby: a codeless session let in before a code's request cannot ask while that one is asked, nor the reverse", async () => {
+	const n = await nearbySetup();
+	// Let in first, asking later: by then the owner is asked about a code's request.
+	const early = await nearbyConnect(n);
+	const coded = await asking(n.s);
+	await assert.rejects(exec(early, request("Pine on Pixel 9")));
+	assert.equal(n.s.asked.length, 1);
+	n.s.answer(false);
+	await coded.answers.next();
+	coded.client.end();
+	early.end();
+	await sleep(30);
+	// The reverse: a codeless question stands, and a code's session asks.
+	const near = await nearbyAsking(n);
+	const client = await n.s.connect(`pair.${codeOf(n.s.pairing.open().link, n.s.store.machineId())}`);
+	await assert.rejects(exec(client, request("Safari on iPhone")));
+	assert.equal(n.s.asked.length, 2);
+	client.end();
+	near.client.end();
+});
+
+test("nearby: a session that leaves without asking gives its place back", async () => {
+	const n = await nearbySetup();
+	(await nearbyConnect(n)).end();
+	await sleep(50);
+	(await nearbyAsking(n)).client.end();
+});
+
+test("nearby: codeless sessions are let in no closer than a few seconds apart, so that one that never asks cannot hold the place", async () => {
+	const n = await nearbySetup();
+	(await nearbyConnect(n)).end();
+	await sleep(50);
+	n.clock.move(-NEARBY_GAP_MS + 1);
+	await assert.rejects(nearbyConnect(n), "too soon after the last one");
+	(await nearbyConnect(n)).end();
+	// And one that never asks loses its place after a few seconds.
+	await sleep(30);
+	const quiet = await nearbySetup({ answerMs: 50 });
+	assert.ok(NEARBY_REQUEST_MS <= 10_000);
+	const held = await nearbyConnect(quiet);
+	await assert.rejects(nearbyConnect(quiet), "the place is held");
+	held.end();
+});
+
+test("nearby: after a refusal every codeless request is refused for 30 seconds", async () => {
+	const n = await nearbySetup();
+	await refusedNearby(n);
+	await assert.rejects(nearbyConnect(n));
+	n.clock.move(NEARBY_PAUSE_MS - 2 * NEARBY_GAP_MS - 1);
+	await assert.rejects(nearbyConnect(n));
+	assert.equal(n.s.asked.length, 1);
+	n.clock.move(1);
+	(await nearbyAsking(n)).client.end();
+});
+
+test("nearby: a requester that asks and hangs up is paused as a refused one, and three hang-ups in ten minutes suspend visibility", async () => {
+	const said: Date[] = [];
+	const n = await nearbySetup({ suspended: (until) => said.push(until) });
+	await hungUp(n);
+	await assert.rejects(nearbyConnect(n), "paused after a hang-up");
+	assert.equal(n.s.asked.length, 1);
+	for (let i = 0; i < 2; i++) {
+		n.clock.move(NEARBY_PAUSE_MS);
+		await hungUp(n);
+	}
+	assert.equal(said.length, 1, "suspended after three hang-ups");
+	n.clock.move(NEARBY_PAUSE_MS);
+	await assert.rejects(nearbyConnect(n));
+	assert.equal(n.s.asked.length, 3, "no toast after that");
+});
+
+test("nearby: a request the owner lets expire counts as a refusal", async () => {
+	const n = await nearbySetup({ answerMs: 50 });
+	const r = await nearbyAsking(n);
+	assert.deepEqual(await r.answers.next(), { ok: false, reason: "expired" });
+	r.client.end();
+	await sleep(30);
+	await assert.rejects(nearbyConnect(n));
+	n.clock.move(NEARBY_PAUSE_MS);
+	(await nearbyAsking(n)).client.end();
+});
+
+test("nearby: three refusals within ten minutes suspend visibility for an hour, said once; resume ends it", async () => {
+	const said: Date[] = [];
+	const n = await nearbySetup({ suspended: (until) => said.push(until) });
+	for (let i = 0; i < 3; i++) {
+		await refusedNearby(n);
+		n.clock.move(NEARBY_PAUSE_MS);
+	}
+	assert.equal(said.length, 1);
+	assert.equal(n.s.pairing.suspendedUntil()?.getTime(), said[0].getTime());
+	await assert.rejects(nearbyConnect(n));
+	n.clock.move(NEARBY_SUSPEND_MS - 2 * NEARBY_PAUSE_MS);
+	await assert.rejects(nearbyConnect(n));
+	assert.equal(n.s.asked.length, 3);
+	n.s.pairing.resume();
+	assert.equal(n.s.pairing.suspendedUntil(), undefined);
+	(await nearbyAsking(n)).client.end();
+});
+
+test("nearby: refusals further apart than ten minutes do not suspend", async () => {
+	const said: Date[] = [];
+	const n = await nearbySetup({ suspended: (until) => said.push(until) });
+	for (let i = 0; i < 3; i++) {
+		await refusedNearby(n);
+		n.clock.move(NEARBY_WINDOW_MS / 2 + 1);
+	}
+	assert.equal(said.length, 0);
+	assert.equal(n.s.pairing.suspendedUntil(), undefined);
 });

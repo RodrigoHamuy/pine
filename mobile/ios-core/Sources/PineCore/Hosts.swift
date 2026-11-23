@@ -58,9 +58,13 @@ public struct SshHost: Equatable, Sendable {
 	}
 }
 
-/** The groups of a whole match of `pattern` in `text` (an empty string for a group that took no part), or nil. */
+/**
+ * The groups of a whole match of `pattern` in `text` (an empty string for a group that took no part),
+ * or nil. Whole means to the last character: `\z`, since ICU's `$` also matches before a line break
+ * that ends the text.
+ */
 func wholeMatch(_ pattern: String, _ text: String) -> [String]? {
-	let regex = try! NSRegularExpression(pattern: "^(?:\(pattern))$")
+	let regex = try! NSRegularExpression(pattern: "^(?:\(pattern))\\z")
 	let all = NSRange(text.startIndex..., in: text)
 	guard let m = regex.firstMatch(in: text, range: all) else { return nil }
 	return (0..<m.numberOfRanges).map { i in

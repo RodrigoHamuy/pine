@@ -2,6 +2,7 @@
 // with scripts only. The bridge holds the browser's key, the SSH connection and the daemon's token;
 // the page, under an opaque origin, reaches none of them and asks by message (serve.ts).
 import { chooseApp, choiceView, onIosDevice } from "./app-choice.ts";
+import { isDesktopBrowser } from "../../desktop/src/machines.ts";
 import { webBridge } from "./host.ts";
 import { idbStore } from "./idb-store.ts";
 import { takePairLink } from "./pairing.ts";
@@ -61,6 +62,8 @@ async function main() {
 		version: __PINE_WEB_VERSION__,
 		// A new tab that gets no handle on this document, and is not told where it was opened from.
 		open: (url) => void window.open(url, "_blank", "noopener,noreferrer"),
+		// From this document, the top one: the browser asks the owner before it hands the address to the app.
+		openApp: isDesktopBrowser(navigator.userAgent, navigator.maxTouchPoints) ? () => location.assign("pine://pair") : undefined,
 		save: (name, text) => {
 			const a = document.createElement("a");
 			a.href = URL.createObjectURL(new Blob([text], { type: "text/plain;charset=utf-8" }));

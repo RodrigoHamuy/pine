@@ -23,11 +23,17 @@ final class AccessHost: @unchecked Sendable {
 	private(set) var service = ""
 	/** This computer's machine id. */
 	private(set) var machineId = ""
+	/** The nonce its announcement carries now, which a codeless request names; `rotate()` changes it. */
+	private(set) var nonce = ""
 
-	/** Starts the helper; `serviceLine` points the access host at a daemon of the test's own. */
+	/**
+	 * Starts the helper; `serviceLine` points the access host at a daemon of the test's own. The meeting
+	 * service it names (in a pairing link, on the pairing channel) is `TEST_SERVICE`, which a test's
+	 * `Remote` routes to `service`.
+	 */
 	static func start(serviceLine: String? = nil, name: String = "Test Mac", options: [String] = []) async throws -> AccessHost {
 		let host = AccessHost()
-		try host.run(["--computer-name", name] + (serviceLine.map { ["--service-line", $0] } ?? []) + options)
+		try host.run(["--computer-name", name, "--service-name", TEST_SERVICE] + (serviceLine.map { ["--service-line", $0] } ?? []) + options)
 		let ready = try await host.next { _ in true }
 		guard ready["t"] as? String == "ready" else {
 			await host.stop()
@@ -35,6 +41,7 @@ final class AccessHost: @unchecked Sendable {
 		}
 		host.service = ready["service"] as! String
 		host.machineId = ready["machineId"] as! String
+		host.nonce = ready["nonce"] as! String
 		return host
 	}
 
@@ -79,6 +86,14 @@ final class AccessHost: @unchecked Sendable {
 		let answer = try await next(after: from) { ($0["t"] as? String) == word || (($0["t"] as? String) == "error" && ($0["to"] as? String) == word) }
 		if answer["t"] as? String == "error" { throw HelperTrouble(description: "\(word): \(answer["message"] ?? "")") }
 		return answer
+	}
+
+	/** A new nonce, as the announcement gets every few minutes: the one before still works, not the one before that. */
+	@discardableResult
+	func rotate() async throws -> String {
+		let fresh = try await command("rotate")["nonce"] as! String
+		nonce = fresh
+		return fresh
 	}
 
 	/** Pairs the phone's key directly, as if the owner had allowed it before. */

@@ -64,8 +64,8 @@ const bridge = {
 	copyPairingLink: () => ipcRenderer.invoke("pine:access-copy") as Promise<void>,
 	/** Closes the open pairing (the dialog was closed). */
 	cancelPairing: () => ipcRenderer.invoke("pine:access-cancel") as Promise<void>,
-	/** The owner's answer to the state's `request`: true allows the device. */
-	answerPairing: (yes: boolean) => ipcRenderer.invoke("pine:access-answer", yes) as Promise<void>,
+	/** The owner's answer to the state's `request` named by its `id`: true allows the device. */
+	answerPairing: (yes: boolean, id: string) => ipcRenderer.invoke("pine:access-answer", yes, id) as Promise<void>,
 	/** Forgets a paired device and cuts its connection. */
 	removeDevice: (id: string) => ipcRenderer.invoke("pine:access-remove", id) as Promise<boolean>,
 	/** The state of browser access, each time it changes. */

@@ -27,7 +27,8 @@ extension PeerRig {
 	/** The link of a pairing opened at the computer, as the QR code carries it (its service an https origin). */
 	func openedLink() async throws -> String {
 		let link = try #require(try await host.command("open")["link"] as? String)
-		return TEST_SERVICE + link.dropFirst(host.service.count)
+		#expect(link.hasPrefix(TEST_SERVICE + "/#pair="))
+		return link
 	}
 
 	/** Paired by the owner's yes, through `pines`, and reached: the device's id at the computer. */
@@ -56,7 +57,7 @@ struct PinesPairingTests {
 			let states = page.states
 			let pairing = states.compactMap { $0["pairing"] as? [String: String] }
 			#expect(pairing.first == ["name": "Pine on iPhone 17 Pro"])
-			#expect(pairing.last == ["name": "Pine on iPhone 17 Pro", "code": rig.host.events("asked").first?["code"] as? String ?? "?"])
+			#expect(pairing.last == ["name": "Pine on iPhone 17 Pro", "code": rig.host.events("asked").first?["code"] as? String ?? "?", "computer": "Test Mac"])
 			#expect(states.contains { $0["status"] as? String == "starting" && $0["host"] as? String == host })
 			#expect(page.last?["host"] as? String == host)
 			#expect(page.last?["label"] as? String == "Test Mac")
@@ -73,7 +74,7 @@ struct PinesPairingTests {
 	@Test("a link whose service is not https is refused")
 	func httpRefused() async throws {
 		try await withPairedPines { rig, pines, page in
-			let link = try #require(try await rig.host.command("open")["link"] as? String)
+			let link = rig.host.service + (try await rig.openedLink()).dropFirst(TEST_SERVICE.count)
 			#expect(link.hasPrefix("http://"))
 			#expect(throws: RemoteError.self) { try pines.pair(link, name: "Pine on a test") }
 			#expect(throws: RemoteError.self) { try pines.pair("pine://pair?service=http%3A%2F%2F127.0.0.1&id=\(rig.host.machineId)&code=\(String(repeating: "A", count: 22))", name: "Pine on a test") }
@@ -195,6 +196,41 @@ struct PinesPairingTests {
 			// Made again whole; a first attempt that a loaded machine lets go of is tried again by itself.
 			try await eventually("ready again") { page.status == "ready" }
 			#expect(rig.connections(device) >= 2)
+		}
+	}
+
+	@Test("a computer found on the network is paired without a code: its name comes with the digits, and a yes keeps it")
+	func nearby() async throws {
+		try await withPairedPines { rig, pines, page in
+			pines.ready()
+			try await rig.host.command("nearby on")
+			try pines.pairNearby(id: rig.host.machineId, service: TEST_SERVICE, nonce: rig.host.nonce, name: "Pine on iPhone 17 Pro")
+			try await eventually("the four digits") { (page.last?["pairing"] as? [String: String])?["code"] != nil }
+			let code = try #require(rig.host.events("asked").first?["code"] as? String)
+			#expect(page.last?["pairing"] as? [String: String] == ["name": "Pine on iPhone 17 Pro", "code": code, "computer": "Test Mac"])
+			try await rig.host.command("allow")
+			try await eventually("ready") { page.status == "ready" }
+			let host = "paired:\(rig.host.machineId)"
+			#expect(page.last?["host"] as? String == host)
+			#expect(pines.inUse == host)
+			#expect(pines.paired(host) == PairedComputer(id: rig.host.machineId, service: TEST_SERVICE, name: "Test Mac"))
+		}
+	}
+
+	@Test("a codeless request the computer does not let in is told to the page; an id, a service or a nonce of another shape is refused")
+	func nearbyRefused() async throws {
+		try await withPairedPines { rig, pines, page in
+			let nonce = rig.host.nonce
+			#expect(throws: RemoteError.self) { try pines.pairNearby(id: "nope", service: TEST_SERVICE, nonce: nonce, name: "Pine on a test") }
+			#expect(throws: RemoteError.self) { try pines.pairNearby(id: rig.host.machineId, service: "http://pine.test", nonce: nonce, name: "Pine on a test") }
+			#expect(throws: RemoteError.self) { try pines.pairNearby(id: rig.host.machineId, service: TEST_SERVICE + "/", nonce: nonce, name: "Pine on a test") }
+			#expect(throws: RemoteError.self) { try pines.pairNearby(id: rig.host.machineId, service: TEST_SERVICE, nonce: "short", name: "Pine on a test") }
+			#expect(page.states.isEmpty)
+			try pines.pairNearby(id: rig.host.machineId, service: TEST_SERVICE, nonce: nonce, name: "Pine on a test")
+			try await eventually("not let in") { page.status == "error" }
+			#expect(page.last?["message"] as? String == PairWords.notLetIn)
+			#expect(page.last?["host"] == nil)
+			#expect(pines.hosts.isEmpty)
 		}
 	}
 }
