@@ -165,7 +165,12 @@ export interface AccessChange {
 export interface Announcement {
 	id: string;
 	service: string;
+	/** A random word that changes every few minutes (`NONCE_MS`): a codeless request names it, so only a device that hears the announcement can ask. */
+	nonce: string;
 }
+
+/** How often the announcement's nonce changes while it is announced. The one before keeps working until the next change. */
+export const NONCE_MS = 5 * 60_000;
 
 /** The access host as the control drives it. `opened` is the stand-in's alone: it tells a stand-in phone the link. */
 export type Host = AccessHost & { opened?(link: string): void };
@@ -194,6 +199,8 @@ export interface AccessControlOptions {
 	tryRelay?: (relay: RelayServer) => Promise<RelayTry>;
 	/** Announces this computer on the local network, or with none stops (the app's Bonjour). Called when what is announced changes. */
 	announce?: (what: Announcement | undefined) => void;
+	/** How often the nonce changes (`NONCE_MS`; a test's own). */
+	nonceMs?: number;
 	/** The owner is asked about a device (the app's notification while it is in the background). */
 	asked?: (request: PairingRequest) => void;
 }
@@ -205,7 +212,7 @@ export interface AccessControl {
 	openPairing(): Promise<{ link: string; expires: string }>;
 	cancelPairing(): Promise<void>;
 	/** The owner's answer to the question about a device. */
-	answer(yes: boolean): Promise<void>;
+	answer(yes: boolean, id?: string): Promise<void>;
 	remove(id: string): Promise<boolean>;
 	/** At the app's start: the host starts when browser access was left on. */
 	start(): Promise<void>;
@@ -251,6 +258,8 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	let expiry: ReturnType<typeof setTimeout> | undefined;
 	/** The end of a suspension of visibility, when the announcement comes back. */
 	let pauseEnd: ReturnType<typeof setTimeout> | undefined;
+	/** The nonce's change, every `NONCE_MS` while the host runs: each one is announced anew. */
+	let rotation: ReturnType<typeof setInterval> | undefined;
 	/** What is announced now, as a key: announced again only when it changes. */
 	let announced = "";
 	/** Starting and stopping the host, one after the other. */
@@ -278,8 +287,8 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	function announce(): void {
 		const prefs = options.prefs.read();
 		let what: Announcement | undefined;
-		if (host && prefs.enabled && visibleOf(prefs) && host.status() === "waiting" && !pairing?.suspendedUntil()) what = { id: host.store.machineId(), service: serviceOf(prefs) };
-		const key = what ? `${what.id} ${what.service}` : "";
+		if (host && prefs.enabled && visibleOf(prefs) && host.status() === "waiting" && !pairing?.suspendedUntil()) what = { id: host.store.machineId(), service: serviceOf(prefs), nonce: pairing!.nearbyNonce() };
+		const key = what ? `${what.id} ${what.service} ${what.nonce}` : "";
 		if (key === announced) return;
 		announced = key;
 		try {
@@ -378,7 +387,7 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	/** The owner is asked about a device: the question stands until answered or withdrawn. */
 	const ask = (request: PairingRequest, signal: AbortSignal) =>
 		new Promise<boolean>((resolve) => {
-			const mine = { request: { name: request.name, code: request.code, ...(request.kind ? { kind: request.kind } : {}) }, resolve };
+			const mine = { request: { id: request.id, name: request.name, code: request.code, ...(request.kind ? { kind: request.kind } : {}) }, resolve };
 			asking = mine;
 			options.asked?.({ ...mine.request });
 			signal.addEventListener(
@@ -428,6 +437,11 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 				onStatus: (_status: HostStatus) => emit(),
 				report: () => emit(),
 			});
+			clearInterval(rotation);
+			rotation = setInterval(() => {
+				pairing?.rotateNearbyNonce();
+				emit();
+			}, options.nonceMs ?? NONCE_MS);
 		} catch (e) {
 			failure = { kind: "failed", message: `Browser access could not start: ${e instanceof Error ? e.message : String(e)}` };
 		}
@@ -435,6 +449,7 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 	}
 
 	async function down(): Promise<void> {
+		clearInterval(rotation);
 		clearTimeout(expiry);
 		clearTimeout(pauseEnd);
 		pairing?.cancel();
@@ -527,9 +542,11 @@ export function createAccessControl(options: AccessControlOptions): AccessContro
 			pairing?.cancel();
 			emit();
 		},
-		async answer(yes) {
+		async answer(yes, id) {
 			const now = asking;
 			if (!now) throw new Error("No device is waiting for an answer now.");
+			// The answer is to the question the owner saw: never to another one that took its place meanwhile.
+			if (id !== now.request.id) throw new Error("That device is no longer the one asking: look at the question again.");
 			asking = undefined;
 			now.resolve(yes === true);
 			emit();

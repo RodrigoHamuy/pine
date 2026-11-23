@@ -159,13 +159,15 @@ export interface PinePlugin {
 	nearby(options: { on: boolean }): Promise<void>;
 	/**
 	 * Pair with a computer found on the network, without a code: as `pair`, but the SSH user is
-	 * `nearby` (desktop/electron/access/pairing.ts `NEARBY_USER`) and nothing of a code is sent. `id` is
-	 * the machine id the announcement carried, `service` the https origin of its meeting service. The
-	 * host key is checked against `id` as for a link: an announcement is not trusted, the four digits
-	 * are what the owner compares. The states are `pair`'s, with the computer's name once the computer
-	 * gave it (`pairing.computer`). Rejects an id or a service of another shape, and a second pairing.
+	 * `nearby.<nonce>` (desktop/electron/access/pairing.ts `NEARBY_USER`), the nonce the announcement
+	 * carried, which only a device on that network hears. `id` is the machine id the announcement carried,
+	 * `service` the https origin of its meeting service. The host key is checked against `id` as for a
+	 * link: an announcement is not trusted, the four digits are what the owner compares. The computer
+	 * then states its service with the digits; a pairing whose announcement named another one is
+	 * refused, and the stated one is kept. The states are `pair`'s, with the computer's name once the
+	 * computer gave it (`pairing.computer`). Rejects an id, a service or a nonce of another shape, and a second pairing.
 	 */
-	pairNearby(options: { id: string; service: string }): Promise<void>;
+	pairNearby(options: { id: string; service: string; nonce: string }): Promise<void>;
 
 	/** The page's state of the connection changed (as `pine:service` on the desktop). */
 	addListener(event: "service", fn: (data: { state: ServiceState }) => void): Promise<PluginListenerHandle>;
@@ -189,5 +191,5 @@ export interface PinePlugin {
 	 * `nearby({on: true})`. `denied`: the system refused the local network to the app (iOS), so that
 	 * nothing can be found until the owner allows it in Settings > Pine.
 	 */
-	addListener(event: "nearby", fn: (data: { computers: { id: string; service: string }[]; denied?: boolean }) => void): Promise<PluginListenerHandle>;
+	addListener(event: "nearby", fn: (data: { computers: { id: string; service: string; nonce: string }[]; denied?: boolean }) => void): Promise<PluginListenerHandle>;
 }

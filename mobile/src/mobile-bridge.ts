@@ -8,6 +8,9 @@ import { isPaired, MACHINE_ID, type NearbyFound, readPairLink } from "../../desk
 import { cleanLook, type Look } from "../../desktop/src/theme.ts";
 import { ORIGINS, type PagePrefs, type PinePlugin, type Platform } from "./plugin.ts";
 
+/** The nonce of a computer's announcement: 16 random bytes, base64url. */
+const NONCE = /^[A-Za-z0-9_-]{22}$/;
+
 const DEFAULTS: PagePrefs = { notify: false, updates: false, keepRunning: false };
 
 /** pmndre's page color (index.css), which the page draws with no theme: the system bars' until one is known. */
@@ -67,7 +70,7 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 	let canNearby = false;
 	/** The page's listeners of what is found on the network: the native side looks while there is one. */
 	const finders = new Set<(found: NearbyFound) => void>();
-	const nearbyEvents = on("nearby", (d) => ({ computers: Array.isArray(d?.computers) ? d.computers.filter((c: any) => typeof c?.id === "string" && MACHINE_ID.test(c.id) && typeof c?.service === "string" && /^https:\/\/[^/]+$/.test(c.service)).map((c: any) => ({ id: c.id, service: c.service })) : [], ...(d?.denied === true ? { denied: true } : {}) }));
+	const nearbyEvents = on("nearby", (d) => ({ computers: Array.isArray(d?.computers) ? d.computers.filter((c: any) => typeof c?.id === "string" && MACHINE_ID.test(c.id) && typeof c?.service === "string" && /^https:\/\/[^/]+$/.test(c.service) && typeof c?.nonce === "string" && NONCE.test(c.nonce)).map((c: any) => ({ id: c.id, service: c.service, nonce: c.nonce })) : [], ...(d?.denied === true ? { denied: true } : {}) }));
 
 	return {
 		mediaBase: ORIGINS[platform].media,
@@ -159,9 +162,9 @@ export function mobileBridge(plugin: PinePlugin, platform: Platform): PageBridge
 				if (finders.delete(fn) && finders.size === 0) void plugin.nearby({ on: false }).catch(() => {});
 			};
 		},
-		pairNearby: async (id: string, service: string) => {
-			if (!canNearby || !MACHINE_ID.test(id) || !/^https:\/\/[^/]+$/.test(service)) throw new Error("That is not a computer this phone can pair with. Look again, or pair with the code from Pine > Add a device.");
-			await plugin.pairNearby({ id, service });
+		pairNearby: async (id: string, service: string, nonce: string) => {
+			if (!canNearby || !MACHINE_ID.test(id) || !/^https:\/\/[^/]+$/.test(service) || !NONCE.test(nonce)) throw new Error("That is not a computer this phone can pair with. Look again, or pair with the code from Pine > Add a device.");
+			await plugin.pairNearby({ id, service, nonce });
 		},
 		onPairLink: on("link", (d) => (typeof d?.link === "string" ? d.link : ""), (link) => !link),
 		deviceKey: async () => {

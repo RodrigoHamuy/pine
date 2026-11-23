@@ -31,7 +31,10 @@ export const PAIR_COMMAND = "pine-pair";
 export const NO_NAME = "Unnamed device";
 /** The prefix of the id a pairing session has in the access server's reports and for `cut`. */
 export const PAIRING_ID = "pairing:";
-/** The user name of a codeless pairing session, from a device that found this computer on the network. */
+/**
+ * The user name of a codeless pairing session, from a device that found this computer on the network:
+ * this word, a dot, and the nonce of the announcement it heard (`nearby.<nonce>`).
+ */
 export const NEARBY_USER = "nearby";
 /** How long codeless requests are refused after the owner refused one. */
 export const NEARBY_PAUSE_MS = 30_000;
@@ -40,7 +43,11 @@ export const NEARBY_REFUSALS = 3;
 export const NEARBY_WINDOW_MS = 10 * 60_000;
 export const NEARBY_SUSPEND_MS = 60 * 60_000;
 /** How long a codeless session that was let in has to make its request: its place is the only one. */
-export const NEARBY_REQUEST_MS = 30_000;
+export const NEARBY_REQUEST_MS = 10_000;
+/** The least time between two codeless sessions let in, so that one that never asks cannot hold the place without a break. */
+export const NEARBY_GAP_MS = 3_000;
+/** A nonce of the announcement: 16 random bytes, base64url. */
+const NONCE = /^[A-Za-z0-9_-]{22}$/;
 
 /** Why a request did not end in a pairing: the owner said no, time ran out, the device left, the owner closed the pairing. */
 export type Ended = "refused" | "expired" | "closed" | "cancelled";
@@ -50,6 +57,8 @@ export type Ended = "refused" | "expired" | "closed" | "cancelled";
  * and how it came: with a pairing's code (`code`), or from the network without one (`nearby`).
  */
 export interface PairingRequest {
+	/** Which question this is: the owner's answer names it, so that it never goes to another one. */
+	id: string;
 	name: string;
 	code: string;
 	kind?: "code" | "nearby";
@@ -74,6 +83,8 @@ export interface PairingOptions {
 	paired?: (device: Device) => void;
 	pairingMs?: number;
 	answerMs?: number;
+	/** The least time between two codeless sessions (`NEARBY_GAP_MS`; the native cores' helper sets none, its tests ask in a row). */
+	nearbyGapMs?: number;
 	/**
 	 * Whether a codeless request may come in now: browser access on, and the owner keeps this computer
 	 * visible on the network. Left out: never.
@@ -104,6 +115,10 @@ export interface Pairing {
 	suspendedUntil(): Date | undefined;
 	/** The owner turned visibility back on: the suspension, the pause and the refusals counted so far are forgotten. */
 	resume(): void;
+	/** The nonce the announcement carries now; a codeless request names it, or the one before it. */
+	nearbyNonce(): string;
+	/** A new nonce (the app does it every few minutes while it announces): the one before still works, the older one no longer. */
+	rotateNearbyNonce(): void;
 }
 
 /** A request under way: an open pairing's, or a codeless one's (`kind`). */
@@ -156,10 +171,20 @@ export function createPairing(options: PairingOptions): Pairing {
 	/** Codeless requests are refused until then (after a refusal), and until `suspendedUntil` (after too many). */
 	let pausedUntil = 0;
 	let suspendedUntil = 0;
-	/** When the owner refused codeless requests, within the last `NEARBY_WINDOW_MS`. */
+	/** When the owner refused codeless requests (or a requester hung up or let one expire), within the last `NEARBY_WINDOW_MS`. */
 	let refusals: number[] = [];
+	/** When the last codeless session was let in. */
+	let lastNearby = -Infinity;
+	/** The announcement's nonce and the one before it, as digests: compared in constant time. */
+	const fresh = () => randomBytes(16).toString("base64url");
+	let nonce = fresh();
+	let nonces: Buffer[] = [digestOf(nonce)];
 
-	/** The owner refused a codeless request: a pause, and after too many in a short time the suspension. */
+	/**
+	 * A codeless request ended without a yes: the owner refused it, or the requester hung up or let it
+	 * expire after it was shown (otherwise hanging up would ask again and again for free). A pause, and
+	 * after too many in a short time the suspension.
+	 */
 	const refusedNearby = () => {
 		const now = clock();
 		pausedUntil = now + NEARBY_PAUSE_MS;
@@ -175,7 +200,7 @@ export function createPairing(options: PairingOptions): Pairing {
 		if (open === which) open = undefined;
 		if (nearby === which) {
 			nearby = undefined;
-			if (why === "refused") refusedNearby();
+			if (why === "refused" || (which.asked && (why === "closed" || why === "expired"))) refusedNearby();
 		}
 		if (!which.decided) {
 			which.decided = true;
@@ -190,6 +215,9 @@ export function createPairing(options: PairingOptions): Pairing {
 		const name = requested(command);
 		// One request per pairing: a second exec on the same session is refused.
 		if (name === undefined || which.abort.signal.aborted || which.asked) return false;
+		// One question at a time, whichever came first: a codeless one never stands beside a code's, nor the reverse.
+		const other = which.kind === "nearby" ? open : nearby;
+		if (other?.asked && !other.decided) return false;
 		which.asked = true;
 		const channel = accept();
 		const code = String(randomInt(0, 10_000)).padStart(4, "0");
@@ -206,10 +234,12 @@ export function createPairing(options: PairingOptions): Pairing {
 		clearTimeout(which.timer);
 		which.timer = setTimeout(() => close(which, "expired"), answerMs);
 		// The device is told this computer's name with the digits: it found it by a machine id alone.
-		channel.write(`${JSON.stringify({ code, computer: computerName() })}\n`);
+		// And the meeting service it is reached at, said by the computer that holds the key: a phone keeps this
+		// one, never what an announcement on the network said.
+		channel.write(`${JSON.stringify({ code, computer: computerName(), service: options.service.replace(/\/+$/, "") })}\n`);
 
 		const withdrawn = new Promise<false>((resolve) => signal.addEventListener("abort", () => resolve(false), { once: true }));
-		Promise.race([Promise.resolve().then(() => options.ask({ name, code, kind: which.kind }, signal)), withdrawn])
+		Promise.race([Promise.resolve().then(() => options.ask({ id: randomBytes(9).toString("base64url"), name, code, kind: which.kind }, signal)), withdrawn])
 			.then(async (yes) => {
 				if (!signal.aborted) which.decided = true;
 				if (signal.aborted) return finish(false, { ok: false, reason: signal.reason === "expired" ? "expired" : "refused" });
@@ -236,9 +266,12 @@ export function createPairing(options: PairingOptions): Pairing {
 	const busy = () => Boolean(nearby || (open?.asked && !open.decided));
 
 	/** A codeless request: let in only while it may come, one at a time, outside the pause and the suspension. Refused without a word. */
-	const admitNearby = (key: Parameters<Admit>[1]) => {
+	const admitNearby = (given: string, key: Parameters<Admit>[1]) => {
 		const now = clock();
-		if (!options.nearby?.() || busy() || now < pausedUntil || now < suspendedUntil) return false;
+		// Only a device that heard the announcement knows its nonce: the machine id alone, which old links carry, is not enough.
+		const heard = NONCE.test(given) && nonces.some((d) => timingSafeEqual(digestOf(given), d));
+		if (!heard || !options.nearby?.() || busy() || now < pausedUntil || now < suspendedUntil || now - lastNearby < (options.nearbyGapMs ?? NEARBY_GAP_MS)) return false;
+		lastNearby = now;
 		const which: Open = { kind: "nearby", opened: { link: "", expires: new Date(now + NEARBY_REQUEST_MS) }, digest: Buffer.alloc(0), wrong: 0, abort: new AbortController(), timer: setTimeout(() => close(which, "expired"), NEARBY_REQUEST_MS) };
 		which.session = `${PAIRING_ID}${randomBytes(9).toString("base64url")}`;
 		nearby = which;
@@ -247,7 +280,7 @@ export function createPairing(options: PairingOptions): Pairing {
 	};
 
 	const admit: Admit = (user, key) => {
-		if (user === NEARBY_USER) return admitNearby(key);
+		if (user.startsWith(`${NEARBY_USER}.`)) return admitNearby(user.slice(NEARBY_USER.length + 1), key);
 		if (!user.startsWith(PAIR_USER)) return paired(user, key);
 		const which = open;
 		// A wrong code, or a code with no pairing open, closes the connection.
@@ -284,6 +317,11 @@ export function createPairing(options: PairingOptions): Pairing {
 			suspendedUntil = 0;
 			pausedUntil = 0;
 			refusals = [];
+		},
+		nearbyNonce: () => nonce,
+		rotateNearbyNonce() {
+			nonce = fresh();
+			nonces = [digestOf(nonce), nonces[0]];
 		},
 	};
 }

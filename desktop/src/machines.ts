@@ -121,8 +121,11 @@ export function httpService(text: string): string | undefined {
  */
 export const deviceWord = (platform: string): "phone" | "browser" => (platform === "android" || platform === "ios" ? "phone" : "browser");
 
-/** A computer that announces itself on this network (ADR 0005): its machine id and its meeting service's https origin. Unproven: the digits are. */
-export type NearbyComputer = { id: string; service: string };
+/**
+ * A computer that announces itself on this network (ADR 0005): its machine id, its meeting service's
+ * https origin, and the nonce a request has to name. Unproven: the digits are.
+ */
+export type NearbyComputer = { id: string; service: string; nonce: string };
 /** What a bridge that looks on the network found: every computer, and whether the system refused the app the local network (iOS). */
 export type NearbyFound = { computers: NearbyComputer[]; denied?: boolean };
 

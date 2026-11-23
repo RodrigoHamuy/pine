@@ -357,6 +357,8 @@ async function pairFromAddress(url: string): Promise<void> {
 	if (!access) return;
 	const now = await access.state();
 	if (!now.enabled || now.status === "off") return;
+	// A pairing open or a device asking stays as it is: opening one would cancel it, and any site may send this address.
+	if (now.pairing || now.request) return;
 	const opened = await access.openPairing().catch(() => undefined);
 	if (!opened) return;
 	openOutside(opened.link);
@@ -364,6 +366,8 @@ async function pairFromAddress(url: string): Promise<void> {
 	else pairingShown = true;
 }
 let pairingShown = false;
+/** Addresses the system handed the app before browser access existed (`open-url` on a cold start). */
+const pendingAddresses: string[] = [];
 
 /** Where the app is the system's handler of `pine:`: a packed app, or a checkout that asks for it. Never in a test. */
 function registerScheme(): void {
@@ -791,7 +795,7 @@ function wire(): void {
 		if (!pairing) throw new Error("No pairing is open now: press Add a device.");
 		clipboard.writeText(pairing.link);
 	});
-	handle("pine:access-answer", (yes: unknown) => accessOn().answer(yes === true));
+	handle("pine:access-answer", (yes: unknown, id: unknown) => accessOn().answer(yes === true, typeof id === "string" ? id.slice(0, 64) : undefined));
 	handle("pine:access-remove", (id: unknown) => {
 		if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("That is not a device of the list.");
 		return accessOn().remove(id);
@@ -889,16 +893,18 @@ if (!app.requestSingleInstanceLock()) app.quit();
 else {
 	app.on("second-instance", (_e, argv) => {
 		// On Windows and Linux an address the system opens the app with comes as an argument of a second start.
+		show();
 		const address = argv.find((a) => a.toLowerCase().startsWith("pine:"));
 		if (address) return void pairFromAddress(address);
-		show();
 		const dir = argv.slice(1).find((a) => !a.startsWith("-") && path.isAbsolute(a));
 		if (dir) openFolder(dir);
 	});
 	// On macOS an address comes as an event, also before the app is ready.
 	app.on("open-url", (e, url) => {
 		e.preventDefault();
-		void pairFromAddress(url);
+		// A cold start: the address comes before the app is ready, and is kept until browser access exists.
+		if (!accessStarted) pendingAddresses.push(url);
+		else void pairFromAddress(url);
 	});
 	app.on("open-file", (e, file) => {
 		e.preventDefault();
@@ -916,6 +922,7 @@ else {
 		wire();
 		startAccess();
 		registerScheme();
+		for (const url of pendingAddresses.splice(0)) void pairFromAddress(url);
 		// The first start on Windows and Linux: the address is an argument of this one.
 		const address = process.argv.find((a) => a.toLowerCase().startsWith("pine:"));
 		if (address) void pairFromAddress(address);

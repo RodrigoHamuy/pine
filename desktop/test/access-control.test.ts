@@ -35,12 +35,12 @@ const daemonLine = JSON.stringify({ base: "http://127.0.0.1:9", token: "t", mode
 
 /** `waitMs`: how long the stand-in phone waits before it uses a pairing link (its own default otherwise). */
 /** `tryRelay`: a stand-in for the try of a relay; the real one otherwise, with a short wait for a relay that does not answer. */
-function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined; folder?: string; official?: string; waitMs?: number; tryRelay?: (relay: RelayServer) => Promise<RelayTry> } = {}) {
+function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined; folder?: string; official?: string; waitMs?: number; nonceMs?: number; tryRelay?: (relay: RelayServer) => Promise<RelayTry> } = {}) {
 	const folder = more.folder ?? mkdtempSync(path.join(tmpdir(), "pine-access-control-"));
 	folders.push(folder);
 	let prefs: AccessPrefs = { enabled: false, openAtLogin: false, ...more.prefs };
 	const hosts: Host[] = [];
-	const calls = { starts: 0, daemon: 0, login: [] as boolean[], paired: [] as Device[], changes: [] as AccessState[], hostOptions: [] as AccessHostOptions[], announced: [] as Array<Announcement | undefined>, asked: [] as Array<{ name: string; code: string }> };
+	const calls = { starts: 0, daemon: 0, login: [] as boolean[], paired: [] as Device[], changes: [] as AccessState[], hostOptions: [] as AccessHostOptions[], announced: [] as Array<Announcement | undefined>, asked: [] as Array<{ id: string; name: string; code: string }> };
 	const control = createAccessControl({
 		folder,
 		cipher: () => ("cipher" in more ? more.cipher : cipher),
@@ -60,6 +60,7 @@ function make(more: { prefs?: Partial<AccessPrefs>; cipher?: Cipher | undefined;
 		},
 		tryRelay: more.tryRelay ?? ((relay) => tryRelay(relay, 800)),
 		announce: (what) => void calls.announced.push(what),
+		nonceMs: more.nonceMs,
 		asked: (request) => void calls.asked.push(request),
 	});
 	controls.push(control);
@@ -161,7 +162,9 @@ test("access control: a pairing is opened, the owner is asked with the device's 
 	assert.equal(request?.name, "Stand-in phone");
 	assert.match(request!.code, /^\d{4}$/);
 	await until("the page was told", () => calls.changes.some((s) => s.request?.code === request!.code));
-	await control.answer(true);
+	await assert.rejects(control.answer(true, "another-question"), /no longer the one asking/, "an answer to another question allows nothing");
+	await assert.rejects(control.answer(true), /no longer the one asking/, "nor one that names none");
+	await control.answer(true, request!.id);
 	await until("the device is connected", async () => (await control.state()).devices[0]?.connected !== undefined);
 	const after = await control.state();
 	assert.equal(after.request, undefined);
@@ -181,7 +184,7 @@ test("access control: a no, or a pairing cancelled, adds nothing and notifies no
 	await control.set({ enabled: true });
 	await control.openPairing();
 	await until("the owner is asked", async () => (await control.state()).request !== undefined);
-	await control.answer(false);
+	await control.answer(false, (await control.state()).request!.id);
 	await new Promise((r) => setTimeout(r, 200));
 	assert.deepEqual((await control.state()).devices, []);
 	await control.openPairing();
@@ -199,7 +202,7 @@ async function paired() {
 	await made.control.set({ enabled: true });
 	await made.control.openPairing();
 	await until("the owner is asked", async () => (await made.control.state()).request !== undefined);
-	await made.control.answer(true);
+	await made.control.answer(true, (await made.control.state()).request!.id);
 	await until("the device is connected", async () => (await made.control.state()).devices[0]?.connected !== undefined);
 	return made;
 }
@@ -381,11 +384,13 @@ test("access control: where the keychain cannot be used, no relay is kept", asyn
 test("access control: visible on this network by default while browser access is on; the announcement carries the machine id and the service, and goes when visibility or access is turned off", async () => {
 	const { control, calls, hosts, prefs } = make();
 	await control.start();
-	assert.deepEqual(calls.announced, [], "nothing is announced while browser access is off");
+	assert.equal(calls.announced.length, 0, "nothing is announced while browser access is off");
 	await control.set({ enabled: true });
 	await until("announced", () => calls.announced.at(-1) !== undefined);
 	const id = hosts[0].store.machineId();
-	assert.deepEqual(calls.announced.at(-1), { id, service: SERVICE });
+	const first = calls.announced.at(-1)!;
+	assert.deepEqual({ id: first.id, service: first.service }, { id, service: SERVICE });
+	assert.match(first.nonce, /^[A-Za-z0-9_-]{22}$/);
 	assert.equal((await control.state()).visible, true);
 
 	await control.set({ visible: false });
@@ -408,5 +413,14 @@ test("access control: the owner is told each question, so that the app can say i
 	await control.openPairing();
 	await until("asked", () => calls.asked.length === 1);
 	assert.match(calls.asked[0].code, /^\d{4}$/);
-	await control.answer(false);
+	await control.answer(false, calls.asked[0].id);
+});
+
+test("access control: the announcement's nonce changes every few minutes, each change announced anew", async () => {
+	const { control, calls } = make({ nonceMs: 100 });
+	await control.set({ enabled: true });
+	await until("announced", () => calls.announced.at(-1) !== undefined);
+	const first = calls.announced.at(-1)!.nonce;
+	await until("announced with a new nonce", () => calls.announced.at(-1) !== undefined && calls.announced.at(-1)!.nonce !== first);
+	await control.set({ enabled: false });
 });

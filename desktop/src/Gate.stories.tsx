@@ -402,10 +402,11 @@ export const PhonePairing: Story = {
 // ---- The mobile app, pairing with a computer found on the network ----
 
 const ID = "x8Qk2vJp1mZl3nRt5yWb7cDf9gHs0aEu4iOq6eTr2wA";
+const NONCE = "Zm9vYmFyYmF6cXV4cXV1eA";
 
 /** Two computers found on this network, each "Pine" and the start of its id; one through a service of its owner's own. Below, the code as before. */
 export const PhoneNearbyFound: Story = {
-	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE }, nearby: { computers: [{ id: ID, service: "https://pine-main.drcmda.workers.dev" }, { id: `Zq${ID.slice(2)}`, service: "https://pine.example.org" }] } },
+	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE }, nearby: { computers: [{ id: ID, service: "https://pine-main.drcmda.workers.dev", nonce: NONCE }, { id: `Zq${ID.slice(2)}`, service: "https://pine.example.org", nonce: NONCE }] } },
 	play: async ({ canvasElement }) => {
 		// What the bridge found arrives once the list listens (an effect), after the first drawing.
 		await waitFor(() => expect(canvasElement.querySelectorAll('[data-slot="pair-nearby-computer"]')).toHaveLength(2));

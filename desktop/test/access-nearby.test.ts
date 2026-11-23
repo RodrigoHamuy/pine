@@ -7,6 +7,7 @@ import { createAnnouncer, isPairAddress, type Mdns, NEARBY_PORT, NEARBY_TYPE, tx
 
 const ID = "A".repeat(43);
 const SERVICE = "https://pine.example.workers.dev";
+const NONCE = "n".repeat(22);
 
 function fakeLibrary() {
 	const made: Array<{ published: any[]; destroyed: boolean }> = [];
@@ -21,15 +22,15 @@ function fakeLibrary() {
 test("nearby: the record says the version, the machine id and the service, under _pine._tcp, and no name of the computer's", () => {
 	const lib = fakeLibrary();
 	const announcer = createAnnouncer(lib.make);
-	announcer.announce({ id: ID, service: SERVICE });
+	announcer.announce({ id: ID, service: SERVICE, nonce: NONCE });
 	assert.equal(lib.made.length, 1);
 	const [config] = lib.made[0].published;
 	assert.equal(config.type, NEARBY_TYPE);
 	assert.equal(config.protocol, "tcp");
 	assert.equal(config.port, NEARBY_PORT);
 	assert.equal(config.name, "Pine AAAAAAAA");
-	assert.deepEqual(config.txt, { v: "1", id: ID, service: SERVICE });
-	assert.deepEqual(txtOf({ id: ID, service: SERVICE }), config.txt);
+	assert.deepEqual(config.txt, { v: "1", id: ID, service: SERVICE, nonce: NONCE });
+	assert.deepEqual(txtOf({ id: ID, service: SERVICE, nonce: NONCE }), config.txt);
 });
 
 test("nearby: nothing is made before an announcement, and a stop destroys the library (its socket and its records)", () => {
@@ -37,10 +38,10 @@ test("nearby: nothing is made before an announcement, and a stop destroys the li
 	const announcer = createAnnouncer(lib.make);
 	announcer.announce(undefined);
 	assert.equal(lib.made.length, 0);
-	announcer.announce({ id: ID, service: SERVICE });
+	announcer.announce({ id: ID, service: SERVICE, nonce: NONCE });
 	announcer.announce(undefined);
 	assert.equal(lib.made[0].destroyed, true);
-	announcer.announce({ id: ID, service: "https://other.example" });
+	announcer.announce({ id: ID, service: "https://other.example", nonce: NONCE });
 	assert.equal(lib.made.length, 2);
 	announcer.stop();
 	assert.equal(lib.made[1].destroyed, true);

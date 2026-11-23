@@ -63,8 +63,21 @@ export function AddDeviceDialog({ opened, stale, now, onClose, onNew, onCopy }: 
 /** The questions' own toasts: apart from the passing notices, so that a notice never pushes a question out of sight. */
 const questions = createToastManager();
 
-/** The toasts on screen: each a device asking, with the four digits large, Refuse and Allow. */
-function QuestionList({ answer }: { answer: (yes: boolean) => void }) {
+/** How long Allow stays inert after a question appears: a click meant for what was there before never allows a device. */
+export const ALLOW_AFTER_MS = 1000;
+
+/** Allow, inert for a moment after the question it answers is shown. A new question is a new toast, and so a new wait. */
+function AllowButton({ onAllow }: { onAllow: () => void }) {
+	const [ready, setReady] = useState(false);
+	useEffect(() => {
+		const t = setTimeout(() => setReady(true), ALLOW_AFTER_MS);
+		return () => clearTimeout(t);
+	}, []);
+	return <Button size="sm" data-slot="pairing-allow" disabled={!ready} onClick={onAllow}>Allow</Button>;
+}
+
+/** The toasts on screen: each a device asking, with the four digits large, Refuse and Allow. Each answer names its question. */
+function QuestionList({ answer }: { answer: (yes: boolean, request: Request) => void }) {
 	const { toasts } = useToastManager();
 	return toasts.map((t) => {
 		const request = (t.data as { request: Request }).request;
@@ -81,8 +94,8 @@ function QuestionList({ answer }: { answer: (yes: boolean) => void }) {
 					</div>
 					<p data-slot="pairing-code" className="text-center font-mono text-3xl font-semibold tracking-widest tabular-nums select-text">{request.code}</p>
 					<div className="flex justify-end gap-2">
-						<Button variant="outline" size="sm" data-slot="pairing-refuse" onClick={() => answer(false)}>Refuse</Button>
-						<Button size="sm" data-slot="pairing-allow" onClick={() => answer(true)}>Allow</Button>
+						<Button variant="outline" size="sm" data-slot="pairing-refuse" onClick={() => answer(false, request)}>Refuse</Button>
+						<AllowButton key={request.id} onAllow={() => answer(true, request)} />
 					</div>
 				</ToastContent>
 			</Toast>
@@ -95,13 +108,13 @@ function QuestionList({ answer }: { answer: (yes: boolean) => void }) {
  * stands (the main process ends it when it is answered, expires or is withdrawn). Base UI's toasts
  * never move the focus, so what the owner types goes on where it went.
  */
-export function PairingQuestion({ request, answer }: { request?: Request; answer: (yes: boolean) => void }) {
+export function PairingQuestion({ request, answer }: { request?: Request; answer: (yes: boolean, request: Request) => void }) {
 	useEffect(() => {
 		if (!request) return;
 		// Not "high": Base UI hides a high-priority toast from assistive technology (its live region says it instead), and the buttons with it.
 		const id = questions.add({ timeout: 0, data: { request } });
 		return () => questions.close(id);
-	}, [request?.name, request?.code]);
+	}, [request?.id]);
 	return (
 		<ToastProvider toastManager={questions}>
 			<ToastPortal>
@@ -159,9 +172,9 @@ export function DevicePairing() {
 	usePausedNotice(state, s.platform, () => void store.attempt(async () => setState(await bridge.setAccess!({ visible: true }))));
 	if (!has) return null;
 
-	const answer = (yes: boolean) => {
+	const answer = (yes: boolean, request: Request) => {
 		if (store.devicePairing) (store.devicePairing = undefined), store.touch();
-		void store.attempt(() => bridge.answerPairing!(yes));
+		void store.attempt(() => bridge.answerPairing!(yes, request.id));
 	};
 	return (
 		<>

@@ -20,9 +20,11 @@ the `bonjour-service` package, pure JavaScript, in the app's main process
 (`desktop/electron/access/nearby.ts`): one code for macOS, Windows and Linux. The service type is
 `_pine._tcp`. The instance name is "Pine" and the first 8 characters of the machine id
 (`Pine 3fK9x2Qa`), never the computer's own name. The record names port 9, the discard port:
-DNS-SD requires a port, nothing listens there and nothing connects to it. Its TXT record says three
-things: `v=1`, `id=<machine id>` and `service=<the https origin of the meeting service>`. The
-service is there because a computer may wait at its owner's own deployment, not Pine's. The
+DNS-SD requires a port, nothing listens there and nothing connects to it. Its TXT record says four
+things: `v=1`, `id=<machine id>`, `service=<the https origin of the meeting service>` and
+`nonce=<16 random bytes, base64url>`. The service is there because a computer may wait at its
+owner's own deployment, not Pine's. The nonce changes every five minutes while the computer is
+announced (`NONCE_MS`), and each change is announced anew. The
 library, and its socket on port 5353, exist only while something is announced. The computer is
 announced while browser access is on, the host waits at the service, "Visible on this network" is
 on, and no suspension holds (below).
@@ -37,12 +39,24 @@ pairing link, over the same WebRTC data channel and SSH, and checks the host key
 machine id during key exchange. The computer's real name is told to the device only over that
 connection.
 
-**A pairing request without a code.** The device connects under the SSH user name `nearby`
-(`NEARBY_USER`), beside `pair.<code>`, and runs the same `pine-pair` command. From then on it is
-the request a code makes: four random digits written to the channel, the owner asked with the
-device's name and the same digits, and only Allow stores the key. The first line the computer
-writes is now `{"code","computer"}` for both kinds of request: the four digits and the computer's
-name, so that a device that found "Pine 3fK9x2" can say "Confirm on Studio Mac".
+**A pairing request without a code.** The device connects under the SSH user name
+`nearby.<nonce>` (`NEARBY_USER`), beside `pair.<code>`, with the nonce of the announcement it
+heard, and runs the same `pine-pair` command. The computer takes the current nonce or the one
+before it, compared in constant time, and nothing else. So only a device that hears the
+announcement, on the same network, can ask: the machine id alone, which every pairing link and
+every announcement ever heard carry, is not enough. From then on it is the request a code makes:
+four random digits written to the channel, the owner asked with the device's name and the same
+digits, and only Allow stores the key. The first line the computer writes is now
+`{"code","computer","service"}` for both kinds of request: the four digits, the computer's name, so
+that a device that found "Pine 3fK9x2" can say "Confirm on Studio Mac", and the meeting service it
+waits at. The phone keeps that service, said by the computer that holds the key, and refuses a
+codeless pairing whose announcement named another one: a forged record cannot make it keep a
+service of someone else's.
+
+**One question, one answer.** Each question has an id. The owner's Allow or Refuse names it, and
+the app refuses an answer to a question that is no longer the one asked. A codeless request never
+stands beside a code's, nor the reverse, checked again when the request is made. Allow is inert for
+a second after a question appears, so that a click meant for something else allows nothing.
 
 **Limits on requests without a code.** An unpaired device has no identity to count by, so the
 limits are global (`desktop/electron/access/pairing.ts`):
@@ -50,12 +64,16 @@ limits are global (`desktop/electron/access/pairing.ts`):
 - let in only while the computer is visible, read at each request;
 - one at a time: refused while another codeless session holds its place, and while the owner is
   asked about a code's request;
-- a session let in has 30 seconds to make its request; one that leaves gives its place back;
-- 30 seconds of refusals after the owner refused one;
-- three refusals within ten minutes suspend visibility, the announcement and the requests, for an
+- a session let in has 10 seconds to make its request; one that leaves gives its place back; and
+  two sessions are let in no closer than 3 seconds apart, so that one that never asks cannot hold
+  the place without a break;
+- a request that ends without a yes counts as a refusal: the owner refused it, or the requester
+  hung up or let it expire after it was shown. Otherwise hanging up would ask again and again for
+  free;
+- 30 seconds of refusals after such an end;
+- three such ends within ten minutes suspend visibility, the announcement and the requests, for an
   hour. A toast says "Visibility paused after 3 refusals", with "Turn on now"; turning the switch
   on ends the suspension;
-- a request that expires unanswered is no refusal;
 - what is refused is refused silently: no toast, no notification. Only a request that reaches the
   owner shows anything.
 
@@ -107,10 +125,18 @@ trusted. Two cases:
   nothing is not talking to Studio Mac. The name in "Confirm on" is the computer's own word and
   proves nothing either.
 
-The other way round, a device on the network that asks the owner's computer without a code gets
-nothing without Allow at that computer, and the four digits tie that Allow to the device the owner
-holds: a request whose digits no screen in front of the owner shows is refused. The limits above
-keep such requests from becoming a stream of questions.
+The other way round, a device that asks the owner's computer without a code has to be on the same
+network, since it needs the nonce it heard there. It gets nothing without Allow at that computer,
+and the four digits tie that Allow to the device the owner holds: a request whose digits no screen
+in front of the owner shows is refused. The limits above keep such requests from becoming a stream
+of questions.
+
+What a device on the same network can still do: hear the machine id and the service, and learn the
+computer's name by asking (the name comes with the digits, before the owner answers); put up to
+three questions in front of the owner, then have visibility suspended for an hour, which keeps the
+owner's own phone from finding the computer meanwhile (the code still works); and hold the one
+place for requests most of the time, by connecting again every few seconds, with the same effect.
+None of it pairs anything. On a network you do not trust, turn "Visible on this network" off.
 
 ## Alternatives considered
 
@@ -140,8 +166,11 @@ the digits are large and the owner is looking at Pine.
   protocol are as in ADR 0004. What changed is who may start a request, never who answers it.
 - While visible, the machine id is announced on every network the computer joins. It is a public
   key's fingerprint and opens nothing, but it recognises the computer from one network to the next.
-  A device that is let in to ask also learns the computer's name before the owner answers. On a
-  network you do not trust, turn "Visible on this network" off.
+  A device on that network that asks also learns the computer's name before the owner answers;
+  the nonce keeps that to the network the computer is on. On a network you do not trust, turn
+  "Visible on this network" off.
+- Every site can open `pine://pair`, but while a pairing is open or a device asks, the address does
+  nothing: it never replaces the owner's pairing.
 - Every site can open `pine://pair`. The browser asks first, the link goes only to this computer's
   default browser, and nothing is kept without Allow. At worst a pairing opens on its own, with its
   page in the browser and the Add a device dialog, and the owner closes them.

@@ -102,7 +102,8 @@ test("browser access in the app: off at first, nothing written; on, it waits; a 
 	const { request } = (await told()).at(-1);
 	assert.equal(request.name, "Stand-in phone");
 	assert.match(request.code, /^\d{4}$/);
-	await bridge("answerPairing", true);
+	await assert.rejects(bridge("answerPairing", true, "not-this-one"), /no longer the one asking/);
+	await bridge("answerPairing", true, request.id);
 	await until("the device is connected", async () => (await told()).at(-1)?.devices[0]?.connected !== undefined);
 	const now = (await told()).at(-1);
 	assert.equal(now.devices[0].name, "Stand-in phone");
@@ -304,6 +305,12 @@ test("adding a device from anywhere: pine://pair opens a pairing and its link in
 	await until("its link went to the browser", async () => (await opened()).at(-1) === pairing.link);
 	await sees("[data-slot=pairing-dialog] [data-slot=qr-code]");
 	assert.equal(await scanned("[data-slot=pairing-dialog] [data-slot=qr-code]"), pairing.link, "the dialog shows the pairing whose link was sent, not another one");
+	// Sent again while that pairing is open (any site may send the address): nothing changes, the owner's pairing stays.
+	const sent = (await opened()).length;
+	await openUrl("pine://pair");
+	await new Promise((r) => setTimeout(r, 300));
+	assert.equal((await bridge("access")).pairing?.link, pairing.link);
+	assert.equal((await opened()).length, sent);
 
 	// The stand-in phone uses the link: the question is a toast, the dialog is put away.
 	await sees("[data-slot=pairing-request] [data-slot=pairing-code]");

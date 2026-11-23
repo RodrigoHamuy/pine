@@ -56,7 +56,7 @@ function Asking({ answer }: { answer: (yes: boolean) => void }) {
 				<FieldLabel htmlFor="composer">Message</FieldLabel>
 				<Input id="composer" ref={input} />
 			</Field>
-			<PairingQuestion request={asked ? { name: "Pine on Pixel 9", code: "4821", kind: "nearby" } : undefined} answer={answer} />
+			<PairingQuestion request={asked ? { id: "q1", name: "Pine on Pixel 9", code: "4821", kind: "nearby" } : undefined} answer={answer} />
 		</div>
 	);
 }
@@ -74,12 +74,16 @@ export const DeviceAsks: Story = {
 		await waitFor(() => expect(document.activeElement).toBe(field));
 		await userEvent.keyboard("{Enter}");
 		await expect(answered).not.toHaveBeenCalled();
-		await userEvent.click(within(document.body).getByRole("button", { name: "Allow" }));
-		await expect(answered).toHaveBeenCalledWith(true);
+		// Allow is inert for a moment after the question appears, then answers it, by its id.
+		const allow = within(document.body).getByRole("button", { name: "Allow" });
+		await expect(allow).toBeDisabled();
+		await waitFor(() => expect(allow).toBeEnabled(), { timeout: 3000 });
+		await userEvent.click(allow);
+		await expect(answered).toHaveBeenCalledWith(true, expect.objectContaining({ id: "q1" }));
 	},
 };
 
 /** A long name wraps inside the toast, and the digits stay whole. */
 export const LongName: Story = {
-	render: () => <PairingQuestion request={{ name: "Firefox on Linux, the laptop in the kitchen that everybody uses on Sundays", code: "0193" }} answer={fn()} />,
+	render: () => <PairingQuestion request={{ id: "q2", name: "Firefox on Linux, the laptop in the kitchen that everybody uses on Sundays", code: "0193" }} answer={fn()} />,
 };

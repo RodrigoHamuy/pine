@@ -701,7 +701,7 @@ export class Store extends Model {
 	/** A computer found on the network, tapped by the owner: the codeless request starts, and the first screen follows how it goes. */
 	async pairNearby(computer: NearbyComputer): Promise<void> {
 		if (!this.canFindNearby) return;
-		await this.attempt(() => bridge.pairNearby!(computer.id, computer.service));
+		await this.attempt(() => bridge.pairNearby!(computer.id, computer.service, computer.nonce));
 	}
 
 	/** Whether the owner can paste a pairing link: only under a bridge that can pair and takes one from the owner's hand (the mobile app's). */

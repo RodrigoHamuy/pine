@@ -196,7 +196,7 @@ export type PageBridge = Omit<Bridge, "state" | AccessCalls | UpdateCalls> & Par
 	 */
 	nearby?: (fn: (found: NearbyFound) => void) => () => void;
 	/** Pair with a computer found on the network, without a code: the pairing goes as `pair`'s does, through the service state. */
-	pairNearby?: (id: string, service: string) => Promise<void>;
+	pairNearby?: (id: string, service: string, nonce: string) => Promise<void>;
 	/**
 	 * Open the Pine app on this computer to add this browser (`pine://pair`). The web client's bridge,
 	 * which offers it where it says `canOpenApp`.

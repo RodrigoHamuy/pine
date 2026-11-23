@@ -27,8 +27,11 @@ export const NEARBY_PORT = 9;
 /** The version of what the record says, so that a phone can skip a record it would misread. */
 export const NEARBY_VERSION = "1";
 
-/** The TXT record of an announcement: the version, the machine id and the meeting service's origin. */
-export const txtOf = (what: Announcement): Record<string, string> => ({ v: NEARBY_VERSION, id: what.id, service: what.service });
+/**
+ * The TXT record of an announcement: the version, the machine id, the meeting service's origin, and
+ * the nonce a codeless request has to name (heard on this network only, and changed every few minutes).
+ */
+export const txtOf = (what: Announcement): Record<string, string> => ({ v: NEARBY_VERSION, id: what.id, service: what.service, nonce: what.nonce });
 
 /** What the announcer needs of the library: publish one service, and stop everything. */
 export interface Mdns {
