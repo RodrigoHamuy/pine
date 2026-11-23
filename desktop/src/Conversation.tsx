@@ -742,7 +742,8 @@ function StatusLine({ tab }: { tab: Tab }) {
 	// The line keeps its height when it says nothing, so that the input does not move.
 	const line = (icon: ReactNode, text: string, action?: ReactNode, warn?: boolean) => (
 		<Marker className="min-h-7.5 py-1.5">
-			{icon ? <MarkerIcon className={cn(warn && "text-warn")}>{icon}</MarkerIcon> : null}
+			{/* A grid centers the dot of Pulse, which would otherwise sit on the text's baseline in the icon's box. */}
+			{icon ? <MarkerIcon className={cn("grid place-items-center", warn && "text-warn")}>{icon}</MarkerIcon> : null}
 			<MarkerContent className="min-w-0 flex-1">{text}</MarkerContent>
 			{action}
 		</Marker>
