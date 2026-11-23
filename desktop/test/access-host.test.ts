@@ -112,7 +112,7 @@ test("access host: with pairing as its admission, a browser pairs over the data 
 	await new Promise<void>((resolve) => request.on("data", (d: Buffer) => ((said += d), said.includes('"ok"') && resolve())));
 	const [digits, answer] = said.trim().split("\n").map((l) => JSON.parse(l));
 	assert.match(digits.code, /^\d{4}$/);
-	assert.deepEqual(asked, [{ name: "Chrome on Android", code: digits.code }]);
+	assert.deepEqual(asked, [{ name: "Chrome on Android", code: digits.code, kind: "code" }]);
 	assert.deepEqual(answer, { ok: true, name: "Studio Mac" });
 	pairingSession.end();
 	first.close();
