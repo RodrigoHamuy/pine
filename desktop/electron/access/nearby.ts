@@ -33,24 +33,65 @@ export const NEARBY_VERSION = "1";
  */
 export const txtOf = (what: Announcement): Record<string, string> => ({ v: NEARBY_VERSION, id: what.id, service: what.service, nonce: what.nonce });
 
-/** What the announcer needs of the library: publish one service, and stop everything. */
+/** A DNS record as the library builds it; `flush` is mDNS's cache-flush bit. */
+export interface MdnsRecord {
+	name: string;
+	type: string;
+	ttl: number;
+	data: unknown;
+	flush?: boolean;
+}
+
+/** A service the library published: its records, and its withdrawal, which sends them again with a TTL of 0 (a goodbye). */
+export interface MdnsService {
+	records(): MdnsRecord[];
+	stop(callback?: () => void): void;
+}
+
+/** What the announcer needs of the library: publish one service, and end everything. */
 export interface Mdns {
-	publish(config: { name: string; type: string; port: number; protocol: "tcp"; txt: Record<string, string>; disableIPv6?: boolean }): unknown;
+	publish(config: { name: string; type: string; port: number; protocol: "tcp"; txt: Record<string, string>; disableIPv6?: boolean }): MdnsService;
 	destroy(callback?: () => void): void;
 }
 
 /**
- * Announces what it is told, and stops with none. A socket the library cannot open (port 5353 held by
- * another program, a firewall) is no failure of the app's: the code and the link pair without it. The library (and its multicast socket) exists only
- * while something is announced: nothing listens on port 5353 while visibility is off.
+ * The records with mDNS's cache-flush bit on the ones that belong to this computer alone (the
+ * service's SRV and TXT, its addresses): a device that hears them drops what it cached under the
+ * same name, so a new nonce replaces the old one instead of standing beside it. The PTR records are
+ * shared by every computer that announces the type, and never carry it (RFC 6762, 10.2).
+ */
+export const flushed = (records: MdnsRecord[]): MdnsRecord[] => records.map((r) => (r.type === "PTR" ? r : { ...r, flush: true }));
+
+/**
+ * Announces what it is told, and stops with none. A new announcement (a new nonce) first withdraws the
+ * one before with a goodbye, then publishes, with the cache-flush bit, so that only the current TXT
+ * record is served and cached. A socket the library cannot open (port 5353 held by another program, a
+ * firewall) is no failure of the app's: the code and the link pair without it. The library (and its
+ * multicast socket) exists only while something is announced: nothing listens on port 5353 while
+ * visibility is off.
  */
 export function createAnnouncer(make: () => Mdns = () => new Bonjour({}, () => {}) as unknown as Mdns): { announce(what: Announcement | undefined): void; stop(): void } {
 	let mdns: Mdns | undefined;
-	const stop = () => {
+	let current: MdnsService | undefined;
+	/** One change after the other: a goodbye is sent before the next record. */
+	let queue: Promise<void> = Promise.resolve();
+	const later = (work: () => Promise<void>) => void (queue = queue.then(work).catch(() => {}));
+	const withdraw = () =>
+		new Promise<void>((resolve) => {
+			const was = current;
+			current = undefined;
+			if (!was) return resolve();
+			try {
+				was.stop(() => resolve());
+			} catch {
+				resolve();
+			}
+		});
+	const end = async () => {
+		await withdraw();
 		const was = mdns;
 		mdns = undefined;
 		try {
-			// Destroying unpublishes first: the phones hear a goodbye and drop the computer from their list.
 			was?.destroy();
 		} catch {
 			// a socket that is already gone
@@ -58,12 +99,19 @@ export function createAnnouncer(make: () => Mdns = () => new Bonjour({}, () => {
 	};
 	return {
 		announce(what) {
-			stop();
-			if (!what) return;
-			mdns = make();
-			mdns.publish({ name: nearbyName(what.id), type: NEARBY_TYPE, port: NEARBY_PORT, protocol: "tcp", txt: txtOf(what) });
+			later(async () => {
+				if (!what) return end();
+				await withdraw();
+				mdns ??= make();
+				// Probed every time (the default), which also makes the library announce later, after the
+				// records below carry the cache-flush bit: without a probe it announces inside publish().
+				const service = mdns.publish({ name: nearbyName(what.id), type: NEARBY_TYPE, port: NEARBY_PORT, protocol: "tcp", txt: txtOf(what) });
+				const records = service.records.bind(service);
+				service.records = () => flushed(records());
+				current = service;
+			});
 		},
-		stop,
+		stop: () => later(end),
 	};
 }
 
