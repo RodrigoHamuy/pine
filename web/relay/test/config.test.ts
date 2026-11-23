@@ -49,7 +49,7 @@ test("observability stays off", () => {
 test("the workflow deploys each channel under its own name and deletes a pull request's when it closes", () => {
 	const workflow = readFileSync(path.join(root, "..", "..", ".github", "workflows", "web-preview.yml"), "utf8");
 	assert.match(workflow, /wrangler deploy --name "\$WORKER"/);
-	assert.match(workflow, /wrangler delete --name "\$WORKER"/);
+	assert.match(workflow, /-X DELETE[\s\S]*\/workers\/scripts\/\$WORKER\?force=true/);
 	assert.doesNotMatch(workflow, /--env|versions upload|preview-alias/);
 });
 
