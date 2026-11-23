@@ -2781,6 +2781,9 @@ export class Store extends Model {
 						part.how = how;
 						this.redraw(part);
 					} else this.did(tab, { p: "child", task: p.task, agent: p.agent, kind: what, label: child?.label ?? "", status: p.status, how, depth });
+					// A sub-agent that worked after its conversation's turn (the check of a swarm's answer, which pine starts
+					// itself, or a pool's sub-agent that outlived the turn): no end of a turn follows that would close the group.
+					if (!tab.busy && ![...tab.children.values()].some((c) => c.running)) this.endWork(tab);
 					break;
 				}
 				tab.running.delete(p.task);

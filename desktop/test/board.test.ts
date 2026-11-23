@@ -125,6 +125,9 @@ test("/swarm in the input starts a swarm: the conversation says what pine does a
 	await sees("text=SWARM-ANSWER every shelf is sorted", 30_000);
 	await sees("text=swarm · the answer is being checked by a sub-agent that did none of the work", 30_000);
 	await sees("text=swarm · done after 1 round: 1 task, and the answer was checked", 30_000);
+	// The check ran after the lead's turn: its line is closed with it, and nothing in the conversation says "working" any more.
+	assert.deepEqual(await page.$$eval("[data-item=work] [data-slot=pulse]", (all) => all.length), 0, "no group of steps is left pulsing after the swarm is done");
+	assert.ok(!(await page.locator("[data-slot=message-scroller], main").first().innerText()).includes("so far"));
 	// The job is shown once, as the owner's message, without what pine told the lead under it.
 	const said = await page.locator("[data-slot=message-scroller], main").first().innerText();
 	assert.equal(said.split("sort the archive").length - 1, 1, said);
