@@ -373,14 +373,16 @@ test("boards: one answer does for every task that has the same question: those t
 	// (The pool comes back when the first of them has ended. Each ends when the other has asked too, and the third
 	// asks when the answer is on the board: by what happened, not by the clock, which a busy machine does not keep.)
 	const blocked = (id: number) => boards.item(id)?.state === "blocked";
-	h.mock.state.scripts.a = [{ tools: [call("board_done", { id: 1, outcome: "blocked", result: "WHAT-RATE for a?" })] }, { until: () => blocked(2), text: "stopped" }];
-	h.mock.state.scripts.b = [{ tools: [call("board_done", { id: 2, outcome: "blocked", result: "WHAT-RATE for b?" })] }, { until: () => blocked(1), text: "stopped" }];
-	h.mock.state.scripts.c = [{ until: () => boards.items(1, { kind: "note" }).length > 0, tools: [call("board_done", { id: 3, outcome: "blocked", result: "WHAT-RATE for c?" })] }, { text: "stopped" }];
-	const asked = new Set<number>();
-	h.pine.bus.subscribe("pine/board", () => {
-		// Whoever is given a task after it was asked about does it.
-		for (const [id, name] of [[1, "a"], [2, "b"], [3, "c"]] as const) if (boards.item(id)?.state === "blocked" && !asked.has(id)) asked.add(id), (h.mock.state.scripts[name] = [{ text: `${name} done at RATE-100` }]);
-	});
+	// A script is looked up at every request. Each sub-agent keeps the one it began with until its part is over (the
+	// two that asked first: until their question has its answer; the third: until it has asked), and whoever is given
+	// the task after that does it. Swapped the moment a task had asked, the step that waits for the other was never used.
+	const hasAnswer = (id: number) => boards.items(1, { about: id }).length > 0;
+	let thirdAsked = false;
+	h.pine.bus.subscribe("pine/board", () => void (thirdAsked ||= blocked(3)));
+	const script = (name: string, first: any[], over: () => boolean) => Object.defineProperty(h.mock.state.scripts, name, { configurable: true, get: () => (over() ? [{ text: `${name} done at RATE-100` }] : first) });
+	script("a", [{ tools: [call("board_done", { id: 1, outcome: "blocked", result: "WHAT-RATE for a?" })] }, { until: () => blocked(2), text: "stopped" }], () => hasAnswer(1));
+	script("b", [{ tools: [call("board_done", { id: 2, outcome: "blocked", result: "WHAT-RATE for b?" })] }, { until: () => blocked(1), text: "stopped" }], () => hasAnswer(2));
+	script("c", [{ until: () => boards.items(1, { kind: "note" }).length > 0, tools: [call("board_done", { id: 3, outcome: "blocked", result: "WHAT-RATE for c?" })] }, { text: "stopped" }], () => thirdAsked);
 	const r = await h.pine.agents.run({
 		agent: "main",
 		session: "job",
