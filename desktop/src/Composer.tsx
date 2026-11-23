@@ -367,7 +367,7 @@ export function Composer({ tab }: { tab: Tab }) {
 					>
 						<ComboboxPrimitive.Input
 							ref={area as unknown as React.Ref<HTMLInputElement>}
-							render={<InputGroupTextarea rows={1} className="max-h-48 p-3" />}
+							render={<InputGroupTextarea rows={1} className="max-h-48 p-3 leading-snug md:text-base md:leading-snug" />}
 							placeholder={tab.busy ? `Say something to ${tab.agent} while it works…` : `Message ${tab.agent} · / for commands · @ for files`}
 							onChange={(e) => {
 								// A key that types ends the listening: what was heard stays, and nothing more is put into the input.

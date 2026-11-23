@@ -269,7 +269,7 @@ export function OwnerTurn({ text, from, files, menu, skeleton }: { text?: string
 			<MessageContent>
 				{from ? <MessageHeader>{from}</MessageHeader> : null}
 				<Bubble align="end" variant="muted">
-					<BubbleContent className="whitespace-pre-wrap select-text">{text}</BubbleContent>
+					<BubbleContent className="text-base leading-snug whitespace-pre-wrap select-text">{text}</BubbleContent>
 				</Bubble>
 				{files?.length ? (
 					<AttachmentGroup>
@@ -294,7 +294,7 @@ function Entry({ entry, agent }: { entry: TranscriptEntry; agent: string }) {
 	if (entry.kind === "user") return <OwnerTurn text={entry.text ?? ""} from="task" />;
 	if (entry.kind === "text")
 		return (
-			<Message>
+			<Message className="text-base leading-snug">
 				<MessageContent>
 					<Markdown text={entry.text ?? ""} where={{ agent }} />
 				</MessageContent>
@@ -437,7 +437,7 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 		}
 		case "answer":
 			return (
-				<Message data-item="answer">
+				<Message data-item="answer" className="text-base leading-snug">
 					<MessageContent>
 						<Markdown text={item.text} live={item.live} where={{ agent: item.agent, session: tab.kind === "chat" ? tab.session : undefined, id: `${tab.id}:${item.id}`, arrived: item.arrived }} />
 					</MessageContent>

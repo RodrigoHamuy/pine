@@ -36,8 +36,8 @@ function Act({ onClick, children }: { onClick: () => void; children: ReactNode }
  */
 export function WelcomeLetter({ main, home, here, settings, reveal, say }: LetterProps) {
 	return (
-		<Message data-item="welcome">
-			<MessageContent className="gap-3 leading-relaxed select-text">
+		<Message data-item="welcome" className="text-base leading-snug">
+			<MessageContent className="gap-3 select-text">
 				<MessageHeader className="px-0">
 					Welcome to pine!
 				</MessageHeader>

@@ -1126,8 +1126,11 @@ text color. Settings keeps to this; other parts of the page are brought to it as
   express in place, and wraps the stock one; add one or a style override only for what stock
   cannot do.
 - Sizes and spacing are Tailwind's default scale and shadcn's defaults, never arbitrary values.
-  The page's density is one `font-size` on `:root` in `index.css`: every rem size (text, spacing,
-  components) follows it, so no component sets a font size of its own. Corners come from shadcn's
+  The page's density is one `font-size` on `:root` in `index.css` (15px): every rem size (text,
+  spacing, components) follows it, so no component sets a font size of its own. On that root the
+  scale's `text-sm` and `text-xs` are set to 14px and 12px (`@theme` in `index.css`), the app's own
+  text and its small labels; a conversation (answers, your messages, the message box) is
+  `text-base` with `leading-snug`, 15px on lines of 20.6px. Corners come from shadcn's
   `--radius`. The one size that is not on the scale is the room for a Mac's window buttons at the
   start of a bar along the top (`pl-window-buttons`, a token in `index.css`): the window says where
   the buttons end (`titleBarOverlay` in `electron/main.ts`, read as `env(titlebar-area-x)`), so it is
