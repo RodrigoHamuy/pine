@@ -331,7 +331,7 @@ test("systemBars: the bars take the color and kind of the theme the page draws, 
 
 const ID = "q1w2e3r4t5y6u7i8o9p0a1s2d3f4g5h6j7k8l9z0x-_";
 const CODE = "abcdefghijklmnopqrstuv";
-const LINK = `https://pine.drcmda.workers.dev/#pair=${ID}.${CODE}`;
+const LINK = `https://pine-main.drcmda.workers.dev/#pair=${ID}.${CODE}`;
 const PAIRED_HOST = `paired:${ID}`;
 
 test("canPair: only where the plugin says it can, and the paired computers' names with the machines", async () => {
@@ -357,12 +357,12 @@ test("pair: a link that is not a pairing link of an https service is refused and
 	const { plugin, calls } = fakePlugin();
 	const b = mobileBridge(plugin, "android");
 	const refused = [
-		`http://pine.drcmda.workers.dev/#pair=${ID}.${CODE}`,
-		`https://me:pw@pine.drcmda.workers.dev/#pair=${ID}.${CODE}`,
-		`https://pine.drcmda.workers.dev/#pair=${ID}.${CODE}.more`,
-		`https://pine.drcmda.workers.dev/#pair=${ID.slice(1)}.${CODE}`,
-		`https://pine.drcmda.workers.dev/#pair=${ID}.${CODE}x`,
-		`https://pine.drcmda.workers.dev/other#pair=${ID}.${CODE}`,
+		`http://pine-main.drcmda.workers.dev/#pair=${ID}.${CODE}`,
+		`https://me:pw@pine-main.drcmda.workers.dev/#pair=${ID}.${CODE}`,
+		`https://pine-main.drcmda.workers.dev/#pair=${ID}.${CODE}.more`,
+		`https://pine-main.drcmda.workers.dev/#pair=${ID.slice(1)}.${CODE}`,
+		`https://pine-main.drcmda.workers.dev/#pair=${ID}.${CODE}x`,
+		`https://pine-main.drcmda.workers.dev/other#pair=${ID}.${CODE}`,
 		`pine://pair?service=${encodeURIComponent("http://pine.example.org")}&id=${ID}&code=${CODE}`,
 		`pine://pair?service=${encodeURIComponent("https://pine.example.org/path")}&id=${ID}&code=${CODE}`,
 		`pine://pair?service=${encodeURIComponent("https://pine.example.org")}&id=${ID}`,

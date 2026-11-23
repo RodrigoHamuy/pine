@@ -22,7 +22,7 @@ export type MeetNamespace = {
 
 export type SiteEnv = Env & {
 	ASSETS: { fetch(request: Request): Promise<Response> };
-	/** The meetings' objects: only a configuration with the meeting service has them (env.official, env.full). */
+	/** The meetings' objects: every deployment of wrangler.jsonc has them; a configuration of one's own may leave them out. */
 	MEET?: MeetNamespace;
 	/** "on" serves the SSH relay at /ssh; anything else, or nothing, refuses it. */
 	RELAY?: string;

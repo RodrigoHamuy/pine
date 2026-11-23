@@ -286,7 +286,7 @@ export const PairedComputerNotReached: Story = {
 
 // ---- A service with both: pairing first, SSH behind a link ----
 
-const SERVICE = "pine.drcmda.workers.dev";
+const SERVICE = "pine-main.drcmda.workers.dev";
 
 /**
  * The official service, nothing added yet: how to pair, and a discreet link to SSH. The link shows the SSH

@@ -198,7 +198,7 @@ class PinesTest {
 
 	private val id = "EKN2VkO6uLv7SOTEAyIGDru_1I_cTOGadqwTlLFm-qs"
 	/** The project's meeting service, as a pairing link of the Pine app names it. */
-	private val OFFICIAL = "https://pine.drcmda.workers.dev"
+	private val OFFICIAL = "https://pine-main.drcmda.workers.dev"
 	private val computer = "paired:$id"
 
 	@Test

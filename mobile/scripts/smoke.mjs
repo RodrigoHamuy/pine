@@ -618,12 +618,12 @@ try {
 	check("pasted link: the paired computer is the machine in use", (await page.evaluate("Capacitor.Plugins.Pine.loadPrefs().then((p) => p.use ?? '')")).startsWith("paired:"), true);
 
 	step("App Links: the manifest's address of Pine's own service, and another host's");
-	const official = `https://pine.drcmda.workers.dev/${SHAPED}`;
-	check("App Links: the app declares Pine's own service, to be verified by its statement", /pine\.drcmda\.workers\.dev/.test(adb("shell", "pm", "get-app-links", APP)), true);
+	const official = `https://pine-main.drcmda.workers.dev/${SHAPED}`;
+	check("App Links: the app declares Pine's own service, to be verified by its statement", /pine-main\.drcmda\.workers\.dev/.test(adb("shell", "pm", "get-app-links", APP)), true);
 	const handlers = (url) => adb("shell", `cmd package query-activities --brief -a android.intent.action.VIEW -c android.intent.category.BROWSABLE -d ${quoted(url)}`);
 	check("App Links: an address of another host is not this app's", handlers(`https://pine.example.com/${SHAPED}`).includes(`${APP}/`), false);
 	// Verifying asks the service on the web, which this run never reaches: the state verification gives is set by hand, as Android allows for a test.
-	adb("shell", "pm", "set-app-links", "--package", APP, "STATE_APPROVED", "pine.drcmda.workers.dev");
+	adb("shell", "pm", "set-app-links", "--package", APP, "STATE_APPROVED", "pine-main.drcmda.workers.dev");
 	check("App Links: Pine's own service's address, once verified, is this app's", handlers(official).includes(`${APP}/`), true);
 	adb("shell", "input", "keyevent", "KEYCODE_HOME");
 	await waitFor("the app paused by HOME", () => front() !== APP || undefined, 15);

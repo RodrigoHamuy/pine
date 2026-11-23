@@ -15,7 +15,7 @@
 // tab with no hold on the client; after the relay restarts the bridge connects again by itself; a
 // frame that navigates itself away makes the client start anew.
 //
-// Then a computer paired by link, on the same deployment (`--env official`, the meeting service beside the
+// Then a computer paired by link, on the same deployment (the meeting service beside the
 // relay): the Pine app's access host under Node beside the same home's real `pine service`, and a
 // second browser that opens the pairing link. Named checks again: the meeting routes answer;
 // pairing completes when the owner allows the four digits the browser shows; the computer is listed
@@ -120,8 +120,8 @@ try {
 	// (RELAY_ALLOW_LOOPBACK, which no deployed configuration sets). The relay is stopped and
 	// started again on the same port, as a deploy restarts a Worker.
 	//
-	// It is the configuration `official` (`--env official`): the relay and the meeting service side by side,
-	// so that a machine added as user@host and a computer paired by link are both tried on one deployment.
+	// It is the one configuration of wrangler.jsonc, the one every channel deploys: the relay and the
+	// meeting service side by side, so that a machine added as user@host and a computer paired by link are both tried on one deployment.
 	// Two changes are made to it, in a copy in the smoke's folder: the servers that help a connection
 	// (ICE) are a closed port of the loopback, so that no public STUN server is asked. An empty list
 	// would not do: the service falls back to a public one. And the limit per client address is
@@ -131,21 +131,21 @@ try {
 	const wranglerState = path.join(dir, "wrangler");
 	const relayDir = path.join(web, "relay");
 	const config = JSON.parse(readFileSync(path.join(relayDir, "wrangler.jsonc"), "utf8").split("\n").filter((line) => !line.trim().startsWith("//")).join("\n"));
-	assert.ok(config.env?.official?.durable_objects, "the configuration `official` has the meeting service");
+	assert.ok(config.durable_objects, "the configuration has the meeting service");
 	config.main = path.join(relayDir, config.main);
 	// Paths are read from the copy's folder: the ones that point out of web/relay are made whole.
-	for (const where of [config, ...Object.values(config.env as Record<string, { assets?: { directory: string } }>)]) if (where.assets) where.assets = { ...where.assets, directory: dist };
-	config.env.official.vars = { ...config.env.official.vars, ICE: [{ urls: "stun:127.0.0.1:9" }] };
+	config.assets = { ...config.assets, directory: dist };
+	config.vars = { ...config.vars, ICE: [{ urls: "stun:127.0.0.1:9" }] };
 	// And the limit per client address: every browser, the access host and the relay's connections
 	// here come from the one loopback address, which a minute of reconnecting takes past 20.
-	for (const limit of config.env.official.ratelimits) limit.simple = { ...limit.simple, limit: 1000 };
+	for (const limit of config.ratelimits) limit.simple = { ...limit.simple, limit: 1000 };
 	delete config.$schema;
 	const configFile = path.join(wranglerState, "wrangler.json");
 	write(configFile, JSON.stringify(config, null, 2));
 	let wrangler: ChildProcess | null = null;
 	let wranglerLog = "";
 	const startRelay = async () => {
-		const running = spawn(path.join(relayDir, "node_modules", ".bin", "wrangler"), ["dev", "--config", configFile, "--env", "official", "--ip", "127.0.0.1", "--port", String(relayPort), "--inspector-port", String(inspectorPort), "--var", "RELAY_ALLOW_LOOPBACK:1", "--persist-to", path.join(wranglerState, "state"), "--show-interactive-dev-session=false", "--log-level", "warn"], {
+		const running = spawn(path.join(relayDir, "node_modules", ".bin", "wrangler"), ["dev", "--config", configFile, "--ip", "127.0.0.1", "--port", String(relayPort), "--inspector-port", String(inspectorPort), "--var", "RELAY_ALLOW_LOOPBACK:1", "--persist-to", path.join(wranglerState, "state"), "--show-interactive-dev-session=false", "--log-level", "warn"], {
 			cwd: path.join(web, "relay"),
 			// Wrangler's own files (its settings, its logs) go into the smoke's folder, never the owner's; no metrics are sent.
 			env: { ...process.env, XDG_CONFIG_HOME: path.join(wranglerState, "config"), WRANGLER_LOG_PATH: path.join(wranglerState, "logs"), WRANGLER_SEND_METRICS: "false", CI: "1" },

@@ -1,26 +1,27 @@
-// The relay of pine's web client, in two configurations:
+// The relay of pine's web client, in one configuration: the web client, the SSH relay and the
+// meeting service, a whole deployment. Every deployment is a Worker of its own made from this one
+// configuration, named by its channel with `--name`, at pine-<channel>.<account>.workers.dev:
 //
-// - The default one (no --env): the SSH relay and the web client, no meeting service. It is what
-//   `.github/workflows/web-preview.yml` uploads as versions under a preview alias (pr-<number>,
-//   next, main), and what `npx wrangler deploy` deploys by hand. It declares no Durable Object on
-//   purpose: a version that adds one cannot be uploaded, and a Worker that holds one gets no
-//   version addresses, which is all a preview is.
-// - `official` (`npx wrangler deploy --env official`): the project's one service. The web client,
-//   the meeting service and the relay, at pine.<account>.workers.dev. `npx wrangler dev --env
-//   official` serves that locally. A deployment of one's own with the meeting service uses the
-//   same environment under a name of its own (`--name`, or `name` here in a copy of one's own).
+// - `pine-main`, deployed on every push to main: the project's service, which the apps use unless
+//   the owner names another (`OFFICIAL_SERVICE` in desktop/src/machines.ts);
+// - `pine-next`, deployed on every push to next;
+// - `pine-pr-<number>`, deployed on every push to a pull request, and deleted when it is closed.
 //
-// The Worker's live versions are changed only by hand. Bindings and variables are not inherited
-// by an environment, so each one writes its own.
+// `.github/workflows/web-preview.yml` deploys them (`npx wrangler deploy --name pine-<channel>`) and
+// deletes a pull request's (`npx wrangler delete --name pine-pr-<number>`). A deployment of one's
+// own does the same under a name of its own. A Worker that holds a Durable Object gets no version
+// preview addresses, which is why each channel is a Worker of its own and not a version of one.
+// `npx wrangler dev` serves the same locally.
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "pine-relay",
+  // The name when none is given: a deployment by hand without --name. The workflow always gives one.
+  "name": "pine-dev",
   "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
-  // No live address on workers.dev: only the preview addresses of uploaded versions
-  // (pr-<number>-, next- and main-pine-relay.<account>.workers.dev), which a workflow posts.
-  "workers_dev": false,
-  "preview_urls": true,
+  // Each Worker's one address: pine-<channel>.<account>.workers.dev.
+  "workers_dev": true,
+  // A Worker that holds a Durable Object gets no version addresses.
+  "preview_urls": false,
   // The web client's build (`npm run build` in web/), served by the same Worker: every request
   // goes through it first, which adds the headers of src/site.ts.
   "assets": { "directory": "../dist", "binding": "ASSETS", "run_worker_first": true },
@@ -34,41 +35,20 @@
       "simple": { "limit": 20, "period": 60 }
     }
   ],
+  // The meeting service: one object per machine id, holding that meeting's hibernating
+  // sockets and no storage (src/meet-object.ts).
+  "durable_objects": { "bindings": [{ "name": "MEET", "class_name": "Meeting" }] },
+  // The free plan has Durable Objects backed by SQLite only; the class uses none of its storage.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Meeting"] }],
   "vars": {
     // "on" serves the SSH relay at /ssh, for machines added as user@host; anything else refuses it.
-    "RELAY": "on"
-  },
-  "env": {
-    // The project's official service: the web client, the meeting service and the SSH relay.
-    "official": {
-      "name": "pine",
-      // Its fixed address: pine.<account>.workers.dev.
-      "workers_dev": true,
-      // A Worker that holds a Durable Object gets no version addresses.
-      "preview_urls": false,
-      "assets": { "directory": "../dist", "binding": "ASSETS", "run_worker_first": true },
-      "observability": { "enabled": false },
-      "ratelimits": [
-        {
-          "name": "LIMITER",
-          "namespace_id": "1002",
-          "simple": { "limit": 20, "period": 60 }
-        }
-      ],
-      // The meeting service: one object per machine id, holding that meeting's hibernating
-      // sockets and no storage (src/meet-object.ts).
-      "durable_objects": { "bindings": [{ "name": "MEET", "class_name": "Meeting" }] },
-      // The free plan has Durable Objects backed by SQLite only; the class uses none of its storage.
-      "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Meeting"] }],
-      "vars": {
-        "RELAY": "on",
-        // The servers that help a browser and a paired computer connect directly, which both read from /meet/config.
-        "ICE": [{ "urls": "stun:stun.cloudflare.com:3478" }]
-        // With "ANDROID_CERT_SHA256": the SHA-256 fingerprint of the key the Android app's releases
-        // are signed with (AA:BB:..., from `keytool -list -v` or `apksigner verify --print-certs`),
-        // the service serves /.well-known/assetlinks.json and its pairing links open the Pine app on
-        // Android (App Links). Without it they open the browser. It is public: a variable, not a secret.
-      }
-    }
+    "RELAY": "on",
+    // The servers that help a browser and a paired computer connect directly, which both read from /meet/config.
+    "ICE": [{ "urls": "stun:stun.cloudflare.com:3478" }]
+    // With "ANDROID_CERT_SHA256": the SHA-256 fingerprint of the key the Android app's releases
+    // are signed with (AA:BB:..., from `keytool -list -v` or `apksigner verify --print-certs`),
+    // the service serves /.well-known/assetlinks.json and its pairing links open the Pine app on
+    // Android (App Links). Without it they open the browser. It is public: a variable, not a secret.
+    // The app's App Link names pine-main alone (mobile/android/app/src/main/AndroidManifest.xml).
   }
 }

@@ -104,7 +104,7 @@ export interface AppState {
 	canPair?: boolean;
 	/**
 	 * The host of the service a machine is reached through (the web client's deployment, its
-	 * document's address: "pine.drcmda.workers.dev"), which the page names so that the relay and the
+	 * document's address: "pine-main.drcmda.workers.dev"), which the page names so that the relay and the
 	 * meeting service are never forgotten. The others leave it out: they reach machines without one.
 	 */
 	serviceHost?: string;

@@ -1,11 +1,7 @@
-// The configurations that are deployed, read as wrangler reads them:
-// - the default one (today's deployment and every preview of .github/workflows/web-preview.yml):
-//   the relay on, and no meeting service, since a Worker that holds a Durable Object can be
-//   neither uploaded as a version with a new class nor given version addresses;
-// - `official`, the project's service and the one environment with the meeting service: the
-//   meeting service and the relay, on workers.dev. A deployment of one's own uses the same
-//   environment under a name of its own.
-// None of them has any logs.
+// The configuration that is deployed, read as wrangler reads it: one configuration, from which every
+// channel of .github/workflows/web-preview.yml (pine-main, pine-next, pine-pr-<number>) is a Worker of
+// its own under its own name. Each is a whole deployment: the web client, the relay and the meeting
+// service, on workers.dev. None of them has any logs.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
@@ -19,48 +15,42 @@ const config = JSON.parse(
 		.filter((line) => !/^\s*\/\//.test(line))
 		.join("\n"),
 );
-const { official } = config.env;
 
-test("the default configuration declares no Durable Object, so that the preview workflow can still upload versions with addresses", () => {
-	assert.equal(config.durable_objects, undefined);
-	assert.equal(config.migrations, undefined);
-	assert.equal(config.preview_urls, true);
-	assert.equal(config.workers_dev, false);
-	assert.equal(config.name, "pine-relay");
+test("one configuration and no environment: every channel is the same deployment under its own name", () => {
+	assert.equal(config.env, undefined);
+	assert.equal(typeof config.name, "string");
 });
 
-test("official is the one environment: a deployment of one's own with the meeting service uses it under a name of its own", () => {
-	assert.deepEqual(Object.keys(config.env), ["official"]);
-});
-
-test("the relay is on by default and in the official service", () => {
+test("the relay is on", () => {
 	assert.equal(config.vars.RELAY, "on");
-	assert.equal(official.vars.RELAY, "on");
 });
 
-test("the official service has an address of its own on workers.dev", () => {
-	assert.equal(official.name, "pine");
-	assert.equal(official.workers_dev, true);
+test("each deployment has an address of its own on workers.dev and asks for no version addresses", () => {
+	assert.equal(config.workers_dev, true);
+	assert.equal(config.preview_urls, false);
 });
 
-test("official declares the meeting's Durable Object backed by SQLite, as the free plan requires, and asks for no version addresses", () => {
-	assert.deepEqual(official.durable_objects.bindings, [{ name: "MEET", class_name: "Meeting" }]);
-	assert.ok(official.migrations.some((m: any) => m.new_sqlite_classes?.includes("Meeting")));
-	assert.ok(!official.migrations.some((m: any) => m.new_classes?.includes("Meeting")), "a key-value class is not on the free plan");
-	assert.equal(official.preview_urls, false);
-	assert.ok(official.vars.ICE.every((s: any) => /^stun:/.test(s.urls)));
+test("the meeting's Durable Object is declared, backed by SQLite as the free plan requires", () => {
+	assert.deepEqual(config.durable_objects.bindings, [{ name: "MEET", class_name: "Meeting" }]);
+	assert.ok(config.migrations.some((m: any) => m.new_sqlite_classes?.includes("Meeting")));
+	assert.ok(!config.migrations.some((m: any) => m.new_classes?.includes("Meeting")), "a key-value class is not on the free plan");
+	assert.ok(config.vars.ICE.every((s: any) => /^stun:/.test(s.urls)));
 });
 
-test("every configuration has the rate limit and the web client's files", () => {
-	for (const [name, c] of [["default", config], ["official", official]]) {
-		assert.ok(c.ratelimits.some((r: any) => r.name === "LIMITER"), name);
-		assert.equal(c.assets.binding, "ASSETS", name);
-	}
+test("the rate limit and the web client's files", () => {
+	assert.ok(config.ratelimits.some((r: any) => r.name === "LIMITER"));
+	assert.equal(config.assets.binding, "ASSETS");
 });
 
-test("observability stays off in every configuration", () => {
+test("observability stays off", () => {
 	assert.equal(config.observability.enabled, false);
-	for (const [name, c] of Object.entries<any>(config.env)) assert.equal(c.observability?.enabled, false, name);
+});
+
+test("the workflow deploys each channel under its own name and deletes a pull request's when it closes", () => {
+	const workflow = readFileSync(path.join(root, "..", "..", ".github", "workflows", "web-preview.yml"), "utf8");
+	assert.match(workflow, /wrangler deploy --name "\$WORKER"/);
+	assert.match(workflow, /wrangler delete --name "\$WORKER"/);
+	assert.doesNotMatch(workflow, /--env|versions upload|preview-alias/);
 });
 
 test("nothing of a meeting is logged", () => {

@@ -337,8 +337,8 @@ test("a failed read of the configuration (offline, a 429, a 5xx) is not taken fo
 });
 
 test("the page is told the deployment's host, which it names as the relay's and the meeting service's; none is invented", async () => {
-	const named = client(computer(), { serviceHost: "pine.drcmda.workers.dev" });
-	assert.equal((await named.page.state()).serviceHost, "pine.drcmda.workers.dev");
+	const named = client(computer(), { serviceHost: "pine-main.drcmda.workers.dev" });
+	assert.equal((await named.page.state()).serviceHost, "pine-main.drcmda.workers.dev");
 	named.stop();
 	const none = client(computer());
 	assert.equal("serviceHost" in (await none.page.state()), false);

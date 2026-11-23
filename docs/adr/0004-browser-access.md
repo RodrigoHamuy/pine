@@ -79,15 +79,24 @@ browser is given nothing, and neither the web client nor the service changes. IC
 direct path. The relay's password is kept like the host key, in the file the keychain encrypts, and
 never reaches the page; a TURN entry from the service's list is still dropped.
 
-**One official service.** The project runs the Worker `pine` (`--env official`) at
-`https://pine.drcmda.workers.dev`: the web client, the meeting service and the SSH relay. It
-is the app's default (`OFFICIAL_SERVICE`); an owner who runs their own deployment (the same
-`--env official` under a name of their own) names it in the settings. The default configuration, which pull request previews
-upload, declares no Durable Object: Cloudflare does not let a Worker that holds one be uploaded as
-a preview version.
+**One official service.** The project runs the Worker `pine-main` at
+`https://pine-main.drcmda.workers.dev`: the web client, the meeting service and the SSH relay,
+deployed from every push to `main`. It is the app's default (`OFFICIAL_SERVICE`); an owner who
+runs their own deployment (the same configuration under a name of their own, `--name`) names it
+in the settings.
+
+*Amended:* the official service was first the Worker `pine` (`--env official`, deployed by hand),
+and pull request previews were versions of another Worker, `pine-relay`, uploaded under preview
+aliases from a configuration with no Durable Object: Cloudflare gives a Worker that holds one no
+version preview addresses. So a preview had no meeting service, and pairing could not be tried
+before a merge. Now `wrangler.jsonc` has one configuration, a whole deployment, and every channel
+is a Worker of its own made from it: `pine-main` from `main`, `pine-next` from `next`, and
+`pine-pr-<number>` for a pull request, deleted when it is closed
+(`.github/workflows/web-preview.yml`). The old addresses were dropped without a transition: pine
+is below 1.0, and each device paired with the old service pairs once again.
 
 *Amended:* the official service first had the SSH relay off, and offered pairing only. It has
-the relay on now, for three reasons. The preview addresses already run the relay in public, on
+the relay on now, for three reasons. The previews already ran the relay in public, on
 the same account, so leaving it off on one address shut nothing that was not open beside it. It
 costs one request a session: the WebSocket that carries SSH is one request however long it lasts.
 And an owner whose pine runs where there is no Pine app (a server, a VPS) had no other way in from
