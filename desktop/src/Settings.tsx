@@ -949,7 +949,7 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 	const set = (v: string, model?: string) => void store.attempt(() => api.limitModelServer(x.name, v === "default" ? null : Number(v), model)).then((r) => r && reload());
 	// Every line of a server is the same kind of row with the same column at its right, so that the page reads as a list.
 	const pick = (id: string, items: Array<{ value: string; label: string }>, value: string, onChange: (v: string) => void) => (
-		<div className="w-48 shrink-0">
+		<div className="w-full @lg/settings:w-48 @lg/settings:shrink-0">
 			<Choose id={id} items={items} value={value} onChange={onChange} />
 		</div>
 	);
@@ -981,26 +981,26 @@ function ModelServerCard({ server: x, inUse, fallback, reload }: { server: Model
 				const ref = `${x.name}/${m.id}`;
 				return (
 					<Item key={m.id} variant="outline" size="sm" data-model={ref}>
-						<ItemContent className="min-w-0">
+						<ItemContent className="min-w-0 basis-full @lg/settings:basis-0">
 							<ItemTitle className="font-mono wrap-anywhere">
 								{m.id}
 								{ref === fallback ? <Badge variant="secondary" className="font-sans">default</Badge> : null}
 							</ItemTitle>
 							<ItemDescription>{[m.contextWindow ? `${Math.round(m.contextWindow / 1000)}k context` : "", m.images ? "sees pictures" : "text only", m.reasoning ? "can reason" : ""].filter(Boolean).join(" · ")}</ItemDescription>
 						</ItemContent>
-						<ItemActions data-setting={`model-runs:${ref}`}>{pick(`model-runs-${ref}`, [{ value: "default", label: `As the server (${forAll})` }, ...numbers(m.limit)], m.limit ? String(m.limit) : "default", (v) => set(v, m.id))}</ItemActions>
+						<ItemActions className="w-full @lg/settings:w-auto" data-setting={`model-runs:${ref}`}>{pick(`model-runs-${ref}`, [{ value: "default", label: `Server default (${forAll})` }, ...numbers(m.limit)], m.limit ? String(m.limit) : "default", (v) => set(v, m.id))}</ItemActions>
 					</Item>
 				);
 			})}
 			<Item variant="outline" size="sm" data-setting={`server-runs:${x.name}`}>
-				<ItemContent className="min-w-0">
+				<ItemContent className="min-w-0 basis-full @lg/settings:basis-0">
 					<ItemTitle>{x.models.length ? "Every model of this server" : "This server lists no models"}</ItemTitle>
 					<ItemDescription className="line-clamp-none">
 						How many agents use a model at once; the rest wait. A model on your own computer usually handles 1 or 2.
 						{inUse.length ? ` Used by ${inUse.join(", ")}.` : ""}
 					</ItemDescription>
 				</ItemContent>
-				<ItemActions>{pick(`server-runs-${x.name}`, [{ value: "default", label: `As everywhere (${runs})` }, ...numbers(x.limit)], x.limit ? String(x.limit) : "default", (v) => set(v))}</ItemActions>
+				<ItemActions className="w-full @lg/settings:w-auto">{pick(`server-runs-${x.name}`, [{ value: "default", label: `Pine default (${runs})` }, ...numbers(x.limit)], x.limit ? String(x.limit) : "default", (v) => set(v))}</ItemActions>
 			</Item>
 		</ItemGroup>
 	);

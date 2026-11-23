@@ -166,10 +166,10 @@ export const Models: Story = {
 		await expect(within(canvasElement).getByText("66k context · text only · can reason")).toBeInTheDocument();
 		// The server with a number of its own says it; the other says what holds everywhere.
 		await expect(canvasElement.querySelector('[data-setting="server-runs:local"] [data-slot=select-trigger]')).toHaveTextContent("2 at a time");
-		await expect(canvasElement.querySelector('[data-setting="server-runs:studio"] [data-slot=select-trigger]')).toHaveTextContent("As everywhere (8)");
+		await expect(canvasElement.querySelector('[data-setting="server-runs:studio"] [data-slot=select-trigger]')).toHaveTextContent("Pine default (8)");
 		// And so does each model: one with its own number, one that goes by its server's.
 		await expect(canvasElement.querySelector('[data-setting="model-runs:local/gemma-4-vision"] [data-slot=select-trigger]')).toHaveTextContent("1 at a time");
-		await expect(canvasElement.querySelector('[data-setting="model-runs:local/qwen3-coder"] [data-slot=select-trigger]')).toHaveTextContent("As the server (2)");
+		await expect(canvasElement.querySelector('[data-setting="model-runs:local/qwen3-coder"] [data-slot=select-trigger]')).toHaveTextContent("Server default (2)");
 	},
 };
 
