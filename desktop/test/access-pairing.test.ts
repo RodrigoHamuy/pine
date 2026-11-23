@@ -20,7 +20,7 @@ interface Setup {
 	pairing: Pairing;
 	browser: { private: string; public: Buffer };
 	/** What the owner was asked, in order. */
-	asked: Array<{ name: string; code: string; signal: AbortSignal }>;
+	asked: Array<{ name: string; code: string; kind?: string; signal: AbortSignal }>;
 	/** Answers the owner's next question (or the pending one). */
 	answer(yes: boolean): void;
 	connect(username: string, privateKey?: string): Promise<Client>;

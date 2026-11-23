@@ -11,7 +11,7 @@ import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, t
 import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
-import { computerWord, deviceWord, homeScreenKeeps, httpService, isPaired, machineName, machinesView, pairingEnded, readPairLink, type MachinesViewName, type PairLink } from "./machines.ts";
+import { computerWord, deviceWord, homeScreenKeeps, httpService, isPaired, machineName, machinesView, pairingEnded, readPairLink, type MachinesViewName, type NearbyComputer, type PairLink } from "./machines.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
 
 /** The reasoning levels, each with what it means for the answer. */
@@ -250,6 +250,8 @@ export class Store extends Model {
 	canAddHost = true;
 	/** Whether a computer can be paired with by its link: only where the bridge says so, the web client on a deployment with the meeting service (`AppState.canPair`). */
 	canPair = false;
+	/** Whether the page offers "Open Pine on this computer" (`AppState.canOpenApp`): the web client in a browser on a computer. */
+	canOpenApp = false;
 	/** The host of the service machines are reached through, named beside them (`AppState.serviceHost`): the web client's deployment only. */
 	serviceHost?: string;
 	/** The view of the machines the owner chose with the link to SSH or the back control (`machinesView`): for this visit only, never kept. */
@@ -263,6 +265,11 @@ export class Store extends Model {
 	 * yes in the page: nothing of it reaches the computer before that yes (`confirmPair`).
 	 */
 	pairAsk?: PairLink & { link: string };
+	/**
+	 * The pairing the Add a device dialog shows (Browser access, `DevicePairing.tsx`): opened from
+	 * Settings, the menu or the Dock, or by the main process for `pine://pair`. None: the dialog is closed.
+	 */
+	devicePairing?: { link: string; expires: string; asked?: boolean };
 	/** Whether the bridge pairs from a link in the owner's hand (`pair`: the mobile app's), not from its address by itself (the web client's). */
 	pairsFromHand = false;
 	/** The owner ended the open pairing: how it ends is then no failure to say. */
@@ -435,6 +442,7 @@ export class Store extends Model {
 		this.local = first.local !== false;
 		this.canAddHost = first.canAddHost !== false;
 		this.canPair = first.canPair === true;
+		this.canOpenApp = first.canOpenApp === true;
 		this.pairsFromHand = typeof bridge.pair === "function" && typeof bridge.stopPairing === "function";
 		// A pairing link the app was opened with (the mobile app's): asked about here, never paired with by itself.
 		if (this.canPair)
@@ -685,6 +693,17 @@ export class Store extends Model {
 		this.touch();
 	}
 
+	/** Whether the page can look for computers on this network and pair with one without a code (the mobile app's bridge). */
+	get canFindNearby(): boolean {
+		return this.canPair && typeof bridge.nearby === "function" && typeof bridge.pairNearby === "function";
+	}
+
+	/** A computer found on the network, tapped by the owner: the codeless request starts, and the first screen follows how it goes. */
+	async pairNearby(computer: NearbyComputer): Promise<void> {
+		if (!this.canFindNearby) return;
+		await this.attempt(() => bridge.pairNearby!(computer.id, computer.service));
+	}
+
 	/** Whether the owner can paste a pairing link: only under a bridge that can pair and takes one from the owner's hand (the mobile app's). */
 	get canPasteLink(): boolean {
 		return this.canPair && this.pairsFromHand;
@@ -704,7 +723,7 @@ export class Store extends Model {
 		const link = readPairLink(text);
 		const http = link ? undefined : httpService(text);
 		if (http) return `This pairing link reaches your computer through ${http} over http, and this ${this.device} pairs only through https: nothing was used. Pair with a link of an https meeting service, or connect over SSH instead.`;
-		if (!link) return "That is not a pairing link. In the Pine app on your computer, go to Settings > Browser access, press Add a device, and copy the link it gives.";
+		if (!link) return "That is not a pairing link. On your computer, choose Pine > Add a device, and copy the link it gives.";
 		this.pairAsk = { ...link, link: text.trim() };
 		this.touch();
 		return undefined;
@@ -726,7 +745,7 @@ export class Store extends Model {
 
 	/** Whether the open pairing can be ended from the page: under a bridge that pairs from the owner's hand. */
 	get canCancelPair(): boolean {
-		return this.pairsFromHand && this.service.status === "starting" && !!this.service.pairing;
+		return (this.pairsFromHand || this.canFindNearby) && this.service.status === "starting" && !!this.service.pairing;
 	}
 
 	/** End the open pairing, nothing kept: the bridge goes back to how it was before. */
@@ -1148,6 +1167,31 @@ export class Store extends Model {
 		const type = { muted: undefined, accent: "info", good: "success", warn: "warning", bad: "error" }[tone];
 		const timeout = tone === "bad" ? Math.max(ms, 7000) : ms;
 		toast.add({ description: text, type, timeout: Number.isFinite(timeout) ? timeout : 0, priority: tone === "bad" ? "high" : "low" });
+	}
+
+	/** Add a device: a pairing is opened (closing the one that was open) and its dialog shows it. Only the desktop app's bridge opens one. */
+	async addDevice(): Promise<void> {
+		if (typeof bridge.openPairing !== "function") return this.flash("Devices are added in the Pine app on the computer: Pine > Add a device.");
+		const opened = await this.attempt(() => bridge.openPairing!());
+		if (!opened) return;
+		this.devicePairing = { ...opened };
+		this.touch();
+	}
+
+	/** The pairing the main process opened (`pine://pair`): shown as it is, never a second one, whose code would replace the one the browser was sent. */
+	async showPairing(): Promise<void> {
+		const now = await Promise.resolve(bridge.access?.()).catch(() => undefined);
+		if (!now?.pairing) return;
+		this.devicePairing = { ...now.pairing };
+		this.touch();
+	}
+
+	/** The dialog was closed: its pairing is cancelled. */
+	closePairing(): void {
+		if (!this.devicePairing) return;
+		this.devicePairing = undefined;
+		this.touch();
+		void this.attempt(() => bridge.cancelPairing!());
 	}
 
 	/** Run something the owner asked for; what goes wrong is said, not thrown away. */
@@ -2425,6 +2469,10 @@ export class Store extends Model {
 				return this.openEvents();
 			case "updates":
 				return this.lookForUpdate(true);
+			case "add-device":
+				return this.addDevice();
+			case "pairing-shown":
+				return this.showPairing();
 			case "new":
 				return this.newConversation();
 			case "agent": {

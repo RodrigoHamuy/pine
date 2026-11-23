@@ -34,7 +34,7 @@ import { HoverTooltip } from "@/components/hover-tooltip";
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
-import { APP_DOWNLOAD, computerWord, isPaired, meetingLine, reachedThrough, relayLine } from "./machines.ts";
+import { APP_DOWNLOAD, computerWord, isPaired, meetingLine, type NearbyFound, reachedThrough, relayLine } from "./machines.ts";
 import { Textarea } from "@/components/ui/textarea";
 import { type Look, type ThemeEntry } from "./theme.ts";
 import { AgentAvatar } from "@/components/agent-avatar";
@@ -43,7 +43,7 @@ import { AgentColorPicker, AgentNameInput } from "@/components/agent-identity";
 import { BrowserAccess } from "./BrowserAccess.tsx";
 import { Control, CONTROL, Page, Section } from "./settings-parts.tsx";
 import { type Entry, entries, GROUPS, LABELS, type Lists, type Place, search } from "./settings-index.ts";
-import { PairLinkField } from "./Pairing.tsx";
+import { NearbyComputers, PairLinkField } from "./Pairing.tsx";
 
 const SECTIONS: Array<{ id: string; label: string; icon: LucideIcon }> = (
 	[
@@ -2516,27 +2516,51 @@ export function MachineList() {
 }
 
 /**
- * How a device is paired with a computer, in three lines, and where the Pine app is for a computer
- * without it: opened like every other link. Under a bridge that takes a link from the owner's hand
- * (the mobile app's), the field to paste one into.
+ * The computers on this network, looked for while this is shown (and only then: a phone asks for the
+ * local network the first time, never at launch). A tap asks the computer without a code.
+ */
+function PairNearby() {
+	const s = useModel(store);
+	const [found, setFound] = useState<NearbyFound>({ computers: [] });
+	useEffect(() => {
+		const stop = bridge.nearby!((next) => setFound({ computers: Array.isArray(next?.computers) ? next.computers : [], denied: next?.denied === true }));
+		return () => void (typeof stop === "function" && stop());
+	}, []);
+	return <NearbyComputers found={found} device={s.device} onPick={(c) => void s.pairNearby(c)} />;
+}
+
+/**
+ * How a device is paired with a computer: first the computers found on this network where the bridge
+ * looks (the mobile app's), or the Pine app on this computer where the browser runs beside it (the
+ * web client's on a computer); then the code, in short, and where the Pine app is for a computer
+ * without it. Under a bridge that takes a link from the owner's hand (the mobile app's), the field to
+ * paste one into.
  */
 function PairHowTo() {
 	const s = useModel(store);
 	return (
+		<>
+			{s.canFindNearby ? <PairNearby /> : null}
+			{s.canOpenApp ? (
+				<div className="flex flex-col items-start gap-1" data-slot="open-app">
+					<Button data-slot="open-pine-here" onClick={() => void store.attempt(() => bridge.openApp!())}><ExternalLinkIcon data-icon="inline-start" />Open Pine on this computer</Button>
+					<p className="text-sm text-muted-foreground">Where Pine runs on this computer with Browser access on, it opens a pairing and sends its link to this browser.</p>
+				</div>
+			) : null}
 		<SettingsItem
 			data-slot="pair-how-to"
 			contentClassName="basis-full"
-			title="Pair with your computer"
+			title={s.canFindNearby ? "Or pair with a code" : "Pair with your computer"}
 			actions={<Button variant="outline" size="sm" data-slot="get-the-app" onClick={() => void store.attempt(() => bridge.open(APP_DOWNLOAD))}><ExternalLinkIcon data-icon="inline-start" />Get the Pine app</Button>}
 		>
 				<ol className="list-decimal ps-5 text-sm text-muted-foreground">
-					<li>Open the Pine app on your computer.</li>
-					<li>Go to Settings &gt; Browser access and press Add a device.</li>
+					<li>On your computer: Pine &gt; Add a device.</li>
 					<li>{s.canPasteLink ? "Scan the code with this phone's camera and open it in Pine, or paste the link it gives below." : "Scan the code with this device's camera, or open the link it gives in this browser."}</li>
 				</ol>
 				{s.canPasteLink ? <PairLinkField onLink={(text) => s.askToPair(text)} /> : null}
 				{s.serviceHost ? <ItemDescription className="line-clamp-none wrap-anywhere" data-slot="meeting-line">{meetingLine(s.serviceHost)}</ItemDescription> : null}
 		</SettingsItem>
+		</>
 	);
 }
 

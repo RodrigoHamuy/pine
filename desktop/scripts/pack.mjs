@@ -243,6 +243,8 @@ await packApp({
 			},
 		},
 		dmg: { title: `Pine ${pineVersion}` },
+		// `pine://pair` (ADR 0005): a page of the web client opens the app on this computer to add a device.
+		protocols: [{ name: "Pine", schemes: ["pine"] }],
 		linux: { target: ["AppImage"], icon: "assets/icon.png", category: "Development" },
 		win: { target: ["nsis"], icon: "assets/icon.png" },
 	},

@@ -121,6 +121,23 @@ export function httpService(text: string): string | undefined {
  */
 export const deviceWord = (platform: string): "phone" | "browser" => (platform === "android" || platform === "ios" ? "phone" : "browser");
 
+/** A computer that announces itself on this network (ADR 0005): its machine id and its meeting service's https origin. Unproven: the digits are. */
+export type NearbyComputer = { id: string; service: string };
+/** What a bridge that looks on the network found: every computer, and whether the system refused the app the local network (iOS). */
+export type NearbyFound = { computers: NearbyComputer[]; denied?: boolean };
+
+/** The start of a machine id, which tells two computers found on one network apart: they are all called "Pine" there. */
+export const shortId = (id: string) => id.slice(0, 6);
+
+/**
+ * Whether the web client runs in a browser on a computer, where the Pine app may run beside it and
+ * `pine://pair` can open it: not on a phone or a tablet (iPadOS says it is a Mac: told apart by its touch points).
+ */
+export function isDesktopBrowser(userAgent: string, touchPoints = 0): boolean {
+	if (/iPhone|iPad|iPod|Android|Mobile/.test(userAgent) || (/Macintosh/.test(userAgent) && touchPoints > 1)) return false;
+	return /Macintosh|Windows|X11|Linux|CrOS/.test(userAgent);
+}
+
 /** What a paired computer is called while no name is known for it: before the pairing, and where none was given. */
 export const YOUR_COMPUTER = "your computer";
 
@@ -183,9 +200,11 @@ export function reachedThrough(host: string, serviceHost?: string): string | und
 /** The first screen during a pairing: what it says, and the four digits once the computer showed them. None: no pairing under way. Its name is not known yet. */
 export function firstScreen(state: ServiceState, device: "phone" | "browser" = "browser"): { title: string; about: string; code?: string } | undefined {
 	if (state.status !== "starting" || !state.pairing) return undefined;
-	const { code, name } = state.pairing;
-	if (!code) return { title: "Pairing with your computer", about: "Reaching your computer through the pairing link…" };
-	return { title: "Confirm on your computer", about: `Your computer asks whether ${name ? `"${name}"` : `this ${device}`} may connect. Press Allow there if it shows ${code}, the same digits as here.`, code };
+	const { code, name, computer } = state.pairing;
+	if (!code) return { title: "Pairing with your computer", about: "Reaching your computer…" };
+	// The computer's own name, once it gave it with the digits: a computer found on the network was only "Pine" before.
+	const it = computer || "your computer";
+	return { title: `Confirm on ${it}`, about: `${computer || "Your computer"} asks whether ${name ? `"${name}"` : `this ${device}`} may connect. Press Allow there if it shows ${code}, the same digits as here.`, code };
 }
 
 /**

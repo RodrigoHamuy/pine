@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, fn, within } from "storybook/test";
 import type { ServiceState } from "./bridge.ts";
+import type { NearbyFound } from "./machines.ts";
 import { Gate } from "./App.tsx";
 import { store } from "./model.ts";
 
@@ -10,7 +11,14 @@ import { store } from "./model.ts";
 
 window.pine.deviceKey = async () => ({ key: "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIGq3lYcVb0mXkJ2yq8rV6tZsP4dW1nE9fKcH7uR2aB3m pine-android", copy: async () => {}, share: async () => {} });
 
-function Before({ state, hosts, loadError, names, canAddHost = true, canPair = false, serviceHost, pairFailed = false, phone = false }: { state: ServiceState; hosts: string[]; loadError?: string; names?: Record<string, string>; canAddHost?: boolean; canPair?: boolean; serviceHost?: string; pairFailed?: boolean; phone?: boolean }) {
+function Before({ state, hosts, loadError, names, canAddHost = true, canPair = false, serviceHost, pairFailed = false, phone = false, nearby, openApp = false }: { state: ServiceState; hosts: string[]; loadError?: string; names?: Record<string, string>; canAddHost?: boolean; canPair?: boolean; serviceHost?: string; pairFailed?: boolean; phone?: boolean; nearby?: NearbyFound; openApp?: boolean }) {
+	// `nearby`: what a phone whose app looks on the network finds (the bridge tells it at once); none: a bridge that does not look.
+	// (False, not undefined: the stand-in bridge answers a name it does not have with a function.)
+	Object.assign(window.pine, {
+		nearby: nearby ? (fn: (found: NearbyFound) => void) => (fn(nearby), () => {}) : false,
+		pairNearby: nearby ? fn(async () => {}) : false,
+	});
+	store.canOpenApp = openApp;
 	// `phone`: the mobile app's bridge, which pairs from a link in the owner's hand (`pair`) where it says `canPair`.
 	store.platform = phone ? "android" : "darwin";
 	store.pairsFromHand = phone;
@@ -34,8 +42,8 @@ const meta = {
 	parameters: { layout: "fullscreen" },
 	// What a story sets on the store is put back after it: the next story starts from the store as it was.
 	beforeEach: () => {
-		const { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed, platform, pairsFromHand } = store;
-		return () => void Object.assign(store, { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed, platform, pairsFromHand });
+		const { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed, platform, pairsFromHand, canOpenApp } = store;
+		return () => void Object.assign(store, { local, service, prefs, loadError, canAddHost, canPair, serviceHost, machinesChosen, pairFailed, platform, pairsFromHand, canOpenApp });
 	},
 	// Nothing of a local machine, and the machines listed: they are the only way to a pine.
 	play: async ({ canvasElement }) => {
@@ -232,7 +240,7 @@ const opened = fn(async () => {});
 
 /** A deployment whose relay is off, nothing paired yet: how to pair in three lines and where the app is; no user@host field, no key for one, no link to SSH. */
 export const PairFirst: Story = {
-	args: { hosts: [], canAddHost: false, state: { status: "error", kind: "ssh", message: "Pair this browser with the Pine app on your computer: open Pine on your computer, go to Settings > Browser access, and scan the code it shows." } },
+	args: { hosts: [], canAddHost: false, state: { status: "error", kind: "ssh", message: "Pair this browser with the Pine app on your computer: on your computer, choose Pine > Add a device, and scan the code it shows." } },
 	beforeEach: () => {
 		opened.mockClear();
 		const was = window.pine.open;
@@ -287,6 +295,16 @@ export const PairedComputerNotReached: Story = {
 // ---- A service with both: pairing first, SSH behind a link ----
 
 const SERVICE = "pine-main.drcmda.workers.dev";
+
+/** A browser on a computer: "Open Pine on this computer" first (`pine://pair`), the code below. */
+export const BrowserOnAComputer: Story = {
+	args: { hosts: [], canPair: true, openApp: true, serviceHost: SERVICE, state: { status: "error", kind: "ssh", message: "Add the machine whose pine this browser is to use, as user@host or user@host:port. Put this browser's key into ~/.ssh/authorized_keys there first." } },
+	play: async ({ canvasElement }) => {
+		await expect(within(canvasElement).getByRole("button", { name: "Open Pine on this computer" })).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-slot="pair-how-to"]')).toHaveTextContent("On your computer: Pine > Add a device.");
+		await expect(canvasElement.querySelector('[data-slot="pair-nearby"]')).toBeNull();
+	},
+};
 
 /**
  * The official service, nothing added yet: how to pair, and a discreet link to SSH. The link shows the SSH
@@ -378,6 +396,49 @@ export const PhonePairing: Story = {
 		await expect(canvasElement.querySelector('[data-slot="pairing-code"]')).toHaveTextContent("4821");
 		await expect(within(canvasElement).getByText(/Pine on Pixel 9/)).toBeInTheDocument();
 		await expect(canvasElement.querySelector('[data-slot="cancel-pairing"]')).not.toBeNull();
+	},
+};
+
+// ---- The mobile app, pairing with a computer found on the network ----
+
+const ID = "x8Qk2vJp1mZl3nRt5yWb7cDf9gHs0aEu4iOq6eTr2wA";
+
+/** Two computers found on this network, each "Pine" and the start of its id; one through a service of its owner's own. Below, the code as before. */
+export const PhoneNearbyFound: Story = {
+	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE }, nearby: { computers: [{ id: ID, service: "https://pine-main.drcmda.workers.dev" }, { id: `Zq${ID.slice(2)}`, service: "https://pine.example.org" }] } },
+	play: async ({ canvasElement }) => {
+		const found = canvasElement.querySelectorAll('[data-slot="pair-nearby-computer"]');
+		await expect(found).toHaveLength(2);
+		await expect(found[0]).toHaveTextContent("Pine x8Qk2v");
+		await expect(found[1]).toHaveTextContent(/Through pine\.example\.org/);
+		await expect(within(canvasElement).getByText("Or pair with a code")).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-slot="pair-link-field"]')).not.toBeNull();
+	},
+};
+
+/** Looking, nothing found yet: a spinner, and what the computer needs. */
+export const PhoneNearbyEmpty: Story = {
+	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE }, nearby: { computers: [] } },
+	play: async ({ canvasElement }) => {
+		await expect(canvasElement.querySelector('[data-slot="pair-nearby-empty"]')).toHaveTextContent("No computer found on this network yet. Pine must be open, with Browser access on.");
+	},
+};
+
+/** iOS refused the app the local network: how to allow it, and the code below still works. */
+export const PhoneNearbyRefused: Story = {
+	args: { hosts: [], canPair: true, phone: true, state: { status: "error", kind: "ssh", message: NO_MACHINE }, nearby: { computers: [], denied: true } },
+	play: async ({ canvasElement }) => {
+		await expect(canvasElement.querySelector('[data-slot="pair-nearby-denied"]')).toHaveTextContent(/Settings > Pine/);
+		await expect(canvasElement.querySelector('[data-slot="pair-link-field"]')).not.toBeNull();
+	},
+};
+
+/** A computer found on the network answered: its own name now, with the four digits. */
+export const PhoneNearbyConfirm: Story = {
+	args: { hosts: [], canPair: true, phone: true, state: { status: "starting", pairing: { code: "4821", name: "Pine on iPhone", computer: "Studio Mac" } }, nearby: { computers: [] } },
+	play: async ({ canvasElement }) => {
+		await expect(within(canvasElement).getByText("Confirm on Studio Mac")).toBeInTheDocument();
+		await expect(canvasElement.querySelector('[data-slot="pairing-code"]')).toHaveTextContent("4821");
 	},
 };
 

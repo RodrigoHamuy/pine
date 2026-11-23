@@ -1,5 +1,6 @@
 // What the page has of the world outside itself: the bridge the preload script exposes.
 import type { Bridge } from "../electron/preload.ts";
+import type { NearbyFound } from "./machines.ts";
 import type { Look } from "./theme.ts";
 
 declare global {
@@ -19,7 +20,7 @@ export type ServiceState = {
 			 * digits the computer shows beside `name`, this browser's name, while the owner decides there.
 			 * Before the computer answered, neither. The other bridges leave it out.
 			 */
-			pairing?: { code?: string; name?: string };
+			pairing?: { code?: string; name?: string; computer?: string };
 	  } | {
 			status: "ready";
 			mode: string;
@@ -103,6 +104,11 @@ export interface AppState {
 	 */
 	canPair?: boolean;
 	/**
+	 * Whether the page offers "Open Pine on this computer" (`openApp`): the web client's bridge in a
+	 * browser on a computer, where it can pair. The others leave it out.
+	 */
+	canOpenApp?: boolean;
+	/**
 	 * The host of the service a machine is reached through (the web client's deployment, its
 	 * document's address: "pine-main.drcmda.workers.dev"), which the page names so that the relay and the
 	 * meeting service are never forgotten. The others leave it out: they reach machines without one.
@@ -182,6 +188,20 @@ export type PageBridge = Omit<Bridge, "state" | AccessCalls | UpdateCalls> & Par
 	stopPairing?: () => Promise<void>;
 	/** A pairing link the app was opened with (the mobile app's): starts nothing, the page asks the owner first. */
 	onPairLink?: (fn: (link: string) => void) => () => void;
+	/**
+	 * Look for computers that announce themselves on this network (ADR 0005), for as long as the page
+	 * listens: told every computer found, each time the list changes. Set by a bridge that can look (the
+	 * mobile app's, where its native side can); the page listens only while it shows how to pair, so that
+	 * a phone asks for the local network then and never at launch.
+	 */
+	nearby?: (fn: (found: NearbyFound) => void) => () => void;
+	/** Pair with a computer found on the network, without a code: the pairing goes as `pair`'s does, through the service state. */
+	pairNearby?: (id: string, service: string) => Promise<void>;
+	/**
+	 * Open the Pine app on this computer to add this browser (`pine://pair`). The web client's bridge,
+	 * which offers it where it says `canOpenApp`.
+	 */
+	openApp?: () => Promise<void>;
 };
 
 export const bridge = window.pine;

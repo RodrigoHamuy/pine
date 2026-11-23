@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
 import { type AccessChange, type AccessControl, type AccessPrefs, createAccessControl, readAccessPrefs } from "./access/control.ts";
 import type { Cipher } from "./access/host.ts";
+import { createAnnouncer, isPairAddress } from "./access/nearby.ts";
 import { startStandIn } from "./access/stand-in.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
 import { callDaemon, followEvents, mediaFromDaemon, pageCsp, VIEW_CSP } from "./daemon.ts";
@@ -294,6 +295,22 @@ function notifyPaired(name: string): void {
 }
 
 /**
+ * A device asks to connect (with a pairing's code, or from the network without one): while the window
+ * is not in front, the system says so with the device's name and the four digits. No Allow in it: the
+ * owner answers in the app, which a click brings forward. Said whatever the notification preference,
+ * as a question that waits for the owner is, but only while the window is not in front: there the toast asks.
+ */
+function notifyAsked(request: { name: string; code: string }): void {
+	if (!Notification.isSupported() || (win && !win.isDestroyed() && win.isVisible() && win.isFocused())) return;
+	const n = new Notification({ title: `${request.name} wants to connect`.slice(0, 80), body: `Allow it in Pine if the device shows ${request.code}.`, silent: false });
+	n.on("click", () => show());
+	n.show();
+}
+
+/** This computer on the local network (access/nearby.ts); a test's stand-in host announces nothing. */
+const announcer = createAnnouncer();
+
+/**
  * Browser access (access/control.ts), made when the app is ready. Its daemon is this computer's,
  * held as the window holds it: it ends when the app quits, or goes on with "keep pine running".
  */
@@ -317,9 +334,43 @@ function startAccess(): void {
 		loginItem: (open) => app.setLoginItemSettings({ openAtLogin: open }),
 		paired: (device) => notifyPaired(device.name),
 		changed: (s) => send("pine:access", s),
+		asked: notifyAsked,
+		announce: ACCESS_STAND_IN !== undefined ? undefined : (what) => announcer.announce(what),
 		start: ACCESS_STAND_IN !== undefined ? (options) => startStandIn({ ...options, waitMs: Number(ACCESS_STAND_IN) || undefined }) : undefined,
 	});
-	void access.start();
+	accessStarted = access.start();
+}
+
+/** The access host's start, which an address handed to the app before it was up waits for. */
+let accessStarted: Promise<void> | undefined;
+
+/**
+ * `pine://pair`, from the web client's "Open Pine on this computer" (ADR 0005): a pairing is opened,
+ * as Add a device opens one, and its link goes to the owner's default browser, which is most likely
+ * the one that asked; the page shows the Add a device dialog too, for a browser that is not the
+ * default one. Nothing while browser access is off. Any site can send the owner here: the browser asks
+ * first, the link goes to this computer's browser only, and nothing is kept without Allow.
+ */
+async function pairFromAddress(url: string): Promise<void> {
+	if (!isPairAddress(url)) return;
+	await accessStarted;
+	if (!access) return;
+	const now = await access.state();
+	if (!now.enabled || now.status === "off") return;
+	const opened = await access.openPairing().catch(() => undefined);
+	if (!opened) return;
+	openOutside(opened.link);
+	if (pageReady) send("pine:menu", "pairing-shown");
+	else pairingShown = true;
+}
+let pairingShown = false;
+
+/** Where the app is the system's handler of `pine:`: a packed app, or a checkout that asks for it. Never in a test. */
+function registerScheme(): void {
+	if (HEADLESS || ACCESS_STAND_IN !== undefined || process.env.PINE_DESKTOP_DATA) return;
+	if (app.isPackaged) app.setAsDefaultProtocolClient("pine");
+	// From a checkout the program is Electron's, which is given the app's folder to open.
+	else if (process.env.PINE_DESKTOP_PROTOCOL) app.setAsDefaultProtocolClient("pine", process.execPath, [APP_ROOT]);
 }
 
 /** What the page may ask to change, value by value. */
@@ -564,7 +615,7 @@ function buildMenu(): void {
 			? [
 					{
 						label: "Pine",
-						submenu: [{ role: "about" as const }, ...(RELEASE_API ? [item("Check for Updates…", "updates")] : []), { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), ...(RESOURCES && fs.existsSync(path.join(RESOURCES, "bin", "pine")) ? [{ label: "pine in a Terminal…", click: () => void commandFromMenu() }] : []), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
+						submenu: [{ role: "about" as const }, ...(RELEASE_API ? [item("Check for Updates…", "updates")] : []), { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), item("Add a Device…", "add-device", "Cmd+Shift+D"), ...(RESOURCES && fs.existsSync(path.join(RESOURCES, "bin", "pine")) ? [{ label: "pine in a Terminal…", click: () => void commandFromMenu() }] : []), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
 					},
 				]
 			: []),
@@ -581,7 +632,7 @@ function buildMenu(): void {
 				item("Export Conversation…", "export", "CmdOrCtrl+Shift+E"),
 				{ type: "separator" },
 				item("Close Tab", "close", "CmdOrCtrl+W"),
-				...(isMac ? [] : [{ type: "separator" as const }, item("Settings…", "settings", "Ctrl+,"), { role: "quit" as const }]),
+				...(isMac ? [] : [{ type: "separator" as const }, item("Settings…", "settings", "Ctrl+,"), item("Add a Device…", "add-device", "Ctrl+Shift+D"), { role: "quit" as const }]),
 			],
 		},
 		{ label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "pasteAndMatchStyle" }, { role: "selectAll" }, { type: "separator" }, item("Find in Conversation", "find", "CmdOrCtrl+F"), item("Copy Last Answer", "copy", "CmdOrCtrl+Shift+C"), ...(isMac ? [item("Dictate Message", "voice", "Ctrl+R")] : [])] },
@@ -636,6 +687,8 @@ function buildMenu(): void {
 		{ role: "help", submenu: [item("Keys and Commands", "help"), ...(RELEASE_API && !isMac ? [item("Check for Updates…", "updates")] : []), { label: "pine on GitHub", click: () => openOutside("https://github.com/pmndre/pine") }] },
 	];
 	Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+	// The Dock's menu: a device can be added from there while the window is behind others.
+	if (isMac) app.dock?.setMenu(Menu.buildFromTemplate([item("Add a Device…", "add-device")]));
 }
 
 // ---- what the page may ask for -----------------------------------------------------------------
@@ -835,9 +888,17 @@ function openFolder(dir: string): void {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
 	app.on("second-instance", (_e, argv) => {
+		// On Windows and Linux an address the system opens the app with comes as an argument of a second start.
+		const address = argv.find((a) => a.toLowerCase().startsWith("pine:"));
+		if (address) return void pairFromAddress(address);
 		show();
 		const dir = argv.slice(1).find((a) => !a.startsWith("-") && path.isAbsolute(a));
 		if (dir) openFolder(dir);
+	});
+	// On macOS an address comes as an event, also before the app is ready.
+	app.on("open-url", (e, url) => {
+		e.preventDefault();
+		void pairFromAddress(url);
 	});
 	app.on("open-file", (e, file) => {
 		e.preventDefault();
@@ -854,11 +915,16 @@ else {
 		session.defaultSession.setPermissionRequestHandler((_wc, _permission, done) => done(false));
 		wire();
 		startAccess();
+		registerScheme();
+		// The first start on Windows and Linux: the address is an argument of this one.
+		const address = process.argv.find((a) => a.toLowerCase().startsWith("pine:"));
+		if (address) void pairFromAddress(address);
 		ipcMain.on("pine:ready", (e) => {
 			if (!fromPage(e)) return;
 			pageReady = true;
 			send("pine:service", state);
 			for (const dir of pendingFolders.splice(0)) send("pine:menu", `folder:${dir}`);
+			if (pairingShown) (pairingShown = false), send("pine:menu", "pairing-shown");
 		});
 		// From a checkout the program is Electron's, and so would be its icon in the Dock.
 		if (isMac && !app.isPackaged) {
@@ -886,6 +952,7 @@ else {
 		terminals.closeAll();
 		// Browser access closes its sockets; its daemon is one of those held, and follows them.
 		void access?.stop();
+		announcer.stop();
 		// The connections to other machines end with the app, and a pine one started there with it.
 		const going = [...held.values()].filter((s) => s.host || (s.started && !prefs.keepRunning));
 		if (!going.length) return;
