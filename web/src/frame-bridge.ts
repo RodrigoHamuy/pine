@@ -73,6 +73,7 @@ export function frameBridge(parent: Target, self: MessageSource): FrameBridge {
 		mediaBase: MEDIA_BASE,
 		media: (target: string) => ask("media", target),
 		open: (url: string) => ask("open", url),
+		openApp: () => ask("openApp"),
 		saveText: (name: string, text: string) => ask("saveText", name, text),
 		// What only the desktop app has, refused or done nothing.
 		contextMenu: async () => undefined,

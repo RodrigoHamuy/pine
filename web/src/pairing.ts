@@ -68,10 +68,11 @@ export type PairAnswer = { ok: true; name: string } | { ok: false; reason: "refu
 
 /**
  * Runs the pairing request on a pairing session and waits for the owner's answer at the computer.
- * `onCode` is told the four digits the computer shows beside this browser's name. A channel that
+ * `onCode` is told the four digits the computer shows beside this browser's name, and the computer's
+ * name when it gives it with them (`computer`, cleaned; none: an older Pine app). A channel that
  * ends without an answer counts as expired. A yes without a name is kept as "your computer".
  */
-export async function askToPair(connection: Connection, name: string, onCode: (code: string) => void): Promise<PairAnswer> {
+export async function askToPair(connection: Connection, name: string, onCode: (code: string, computer?: string) => void): Promise<PairAnswer> {
 	const channel: Channel = await connection.exec(pairCommand(name));
 	return new Promise<PairAnswer>((resolve) => {
 		let text = "";
@@ -81,13 +82,13 @@ export async function askToPair(connection: Connection, name: string, onCode: (c
 			for (let end = text.indexOf("\n"); end >= 0; end = text.indexOf("\n")) {
 				const line = text.slice(0, end);
 				text = text.slice(end + 1);
-				let said: { code?: unknown; ok?: unknown; name?: unknown; reason?: unknown };
+				let said: { code?: unknown; computer?: unknown; ok?: unknown; name?: unknown; reason?: unknown };
 				try {
 					said = JSON.parse(line);
 				} catch {
 					continue;
 				}
-				if (typeof said.code === "string" && /^\d{4}$/.test(said.code)) onCode(said.code);
+				if (typeof said.code === "string" && /^\d{4}$/.test(said.code)) onCode(said.code, (typeof said.computer === "string" && cleanName(said.computer)) || undefined);
 				else if (said.ok === true) resolve({ ok: true, name: cleanName(typeof said.name === "string" ? said.name : "") || YOUR_COMPUTER });
 				else if (said.ok === false) resolve({ ok: false, reason: said.reason === "refused" ? "refused" : "expired" });
 			}

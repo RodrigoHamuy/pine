@@ -41,6 +41,8 @@ export const METHODS = {
 	media: (args: unknown[]) => args.length === 1 && typeof args[0] === "string" && args[0].length <= 4096,
 	/** An address to open in a new tab; the bridge opens only http(s). */
 	open: (args: unknown[]) => args.length === 1 && typeof args[0] === "string" && args[0].length <= 8192,
+	/** `pine://pair`, opened by the top document: the Pine app on this computer adds this browser. Nothing else. */
+	openApp: none,
 	/** A file's name and its text, saved by the browser as a download. */
 	saveText: (args: unknown[]) => args.length === 2 && typeof args[0] === "string" && args[0].length <= 1000 && typeof args[1] === "string" && args[1].length <= 64 * 1024 * 1024,
 } satisfies Record<string, (args: unknown[]) => boolean>;
