@@ -32,5 +32,9 @@ export type { Update } from "../electron/updates.ts";
 
 export const bridge = window.pine;
 
-/** Where the daemon's pictures, video and sound are fetched from: the app's scheme, or in the preview its server's path. */
-export const MEDIA_BASE = import.meta.env.DEV && __PINE_PREVIEW__ ? "/__pine/media" : "pine-media://daemon";
+/** Where the daemon's pictures, video and sound are fetched from: the app's scheme (per window), or in the preview its server's path. */
+export let MEDIA_BASE = import.meta.env.DEV && __PINE_PREVIEW__ ? "/__pine/media" : "pine-media://daemon";
+
+export function setMediaBase(base: string): void {
+	if (base) MEDIA_BASE = base;
+}

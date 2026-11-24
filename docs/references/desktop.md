@@ -249,10 +249,11 @@ shows it, the main agent can set it (`set_setting ui.theme`), and with another m
 ## Environments: the pine of another machine
 
 The app can use the pine of another machine instead of the one on this computer: a server, a
-desktop at home, anything you reach with `ssh`. It uses one pine at a time. The foot of the side
-bar says which (`pine 0.23.0 · started here`, or `pine 0.23.0 · server`): a click on it lists
-This Mac and the machines you added, and Environments… leads to Settings > Environments, where
-machines are added and forgotten. The palette (`⌘K`) has "Use the pine on …" too. In a terminal,
+desktop at home, anything you reach with `ssh`. Each window uses one pine at a time, and you can
+open multiple windows (`⌘N`, or **New window** in Settings > Environments) on different machines
+side by side. The foot of the side bar says which (`pine 0.23.0 · started here`, or `pine 0.23.0 · server`): a click on it lists
+This Mac and the machines you added, **Open in new window**, and Environments… leads to Settings > Environments, where
+machines are added and forgotten. The palette (`⌘K`) has "Use the pine on …" and "Open … in new window" too. In a terminal,
 `pine --ssh <host>` does the same for the terminal UI ([tui.md](tui.md#the-pine-of-another-machine)).
 
 | What | How |

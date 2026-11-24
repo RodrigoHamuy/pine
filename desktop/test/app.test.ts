@@ -664,7 +664,7 @@ test("what an answer points at on the web is not fetched by itself, and what it 
 	assert.equal(await md.locator('img[src^="http"]').count(), 0);
 	// A small picture in the text itself is shown, and one in the workspace comes from the daemon.
 	assert.equal(await md.locator('img[src^="data:image/png"]').count(), 1);
-	assert.match((await md.locator('img[alt="the plan"]').getAttribute("src")) ?? "", /^pine-media:\/\/daemon\/.*plan\.png/);
+	assert.match((await md.locator('img[alt="the plan"]').getAttribute("src")) ?? "", /^pine-media:\/\/(daemon|w\d+)\/.*plan\.png/);
 	// Nothing to download a picture with.
 	assert.equal(await md.locator('button[title*="ownload"], button[aria-label*="ownload"]').count(), 0);
 	// What could act or restyle is gone, and the words stay. The one svg allowed is pine's own arrow beside a link.
@@ -2340,8 +2340,29 @@ test("another machine's pine is used from the foot of the side bar, and this Mac
 	assert.equal(await ours(farPort, far), true);
 	assert.equal((await page.evaluate(() => (window as any).pine.state())).prefs.use, undefined);
 
-	// Forgotten: the connection ends, and the pine the app started there with it.
+	// A second window can be opened on another machine while this one stays on This Mac.
 	await menu("settings:environments");
+	await sees("[data-environment='you@elsewhere']");
+	const [page2] = await Promise.all([
+		app.waitForEvent("window"),
+		page.locator("[data-environment='you@elsewhere']").getByRole("button", { name: "New window" }).click(),
+	]);
+	await page2.waitForFunction(() => [...document.querySelectorAll("[data-slot=agent-label] > :first-child")].map((e) => e.textContent?.trim()).join() === "main,helper", undefined, { timeout: 60_000 });
+	assert.match(await page2.textContent("[data-slot=service-status]"), /· elsewhere/);
+	assert.match(await page.textContent("[data-slot=service-status]"), /started here/);
+	assert.doesNotMatch(await agents(), /helper/);
+	await page2.fill("[data-slot=composer] textarea", "hello from window 2");
+	await page2.keyboard.press("Enter");
+	await page2.waitForSelector("[data-slot=markdown] >> text=ECHO[hello from window 2]", { timeout: 20_000 });
+	assert.ok((await (await fetch(`http://127.0.0.1:${farPort}/tasks?agent=main&limit=100`, { headers: { authorization: `Bearer ${daemonOf(far).token}` } })).json()).find((t: any) => t.prompt === "hello from window 2"));
+	// Cannot forget a machine while another window is using it.
+	await page.locator("[data-environment='you@elsewhere']").getByRole("button", { name: "Forget" }).click();
+	await sees("[data-slot=toast] >> text=A window uses this machine now");
+	await page2.close();
+	await page.waitForTimeout(200);
+	assert.equal(app.windows().length, 1);
+
+	// Forgotten: the connection ends, and the pine the app started there with it.
 	await page.locator("[data-environment='you@elsewhere']").getByRole("button", { name: "Forget" }).click();
 	await page.locator("[data-environment='you@elsewhere']").waitFor({ state: "detached" });
 	assert.deepEqual((await page.evaluate(() => (window as any).pine.state())).prefs.hosts, []);

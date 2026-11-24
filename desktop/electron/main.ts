@@ -97,14 +97,14 @@ function loadPrefs(): void {
  * What the window shows before the page draws: the page colour of the theme it was last drawn in
  * (pmndre's before there was one). On a Mac the window is transparent, behind its vibrancy.
  */
-function windowBackground(): string {
+function windowBackground(look = prefs.look): string {
 	if (isMac) return "#00000000";
-	return (prefs.look?.colors.bg ?? "#1b1e28").slice(0, 7);
+	return (look?.colors.bg ?? "#1b1e28").slice(0, 7);
 }
 
-/** Repaints the window's background for the current theme; a no-op before the window exists. */
-function refreshBackground(): void {
-	if (win && !win.isDestroyed()) win.setBackgroundColor(windowBackground());
+/** Repaints a window's background for its current theme. */
+function refreshBackground(entry: WinEntry): void {
+	if (!entry.win.isDestroyed()) entry.win.setBackgroundColor(windowBackground(entry.look));
 }
 
 function savePrefs(): void {
@@ -116,80 +116,83 @@ function savePrefs(): void {
 	}
 }
 
-// ---- the daemon --------------------------------------------------------------------------------
+// ---- windows & daemons -------------------------------------------------------------------------
 
-// One pine at a time: this computer's, or another machine's over SSH (Settings > Environments). The
-// page knows only that there is one; which it is, it is told in the state (`host`, `label`).
+// Each window shows one pine at a time: this computer's, or another machine's over SSH (Settings >
+// Environments). Multiple windows can be open at once, on the same pine or on different ones.
 type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | { status: "error"; kind: ServiceError["kind"]; message: string; host?: string };
 
-let win: BrowserWindow | undefined;
-let service: Service | undefined;
+interface WinEntry {
+	id: number;
+	wcId: number;
+	win: BrowserWindow;
+	host?: string;
+	pageReady: boolean;
+	pendingFolders: string[];
+	pendingCommands: string[];
+	look?: Look;
+	badgeCount: number;
+	terminals: Terminals;
+}
+
+interface EnvConnection {
+	key: string;
+	host?: string;
+	service?: Service;
+	state: ServiceState;
+	connected: boolean;
+	stream?: AbortController;
+	starting?: Promise<void>;
+	round: number;
+}
+
+const windows = new Map<number, WinEntry>();
+const windowById = new Map<number, WinEntry>();
+const envs = new Map<string, EnvConnection>();
 let launch: Launch | undefined;
-let state: ServiceState = { status: "starting" };
-let stream: AbortController | undefined;
-/** Whether the event stream of the pine in use is up: told again to a page that was loaded anew, which knows nothing of it. */
-let connected = false;
-/** Counts up with each start, so that a start that was overtaken (another machine was picked meanwhile) lets go of what it found. */
-let round = 0;
+let lastFocusedWcId: number | undefined;
 let quitting = false;
 let listening: Listening | undefined;
+let listeningWin: WinEntry | undefined;
 
-const send = (channel: string, ...args: unknown[]) => {
-	if (win && !win.isDestroyed()) win.webContents.send(channel, ...args);
+const sendToWindow = (entry: WinEntry | undefined, channel: string, ...args: unknown[]) => {
+	if (entry && !entry.win.isDestroyed()) entry.win.webContents.send(channel, ...args);
 };
 
-/** The owner's terminal of each conversation (terminal.ts): their own shell, which ends with the app. */
-// A block run with a Run button reports how it went to the page, which tells the conversation through the daemon.
-const terminals = new Terminals(
-	{ data: (id, data) => send("pine:term-data", id, data), exit: (id, code) => send("pine:term-exit", id, code), run: (id, report) => send("pine:term-run", id, report) },
-	{ env: loginEnv, hooks: path.join(app.getPath("userData"), "shell-hooks"), shell: process.env.PINE_DESKTOP_SHELL ? [process.env.PINE_DESKTOP_SHELL] : undefined, stillRunningMs: Number(process.env.PINE_DESKTOP_STILL_RUNNING_MS) || undefined },
-);
+const broadcast = (channel: string, ...args: unknown[]) => {
+	for (const entry of windows.values()) sendToWindow(entry, channel, ...args);
+};
 
-function setState(next: ServiceState): void {
-	state = next;
-	send("pine:service", state);
-}
+const windowsOn = (key: string): WinEntry[] => [...windows.values()].filter((w) => (w.host ?? "") === key && !w.win.isDestroyed());
 
-async function startService(): Promise<void> {
-	stream?.abort();
-	const mine = ++round;
-	const host = prefs.use;
-	service = undefined;
-	connected = false;
-	setState({ status: "starting", host });
-	try {
-		let s = held.get(host ?? "");
-		// One held from before answers still: it is used again at once. One that does not is let go of and made anew.
-		if (s && !(await answers(s))) {
-			held.delete(host ?? "");
-			void letGo(s);
-			s = undefined;
-		}
-		if (!s) {
-			const made = host ? await connectSsh(host, await loginEnv()) : await connect((launch = await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined)), { home: prefs.home ?? process.env.PINE_HOME, keep: prefs.keepRunning });
-			// Asked for twice (Try again while it connected): the one that came first is kept.
-			const first = held.get(host ?? "");
-			if (first) void letGo(made);
-			else held.set(host ?? "", made);
-			s = first ?? made;
-		}
-		// Another machine was picked while this one connected: it stays held, and the other is shown.
-		if (mine !== round) return;
-		service = s;
-		setState({ status: "ready", mode: s.mode, started: s.started, home: s.home, version: s.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: s.host, label: s.label });
-		follow(s);
-	} catch (e) {
-		if (mine !== round) return;
-		setState({ status: "error", kind: e instanceof ServiceError ? e.kind : "failed", message: e instanceof Error ? e.message : String(e), host });
+const sendToEnv = (key: string, channel: string, ...args: unknown[]) => {
+	for (const w of windowsOn(key)) if (w.pageReady) sendToWindow(w, channel, ...args);
+};
+
+function activeWindow(): WinEntry | undefined {
+	const focused = BrowserWindow.getFocusedWindow();
+	if (focused && !focused.isDestroyed()) {
+		const entry = windows.get(focused.webContents.id);
+		if (entry) return entry;
 	}
+	if (lastFocusedWcId !== undefined) {
+		const entry = windows.get(lastFocusedWcId);
+		if (entry && !entry.win.isDestroyed()) return entry;
+	}
+	for (const entry of windows.values()) if (!entry.win.isDestroyed()) return entry;
+	return undefined;
 }
 
-/**
- * The pines this app holds: this computer's ("") and each machine's it used, by host. Switching
- * changes which one the window shows and lets go of none, so that an agent at work in one goes on
- * while another is shown. They are let go of when the app quits.
- */
-const held = new Map<string, Service>();
+function updateBadge(): void {
+	const total = [...windows.values()].reduce((sum, w) => sum + w.badgeCount, 0);
+	if (isMac) app.dock?.setBadge(total > 0 ? String(total) : "");
+	else app.setBadgeCount(total);
+}
+
+function setEnvState(env: EnvConnection, next: ServiceState): void {
+	env.state = next;
+	sendToEnv(env.key, "pine:service", next);
+}
 
 /** Whether a pine still answers: one on another machine may have lost its connection meanwhile. */
 const answers = (s: Service) => fetch(`${s.base}/health`, { signal: AbortSignal.timeout(2500) }).then((r) => r.ok, () => false);
@@ -199,42 +202,131 @@ async function letGo(s: Service | undefined): Promise<void> {
 	if (s?.host || (s?.started && !prefs.keepRunning)) await s.stop();
 }
 
-/** The app shows another pine: this computer's (no host) or a machine's of the list. The tabs are that pine's own. */
-async function use(host: string | undefined): Promise<void> {
-	if (host !== undefined && !prefs.hosts.includes(host)) throw new Error("That machine is not in the list: add it in Settings > Environments.");
-	if (host === prefs.use && service) return;
-	prefs.use = host;
-	savePrefs();
-	// The terminals are in the folders of the other pine's conversations.
-	terminals.closeAll();
-	await startService();
-}
-
-/** The daemon's live events, handed to the page in small batches (`followEvents`). */
-function follow(s: Service): void {
-	stream = new AbortController();
-	followEvents(s, stream.signal, {
-		batch: (events) => send("pine:events", events),
+/** The daemon's live events, handed to every window on that pine in small batches (`followEvents`). */
+function followEnv(env: EnvConnection): void {
+	if (!env.service || env.stream) return;
+	const s = env.service;
+	const ac = new AbortController();
+	env.stream = ac;
+	followEvents(s, ac.signal, {
+		batch: (events) => sendToEnv(env.key, "pine:events", events),
 		connection: (up) => {
-			connected = up;
-			send("pine:connection", up);
+			env.connected = up;
+			sendToEnv(env.key, "pine:connection", up);
 		},
 		// A daemon this app started and that is gone will not come back by waiting: start it again.
 		// Nor does an SSH connection that broke: it is made again.
 		lost: (times) => {
 			if (times !== 5 || !(s.started || s.host) || quitting) return false;
-			if (held.get(s.host ?? "") === s) held.delete(s.host ?? "");
+			if (env.service === s) {
+				env.service = undefined;
+				env.stream = undefined;
+				env.connected = false;
+			}
 			void letGo(s);
-			void startService();
+			if (windowsOn(env.key).length > 0) void startEnv(env.key, true);
 			return true;
 		},
 	});
 }
 
+function syncStreams(): void {
+	for (const env of envs.values()) {
+		const count = windowsOn(env.key).length;
+		if (count === 0 && env.stream) {
+			env.stream.abort();
+			env.stream = undefined;
+			env.connected = false;
+		} else if (count > 0 && env.service && !env.stream) {
+			followEnv(env);
+		}
+	}
+}
+
+async function startEnv(key: string, force = false): Promise<void> {
+	const host = key || undefined;
+	let env = envs.get(key);
+	if (!env) {
+		env = { key, host, state: { status: "starting", host }, connected: false, round: 0 };
+		envs.set(key, env);
+	}
+	if (!force && env.starting) return env.starting;
+	if (!force && env.service) {
+		if (env.connected && env.state.status === "ready") {
+			if (windowsOn(key).length > 0) followEnv(env);
+			return;
+		}
+		if (await answers(env.service)) {
+			if (windowsOn(key).length > 0) followEnv(env);
+			return;
+		}
+		const stale = env.service;
+		env.service = undefined;
+		env.stream?.abort();
+		env.stream = undefined;
+		env.connected = false;
+		void letGo(stale);
+	}
+	const mine = ++env.round;
+	env.stream?.abort();
+	env.stream = undefined;
+	env.service = undefined;
+	env.connected = false;
+	setEnvState(env, { status: "starting", host });
+	let run: Promise<void> | undefined;
+	run = (async () => {
+		try {
+			const made = host ? await connectSsh(host, await loginEnv()) : await connect((launch = await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined)), { home: prefs.home ?? process.env.PINE_HOME, keep: prefs.keepRunning });
+			if (mine !== env.round) {
+				void letGo(made);
+				return;
+			}
+			env.service = made;
+			setEnvState(env, { status: "ready", mode: made.mode, started: made.started, home: made.home, version: made.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: made.host, label: made.label });
+			if (windowsOn(key).length > 0) followEnv(env);
+		} catch (e) {
+			if (mine !== env.round) return;
+			setEnvState(env, { status: "error", kind: e instanceof ServiceError ? e.kind : "failed", message: e instanceof Error ? e.message : String(e), host });
+		} finally {
+			if (env.starting === run) env.starting = undefined;
+		}
+	})();
+	env.starting = run;
+	return run;
+}
+
+/** A window shows another pine: this computer's (no host) or a machine's of the list. The tabs are that pine's own. */
+async function use(entry: WinEntry, host: string | undefined): Promise<void> {
+	if (host !== undefined && !prefs.hosts.includes(host)) throw new Error("That machine is not in the list: add it in Settings > Environments.");
+	const key = host ?? "";
+	const env = envs.get(key);
+	if (host === entry.host && env?.service) return;
+	prefs.use = host;
+	savePrefs();
+	// The terminals are in the folders of the other pine's conversations.
+	entry.terminals.closeAll();
+	entry.host = host;
+	syncStreams();
+	const current = envs.get(key);
+	if (current && !current.starting && current.service && current.state.status === "ready") {
+		if (await answers(current.service)) {
+			sendToWindow(entry, "pine:service", current.state);
+			followEnv(current);
+			if (current.connected) sendToWindow(entry, "pine:connection", true);
+			return;
+		}
+	}
+	sendToWindow(entry, "pine:service", { status: "starting", host });
+	await startEnv(key, current?.state.status === "error");
+}
+
 /** A picture, video or sound of the daemon's, for the page's `pine-media:` addresses. */
 async function media(request: Request): Promise<Response> {
 	const url = new URL(request.url);
-	return mediaFromDaemon(service, request.method, url.pathname, url.search);
+	const m = /^w(\d+)$/.exec(url.hostname);
+	const entry = m ? windowById.get(Number(m[1])) : activeWindow();
+	const s = entry ? envs.get(entry.host ?? "")?.service : undefined;
+	return mediaFromDaemon(s, request.method, url.pathname, url.search);
 }
 
 // ---- the page ----------------------------------------------------------------------------------
@@ -252,9 +344,12 @@ function page(request: Request): Response {
 	return new Response(fs.readFileSync(file), { headers: { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "content-security-policy": CSP, "x-content-type-options": "nosniff" } });
 }
 
-function fromPage(e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): boolean {
+function windowFor(e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): WinEntry | undefined {
 	const frame = e.senderFrame;
-	return Boolean(win && frame && e.sender === win.webContents && frame === win.webContents.mainFrame && originOf(frame.url) === ORIGIN);
+	if (!frame || originOf(frame.url) !== ORIGIN) return undefined;
+	const entry = windows.get(e.sender.id);
+	if (!entry || entry.win.isDestroyed() || frame !== entry.win.webContents.mainFrame) return undefined;
+	return entry;
 }
 
 /** Only pages on the web open outside the app; a link in an answer never starts a program or opens a file. */
@@ -267,13 +362,15 @@ function openOutside(url: string): void {
 	}
 }
 
-function createWindow(): void {
+function createWindow(host?: string): WinEntry {
+	if (host !== undefined && !prefs.hosts.includes(host)) throw new Error("That machine is not in the list: add it in Settings > Environments.");
 	const b = prefs.bounds;
-	win = new BrowserWindow({
+	const cascade = windows.size > 0 && b?.x !== undefined && b?.y !== undefined ? windows.size * 26 : 0;
+	const win = new BrowserWindow({
 		width: b?.width ?? 1280,
 		height: b?.height ?? 820,
-		x: b?.x,
-		y: b?.y,
+		x: b?.x !== undefined ? b.x + cascade : undefined,
+		y: b?.y !== undefined ? b.y + cascade : undefined,
 		// As narrow as a phone: below the page's breakpoint the side bar and the panel beside a conversation lie over it.
 		minWidth: 360,
 		minHeight: 480,
@@ -297,7 +394,27 @@ function createWindow(): void {
 			navigateOnDragDrop: false,
 		},
 	});
-	win.once("ready-to-show", () => (BACKGROUND ? win?.showInactive() : win?.show()));
+	const wcId = win.webContents.id;
+	const entry: WinEntry = {
+		id: win.id,
+		wcId,
+		win,
+		host,
+		pageReady: false,
+		pendingFolders: pendingFolders.splice(0),
+		pendingCommands: [],
+		look: prefs.look,
+		badgeCount: 0,
+		// The owner's terminal of each conversation (terminal.ts): their own shell, which ends with the window.
+		terminals: new Terminals(
+			{ data: (id, data) => sendToWindow(entry, "pine:term-data", id, data), exit: (id, code) => sendToWindow(entry, "pine:term-exit", id, code), run: (id, report) => sendToWindow(entry, "pine:term-run", id, report) },
+			{ env: loginEnv, hooks: path.join(app.getPath("userData"), "shell-hooks"), shell: process.env.PINE_DESKTOP_SHELL ? [process.env.PINE_DESKTOP_SHELL] : undefined, stillRunningMs: Number(process.env.PINE_DESKTOP_STILL_RUNNING_MS) || undefined },
+		),
+	};
+	windows.set(wcId, entry);
+	windowById.set(win.id, entry);
+	lastFocusedWcId = wcId;
+	win.once("ready-to-show", () => (BACKGROUND ? win.showInactive() : win.show()));
 	win.webContents.setWindowOpenHandler(({ url }) => (openOutside(url), { action: "deny" }));
 	win.webContents.on("will-navigate", (e, url) => {
 		// The page stays the page. (Reloading it during development is the one navigation there is.)
@@ -308,28 +425,45 @@ function createWindow(): void {
 	});
 	win.webContents.on("will-attach-webview", (e) => e.preventDefault());
 	const keep = () => {
-		if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
+		if (win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
 		prefs.bounds = win.getBounds();
 	};
 	win.on("resize", keep);
 	win.on("move", keep);
 	win.on("close", savePrefs);
-	win.on("focus", () => send("pine:focus", true));
-	win.on("blur", () => send("pine:focus", false));
-	win.on("closed", () => (win = undefined));
+	win.on("focus", () => {
+		lastFocusedWcId = wcId;
+		nativeTheme.themeSource = entry.look?.kind ?? "dark";
+		sendToWindow(entry, "pine:focus", true);
+	});
+	win.on("blur", () => sendToWindow(entry, "pine:focus", false));
+	win.on("closed", () => {
+		entry.terminals.closeAll();
+		if (listeningWin === entry) {
+			listening?.cancel();
+			listening = undefined;
+			listeningWin = undefined;
+		}
+		windows.delete(wcId);
+		windowById.delete(entry.id);
+		if (lastFocusedWcId === wcId) lastFocusedWcId = undefined;
+		updateBadge();
+		syncStreams();
+	});
 	void win.loadURL(DEV_URL ?? "app://pine/");
 	if (process.env.PINE_DESKTOP_DEVTOOLS) win.webContents.openDevTools({ mode: "detach" });
+	void startEnv(host ?? "");
+	return entry;
 }
 
-function show(): void {
-	if (!win) createWindow();
+function showWindow(entry?: WinEntry): void {
+	const target = entry && !entry.win.isDestroyed() ? entry : createWindow(prefs.use);
+	const w = target.win;
+	if (w.isMinimized()) w.restore();
+	if (BACKGROUND) w.showInactive();
 	else {
-		if (win.isMinimized()) win.restore();
-		if (BACKGROUND) win.showInactive();
-		else {
-			win.show();
-			win.focus();
-		}
+		w.show();
+		w.focus();
 	}
 }
 
@@ -401,8 +535,23 @@ async function update(again?: boolean): Promise<Update | undefined> {
 
 // ---- menus -------------------------------------------------------------------------------------
 
-/** A menu item that asks the page to do something: the page knows which conversation is in front. */
-const item = (label: string, command: string, accelerator?: string, more: MenuItemConstructorOptions = {}): MenuItemConstructorOptions => ({ label, accelerator, click: () => (show(), send("pine:menu", command)), ...more });
+/** A menu item that asks the frontmost window's page to do something: the page knows which conversation is in front. */
+const item = (label: string, command: string, accelerator?: string, more: MenuItemConstructorOptions = {}): MenuItemConstructorOptions => ({
+	label,
+	accelerator,
+	click: () => {
+		const target = activeWindow();
+		if (target) {
+			showWindow(target);
+			if (target.pageReady) sendToWindow(target, "pine:menu", command);
+			else target.pendingCommands.push(command);
+		} else {
+			const created = createWindow(prefs.use);
+			created.pendingCommands.push(command);
+		}
+	},
+	...more,
+});
 
 function buildMenu(): void {
 	const template: MenuItemConstructorOptions[] = [
@@ -417,6 +566,7 @@ function buildMenu(): void {
 		{
 			label: "File",
 			submenu: [
+				{ label: "New Window", accelerator: "CmdOrCtrl+N", click: () => void createWindow(activeWindow()?.host ?? prefs.use) },
 				item("New Conversation", "new", "CmdOrCtrl+T"),
 				item("New Conversation with…", "agent", "CmdOrCtrl+Shift+T"),
 				item("Open Folder…", "open-folder", "CmdOrCtrl+O"),
@@ -427,6 +577,7 @@ function buildMenu(): void {
 				item("Export Conversation…", "export", "CmdOrCtrl+Shift+E"),
 				{ type: "separator" },
 				item("Close Tab", "close", "CmdOrCtrl+W"),
+				{ role: "close", label: "Close Window", accelerator: "CmdOrCtrl+Shift+W" },
 				...(isMac ? [] : [{ type: "separator" as const }, item("Settings…", "settings", "Ctrl+,"), { role: "quit" as const }]),
 			],
 		},
@@ -485,118 +636,158 @@ function buildMenu(): void {
 
 // ---- what the page may ask for -----------------------------------------------------------------
 
-function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknown): void {
+function handle<T extends unknown[]>(channel: string, fn: (entry: WinEntry, ...args: T) => unknown): void {
 	ipcMain.handle(channel, (e, ...args) => {
-		if (!fromPage(e)) throw new Error("not from the app's page");
-		return fn(...(args as T));
+		const entry = windowFor(e);
+		if (!entry) throw new Error("not from the app's page");
+		return fn(entry, ...(args as T));
 	});
 }
 
 function wire(): void {
-	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron } }));
-	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
-	handle("pine:retry", () => startService());
-	handle("pine:update", (again?: boolean) => update(again === true));
-	handle("pine:restart", async () => {
-		// Only a daemon of this app's own is its to restart; another one is somebody's terminal.
-		if (!service?.started) throw new Error("this pine was started somewhere else (a terminal, a service). Restart it there.");
-		stream?.abort();
-		held.delete(service.host ?? "");
-		await service.stop();
-		await startService();
+	handle("pine:state", (entry) => {
+		const env = envs.get(entry.host ?? "");
+		return {
+			state: env?.state ?? { status: "starting", host: entry.host },
+			connected: Boolean(env?.service) && Boolean(env?.connected),
+			home: prefs.home ?? process.env.PINE_HOME,
+			prefs: { ...prefs, bounds: undefined },
+			platform: process.platform,
+			focused: entry.win.isFocused(),
+			updates: Boolean(RELEASE_API),
+			versions: { app: app.getVersion(), electron: process.versions.electron },
+			mediaBase: `pine-media://w${entry.id}`,
+		};
 	});
-	handle("pine:init", async () => {
+	handle("pine:call", (entry, method: string, url: string, body?: unknown) => callDaemon(envs.get(entry.host ?? "")?.service, method, url, body));
+	handle("pine:retry", (entry) => startEnv(entry.host ?? "", true));
+	handle("pine:update", (_entry, again?: boolean) => update(again === true));
+	handle("pine:restart", async (entry) => {
+		const key = entry.host ?? "";
+		const env = envs.get(key);
+		// Only a daemon of this app's own is its to restart; another one is somebody's terminal.
+		if (!env?.service?.started) throw new Error("this pine was started somewhere else (a terminal, a service). Restart it there.");
+		env.stream?.abort();
+		env.stream = undefined;
+		const old = env.service;
+		env.service = undefined;
+		env.connected = false;
+		setEnvState(env, { status: "starting", host: env.host });
+		await old.stop();
+		await startEnv(key, true);
+	});
+	handle("pine:init", async (entry) => {
 		launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
 		const args = ["init", ...(prefs.home ? [prefs.home] : []), "--yes"];
-		return runPine(launch, args, (line) => send("pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
+		return runPine(launch, args, (line) => sendToWindow(entry, "pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
 	});
 	// The browser the web tools drive, fetched by the pine the app runs: each pine wants the build
 	// of its own Playwright, and a home that was set up by another pine has an older one.
-	handle("pine:browser", async () => {
+	handle("pine:browser", async (entry) => {
 		launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
-		return runPine(launch, ["browser-install"], (line) => send("pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
+		return runPine(launch, ["browser-install"], (line) => sendToWindow(entry, "pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
 	});
-	handle("pine:command", async (action?: string) => {
+	handle("pine:command", async (_entry, action?: string) => {
 		const env = await loginEnv();
 		return worded(action === "install" ? await install(RESOURCES, env) : action === "remove" ? await remove(RESOURCES, env) : look(RESOURCES, env));
 	});
-	handle("pine:use", (host?: string) => use(typeof host === "string" ? host : undefined));
+	handle("pine:use", (entry, host?: string) => use(entry, typeof host === "string" ? host : undefined));
+	handle("pine:new-window", (entry, host?: string | null) => {
+		const target = host === null ? entry.host : typeof host === "string" ? host || undefined : undefined;
+		createWindow(target);
+	});
 	// A machine is added by its name alone; it is connected to when it is picked.
-	handle("pine:hosts-add", (value: string) => {
+	handle("pine:hosts-add", (_entry, value: string) => {
 		const host = sshHost(String(value ?? ""))?.host;
 		if (!host) throw new Error("Write the machine as you would after ssh: host or user@host.");
 		if (!prefs.hosts.includes(host)) {
 			if (prefs.hosts.length >= 20) throw new Error("There are 20 machines in the list already: forget one first.");
 			prefs.hosts.push(host);
 			savePrefs();
+			broadcast("pine:prefs", { ...prefs, bounds: undefined });
 		}
 		return { ...prefs, bounds: undefined };
 	});
-	handle("pine:hosts-forget", (host: string) => {
-		if (host === prefs.use) throw new Error("The app uses this machine now. Use another one first.");
+	handle("pine:hosts-forget", (_entry, host: string) => {
+		if ([...windows.values()].some((w) => w.host === host)) throw new Error("A window uses this machine now. Close it or use another one first.");
 		prefs.hosts = prefs.hosts.filter((h) => h !== host);
 		savePrefs();
+		broadcast("pine:prefs", { ...prefs, bounds: undefined });
 		// Its connection ends, and a pine it started there with it.
-		const s = held.get(String(host));
-		if (s) (held.delete(String(host)), void letGo(s));
+		const env = envs.get(String(host));
+		if (env) {
+			env.round++;
+			env.stream?.abort();
+			envs.delete(String(host));
+			if (env.service) void letGo(env.service);
+		}
 		return { ...prefs, bounds: undefined };
 	});
-	handle("pine:prefs", (change: Partial<Prefs>) => {
-		if (typeof change.notify === "boolean") prefs.notify = change.notify;
-		if (typeof change.updates === "boolean") prefs.updates = change.updates;
-		if (typeof change.keepRunning === "boolean") prefs.keepRunning = change.keepRunning;
+	handle("pine:prefs", (entry, change: Partial<Prefs>) => {
+		let shared = false;
+		if (typeof change.notify === "boolean") ((prefs.notify = change.notify), (shared = true));
+		if (typeof change.updates === "boolean") ((prefs.updates = change.updates), (shared = true));
+		if (typeof change.keepRunning === "boolean") ((prefs.keepRunning = change.keepRunning), (shared = true));
 		if ("home" in change) {
 			const home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
 			// Another home is another pine: the one held for this computer is not used again (the page restarts or reconnects).
-			const old = held.get("");
+			const old = envs.get("");
 			if (home !== prefs.home && old) {
-				held.delete("");
-				// One that is not on screen is let go of here; the one on screen, by the restart that follows.
-				if (old !== service) void letGo(old);
+				old.round++;
+				old.stream?.abort();
+				envs.delete("");
+				if (old.service) void letGo(old.service);
 			}
 			prefs.home = home;
+			shared = true;
 		}
 		// The theme the page draws now: the window's frame (light or dark, the Mac's materials) and background follow it.
 		if ("look" in change) {
-			prefs.look = cleanLook(change.look);
-			nativeTheme.themeSource = prefs.look?.kind ?? "dark";
-			refreshBackground();
+			entry.look = cleanLook(change.look);
+			refreshBackground(entry);
+			if (entry.win.isFocused() || windows.size === 1) {
+				prefs.look = entry.look;
+				nativeTheme.themeSource = entry.look?.kind ?? "dark";
+			}
 		}
-		if (typeof change.agentAccent === "boolean") prefs.agentAccent = change.agentAccent;
+		if (typeof change.agentAccent === "boolean") ((prefs.agentAccent = change.agentAccent), (shared = true));
 		savePrefs();
-		return { ...prefs, bounds: undefined };
+		const out = { ...prefs, bounds: undefined };
+		if (shared) broadcast("pine:prefs", out);
+		return out;
 	});
-	handle("pine:pick-folder", async (title?: string) => {
-		const r = await dialog.showOpenDialog(win!, { title: typeof title === "string" ? title.slice(0, 80) : "Choose a folder", properties: ["openDirectory", "createDirectory"] });
+	handle("pine:pick-folder", async (entry, title?: string) => {
+		const r = await dialog.showOpenDialog(entry.win, { title: typeof title === "string" ? title.slice(0, 80) : "Choose a folder", properties: ["openDirectory", "createDirectory"] });
 		return r.canceled ? undefined : r.filePaths[0];
 	});
-	handle("pine:save-text", async (name: string, text: string) => {
-		const r = await dialog.showSaveDialog(win!, { defaultPath: path.join(app.getPath("documents"), path.basename(String(name))) });
+	handle("pine:save-text", async (entry, name: string, text: string) => {
+		const r = await dialog.showSaveDialog(entry.win, { defaultPath: path.join(app.getPath("documents"), path.basename(String(name))) });
 		if (r.canceled || !r.filePath) return undefined;
 		fs.writeFileSync(r.filePath, String(text));
 		return r.filePath;
 	});
-	handle("pine:open", (url: string) => openOutside(String(url)));
-	handle("pine:reveal", (file: string) => {
+	handle("pine:open", (_entry, url: string) => openOutside(String(url)));
+	handle("pine:reveal", (_entry, file: string) => {
 		// Shown in the Finder, never opened: opening would start whatever the file is.
 		if (typeof file === "string" && path.isAbsolute(file) && fs.existsSync(file)) shell.showItemInFolder(file);
 	});
-	handle("pine:notify", (title: string, body: string, tab?: string) => {
-		if (!prefs.notify || !Notification.isSupported() || win?.isFocused()) return;
+	handle("pine:notify", (entry, title: string, body: string, tab?: string) => {
+		if (!prefs.notify || !Notification.isSupported() || entry.win.isFocused()) return;
 		const n = new Notification({ title: String(title).slice(0, 80), body: String(body).slice(0, 160), silent: false });
-		n.on("click", () => (show(), tab && send("pine:menu", `focus:${tab}`)));
+		n.on("click", () => (showWindow(entry), tab && sendToWindow(entry, "pine:menu", `focus:${tab}`)));
 		n.show();
 	});
-	handle("pine:badge", (count: number) => {
-		if (isMac) app.dock?.setBadge(count > 0 ? String(count) : "");
-		else app.setBadgeCount(Math.max(0, Number(count) || 0));
+	handle("pine:badge", (entry, count: number) => {
+		entry.badgeCount = Math.max(0, Number(count) || 0);
+		updateBadge();
 	});
 	// Dictating a message. The words are recognised on this Mac by the helper the terminal UI
 	// uses too (src/tui/voice.ts): nothing is sent anywhere, and what is heard is text for the
 	// input and nothing more. The page puts it there; nothing here sends a message.
-	handle("pine:voice-start", async (language?: string) => {
+	handle("pine:voice-start", async (entry, language?: string) => {
 		listening?.cancel();
 		listening = undefined;
+		listeningWin = entry;
 		const lang = typeof language === "string" && /^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$/.test(language) ? language : undefined;
 		let command: string[];
 		if (process.env.PINE_DESKTOP_VOICE) command = [process.env.PINE_DESKTOP_VOICE]; // a stand-in, for tests
@@ -608,59 +799,64 @@ function wire(): void {
 			command = [await buildVoice(path.join(app.getPath("userData"), "voice"), source)];
 		}
 		const mine: Listening = new Listening(command, lang, {
-			ready: () => listening === mine && send("pine:voice", { type: "ready" }),
-			partial: (text) => listening === mine && send("pine:voice", { type: "partial", text }),
-			model: (state) => listening === mine && send("pine:voice", { type: "model", state }),
+			ready: () => listening === mine && sendToWindow(entry, "pine:voice", { type: "ready" }),
+			partial: (text) => listening === mine && sendToWindow(entry, "pine:voice", { type: "partial", text }),
+			model: (state) => listening === mine && sendToWindow(entry, "pine:voice", { type: "model", state }),
 			done: (text, error) => {
 				if (listening !== mine) return;
 				listening = undefined;
-				send("pine:voice", { type: "done", text, error });
+				listeningWin = undefined;
+				sendToWindow(entry, "pine:voice", { type: "done", text, error });
 			},
 		});
 		listening = mine;
 	});
-	handle("pine:voice-stop", (cancel?: boolean) => {
-		if (cancel) (listening?.cancel(), (listening = undefined));
+	handle("pine:voice-stop", (_entry, cancel?: boolean) => {
+		if (cancel) (listening?.cancel(), (listening = undefined), (listeningWin = undefined));
 		else listening?.stop();
 	});
 	// The owner's terminal beside a conversation. What is written into it comes from the page's
 	// keyboard, or from a code block of an answer that the owner ran with its button.
-	handle("pine:term-open", (id: string, cwd?: string, cols?: number, rows?: number) => terminals.open(String(id), cwd, cols, rows));
-	handle("pine:term-write", (id: string, data: string) => terminals.write(String(id), data));
-	handle("pine:term-run", (id: string, code: string) => terminals.run(String(id), code));
-	handle("pine:term-resize", (id: string, cols: number, rows: number) => terminals.resize(String(id), cols, rows));
-	handle("pine:term-close", (id: string) => terminals.close(String(id)));
+	handle("pine:term-open", (entry, id: string, cwd?: string, cols?: number, rows?: number) => entry.terminals.open(String(id), cwd, cols, rows));
+	handle("pine:term-write", (entry, id: string, data: string) => entry.terminals.write(String(id), data));
+	handle("pine:term-run", (entry, id: string, code: string) => entry.terminals.run(String(id), code));
+	handle("pine:term-resize", (entry, id: string, cols: number, rows: number) => entry.terminals.resize(String(id), cols, rows));
+	handle("pine:term-close", (entry, id: string) => entry.terminals.close(String(id)));
 	// An item with `checked` is one of a set of choices (the side bar's "Sort by"), drawn with the system's mark.
-	handle("pine:context-menu", (items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean; checked?: boolean }>) => {
+	handle("pine:context-menu", (entry, items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean; checked?: boolean }>) => {
 		return new Promise<string | undefined>((resolve) => {
 			let picked: string | undefined;
 			const menu = Menu.buildFromTemplate(items.slice(0, 30).map((i) => (i.separator ? { type: "separator" as const } : { label: String(i.label).slice(0, 80), enabled: i.enabled !== false, ...(typeof i.checked === "boolean" ? { type: "radio" as const, checked: i.checked } : {}), click: () => (picked = String(i.id)) })));
-			menu.popup({ window: win, callback: () => resolve(picked) });
+			menu.popup({ window: entry.win, callback: () => resolve(picked) });
 		});
 	});
 }
 
 // ---- life of the app ---------------------------------------------------------------------------
 
-/** A folder the app was opened with (dropped on its icon, or `open -a Pine <folder>`): a conversation that works there. */
+/** A folder the app was opened with before the app was ready (dropped on its icon, or `open -a Pine <folder>`). */
 const pendingFolders: string[] = [];
-let pageReady = false;
 function openFolder(dir: string): void {
 	try {
 		if (!fs.statSync(dir).isDirectory()) return;
 	} catch {
 		return;
 	}
-	if (pageReady) (show(), send("pine:menu", `folder:${dir}`));
-	else pendingFolders.push(dir);
+	if (!app.isReady()) {
+		pendingFolders.push(dir);
+		return;
+	}
+	const target = activeWindow() ?? createWindow(prefs.use);
+	if (target.pageReady) (showWindow(target), sendToWindow(target, "pine:menu", `folder:${dir}`));
+	else target.pendingFolders.push(dir);
 }
 
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
 	app.on("second-instance", (_e, argv) => {
-		show();
 		const dir = argv.slice(1).find((a) => !a.startsWith("-") && path.isAbsolute(a));
 		if (dir) openFolder(dir);
+		else showWindow(activeWindow());
 	});
 	app.on("open-file", (e, file) => {
 		e.preventDefault();
@@ -677,10 +873,16 @@ else {
 		session.defaultSession.setPermissionRequestHandler((_wc, _permission, done) => done(false));
 		wire();
 		ipcMain.on("pine:ready", (e) => {
-			if (!fromPage(e)) return;
-			pageReady = true;
-			send("pine:service", state);
-			for (const dir of pendingFolders.splice(0)) send("pine:menu", `folder:${dir}`);
+			const entry = windowFor(e);
+			if (!entry) return;
+			entry.pageReady = true;
+			const env = envs.get(entry.host ?? "");
+			if (env) {
+				sendToWindow(entry, "pine:service", env.state);
+				if (env.service && env.connected) sendToWindow(entry, "pine:connection", true);
+			}
+			for (const dir of entry.pendingFolders.splice(0)) sendToWindow(entry, "pine:menu", `folder:${dir}`);
+			for (const cmd of entry.pendingCommands.splice(0)) sendToWindow(entry, "pine:menu", cmd);
 		});
 		// From a checkout the program is Electron's, and so would be its icon in the Dock.
 		if (isMac && !app.isPackaged) {
@@ -691,28 +893,26 @@ else {
 			}
 		}
 		buildMenu();
-		createWindow();
-		void startService();
+		createWindow(prefs.use);
 		void firstCommand();
-		app.on("activate", show);
+		app.on("activate", () => showWindow(activeWindow()));
 	});
 	app.on("window-all-closed", () => {
-		// On a Mac the app, and the daemon it started, stay when the window is closed.
-		pageReady = false;
+		// On a Mac the app, and the daemon it started, stay when all windows are closed.
 		if (!isMac) app.quit();
 	});
 	app.on("before-quit", (e) => {
 		if (quitting) return;
 		savePrefs();
-		terminals.closeAll();
+		for (const entry of windows.values()) entry.terminals.closeAll();
 		// The connections to other machines end with the app, and a pine one started there with it.
-		const going = [...held.values()].filter((s) => s.host || (s.started && !prefs.keepRunning));
+		const going = [...envs.values()].map((env) => env.service).filter((s): s is Service => Boolean(s && (s.host || (s.started && !prefs.keepRunning))));
 		if (!going.length) return;
 		// A daemon this app started ends with it, as the terminal UI's does: its agents are stopped
 		// and its database closed before the app is gone.
 		e.preventDefault();
 		quitting = true;
-		stream?.abort();
+		for (const env of envs.values()) env.stream?.abort();
 		void Promise.all(going.map((s) => s.stop())).finally(() => app.quit());
 	});
 }

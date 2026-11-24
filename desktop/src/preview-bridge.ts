@@ -58,6 +58,9 @@ function standIn(): Bridge {
 		use: async (host?: string) => {
 			if (host) throw new Error("Other machines are in the Pine app only.");
 		},
+		newWindow: async () => {
+			throw new Error("Multiple windows are in the Pine app only.");
+		},
 		addHost: async () => {
 			throw new Error("Other machines are in the Pine app only.");
 		},
@@ -99,6 +102,7 @@ function standIn(): Bridge {
 		onService: on(listeners.service),
 		onEvents: on(listeners.events),
 		onConnection: on(listeners.connection),
+		onPrefs: never,
 		onMenu: never,
 		onFocus: never,
 		onInitLine: never,

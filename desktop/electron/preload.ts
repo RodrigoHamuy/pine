@@ -22,6 +22,8 @@ const bridge = {
 	prefs: (change: Record<string, unknown>) => ipcRenderer.invoke("pine:prefs", change),
 	/** Use the pine of a machine of the list (a host for ssh), or with none this computer's. */
 	use: (host?: string) => ipcRenderer.invoke("pine:use", host),
+	/** Open a new window, on `host` (or this computer's pine when omitted, or the active window's when null). */
+	newWindow: (host?: string | null) => ipcRenderer.invoke("pine:new-window", host),
 	/** Add a machine to the list, or take one out; what comes back is the prefs as they are now. */
 	addHost: (host: string) => ipcRenderer.invoke("pine:hosts-add", host),
 	forgetHost: (host: string) => ipcRenderer.invoke("pine:hosts-forget", host),
@@ -52,6 +54,7 @@ const bridge = {
 	onService: on("pine:service"),
 	onEvents: on("pine:events"),
 	onConnection: on("pine:connection"),
+	onPrefs: on("pine:prefs"),
 	onMenu: on("pine:menu"),
 	onFocus: on("pine:focus"),
 	onInitLine: on("pine:init-line"),

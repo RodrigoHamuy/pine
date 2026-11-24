@@ -8,7 +8,7 @@
 import { useEffect, useRef, useSyncExternalStore } from "react";
 import { toast } from "@/components/ui/toast";
 import { type AgentInfo, api, type Approval, type Conversation, type GoalInfo, type GroupList, media, type WorktreeMade, type PineEvent, type Program, type Stats, type Task, type Todo, type TranscriptEntry } from "./api.ts";
-import { bridge, type Prefs, type ServiceState, type Update } from "./bridge.ts";
+import { bridge, type Prefs, type ServiceState, setMediaBase, type Update } from "./bridge.ts";
 import { baseName, childKind, errText, eventBody, isGoalRound, learnHome, MODES, oneLine, plural, short, type Speed, speedOf, speedText, taskSummary, tilde, took, undoLines } from "./text.ts";
 import { runnable } from "./runnable.ts";
 import { applyLook, cleanLook, type ThemeEntry } from "./theme.ts";
@@ -327,6 +327,10 @@ export class Store extends Model {
 			if (back && this.agents.length) void this.dropAnswered();
 			this.touch();
 		});
+		bridge.onPrefs((p: Prefs) => {
+			this.prefs = p;
+			this.touch();
+		});
 		bridge.onMenu((command: string) => void this.command(command));
 		// How a block run with a Run button went: the conversation it came from is told, and goes on.
 		bridge.onTermRun((id: string, report: { command: string; state: "running" | "ended"; code?: number; seconds: number; output: string }) => {
@@ -344,6 +348,7 @@ export class Store extends Model {
 			this.touch();
 		});
 		const first = await bridge.state();
+		if (first.mediaBase) setMediaBase(first.mediaBase);
 		// Whether the event stream is up: a page loaded anew is not told it by an event.
 		this.connected = first.connected === true;
 		this.prefs = first.prefs;
@@ -478,6 +483,8 @@ export class Store extends Model {
 		// Another pine than before (another machine was picked): nothing of the last one is kept, not even what an agent of the same name was doing.
 		if (s.host !== this.service.host) this.forgetPine();
 		this.service = s;
+		const on = s.status === "ready" ? s.label : s.host;
+		document.title = on ? `Pine · ${on}` : "Pine";
 		this.touch();
 		if (s.status === "ready" && (was !== "ready" || !this.agents.length)) await this.load();
 	}
@@ -515,6 +522,11 @@ export class Store extends Model {
 	async useMachine(host?: string): Promise<void> {
 		if (host === this.service.host && this.service.status === "ready") return;
 		await this.attempt(() => bridge.use(host));
+	}
+
+	/** Open a new window on `host` (this computer's pine when omitted, or the active window's when null). */
+	async newWindow(host?: string | null): Promise<void> {
+		await this.attempt(() => bridge.newWindow(host));
 	}
 
 	/**

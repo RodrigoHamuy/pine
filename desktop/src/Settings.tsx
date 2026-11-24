@@ -2080,12 +2080,13 @@ function Environments() {
 			<ItemActions>
 				{state.host === h && state.status === "error" ? <Button variant="outline" size="xs" onClick={() => void bridge.retry()}>Try again</Button> : null}
 				{state.host === h ? null : <Button variant="outline" size="xs" onClick={() => void s.useMachine(h)}>Use</Button>}
+				<Button variant="outline" size="xs" onClick={() => void s.newWindow(h ?? "")}>New window</Button>
 				{h && state.host !== h ? <Button variant="ghost" size="xs" onClick={() => void forget(h)}>Forget</Button> : null}
 			</ItemActions>
 		</Item>
 	);
 	return (
-		<Page title="Environments" lead="The pine this app uses: the one on this computer, or one on another machine that you reach with ssh. One at a time: the foot of the side bar switches between them.">
+		<Page title="Environments" lead="The pine this window uses: the one on this computer, or one on another machine that you reach with ssh. Switch here or at the foot of the side bar, or open another in a new window.">
 			<ItemGroup>
 				{row(undefined)}
 				{s.prefs.hosts.map(row)}
