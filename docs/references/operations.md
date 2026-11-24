@@ -131,6 +131,9 @@ does `pine model add`. To pick: set `defaults.model` in `pine.json`, for example
 `"opencode-go/deepseek-v4.1-flash"`, or switch in the UI with `/model`. `pine login <unknown>`
 lists every provider pi knows.
 
+Gemini is the provider `google`, with an API key from Google AI Studio. There is no sign-in with
+a Gemini subscription (Gemini CLI, Antigravity): pi took it out, and pine has none of its own.
+
 ### With a model server of your own
 
 llama.cpp, vLLM, LM Studio and anything else that speaks OpenAI's chat API is added by its
