@@ -68,6 +68,8 @@ export interface TaskMeta {
 	label?: string;
 	/** This message was given to a task that was already working (that task's id) instead of becoming work of its own. */
 	steered?: number;
+	/** When the work a steered message was given to read it (ms). */
+	read?: number;
 	/** Not a message for the model: the conversation is to be shortened (its earlier part summarised). */
 	compact?: boolean;
 	/** The owner wrote this message in the Pine app, which draws a Run button on a shell code block (`via` of the control API). */

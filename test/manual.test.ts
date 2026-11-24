@@ -41,6 +41,7 @@ test("manual: questions in an agent's own words find the part of pine's manual t
 		["how do sub-agents know which of them looks at which file", /^boards(#a-pool-of-sub-agents)?$/],
 		["ten agents on one project: how do they share what they found", /^boards/],
 		["more than four sub-agents at once", /^boards#a-pool-of-sub-agents$/],
+		["i wrote while the agent was working and it ignored my message", /^(agents#a-message-while-the-agent-works|operations#.*tasks-id-now)/],
 		["let more sub-agents work at the same time", /^(configuration#.*maxsubagents|setup#.*maxsubagents|boards#a-pool-of-sub-agents|agents#sub-agents)/],
 		["how many agents can work at the same time", /^(configuration#.*maxconcurrentruns|setup#.*maxconcurrentruns)/],
 		["split a job into more than a hundred tasks", /^(configuration#.*maxpooltasks|setup#.*maxpooltasks|boards#a-pool-of-sub-agents)/],

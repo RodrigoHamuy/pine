@@ -67,7 +67,7 @@ export interface Task {
 	error?: string;
 	parent?: number;
 	depth: number;
-	meta: { images?: unknown[]; label?: string; steered?: number; compact?: boolean; chain?: string[]; stats?: Stats; trust?: string };
+	meta: { images?: unknown[]; label?: string; steered?: number; read?: number; compact?: boolean; chain?: string[]; stats?: Stats; trust?: string };
 }
 
 export interface TranscriptEntry {
@@ -480,6 +480,7 @@ export const api = {
 	prompt: (agent: string, prompt: string, session: string, attachments?: Array<{ name: string; data: string }>, whenBusy: "steer" | "queue" = "steer", mentions?: string[], runs = true) => post<{ task: number; steered?: number }>(`${a(agent)}/prompt`, { prompt, session, wait: false, attachments, whenBusy, mentions, ...(runs ? { via: "app" } : {}) }),
 	transcript: (task: number, full = false) => get<{ task: Task; entries: TranscriptEntry[] }>(`/tasks/${task}/transcript${full ? "?full=1" : ""}`),
 	cancel: (task: number) => post<{ cancelled: boolean }>(`/tasks/${task}/cancel`),
+	sendNow: (task: number) => post<{ sent: boolean }>(`/tasks/${task}/now`),
 	reset: (agent: string, session: string) => post<{ reset: boolean }>(`${a(agent)}/reset`, { session }),
 	compact: (agent: string, session: string) => post<{ task: number }>(`${a(agent)}/compact`, { session }),
 	undo: (agent: string, session: string) => post<UndoResult>(`${a(agent)}/undo`, { session }),

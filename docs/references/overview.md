@@ -104,6 +104,7 @@ Topics pine itself uses:
 | `board/<name>/task`, `/note`, `/done`, `/failed`, `/blocked` | Something happened on a board with a name that an agent or all agents have ([boards.md](boards.md)) |
 | `pine/board` | A board changed (`board`, `scope`, `agent`, `session`, `name`, `change`; live only): a UI asks the control API for the rest |
 | `agent/<id>/steered` | A message was given to a task that was already working (`task`), instead of becoming work of its own (live only) |
+| `agent/<id>/read` | The work (`task`) read a message that was steered into it (`by`), at `at` (live only) |
 | `agent/<id>/goal` | The goal of a conversation was set, judged, paused, resumed or cleared (the goal with its `objective`, `status`, `round`, `note` and the judge's `reason`, and `event`: what just happened) |
 | `agent/<id>/undone`, `agent/<id>/redone` | The owner took back their last message in a conversation, or brought it back (`session`, `message`, how many `tasks` and `files`) |
 | `agent/<id>/delta`, `agent/<id>/thinking`, `agent/<id>/message` | Streamed answer text; what the model thinks (`phase: "start"`, then pieces of `text`, then `phase: "end"` with `ms`); the end of a model message with token counts (live only) |

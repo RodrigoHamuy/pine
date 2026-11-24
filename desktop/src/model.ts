@@ -56,7 +56,7 @@ interface Base {
 
 export type Item = Base &
 	(
-		| { t: "user"; text: string; from?: string; files?: string[]; /** The owner's message as a task, to branch from. */ task?: number }
+		| { t: "user"; text: string; from?: string; files?: string[]; /** The owner's message as a task, to branch from. */ task?: number; /** It was given to work that was running (`into`), as task `task`: when that work read it. */ steer?: Steer }
 		| { t: "answer"; task: number; agent: string; text: string; live: boolean; /** It arrived while the owner was looking at its conversation: its first sound plays by itself, once. */ arrived?: { heard: boolean } }
 		| { t: "work"; parts: Part[]; done: boolean; open: boolean; startedAt: number; ms?: number }
 		| { t: "note"; tone: Tone; text: string; lines?: Array<{ text: string; tone?: Tone }>; action?: { label: string; run: () => void } }
@@ -73,6 +73,13 @@ export type Item = Base &
 	);
 
 type Of<K extends Item["t"]> = Extract<Item, { t: K }>;
+
+/** A message given to running work: its own task, the work's task, and when the work read it (ms). */
+export interface Steer {
+	task: number;
+	into: number;
+	read?: number;
+}
 
 export interface Attachment {
 	name: string;
@@ -1494,7 +1501,7 @@ export class Store extends Model {
 		if (t.meta?.compact) return void tab.note(t.status === "done" ? (t.result ?? "The earlier part of the conversation was summarised.") : `Shortening the conversation: ${t.status}${t.error ? ` (${t.error})` : ""}`);
 		if (t.kind === "event" && t.meta?.label) tab.add({ t: "event", label: t.meta.label, body: eventBody(t.prompt) });
 		else if (isGoalRound(t.kind, t.meta?.label)) tab.note(`↻ ${t.meta.label}`);
-		else tab.add({ t: "user", text: t.prompt, from: t.kind === "prompt" ? undefined : t.kind, task: t.kind === "prompt" && t.meta?.trust === "owner" && t.meta?.steered === undefined ? t.id : undefined });
+		else tab.add({ t: "user", text: t.prompt, from: t.kind === "prompt" ? undefined : t.kind, task: t.kind === "prompt" && t.meta?.trust === "owner" && t.meta?.steered === undefined ? t.id : undefined, steer: t.meta?.steered === undefined ? undefined : { task: t.id, into: t.meta.steered, read: t.meta.read } });
 		(t.meta?.images ?? []).forEach((_, i) => tab.add({ t: "media", kind: "image", name: `attached picture ${i + 1}`, url: media.task(t.id, i) }));
 		// It was read by work that was already running; the answer is that work's.
 		if (t.meta?.steered !== undefined) return;
@@ -1966,6 +1973,8 @@ export class Store extends Model {
 			tab.roots.add(task);
 			if (steered === undefined) (mine.task = task), mine.v++;
 			if (steered !== undefined) {
+				mine.steer ??= { task, into: steered };
+				mine.v++;
 				tab.awaiting = tab.awaiting.filter((p) => p !== text);
 				this.flash("Given to the agent while it works. ⌥↩ makes a message wait until the agent is done instead.", "muted", 3000);
 			} else if (busy) this.flash("Queued: it is answered when the agent is done with the current work.", "muted", 3000);
@@ -1992,6 +2001,13 @@ export class Store extends Model {
 		if (!ids.length) return this.flash("Stopped. This is your next message being answered; stop again in a moment to stop it too.");
 		tab.stopped = { at: Date.now(), waiting: tab.awaiting.length, spared: recent?.spared ?? new Set() };
 		for (const id of ids) await api.cancel(id).catch(() => {});
+	}
+
+	/** A message steered into work that has not read it yet: that work stops the step it is on and reads it now. */
+	async sendNow(tab: Tab, steer: Steer): Promise<void> {
+		const r = await this.attempt(() => api.sendNow(steer.task));
+		if (r && !r.sent) this.flash("The agent has read it already.", "muted", 3000);
+		tab.touch();
 	}
 
 	async undo(tab: Tab, redo: boolean): Promise<void> {
@@ -2643,16 +2659,31 @@ export class Store extends Model {
 			if (t.roots.has(p.task)) this.live(t, kind, p, (p.depth ?? 0) - t.baseDepth);
 		}
 
+		if (kind === "read") {
+			// The work read a message that was steered into it.
+			for (const tab of this.tabs) {
+				if (tab.kind !== "chat" || tab.agent !== p.agent || tab.session !== p.session) continue;
+				const it = tab.items.findLast((x): x is Of<"user"> => x.t === "user" && x.steer?.task === p.by);
+				if (it?.steer) ((it.steer.read = Number(p.at) || Date.now()), it.v++, this.dirty.add(tab));
+			}
+			return;
+		}
+
 		if (kind === "steered") {
 			// A message that went into running work: ours is on screen already, somebody else's is shown.
 			const tab = this.tabs.find((t) => t.kind === "chat" && t.agent === p.agent && t.session === p.session);
 			if (!tab || tab.roots.has(p.by)) return;
 			tab.roots.add(p.by);
 			const i = tab.awaiting.findIndex((x) => String(p.prompt ?? "").startsWith(x));
-			if (i >= 0) tab.awaiting.splice(i, 1);
-			else {
+			const steer = { task: Number(p.by), into: Number(p.task) };
+			if (i >= 0) {
+				// Ours: the bubble on screen gets its line now, before the answer to the request comes.
+				const text = tab.awaiting.splice(i, 1)[0];
+				const mine = tab.items.findLast((it): it is Of<"user"> => it.t === "user" && it.text === text && !it.steer && it.task === undefined);
+				if (mine) ((mine.steer = steer), mine.v++);
+			} else {
 				this.endWork(tab);
-				tab.add({ t: "user", text: String(p.prompt ?? ""), from: p.kind === "prompt" ? "elsewhere" : p.kind });
+				tab.add({ t: "user", text: String(p.prompt ?? ""), from: p.kind === "prompt" ? "elsewhere" : p.kind, steer: p.kind === "prompt" ? steer : undefined });
 			}
 			this.dirty.add(tab);
 			return;
@@ -2972,6 +3003,8 @@ export class Store extends Model {
 					break;
 				}
 				tab.running.delete(p.task);
+				// A message steered into that work and not read is not waiting for it any more: its line goes.
+				for (const it of tab.items) if (it.t === "user" && it.steer && it.steer.into === p.task && !it.steer.read) it.v++;
 				tab.thinking = false;
 				if (!tab.busy) this.endWork(tab);
 				this.takeStats(tab, p.stats);

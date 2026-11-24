@@ -406,12 +406,6 @@ arrives in the conversation that subscribed to the Telegram source. Runs started
 events use a twin of the session with `~u` appended,
 so they never see or extend your own conversation.
 
-Tasks for one session queue up. With `"whenBusy": "steer"` on a route, a new message is instead
-shown to the agent in the middle of what it is doing: it reads it at its next step. The terminal
-UI sends your own messages this way (`alt+enter` makes one wait its turn). A steered message
-that the work did not get to read, because it ended or was stopped first, is answered next as
-work of its own.
-
 `pine reset <agent> [session]` (or `/reset` in the terminal UI) starts a session
 over. The old history is kept on disk next to it with a `.reset-<time>` suffix for
 `limits.eventRetentionDays`. It is no longer shown, also after a restart of pine: the
@@ -427,6 +421,24 @@ conversation: one you opened in the terminal UI, a delegation thread's, one a ro
 conversations in the terminal UI; see [tui.md](tui.md)), or set `limits.conversationDays` to
 `0` to keep them all. Everything that was set up for one conversation alone goes with it: its
 event sources and subscriptions, schedules, MCP servers and skills ([setup.md](setup.md)).
+
+### A message while the agent works
+
+Tasks for one session queue up. With `"whenBusy": "steer"` on a route, a new message is instead
+shown to the agent in the middle of what it is doing: it reads it at its next step. The terminal
+UI sends your own messages this way (`alt+enter` makes one wait its turn). A steered message
+that the work did not get to read, because it ended or was stopped first, is answered next as
+work of its own.
+
+A steered message of yours comes with a word from pine that it is to be answered first, briefly,
+before the work goes on. A steered event comes as it is.
+
+The work reads a steered message only at its next step, which a long command can put off for
+minutes. The Pine app writes under such a message whether the work has read it ("not read yet",
+"read 14:03"), and until it has, offers "send now": the step under way is stopped (a command it
+runs ends), and the work goes on with the message. Reading is not answering: a model deep in
+long work may read a message and still keep going. Stop the work when you need the answer and
+it does not come.
 
 ## Groups of conversations
 

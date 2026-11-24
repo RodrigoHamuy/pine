@@ -7,8 +7,9 @@ import { type Item, Tab } from "./model.ts";
 // The items are made by hand, as the model would make them from what the daemon says.
 type Made = Item extends infer I ? (I extends Item ? Omit<I, "id" | "v"> : never) : never;
 
-function Items({ items }: { items: Made[] }) {
+function Items({ items, running }: { items: Made[]; /** Tasks at work in the conversation. */ running?: number[] }) {
 	const tab = new Tab("chat", "main", "main");
+	for (const id of running ?? []) tab.running.add(id);
 	for (const item of items) tab.add(item as never);
 	return (
 		<div className="flex w-full max-w-160 flex-col gap-3.5">
@@ -73,8 +74,11 @@ const working: Made[] = [
 			{ p: "child", task: 14, agent: "scout", kind: "delegate", label: "check the links", status: "run", depth: 1 },
 		],
 	},
+	// Messages given to the work while it runs: one it read, one it has not read yet.
+	{ t: "user", text: "keep the config folder", steer: { task: 8, into: 7, read: now } },
+	{ t: "user", text: "how far along are you?", steer: { task: 9, into: 7 } },
 ];
-export const Working: Story = { args: { items: working } };
+export const Working: Story = { args: { items: working, running: [7] } };
 
 /** A long thought that goes on: its box at its full height, at the end of the text, faded above. */
 const reasons = [

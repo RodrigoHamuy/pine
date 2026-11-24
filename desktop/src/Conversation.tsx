@@ -23,7 +23,7 @@ import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput, InputGr
 import { Item as Card, ItemActions, ItemContent, ItemDescription, ItemFooter, ItemMedia, ItemTitle } from "@/components/ui/item";
 import { Kbd } from "@/components/ui/kbd";
 import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
-import { Message, MessageContent, MessageHeader } from "@/components/ui/message";
+import { Message, MessageContent, MessageFooter, MessageHeader } from "@/components/ui/message";
 import { MessageScroller, MessageScrollerButton, MessageScrollerContent, MessageScrollerItem, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
 import { Progress, ProgressLabel, ProgressValue } from "@/components/ui/progress";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -37,7 +37,7 @@ import { bridge } from "./bridge.ts";
 import { Composer } from "./Composer.tsx";
 import { WelcomeLetter } from "./WelcomeLetter.tsx";
 import { Markdown, MEDIA } from "./markdown.tsx";
-import { type Item, type Part, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
+import { type Item, type Part, type Steer, store, type Tab, type Tone, useModel, useSignal } from "./model.ts";
 import { childKind, clock, count, MODES, oneLine, plural, short, speedText, tilde, took } from "./text.ts";
 import { Pulse } from "@/components/pulse";
 
@@ -255,7 +255,7 @@ function Work({ item }: { item: Extract<Item, { t: "work" }> }) {
 
 /** The owner's turn (or a task's prompt): a bubble on the owner's side, with the files it brought. */
 /** A message of the owner's. With `menu`, a right click on it offers to branch from it. */
-export function OwnerTurn({ text, from, files, menu, skeleton }: { text?: string; from?: string; files?: string[]; menu?: () => void; /** While the conversation loads: a bubble's shape on the owner's side, from stock Skeleton. */ skeleton?: boolean }) {
+export function OwnerTurn({ text, from, files, menu, skeleton, footer }: { text?: string; from?: string; files?: string[]; menu?: () => void; /** While the conversation loads: a bubble's shape on the owner's side, from stock Skeleton. */ skeleton?: boolean; /** A line under the bubble (whether running work read it). */ footer?: ReactNode }) {
 	if (skeleton)
 		return (
 			<Message align="end" data-item="user-skeleton">
@@ -285,8 +285,28 @@ export function OwnerTurn({ text, from, files, menu, skeleton }: { text?: string
 						))}
 					</AttachmentGroup>
 				) : null}
+				{footer ? <MessageFooter>{footer}</MessageFooter> : null}
 			</MessageContent>
 		</Message>
+	);
+}
+
+/**
+ * Under a message that was given to running work: whether that work has read it. Until it has, it
+ * can be sent now, which stops the step the work is on (a long command, say) so that it reads it.
+ */
+function SteerLine({ tab, steer }: { tab: Tab; steer: Steer }) {
+	if (steer.read) return <span>read {new Date(steer.read).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}</span>;
+	// Work that ended without reading it: it is answered on its own, next.
+	if (!tab.running.has(steer.into)) return null;
+	return (
+		<span className="flex items-center gap-1">
+			not read yet ·
+			<HoverTooltip>
+				<TooltipTrigger render={<Button variant="link" size="xs" className="h-auto px-0 text-xs font-medium text-muted-foreground" onClick={() => void store.sendNow(tab, steer)} />}>send now</TooltipTrigger>
+				<TooltipContent>Stops what the agent is doing right now, gives it this message, and lets it carry on</TooltipContent>
+			</HoverTooltip>
+		</span>
 	);
 }
 
@@ -433,7 +453,8 @@ export const Row = memo(function Row({ item, tab }: { item: Item; v: number; tab
 	switch (item.t) {
 		case "user": {
 			const task = tab.kind === "chat" ? item.task : undefined;
-			return <OwnerTurn text={item.text} from={item.from} files={item.files} menu={task === undefined ? undefined : () => void branchMenu(tab, task)} />;
+			const steer = tab.kind === "chat" ? item.steer : undefined;
+			return <OwnerTurn text={item.text} from={item.from} files={item.files} menu={task === undefined ? undefined : () => void branchMenu(tab, task)} footer={steer ? <SteerLine tab={tab} steer={steer} /> : undefined} />;
 		}
 		case "answer":
 			return (

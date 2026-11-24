@@ -551,6 +551,7 @@ export class HttpServer {
 			}
 			if (parts[0] === "agents" && parts[2] === "reset" && parts.length === 3) return send(200, { reset: await this.manager.resetSession(parts[1], body.session) });
 			if (parts[0] === "tasks" && parts[2] === "cancel" && parts.length === 3) return send(200, { cancelled: this.manager.cancel(Number(parts[1])) });
+			if (parts[0] === "tasks" && parts[2] === "now" && parts.length === 3) return send(200, { sent: this.manager.sendNow(Number(parts[1])) });
 			if (parts[0] === "approvals" && parts.length === 2) {
 				const values = body.values && typeof body.values === "object" && !Array.isArray(body.values) ? (body.values as Record<string, string>) : undefined;
 				const missing = body.allow === true ? this.approvals.missing(parts[1], values) : [];

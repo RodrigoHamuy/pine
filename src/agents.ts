@@ -271,6 +271,22 @@ export interface RunContext {
 	slot: Slot;
 	cancelled?: boolean;
 	timedOut?: boolean;
+	/** The owner stopped the step under way for a message steered into the work (`sendNow`): the work goes on with it. */
+	interrupted?: boolean;
+}
+
+/** What goes in front of a message of the owner's that is given to running work. */
+const STEER_NOTE = "Your owner wrote this while you work. Answer it first, briefly. Then go on with your work, unless it says otherwise.";
+
+/** A message given to running work (see `whenBusy: "steer"`), and its task (`meta.steered`). */
+interface Steering {
+	id: number;
+	/** The message as written, for work of its own when it was not read. */
+	text: string;
+	/** What the work is given: the owner's message with pine's word that it is to be answered. */
+	said: string;
+	images?: ImageRef[];
+	read: boolean;
 }
 
 export interface Live {
@@ -321,7 +337,7 @@ export interface Live {
 	 * "steer"`). `read`: it is in the conversation; it counts as dealt with once a reply of the
 	 * model's has come after that.
 	 */
-	steering: Array<{ text: string; read: boolean }>;
+	steering: Steering[];
 	/** Whether the conversation's browser is a window on the owner's screen right now. Unset: as the configuration says. */
 	window?: boolean;
 	/** The mode the agent was last told it is in, to say when planning is over. */
@@ -843,8 +859,11 @@ export class AgentManager {
 				const text = prompt.replace(/<(\/?)pine-note>/gi, "<$1pine_note>");
 				// Kept until the work has read it: work that ends or is stopped first leaves it here, and it
 				// is then answered as work of its own (see execute). pi forgets its queue when it is stopped.
-				live.steering.push({ text, read: false });
-				void live.session.steer(text, loadImages(images)).catch((e: unknown) => this.log.warn(`steer failed for ${agent.id}`, errText(e)));
+				// Read is not answered: a model deep in long work keeps going unless it is told to answer. Only the
+				// owner's own message is said to be theirs; anything else goes in as it came.
+				const said = trust === "owner" && steered.kind === "prompt" ? `<pine-note>\n${STEER_NOTE}\n</pine-note>\n\n${text}` : text;
+				live.steering.push({ id: steered.id, text, said, images, read: false });
+				void live.session.steer(said, loadImages(images)).catch((e: unknown) => this.log.warn(`steer failed for ${agent.id}`, errText(e)));
 				this.bus.publish(`agent/${agent.id}/steered`, { task: into.id, by: steered.id, agent: agent.id, session, kind: steered.kind, prompt: truncate(prompt, 2000), depth: 0 }, { persist: false, source: `agent:${agent.id}` });
 				return steered;
 			}
@@ -945,6 +964,33 @@ export class AgentManager {
 		} finally {
 			signal?.removeEventListener("abort", onAbort);
 		}
+	}
+
+	/**
+	 * The owner wants a message that was steered into running work read now rather than at the work's
+	 * next step, which a long command can put off for minutes: the step under way is stopped (its
+	 * command ends) and the work goes on with the message (see execute). Only for a message of the
+	 * owner's that the work has not read yet; the result says whether that was so.
+	 */
+	sendNow(id: number): boolean {
+		const t = this.tasks.get(id);
+		if (t?.meta.steered === undefined || t.meta.trust !== "owner") return false;
+		const active = this.running.get(t.meta.steered);
+		const live = active?.live;
+		if (!active || !live || active.cancelled || live.trust !== "owner" || !live.steering.some((x) => x.id === id && !x.read)) return false;
+		active.interrupted = true;
+		void live.session.abort().catch(() => {});
+		return true;
+	}
+
+	/** A steered message is in the conversation now: noted on its task, and told to the UIs (`agent/<id>/read`). */
+	private steerRead(entry: Steering): void {
+		entry.read = true;
+		const t = this.tasks.get(entry.id);
+		if (!t) return;
+		const at = Date.now();
+		this.tasks.update(t.id, { meta: { ...t.meta, read: at } });
+		this.bus.publish(`agent/${t.agent}/read`, { task: t.meta.steered, by: t.id, agent: t.agent, session: t.session, at }, { persist: false, source: `agent:${t.agent}` });
 	}
 
 	cancel(id: number): boolean {
@@ -2282,8 +2328,8 @@ export class AgentManager {
 				} else if (e.type === "message_end" && e.message?.role === "user") {
 					// The work has read a message that was steered into it.
 					const read = (Array.isArray(e.message.content) ? e.message.content : [{ type: "text", text: e.message.content }]).filter((c: any) => c.type === "text").map((c: any) => String(c.text)).join("");
-					const waiting = live!.steering.find((x) => !x.read && x.text === read);
-					if (waiting) waiting.read = true;
+					const waiting = live!.steering.find((x) => !x.read && x.said === read);
+					if (waiting) this.steerRead(waiting);
 				} else if (e.type === "message_end" && e.message?.role === "assistant") {
 					// A reply that came after a steered message was read has taken it into account.
 					if (e.message.stopReason !== "aborted" && e.message.stopReason !== "error") live!.steering = live!.steering.filter((x) => !x.read);
@@ -2366,7 +2412,21 @@ export class AgentManager {
 					} else if (said.length) prompt = `<pine-note>\n${said.join("\n")}\n</pine-note>\n\n${prompt}`;
 					if (news.length) this.toldFiles(agent, live);
 					live.noteKey = note.key;
-					await live.session.prompt(prompt, { expandPromptTemplates: false, images: loadImages(task.meta.images) });
+					// A stop for "send now" may end the call in either way.
+					const stoppedForNow = (e: unknown) => {
+						if (!ctx.interrupted) throw e;
+					};
+					await live.session.prompt(prompt, { expandPromptTemplates: false, images: loadImages(task.meta.images) }).catch(stoppedForNow);
+					// The owner stopped the step under way for a message steered into this work (`sendNow`): the
+					// work goes on with that message, in pine's words, so that it is answered and not only read.
+					while (ctx.interrupted && !ctx.cancelled && !ctx.timedOut) {
+						ctx.interrupted = false;
+						const now = live.steering.filter((x) => !x.read);
+						for (const x of now) this.steerRead(x);
+						const said = now.map((x) => x.text).join("\n\n");
+						const frame = `<pine-note>\nYour owner stopped your work for ${said ? "the message below" : "their message above"}. A step you were taking was cut off: take it again if it is still needed. Answer the message first. Then go on with your work, unless the message says otherwise.\n</pine-note>`;
+						await live.session.prompt(said ? `${frame}\n\n${said}` : frame, { expandPromptTemplates: false, images: loadImages(now.flatMap((x) => x.images ?? [])) }).catch(stoppedForNow);
+					}
 				}
 			} finally {
 				clearTimeout(timer);
