@@ -864,10 +864,16 @@ export class AgentManager {
 
 		if (o.whenBusy === "steer" && !ephemeral) {
 			const live = this.lives.get(`${agent.id}:${session}`);
-			if (live?.current && live.session.isStreaming && !this.stopping) {
+			// An answer goes where the running work's answer goes, so a message whose answer goes somewhere else
+			// (a Telegram message during work started elsewhere) waits its turn and is answered where it came from.
+			const sameReply = !o.reply || JSON.stringify(o.reply) === JSON.stringify(live?.current?.task.reply);
+			if (live?.current && live.session.isStreaming && !this.stopping && sameReply) {
 				const into = live.current.task;
-				const steered = this.tasks.insert({ agent: agent.id, session, kind: o.kind ?? "event", prompt, status: "done", priority: o.priority ?? 0, created: Date.now(), event: o.event?.id || undefined, hops: o.event?.hops ?? 0, depth: 0, meta: { trust, images, steered: into.id, label: `steered into #${into.id}`, quotes, body } });
+				const steered = this.tasks.insert({ agent: agent.id, session, kind: o.kind ?? "event", prompt, status: "done", priority: o.priority ?? 0, created: Date.now(), event: o.event?.id || undefined, hops: o.event?.hops ?? 0, depth: 0, meta: { trust, images, steered: into.id, label: `steered into #${into.id}`, quotes, body, tainted: o.tainted } });
 				this.tasks.update(steered.id, { finished: Date.now(), result: `steered into task #${into.id}` });
+				// What a source that is not the owner's reports marks the conversation that reads it, steered in as
+				// when it starts a turn (execute): before the work reads it, so that what it sends next is asked about.
+				if (o.tainted) live.taint(o.tainted);
 				// Nobody but the daemon writes a note; an incoming text that carries the tag loses it.
 				const text = prompt.replace(/<(\/?)pine-note>/gi, "<$1pine_note>");
 				// Kept until the work has read it: work that ends or is stopped first leaves it here, and it
