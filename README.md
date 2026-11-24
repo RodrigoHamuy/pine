@@ -5,7 +5,7 @@
   </picture>
 </h1>
 
-pine.pmnd.re
+[pine.pmnd.re](https://pine.pmnd.re)
 
 ```bash
 npm install -g @pmndre/pine
