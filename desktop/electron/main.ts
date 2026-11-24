@@ -6,6 +6,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
+import { BROWSER_SWITCHES, type Bounds, BrowserHost } from "./browser-host.ts";
 import { type AccessChange, type AccessControl, type AccessPrefs, createAccessControl, readAccessPrefs } from "./access/control.ts";
 import type { Cipher } from "./access/host.ts";
 import { createAnnouncer, isPairAddress } from "./access/nearby.ts";
@@ -49,6 +50,8 @@ if (HEADLESS && isMac) app.setActivationPolicy("accessory");
  */
 const ACCESS_STAND_IN = process.env.PINE_DESKTOP_ACCESS_STAND_IN;
 if (ACCESS_STAND_IN !== undefined) app.commandLine.appendSwitch("use-mock-keychain");
+// The agent's browser is in this window (browser-host.ts): what goes around its proxy is switched off for the app.
+for (const [name, value] of BROWSER_SWITCHES) app.commandLine.appendSwitch(name, value);
 
 // A second set of windows and data for tests and for trying things out beside the real app.
 if (process.env.PINE_DESKTOP_DATA) app.setPath("userData", path.resolve(process.env.PINE_DESKTOP_DATA));
@@ -156,6 +159,8 @@ function olderThan(s: Service, host: string | undefined): string | undefined {
 }
 
 let win: BrowserWindow | undefined;
+/** The agents' browsers, in this window: for this computer's pine only, whose browser servers can reach it. */
+const browsers = new BrowserHost(() => win);
 let service: Service | undefined;
 let launch: Launch | undefined;
 let state: ServiceState = { status: "starting" };
@@ -706,7 +711,27 @@ function handle<T extends unknown[]>(channel: string, fn: (...args: T) => unknow
 
 function wire(): void {
 	handle("pine:state", () => ({ state, connected: Boolean(service) && connected, home: prefs.home ?? process.env.PINE_HOME, prefs: { ...prefs, bounds: undefined }, platform: process.platform, focused: Boolean(win?.isFocused()), updates: Boolean(RELEASE_API), versions: { app: app.getVersion(), electron: process.versions.electron }, views: true, selfUpdate: Boolean(updater) }));
-	handle("pine:call", (method: string, url: string, body?: unknown) => callDaemon(service, method, url, body));
+	handle("pine:call", async (method: string, url: string, body?: unknown) => {
+		// The app says again and again that it shows the browser. To this computer's pine it also says where its own
+		// browser is, with the word to reach it, which the page never holds.
+		if (method === "POST" && url === "/browser/embedded" && service && !service.host) {
+			await browsers.start().catch(() => {});
+			return callDaemon(service, method, url, { host: browsers.url });
+		}
+		return callDaemon(service, method, url, body);
+	});
+	// Where the browser panel is, and which conversation's tab is in front there: its page is laid over the panel.
+	handle("pine:browser-show", (key: unknown, index: unknown, bounds: unknown) => {
+		const b = bounds as Partial<Bounds> | undefined;
+		const fine = (v: unknown, max: number): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= max;
+		const place = b && fine(b.x, 20_000) && fine(b.y, 20_000) && fine(b.width, 20_000) && fine(b.height, 20_000) && b.width >= 1 && b.height >= 1 ? { x: b.x, y: b.y, width: b.width, height: b.height } : undefined;
+		// (The page's places are in its own points, which the window's zoom makes larger or smaller.)
+		const zoom = win?.webContents.getZoomFactor() ?? 1;
+		const scaled = place && { x: Math.round(place.x * zoom), y: Math.round(place.y * zoom), width: Math.round(place.width * zoom), height: Math.round(place.height * zoom) };
+		return browsers.show(typeof key === "string" && !service?.host ? key : undefined, fine(index, 99) ? index : 0, scaled);
+	});
+	handle("pine:browser-focus", () => browsers.focus());
+	handle("pine:browser-picture", () => browsers.picture());
 	handle("pine:retry", () => startService());
 	handle("pine:update", (again?: boolean) => update(again === true));
 	handle("pine:install-update", () => installUpdate());
@@ -957,6 +982,7 @@ else {
 		savePrefs();
 		updater?.quitting();
 		terminals.closeAll();
+		browsers.close();
 		// Browser access closes its sockets; its daemon is one of those held, and follows them.
 		void access?.stop();
 		announcer.stop();

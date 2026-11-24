@@ -497,7 +497,8 @@ export class HttpServer {
 				return send(200, await this.manager.browserOpen(parts[1], session, body.url));
 			}
 			// A UI that shows the browser itself says so, again and again while it runs: browser_show then opens no window.
-			if (url.pathname === "/browser/embedded") return this.manager.browserEmbedded(), send(200, { ok: true });
+			// The Pine app on this computer also says where its own browser is (`host`), which the agents' browsers become.
+			if (url.pathname === "/browser/embedded") return this.manager.browserEmbedded(body.host), send(200, { ok: true });
 			if (parts[0] === "agents" && parts[2] === "programs" && parts[3] === "stop" && parts.length === 4) {
 				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 				return send(200, { stopped: this.manager.stopProgram(parts[1], String(body.session ?? "main"), Number(body.id)) });

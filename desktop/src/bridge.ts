@@ -139,10 +139,16 @@ export type AccessCalls = "access" | "setAccess" | "openPairing" | "copyPairingL
 export type UpdateCalls = "installUpdate" | "onUpdate";
 
 /**
+ * The agent's real browser laid over the panel (electron/browser-host.ts): only the desktop app's bridge has these
+ * calls, and only for this computer's pine. Elsewhere the panel draws the pictures the daemon hands over.
+ */
+export type BrowserCalls = "browserShow" | "browserFocus" | "browserPicture";
+
+/**
  * The bridge as the page sees it: the preload script's, or a stand-in of the same shape (the
  * preview's, the mobile app's, the web client's).
  */
-export type PageBridge = Omit<Bridge, "state" | AccessCalls | UpdateCalls> & Partial<Pick<Bridge, AccessCalls | UpdateCalls>> & {
+export type PageBridge = Omit<Bridge, "state" | AccessCalls | UpdateCalls | BrowserCalls> & Partial<Pick<Bridge, AccessCalls | UpdateCalls | BrowserCalls>> & {
 	state: () => Promise<AppState>;
 	/**
 	 * Where the daemon's pictures, video and sound are fetched from, set by a bridge whose page

@@ -582,6 +582,10 @@ export interface BrowserState {
 	tabs: Array<{ title: string; url: string }>;
 	current: number;
 	window: boolean;
+	/** How many pixels of the picture make one point of the page: 2, as sharp as a Retina display draws. (1 from a pine before it said.) */
+	scale?: number;
+	/** The browser is the Pine app's own, and these are its tabs there (electron/browser-host.ts): the app lays the page itself over the panel. */
+	room?: string;
 	/** Why the last thing asked for was not done. */
 	error?: string;
 	/** The addresses the agent opened in this conversation, newest first. */

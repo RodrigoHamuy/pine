@@ -63,7 +63,8 @@ export const NO_MODEL = "No model yet: sign in to a provider (Settings > Models 
  * say. Only an owner's conversation has local addresses the owner allowed, and only there may the
  * browser be put on the owner's screen.
  */
-export const browserSession = (owner: boolean, localFile: string, viewFile?: string): Record<string, unknown> => (owner ? { localFile, window: true, viewFile: viewFile ?? null } : { localFile: null, window: false, viewFile: null });
+export const browserSession = (owner: boolean, localFile: string, viewFile?: string, hostFile?: string, room?: string): Record<string, unknown> =>
+	owner ? { localFile, window: true, viewFile: viewFile ?? null, hostFile: viewFile && hostFile ? hostFile : null, room: viewFile && hostFile ? (room ?? null) : null } : { localFile: null, window: false, viewFile: null, hostFile: null, room: null };
 
 export const THINKING_LEVELS = ["off", "minimal", "low", "medium", "high", "xhigh", "max"];
 
@@ -502,8 +503,9 @@ export class AgentManager {
 	 * A UI of the owner's says that it shows the browser itself (the Pine app, again and again
 	 * while it runs). While that holds, browser_show opens no window: the owner is looking already.
 	 */
-	browserEmbedded(): void {
+	browserEmbedded(host?: unknown): void {
 		this.embedUntil = Date.now() + 90_000;
+		if (host !== undefined) this.views.host(host, this.embedUntil);
 	}
 
 	async browserState(agentId: string, session: string): Promise<BrowserState> {
@@ -579,7 +581,7 @@ export class AgentManager {
 		const perm = this.browserOf(agentId, session);
 		const local = localTarget(url);
 		if (local && this.cfg.http && local.port === this.cfg.http.port) return this.withVisited(perm, { ...(await this.views.state(perm)), error: `${local.key} is pine's own control port. It stays closed to the browser.` });
-		if (!this.views.has(perm) && !(await this.wakeBrowser(agentId, session))) return this.withVisited(perm, { open: false, tabs: [], current: 0, window: false, error: "This conversation has no browser. The agent has to have the browser of the web tools, and the conversation a first message." });
+		if (!this.views.has(perm) && !(await this.wakeBrowser(agentId, session))) return this.withVisited(perm, { open: false, tabs: [], current: 0, window: false, scale: 1, error: "This conversation has no browser. The agent has to have the browser of the web tools, and the conversation a first message." });
 		if (local) this.allowLocal(perm, local.key);
 		this.stir(perm);
 		return this.withVisited(perm, await this.views.open(perm, url));
@@ -3443,7 +3445,7 @@ export class AgentManager {
 				// The browser of an owner's conversation learns which local addresses the owner allowed there,
 				// and may be put on the owner's screen. A run started from outside gets neither, whatever the options say.
 				// App control: the profile holds this server only where the session may have it; here it learns where its helper is kept.
-				const extra = server.pine === "commands" ? { cwd: roots.cwd, sandbox: jail?.("restricted"), env: shellEnv(agent, roots, {}) } : server.pine === "browser" ? browserSession(live.trust === "owner", this.localFile(live.perm), profile.leaf ? undefined : this.views.file(live.perm)) : server.pine === "computer" ? (this.computerFor(agent, live.trust, server, live.cap) ?? {}) : {};
+				const extra = server.pine === "commands" ? { cwd: roots.cwd, sandbox: jail?.("restricted"), env: shellEnv(agent, roots, {}) } : server.pine === "browser" ? browserSession(live.trust === "owner", this.localFile(live.perm), profile.leaf ? undefined : this.views.file(live.perm), this.views.hostFile, live.perm) : server.pine === "computer" ? (this.computerFor(agent, live.trust, server, live.cap) ?? {}) : {};
 				pi.registerMcpServer(name, toPiMcp(name, server, extra));
 			}
 

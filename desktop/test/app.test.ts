@@ -127,7 +127,7 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 	const picture = Buffer.from(await app.evaluate(({ nativeImage }: any) => nativeImage.createFromBitmap(Buffer.alloc(400 * 300 * 4, 180), { width: 400, height: 300 }).toJPEG(70).toString("base64")), "base64");
 	const word = "cd".repeat(32);
 	const asked: Array<{ at: string; body: any }> = [];
-	const where = { open: true, tabs: [{ title: "<img src=x onerror=window.hacked=3>Okapi shop", url: "https://shop.example/" }, { title: "Second", url: "https://shop.example/two" }], current: 0, window: false };
+	const where = { open: true, tabs: [{ title: "<img src=x onerror=window.hacked=3>Okapi shop", url: "https://shop.example/" }, { title: "Second", url: "https://shop.example/two" }], current: 0, window: false, scale: 2 };
 	const door = http.createServer(async (req, res) => {
 		if (req.headers.authorization !== `Bearer ${word}`) return void res.writeHead(401).end();
 		let text = "";
@@ -180,8 +180,9 @@ test("the agent's browser is shown in an aside of its own as a picture, and what
 		assert.equal(await page.evaluate(() => (window as any).hacked), undefined);
 		await shot("05-browser");
 
-		// A click in the picture is a click at that place in the page, whatever size the picture is drawn at.
-		const box = await page.$eval("[data-slot=browser] canvas", (c: HTMLCanvasElement) => ({ x: c.getBoundingClientRect().left, y: c.getBoundingClientRect().top, k: c.width / c.getBoundingClientRect().width }));
+		// A click in the picture is a click at that place in the page, whatever size the picture is drawn at: the
+		// picture has two pixels for a point of the page (scale), as sharp as a Retina display draws.
+		const box = await page.$eval("[data-slot=browser] canvas", (c: HTMLCanvasElement) => ({ x: c.getBoundingClientRect().left, y: c.getBoundingClientRect().top, k: c.width / 2 / c.getBoundingClientRect().width }));
 		await page.mouse.click(box.x + 100, box.y + 60);
 		await waitFor("the click arrived", () => ops().some((o) => o.do === "click"));
 		const click = ops().find((o) => o.do === "click");

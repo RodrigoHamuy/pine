@@ -518,17 +518,36 @@ These are invariants. A change that breaks one needs a test that shows why it is
    "reaches nothing nearby" in `test/browser.test.ts` listens on a UDP port for anything that
    gets out: run it (`npm run test:live`) when Playwright MCP is upgraded, since the switches
    are Chromium's and a new build can rename one.
-   A UI of the owner's that shows the browser itself (the Pine app, in the panel beside a
-   conversation) gets it as pictures and hands back what the owner did in them. The browser stays
-   the one the agent has: the same process, the same guard proxy, the same blocked tools, no
-   window. `mcp/browser.ts` has a door for that (`startViewDoor`): a server on the loopback that
+   The Pine app on this computer has the agent's browser itself: while it runs, the browser of an
+   owner's conversation is a set of tabs in the app's window (`desktop/electron/browser-host.ts`),
+   each a `WebContentsView` with a session of its own, sandboxed, with no preload and no way to the
+   app's page or its main process, laid over the panel beside the conversation. The owner uses the
+   page itself there. The app says where it is with its heartbeat (`/browser/embedded`, `host`,
+   only to this computer's pine), the daemon writes that into pine's data (`BrowserViews.host`,
+   read by the browser servers of an owner's conversations with a door: `hostFile`, `room`), and
+   `mcp/browser.ts` starts Playwright's server against it (`--cdp-endpoint`) instead of a Chromium
+   of its own, and moves back to that one when the app is gone (`move`: the page is opened again,
+   the logins go along when the browser that is left still answers). What Playwright talks to is a
+   browser made of each tab's own debugger, behind a WebSocket on the loopback with a word: it
+   reaches the tabs of the conversation the connection names and nothing else, never the app's own
+   page, where the owner answers pine's questions. Never turn on Chromium's remote debugging port
+   for the app instead. Every tab's session goes through the connecting server's guard proxy,
+   loopback included (`<-loopback>`), what goes around a proxy is switched off for the whole app
+   (`BROWSER_SWITCHES`, and each tab's WebRTC policy), a tab asks for no permission, keeps no
+   download and goes to nothing but `http(s)` by itself, and the blocked tools are the same. Since
+   the owner can act in that page at any time, every call of the agent's is guarded there as with
+   a window (`guarded`). Elsewhere (the phone, the web client, another machine's pine, pine
+   without the app) a UI that shows the browser gets it as pictures and hands back what the owner
+   did in them. The browser stays the one the agent has: the same process, the same guard proxy,
+   the same blocked tools, no window. `mcp/browser.ts` has a door for that (`startViewDoor`): a server on the loopback that
    answers only who says the word it wrote into a file in pine's data (`viewFile`, which
    `browserSession` hands to an owner's conversation and to nothing else: no run started from
    outside, no sub-agent). The daemon goes through it for the control API alone
    (`src/browser-view.ts`); no agent has a tool for it, and what the door says about a page (an
    address, a title) is handed on as one line of text each. What the owner did is checked piece
    by piece by the browser's server (`cleanOps`, `webAddress`) and goes into code of the server's
-   own as values (`OWNER_HAND`): `browser_run_code_unsafe` and the tools that act at a place in
+   own as values (`OWNER_HAND`), or, for a single click, a key and plain letters, to Playwright's
+   own input tools as values: `browser_run_code_unsafe` and the tools that act at a place in
    the picture are used by the server for this and stay closed to the agent (`ALWAYS_BLOCKED`,
    `VISION_TOOLS`). Never put text from a page, an agent or the owner into that code as code,
    and never give the door a road that does more than look and act in the page. An address on
@@ -585,8 +604,9 @@ These are invariants. A change that breaks one needs a test that shows why it is
    app's page draws is content from outside (an answer can repeat a web page), so the page
    holds no token and has no Node: `desktop/electron/main.ts` makes every call for it, takes
    calls from the app's own page only, serves nothing but pictures, video and sound straight
-   from the daemon (`MEDIA`; the page of an agent's browser is one of those pictures, drawn by
-   `desktop/src/Browser.tsx` and never loaded), opens only `http(s)` addresses and only in the owner's browser,
+   from the daemon (`MEDIA`; where the page of an agent's browser is a picture, it is drawn by
+   `desktop/src/Browser.tsx` and never loaded into the app's page: the app's own browser is a view
+   of its own laid over it, rule 8), opens only `http(s)` addresses and only in the owner's browser,
    and sets the policy that lets the page load nothing from the web. Text from an agent or a
    tool is drawn by `desktop/src/markdown.tsx` (parsed, cleaned, links with their address
    beside them, a picture on the web as a line to click) or as plain text, nowhere as HTML.

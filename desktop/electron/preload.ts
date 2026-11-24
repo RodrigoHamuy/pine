@@ -54,6 +54,15 @@ const bridge = {
 	onTermExit: on("pine:term-exit"),
 	/** A block run with a Run button is still running, or has ended (`RunReport` of terminal.ts). */
 	onTermRun: on("pine:term-run"),
+	/**
+	 * The agent's browser of a conversation (`room` of the browser's state) laid over the panel at `bounds`, its tab
+	 * `index` in front; without a room or bounds nothing is laid over the window. Says whether a page is shown.
+	 */
+	browserShow: (room: string | undefined, index: number, bounds?: { x: number; y: number; width: number; height: number }) => ipcRenderer.invoke("pine:browser-show", room, index, bounds) as Promise<boolean>,
+	/** The keys go to the page in the panel. */
+	browserFocus: () => ipcRenderer.invoke("pine:browser-focus") as Promise<void>,
+	/** A still picture of the page laid over the panel (a data: address), for while something of the app's own covers that place. */
+	browserPicture: () => ipcRenderer.invoke("pine:browser-picture") as Promise<string | undefined>,
 	/** Browser access (Settings > Browser access): its state, as access/control.ts gives it. */
 	access: () => ipcRenderer.invoke("pine:access") as Promise<AccessState>,
 	/** Turns it on or off, names the service's address (empty: the official one), sets open at login. What comes back is the state now. */

@@ -924,7 +924,7 @@ the agent to write. So:
 | What is heard | Text for the input: never sent by itself |
 | A code block's Run button | Only your click types a block into your terminal, and only a block whose every character shows as itself: an answer cannot run anything by itself, nor hide a part of what it runs. What the agent hears back is that block's output, quoted, and nothing you typed |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
-| The agent's browser beside a conversation | A picture, drawn; its address and titles as text. The browser is the agent's own, another program behind pine's guard: the app hands the daemon what you did in the picture (places, keys, an address), and the browser's own server checks each piece before anything is done |
+| The agent's browser beside a conversation | With this computer's pine, the page itself: the app has the agent's browser, a view of its own in the window laid over the panel (its own session, sandboxed, nothing of the app's in it), which you use as any browser and the agent drives at the same time. All of it goes through pine's guard, the same as the browser pine starts itself, which the agent goes back to when the app is closed; logins made in one are not in the other. Its address and titles are text in the app. While a dialog or a menu of the app's lies over the panel, a still picture of the page stands in for it. With another machine's pine, on the phone and in the web client: a picture, drawn, and the app hands the daemon what you did in it (places, keys, an address), which the browser's own server checks piece by piece |
 | Browser access | Off until you turn it on. Then the app's SSH server of its own (not the system's SSH server, Remote Login on macOS) accepts only the keys you allowed at this computer, by key and never by password, and gives them this computer's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
 | On the local network | While browser access and Visible on this network are on, a Bonjour record (`_pine._tcp`) named "Pine" and the start of this computer's key fingerprint, never its name, with that fingerprint, the service's address and a random word that changes every five minutes, which a request without a code has to name. Nothing listens behind it: a phone still goes through the service and checks the key, and the four digits are what you compare. Requests without a code are one at a time and paused after refusals. While visibility is off the app has no socket on port 5353 |
 | What the app itself asks the web | GitHub, for pine's last release and, when it is newer, its update (see "A newer version"). The question and the update's feed send the user agent `Pine` and nothing else; the update's zip is fetched by macOS's updater, whose user agent names the app's version and the version of macOS. Of the answer only the release's number is used, and the link and the update's address are made by the app and lead to pine's releases on GitHub, whatever was answered. And, only while browser access is on, its service: this computer waits there under its key's fingerprint, and a browser that asks for it is introduced; the conversations never pass through it |
@@ -981,6 +981,8 @@ desktop/
                    forwarding, the media served straight from the daemon (`MEDIA`), the live events
                    in batches, the page's content security policy
     preload.ts     the bridge: the short list of things the page may ask the main process for
+    browser-host.ts the agents' browsers in the window: each tab a view of its own laid over the panel,
+                   behind the guard of the browser server that drives it through a WebSocket with a word
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed
     updates.ts     whether there is a newer app: GitHub asked for the last release, the link to its page
@@ -1010,7 +1012,7 @@ desktop/
                    in either opens larger in a stock Dialog of its own)
     CodePanel.tsx  changes, files and the editor, output, what is running
     Board.tsx      the Board tab: the tasks and notes a conversation shares with its sub-agents
-    Browser.tsx    the agent's browser in its aside: its page as a picture, and what is done in it handed back
+    Browser.tsx    the agent's browser in its aside: the app's own browser laid over it (electron/browser-host.ts), or its page as a picture, and what is done in it handed back
     View.tsx       the view's panel: what asks you, the view in its sandboxed frame, what happened, what is
                    chosen. view-world.ts is pine as the page knows it, made from the live events; view-state.ts
                    is what a view is told of it (names and states, no text); view-frame.ts (view.html) is the
