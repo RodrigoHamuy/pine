@@ -40,13 +40,10 @@ function Selecting({ onQuote }: { onQuote: (text: string) => void }) {
 export const OverSelectedText: Story = {
 	args: {},
 	render: () => <Selecting onQuote={fn()} />,
-	play: async ({ canvas }) => {
-		const text = canvas.getByTestId("answer").firstChild as Text;
-		const range = document.createRange();
-		range.setStart(text, 4);
-		range.setEnd(text, 36);
-		window.getSelection()?.removeAllRanges();
-		window.getSelection()?.addRange(range);
+	// Selected as a person does, with the mouse: pressed, dragged and let go over the words.
+	play: async ({ canvas, userEvent }) => {
+		const answer = canvas.getByTestId("answer");
+		await userEvent.pointer([{ keys: "[MouseLeft>]", target: answer, offset: 4 }, { offset: 36 }, { keys: "[/MouseLeft]" }]);
 		await within(document.body).findByRole("toolbar");
 	},
 };
