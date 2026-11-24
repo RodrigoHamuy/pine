@@ -13,7 +13,8 @@ each agent, main under the roof. `workshop` is the same pine as Santa's workshop
 the main agent is Santa, the others are elves, each in a workshop of another kind. `overview` is no
 picture but a page to read: what triggers agents, the agents with what each is doing, and the tools
 they use, with a line between two of them while something happens there. The three stand side by
-side; in a panel that is taller than wide and too narrow for that, one under the other. An agent that leads a
+side; in a panel that is taller than wide, one under the other, with the cards of each side by side
+in rows as wide as the panel. An agent that leads a
 swarm says so on its card ("swarm · round 2 of 8", "Checking the answer", "Swarm needs your
 answer") and stays among the agents at work between its turns. It is the one the
 panel shows until you pick another ([desktop.md](desktop.md), "The view", says what is what in each). These
