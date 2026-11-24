@@ -137,7 +137,7 @@ test("quotes: a reply goes with its quote, after it, is left out when empty, is 
 	const long = { text: "x".repeat(50), source: letter, reply: "y".repeat(100) };
 	const cutReply = fitQuotes([long], 80);
 	assert.equal(cutReply[0].text, long.text);
-	assert.ok(cutReply[0].reply!.endsWith("…") && cutReply[0].reply!.length < 100, cutReply[0].reply);
+	assert.ok(cutReply[0].reply!.endsWith("…") && cutReply[0].reply!.length < 100, String(cutReply[0].reply));
 	assert.ok(withQuotes(cutReply, "").length <= 80, `${withQuotes(cutReply, "").length}`);
 	assert.deepEqual(fitQuotes([long], 54), [{ text: long.text, source: letter }]);
 
