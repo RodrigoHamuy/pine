@@ -1,11 +1,11 @@
 import { createRequire } from "node:module";
 
-// Colours for code in an answer. highlight.js knows the languages and says what each piece of a
+// Colors for code in an answer. highlight.js knows the languages and says what each piece of a
 // text is (a keyword, a string, a removed line of a diff); here that becomes one of the terminal's
-// own sixteen colours, so code follows the terminal's palette like the rest of the UI.
+// own sixteen colors, so code follows the terminal's palette like the rest of the UI.
 
-/** What highlight.js calls a piece of code -> the colour it gets (an SGR foreground code). */
-const COLOUR: Record<string, string> = {
+/** What highlight.js calls a piece of code -> the color it gets (an SGR foreground code). */
+const COLOR: Record<string, string> = {
 	keyword: "35", literal: "35", "selector-tag": "35", "meta-keyword": "35", doctag: "35",
 	built_in: "36", type: "36", "builtin-name": "36", attr: "36", attribute: "36", variable: "36", "template-variable": "36", "selector-class": "36", "selector-id": "36", "selector-attr": "36", "selector-pseudo": "36",
 	string: "32", regexp: "32", "meta-string": "32", addition: "32",
@@ -32,28 +32,28 @@ function hljs(): any {
 	return lib;
 }
 
-/** highlight.js's answer (text with <span class="hljs-..."> around the pieces) as coloured lines. */
+/** highlight.js's answer (text with <span class="hljs-..."> around the pieces) as colored lines. */
 function toLines(html: string): string[] {
 	const lines: string[] = [];
 	const open: Array<string | undefined> = [];
-	const colour = () => open.findLast((x) => x !== undefined);
+	const color = () => open.findLast((x) => x !== undefined);
 	let line = "";
 	for (const m of html.matchAll(/<span class="([^"]*)">|<\/span>|&(?:amp|lt|gt|quot|#x27|#39);|\n|[^<&\n]+|[<&]/g)) {
 		const piece = m[0];
 		if (m[1] !== undefined) {
-			const now = m[1].split(/\s+/).map((name) => COLOUR[name.replace(/^hljs-/, "")]).find(Boolean);
+			const now = m[1].split(/\s+/).map((name) => COLOR[name.replace(/^hljs-/, "")]).find(Boolean);
 			open.push(now);
 			if (now) line += `\x1b[${now}m`;
 		} else if (piece === "</span>") {
 			const was = open.pop();
-			if (was) line += `\x1b[${colour() ?? "39"}m`;
+			if (was) line += `\x1b[${color() ?? "39"}m`;
 		} else if (piece === "\n") {
-			// A colour that runs over the end of a line (a long comment, a string) ends with the line and starts again on the next.
-			lines.push(colour() ? `${line}\x1b[39m` : line);
-			line = colour() ? `\x1b[${colour()}m` : "";
+			// A color that runs over the end of a line (a long comment, a string) ends with the line and starts again on the next.
+			lines.push(color() ? `${line}\x1b[39m` : line);
+			line = color() ? `\x1b[${color()}m` : "";
 		} else line += ENTITY[piece] ?? piece;
 	}
-	lines.push(colour() ? `${line}\x1b[39m` : line);
+	lines.push(color() ? `${line}\x1b[39m` : line);
 	return lines;
 }
 
@@ -66,8 +66,8 @@ export function languageOf(lang: string | undefined): string | undefined {
 }
 
 /**
- * A code block as lines, coloured when its language is known. A block without a language, or in
- * one highlight.js does not know, comes back as it is: guessing the language colours plain text
+ * A code block as lines, colored when its language is known. A block without a language, or in
+ * one highlight.js does not know, comes back as it is: guessing the language colors plain text
  * at random.
  */
 export function highlightCode(code: string, lang?: string): string[] {

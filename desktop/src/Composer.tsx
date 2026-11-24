@@ -10,8 +10,10 @@ import { Combobox, ComboboxContent, ComboboxItem, ComboboxList } from "@/compone
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupTextarea } from "@/components/ui/input-group";
 import { Kbd } from "@/components/ui/kbd";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useEffect, useRef, useState } from "react";
+import { useMediaQuery } from "usehooks-ts";
 import { api } from "./api.ts";
 import { bridge } from "./bridge.ts";
 import { COMMANDS, runSlash } from "./commands.ts";
@@ -83,9 +85,12 @@ export function Composer({ tab }: { tab: Tab }) {
 		setKind(undefined);
 	};
 
+	// On a touch screen a focus nobody asked for raises the on-screen keyboard, which covers half the
+	// page and pushes it under the status bar: there the owner taps into the input when they write.
+	const touch = useMediaQuery("(pointer: coarse)");
 	useEffect(() => {
-		area.current?.focus();
-	}, [tab.id]);
+		if (!touch) area.current?.focus();
+	}, [tab.id, touch]);
 
 	const heard = (said: string) => `${typed.current}${typed.current && !/\s$/.test(typed.current) && said ? " " : ""}${said}`;
 	/** `cancel`: nothing more is put into the input. Otherwise "that was all": the last words still arrive. */
@@ -116,7 +121,7 @@ export function Composer({ tab }: { tab: Tab }) {
 			bridge.onVoice((m: { type: string; text?: string; state?: string; error?: string }) => {
 				if (!hearing.current) return;
 				if (m.type === "ready") setVoice("listening");
-				else if (m.type === "model") setVoiceNote(m.state === "downloading" ? "the system is fetching its speech model for this language, once" : "");
+				else if (m.type === "model") setVoiceNote(m.state === "downloading" ? "macOS is downloading the speech model for this language, once" : "");
 				else if (m.type === "partial") set(heard(m.text ?? ""));
 				else if (m.type === "done") {
 					hearing.current = false;
@@ -262,9 +267,10 @@ export function Composer({ tab }: { tab: Tab }) {
 	const paused = store.bypassPaused(tab);
 	const tainted = store.taints.get(`${tab.agent}:${tab.session}`);
 	const goal = tab.goal && tab.goal.status !== "met" ? tab.goal : undefined;
+	const swarm = tab.swarm && (tab.swarm.status === "paused" || tab.swarm.status === "limit") ? tab.swarm : undefined;
 
 	const model = info?.model ?? "none";
-	const thinking = info?.thinking ?? "off";
+	const thinking = info?.thinking ?? "medium";
 	// A menu's popup lies elsewhere on the page but inside the Input Group's addon for React, so a
 	// click in it would reach the addon's own handler (a click there puts focus into the input) and
 	// take focus from the button the menu gives it back to.
@@ -277,11 +283,22 @@ export function Composer({ tab }: { tab: Tab }) {
 			{goal && goal.status !== "active" ? (
 				<Alert className="mb-2">
 					<ClockIcon />
-					<AlertTitle>Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "at its limit"}</AlertTitle>
+					<AlertTitle>Goal {goal.status === "paused" ? "paused" : goal.status === "blocked" ? "waits for you" : "limit reached"}</AlertTitle>
 					<AlertDescription className="truncate">{goal.note}</AlertDescription>
 					<AlertAction>
 						<Button variant="link" size="xs" onClick={() => void store.setGoal(tab, "resume")}>Resume</Button>
 						<Button variant="link" size="xs" onClick={() => void store.setGoal(tab, "clear")}>Clear</Button>
+					</AlertAction>
+				</Alert>
+			) : null}
+			{swarm ? (
+				<Alert className="mb-2">
+					<ClockIcon />
+					<AlertTitle>Swarm {swarm.status === "paused" ? "paused" : "limit reached"}</AlertTitle>
+					<AlertDescription className="truncate">{swarm.note}</AlertDescription>
+					<AlertAction>
+						<Button variant="link" size="xs" onClick={() => void store.setSwarm(tab, "resume")}>Resume</Button>
+						<Button variant="link" size="xs" onClick={() => void store.setSwarm(tab, "clear")}>Clear</Button>
 					</AlertAction>
 				</Alert>
 			) : null}
@@ -292,10 +309,11 @@ export function Composer({ tab }: { tab: Tab }) {
 					<AlertDescription>{voice === "starting" ? "" : "speak · ↩ when you are done · esc to throw it away"}{voiceNote ? ` · ${voiceNote}` : ""}</AlertDescription>
 				</Alert>
 			) : null}
-			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the daemon). */}
-			<form
+			{/* The files are pine's own (`attach`: its limits, a folder opened instead, base64 for the daemon).
+			    Not a form: the web client's page runs in a frame that may not submit one (no `allow-forms`,
+			    AGENTS.md rule 10), so the Send button sends by its click and Enter by `onKey`. */}
+			<div
 				data-slot="composer"
-				onSubmit={(e) => (e.preventDefault(), void send("steer"))}
 				onDragOver={(e) => {
 					if (![...e.dataTransfer.types].includes("Files")) return;
 					e.preventDefault();
@@ -315,10 +333,10 @@ export function Composer({ tab }: { tab: Tab }) {
 										<AttachmentDescription>{size(f.size)}</AttachmentDescription>
 									</AttachmentContent>
 									<AttachmentActions>
-										<Tooltip>
+										<HoverTooltip>
 											<TooltipTrigger render={<AttachmentAction onClick={() => (tab.attachments.splice(i, 1), tab.touch())} aria-label={`Remove ${f.name}`} />}><XIcon /></TooltipTrigger>
 											<TooltipContent>Remove {f.name}</TooltipContent>
-										</Tooltip>
+										</HoverTooltip>
 									</AttachmentActions>
 								</Chip>
 							))}
@@ -349,7 +367,7 @@ export function Composer({ tab }: { tab: Tab }) {
 					>
 						<ComboboxPrimitive.Input
 							ref={area as unknown as React.Ref<HTMLInputElement>}
-							render={<InputGroupTextarea rows={1} className="max-h-48 p-3" />}
+							render={<InputGroupTextarea rows={1} className="max-h-48 p-3 leading-snug md:text-base md:leading-snug" />}
 							placeholder={tab.busy ? `Say something to ${tab.agent} while it works…` : `Message ${tab.agent} · / for commands · @ for files`}
 							onChange={(e) => {
 								// A key that types ends the listening: what was heard stays, and nothing more is put into the input.
@@ -380,34 +398,35 @@ export function Composer({ tab }: { tab: Tab }) {
 					{/* A narrow input keeps every button on one line and whole: only the model's and the folder's
 					    names are cut, and what has no room for its words stands as its sign alone, with the words in its tooltip. */}
 					<InputGroupAddon align="block-end" className="@container/bar">
-						<Tooltip>
+						<HoverTooltip>
 							<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="outline" className="rounded-full" onClick={() => picker.current?.click()} aria-label="Attach files (or drop them here)" />}><PlusIcon /></TooltipTrigger>
 							<TooltipContent>Attach files (or drop them here)</TooltipContent>
-						</Tooltip>
-						<Tooltip>
+						</HoverTooltip>
+						<HoverTooltip>
 							<TooltipTrigger render={<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickModel(tab)} aria-label={`Model: ${model}`} />}>
 								<CpuIcon />
 								<span className="truncate @max-md/bar:hidden">{info?.model?.split("/").pop() ?? "model"}</span>
 							</TooltipTrigger>
 							<TooltipContent>Model: {model}</TooltipContent>
-						</Tooltip>
+						</HoverTooltip>
 						<DropdownMenu>
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<DropdownMenuTrigger render={<InputGroupButton size="sm" aria-label={`Reasoning: ${thinking}, how much the model thinks before it answers`} />} />}>
 									<SparkleIcon />
 									<span className="@max-md/bar:hidden">{thinking}</span>
 									<ChevronDownIcon className="@max-md/bar:hidden" />
 								</TooltipTrigger>
 								<TooltipContent>Reasoning: {thinking}, how much the model thinks before it answers</TooltipContent>
-							</Tooltip>
-							<DropdownMenuContent side="top" className="w-56" onClick={inMenu}>
+							</HoverTooltip>
+							<DropdownMenuContent side="top" className="w-72" onClick={inMenu}>
 								<DropdownMenuGroup>
 									<DropdownMenuLabel>Reasoning for {tab.agent}</DropdownMenuLabel>
 									<DropdownMenuRadioGroup value={thinking} onValueChange={(level: string) => void store.setReasoning(tab, level)}>
+										{/* Two columns, each row on one line: the level, and what it means beside it. */}
 										{Object.entries(REASONING_ABOUT).map(([level, about]) => (
 											<DropdownMenuRadioItem key={level} value={level} closeOnClick>
-												{level}
-												<span className="text-muted-foreground">{about}</span>
+												<span className="w-16 shrink-0">{level}</span>
+												<span className="truncate text-muted-foreground">{about}</span>
 											</DropdownMenuRadioItem>
 										))}
 									</DropdownMenuRadioGroup>
@@ -415,14 +434,14 @@ export function Composer({ tab }: { tab: Tab }) {
 							</DropdownMenuContent>
 						</DropdownMenu>
 						<DropdownMenu>
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<DropdownMenuTrigger render={<InputGroupButton size="sm" variant={mode === "bypass" && !paused ? "destructive" : "ghost"} aria-label={`Mode: ${mode}${paused ? " (paused)" : ""}, how much this agent does without asking`} />} />}>
 									<ShieldIcon />
 									<span className="@max-xl/bar:hidden">{mode}{paused ? " (paused)" : ""}</span>
 									<ChevronDownIcon className="@max-md/bar:hidden" />
 								</TooltipTrigger>
 								<TooltipContent>Mode: {mode}{paused ? " (paused)" : ""}, how much this agent does without asking</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 							<DropdownMenuContent side="top" className="w-80" onClick={inMenu}>
 								<DropdownMenuGroup>
 									<DropdownMenuLabel>Mode for {tab.agent}</DropdownMenuLabel>
@@ -439,54 +458,54 @@ export function Composer({ tab }: { tab: Tab }) {
 								</DropdownMenuGroup>
 							</DropdownMenuContent>
 						</DropdownMenu>
-						<Tooltip>
+						<HoverTooltip>
 							<TooltipTrigger render={<InputGroupButton size="sm" className="min-w-0 shrink" onClick={() => void store.pickFolder(tab)} aria-label={tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"} />}>
 								<FolderIcon />
-								<span className="truncate @max-sm/bar:hidden">{tab.folder ? baseName(tab.folder) : "its workspace"}</span>
+								<span className="truncate @max-sm/bar:hidden">{tab.folder ? baseName(tab.folder) : "workspace"}</span>
 							</TooltipTrigger>
 							<TooltipContent>{tab.folder ? `Works in ${tab.folder}` : "Where this conversation works: the agent's own workspace, or a folder of yours"}</TooltipContent>
-						</Tooltip>
+						</HoverTooltip>
 						{tainted ? (
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<Badge variant="outline" className="min-w-0 shrink" tabIndex={0} />}>
 									<EyeIcon data-icon="inline-start" />
 									<span className="truncate @max-xl/bar:hidden">outside content</span>
 								</TooltipTrigger>
 								<TooltipContent>This conversation has read outside content ({tainted}): the agent asks before it sends something out.</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						) : null}
 						<span className="ml-auto" />
 						{store.platform === "darwin" ? (
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant={voice !== "off" ? "destructive" : "ghost"} onClick={() => void dictate()} aria-label={voice === "off" ? "Dictate the message" : "End the listening"} />}><MicIcon /></TooltipTrigger>
 								<TooltipContent>
 									{voice === "off" ? "Dictate the message" : "End the listening"}
 									{voice === "off" ? <Kbd>⌃R</Kbd> : null}
 								</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						) : null}
 						{tab.busy && !text.trim() ? (
-							<Tooltip>
+							<HoverTooltip>
 								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="default" className="rounded-full" onClick={() => void store.stop(tab)} aria-label="Stop" />}><SquareIcon /></TooltipTrigger>
 								<TooltipContent>
 									Stop
 									<Kbd>esc</Kbd>
 								</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						) : (
-							<Tooltip>
+							<HoverTooltip>
 								{/* Said as disabled, not disabled: a disabled button inside an InputGroup dims the whole
 								    composer (`has-disabled:`). With nothing to send, `send` does nothing. */}
-								<TooltipTrigger render={<InputGroupButton type="submit" size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
+								<TooltipTrigger render={<InputGroupButton size="icon-sm" variant="default" className="rounded-full aria-disabled:opacity-50" onClick={() => void send("steer")} aria-disabled={!text.trim() || undefined} aria-label={tab.busy ? "Give it to the agent while it works · ⌥↩ waits until it is done" : "Send"} />}><ArrowUpIcon /></TooltipTrigger>
 								<TooltipContent>
-									{tab.busy ? "Give it to the agent while it works · ⌥↩ waits its turn" : "Send"}
+									{tab.busy ? "Give it to the agent while it works · ⌥↩ waits until it is done" : "Send"}
 									<Kbd>↩</Kbd>
 								</TooltipContent>
-							</Tooltip>
+							</HoverTooltip>
 						)}
 					</InputGroupAddon>
 				</InputGroup>
-			</form>
+			</div>
 			<input ref={picker} type="file" multiple hidden onChange={(e) => (void attach(tab, [...(e.target.files ?? [])]), (e.target.value = ""))} />
 			{tab.folder && !tab.items.length ? <div className="px-1 pt-1.5 text-faint text-xs">{tab.agent}'s tools start in {tilde(tab.folder)} and may read and change what is in it.</div> : null}
 		</>

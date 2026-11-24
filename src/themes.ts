@@ -1,11 +1,11 @@
-// The themes of pine's look: VS Code colour theme files in <home>/themes, one theme a file, named by
+// The themes of pine's look: VS Code color theme files in <home>/themes, one theme a file, named by
 // the file (`one-dark-pro.json` is the theme "one-dark-pro"). `ui.theme` in pine.json says which
 // one is in force; pmndre when it names none. A home gets pine's own set the first time pine starts
 // without the folder (and from `pine init`, which copies examples/home); after that the folder is
 // the owner's: a theme taken out stays out, one dropped in is offered.
 //
 // The folder lies in pine's home, which no agent writes. All the same a theme file is read as data
-// and nothing else: parsed, resolved into colours (src/theme-colors.ts), and only those colours go
+// and nothing else: parsed, resolved into colors (src/theme-colors.ts), and only those colors go
 // to a UI.
 
 import fs from "node:fs";
@@ -23,7 +23,7 @@ const MAX_BYTES = 2_000_000;
 const bundled = () => path.join(PINE_ROOT, "examples", "home", "themes");
 export const themesDir = (home: string) => path.join(home, "themes");
 
-/** A theme as a UI is handed it: its colours, or why it cannot be drawn. */
+/** A theme as a UI is handed it: its colors, or why it cannot be drawn. */
 export type ThemeEntry = ({ id: string } & ResolvedTheme) | { id: string; name: string; problem: string };
 
 /** The first start of a home without a themes folder: pine's own set goes into it. */

@@ -11,7 +11,7 @@
 | `@earendil-works/pi-mcp` | MCP naming | pi's MCP package; pine uses its function that turns a server name into the prefix of its tool names. |
 | `mqtt` | MQTT client | Only loaded when an `mqtt` source starts. |
 | `@earendil-works/pi-tui` | Terminal UI toolkit | pi's own: full-screen layout, editor with completion, Markdown rendering. Used by `src/tui/`. |
-| `highlight.js` | Code colours | Colours code blocks in the terminal UI. |
+| `highlight.js` | Code colors | Colors code blocks in the terminal UI. |
 | `@playwright/mcp` | Browser automation | Started as a child of `mcp/browser.ts`, which filters its tools and proxies its traffic. `pine init` downloads the browser it drives. |
 | `sandbox-exec`, `bwrap` | Containment | The system's sandbox: Apple's on macOS, driven by a generated profile; bubblewrap on Linux, driven by generated mounts. One set of rules for both (`src/security.ts`, `src/sandbox-linux.ts`). Agents in `safe` and `manual` mode and every run started from outside work in it; `auto` and `bypass` mode work without. |
 | `git` | Changes, diffs and undo | The system's own. The code pane asks it what changed in a folder, and `/undo` keeps the states of a folder as git trees in `data/snapshots`. It always runs inside a sandbox, without network and with everything a repository's settings could make it start turned off; only undo may write, and only pine's own snapshot folder and the conversation's folder (`src/workspace-view.ts`, `src/snapshots.ts`). |
@@ -56,7 +56,7 @@ Before pine was written, 59 checks charted how pi 1.5.1 behaves when embedded
 | The MCP extension reads `mcp.json` from pi's global folder, not the session's | Servers are registered per session from pine's configuration; pi's global folder is redirected |
 | Session files default to pi's global folder | Explicit session folders per agent |
 | The shell tool has no default time limit | A limit the model cannot raise |
-| Instruction files are read once | Reload when a file changed |
+| Instruction files are read once, and reading them again restarts the session's MCP servers | The owner's conversations read the files at every request, so the browser stays open when an agent writes its memory; a run started from outside is reloaded when a file changed |
 | `prompt()` resolves even when the model call failed | The result is read from the last assistant message |
 | No built-in sub-agents; the shipped example breaks when embedded | `delegate` and `subagent` are pine tools running child sessions in-process |
 | Malformed tool calls come back to the model as readable errors | Nothing to do; it is why a weaker local model is workable |

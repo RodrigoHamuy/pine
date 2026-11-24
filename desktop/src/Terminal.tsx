@@ -10,14 +10,17 @@ import { Terminal as Xterm, type ITheme } from "@xterm/xterm";
 import { RotateCwIcon, SquareTerminalIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { EmptyView } from "@/components/empty-view";
+import { Skeleton } from "@/components/ui/skeleton";
 import { bridge } from "./bridge.ts";
 import { SUB } from "./CodePanel.tsx";
 import { store, type Tab, useModel } from "./model.ts";
 import { errText, tilde } from "./text.ts";
+import { cn } from "@/lib/utils";
 
-/** A colour of the page's tokens, as xterm.js takes it: the browser says what any CSS colour is in sRGB. */
+/** A color of the page's tokens, as xterm.js takes it: the browser says what any CSS color is in sRGB. */
 function resolved(css: string, fallback: string): string {
 	const ctx = document.createElement("canvas").getContext("2d", { willReadFrequently: true });
 	if (!ctx || !css.trim()) return fallback;
@@ -30,22 +33,33 @@ function resolved(css: string, fallback: string): string {
 
 const ANSI = ["black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"] as const;
 
-/** The terminal's colours: the theme's (`--term-*`, set with the rest of the theme in theme.ts). */
+/** The terminal's colors: the theme's (`--term-*`, set with the rest of the theme in theme.ts). */
 function theme(): ITheme {
 	const style = getComputedStyle(document.documentElement);
 	const token = (name: string, fallback: string) => resolved(style.getPropertyValue(name), fallback);
-	const colours: Record<string, string> = {};
+	const colors: Record<string, string> = {};
 	ANSI.forEach((name, i) => {
-		colours[name] = token(`--term-${i}`, "#808080");
-		colours[`bright${name[0].toUpperCase()}${name.slice(1)}`] = token(`--term-${i + 8}`, colours[name]);
+		colors[name] = token(`--term-${i}`, "#808080");
+		colors[`bright${name[0].toUpperCase()}${name.slice(1)}`] = token(`--term-${i + 8}`, colors[name]);
 	});
 	return {
-		...colours,
+		...colors,
 		background: token("--term-bg", token("--background", "#1b1e28")),
 		foreground: token("--term-fg", token("--foreground", "#e4f0fb")),
 		cursor: token("--term-cursor", token("--code-cursor", "#e4f0fb")),
 		selectionBackground: token("--term-select", "rgba(113, 124, 180, 0.3)"),
 	};
+}
+
+/** A terminal while its shell starts: a few short lines, from stock Skeleton blocks. */
+export function TerminalSkeleton({ className }: { className?: string }) {
+	return (
+		<div data-slot="terminal-skeleton" className={cn("flex flex-col gap-2 bg-background p-3", className)}>
+			<Skeleton className="h-3.5 w-1/2" />
+			<Skeleton className="h-3.5 w-1/3" />
+			<Skeleton className="h-3.5 w-2/5" />
+		</div>
+	);
 }
 
 /** The terminal of the conversation in `tab`. */
@@ -80,9 +94,9 @@ export function TerminalView({ tab }: { tab: Tab }) {
 			}
 		});
 		resize.observe(host.current!);
-		const recolour = () => (xterm.options.theme = theme());
-		// A new theme (Settings > App) sets the root element's variables (its style attribute).
-		const restyled = new MutationObserver(recolour);
+		const recolor = () => (xterm.options.theme = theme());
+		// A new theme (Settings > General) sets the root element's variables (its style attribute).
+		const restyled = new MutationObserver(recolor);
 		restyled.observe(document.documentElement, { attributes: true });
 		bridge
 			.termOpen(id, tab.folder ?? tab.workspace, xterm.cols, xterm.rows)
@@ -128,16 +142,18 @@ export function TerminalView({ tab }: { tab: Tab }) {
 					{state.cwd ? tilde(state.cwd) : "Starting…"}
 					{state.ended !== undefined ? ` · ended${state.ended ? ` (${state.ended})` : ""}` : ""}
 				</span>
-				<Tooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Start the shell again" onClick={() => void restart()}><RotateCwIcon /></Button>} />
 					<TooltipContent>Start the shell again</TooltipContent>
-				</Tooltip>
+				</HoverTooltip>
 			</div>
 			{state.error ? (
 				<EmptyView icon={SquareTerminalIcon} title="The terminal did not start">{state.error}</EmptyView>
 			) : (
-				<div className="flex min-h-0 flex-1 flex-col bg-background p-1.5" onClick={() => term.current?.focus()}>
-					<div ref={host} data-slot="terminal" className="min-h-0 flex-1" />
+				<div className="relative flex min-h-0 flex-1 flex-col bg-background p-1.5" onClick={() => term.current?.focus()}>
+					<div ref={host} data-slot="terminal" className={cn("min-h-0 flex-1", !state.cwd && "opacity-0")} />
+					{/* xterm.js needs its host laid out from the start, and focusable (opacity, not visibility): the skeleton lies over it while the shell starts. */}
+					{state.cwd ? null : <TerminalSkeleton className="absolute inset-0" />}
 					{state.ended !== undefined ? (
 						<div className="flex flex-none items-center justify-center gap-2 py-1.5 text-xs text-muted-foreground">
 							The shell ended.

@@ -1,0 +1,16 @@
+{
+	"about": "What the page is given of a media answer of the daemon (desktop/electron/daemon.ts mediaFromDaemon): only what is drawn or played. status and contentType (null: no Content-Type header) are the daemon's answer to an allowed request. expect is the status the page gets: 200 with the body, 415 \"not shown\", or 404 \"not found\".",
+	"cases": [
+		{ "name": "a picture", "status": 200, "contentType": "image/png", "expect": 200 },
+		{ "name": "a video", "status": 200, "contentType": "video/mp4", "expect": 200 },
+		{ "name": "a sound", "status": 200, "contentType": "audio/mpeg", "expect": 200 },
+		{ "name": "a picture with a parameter", "status": 200, "contentType": "image/jpeg; q=1", "expect": 200 },
+		{ "name": "a page of HTML", "status": 200, "contentType": "text/html", "expect": 415 },
+		{ "name": "a drawing that can hold a script", "status": 200, "contentType": "image/svg+xml", "expect": 415 },
+		{ "name": "JSON", "status": 200, "contentType": "application/json", "expect": 415 },
+		{ "name": "no type", "status": 200, "contentType": null, "expect": 415 },
+		{ "name": "a type that only contains image/", "status": 200, "contentType": "text/x-image/png", "expect": 415 },
+		{ "name": "missing", "status": 404, "contentType": "image/png", "expect": 404 },
+		{ "name": "the daemon failed", "status": 500, "contentType": "image/png", "expect": 404 }
+	]
+}

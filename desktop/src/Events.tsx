@@ -1,17 +1,19 @@
 // The event log: everything pine publishes, as it happens. A line is a collapsible: it opens, by click or key, to its whole payload.
-import { AudioLinesIcon, PlayIcon, SearchIcon, SquareIcon, Trash2Icon, ZapIcon } from "lucide-react";
+import { AudioLinesIcon, CircleAlertIcon, PlayIcon, SearchIcon, SquareIcon, Trash2Icon, ZapIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { MessageScroller, MessageScrollerContent, MessageScrollerProvider, MessageScrollerViewport } from "@/components/ui/message-scroller";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Printed } from "@/components/printed";
 import { useEffect, useState } from "react";
 import type { PineEvent } from "./api.ts";
 import { store, type Tab, useModel } from "./model.ts";
 import { short } from "./text.ts";
 import { EmptyView } from "@/components/empty-view";
+import { Skeleton } from "@/components/ui/skeleton";
 
 /** "agent/#" fits every topic under agent; "+" fits one level; a word without either is looked for anywhere. */
 function fits(pattern: string, e: PineEvent): boolean {
@@ -45,16 +47,16 @@ export function Events({ tab }: { tab: Tab }) {
 					<InputGroupAddon>
 						<SearchIcon />
 					</InputGroupAddon>
-					<InputGroupInput aria-label="Filter the events" placeholder="Filter: a word, or a topic pattern such as agent/# or source/+/message" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
+					<InputGroupInput aria-label="Filter the events" placeholder="Filter by word or topic (agent/#)" value={filter} onChange={(e) => setFilter(e.target.value)} spellCheck={false} />
 				</InputGroup>
 				<span className="whitespace-nowrap text-faint">{shown.length} shown · text deltas are left out</span>
 				<span className="min-w-0 flex-1" />
 				<Button variant="outline" size="xs" onClick={() => (setFrozen([...tab.log]), setPaused(!paused))}>{paused ? <PlayIcon data-icon="inline-start" /> : <SquareIcon data-icon="inline-start" />}{paused ? "Follow" : "Pause"}</Button>
 				<Button variant="outline" size="xs" onClick={() => store.setPublishing(true)}><ZapIcon data-icon="inline-start" />Publish…</Button>
-				<Tooltip>
+				<HoverTooltip>
 					<TooltipTrigger render={<Button variant="ghost" size="icon-xs" aria-label="Clear the view" onClick={() => ((tab.log = []), tab.touch())} />}><Trash2Icon /></TooltipTrigger>
 					<TooltipContent>Clear the view</TooltipContent>
-				</Tooltip>
+				</HoverTooltip>
 			</div>
 			{/* The log follows its end while it is scrolled to there, and holds still while a line is open. */}
 			<MessageScrollerProvider autoScroll={open === undefined} defaultScrollPosition="end">
@@ -75,6 +77,10 @@ export function Events({ tab }: { tab: Tab }) {
 							</CollapsibleContent>
 						</Collapsible>
 					))
+				) : tab.logLoading && !tab.log.length ? (
+					<EventLines skeleton />
+				) : tab.logError && !tab.log.length ? (
+					<EmptyView icon={CircleAlertIcon} title="Could not load the events">{tab.logError}<div className="mt-3"><Button variant="outline" size="xs" onClick={() => void store.fillEvents(tab)}>Try again</Button></div></EmptyView>
 				) : (
 					<EmptyView icon={AudioLinesIcon} title={tab.log.length ? "No event fits the filter" : "No events yet"}>Messages, tool calls, sources, schedules and approvals all pass through here.</EmptyView>
 				)}
@@ -82,6 +88,23 @@ export function Events({ tab }: { tab: Tab }) {
 					</MessageScrollerViewport>
 				</MessageScroller>
 			</MessageScrollerProvider>
+		</div>
+	);
+}
+
+/** The log's lines while its first fetch is out: rows of a line's shape (time, badge, topic, payload). */
+export function EventLines(_: { skeleton: true }) {
+	const widths = ["w-2/5", "w-3/5", "w-1/3", "w-1/2", "w-2/3", "w-1/4", "w-1/2", "w-3/5"];
+	return (
+		<div aria-busy="true" aria-label="Loading the events">
+			{widths.map((w, i) => (
+				<div key={i} className="flex items-center gap-3 px-4 py-1">
+					<Skeleton className="h-3 w-14 flex-none" />
+					<Skeleton className="h-4 w-14 flex-none rounded-full" />
+					<Skeleton className="h-3 w-28 flex-none" />
+					<Skeleton className={`h-3 ${w}`} />
+				</div>
+			))}
 		</div>
 	);
 }

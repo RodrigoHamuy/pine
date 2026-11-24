@@ -1,6 +1,7 @@
 // Makes the app that is handed out: release/mac-*/Pine.app (and with --dmg a disk image).
 //   node scripts/pack.mjs            the app, for this Mac's kind of processor
-//   node scripts/pack.mjs --dmg      also a disk image (Pine-<version>-<arch>.dmg)
+//   node scripts/pack.mjs --dmg      also a disk image (Pine-<version>-<arch>.dmg), and what the app's
+//                                    updater reads: the app zipped (Pine-<version>-<arch>.zip) and its feed (Pine-<arch>.json)
 //   node scripts/pack.mjs --arch x64 for the other kind of processor (arm64, x64)
 //   node scripts/pack.mjs --no-pine  without a pine inside: the app then uses the `pine` of the owner's shell
 //   node scripts/pack.mjs --out <folder>   into another folder than release/ (for a build beside one that is in use)
@@ -25,6 +26,7 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
+import { updateFeed } from "./update-feed.ts";
 
 const root = path.resolve(import.meta.dirname, "..");
 const repo = path.resolve(root, "..");
@@ -164,6 +166,22 @@ for (const dir of fs.existsSync(path.join(root, "node_modules", "node-pty", "pre
 	if (fs.existsSync(helper)) fs.chmodSync(helper, 0o755);
 }
 
+// node-datachannel, the peer connection of browser access, loads the binary of a package of its
+// own for each kind of Mac, and npm installs only this Mac's. For an app of the other kind the
+// other one is fetched here, at the version node-datachannel names, through npm, which checks it
+// against the registry's checksum, and put beside this Mac's.
+const datachannel = path.join(root, "node_modules", "@node-datachannel", `darwin-${arch}`);
+if (!fs.existsSync(path.join(datachannel, "node_datachannel.node"))) {
+	const version = JSON.parse(fs.readFileSync(path.join(root, "node_modules", "node-datachannel", "package.json"), "utf8")).optionalDependencies[`@node-datachannel/darwin-${arch}`];
+	const into = path.join(root, ".stage", "datachannel");
+	fs.rmSync(into, { recursive: true, force: true });
+	fs.mkdirSync(into, { recursive: true });
+	const file = execFileSync("npm", ["pack", `@node-datachannel/darwin-${arch}@${version}`, "--pack-destination", into, "--silent"], { cwd: into, encoding: "utf8" }).trim().split("\n").pop();
+	fs.mkdirSync(datachannel, { recursive: true });
+	run("/usr/bin/tar", ["-xzf", path.join(into, file), "--strip-components", "1", "-C", datachannel], into);
+}
+const otherArch = arch === "arm64" ? "x64" : "arm64";
+
 const targets = flags.has("--dmg") ? ["dmg", "dir"] : ["dir"];
 await packApp({
 	projectDir: root,
@@ -176,10 +194,14 @@ await packApp({
 		// The app has the version of the pine it carries: they are made and handed out together.
 		extraMetadata: { version: pineVersion },
 		// Everything the app runs is in the two built folders: the page and the main process are bundles.
-		// The one exception is node-pty, the terminal's pseudo-terminal (a dependency of the app's,
-		// which the packer adds by itself): native, so it lies outside the archive.
-		files: ["dist/**", "dist-electron/**", "package.json"],
-		asarUnpack: ["node_modules/node-pty/**"],
+		// The exceptions are node-pty, the terminal's pseudo-terminal, and node-datachannel, browser
+		// access's peer connection (dependencies of the app's, which the packer adds by itself):
+		// native, so they lie outside the archive, where they are signed with the app. Of
+		// node-datachannel's binaries only the one for this app's kind of Mac goes in. ssh2, the access
+		// server's SSH, is not bundled either (it is CommonJS that needs `__dirname`): it is added by
+		// the packer like them, inside the archive, without its native bindings (scripts/ssh2-pure.mjs).
+		files: ["dist/**", "dist-electron/**", "package.json", `!node_modules/@node-datachannel/darwin-${otherArch}/**`],
+		asarUnpack: ["node_modules/node-pty/**", "node_modules/node-datachannel/**", "node_modules/@node-datachannel/**"],
 		// pine goes in whole, with what it depends on, before the app is signed. (Listed as a resource,
 		// the packer would leave its node_modules out.) With it the Node it runs on and `pine` for a terminal.
 		afterPack: (context) => {
@@ -217,10 +239,15 @@ await packApp({
 				// Dictating a message: the helper that listens asks under its own name, and the app says why too.
 				NSMicrophoneUsageDescription: "Pine listens while you dictate a message.",
 				NSSpeechRecognitionUsageDescription: "Pine turns what you say into text for the message you are writing. The words are recognised on this Mac.",
+				// Visible on this network (ADR 0005): macOS 15 and later ask before an app uses the local network, and say why.
+				NSLocalNetworkUsageDescription: "Pine announces this Mac on your network, so that the Pine app on your phone finds it and can ask to connect.",
+				NSBonjourServices: ["_pine._tcp"],
 				CFBundleDocumentTypes: [{ CFBundleTypeName: "Folder", CFBundleTypeRole: "Viewer", LSHandlerRank: "Alternate", LSItemContentTypes: ["public.folder"] }],
 			},
 		},
 		dmg: { title: `Pine ${pineVersion}` },
+		// `pine://pair` (ADR 0005): a page of the web client opens the app on this computer to add a device.
+		protocols: [{ name: "Pine", schemes: ["pine"] }],
 		linux: { target: ["AppImage"], icon: "assets/icon.png", category: "Development" },
 		win: { target: ["nsis"], icon: "assets/icon.png" },
 	},
@@ -233,3 +260,20 @@ if (process.platform === "darwin") {
 	console.log(adhoc ? "signed for this Mac only: to hand the app out, sign it with a Developer ID (CSC_NAME or CSC_LINK) and have it notarised" : notarised ? "signed and notarised" : "signed with a Developer ID but not notarised: another Mac will not open it. Set APPLE_API_KEY, APPLE_API_KEY_ID and APPLE_API_ISSUER");
 }
 console.log(`the app is ${app}`);
+
+// What an app in the field updates from, beside the disk image. The zip is made of the app as it is
+// now, after its ticket was attached (in afterSign), so that the ticket travels inside it; the zip
+// notarise() sent to Apple was of the app before that, and is gone. Without a key (a pack of one's
+// own) both are written all the same, to be looked at by hand.
+if (flags.has("--dmg") && process.platform === "darwin") {
+	if (/^\d+\.\d+\.\d+$/.test(pineVersion)) {
+		const { files, json } = updateFeed(pineVersion, arch, new Date());
+		const zip = path.join(out, files.zip);
+		fs.rmSync(zip, { force: true });
+		run("/usr/bin/ditto", ["-c", "-k", "--sequesterRsrc", "--keepParent", app, zip]);
+		fs.writeFileSync(path.join(out, files.feed), `${JSON.stringify(json, null, "\t")}\n`);
+		console.log(`the update is ${zip}, its feed ${path.join(out, files.feed)}`);
+	} else {
+		console.log(`no update feed: ${pineVersion} is not the version of a release, and only releases are updated to`);
+	}
+}

@@ -531,12 +531,12 @@ test("the owner's editor writes a file of a conversation's folder, and a link pl
 	await h.close();
 });
 
-test("the owner gives an agent a colour of its own: kept in its agent.json, read back by the control API, taken away with none", async () => {
+test("the owner gives an agent a color of its own: kept in its agent.json, read back by the control API, taken away with none", async () => {
 	const h = await harness({ pine: { http: { port: 0 } }, agents: { main: {}, books: { agent: { description: "Keeps the books" } } } });
 	const a = api(h);
 	const file = path.join(h.home, "agents", "books", "agent.json");
 	const listed = async (id: string) => ((await a.get("/agents")).body as any[]).find((x) => x.id === id);
-	assert.ok(!("color" in (await listed("books"))), "an agent without a colour has none in the list");
+	assert.ok(!("color" in (await listed("books"))), "an agent without a color has none in the list");
 	assert.ok(!("color" in (await a.get("/agents/books/detail")).body), "nor in its detail");
 
 	// Any case is taken, and kept in lower case.
@@ -551,7 +551,7 @@ test("the owner gives an agent a colour of its own: kept in its agent.json, read
 	for (const bad of ["coral", "#e08", "e0805a", "#e0805g"]) {
 		const r = await a.post("/agents/books/update", { color: bad });
 		assert.equal(r.status, 400, bad);
-		assert.match(r.body.error, /a colour is written #rrggbb/, bad);
+		assert.match(r.body.error, /a color is written #rrggbb/, bad);
 	}
 	assert.equal(json(file).color, "#e0805a");
 
@@ -569,11 +569,11 @@ test("the owner gives an agent a colour of its own: kept in its agent.json, read
 	assert.equal((await a.post("/agents", { id: "scout", description: "Scouts", instructions: "You are SCOUT.", color: "#3366CC" })).status, 200);
 	assert.equal(json(path.join(h.home, "agents", "scout", "agent.json")).color, "#3366cc");
 	assert.equal((await listed("scout")).color, "#3366cc");
-	assert.match((await a.post("/agents", { id: "ghost", description: "Ghost", instructions: "You are GHOST.", color: "coral" })).body.error, /a colour is written #rrggbb/);
+	assert.match((await a.post("/agents", { id: "ghost", description: "Ghost", instructions: "You are GHOST.", color: "coral" })).body.error, /a color is written #rrggbb/);
 	assert.ok(!fs.existsSync(path.join(h.home, "agents", "ghost")));
 	await h.close();
 
-	// A colour written by hand that is not one is a problem of that agent's file.
+	// A color written by hand that is not one is a problem of that agent's file.
 	const bad = await harness({ agents: { main: {}, books: { agent: { description: "Keeps the books", color: "coral" } } }, start: false } as any);
 	assert.throws(() => loadConfig(bad.home), /agents\/books\/agent\.json: color must be written #rrggbb, for example #e0805a \(got "coral"\)/);
 	await bad.close();

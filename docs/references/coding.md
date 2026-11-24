@@ -159,7 +159,7 @@ when no folder is open. In a terminal of 100 columns or more it takes half the w
 | View | Shows | A click |
 |---|---|---|
 | **Changes** | What differs from the last commit: changed (`M`), added (`A`), new (`+`), deleted (`D`) and renamed (`R`) files with the lines added and removed, and the branch. Its first line switches to **by your last message**: the same list and diffs, counted from before your last message instead of from the last commit | on a file shows its diff, added lines green and removed ones red; `‹ back` returns to the list; `▸ by your last message` and `▸ since the last commit` switch between the two |
-| **Files** | The folder as a tree | on a folder opens or closes it; on a file shows its text with line numbers and colours, or a picture as a picture |
+| **Files** | The folder as a tree | on a folder opens or closes it; on a file shows its text with line numbers and colors, or a picture as a picture |
 | **Output** | Every tool call of the conversation's last 8 messages, newest first: the tool, what it was called with, how long it took | on a call shows everything it printed, not only the first lines the conversation shows |
 | **Running** | What the conversation's commands started and left running: a development server, a watcher. Each with its command, the ports it listens on and how long it has run. A command the agent put into the background is listed too, with the file its output goes to | on `■ stop` ends it |
 
@@ -253,7 +253,7 @@ model. Long lines wrap. A file is shown up to 256 KB, a diff up to 200 000 chara
 output up to 200 000 characters and 4000 lines; binary files are named, not shown. Changes
 lists the first 300 files, and Files shows up to 500 entries of a folder.
 
-While the pane is open, pictures and videos in the conversation are drawn with coloured half
+While the pane is open, pictures and videos in the conversation are drawn with colored half
 blocks also on terminals that can show real pictures. A terminal draws a real picture only at
 the left edge of a full line, where it would lie across the pane.
 
@@ -286,9 +286,9 @@ were restored and which, what was left alone, and how to bring it back.
 ```
  ↶ taken back: “make the total include shipping”
    2 files restored in ~/dev/shop (1 changed back, 1 removed): src/cart.ts, src/shipping.ts
-   not taken back: what commands did outside this folder, files git ignores or that are over 2 MB, and anything that was sent out
-   the message is in the input again, to change and send
-   /redo brings it back, until you send a new message
+   not undone: changes made outside this folder, files git ignores, files over 2 MB, and anything that was sent out
+   what you wrote is back in the message box: edit it and send it again
+   /redo restores it until you send something new
 ```
 
 ### What is restored, and what is not

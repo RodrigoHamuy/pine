@@ -240,7 +240,7 @@ function ShellBlock({ code, language, agent, session }: { code: string; language
 
 const COMPONENTS: Components = { a: Link, img: Picture, details: Details, summary: Summary, code: Code };
 /**
- * The highlighter's theme for code in answers: every colour is a `--code-*` variable of index.css, the
+ * The highlighter's theme for code in answers: every color is a `--code-*` variable of index.css, the
  * ones the code editor reads, so that code in an answer and in the code pane look the same and both
  * follow pine's theme (theme.ts). The variables change with the theme, so one highlighter theme serves
  * them all. Scopes are TextMate's, mapped to the editor's kinds.

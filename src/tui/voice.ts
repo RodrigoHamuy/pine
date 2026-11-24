@@ -31,7 +31,7 @@ const INFO = `<?xml version="1.0" encoding="UTF-8"?>
 `;
 
 export const NOT_HERE = "Voice input needs a Mac: it uses the speech recognition that macOS has on the device. On this system pine works as before, by typing.";
-export const NO_COMPILER = "Voice input needs Apple's command line developer tools, once, to build its helper, and they are not installed on this Mac. Install them by typing this into a terminal: xcode-select --install (macOS then shows a window to confirm). Then try again.";
+export const NO_COMPILER = "Voice input needs Apple's command line developer tools, once, to build the voice helper, and they are not installed on this Mac. Install them by typing this into a terminal: xcode-select --install (macOS then shows a window to confirm). Then try again.";
 
 type Run = (file: string, args: string[], ms: number) => Promise<{ code: number; stdout: string; stderr: string }>;
 
@@ -63,7 +63,7 @@ export async function buildVoice(dir: string, source: string = VOICE_SOURCE, run
 	if (built.code !== 0 || !fs.existsSync(tmp)) {
 		fs.rmSync(tmp, { force: true });
 		const why = built.stderr.split("\n").filter((l) => /error/i.test(l)).slice(0, 3).join(" | ") || built.stderr.trim().split("\n").slice(-2).join(" | ");
-		throw new Error(`pine could not build its helper for voice input (${why.slice(0, 400) || "the compiler gave no reason"}). Apple's command line developer tools may be missing a part or need an update: xcode-select --install, or Software Update.`);
+		throw new Error(`pine could not build the voice input helper (${why.slice(0, 400) || "the compiler gave no reason"}). Apple's command line developer tools may be missing a part or need an update: xcode-select --install, or Software Update.`);
 	}
 	// Whole or not at all: another window of pine may be building the same program at this moment.
 	fs.renameSync(tmp, file);

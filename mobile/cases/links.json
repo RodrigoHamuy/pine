@@ -1,0 +1,42 @@
+{
+	"about": "Where the page may go, what opens outside the app, and which of the page's requests are the daemon's media (desktop/electron/main.ts for the desktop page). rule is one of: outside (the address opens in the system's browser: expect true or false), stays (the address is the page's own origin, Android https://localhost, iOS capacitor://localhost: expect true or false), media (the address is a request for the daemon's media, under Android https://localhost/_pine_media, iOS pine-media://daemon: expect {path, search} with search \"?...\" or \"\", or null).",
+	"cases": [
+		{ "name": "outside: a page on the web", "rule": "outside", "url": "https://example.com/a?b", "expect": true },
+		{ "name": "outside: http in capitals", "rule": "outside", "url": "HTTP://example.com", "expect": true },
+		{ "name": "outside: an Android intent", "rule": "outside", "url": "intent://x#Intent;end", "expect": false },
+		{ "name": "outside: a file", "rule": "outside", "url": "file:///sdcard/a", "expect": false },
+		{ "name": "outside: a script", "rule": "outside", "url": "javascript:alert(1)", "expect": false },
+		{ "name": "outside: a phone number", "rule": "outside", "url": "tel:123", "expect": false },
+		{ "name": "outside: a content provider", "rule": "outside", "url": "content://x/y", "expect": false },
+		{ "name": "outside: https without a host", "rule": "outside", "url": "https://", "expect": false },
+		{ "name": "outside: not an address", "rule": "outside", "url": "not a url", "expect": false },
+		{ "name": "outside: an app store", "rule": "outside", "url": "market://details?id=x", "expect": false },
+		{ "name": "outside: an iOS app's own scheme", "rule": "outside", "url": "capacitor://localhost/", "expect": false },
+		{ "name": "outside: the media scheme", "rule": "outside", "url": "pine-media://daemon/media/tool/abc", "expect": false },
+
+		{ "name": "stays: the Android origin", "rule": "stays", "url": "https://localhost/", "expect": { "android": true, "ios": false } },
+		{ "name": "stays: the Android origin with a path and a fragment", "rule": "stays", "url": "https://localhost/index.html#x", "expect": { "android": true, "ios": false } },
+		{ "name": "stays: the iOS origin", "rule": "stays", "url": "capacitor://localhost/", "expect": { "android": false, "ios": true } },
+		{ "name": "stays: the iOS origin with a path and a fragment", "rule": "stays", "url": "capacitor://localhost/index.html#x", "expect": { "android": false, "ios": true } },
+		{ "name": "stays: a host that begins with localhost", "rule": "stays", "url": "https://localhost.evil.com/", "expect": false },
+		{ "name": "stays: an iOS host that begins with localhost", "rule": "stays", "url": "capacitor://localhost.evil.com/", "expect": false },
+		{ "name": "stays: http", "rule": "stays", "url": "http://localhost/", "expect": false },
+		{ "name": "stays: a port", "rule": "stays", "url": "https://localhost:8443/", "expect": false },
+		{ "name": "stays: an iOS origin with a port", "rule": "stays", "url": "capacitor://localhost:8443/", "expect": false },
+		{ "name": "stays: a user", "rule": "stays", "url": "https://user@localhost/", "expect": false },
+		{ "name": "stays: an iOS origin with a user", "rule": "stays", "url": "capacitor://user@localhost/", "expect": false },
+		{ "name": "stays: a page on the web", "rule": "stays", "url": "https://example.com/", "expect": false },
+
+		{ "name": "media: a tool's picture on Android", "rule": "media", "url": "https://localhost/_pine_media/media/tool/abc", "expect": { "android": { "path": "/media/tool/abc", "search": "" }, "ios": null } },
+		{ "name": "media: with a query on Android", "rule": "media", "url": "https://localhost/_pine_media/agents/a/image?path=x.png", "expect": { "android": { "path": "/agents/a/image", "search": "?path=x.png" }, "ios": null } },
+		{ "name": "media: a tool's picture on iOS", "rule": "media", "url": "pine-media://daemon/media/tool/abc", "expect": { "android": null, "ios": { "path": "/media/tool/abc", "search": "" } } },
+		{ "name": "media: with a query on iOS", "rule": "media", "url": "pine-media://daemon/agents/a/image?path=x.png", "expect": { "android": null, "ios": { "path": "/agents/a/image", "search": "?path=x.png" } } },
+		{ "name": "media: the page's own script", "rule": "media", "url": "https://localhost/assets/index.js", "expect": null },
+		{ "name": "media: the page's own script on iOS", "rule": "media", "url": "capacitor://localhost/assets/index.js", "expect": null },
+		{ "name": "media: a path that only begins like the media base", "rule": "media", "url": "https://localhost/_pine_mediaX/a", "expect": null },
+		{ "name": "media: the media path on another host", "rule": "media", "url": "https://example.com/_pine_media/media/tool/abc", "expect": null },
+		{ "name": "media: the media scheme with another host", "rule": "media", "url": "pine-media://evil/media/tool/abc", "expect": null },
+		{ "name": "media: the media scheme with a user", "rule": "media", "url": "pine-media://user@daemon/media/tool/abc", "expect": null },
+		{ "name": "media: the media scheme with a port", "rule": "media", "url": "pine-media://daemon:1/media/tool/abc", "expect": null }
+	]
+}

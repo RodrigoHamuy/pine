@@ -1,6 +1,7 @@
-// The panel beside a conversation: the agent itself (AgentView.tsx), then its work: the files
-// with an editor, what changed in the folder (git), what the last message changed, what the
-// agent's tool calls printed, and what its commands left running. Everything is read through the control API; a file is written through it too, by
+// The panel beside a conversation: the files with an editor, what changed in the folder (git, or
+// what the last message changed), what the agent's tool calls printed, the owner's terminal, the
+// agent itself (AgentView.tsx), and, while there is something in them, what its commands left
+// running and the board it shares with its sub-agents (Board.tsx). Everything is read through the control API; a file is written through it too, by
 // the daemon, inside a sandbox that reaches only this folder.
 import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, ChevronRightIcon, CopyIcon, ExternalLinkIcon, FileIcon, FolderIcon, GitBranchIcon, PencilIcon, PlayIcon, RotateCwIcon, SaveIcon, SearchIcon, SquareTerminalIcon, Undo2Icon, XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,7 @@ import { Printed } from "@/components/printed";
 import { SideSheet } from "@/components/side-sheet";
 import { api, type Change, media, type TranscriptEntry } from "./api.ts";
 import { AgentView } from "./AgentView.tsx";
+import { BoardTab } from "./Board.tsx";
 import { bridge } from "./bridge.ts";
 import { Steps } from "./Conversation.tsx";
 import { type CodeView, mediaKind, ROOM, store, type Tab, useModel, useSignal } from "./model.ts";
@@ -39,8 +41,10 @@ import { Tree, TreeGroup, TreeItem, TreeItemLabel } from "@ui-sdk/react/tree";
 import { EmptyView } from "@/components/empty-view";
 import { useLoad } from "./use-load.ts";
 import { TerminalView } from "./Terminal.tsx";
-import { Spinner } from "@/components/ui/spinner";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Pulse } from "@/components/pulse";
+import { Skeleton } from "@/components/ui/skeleton";
+import { HoverTooltip } from "@/components/hover-tooltip";
+import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Alert, AlertAction, AlertDescription } from "@/components/ui/alert";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import { Item, ItemActions, ItemContent, ItemDescription, ItemMedia, ItemTitle } from "@/components/ui/item";
@@ -48,9 +52,9 @@ import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area";
 
 // ---- the editor ------------------------------------------------------------------------------------
 
-// The editor says what a token is and what it looks like. The colours are tokens of index.css
+// The editor says what a token is and what it looks like. The colors are tokens of index.css
 // (`--code-*`), so light and dark differ there and nowhere else.
-const colours = HighlightStyle.define([
+const colors = HighlightStyle.define([
 	{ tag: [t.comment], color: "var(--code-comment)", fontStyle: "italic" },
 	{ tag: [t.meta], color: "var(--code-meta)", fontStyle: "var(--code-meta-style)" },
 	{ tag: [t.keyword], color: "var(--code-keyword)" },
@@ -140,7 +144,7 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 					highlightSelectionMatches(),
 					search({ top: true }),
 					look,
-					syntaxHighlighting(colours),
+					syntaxHighlighting(colors),
 					language(file),
 					EditorView.lineWrapping,
 					keymap.of([{ key: "Mod-s", run: () => (live.current.onSave?.(), true) }, ...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
@@ -167,10 +171,10 @@ export function Editor({ file, text, readOnly, onChange, onSave }: { file: strin
 // What a line of a unified diff is: a change is drawn by the stock line variants, which put the
 // sign in front themselves, so its own sign is taken off; a hunk header is highlighted; the
 // lines about the file itself are muted. The stock variants mark a line by its sign and a tint
-// (added is the neutral muted one), so pine's diff colours are laid over them.
+// (added is the neutral muted one), so pine's diff colors are laid over them.
 const META = ["+++", "---", "diff ", "index ", "new file", "deleted file", "similarity", "rename "];
 
-/** A unified diff, coloured line by line. */
+/** A unified diff, colored line by line. */
 export function Diff({ text }: { text: string }) {
 	const lines = text.split("\n");
 	return (
@@ -208,9 +212,54 @@ function PathCrumbs({ path, children }: { path: string; children?: React.ReactNo
 	);
 }
 
+function ChangeRowSkeleton() {
+	return (
+		<div data-slot="change-row-skeleton" className={rowClass()} aria-hidden>
+			<Skeleton className="h-3.5 w-3.5 flex-none" />
+			<Skeleton className="h-3.5 w-24" />
+			<Skeleton className="h-3.5 min-w-0 flex-1" />
+			<Skeleton className="h-3.5 w-8" />
+		</div>
+	);
+}
+
+/** A few line bars where a diff, a file or a list is read. */
+function LinesSkeleton({ rows = 6 }: { rows?: number }) {
+	return (
+		<div data-slot="lines-skeleton" className="flex flex-col gap-2 p-3" aria-hidden>
+			{Array.from({ length: rows }, (_, i) => <Skeleton key={i} className="h-3.5" style={{ width: `${[85, 60, 75, 40, 90, 55][i % 6]}%` }} />)}
+		</div>
+	);
+}
+
+/** One row of the file tree: a folder (open or not) or a file with its size, indented by its depth. */
+export function DirRow(props: { name: string; dir: boolean; size: number; depth: number; open?: boolean; active?: boolean; skeleton?: false } | { name?: undefined; dir?: undefined; size?: undefined; depth: number; open?: undefined; active?: undefined; /** While a folder is read: a row of its shape. */ skeleton: true }) {
+	const indent = { paddingLeft: `calc(var(--spacing) * ${2.5 + props.depth * 3.5})` };
+	if (props.skeleton || props.name === undefined)
+		return (
+			<div data-slot="dir-row-skeleton" className={rowClass()} style={indent} aria-hidden>
+				<span className="w-3 flex-none" />
+				<Skeleton className="size-3.5 flex-none" />
+				<Skeleton className="h-3.5 w-28" />
+			</div>
+		);
+	const { name, dir, size: bytes, open, active } = props;
+	return (
+		<TreeItemLabel className={rowClass(active)} style={indent}>
+			{dir ? (open ? <ChevronDownIcon className="size-3 text-faint" /> : <ChevronRightIcon className="size-3 text-faint" />) : <span className="w-3 flex-none" />}
+			{dir ? <FolderIcon className="size-3.5 text-faint" /> : <FileIcon className="size-3.5 text-faint" />}
+			<span className="min-w-0 flex-1 truncate">{name}</span>
+			{!dir ? <span className="text-faint">{size(bytes)}</span> : null}
+		</TreeItemLabel>
+	);
+}
+
 // ---- its views -------------------------------------------------------------------------------------
 
-function ChangeRow({ c }: { c: Change }) {
+/** One changed file in a list: its status, name, folder and lines added and removed. */
+export function ChangeRow(props: { c: Change; skeleton?: false } | { c?: undefined; /** While the list loads: a row of its shape. */ skeleton: true }) {
+	if (props.skeleton || !props.c) return <ChangeRowSkeleton />;
+	const c = props.c;
 	const at = c.path.lastIndexOf("/");
 	return (
 		<ListboxItem value={c.path} label={c.path.slice(at + 1)} className={rowClass()} title={c.path}>
@@ -237,25 +286,25 @@ function Changes({ tab, turn, openFile }: { tab: Tab; turn: boolean; openFile: (
 		const prefix = top && root && root !== top && root.startsWith(`${top}/`) ? `${root.slice(top.length + 1)}/` : "";
 		return prefix && p.startsWith(prefix) ? p.slice(prefix.length) : p;
 	};
-	if (list.error) return <EmptyView icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "Nothing to show" : "No changes to show"}>{turn ? "No message of yours in this conversation changed a file that pine records." : list.error}</EmptyView>;
-	if (!data) return <Spinner className="m-auto" />;
+	if (list.error) return <EmptyView icon={turn ? Undo2Icon : GitBranchIcon} title={turn ? "The last message cannot be read" : "No changes to show"}>{list.error}</EmptyView>;
+	if (!data) return <div className="flex flex-col">{Array.from({ length: 5 }, (_, i) => <ChangeRow key={i} skeleton />)}</div>;
 	if (!turn && !data.repo) return <EmptyView icon={GitBranchIcon} title="Not a git repository">The folder this conversation works in has no git history, so there are no changes to show. The files are in the Files view.</EmptyView>;
 	if (file)
 		return (
 			<>
 				<div className={SUB}>
-					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
+					<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setFile(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></HoverTooltip>
 					<PathCrumbs path={file} />
 					<Button variant="ghost" size="xs" onClick={() => openFile(inFolder(file))}><PencilIcon data-icon="inline-start" />Edit</Button>
 				</div>
-				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… the rest of this diff is too long to show.</p> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <Spinner className="m-auto" />}</div><ScrollBar orientation="horizontal" /></ScrollArea>
+				<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">{diff.data ? <><Diff text={diff.data.diff || "No difference."} />{diff.data.truncated ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">… the rest of this diff is too long to show.</p> : null}</> : diff.error ? <EmptyView icon={GitBranchIcon} title="This diff cannot be shown">{diff.error}</EmptyView> : <LinesSkeleton />}</div><ScrollBar orientation="horizontal" /></ScrollArea>
 			</>
 		);
 	return (
 		<>
 			<div className={SUB}>
 				{turn ? <><Undo2Icon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.prompt ? `Since “${short(oneLine(data.prompt), 60)}”` : "Since your last message"}</span>{data.files.length ? <Button variant="outline" size="xs" onClick={() => void store.undo(tab, false)}>Take back</Button> : null}</> : <><GitBranchIcon className="size-3.5" /><span className="min-w-0 flex-1 truncate">{data.branch || "no branch"}{data.worktree ? ` · ${data.worktree.ahead} ahead of ${data.worktree.base}${data.worktree.behind ? `, ${data.worktree.behind} behind` : ""}` : ""} · {data.files.length ? plural(data.files.length, "changed file") : "clean"}</span>{data.worktree ? <Button variant="outline" size="xs" onClick={() => void store.worktreeMenu(tab)}>{data.worktree.ahead && !data.worktree.dirty ? "Merge…" : "Worktree…"}</Button> : null}</>}
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={list.reload} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
+				<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={list.reload} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></HoverTooltip>
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{data.note ? <p className="px-3 py-2.5 text-xs text-muted-foreground select-text">{data.note}</p> : null}
@@ -278,12 +327,6 @@ interface TreeState {
 }
 const trees = new Map<string, TreeState>();
 const treeOf = (key: string): TreeState => trees.get(key) ?? (trees.set(key, { open: new Set(), dirs: new Map(), failed: new Map(), edits: new Map() }), trees.get(key)!);
-/** The model is told which conversations have a file edited and not saved: the tab bar's Close Saved leaves their tabs open. */
-const noteEdits = (key: string): void => {
-	const edited = [...treeOf(key).edits.values()].some((e) => e.draft !== undefined && e.draft !== e.base);
-	if (edited) store.editing.add(key);
-	else store.editing.delete(key);
-};
 
 /** The folder's files as a tree: a folder opens and closes, a file opens in the editor. */
 function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void; tick: number }) {
@@ -299,7 +342,6 @@ function FileTree({ tab, pick, tick }: { tab: Tab; pick: (file: string) => void;
 		<>
 			{failed ? <EmptyView icon={FolderIcon} title="This folder cannot be read">{failed}</EmptyView> : null}
 			{entries && !entries.length ? <EmptyView icon={FolderIcon} title="This folder is empty" /> : null}
-			{entries || failed ? null : <Spinner className="m-auto" />}
 			<Tree aria-label="Files" className="outline-none" expanded={[...state.open]} onExpandedChange={(open) => ((state.open = new Set(open)), redraw((n) => n + 1))} expandOnPress onAction={(full) => !isDir(full) && pick(full)}>
 				<Dir tab={tab} dir="" depth={0} tick={tick} onLoad={() => redraw((n) => n + 1)} />
 			</Tree>
@@ -320,8 +362,9 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 	}, [read.loading, read.data, read.error]);
 	const failed = state.failed.get(dir);
 	if (failed && dir) return <p className="py-2.5 pr-3 text-xs wrap-anywhere text-faint select-text" style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>{failed}</p>;
+	if (failed !== undefined) return null;
 	const entries = state.dirs.get(dir);
-	if (!entries) return null;
+	if (!entries) return <>{Array.from({ length: dir ? 2 : 6 }, (_, i) => <DirRow key={i} depth={depth} skeleton />)}</>;
 	return (
 		<>
 			{entries.map((e) => {
@@ -329,12 +372,7 @@ function Dir({ tab, dir, depth, tick, onLoad }: { tab: Tab; dir: string; depth: 
 				const open = state.open.has(full);
 				return (
 					<TreeItem key={full} value={full} label={e.name} branch={e.dir} className={TREE_ITEM}>
-						<TreeItemLabel className={rowClass(state.file === full)} style={{ paddingLeft: `calc(var(--spacing) * ${2.5 + depth * 3.5})` }}>
-							{e.dir ? (open ? <ChevronDownIcon className="size-3 text-faint" /> : <ChevronRightIcon className="size-3 text-faint" />) : <span className="w-3 flex-none" />}
-							{e.dir ? <FolderIcon className="size-3.5 text-faint" /> : <FileIcon className="size-3.5 text-faint" />}
-							<span className="min-w-0 flex-1 truncate">{e.name}</span>
-							{!e.dir ? <span className="text-faint">{size(e.size)}</span> : null}
-						</TreeItemLabel>
+						<DirRow name={e.name} dir={e.dir} size={e.size} depth={depth} open={open} active={state.file === full} />
 						{e.dir ? <TreeGroup>{open ? <Dir tab={tab} dir={full} depth={depth + 1} tick={tick} onLoad={onLoad} /> : null}</TreeGroup> : null}
 					</TreeItem>
 				);
@@ -348,7 +386,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	const disk = useLoad(() => api.file(tab.agent, tab.session, file), [tab.key, file, tab.codeTick]);
 	const edits = treeOf(tab.key).edits;
 	const [, redraw] = useState(0);
-	const edit = (patch: { draft?: string; base?: string }) => (edits.set(file, { ...edits.get(file), ...patch }), noteEdits(tab.key), redraw((n) => n + 1));
+	const edit = (patch: { draft?: string; base?: string }) => (edits.set(file, { ...edits.get(file), ...patch }), redraw((n) => n + 1));
 	const { draft, base } = edits.get(file) ?? {};
 	const setDraft = (draft?: string) => edit({ draft });
 	const setBase = (base?: string) => edit({ base });
@@ -362,7 +400,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [text]);
 	// Leaving the file gives up what was typed in it.
-	const leave = () => (edits.delete(file), noteEdits(tab.key), close());
+	const leave = () => (edits.delete(file), close());
 	const save = async () => {
 		if (!dirty || saving) return;
 		setSaving(true);
@@ -385,7 +423,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 	return (
 		<>
 			<div className={SUB}>
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : leave())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></Tooltip>
+				<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => (dirty ? setLeaving(true) : leave())} aria-label="Back to the files"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the files</TooltipContent></HoverTooltip>
 				<AlertDialog open={leaving} onOpenChange={setLeaving}>
 					<AlertDialogContent>
 						<AlertDialogHeader>
@@ -399,7 +437,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				</AlertDialog>
 				<PathCrumbs path={file}>{dirty ? <span className="text-warn"> ●</span> : null}</PathCrumbs>
 				{disk.data?.truncated ? <Badge variant="outline">too large to edit</Badge> : null}
-				{root && !store.remote ? <Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)} aria-label="Show in the Finder"><ExternalLinkIcon /></Button>} /><TooltipContent>Show in the Finder</TooltipContent></Tooltip> : null}
+				{root && !store.remote ? <HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void bridge.reveal(`${root}/${file}`)} aria-label="Show in the Finder"><ExternalLinkIcon /></Button>} /><TooltipContent>Show in the Finder</TooltipContent></HoverTooltip> : null}
 				{kind || disk.data?.binary ? null : <Button variant={dirty ? "default" : "ghost"} size="xs" disabled={!dirty || saving} onClick={() => void save()}><SaveIcon data-icon="inline-start" />Save</Button>}
 			</div>
 			{changedOnDisk ? (
@@ -422,7 +460,7 @@ function FileView({ tab, file, close }: { tab: Tab; file: string; close: () => v
 				) : disk.error ? (
 					<EmptyView icon={FileIcon} title="This file cannot be shown">{disk.error}</EmptyView>
 				) : !disk.data ? (
-					<Spinner className="m-auto" />
+					<LinesSkeleton rows={12} />
 				) : (
 					<EmptyView icon={FileIcon} title="A binary file">{size(disk.data.size)}. It is not shown as text.</EmptyView>
 				)}
@@ -448,11 +486,11 @@ function Files({ tab, file, setFile }: { tab: Tab; file?: string; setFile: (file
 					</InputGroupAddon>
 					<InputGroupInput aria-label="Find a file" placeholder={root ? `Find a file in ${tilde(root)}` : "Find a file"} value={query} onChange={(e) => setQuery(e.target.value)} />
 				</InputGroup>
-				<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></Tooltip>
+				<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setTick((n) => n + 1)} aria-label="Read again"><RotateCwIcon /></Button>} /><TooltipContent>Read again</TooltipContent></HoverTooltip>
 			</div>
 			<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 				{query.trim() ? (
-					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Spinner className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
+					found.data?.length ? <Listbox aria-label="Files that fit" className="outline-none" {...LISTBOX} onValueChange={onPick(setFile)}>{found.data.map((f) => <ListboxItem key={f} value={f} label={f} className={rowClass()}><FileIcon className="size-3.5 text-faint" /><span className="truncate">{f}</span></ListboxItem>)}</Listbox> : found.loading ? <Pulse label="Loading" className="m-auto" /> : <EmptyView icon={SearchIcon} title="No file fits" />
 				) : (
 					<FileTree tab={tab} pick={setFile} tick={tick} />
 				)}
@@ -473,14 +511,14 @@ function Output({ tab }: { tab: Tab }) {
 		return out;
 	}, [tab.key, tab.codeTick]);
 	const [open, setOpen] = useState<string>();
-	if (!calls.data) return calls.error ? <EmptyView icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</EmptyView> : <Spinner className="m-auto" />;
+	if (!calls.data) return calls.error ? <EmptyView icon={SquareTerminalIcon} title="The tool calls cannot be read">{calls.error}</EmptyView> : <div className="flex flex-col">{Array.from({ length: 5 }, (_, i) => <ChangeRow key={i} skeleton />)}</div>;
 	if (!calls.data.length) return <EmptyView icon={SquareTerminalIcon} title="No tool calls yet">What the agent's commands and tools print appears here.</EmptyView>;
 	const shown = calls.data.find((c) => `${c.task}:${c.n}` === open);
 	if (shown)
 		return (
 			<>
 				<div className={SUB}>
-					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></Tooltip>
+					<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => setOpen(undefined)} aria-label="Back to the list"><ChevronLeftIcon /></Button>} /><TooltipContent>Back to the list</TooltipContent></HoverTooltip>
 					<span className="font-mono">{shown.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{shown.entry.subject}</span>
 				</div>
@@ -495,7 +533,7 @@ function Output({ tab }: { tab: Tab }) {
 			<Listbox aria-label="Tool calls" className="outline-none" {...LISTBOX} onValueChange={onPick(setOpen)}>
 			{calls.data.map((c) => (
 				<ListboxItem key={`${c.task}:${c.n}`} value={`${c.task}:${c.n}`} label={`${c.entry.tool} ${c.entry.subject ?? ""}`} className={rowClass()}>
-					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Spinner aria-label="Working" className="size-3.5" />}
+					{c.entry.ok === false ? <XIcon className="size-3.5 flex-none text-destructive" /> : c.entry.ok ? <CheckIcon className="size-3.5 flex-none text-primary" /> : <Pulse />}
 					<span className="font-mono">{c.entry.tool}</span>
 					<span className="min-w-0 flex-1 truncate font-mono text-faint">{c.entry.subject ? oneLine(c.entry.subject) : ""}</span>
 					{c.entry.ms !== undefined ? <span className="text-faint">{took(c.entry.ms)}</span> : null}
@@ -508,7 +546,8 @@ function Output({ tab }: { tab: Tab }) {
 
 /** What the conversation's commands left running, and the way to stop each. */
 function Running({ tab }: { tab: Tab }) {
-	if (!tab.programs.length) return <EmptyView icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after its turn. It is listed here, and stopped from here.</EmptyView>;
+	if (!tab.programsRead) return <LinesSkeleton rows={3} />;
+	if (!tab.programs.length) return <EmptyView icon={PlayIcon} title="Nothing is running">A dev server or a watcher the agent starts keeps running after the agent is done. It is listed here, and stopped from here.</EmptyView>;
 	return (
 		<ScrollArea className="flex min-h-0 flex-1 flex-col *:data-[slot=scroll-area-viewport]:scroll-fade"><div className="flex min-h-full flex-col">
 			{tab.programs.map((p) => (
@@ -526,10 +565,10 @@ function Running({ tab }: { tab: Tab }) {
 						</ItemContent>
 						<ItemActions>
 							{p.ports.map((port) => (
-								<Tooltip key={port}>
+								<HoverTooltip key={port}>
 									<TooltipTrigger render={<Button variant="link" size="xs" onClick={() => void store.showInBrowser(tab, `http://localhost:${port}`)} />}>localhost:{port}</TooltipTrigger>
 									<TooltipContent>Opens in the browser beside this conversation</TooltipContent>
-								</Tooltip>
+								</HoverTooltip>
 							))}
 							<AlertDialog>
 								<AlertDialogTrigger render={<Button variant="ghost" size="xs" />}>Stop</AlertDialogTrigger>
@@ -563,6 +602,8 @@ export function CodePanel({ tab }: { tab: Tab }) {
 	const setView = (v: CodeView) => ((store.codeView = v), store.touch());
 	const setFile = (file?: string) => ((state.file = file), redraw((n) => n + 1));
 	const steps = tab.steps?.items.some((s) => s.status !== "done") ? tab.steps.items : undefined;
+	// The tasks of its boards that are not settled yet: what the tab's number says.
+	const unsettled = tab.boards.reduce((n, b) => n + b.counts.open + b.counts.taken + b.counts.blocked, 0);
 	// In a window narrower than that there is no room beside the conversation: the panel is a stock sheet over it,
 	// from the right, and putting it away is closing the panel. The owner's choice (open or not) is the same either way.
 	const sheet = !useMediaQuery(ROOM);
@@ -577,29 +618,41 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			onClose={() => void store.command("code")}
 			bar={
 				<>
-					{/* Seven tabs in a narrow panel: the row scrolls sideways, and fades where it is cut. The padding is the room
-					    for the line under the tab in front, which stock draws below the list. */}
+					{/* What is always there first, in the order it is used: the folder (Files, Changes), what ran (Output, the
+					    owner's Terminal), then the agent. After them the two that are there only while they hold something,
+					    with their number, so that the others never move. In a narrow panel the row scrolls sideways, and fades
+					    where it is cut. The padding is the room for the line under the tab in front, which stock draws below the list. */}
 					<ScrollArea className="flex min-w-0 flex-initial flex-col *:data-[slot=scroll-area-viewport]:scroll-fade-x">
 					<div className="pb-1.5">
-					<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+					{/* Last turn is a range of Changes, chosen inside that view: one tab for both. */}
+					<Tabs value={view === "turn" ? "changes" : view} onValueChange={(v) => setView(v as CodeView)}>
 						<TabsList variant="line" activateOnFocus>
-							<TabsTrigger value="agent">Agent</TabsTrigger>
 							<TabsTrigger value="files">Files</TabsTrigger>
 							<TabsTrigger value="changes">Changes</TabsTrigger>
-							<TabsTrigger value="turn">Last turn</TabsTrigger>
 							<TabsTrigger value="output">Output</TabsTrigger>
-							<TabsTrigger value="running">
-								Running
-								{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
-							</TabsTrigger>
 							{/* A shell of this computer: a conversation of another machine's pine does not work here. */}
 							{store.remote ? null : <TabsTrigger value="terminal">Terminal</TabsTrigger>}
+							<TabsTrigger value="agent">Agent</TabsTrigger>
+							{/* Only while a command of the conversation's is still running, or the owner asked for the tab. */}
+							{tab.programs.length || view === "running" ? (
+								<TabsTrigger value="running">
+									Running
+									{tab.programs.length ? <Badge variant="secondary">{tab.programs.length}</Badge> : null}
+								</TabsTrigger>
+							) : null}
+							{/* Only while the conversation has a board, or the owner asked for the tab: most conversations have none. */}
+							{tab.boards.length || view === "board" ? (
+								<TabsTrigger value="board">
+									Board
+									{unsettled ? <Badge variant="secondary">{unsettled}</Badge> : null}
+								</TabsTrigger>
+							) : null}
 						</TabsList>
 					</Tabs>
 					</div>
 					</ScrollArea>
 					<span className="min-w-0 flex-1" />
-					<Tooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></Tooltip>
+					<HoverTooltip><TooltipTrigger render={<Button variant="ghost" size="icon-xs" onClick={() => void store.command("code")} aria-label="Close the panel"><XIcon /></Button>} /><TooltipContent>Close the panel</TooltipContent></HoverTooltip>
 				</>
 			}
 		>
@@ -607,11 +660,24 @@ export function CodePanel({ tab }: { tab: Tab }) {
 			{view === "agent" ? (
 				<AgentView tab={tab} />
 			) : view === "changes" || view === "turn" ? (
-				<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
+				<>
+					{/* Which changes: all that git knows of in the folder, or what the owner's last message changed. */}
+					<div className={SUB}>
+						<Tabs value={view} onValueChange={(v) => setView(v as CodeView)}>
+							<TabsList activateOnFocus aria-label="Which changes">
+								<TabsTrigger value="changes">All changes</TabsTrigger>
+								<TabsTrigger value="turn">Last turn</TabsTrigger>
+							</TabsList>
+						</Tabs>
+					</div>
+					<Changes tab={tab} turn={view === "turn"} openFile={(f) => (setFile(f), setView("files"))} />
+				</>
 			) : view === "files" ? (
 				<Files tab={tab} file={state.file} setFile={setFile} />
 			) : view === "output" ? (
 				<Output tab={tab} />
+			) : view === "board" ? (
+				<BoardTab tab={tab} />
 			) : view === "terminal" ? (
 				store.remote ? <EmptyView icon={SquareTerminalIcon} title="No terminal here">The terminal is a shell on this computer, and this conversation works on {store.remote}. Open a terminal there with ssh.</EmptyView> : <TerminalView tab={tab} />
 			) : (

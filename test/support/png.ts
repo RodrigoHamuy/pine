@@ -1,6 +1,6 @@
 import zlib from "node:zlib";
 
-/** A small png made by hand: left half one colour, right half another, so a drawing of it can be checked. */
+/** A small png made by hand: left half one color, right half another, so a drawing of it can be checked. */
 export function png(width = 64, height = 40, left: [number, number, number] = [220, 40, 40], right: [number, number, number] = [40, 60, 220]): Buffer {
 	const raw = Buffer.alloc((width * 4 + 1) * height);
 	for (let y = 0; y < height; y++) {

@@ -8,9 +8,10 @@ import { type Approvals, timingSafeEqual } from "./security.ts";
 import type { Bus, State, TaskStore } from "./store.ts";
 import { addServer, listServers, removeServer } from "./mcp-config.ts";
 import { changes, diffOf, listDir, MAX_EDIT, readText, findFiles } from "./workspace-view.ts";
-import { type LoginRunner, OwnerApi, Refusal } from "./owner.ts";
+import { type LoginRunner, OwnerApi, Refusal, settleModel } from "./owner.ts";
 import type { Router } from "./router.ts";
 import type { SourceHost } from "./sources.ts";
+import { pineVersion } from "./service.ts";
 import type { Scheduler } from "./timers.ts";
 import { errText, type Logger, topicMatches } from "./util.ts";
 
@@ -22,6 +23,28 @@ class HttpError extends Error {
 		super(message);
 		this.status = status;
 	}
+}
+
+/**
+ * The one range of bytes a `Range` header asks for, within a file of `size` bytes: the first and
+ * last byte, both included. `undefined` when there is no header or it is not one plain range of
+ * bytes (several ranges, another unit, nonsense): the whole file is the answer then, as HTTP
+ * allows. "unsatisfiable" when the range starts past the end.
+ */
+export function byteRange(header: string | undefined, size: number): { start: number; end: number } | "unsatisfiable" | undefined {
+	const m = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
+	if (!m || (m[1] === "" && m[2] === "")) return undefined;
+	if (m[1] === "") {
+		// The last n bytes.
+		const n = Number(m[2]);
+		if (n === 0 || size === 0) return "unsatisfiable";
+		return { start: Math.max(0, size - n), end: size - 1 };
+	}
+	const start = Number(m[1]);
+	if (m[2] !== "" && Number(m[2]) < start) return undefined;
+	if (start >= size) return "unsatisfiable";
+	const end = m[2] === "" ? size - 1 : Number(m[2]);
+	return { start, end: Math.min(end, size - 1) };
 }
 
 /**
@@ -89,7 +112,21 @@ export class HttpServer {
 		};
 		const sendPicture = (p: { mime: string; bytes: Buffer } | undefined) => {
 			if (!p) return send(404, { error: "no such picture" });
-			res.writeHead(200, { "content-type": p.mime, "content-length": p.bytes.length, "cache-control": "no-store", "x-content-type-options": "nosniff" });
+			const headers = { "content-type": p.mime, "accept-ranges": "bytes", "cache-control": "no-store", "x-content-type-options": "nosniff" };
+			// A player that seeks in a sound or a video asks for a part of it. Over a slow road (the
+			// phone's SSH channel) sending the whole file again for each seek is what makes it stall.
+			const range = byteRange(req.headers.range, p.bytes.length);
+			if (range === "unsatisfiable") {
+				res.writeHead(416, { ...headers, "content-range": `bytes */${p.bytes.length}`, "content-length": 0 });
+				res.end();
+				return;
+			}
+			if (range) {
+				res.writeHead(206, { ...headers, "content-range": `bytes ${range.start}-${range.end}/${p.bytes.length}`, "content-length": range.end - range.start + 1 });
+				res.end(p.bytes.subarray(range.start, range.end + 1));
+				return;
+			}
+			res.writeHead(200, { ...headers, "content-length": p.bytes.length });
 			res.end(p.bytes);
 		};
 		try {
@@ -107,7 +144,7 @@ export class HttpServer {
 			if (method === "GET") {
 				const q = url.searchParams;
 				const num = (k: string) => (q.has(k) ? Number(q.get(k)) : undefined);
-				if (url.pathname === "/status") return send(200, { ...this.manager.status(), agents: Object.keys(this.cfg.agents), approvals: this.approvals.pending().length, bypassWhenTainted: this.cfg.security.bypassWhenTainted });
+				if (url.pathname === "/status") return send(200, { ...this.manager.status(), agents: Object.keys(this.cfg.agents), approvals: this.approvals.pending().length, bypassWhenTainted: this.cfg.security.bypassWhenTainted, version: pineVersion() });
 				if (url.pathname === "/agents") {
 					// (`modelProblem` only where there is one: why that agent's model cannot answer.)
 					const problems = await this.manager.modelProblems();
@@ -162,10 +199,25 @@ export class HttpServer {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, this.manager.todosOf(parts[1], q.get("session") ?? "main"));
 				}
+				// Boards (src/boards.ts): all of them, one with everything on it, and those a conversation can use.
+				if (url.pathname === "/boards") return send(200, this.manager.boardList());
+				if (parts[0] === "boards" && parts.length === 2) {
+					const found = this.manager.boardView(Number(parts[1]));
+					return found ? send(200, found) : send(404, { error: "no such board" });
+				}
+				if (parts[0] === "agents" && parts[2] === "boards" && parts.length === 3) {
+					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+					return send(200, this.manager.boardsFor(parts[1], q.get("session") ?? "main"));
+				}
 				// The goal the owner set for a conversation, and where it stands.
 				if (parts[0] === "agents" && parts[2] === "goal" && parts.length === 3) {
 					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 					return send(200, { goal: this.manager.goals.get(parts[1], q.get("session") ?? "main") });
+				}
+				// The swarm the owner started in a conversation, and where it stands.
+				if (parts[0] === "agents" && parts[2] === "swarm" && parts.length === 3) {
+					if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+					return send(200, { swarm: this.manager.swarms.get(parts[1], q.get("session") ?? "main") });
 				}
 				// A conversation's worktree and where it stands against its base; and every worktree of pine's.
 				if (parts[0] === "agents" && parts[2] === "worktree" && parts.length === 3) {
@@ -245,9 +297,10 @@ export class HttpServer {
 				return send(202, { task: task.id });
 			}
 			if (url.pathname === "/models/refresh") {
-				// The owner added or removed a model server with the pine command.
+				// The owner signed in, or added or removed a model server, with the pine command.
 				await this.manager.reloadModels();
-				return send(200, { ok: true });
+				const chosen = await settleModel(this.cfg, this.manager, this.log, typeof body.provider === "string" ? body.provider : undefined);
+				return send(200, { ok: true, ...(chosen ? { chosen } : {}) });
 			}
 			if (url.pathname === "/mcp/refresh") {
 				await this.manager.refreshSessions();
@@ -383,7 +436,7 @@ export class HttpServer {
 				try {
 					if (parts[2] === "group") return send(200, m.setGroup(id, text(body.session, "session: the conversation's name"), typeof body.group === "string" ? body.group : null));
 					if (body.action === "add") return send(200, m.addGroup(id, text(body.name, "name: the group's name")));
-					if (body.action === "rename") return send(200, m.renameGroup(id, text(body.name, "name: the group's name"), text(body.to, "to: its new name")));
+					if (body.action === "rename") return send(200, m.renameGroup(id, text(body.name, "name: the group's name"), text(body.to, "to: the group's new name")));
 					if (body.action === "remove") return send(200, await m.removeGroup(id, text(body.name, "name: the group's name")));
 					if (body.action === "order") return send(200, m.setGroupOrder(id, body.to));
 				} catch (e) {
@@ -400,6 +453,22 @@ export class HttpServer {
 					return send(200, await this.manager.removeSession(parts[1], body.session));
 				} catch (e) {
 					throw new HttpError(409, errText(e));
+				}
+			}
+			// A swarm. Like a goal it is the owner's to start, pause, resume and clear: no tool reaches it.
+			if (parts[0] === "agents" && parts[2] === "swarm" && parts.length === 3) {
+				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
+				const session = String(body.session ?? "main");
+				const swarms = this.manager.swarms;
+				try {
+					if (body.action === "pause") return send(200, { swarm: swarms.pause(parts[1], session) });
+					if (body.action === "resume") return send(200, { swarm: swarms.resume(parts[1], session) });
+					if (body.action === "clear") return send(200, { cleared: swarms.clear(parts[1], session) });
+					if (body.action !== undefined) throw new Error("action is pause, resume or clear; to start a swarm send objective");
+					if (typeof body.objective !== "string") throw new Error("objective required: what is to be done");
+					return send(200, { swarm: swarms.set(parts[1], session, body.objective) });
+				} catch (e) {
+					throw new HttpError(400, errText(e));
 				}
 			}
 			// Goal mode. This is the only way to a goal, and it is the owner's, like the folder of a conversation: no tool reaches it.
@@ -428,7 +497,8 @@ export class HttpServer {
 				return send(200, await this.manager.browserOpen(parts[1], session, body.url));
 			}
 			// A UI that shows the browser itself says so, again and again while it runs: browser_show then opens no window.
-			if (url.pathname === "/browser/embedded") return this.manager.browserEmbedded(), send(200, { ok: true });
+			// The Pine app on this computer also says where its own browser is (`host`), which the agents' browsers become.
+			if (url.pathname === "/browser/embedded") return this.manager.browserEmbedded(body.host), send(200, { ok: true });
 			if (parts[0] === "agents" && parts[2] === "programs" && parts[3] === "stop" && parts.length === 4) {
 				if (!this.cfg.agents[parts[1]]) throw new HttpError(404, "no such agent");
 				return send(200, { stopped: this.manager.stopProgram(parts[1], String(body.session ?? "main"), Number(body.id)) });
@@ -468,8 +538,20 @@ export class HttpServer {
 					throw new HttpError(409, errText(e));
 				}
 			}
+			// The owner's hand on a board: a task or a note of their own, and what becomes of a task.
+			if ((parts[0] === "boards" && parts.length === 3) || (parts[0] === "agents" && parts[2] === "boards" && parts[3] === "post" && parts.length === 4)) {
+				try {
+					if (parts[0] === "agents") return send(200, this.manager.boardPost({ agent: parts[1], session: typeof body.session === "string" ? body.session : "main" }, body));
+					if (parts[1] === "items") return send(200, this.manager.boardAct(Number(parts[2]), body.action, body.text));
+					if (parts[2] === "post") return send(200, this.manager.boardPost({ board: Number(parts[1]) }, body));
+					if (parts[2] === "remove") return send(200, this.manager.boardRemove(Number(parts[1])));
+				} catch (e) {
+					throw new HttpError(400, errText(e));
+				}
+			}
 			if (parts[0] === "agents" && parts[2] === "reset" && parts.length === 3) return send(200, { reset: await this.manager.resetSession(parts[1], body.session) });
 			if (parts[0] === "tasks" && parts[2] === "cancel" && parts.length === 3) return send(200, { cancelled: this.manager.cancel(Number(parts[1])) });
+			if (parts[0] === "tasks" && parts[2] === "now" && parts.length === 3) return send(200, { sent: this.manager.sendNow(Number(parts[1])) });
 			if (parts[0] === "approvals" && parts.length === 2) {
 				const values = body.values && typeof body.values === "object" && !Array.isArray(body.values) ? (body.values as Record<string, string>) : undefined;
 				const missing = body.allow === true ? this.approvals.missing(parts[1], values) : [];

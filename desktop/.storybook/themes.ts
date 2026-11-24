@@ -1,5 +1,5 @@
 // pine's own themes, resolved as pine resolves them (src/theme-colors.ts), for the stories: the page
-// in the app is handed these colours by the daemon, which Storybook has none of.
+// in the app is handed these colors by the daemon, which Storybook has none of.
 import { resolveTheme } from "../../src/theme-colors.ts";
 import type { Look } from "../src/theme.ts";
 

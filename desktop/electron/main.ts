@@ -1,16 +1,22 @@
 // The app's main process. It owns three things the page must not: the daemon's token, the
 // operating system (windows, menus, dialogs, notifications), and the child that is the daemon
 // when this app had to start one. The page gets a narrow bridge (preload.ts) and nothing else.
-import { app, BrowserWindow, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, session, shell } from "electron";
+import { app, BrowserWindow, clipboard, dialog, ipcMain, Menu, type MenuItemConstructorOptions, nativeTheme, Notification, protocol, safeStorage, session, shell } from "electron";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildVoice, Listening, NOT_HERE } from "../../src/tui/voice.ts";
+import { BROWSER_SWITCHES, type Bounds, BrowserHost } from "./browser-host.ts";
+import { type AccessChange, type AccessControl, type AccessPrefs, createAccessControl, readAccessPrefs } from "./access/control.ts";
+import type { Cipher } from "./access/host.ts";
+import { createAnnouncer, isPairAddress } from "./access/nearby.ts";
+import { startStandIn } from "./access/stand-in.ts";
 import { type Command, install, look, remove, said } from "./command.ts";
-import { callDaemon, followEvents, mediaFromDaemon, pageCsp } from "./daemon.ts";
-import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
+import { callDaemon, followEvents, mediaFromDaemon, pageCsp, VIEW_CSP } from "./daemon.ts";
+import { connect, connectSsh, findPine, type Launch, loginEnv, pineRoot, pineVersion, readHosts, runPine, type Service, ServiceError, sshHost } from "./service.ts";
 import { Terminals } from "./terminal.ts";
-import { LATEST, lookForUpdate, type Update } from "./updates.ts";
+import { makeUpdater } from "./updater.ts";
+import { ahead, DOWNLOADS, LATEST, lookForUpdate, type Update } from "./updates.ts";
 import { cleanLook, type Look } from "../src/theme.ts";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -27,16 +33,33 @@ const originOf = (url: string) => {
 };
 const ORIGIN = DEV_URL ? originOf(DEV_URL) : "app://pine";
 const isMac = process.platform === "darwin";
-/** Tests only: the window opens behind the owner's windows and the app never takes the focus or a place in the Dock. */
-const BACKGROUND = Boolean(process.env.PINE_DESKTOP_BACKGROUND);
-if (BACKGROUND && isMac) app.setActivationPolicy("accessory");
+/**
+ * Tests only: the app runs without a screen. Its window is made and drawn like any other and never
+ * shown, so it takes no place on the owner's screen, no click, key or pointer of theirs reaches it,
+ * and it never comes to the front; the app has no place in the Dock. The page goes on drawing as it
+ * does in a window in front (`backgroundThrottling` below), and a test reads and drives it through
+ * the debugger (test/support/app.ts, which also keeps the app from the owner's notifications,
+ * clipboard and browser).
+ */
+const HEADLESS = Boolean(process.env.PINE_DESKTOP_HEADLESS);
+if (HEADLESS && isMac) app.setActivationPolicy("accessory");
+/**
+ * Tests only: browser access runs on its stand-in (access/stand-in.ts), which needs no network;
+ * the value is how long its phone waits before it uses a pairing's link, in milliseconds. The
+ * keychain is Chromium's mock one then, so that a test never writes into the owner's keychain.
+ */
+const ACCESS_STAND_IN = process.env.PINE_DESKTOP_ACCESS_STAND_IN;
+if (ACCESS_STAND_IN !== undefined) app.commandLine.appendSwitch("use-mock-keychain");
+// The agent's browser is in this window (browser-host.ts): what goes around its proxy is switched off for the app.
+for (const [name, value] of BROWSER_SWITCHES) app.commandLine.appendSwitch(name, value);
 
 // A second set of windows and data for tests and for trying things out beside the real app.
 if (process.env.PINE_DESKTOP_DATA) app.setPath("userData", path.resolve(process.env.PINE_DESKTOP_DATA));
 app.setName("Pine");
 
 protocol.registerSchemesAsPrivileged([
-	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true } },
+	// corsEnabled: the view frame (view.html) is sandboxed into an origin of its own, and loads its module scripts across it.
+	{ scheme: "app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true } },
 	{ scheme: "pine-media", privileges: { standard: true, secure: true, stream: true, bypassCSP: false } },
 ]);
 
@@ -54,6 +77,8 @@ interface Prefs {
 	notify: boolean;
 	/** Whether GitHub is asked for a newer app when this one starts. */
 	updates: boolean;
+	/** Whether a newer app is downloaded and installed when the app restarts or quits; off: the owner gets the link to its page. */
+	autoUpdate: boolean;
 	/** `pine` for a terminal was looked after once (see firstCommand): a link the owner removed stays removed. */
 	commandTried: boolean;
 	/**
@@ -61,13 +86,13 @@ interface Prefs {
 	 * opens in it, and its frame (light or dark) and background follow it. None: pmndre.
 	 */
 	look?: Look;
-	/** While a coloured agent's conversation is in front, the window's accent is its colour. */
-	agentAccent: boolean;
 	bounds?: { x?: number; y?: number; width: number; height: number };
+	/** Browser access: on or off, the service's address, open at login (access/control.ts). The host key and the devices are a file of their own beside this one. */
+	access: AccessPrefs;
 }
 
 const prefsFile = () => path.join(app.getPath("userData"), "prefs.json");
-let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, commandTried: false, agentAccent: true };
+let prefs: Prefs = { keepRunning: false, hosts: [], notify: true, updates: true, autoUpdate: true, commandTried: false, access: readAccessPrefs(undefined) };
 
 function loadPrefs(): void {
 	try {
@@ -79,11 +104,11 @@ function loadPrefs(): void {
 			use: undefined,
 			notify: raw.notify !== false,
 			updates: raw.updates !== false,
+			autoUpdate: raw.autoUpdate !== false,
 			commandTried: raw.commandTried === true,
 			look: cleanLook(raw.look),
-			// Off when the owner turned it off, or unticked the primary when the window took role families from the agent.
-			agentAccent: raw.agentAccent === false ? false : raw.agentAccent === true || !(Array.isArray(raw.agentFamilies) && !raw.agentFamilies.includes("primary")),
 			bounds: raw.bounds && Number(raw.bounds.width) > 300 && Number(raw.bounds.height) > 200 ? raw.bounds : undefined,
+			access: readAccessPrefs(raw.access),
 		};
 		// Only a machine that is in the list: what else might be written there is not connected to.
 		if (typeof raw.use === "string" && prefs.hosts.includes(raw.use)) prefs.use = raw.use;
@@ -94,7 +119,7 @@ function loadPrefs(): void {
 }
 
 /**
- * What the window shows before the page draws: the page colour of the theme it was last drawn in
+ * What the window shows before the page draws: the page color of the theme it was last drawn in
  * (pmndre's before there was one). On a Mac the window is transparent, behind its vibrancy.
  */
 function windowBackground(look = prefs.look): string {
@@ -120,7 +145,18 @@ function savePrefs(): void {
 
 // Each window shows one pine at a time: this computer's, or another machine's over SSH (Settings >
 // Environments). Multiple windows can be open at once, on the same pine or on different ones.
-type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string } | { status: "error"; kind: ServiceError["kind"]; message: string; host?: string };
+type ServiceState = { status: "starting"; host?: string } | { status: "ready"; mode: string; started: boolean; home: string; version?: string; from: string; host?: string; label?: string; olderThan?: string } | { status: "error"; kind: ServiceError["kind"]; message: string; host?: string };
+
+/**
+ * The version of the pine this app runs (the one it carries, in a packed app) when the daemon of
+ * this computer it attached to says an older one, by the rule of the update check. A daemon the
+ * app started, another machine's, or one on the same or a newer version: undefined.
+ */
+function olderThan(s: Service, host: string | undefined): string | undefined {
+	if (host || s.started || !s.version || !launch) return undefined;
+	const mine = pineVersion(launch);
+	return mine && ahead(mine, s.version) ? mine : undefined;
+}
 
 interface WinEntry {
 	id: number;
@@ -133,6 +169,8 @@ interface WinEntry {
 	look?: Look;
 	badgeCount: number;
 	terminals: Terminals;
+	/** The agents' browsers, in this window: for this computer's pine only, whose browser servers can reach it. */
+	browsers: BrowserHost;
 }
 
 interface EnvConnection {
@@ -192,6 +230,20 @@ function updateBadge(): void {
 function setEnvState(env: EnvConnection, next: ServiceState): void {
 	env.state = next;
 	sendToEnv(env.key, "pine:service", next);
+}
+
+/**
+ * The pine of a machine (none: this computer's) as the app holds it: the one held from before when
+ * it answers still, else one made anew and held. Windows use it, and browser access for this
+ * computer's, also while a window shows another machine's pine.
+ */
+async function hold(host: string | undefined): Promise<Service> {
+	const key = host ?? "";
+	await startEnv(key);
+	const env = envs.get(key);
+	if (env?.service) return env.service;
+	if (env?.state.status === "error") throw new ServiceError(env.state.kind, env.state.message);
+	throw new ServiceError("failed", "pine is not running");
 }
 
 /** Whether a pine still answers: one on another machine may have lost its connection meanwhile. */
@@ -282,7 +334,7 @@ async function startEnv(key: string, force = false): Promise<void> {
 				return;
 			}
 			env.service = made;
-			setEnvState(env, { status: "ready", mode: made.mode, started: made.started, home: made.home, version: made.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: made.host, label: made.label });
+			setEnvState(env, { status: "ready", mode: made.mode, started: made.started, home: made.home, version: made.version, from: host ? `ssh ${host}` : (launch?.from ?? ""), host: made.host, label: made.label, olderThan: olderThan(made, host) });
 			if (windowsOn(key).length > 0) followEnv(env);
 		} catch (e) {
 			if (mine !== env.round) return;
@@ -329,9 +381,129 @@ async function media(request: Request): Promise<Response> {
 	return mediaFromDaemon(s, request.method, url.pathname, url.search);
 }
 
+// ---- browser access ----------------------------------------------------------------------------
+
+/** The keychain's encryption (Electron's safe storage), where it can be used. */
+function keychain(): Cipher | undefined {
+	if (!safeStorage.isEncryptionAvailable()) return undefined;
+	return { seal: (text) => safeStorage.encryptString(text), open: (bytes) => safeStorage.decryptString(bytes) };
+}
+
+/** A device was added: said under the app's notification preference, even while the window is in front (a yes given by mistake is to be noticed). */
+function notifyPaired(name: string): void {
+	if (!prefs.notify || !Notification.isSupported()) return;
+	const n = new Notification({ title: "Browser access", body: `${name} can now access Pine.`.slice(0, 160), silent: false });
+	n.on("click", () => showWindow(activeWindow()));
+	n.show();
+}
+
+/**
+ * A device asks to connect (with a pairing's code, or from the network without one): while the window
+ * is not in front, the system says so with the device's name and the four digits. No Allow in it: the
+ * owner answers in the app, which a click brings forward. Said whatever the notification preference,
+ * as a question that waits for the owner is, but only while the window is not in front: there the toast asks.
+ */
+function notifyAsked(request: { name: string; code: string }): void {
+	if (!Notification.isSupported() || [...windows.values()].some((w) => !w.win.isDestroyed() && w.win.isVisible() && w.win.isFocused())) return;
+	const n = new Notification({ title: `${request.name} wants to connect`.slice(0, 80), body: `Allow it in Pine if the device shows ${request.code}.`, silent: false });
+	n.on("click", () => showWindow(activeWindow()));
+	n.show();
+}
+
+/** This computer on the local network (access/nearby.ts); a test's stand-in host announces nothing. */
+const announcer = createAnnouncer();
+
+/**
+ * Browser access (access/control.ts), made when the app is ready. Its daemon is this computer's,
+ * held as the window holds it: it ends when the app quits, or goes on with "keep pine running".
+ */
+let access: AccessControl | undefined;
+
+function startAccess(): void {
+	access = createAccessControl({
+		folder: app.getPath("userData"),
+		cipher: keychain,
+		prefs: {
+			read: () => prefs.access,
+			write: (next) => {
+				prefs.access = next;
+				savePrefs();
+			},
+		},
+		daemon: async () => {
+			const s = await hold(undefined);
+			return JSON.stringify({ base: s.base, token: s.token, mode: s.mode, started: s.started, home: s.home, version: s.version });
+		},
+		loginItem: (open) => app.setLoginItemSettings({ openAtLogin: open }),
+		paired: (device) => notifyPaired(device.name),
+		changed: (s) => broadcast("pine:access", s),
+		asked: notifyAsked,
+		announce: ACCESS_STAND_IN !== undefined ? undefined : (what) => announcer.announce(what),
+		start: ACCESS_STAND_IN !== undefined ? (options) => startStandIn({ ...options, waitMs: Number(ACCESS_STAND_IN) || undefined }) : undefined,
+	});
+	accessStarted = access.start();
+}
+
+/** The access host's start, which an address handed to the app before it was up waits for. */
+let accessStarted: Promise<void> | undefined;
+
+/**
+ * `pine://pair`, from the web client's "Open Pine on this computer" (ADR 0005): a pairing is opened,
+ * as Add a device opens one, and its link goes to the owner's default browser, which is most likely
+ * the one that asked; the page shows the Add a device dialog too, for a browser that is not the
+ * default one. Nothing while browser access is off. Any site can send the owner here: the browser asks
+ * first, the link goes to this computer's browser only, and nothing is kept without Allow.
+ */
+async function pairFromAddress(url: string): Promise<void> {
+	if (!isPairAddress(url)) return;
+	await accessStarted;
+	if (!access) return;
+	const now = await access.state();
+	if (!now.enabled || now.status === "off") return;
+	// A pairing open or a device asking stays as it is: opening one would cancel it, and any site may send this address.
+	if (now.pairing || now.request) return;
+	const opened = await access.openPairing().catch(() => undefined);
+	if (!opened) return;
+	openOutside(opened.link);
+	const target = activeWindow();
+	if (target?.pageReady) sendToWindow(target, "pine:menu", "pairing-shown");
+	else pairingShown = true;
+}
+let pairingShown = false;
+/** Addresses the system handed the app before browser access existed (`open-url` on a cold start). */
+const pendingAddresses: string[] = [];
+
+/** Where the app is the system's handler of `pine:`: a packed app, or a checkout that asks for it. Never in a test. */
+function registerScheme(): void {
+	if (HEADLESS || ACCESS_STAND_IN !== undefined || process.env.PINE_DESKTOP_DATA) return;
+	if (app.isPackaged) app.setAsDefaultProtocolClient("pine");
+	// From a checkout the program is Electron's, which is given the app's folder to open.
+	else if (process.env.PINE_DESKTOP_PROTOCOL) app.setAsDefaultProtocolClient("pine", process.execPath, [APP_ROOT]);
+}
+
+/** What the page may ask to change, value by value. */
+function accessChange(raw: unknown): AccessChange {
+	const said = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+	const relay = said.relay && typeof said.relay === "object" ? (said.relay as Record<string, unknown>) : undefined;
+	const text = (value: unknown) => (typeof value === "string" ? value.slice(0, 400) : undefined);
+	return {
+		...(typeof said.enabled === "boolean" ? { enabled: said.enabled } : {}),
+		...(typeof said.openAtLogin === "boolean" ? { openAtLogin: said.openAtLogin } : {}),
+		...(typeof said.service === "string" ? { service: said.service.slice(0, 400) } : {}),
+		// The relay's password passes here once, to the sealed file, and is never sent back to the page.
+		...(relay && typeof relay.address === "string" ? { relay: { address: relay.address.slice(0, 400), username: text(relay.username), password: text(relay.password) } } : {}),
+	};
+}
+
+const accessOn = () => {
+	if (!access) throw new Error("Browser access is not ready yet.");
+	return access;
+};
+
 // ---- the page ----------------------------------------------------------------------------------
 
-const CSP = pageCsp();
+// The page may hold one kind of frame: the app's own view.html, which runs a view (View.tsx).
+const CSP = pageCsp({ frame: ["app://pine/view.html"] });
 
 const TYPES: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".svg": "image/svg+xml", ".png": "image/png", ".woff2": "font/woff2", ".json": "application/json", ".map": "application/json" };
 
@@ -341,7 +513,9 @@ function page(request: Request): Response {
 	const rel = decodeURIComponent(url.pathname === "/" ? "/index.html" : url.pathname);
 	const file = path.normalize(path.join(dist, rel));
 	if (!file.startsWith(dist + path.sep) || !fs.existsSync(file) || !fs.statSync(file).isFile()) return new Response("not found", { status: 404 });
-	return new Response(fs.readFileSync(file), { headers: { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "content-security-policy": CSP, "x-content-type-options": "nosniff" } });
+	const view = rel === "/view.html";
+	// The view frame's own document gets its own policy; its scripts are read across its opaque origin.
+	return new Response(fs.readFileSync(file), { headers: { "content-type": TYPES[path.extname(file)] ?? "application/octet-stream", "content-security-policy": view ? VIEW_CSP : CSP, "x-content-type-options": "nosniff", ...(/\.(js|css)$/.test(file) ? { "access-control-allow-origin": "*" } : {}) } });
 }
 
 function windowFor(e: Electron.IpcMainInvokeEvent | Electron.IpcMainEvent): WinEntry | undefined {
@@ -382,7 +556,7 @@ function createWindow(host?: string): WinEntry {
 		titleBarOverlay: isMac,
 		vibrancy: isMac ? "sidebar" : undefined,
 		visualEffectState: "followWindow",
-		// So that the window does not flash another colour before the page draws.
+		// So that the window does not flash another color before the page draws.
 		backgroundColor: windowBackground(),
 		webPreferences: {
 			preload: path.join(HERE, "preload.cjs"),
@@ -392,6 +566,8 @@ function createWindow(host?: string): WinEntry {
 			webSecurity: true,
 			spellcheck: true,
 			navigateOnDragDrop: false,
+			// A window that is never shown would stop drawing once the system counted it as hidden.
+			...(HEADLESS ? { backgroundThrottling: false } : {}),
 		},
 	});
 	const wcId = win.webContents.id;
@@ -410,11 +586,12 @@ function createWindow(host?: string): WinEntry {
 			{ data: (id, data) => sendToWindow(entry, "pine:term-data", id, data), exit: (id, code) => sendToWindow(entry, "pine:term-exit", id, code), run: (id, report) => sendToWindow(entry, "pine:term-run", id, report) },
 			{ env: loginEnv, hooks: path.join(app.getPath("userData"), "shell-hooks"), shell: process.env.PINE_DESKTOP_SHELL ? [process.env.PINE_DESKTOP_SHELL] : undefined, stillRunningMs: Number(process.env.PINE_DESKTOP_STILL_RUNNING_MS) || undefined },
 		),
+		browsers: new BrowserHost(() => (entry.win.isDestroyed() ? undefined : entry.win)),
 	};
 	windows.set(wcId, entry);
 	windowById.set(win.id, entry);
 	lastFocusedWcId = wcId;
-	win.once("ready-to-show", () => (BACKGROUND ? win.showInactive() : win.show()));
+	win.once("ready-to-show", () => void (HEADLESS || win.show()));
 	win.webContents.setWindowOpenHandler(({ url }) => (openOutside(url), { action: "deny" }));
 	win.webContents.on("will-navigate", (e, url) => {
 		// The page stays the page. (Reloading it during development is the one navigation there is.)
@@ -439,6 +616,7 @@ function createWindow(host?: string): WinEntry {
 	win.on("blur", () => sendToWindow(entry, "pine:focus", false));
 	win.on("closed", () => {
 		entry.terminals.closeAll();
+		entry.browsers.close();
 		if (listeningWin === entry) {
 			listening?.cancel();
 			listening = undefined;
@@ -458,13 +636,11 @@ function createWindow(host?: string): WinEntry {
 
 function showWindow(entry?: WinEntry): void {
 	const target = entry && !entry.win.isDestroyed() ? entry : createWindow(prefs.use);
+	if (HEADLESS) return;
 	const w = target.win;
 	if (w.isMinimized()) w.restore();
-	if (BACKGROUND) w.showInactive();
-	else {
-		w.show();
-		w.focus();
-	}
+	w.show();
+	w.focus();
 }
 
 // ---- `pine` for a terminal -----------------------------------------------------------------------
@@ -477,7 +653,7 @@ const worded = (c: Command) => ({ ...c, text: said(c) });
 /**
  * Once, the first time an app that carries pine is started from where it will stay: the link is
  * made where that takes no password. Where it takes one, nothing is asked out of nowhere; the
- * menu and Settings > App offer it. Not in a second set of data for tests and trying things out.
+ * menu and Settings > General offer it. Not in a second set of data for tests and trying things out.
  */
 async function firstCommand(): Promise<void> {
 	if (prefs.commandTried || process.env.PINE_DESKTOP_DATA) return;
@@ -510,16 +686,63 @@ async function commandFromMenu(): Promise<void> {
  * owner gets leads to GitHub.
  */
 const RELEASE_API = process.env.PINE_DESKTOP_RELEASES !== undefined ? process.env.PINE_DESKTOP_RELEASES || undefined : app.isPackaged ? LATEST : undefined;
+/**
+ * Where a release's update feed is downloaded from: pine's own releases. PINE_DESKTOP_DOWNLOADS is
+ * for tests, which name a stand-in for them beside the stand-in for GitHub (a real update of a
+ * signed app, from N to N+1, tried on this Mac without publishing anything).
+ */
+const RELEASE_DOWNLOADS = process.env.PINE_DESKTOP_DOWNLOADS || DOWNLOADS;
 
 /** The last answer that said something, for a page that is opened again. */
 let known: Update | undefined;
 /** The question of this start, asked once. */
 let atStart: Promise<Update> | undefined;
 
+/** The app's own updater (updater.ts): none in an app from a checkout, unless a test names its stand-in. It tells the page how its download goes. */
+const updater = makeUpdater((now) => {
+	// The install failed after the app's pine was stopped for it: that pine is started again, and the page shows the failure with the release's link.
+	if (installing && now.state === "failed") {
+		installing = false;
+		for (const w of windows.values()) void startEnv(w.host ?? "", true);
+	}
+	broadcast("pine:update-state", withUpdater(known));
+});
+/** Between "Restart to update" stopping the app's pines and the app quitting, or the updater saying it failed. */
+let installing = false;
+
+/**
+ * What is said of a newer release, with how the app's own update of it goes where there is one.
+ * With "Update automatically" off the page is not told of it, so that it offers the release page,
+ * also for an update that was downloaded before.
+ */
+const withUpdater = (said: Update | undefined): Update | undefined => (said?.status === "newer" && updater && prefs.autoUpdate ? { ...said, updater: updater.state() } : said);
+
+/** A newer release is downloaded when the owner lets the app update itself. */
+function downloadUpdate(): void {
+	if (known?.status === "newer" && updater && prefs.autoUpdate) updater.download(known.feed, known.version);
+}
+
 async function askForUpdate(): Promise<Update> {
-	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API);
+	const said = await lookForUpdate(app.getVersion(), process.arch, RELEASE_API, RELEASE_DOWNLOADS);
 	if (said.status !== "unknown") known = said;
-	return said;
+	downloadUpdate();
+	return withUpdater(said) as Update;
+}
+
+/**
+ * "Restart to update": every pine this app started on this computer in this run is stopped first,
+ * one that was to be kept running too (it would go on with the old version), and none it only
+ * attached to. The connections to other machines end with the quit, as at any quit. Then the
+ * updater quits and installs.
+ */
+async function installUpdate(): Promise<void> {
+	if (!updater || !prefs.autoUpdate || updater.state().state !== "ready") throw new Error("There is no update ready to install.");
+	installing = true;
+	for (const env of envs.values()) env.stream?.abort();
+	const ours = [...envs.entries()].filter(([, e]) => e.service?.started && !e.service.host).map(([key, e]) => ({ key, service: e.service! }));
+	for (const { key } of ours) envs.delete(key);
+	await Promise.all(ours.map(({ service: s }) => s.stop(true)));
+	updater.install();
 }
 
 /**
@@ -530,7 +753,7 @@ async function update(again?: boolean): Promise<Update | undefined> {
 	if (!RELEASE_API) return undefined;
 	if (again) return askForUpdate();
 	if (prefs.updates) await (atStart ??= askForUpdate().then((said) => (said.status === "unknown" && (atStart = undefined), said)));
-	return known;
+	return withUpdater(known);
 }
 
 // ---- menus -------------------------------------------------------------------------------------
@@ -559,7 +782,7 @@ function buildMenu(): void {
 			? [
 					{
 						label: "Pine",
-						submenu: [{ role: "about" as const }, ...(RELEASE_API ? [item("Check for Updates…", "updates")] : []), { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), ...(RESOURCES && fs.existsSync(path.join(RESOURCES, "bin", "pine")) ? [{ label: "pine in a Terminal…", click: () => void commandFromMenu() }] : []), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
+						submenu: [{ role: "about" as const }, ...(RELEASE_API ? [item("Check for Updates…", "updates")] : []), { type: "separator" as const }, item("Settings…", "settings", "Cmd+,"), item("Add a Device…", "add-device", "Cmd+Shift+D"), ...(RESOURCES && fs.existsSync(path.join(RESOURCES, "bin", "pine")) ? [{ label: "pine in a Terminal…", click: () => void commandFromMenu() }] : []), { type: "separator" as const }, { role: "services" as const }, { type: "separator" as const }, { role: "hide" as const }, { role: "hideOthers" as const }, { role: "unhide" as const }, { type: "separator" as const }, { role: "quit" as const }],
 					},
 				]
 			: []),
@@ -578,7 +801,7 @@ function buildMenu(): void {
 				{ type: "separator" },
 				item("Close Tab", "close", "CmdOrCtrl+W"),
 				{ role: "close", label: "Close Window", accelerator: "CmdOrCtrl+Shift+W" },
-				...(isMac ? [] : [{ type: "separator" as const }, item("Settings…", "settings", "Ctrl+,"), { role: "quit" as const }]),
+				...(isMac ? [] : [{ type: "separator" as const }, item("Settings…", "settings", "Ctrl+,"), item("Add a Device…", "add-device", "Ctrl+Shift+D"), { role: "quit" as const }]),
 			],
 		},
 		{ label: "Edit", submenu: [{ role: "undo" }, { role: "redo" }, { type: "separator" }, { role: "cut" }, { role: "copy" }, { role: "paste" }, { role: "pasteAndMatchStyle" }, { role: "selectAll" }, { type: "separator" }, item("Find in Conversation", "find", "CmdOrCtrl+F"), item("Copy Last Answer", "copy", "CmdOrCtrl+Shift+C"), ...(isMac ? [item("Dictate Message", "voice", "Ctrl+R")] : [])] },
@@ -594,6 +817,7 @@ function buildMenu(): void {
 				item("Changes", "code-changes", "CmdOrCtrl+Shift+G"),
 				item("Terminal", "code-terminal", "Ctrl+`"),
 				item("Toggle Browser", "browser", "CmdOrCtrl+Shift+B"),
+				item("Toggle View", "view", "CmdOrCtrl+Shift+O"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
 				{ role: "resetZoom" },
@@ -632,6 +856,8 @@ function buildMenu(): void {
 		{ role: "help", submenu: [item("Keys and Commands", "help"), ...(RELEASE_API && !isMac ? [item("Check for Updates…", "updates")] : []), { label: "pine on GitHub", click: () => openOutside("https://github.com/pmndre/pine") }] },
 	];
 	Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+	// The Dock's menu: a device can be added from there while the window is behind others.
+	if (isMac) app.dock?.setMenu(Menu.buildFromTemplate([item("Add a Device…", "add-device")]));
 }
 
 // ---- what the page may ask for -----------------------------------------------------------------
@@ -656,12 +882,37 @@ function wire(): void {
 			focused: entry.win.isFocused(),
 			updates: Boolean(RELEASE_API),
 			versions: { app: app.getVersion(), electron: process.versions.electron },
+			views: true,
+			selfUpdate: Boolean(updater),
 			mediaBase: `pine-media://w${entry.id}`,
 		};
 	});
-	handle("pine:call", (entry, method: string, url: string, body?: unknown) => callDaemon(envs.get(entry.host ?? "")?.service, method, url, body));
+	handle("pine:call", async (entry, method: string, url: string, body?: unknown) => {
+		const s = envs.get(entry.host ?? "")?.service;
+		// The app says again and again that it shows the browser. To this computer's pine it also says where its own
+		// browser is, with the word to reach it, which the page never holds.
+		if (method === "POST" && url === "/browser/embedded" && s && !s.host) {
+			await entry.browsers.start().catch(() => {});
+			return callDaemon(s, method, url, { host: entry.browsers.url });
+		}
+		return callDaemon(s, method, url, body);
+	});
+	// Where the browser panel is, and which conversation's tab is in front there: its page is laid over the panel.
+	handle("pine:browser-show", (entry, key: unknown, index: unknown, bounds: unknown) => {
+		const s = envs.get(entry.host ?? "")?.service;
+		const b = bounds as Partial<Bounds> | undefined;
+		const fine = (v: unknown, max: number): v is number => typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= max;
+		const place = b && fine(b.x, 20_000) && fine(b.y, 20_000) && fine(b.width, 20_000) && fine(b.height, 20_000) && b.width >= 1 && b.height >= 1 ? { x: b.x, y: b.y, width: b.width, height: b.height } : undefined;
+		// (The page's places are in its own points, which the window's zoom makes larger or smaller.)
+		const zoom = entry.win.webContents.getZoomFactor() ?? 1;
+		const scaled = place && { x: Math.round(place.x * zoom), y: Math.round(place.y * zoom), width: Math.round(place.width * zoom), height: Math.round(place.height * zoom) };
+		return entry.browsers.show(typeof key === "string" && !s?.host ? key : undefined, fine(index, 99) ? index : 0, scaled);
+	});
+	handle("pine:browser-focus", (entry) => entry.browsers.focus());
+	handle("pine:browser-picture", (entry) => entry.browsers.picture());
 	handle("pine:retry", (entry) => startEnv(entry.host ?? "", true));
 	handle("pine:update", (_entry, again?: boolean) => update(again === true));
+	handle("pine:install-update", () => installUpdate());
 	handle("pine:restart", async (entry) => {
 		const key = entry.host ?? "";
 		const env = envs.get(key);
@@ -727,6 +978,13 @@ function wire(): void {
 		let shared = false;
 		if (typeof change.notify === "boolean") ((prefs.notify = change.notify), (shared = true));
 		if (typeof change.updates === "boolean") ((prefs.updates = change.updates), (shared = true));
+		if (typeof change.autoUpdate === "boolean") {
+			prefs.autoUpdate = change.autoUpdate;
+			shared = true;
+			// Turned on with a newer release known: it is downloaded now. Either way the page is told how the update stands.
+			downloadUpdate();
+			broadcast("pine:update-state", withUpdater(known));
+		}
 		if (typeof change.keepRunning === "boolean") ((prefs.keepRunning = change.keepRunning), (shared = true));
 		if ("home" in change) {
 			const home = typeof change.home === "string" && change.home.trim() ? change.home.trim() : undefined;
@@ -750,11 +1008,26 @@ function wire(): void {
 				nativeTheme.themeSource = entry.look?.kind ?? "dark";
 			}
 		}
-		if (typeof change.agentAccent === "boolean") ((prefs.agentAccent = change.agentAccent), (shared = true));
 		savePrefs();
 		const out = { ...prefs, bounds: undefined };
 		if (shared) broadcast("pine:prefs", out);
 		return out;
+	});
+	// Browser access: its state, and the owner's changes to it.
+	handle("pine:access", () => accessOn().state());
+	handle("pine:access-set", (_entry, change: unknown) => accessOn().set(accessChange(change)));
+	handle("pine:access-pair", () => accessOn().openPairing());
+	handle("pine:access-cancel", () => accessOn().cancelPairing());
+	// The link of the open pairing, put on the clipboard here: the page names no text (and is given no clipboard of its own).
+	handle("pine:access-copy", async () => {
+		const { pairing } = await accessOn().state();
+		if (!pairing) throw new Error("No pairing is open now: press Add a device.");
+		clipboard.writeText(pairing.link);
+	});
+	handle("pine:access-answer", (_entry, yes: unknown, id: unknown) => accessOn().answer(yes === true, typeof id === "string" ? id.slice(0, 64) : undefined));
+	handle("pine:access-remove", (_entry, id: unknown) => {
+		if (typeof id !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(id)) throw new Error("That is not a device of the list.");
+		return accessOn().remove(id);
 	});
 	handle("pine:pick-folder", async (entry, title?: string) => {
 		const r = await dialog.showOpenDialog(entry.win, { title: typeof title === "string" ? title.slice(0, 80) : "Choose a folder", properties: ["openDirectory", "createDirectory"] });
@@ -795,7 +1068,7 @@ function wire(): void {
 			if (!isMac) throw new Error(NOT_HERE);
 			launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
 			const source = path.join(pineRoot(launch) ?? "", "src", "tui", "voice.swift");
-			if (!fs.existsSync(source)) throw new Error("this pine has no voice input: its helper's source was not found. Update pine.");
+			if (!fs.existsSync(source)) throw new Error("this pine has no voice input: the source of the voice helper was not found. Update pine.");
 			command = [await buildVoice(path.join(app.getPath("userData"), "voice"), source)];
 		}
 		const mine: Listening = new Listening(command, lang, {
@@ -854,9 +1127,19 @@ function openFolder(dir: string): void {
 if (!app.requestSingleInstanceLock()) app.quit();
 else {
 	app.on("second-instance", (_e, argv) => {
+		// On Windows and Linux an address the system opens the app with comes as an argument of a second start.
+		showWindow(activeWindow());
+		const address = argv.find((a) => a.toLowerCase().startsWith("pine:"));
+		if (address) return void pairFromAddress(address);
 		const dir = argv.slice(1).find((a) => !a.startsWith("-") && path.isAbsolute(a));
 		if (dir) openFolder(dir);
-		else showWindow(activeWindow());
+	});
+	// On macOS an address comes as an event, also before the app is ready.
+	app.on("open-url", (e, url) => {
+		e.preventDefault();
+		// A cold start: the address comes before the app is ready, and is kept until browser access exists.
+		if (!accessStarted) pendingAddresses.push(url);
+		else void pairFromAddress(url);
 	});
 	app.on("open-file", (e, file) => {
 		e.preventDefault();
@@ -872,6 +1155,12 @@ else {
 		protocol.handle("pine-media", media);
 		session.defaultSession.setPermissionRequestHandler((_wc, _permission, done) => done(false));
 		wire();
+		startAccess();
+		registerScheme();
+		for (const url of pendingAddresses.splice(0)) void pairFromAddress(url);
+		// The first start on Windows and Linux: the address is an argument of this one.
+		const address = process.argv.find((a) => a.toLowerCase().startsWith("pine:"));
+		if (address) void pairFromAddress(address);
 		ipcMain.on("pine:ready", (e) => {
 			const entry = windowFor(e);
 			if (!entry) return;
@@ -883,6 +1172,7 @@ else {
 			}
 			for (const dir of entry.pendingFolders.splice(0)) sendToWindow(entry, "pine:menu", `folder:${dir}`);
 			for (const cmd of entry.pendingCommands.splice(0)) sendToWindow(entry, "pine:menu", cmd);
+			if (pairingShown) ((pairingShown = false), sendToWindow(entry, "pine:menu", "pairing-shown"));
 		});
 		// From a checkout the program is Electron's, and so would be its icon in the Dock.
 		if (isMac && !app.isPackaged) {
@@ -904,7 +1194,14 @@ else {
 	app.on("before-quit", (e) => {
 		if (quitting) return;
 		savePrefs();
-		for (const entry of windows.values()) entry.terminals.closeAll();
+		updater?.quitting();
+		for (const entry of windows.values()) {
+			entry.terminals.closeAll();
+			entry.browsers.close();
+		}
+		// Browser access closes its sockets; its daemon is one of those held, and follows them.
+		void access?.stop();
+		announcer.stop();
 		// The connections to other machines end with the app, and a pine one started there with it.
 		const going = [...envs.values()].map((env) => env.service).filter((s): s is Service => Boolean(s && (s.host || (s.started && !prefs.keepRunning))));
 		if (!going.length) return;

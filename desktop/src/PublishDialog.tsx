@@ -4,14 +4,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
-import { Spinner } from "@/components/ui/spinner";
+import { Pulse } from "@/components/pulse";
 import { Textarea } from "@/components/ui/textarea";
 import { store } from "./model.ts";
 
 /** What is wrong with a topic, if anything. The old one-line form split at the first space, so a topic never had one. */
 function topicError(topic: string): string | undefined {
 	if (!topic.trim()) return "Name the topic.";
-	if (/\s/.test(topic.trim())) return "A topic has no spaces: use / between its parts, such as house/mode.";
+	if (/\s/.test(topic.trim())) return "A topic has no spaces: use / between the parts, such as house/mode.";
 }
 
 /** What is wrong with a payload, if anything: nothing at all is no payload, anything else has to be JSON. */
@@ -49,22 +49,17 @@ export function PublishDialog({ topic: firstTopic = "", payload: firstPayload = 
 	return (
 		<Dialog open onOpenChange={(open) => open || close()}>
 			<DialogContent className="sm:max-w-lg">
-				<form
-					data-slot="publish-form"
-					className="contents"
-					onSubmit={(e) => {
-						e.preventDefault();
-						void send();
-					}}
-				>
+				{/* Not a form: the web client's page runs in a frame that may not submit one (no `allow-forms`,
+				    AGENTS.md rule 10). Publish sends by its click, Enter in the topic and ⌘↩ in the payload by their keys. */}
+				<div data-slot="publish-form" className="contents">
 					<DialogHeader>
 						<DialogTitle>Publish an event</DialogTitle>
-						<DialogDescription>It is published as yours, as the owner: routes and agents subscribed to its topic get it.</DialogDescription>
+						<DialogDescription>It is published as yours, as the owner: routes and agents subscribed to that topic get it.</DialogDescription>
 					</DialogHeader>
 					<FieldGroup>
 						<Field data-invalid={showTopic ? true : undefined}>
 							<FieldLabel htmlFor="publish-topic">Topic</FieldLabel>
-							<Input id="publish-topic" autoFocus className="font-mono" placeholder="house/mode" spellCheck={false} autoComplete="off" value={topic} aria-invalid={showTopic ? true : undefined} onChange={(e) => setTopic(e.target.value)} onBlur={() => topic && setLeft((l) => ({ ...l, topic: true }))} />
+							<Input id="publish-topic" autoFocus className="font-mono" placeholder="house/mode" spellCheck={false} autoComplete="off" value={topic} aria-invalid={showTopic ? true : undefined} onChange={(e) => setTopic(e.target.value)} onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && (e.preventDefault(), void send())} onBlur={() => topic && setLeft((l) => ({ ...l, topic: true }))} />
 							{showTopic ? <FieldError>{wrong.topic}</FieldError> : null}
 						</Field>
 						<Field data-invalid={showPayload ? true : undefined}>
@@ -87,9 +82,9 @@ export function PublishDialog({ topic: firstTopic = "", payload: firstPayload = 
 					</FieldGroup>
 					<DialogFooter>
 						<Button type="button" variant="outline" onClick={close}>Cancel</Button>
-						<Button type="submit" disabled={sending}>{sending ? <Spinner data-icon="inline-start" /> : null}Publish <Kbd>⌘↩</Kbd></Button>
+						<Button disabled={sending} onClick={() => void send()}>{sending ? <Pulse label="Loading" data-icon="inline-start" /> : null}Publish <Kbd className="bg-black/15 text-current">⌘↩</Kbd></Button>
 					</DialogFooter>
-				</form>
+				</div>
 			</DialogContent>
 		</Dialog>
 	);

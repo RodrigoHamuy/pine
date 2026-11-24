@@ -8,15 +8,15 @@ import path from "node:path";
 
 const assets = path.resolve(import.meta.dirname, "..", "assets");
 
-// A rounded square in the shape macOS gives its icons, black, and on it the P of pine's wordmark
-// (docs/images/logo-dark.svg: the first letter, four blocks on a grid of 800), in white.
+// A rounded square in the shape macOS gives its icons, white, and on it the P of pine's wordmark
+// (docs/images/logo-light.svg: the first letter, four blocks on a grid of 800), in black.
 const SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
 <defs>
-	<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1c1c1c"/><stop offset="1" stop-color="#000000"/></linearGradient>
+	<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#ececec"/></linearGradient>
 </defs>
 <rect x="100" y="100" width="824" height="824" rx="186" fill="url(#bg)"/>
-<rect x="100.5" y="100.5" width="823" height="823" rx="185.5" fill="none" stroke="#ffffff" stroke-opacity=".1"/>
-<g transform="translate(280 280) scale(0.58)" fill="#ffffff">
+<rect x="100.5" y="100.5" width="823" height="823" rx="185.5" fill="none" stroke="#000000" stroke-opacity=".08"/>
+<g transform="translate(280 280) scale(0.58)" fill="#000000">
 	<rect x="280" y="560" width="240" height="240"/>
 	<rect x="280" y="280" width="240" height="240"/>
 	<rect x="0" y="280" width="240" height="240"/>

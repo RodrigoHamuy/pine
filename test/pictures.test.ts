@@ -31,7 +31,7 @@ test("pictures: which ones an answer points at", () => {
 	assert.equal(picturesIn(Array.from({ length: 20 }, (_, i) => `![p](p${i}.png)`).join(" ")).length, 6, "an answer cannot flood the screen");
 });
 
-test("pictures: a picture becomes half blocks that keep its colours and shape", mac, async () => {
+test("pictures: a picture becomes half blocks that keep its colors and shape", mac, async () => {
 	const p = await prepare(png(64, 40), "image/png", "two halves");
 	assert.equal(`${p.widthPx}x${p.heightPx}`, "64x40");
 	assert.ok(p.pixels && p.pixels.width === 64 && p.pixels.height === 40, "small pictures are not enlarged");
@@ -40,7 +40,7 @@ test("pictures: a picture becomes half blocks that keep its colours and shape", 
 	assert.ok(lines.every((l) => l.split("▀").length - 1 === 32));
 	assert.ok(lines[0].startsWith(" \x1b[38;2;220;40;40m\x1b[48;2;220;40;40m▀") && lines[0].includes("\x1b[38;2;40;60;220m\x1b[48;2;40;60;220m▀\x1b[0m"), JSON.stringify(lines[0].slice(0, 80)));
 	assert.equal(halfBlocks(p.pixels!, 100, 5).length, 5, "the height limit wins and the width follows");
-	assert.ok(halfBlocks(p.pixels!, 8, 14, false)[0].includes("\x1b[38;5;"), "256 colours where true colour is missing");
+	assert.ok(halfBlocks(p.pixels!, 8, 14, false)[0].includes("\x1b[38;5;"), "256 colors where true color is missing");
 	// Something that is not a picture, and a broken file: no drawing, no crash.
 	assert.equal((await prepare(Buffer.from("not a picture at all"), "image/png", "x")).pixels, undefined);
 	assert.equal(parseBmp(Buffer.from("BM")), undefined);
@@ -55,7 +55,7 @@ test("pictures: ffmpeg converts where sips is missing", hasFfmpeg, async (t) => 
 	assert.ok(await scaled(dir, path.join(dir, "in"), 64, "bmp", "ffmpeg"));
 	const same = parseBmp(fs.readFileSync(path.join(dir, "out.bmp")))!;
 	assert.equal(`${same.width}x${same.height}`, "64x40");
-	assert.deepEqual([...same.rgb.subarray(0, 3)], [220, 40, 40], "the colours and which way is up survive");
+	assert.deepEqual([...same.rgb.subarray(0, 3)], [220, 40, 40], "the colors and which way is up survive");
 	assert.deepEqual([...same.rgb.subarray((39 * 64 + 63) * 3, (39 * 64 + 63) * 3 + 3)], [40, 60, 220]);
 	assert.ok(await scaled(dir, path.join(dir, "in"), 32, "bmp", "ffmpeg"));
 	const small = parseBmp(fs.readFileSync(path.join(dir, "out.bmp")))!;
@@ -222,6 +222,9 @@ test("tui: a menu opened over a real picture is not covered by it; the picture i
 	try {
 		const t = await open({ agents: { main: {} } });
 		await t.sees("type a message");
+		// pine's welcome stands above an empty main conversation: in a new one the menu lies over the picture.
+		await t.send("/new pics");
+		await t.sees("session pics");
 		fs.writeFileSync(path.join(t.h.workspace("main"), "chart.png"), png(64, 40));
 		await t.send(mockMsg([{ text: "![the chart](chart.png)" }]));
 		await t.sees("the chart · 64×40 · click to enlarge");
@@ -492,7 +495,7 @@ test("sound: the line shows the levels as bars that follow the clock while it pl
 	assert.equal(plain(line()), ` ▶ play  ${FLAT}  ♪ two tones · 0:02   ▸ open in player`);
 	assert.ok(line().includes(c.gray(FLAT)));
 
-	// Playing: the bars are the levels at the place the clock is at, in the accent colour, and the line is drawn again ten times a second.
+	// Playing: the bars are the levels at the place the clock is at, in the accent color, and the line is drawn again ten times a second.
 	sound.play();
 	assert.equal(top(line()), low, plain(line()));
 	assert.ok(line().includes(c.accent(bars(prepared.levels!, 0))));
@@ -651,6 +654,9 @@ test("tui: on a terminal with the Kitty graphics protocol a video plays as real 
 	try {
 		const t = await open({ agents: { main: {} } });
 		await t.sees("type a message");
+		// pine's welcome stands above an empty main conversation: in a new one the menu lies over the video.
+		await t.send("/new pics");
+		await t.sees("session pics");
 		execFileSync(ffmpeg!, ["-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=160x90:rate=10", "-t", "1", "-pix_fmt", "yuv420p", path.join(t.h.workspace("main"), "clip.mp4")]);
 		await t.send(mockMsg([{ text: "![test pattern](clip.mp4)" }]));
 		await t.sees("‖ pause · test pattern");
@@ -686,4 +692,50 @@ test("tui: on a terminal with the Kitty graphics protocol a video plays as real 
 	} finally {
 		setCapabilities(before);
 	}
+});
+
+test("pictures: the daemon answers a range of a sound or a video with that part alone", async () => {
+	const h = await harness({ pine: { main: "main", http: { port: 0 } }, agents: { main: {} } });
+	const sound = wav(1);
+	fs.writeFileSync(path.join(h.workspace("main"), "hello.wav"), sound);
+	const at = `http://127.0.0.1:${h.pine.http!.port}/agents/main/image?path=hello.wav`;
+	const get = (range?: string) => fetch(at, { headers: { authorization: `Bearer ${h.pine.token}`, ...(range ? { range } : {}) } });
+
+	// Without a range: the whole file, and word that a part can be asked for.
+	const whole = await get();
+	assert.equal(whole.status, 200);
+	assert.equal(whole.headers.get("accept-ranges"), "bytes");
+	assert.ok(Buffer.from(await whole.arrayBuffer()).equals(sound));
+
+	// A part from the middle, from an offset to the end, the last bytes, and a part that runs past the end.
+	const total = sound.length;
+	const parts: [string, number, number][] = [["bytes=100-199", 100, 199], [`bytes=${total - 10}-`, total - 10, total - 1], ["bytes=-16", total - 16, total - 1], [`bytes=50-${total + 500}`, 50, total - 1]];
+	for (const [range, from, to] of parts) {
+		const part = await get(range);
+		assert.equal(part.status, 206, range);
+		assert.equal(part.headers.get("content-range"), `bytes ${from}-${to}/${total}`, range);
+		assert.equal(part.headers.get("content-length"), String(to - from + 1), range);
+		assert.equal(part.headers.get("content-type"), "audio/wav", range);
+		assert.equal(part.headers.get("cache-control"), "no-store", range);
+		assert.equal(part.headers.get("x-content-type-options"), "nosniff", range);
+		assert.ok(Buffer.from(await part.arrayBuffer()).equals(sound.subarray(from, to + 1)), range);
+	}
+
+	// A range past the end cannot be had.
+	const beyond = await get(`bytes=${total}-`);
+	assert.equal(beyond.status, 416);
+	assert.equal(beyond.headers.get("content-range"), `bytes */${total}`);
+	await beyond.arrayBuffer();
+
+	// What is not one plain range of bytes is answered with the whole file, as HTTP allows.
+	for (const range of ["bytes=0-1,5-9", "items=0-9", "bytes=9-3", "bytes=x-"]) {
+		const got = await get(range);
+		assert.equal(got.status, 200, range);
+		assert.ok(Buffer.from(await got.arrayBuffer()).equals(sound), range);
+	}
+
+	// Still only for the owner, and still only real media.
+	assert.equal((await fetch(at, { headers: { range: "bytes=0-9" } })).status, 401);
+	fs.writeFileSync(path.join(h.workspace("main"), "fake.wav"), "this is only named like a sound");
+	assert.equal((await fetch(at.replace("hello.wav", "fake.wav"), { headers: { authorization: `Bearer ${h.pine.token}`, range: "bytes=0-9" } })).status, 404);
 });

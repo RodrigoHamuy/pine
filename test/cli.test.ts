@@ -30,7 +30,7 @@ test("pine init creates a private home that passes pine check", async (t) => {
 	for (const f of ["pine.json", "models.json", ".env", "USER.md", "AGENTS.md", "TOOLS.md", "agents/main/workspace/AGENTS.md", "agents/main/workspace/SOUL.md", "agents/main/workspace/TOOLS.md", "agents/main/workspace/MEMORY.md"]) assert.equal(fs.statSync(path.join(dir, f)).mode & 0o777, 0o600, f);
 	assert.ok(!fs.existsSync(path.join(dir, "agents", "main", "AGENTS.md")), "an agent's instructions are in its workspace, where it can change them");
 	const check = await run(process.execPath, [CLI, "check", "--home", dir]);
-	for (const part of ["agent main (main)", "mcp        web, browser", "model      dev/claude-haiku", "No security notes."]) assert.ok(check.stdout.includes(part), `${part}\n${check.stdout}`);
+	for (const part of ["agent main (main)", "mcp        web, browser", "model      none yet", "No security notes."]) assert.ok(check.stdout.includes(part), `${part}\n${check.stdout}`);
 	assert.equal(fs.readdirSync(path.join(dir, "agents")).join(), "main", "the example starts with one agent");
 	const again = await run(process.execPath, [CLI, "init", dir]);
 	assert.match(again.stdout, /nothing changed/);
@@ -38,8 +38,17 @@ test("pine init creates a private home that passes pine check", async (t) => {
 	fs.renameSync(path.join(dir, "agents", "main", "workspace", "AGENTS.md"), path.join(dir, "agents", "main", "AGENTS.md"));
 	fs.rmSync(path.join(dir, "agents", "main", "workspace", "SOUL.md"));
 	const older = await run(process.execPath, [CLI, "init", dir]);
-	assert.ok(older.stdout.includes("agents/main/workspace/SOUL.md") && /agents\/main\/AGENTS\.md stays where it is.*move it to agents\/main\/workspace\/AGENTS\.md/s.test(older.stdout), older.stdout);
+	assert.ok(older.stdout.includes("agents/main/workspace/SOUL.md") && /agents\/main\/AGENTS\.md stays where it is.*move the file to agents\/main\/workspace\/AGENTS\.md/s.test(older.stdout), older.stdout);
 	assert.ok(!fs.existsSync(path.join(dir, "agents", "main", "workspace", "AGENTS.md")));
+
+	// A home whose main agent has another name (a new home's was called prime for a while): what is missing is put into its own main agent, and no second one is made.
+	const old = path.join(path.dirname(dir), "old");
+	fs.mkdirSync(path.join(old, "agents", "prime", "workspace"), { recursive: true });
+	fs.writeFileSync(path.join(old, "pine.json"), JSON.stringify({ main: "prime", defaults: { model: "x/y" } }));
+	await run(process.execPath, [CLI, "init", old]);
+	assert.equal(fs.readdirSync(path.join(old, "agents")).join(), "prime");
+	assert.ok(fs.existsSync(path.join(old, "agents", "prime", "workspace", "SOUL.md")));
+	assert.equal(JSON.parse(fs.readFileSync(path.join(old, "pine.json"), "utf8")).main, "prime", "its pine.json is its own");
 });
 
 test("the command line drives a running daemon", async (t) => {
@@ -57,7 +66,7 @@ test("the command line drives a running daemon", async (t) => {
 	assert.match(await pine("emit", "test/topic", '{"n":1}'), /event #\d+/);
 	assert.match(await pine("events", "--topic", "test/#"), /test\/topic\s+owner\s+api\s+\{"n":1\}/);
 	assert.deepEqual(JSON.parse(await pine("agents")).map((a: any) => a.id), ["main"]);
-	assert.equal(JSON.parse(await pine("status")).limiter.max, 2);
+	assert.equal(JSON.parse(await pine("status")).limiter.max, 8);
 	await until(async () => /#2 .* done .* main\/side/.test(await pine("tasks")), 5000, "task 2 in the task list");
 	assert.equal(JSON.parse(await pine("task", "1")).result, "ECHO[hello from the shell]");
 	assert.equal(await pine("approvals"), "nothing waits for approval");
@@ -86,8 +95,8 @@ test("pine agent list, add, update and remove: in the files when no daemon runs,
 	// ---- no daemon: the files are changed, and checked the way pine checks them at a start
 	let list = await pine("agent", "list");
 	assert.match(list, /^main \(main\): /);
-	assert.match(list, /old: Kept the old books\n    model mock\/m \(the default\) · reasoning off · mode safe · reach its own folders \(sandbox\)\n    conversations: none · sources: none · MCP servers: none · schedules: none · skills: none · routes: wake-old · 1 file in /);
-	assert.match(await pine("agent", "add", "books", "--description", "Keeps the books", "--tools", "read,grep"), /^Created the agent books \(tools: read, grep\)\. Its workspace is .*agents\/books\/workspace\. It is there when pine is started\.$/);
+	assert.match(list, /old: Kept the old books\n    model mock\/m \(the default\) · reasoning off · mode safe · reach the agent's own folders \(sandbox\)\n    conversations: none · sources: none · MCP servers: none · schedules: none · skills: none · routes: wake-old · 1 file in /);
+	assert.match(await pine("agent", "add", "books", "--description", "Keeps the books", "--tools", "read,grep"), /^Created the agent books \(tools: read, grep\)\. The agent's workspace is .*agents\/books\/workspace\. It is there when pine is started\.$/);
 	assert.deepEqual(json(file("agents", "books", "agent.json")), { tools: ["read", "grep"] }, "what it is for is the first paragraph of its instructions, not a key of its own");
 	assert.equal(fs.readFileSync(file("agents", "books", "workspace", "AGENTS.md"), "utf8"), "You are books. Keeps the books.\n");
 	assert.match(await fails("agent", "add", "Bad Id", "--description", "x"), /is not a usable agent id/);
@@ -95,13 +104,13 @@ test("pine agent list, add, update and remove: in the files when no daemon runs,
 	assert.match(await fails("agent", "add", "nodesc"), /usage: pine agent add <id> \[--description/);
 
 	// Changing an agent in the files: only what is given changes, the rest stays.
-	assert.match(await fails("agent", "update", "books", "--description", "Does the books now"), /the first paragraph of its instructions/);
+	assert.match(await fails("agent", "update", "books", "--description", "Does the books now"), /the first paragraph of the agent's instructions/);
 	assert.match(await pine("agent", "update", "books", "--tools", "read,bash,grep"), /^Updated the agent books \(it is there when pine is started\):\n  built-in tools: read, grep -> read, bash, grep$/);
 	assert.deepEqual(json(file("agents", "books", "agent.json")), { tools: ["read", "bash", "grep"] });
 	assert.match(await pine("agent", "list"), /books: You are books\. Keeps the books\.\n/);
 	assert.match(await pine("agent", "update", "books", "--color", "#E0805A"), /^Updated the agent books \(it is there when pine is started\):\n  color: #e0805a$/);
 	assert.equal(json(file("agents", "books", "agent.json")).color, "#e0805a");
-	assert.match(await fails("agent", "update", "books", "--color", "coral"), /a colour is written #rrggbb/);
+	assert.match(await fails("agent", "update", "books", "--color", "coral"), /a color is written #rrggbb/);
 	assert.match(await pine("agent", "update", "books", "--color", "none"), /color: none$/);
 	assert.ok(!("color" in json(file("agents", "books", "agent.json"))));
 	assert.match(await fails("agent", "update", "ghost", "--description", "x"), /there is no agent "ghost"/);
@@ -117,7 +126,7 @@ test("pine agent list, add, update and remove: in the files when no daemon runs,
 	new Kv(db).set("taint:old:main", "something from outside");
 	db.close();
 	const refused = await fails("agent", "remove", "old");
-	assert.match(refused, /old: Kept the old books\nWith it go: conversations: none; event sources: none; MCP servers: none; schedules: none; skills: none; routes that wake it: wake-old\nIts folder .*agents\/old is deleted, with 1 file in its workspace and everything said to it\. This cannot be undone\./);
+	assert.match(refused, /old: Kept the old books\nWith it go: conversations: none; event sources: none; MCP servers: none; schedules: none; skills: none; routes that wake it: wake-old\nIts folder .*agents\/old is deleted, with 1 file in the agent's workspace and everything said to the agent\. This cannot be undone\./);
 	assert.match(refused, /not removed: this asks before it deletes\. Run it in a terminal, or add --yes/);
 	assert.ok(fs.existsSync(file("agents", "old")));
 	assert.match(await fails("agent", "remove", "main", "--yes"), /main is the main agent: it administers pine and cannot be removed/);
@@ -141,12 +150,12 @@ test("pine agent list, add, update and remove: in the files when no daemon runs,
 	assert.match(await pine("agent", "add", "scout", "--description", "Looks things up", "--instructions", "You are SCOUT."), /^Created the agent scout .* Talk to it with: pine send scout "\.\.\."$/);
 	assert.equal(await pine("send", "scout", "are you there"), "ECHO[are you there]", "it exists without a restart");
 	assert.deepEqual(JSON.parse(await pine("agents")).map((a: any) => a.id).sort(), ["aide", "books", "main", "scout"]);
-	// The daemon changes a running agent at once; it holds from its next message on.
-	assert.match(await pine("agent", "update", "scout", "--thinking", "high", "--mode", "manual"), /^Updated the agent scout; it holds from its next message on:\n  reasoning: off -> high\n  mode: safe -> manual$/);
+	// The daemon changes a running agent at once; the change applies from the next message on.
+	assert.match(await pine("agent", "update", "scout", "--thinking", "high", "--mode", "manual"), /^Updated the agent scout; the change applies from the next message on:\n  reasoning: off -> high\n  mode: safe -> manual$/);
 	assert.match(await pine("agent", "list"), /scout: Looks things up\n    model .* · reasoning high · mode manual/);
 	const out = await pine("agent", "remove", "scout", "--yes", "--keep-files");
 	assert.match(out, /Its folder is kept: moved to .*removed/);
-	assert.match(out, /Removed the agent scout\. Its folder is kept at .*removed\/scout-/);
+	assert.match(out, /Removed the agent scout\. The agent's folder is kept at .*removed\/scout-/);
 	assert.equal(fs.readdirSync(file("removed")).length, 1);
 	const walk = (d: string): string[] => (fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)])) : []);
 	assert.deepEqual([...walk(file("agents", "scout")), ...walk(file("sandbox", "scout"))].map((f) => path.relative(h.home, f)), [], "neither its folder nor its private home is there again");
@@ -223,7 +232,7 @@ test("pine update knows how pine was installed and which version is newer; pine 
 	fs.mkdirSync(carried, { recursive: true });
 	assert.equal(installKind(carried, global), "app");
 	assert.equal(installKind(carried), "app");
-	assert.match(appNews("0.14.0", "0.13.0"), /pine 0\.14\.0 is available \(this is 0\.13\.0\)\. This pine came with the Pine app.*\n\n  https:\/\/github\.com\/pmndre\/pine\/releases\/latest$/s);
+	assert.match(appNews("0.14.0", "0.13.0"), /pine 0\.14\.0 is available \(this is 0\.13\.0\)\. This pine came with the Pine app.*downloads the new release itself and installs it when you press "Restart to update" or quit it.*\n\n  https:\/\/github\.com\/pmndre\/pine\/releases\/latest$/s);
 	fs.rmSync(global, { recursive: true, force: true });
 
 	assert.deepEqual([newer("0.1.1", "0.1.0"), newer("0.10.0", "0.9.9"), newer("1.0.0", "0.99.99"), newer("0.1.0", "0.1.0"), newer("0.1.0", "0.2.0")], [true, true, true, false, false]);
