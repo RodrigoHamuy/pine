@@ -291,11 +291,14 @@ test("a message for a busy session can be queued or steered into the running tas
 	await h.close();
 });
 
+/** A path for the shell, quoted: on Windows it is Git's bash, where a backslash in a path given as it is is no separator. */
+const shPath = (p: string) => `'${p.replace(/\\/g, "/")}'`;
+
 test("a steered message can be sent now: the step under way stops, the work reads it and goes on", async () => {
 	const h = await harness({ agents: { main: {} } });
 	const started = Date.now();
 	const began = path.join(h.workspace("main"), "began");
-	const first = h.pine.agents.submit({ agent: "main", prompt: mockMsg([{ tools: [{ name: "bash", args: { command: `touch ${began}; sleep 20; echo slept` } }] }, { text: "first done" }]), ...owner });
+	const first = h.pine.agents.submit({ agent: "main", prompt: mockMsg([{ tools: [{ name: "bash", args: { command: `touch ${shPath(began)}; sleep 20; echo slept` } }] }, { text: "first done" }]), ...owner });
 	await until(() => h.pine.bus.query({ topic: "agent/main/started" }).length === 1 && h.mock.state.requests.length >= 1);
 	// The command is under way: it says so itself.
 	await until(() => fs.existsSync(began), 5000, "the command to begin");
@@ -322,12 +325,12 @@ test("a cancelled or timed-out task stops its shell command", async () => {
 	// (The cancelled task is the other agent's, which has no time limit: on a busy computer the limit could come first.)
 	const h = await harness({ agents: { main: { agent: { taskTimeoutSec: 0.25 } }, other: {} } });
 	const marker = path.join(h.workspace("main"), "still-running");
-	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "bash", args: { command: `sleep 0.6; touch ${marker}` } }] }]), ...owner });
+	const r = await h.pine.agents.run({ agent: "main", prompt: mockMsg([{ tools: [{ name: "bash", args: { command: `sleep 0.6; touch ${shPath(marker)}` } }] }]), ...owner });
 	assert.equal(r.status, "failed");
 	assert.ok(/timed out after 0.25 s/.test(r.error ?? ""), String(r.error));
 	const marker2 = path.join(h.workspace("other"), "still-running-2");
 	const began = path.join(h.workspace("other"), "began");
-	const t = h.pine.agents.submit({ agent: "other", prompt: mockMsg([{ tools: [{ name: "bash", args: { command: `touch ${began}; sleep 0.5; touch ${marker2}` } }] }]), session: "new", ...owner });
+	const t = h.pine.agents.submit({ agent: "other", prompt: mockMsg([{ tools: [{ name: "bash", args: { command: `touch ${shPath(began)}; sleep 0.5; touch ${shPath(marker2)}` } }] }]), session: "new", ...owner });
 	// Cancelled while its command runs: the command says when it has begun.
 	await until(() => fs.existsSync(began), 5000, "the command to begin");
 	assert.equal(h.pine.agents.cancel(t.id), true);
