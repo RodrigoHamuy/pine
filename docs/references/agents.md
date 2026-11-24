@@ -620,7 +620,9 @@ delegate(agent, task, wait?, thread?, worktree?)
 - `wait: false` returns at once; the answer arrives later as a new message in the caller's
   session.
 - Each delegation starts the other agent fresh. `thread: "okapi"` instead continues a named
-  conversation with it, so it remembers earlier tasks of that thread.
+  conversation with it, so it remembers earlier tasks of that thread. The name is free text
+  (`"[gen] Login fix 🔐"`): the same text always reaches the same thread, and the lists of the
+  Pine app, the terminal UI and the main agent's `conversations` show it as it was written.
 - An agent already waiting further up the chain cannot be called again, and chains stop at
   `limits.maxDelegationDepth`. The model gets an error it can act on.
 - The other agent works in its own mode or in the caller's, whichever is stricter (from the

@@ -822,7 +822,7 @@ class ConversationList implements Component {
 
 	private shown(): Conversation[] {
 		const f = this.filter.toLowerCase();
-		return f ? this.items.filter((x) => x.session.toLowerCase().includes(f) || (x.group ?? "").toLowerCase().includes(f)) : this.items;
+		return f ? this.items.filter((x) => x.session.toLowerCase().includes(f) || (x.name ?? "").toLowerCase().includes(f) || (x.group ?? "").toLowerCase().includes(f)) : this.items;
 	}
 
 	private get conv(): Conversation | undefined {
@@ -894,7 +894,7 @@ class ConversationList implements Component {
 		const shown = this.shown();
 		const rows = ConversationList.ROWS;
 		this.top = Math.max(0, Math.min(this.selected - Math.floor(rows / 2), shown.length + 1 - rows));
-		const name = Math.min(28, Math.max(10, ...shown.map((x) => visibleWidth(x.session)))) + 1;
+		const name = Math.min(28, Math.max(10, ...shown.map((x) => visibleWidth(x.name ?? x.session)))) + 1;
 		const lines: string[] = [];
 		for (let i = this.top; i < Math.min(shown.length + 1, this.top + rows); i++) {
 			const on = i === this.selected;
@@ -907,10 +907,11 @@ class ConversationList implements Component {
 			const state = main ? "the agent's own, always kept" : conv.pinned ? "pinned" : conv.group ? "kept in a group" : conv.open ? "open in a tab" : conv.expires ? until(conv.expires) : "kept";
 			// The agent's own conversation is kept without a pin: it has the mark of one.
 			const mark = conv.pinned || main ? c.accent("★") : " ";
-			const label = short(conv.session, name - 1).padEnd(name);
+			const label = short(conv.name ?? conv.session, name - 1);
+			const padded = label + " ".repeat(Math.max(0, name - visibleWidth(label)));
 			const tree = conv.worktree ? ` · ⎇ ${conv.worktree.branch}` : "";
 			const group = conv.group ? `${c.accent(`▸ ${conv.group}`)} ` : "";
-			const left = `${mark} ${on ? c.accent(label) : label} ${group}${c.gray(`${conv.tasks} message${conv.tasks === 1 ? "" : "s"} · ${since(conv.last)} · ${state}${tree}`)}`;
+			const left = `${mark} ${on ? c.accent(padded) : padded} ${group}${c.gray(`${conv.tasks} message${conv.tasks === 1 ? "" : "s"} · ${since(conv.last)} · ${state}${tree}`)}`;
 			// At the end of the row, the two things that can be done to it, as words to click.
 			const pin = main ? "" : conv.pinned ? "unpin" : "pin";
 			const x = main ? (this.asked === conv.session ? "reset? ×" : "reset") : this.asked === conv.session ? "remove? ×" : "×";
@@ -1298,6 +1299,7 @@ export class PineTui {
 	private taints = new Map<string, string>();
 	/** The pinned conversations of the agents that have a tab ("agent:session"): a tab of one shows the mark of a kept conversation. */
 	private pins = new Set<string>();
+	private names = new Map<string, string>();
 	private bypassWhenTainted = false;
 	private opts: TuiOptions;
 	private stopped = false;
@@ -2606,11 +2608,13 @@ export class PineTui {
 					if (!t) return;
 					if (!args.trim()) return this.flash("usage: /rename <name>");
 					const was = t.session;
-					const now = (await this.client.renameSession(t.agent, was, args.trim())).session;
+					const done = await this.client.renameSession(t.agent, was, args.trim());
+					const now = done.session;
 					for (const tab of this.tabs) if (tab.kind === "chat" && tab.agent === t.agent && tab.session === was) tab.session = now;
 					this.saveTabs();
 					await this.refreshTaints();
-					this.say(t, c.gray(`this conversation is now called ${c.bold(now)}`));
+					await this.refreshPins();
+					this.say(t, c.gray(`this conversation is now called ${c.bold(done.name ?? now)}`));
 				},
 			},
 			{
@@ -3512,11 +3516,15 @@ export class PineTui {
 	/** Ask again which conversations of the agents on screen are pinned. */
 	private async refreshPins(): Promise<void> {
 		const agents = [...new Set(this.tabs.filter((t) => t.kind === "chat").map((t) => t.agent))];
-		const lists = await Promise.all(agents.map((a) => this.client.sessions(a).then((l) => l.filter((x) => x.pinned).map((x) => `${a}:${x.session}`)).catch(() => undefined)));
+		const all = await Promise.all(agents.map((a) => this.client.sessions(a).catch(() => undefined)));
+		const lists = all.map((l, i) => l?.filter((x) => x.pinned).map((x) => `${agents[i]}:${x.session}`));
 		// An agent that could not be asked keeps the marks it had.
 		const next = new Set([...this.pins].filter((k) => lists.some((l, i) => l === undefined && k.startsWith(`${agents[i]}:`))));
 		for (const l of lists) for (const k of l ?? []) next.add(k);
 		this.pins = next;
+		const names = new Map([...this.names].filter(([k]) => all.some((l, i) => l === undefined && k.startsWith(`${agents[i]}:`))));
+		all.forEach((l, i) => l?.forEach((x) => x.name && names.set(`${agents[i]}:${x.session}`, x.name)));
+		this.names = names;
 		this.tui.requestRender();
 	}
 
@@ -3558,7 +3566,7 @@ export class PineTui {
 	private renderHeader(width: number): string[] {
 		const line = new Line().add(c.bold(c.accent(" pine ")));
 		this.tabs.forEach((t, i) => {
-			const name = t.kind === "events" ? "events" : t.kind === "task" ? `${t.agent}↳#${t.task}` : t.session === "main" ? t.agent : `${t.agent}·${t.session}`;
+			const name = t.kind === "events" ? "events" : t.kind === "task" ? `${t.agent}↳#${t.task}` : t.session === "main" ? t.agent : `${t.agent}·${this.names.get(`${t.agent}:${t.session}`) ?? t.session}`;
 			// A question that waits comes first: its task is still running, and a spinner would hide that it waits for the owner.
 			const mark = t.approvals.size ? c.yellow("!") : t.running.size ? c.yellow(SPINNER[this.frame % SPINNER.length]) : t.unread ? c.accent("•") : " ";
 			// A conversation that is kept for good has the mark it has in the list of conversations: a

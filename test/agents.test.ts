@@ -528,7 +528,7 @@ test("conversations stay until they are removed or unused for too long; pinned, 
 	assert.deepEqual(names(), ["ears", "keep", "main", "old", "tabbed", "work"]);
 
 	// A new name: the history, on disk and in the list, goes with it.
-	assert.deepEqual(await h.pine.agents.renameSession("main", "work", "tax 2026"), { session: "tax_2026" });
+	assert.deepEqual(await h.pine.agents.renameSession("main", "work", "tax 2026"), { session: "tax_2026", name: "tax 2026" });
 	await say("tax_2026", "and now");
 	assert.deepEqual(users(h.mock.state.requests.at(-1)), ["the code word is OKAPI", "and now"]);
 	assert.deepEqual(names(), ["ears", "keep", "main", "old", "tabbed", "tax_2026"]);

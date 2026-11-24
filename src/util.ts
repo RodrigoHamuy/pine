@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -113,6 +114,15 @@ export function parseDuration(v: string | number): number {
 
 /** A string that is safe as one path component: no dots, no separators, never empty. */
 export const safeName = (s: string) => s.replace(/[^A-Za-z0-9_-]+/g, "_").slice(0, 80) || "_";
+
+export const cleanName = (s: string) => s.replace(/[\p{Cc}\s]+/gu, " ").trim().slice(0, 200);
+
+export function hashedKey(name: string): string {
+	const text = cleanName(name);
+	const hash = createHash("sha256").update(text).digest("hex").slice(0, 8);
+	const base = safeName(text).replace(/^_+|_+$/g, "").slice(0, 71);
+	return base ? `${base}-${hash}` : hash;
+}
 
 export const truncate = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}… [${s.length - n} more chars]` : s);
 

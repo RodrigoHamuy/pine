@@ -51,7 +51,7 @@ import { branchFile, onBranch, ownerMessage, redoMessage, sessionFile, standingB
 import { classify, LOOK_TOOLS, pineOwn, pineOwnRefusal, PLAN_REFUSAL, SETUP_TOOLS, ROUTERS } from "./actions.ts";
 import { Type } from "typebox";
 import type { ContextUse, ImageRef, PineEvent, ReplyTarget, Task, TaskKind, TaskResult, TaskStatus, Todo, TranscriptEntry, Trust } from "./types.ts";
-import { callTiming, errText, expandHome, type Logger, onPath, programName, safeName, since, sleep, speedOf, speedText, truncate } from "./util.ts";
+import { callTiming, cleanName, errText, expandHome, type Logger, hashedKey, onPath, programName, safeName, since, sleep, speedOf, speedText, truncate } from "./util.ts";
 
 const BUILTIN_TOOLS = ["read", "bash", "edit", "write", "grep", "find", "ls"];
 const DEFAULT_TOOLS = ["read", "bash", "edit", "write"];
@@ -1573,7 +1573,7 @@ export class AgentManager {
 	 * An agent's conversations: pinned ones first, then the most recently used. `expires` is when
 	 * one is removed by itself if nothing more is said in it; one without it stays.
 	 */
-	conversations(agentId: string): Array<{ session: string; tasks: number; last: number; pinned: boolean; open: boolean; working: boolean; outside?: string; expires?: number; folder?: string; group?: string; branch?: { from: string; at?: number }; worktree?: { branch: string; base: string; path: string; repo: string } }> {
+	conversations(agentId: string): Array<{ session: string; name?: string; tasks: number; last: number; pinned: boolean; open: boolean; working: boolean; outside?: string; expires?: number; folder?: string; group?: string; branch?: { from: string; at?: number }; worktree?: { branch: string; base: string; path: string; repo: string } }> {
 		const agent = this.cfg.agents[agentId];
 		if (!agent) throw new Error(`unknown agent "${agentId}"`);
 		const pinned = this.pinned();
@@ -1584,7 +1584,8 @@ export class AgentManager {
 			const group = this.groupOf(agentId, s.session);
 			const stays = base === "main" || pinned.includes(`${agentId}:${s.session}`) || open.includes(s.session) || group !== undefined || agent.subscribe.some((x) => x.session === base) || agent.schedules.some((x) => x.session === base) || !(days > 0);
 			const working = [...this.running.values()].some((r) => r.task.agent === agentId && r.task.session === s.session);
-			return { ...s, pinned: pinned.includes(`${agentId}:${s.session}`), open: open.includes(s.session), working, outside: this.outsideMark(agentId, s.session), expires: stays ? undefined : s.last + days * 86_400_000, folder: this.folderOf(agentId, s.session), ...(group ? { group } : {}), branch: s.session.endsWith("~u") ? undefined : this.branchOf(agentId, s.session), worktree: s.session.endsWith("~u") ? undefined : worktreeBrief(this.worktreeOf(agentId, s.session)) };
+			const name = s.session.endsWith("~u") ? undefined : this.nameOf(agentId, s.session);
+			return { ...s, ...(name ? { name } : {}), pinned: pinned.includes(`${agentId}:${s.session}`), open: open.includes(s.session), working, outside: this.outsideMark(agentId, s.session), expires: stays ? undefined : s.last + days * 86_400_000, folder: this.folderOf(agentId, s.session), ...(group ? { group } : {}), branch: s.session.endsWith("~u") ? undefined : this.branchOf(agentId, s.session), worktree: s.session.endsWith("~u") ? undefined : worktreeBrief(this.worktreeOf(agentId, s.session)) };
 		});
 		// A branch whose conversation is gone is a conversation like any other.
 		const names = new Set(list.map((s) => s.session));
@@ -1754,9 +1755,36 @@ export class AgentManager {
 		return { order };
 	}
 
-	/** A conversation's name as pine keeps it ("My notes" is "My_notes"; the one outside content is handled in ends in "~u"). */
-	conversationKey(name: string): string {
-		return this.keysOf(name.trim())[0];
+	/** A conversation's key from its name: the one of the agent's conversations called that, else the key the name is kept under ("~u" ends the one outside content is handled in). */
+	conversationKey(name: string, agentId?: string): string {
+		const text = cleanName(name);
+		const outside = text.endsWith("~u");
+		const base = outside ? text.slice(0, -2) : text;
+		const end = outside ? "~u" : "";
+		if (!agentId || !this.cfg.agents[agentId]) return `${sessionKey(base)}${end}`;
+		if (base === sessionKey(base) && this.tasks.sessions(agentId).some((s) => s.session.replace(/~u$/, "") === base)) return `${base}${end}`;
+		return `${this.keyForName(agentId, base)}${end}`;
+	}
+
+	keyForName(agentId: string, name: string, prefix = ""): string {
+		const text = cleanName(name);
+		const own = `name:${agentId}:`;
+		const named = this.kv.keys(own).find((k) => k.slice(own.length).startsWith(prefix) && this.kv.get(k) === text);
+		if (named) return named.slice(own.length);
+		const plain = sessionKey(`${prefix}${text}`);
+		const had = this.nameOf(agentId, plain);
+		return had === undefined || had === text ? plain : sessionKey(hashedKey(`${prefix}${text}`));
+	}
+
+	nameOf(agentId: string, session: string): string | undefined {
+		const name = this.kv.get<string>(`name:${agentId}:${sessionKey(session.replace(/~u$/, ""))}`);
+		return typeof name === "string" && name ? name : undefined;
+	}
+
+	nameSession(agentId: string, session: string, name: string): void {
+		const key = sessionKey(session.replace(/~u$/, ""));
+		const text = cleanName(name);
+		this.kv.set(`name:${agentId}:${key}`, text && text !== key ? text : null);
 	}
 
 	/**
@@ -1909,6 +1937,7 @@ export class AgentManager {
 			this.slots.forget(`${agentId}:${key}`);
 			this.kv.set(`folder:${agentId}:${key}`, null);
 			this.kv.set(`group:${agentId}:${key}`, null);
+			this.kv.set(`name:${agentId}:${key}`, null);
 			this.goals.drop(agentId, key);
 			this.swarms.drop(agentId, key);
 			this.turns.forget(agentId, key);
@@ -2066,14 +2095,16 @@ export class AgentManager {
 	}
 
 	/** Give a conversation another name. Everything stays with it: its history, its pin, what it listens to. */
-	async renameSession(agentId: string, from: string, wanted: string): Promise<{ session: string }> {
+	async renameSession(agentId: string, from: string, wanted: string): Promise<{ session: string; name?: string }> {
 		const agent = this.cfg.agents[agentId];
 		if (!agent) throw new Error(`unknown agent "${agentId}"`);
 		const a = sessionKey(from);
-		const b = sessionKey(wanted.trim());
-		if (!wanted.trim()) throw new Error("a conversation needs a name");
+		const name = cleanName(wanted);
+		if (!name) throw new Error("a conversation needs a name");
+		const b = this.keyForName(agentId, name);
+		const named = () => (this.nameSession(agentId, b, name), { session: b, ...(this.nameOf(agentId, b) ? { name } : {}) });
 		if (a === "main" || from.endsWith("~u")) throw new Error(a === "main" ? "the main conversation cannot be renamed" : "this conversation holds what came from outside and cannot be renamed");
-		if (a === b) return { session: b };
+		if (a === b) return named();
 		const root = path.join(agent.dir, "sessions");
 		if (b === "main" || b === "new" || fs.existsSync(path.join(root, b)) || fs.existsSync(path.join(root, `${b}~u`)) || this.tasks.sessions(agentId).some((s) => s.session.replace(/~u$/, "") === b)) throw new Error(`${agentId} already has a conversation called ${b}`);
 		for (const end of ["", "~u"]) if (this.lives.get(`${agentId}:${a}${end}`)?.current) throw new Error(`the conversation ${from} of ${agentId} is working; rename it when it is done`);
@@ -2081,7 +2112,7 @@ export class AgentManager {
 			const live = this.lives.get(`${agentId}:${a}${end}`);
 			if (live) await this.dispose(live);
 			if (fs.existsSync(path.join(root, `${a}${end}`))) fs.renameSync(path.join(root, `${a}${end}`), path.join(root, `${b}${end}`));
-			for (const mark of ["taint", "keep", "prefix", "note", "visited"]) {
+			for (const mark of ["taint", "keep", "prefix", "note", "visited", "name"]) {
 				const had = this.kv.get(`${mark}:${agentId}:${a}${end}`);
 				this.kv.set(`${mark}:${agentId}:${a}${end}`, null);
 				if (had !== undefined && had !== null) this.kv.set(`${mark}:${agentId}:${b}${end}`, had);
@@ -2130,7 +2161,7 @@ export class AgentManager {
 		this.kv.set(`branch:${agentId}:${a}`, null);
 		if (own) this.kv.set(`branch:${agentId}:${b}`, own);
 		this.log.info(`the conversation ${from} of ${agentId} is now called ${b}`);
-		return { session: b };
+		return named();
 	}
 
 	/**
@@ -2168,8 +2199,9 @@ export class AgentManager {
 
 		const root = path.join(agent.dir, "sessions");
 		const taken = (k: string) => k === "main" || k === "new" || fs.existsSync(path.join(root, k)) || fs.existsSync(path.join(root, `${k}~u`)) || this.tasks.sessions(agentId).some((s) => s.session.replace(/~u$/, "") === k);
-		let to = wanted?.trim() ? sessionKey(wanted.trim()) : `${from}-branch`;
-		if (wanted?.trim() && taken(to)) throw new Error(`${agentId} already has a conversation called ${to}`);
+		const called = wanted ? cleanName(wanted) : "";
+		let to = called ? this.keyForName(agentId, called) : `${from}-branch`;
+		if (called && taken(to)) throw new Error(`${agentId} already has a conversation called ${to}`);
 		for (let n = 2; taken(to); n++) to = `${from}-branch-${n}`;
 
 		const copied = branchFile(file, leaf, path.join(root, to));
@@ -2192,6 +2224,7 @@ export class AgentManager {
 		const group = this.kv.get<string>(`group:${agentId}:${from}`);
 		if (group) this.kv.set(`group:${agentId}:${to}`, group);
 		this.kv.set(`branch:${agentId}:${to}`, { from, at: msg.id });
+		if (called) this.nameSession(agentId, to, called);
 		this.log.info(`the conversation ${from} of ${agentId} was branched after message #${msg.id} into ${to}${marks.taint ? " (it holds outside content)" : ""}`);
 		// In a worktree of its own: the branch writes its files apart from the original's. Should that
 		// fail, the branch is there all the same, in the original's folder, and the owner is told why.

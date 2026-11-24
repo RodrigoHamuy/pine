@@ -1109,6 +1109,8 @@ export class Store extends Model {
 	 */
 	titleOf(agent: string, session: string): string {
 		if (session === "main") return "main conversation";
+		const named = this.conversations.get(agent)?.find((c) => c.session === session)?.name;
+		if (named) return named;
 		// A branch of a conversation that has no name of its own is called after that one's title.
 		const branch = /^(s[0-9a-z]{6,10})-branch(?:-(\d+))?$/.exec(session);
 		if (branch) return `${this.titleOf(agent, branch[1])} · branch${branch[2] ? ` ${branch[2]}` : ""}`;
@@ -1118,7 +1120,7 @@ export class Store extends Model {
 
 	/** Whether a conversation's title is known: one called by how it began is not, until what was said is loaded. */
 	titleKnown(agent: string, session: string): boolean {
-		if (this.titled || session === "main") return true;
+		if (this.titled || session === "main" || this.conversations.get(agent)?.some((c) => c.session === session && c.name)) return true;
 		const branch = /^(s[0-9a-z]{6,10})-branch(?:-(\d+))?$/.exec(session);
 		if (branch) return this.titleKnown(agent, branch[1]);
 		return !/^s[0-9a-z]{6,10}$/.test(session);
@@ -2275,7 +2277,7 @@ export class Store extends Model {
 	async askRename(tab: Tab): Promise<void> {
 		if (tab.kind !== "chat") return;
 		if (tab.session === "main") return this.flash("An agent's main conversation cannot be renamed.");
-		const to = await this.pick({ title: `Another name for ${tab.session}`, items: [], free: true, placeholder: "The new name" });
+		const to = await this.pick({ title: `Another name for ${this.titleOf(tab.agent, tab.session)}`, items: [], free: true, placeholder: "The new name" });
 		if (to?.trim()) await this.rename(tab.agent, tab.session, to.trim());
 	}
 
@@ -2284,7 +2286,7 @@ export class Store extends Model {
 		if (!gone) return;
 		this.dropTabs(agent, session);
 		const with_ = [...(gone.sources.length ? [`${plural(gone.sources.length, "event source")} ${gone.sources.join(", ")}`] : gone.unsubscribed.length ? [`${plural(gone.unsubscribed.length, "subscription")} to ${gone.unsubscribed.join(", ")}`] : []), ...(gone.servers.length ? [`${plural(gone.servers.length, "MCP server")} ${gone.servers.join(", ")}`] : [])];
-		this.flash(`Removed the conversation ${session} of ${agent}${with_.length ? `, with ${with_.join(" and ")}` : ""}.`, "muted", with_.length ? 7000 : 4000);
+		this.flash(`Removed the conversation ${this.titleOf(agent, session)} of ${agent}${with_.length ? `, with ${with_.join(" and ")}` : ""}.`, "muted", with_.length ? 7000 : 4000);
 		void this.refreshConversations(agent);
 	}
 

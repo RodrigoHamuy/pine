@@ -102,6 +102,7 @@ export type Mode = "manual" | "safe" | "auto" | "bypass" | "plan";
 
 export interface Conversation {
 	session: string;
+	name?: string;
 	tasks: number;
 	last: number;
 	pinned: boolean;
@@ -437,7 +438,7 @@ export const api = {
 	models: () => get<string[]>("/models"),
 	sessions: (agent: string) => get<Conversation[]>(`${a(agent)}/sessions`),
 	removeSession: (agent: string, session: string) => post<{ removed: boolean; unsubscribed: string[]; sources: string[]; servers: string[] }>(`${a(agent)}/remove`, { session }),
-	renameSession: (agent: string, session: string, to: string) => post<{ session: string }>(`${a(agent)}/rename`, { session, to }),
+	renameSession: (agent: string, session: string, to: string) => post<{ session: string; name?: string }>(`${a(agent)}/rename`, { session, to }),
 	pinSession: (agent: string, session: string, pinned: boolean) => post<{ pinned: boolean }>(`${a(agent)}/pin`, { session, pinned }),
 	// Groups of an agent's conversations. A pine older than groups has none: an empty list.
 	groups: (agent: string) => get<GroupList>(`${a(agent)}/groups`).catch((): GroupList => ({ order: "recent", groups: [] })),

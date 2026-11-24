@@ -20,7 +20,7 @@ import { addModelServer, checkServerName, listModelServers, lookAt, modelServerU
 import { allSkills, checkSkill, deleteSkill, listSkills, skillDir, skillsBeside, writeSkill } from "./skills.ts";
 import { describeOptions, FRESH } from "./sources.ts";
 import { localTime } from "./timers.ts";
-import { errText, matchesAny, parseDuration, programName, safeName, since, truncate } from "./util.ts";
+import { cleanName, errText, matchesAny, parseDuration, programName, safeName, since, truncate } from "./util.ts";
 
 const ok = (text: string) => ({ content: [{ type: "text" as const, text }], details: {} });
 
@@ -434,7 +434,7 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					agent: Type.String({ description: "Id of the agent" }),
 					task: Type.String({ description: "Your owner's words as they gave them, never reworded, and all the agent needs. It sees nothing else: never other words for what your owner asked, and never a tool they did not name. Tasks of a board: the board's name and the tasks' numbers" }),
 					wait: Type.Optional(Type.Boolean({ description: "false: do not wait; the answer arrives later as a message. Default true." })),
-					thread: Type.Optional(Type.String({ description: "Name of an ongoing thread with that agent, so it remembers earlier tasks of the same thread. Omit for a fresh start." })),
+					thread: Type.Optional(Type.String({ description: "Name of an ongoing thread with that agent, so it remembers earlier tasks of the same thread. Any text; the same text reaches the same thread. Omit for a fresh start." })),
 					...(live.trust === "owner" ? { worktree: Type.Optional(Type.Boolean({ description: WORKTREE_PARAM })) } : {}),
 				}),
 				execute: async (_id, p: any, signal) => {
@@ -454,10 +454,13 @@ export function pineTools(manager: AgentManager, agent: AgentConfig, live: Live,
 					if (onBoard) p.wait = true;
 					const board = onBoard ? boards.ensure("local", who.conversation.agent, who.conversation.session, "") : undefined;
 					const posted = board ? boards.post(board, { kind: "task", text: String(p.task), data: { agent: String(p.agent) }, ...postedAs() }) : undefined;
+					const thread = typeof p.thread === "string" ? cleanName(p.thread) : "";
+					const session = thread ? manager.keyForName(p.agent, thread, "thread-") : "new";
+					if (thread) manager.nameSession(p.agent, session, thread);
 					const child = manager.submit({
 						agent: p.agent,
 						prompt: `[task from agent ${agent.id}]\n${p.task}`,
-						session: p.thread ? `thread-${safeName(p.thread)}` : "new",
+						session,
 						kind: "delegate",
 						parent: r.task,
 						tainted: live.tainted,
@@ -1842,9 +1845,9 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 				if (!a) throw new Error(`there is no agent "${id}". Agents: ${Object.keys(cfg.agents).join(", ")}`);
 				return a;
 			};
-			const named = (v: unknown): string => {
+			const named = (v: unknown, a: AgentConfig): string => {
 				if (typeof v !== "string" || !v.trim()) throw new Error('give "name": the conversation\'s name, as the conversations list has it');
-				return manager.conversationKey(v);
+				return manager.conversationKey(v, a.id);
 			};
 			const of = (a: AgentConfig) => (a.id === agent.id ? "yours" : `of ${a.id}`);
 			const tabOn = (a: AgentConfig, key: string) => manager.uiTabs().tabs.some((t) => t.agent === a.id && manager.conversationKey(t.session) === key);
@@ -1893,7 +1896,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 									c.expires ? `removed by itself on ${new Date(c.expires).toISOString().slice(0, 10)} unless it is used or pinned` : "",
 									c.outside && !c.session.endsWith("~u") ? "has read outside content" : "",
 								];
-								return `- ${c.session}${a.id === agent.id && c.session === mine ? " (the one you are in)" : ""}: ${bits.filter(Boolean).join(" · ")}`;
+								return `- ${c.name ? `${c.name} (${c.session})` : c.session}${a.id === agent.id && c.session === mine ? " (the one you are in)" : ""}: ${bits.filter(Boolean).join(" · ")}`;
 							});
 							// A tab that was opened and nothing said in it yet.
 							for (const t of manager.uiTabs().tabs) if (t.agent === a.id && !list.some((c) => c.session === manager.conversationKey(t.session))) rows.push(`- ${manager.conversationKey(t.session)}: open in a tab · nothing said in it yet`);
@@ -1918,7 +1921,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					execute: async (_id, p) => {
 						run();
 						const a = whose(p.agent);
-						const key = named(p.name);
+						const key = named(p.name, a);
 						lookUp(a, key);
 						const r = manager.said(a.id, key, p.last, p.before);
 						if (r.outside) live.taint(`the conversation "${key}" of ${a.id}, which holds outside content`);
@@ -1945,7 +1948,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						run();
 						notHere("changing a conversation");
 						const a = whose(p.agent);
-						let key = named(p.name);
+						let key = named(p.name, a);
 						const rename = typeof p.rename === "string" && p.rename.trim() ? p.rename.trim() : undefined;
 						const group = typeof p.group === "string" ? p.group.trim() : undefined;
 						if (typeof p.pinned !== "boolean" && typeof p.tab !== "boolean" && !rename && group === undefined) throw new Error('nothing to change: give "pinned" (true or false), "tab" (true or false), "rename" (the new name) or "group" (a group\'s name, "" for none)');
@@ -2003,7 +2006,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 						run();
 						notHere("removing a conversation");
 						const a = whose(p.agent);
-						const key = named(p.name);
+						const key = named(p.name, a);
 						if (key === "main") throw new Error(`"main" is ${a.id === agent.id ? "your" : `${a.id}'s`} own conversation and stays. Your owner empties it with /reset.`);
 						if (a.id === agent.id && key === here()) throw new Error("This is the conversation you are in. It cannot be removed while you work in it: your owner removes it from the list of conversations (/sessions).");
 						const found = lookUp(a, key);
@@ -2425,7 +2428,7 @@ ${found.description}`, `this takes away something ${found.scope === "global" ? "
 					const { agent: who, conversation, ...rest } = p ?? {};
 					const targetId = typeof who === "string" && who.trim() ? who.trim() : agent.id;
 					// "This conversation" is the owner's words for where they are, not a conversation's name.
-					const session = typeof conversation === "string" && conversation.trim() && !THIS_ONE.test(conversation.trim()) ? safeName(conversation.trim()) : undefined;
+					const session = typeof conversation === "string" && conversation.trim() && !THIS_ONE.test(conversation.trim()) ? manager.conversationKey(conversation, targetId).replace(/~u$/, "") : undefined;
 					const r = run();
 					if (targetId === agent.id && (session === undefined || session === here())) return tool.execute(id, rest, signal, onUpdate);
 					const target = cfg.agents[targetId];

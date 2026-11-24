@@ -4,6 +4,7 @@ import type { TurnView, UndoResult } from "../undo.ts";
 /** One conversation of an agent. `expires`: when it is removed by itself unless something more is said in it. */
 export interface Conversation {
 	session: string;
+	name?: string;
 	tasks: number;
 	last: number;
 	pinned: boolean;
@@ -164,7 +165,7 @@ export class Client {
 	models = () => this.get<string[]>("/models");
 	sessions = (agent: string) => this.get<Conversation[]>(`/agents/${agent}/sessions`);
 	removeSession = (agent: string, session: string) => this.post<{ removed: boolean; unsubscribed: string[]; sources: string[]; servers: string[] }>(`/agents/${agent}/remove`, { session });
-	renameSession = (agent: string, session: string, to: string) => this.post<{ session: string }>(`/agents/${agent}/rename`, { session, to });
+	renameSession = (agent: string, session: string, to: string) => this.post<{ session: string; name?: string }>(`/agents/${agent}/rename`, { session, to });
 	pinSession = (agent: string, session: string, pinned: boolean) => this.post<{ pinned: boolean }>(`/agents/${agent}/pin`, { session, pinned });
 	groups = (agent: string) => this.get<GroupList>(`/agents/${agent}/groups`);
 	/** Put a conversation into a group (made if new), or with null take it out. */
