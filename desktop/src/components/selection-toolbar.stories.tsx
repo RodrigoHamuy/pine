@@ -46,6 +46,9 @@ export const OverSelectedText: Story = {
 		range.setEnd(text, 36);
 		window.getSelection()?.removeAllRanges();
 		window.getSelection()?.addRange(range);
-		await within(document.body).findByRole("toolbar");
+		// A selection made by a script is not always announced where the page is not in front (Chromatic's
+		// browser): it is announced here as a person's would be.
+		document.dispatchEvent(new Event("selectionchange"));
+		await within(document.body).findByRole("toolbar", undefined, { timeout: 3000 });
 	},
 };
