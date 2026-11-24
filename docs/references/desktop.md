@@ -21,8 +21,8 @@ The app is attached to pine's releases, a file for each system and kind of proce
 |---|---|
 | `Pine-<version>-arm64.dmg` | A Mac with Apple silicon (M1 and later) |
 | `Pine-<version>-x64.dmg` | A Mac with an Intel processor |
-| `Pine-<version>-x64.AppImage`, `Pine-<version>-arm64.AppImage` | Linux, any distribution: one file that runs where it lies (make it executable first: `chmod +x`) |
-| `Pine-<version>-x64.deb`, `Pine-<version>-arm64.deb` | Debian and Ubuntu: installed with `sudo apt install ./Pine-<version>-x64.deb`, into `/opt/Pine`, started as Pine from the system's list of apps |
+| `Pine-<version>-x86_64.AppImage`, `Pine-<version>-arm64.AppImage` | Linux, any distribution: one file that runs where it lies (make it executable first: `chmod +x`) |
+| `Pine-<version>-amd64.deb`, `Pine-<version>-arm64.deb` | Debian and Ubuntu: installed with `sudo apt install ./Pine-<version>-amd64.deb`, into `/opt/Pine`, started as Pine from the system's list of apps |
 | `Pine-<version>-x64-setup.exe`, `Pine-<version>-arm64-setup.exe` | Windows 10 and 11: an installer for your user alone, which asks for no administrator. It puts Pine into `%LOCALAPPDATA%\Programs\Pine` (or a folder you choose) and into the Start menu |
 
 On a Mac, open the image and drag Pine into Applications. Nothing else has to be installed: no
@@ -85,7 +85,7 @@ web tools drive. It asks for each where it is missing.
 
 | What the app finds | What it does |
 |---|---|
-| No pine home | It offers to set pine up (`pine init`): the example home is copied, and the browser is fetched (about 600 MB, once) |
+| No pine home | It offers to set pine up (`pine init`): the example home is copied, and the browser is fetched (about 600 MB, once). On Linux `pine init` also sets up the sandbox, which needs an administrator (bubblewrap, and on some systems a rule for AppArmor): the app runs none of that. The commands are shown, to be run in a terminal, and then **Try again**. Until they have run, pine works without the sandbox |
 | The welcome | The app opens on the main agent's own conversation (`main` in a new home, with pine's mark as its picture), which begins with pine's welcome: that the main agent is pine's administrator and the one to ask, that agents come first (ask it for one for each purpose: coding, work, automation, chat), that the first conversation is kept and the others are cleared after a while unless pinned, the things pine is for (chatting, code, a folder, acting on events), a prompt to try (one that watches the Downloads folder, which puts its words into the input), and where pine keeps everything (its home, shown in the Finder with a click). pine wrote it, and it is never sent to a model. The terminal UI shows the same there while nothing was said in it yet |
 | Nothing to answer with | A new home has nothing to run on: the agent's card at the top of a conversation says **Connect a model first**, with a button to Settings > Models (the main agent's too, above pine's welcome); that page lists every agent that cannot answer, with the reason (nothing connected yet, or nobody signed in to its provider). A message sent meanwhile says so; send it again once a model is there |
 | A sign-in in Settings > Models | A Claude, ChatGPT or Copilot subscription is signed in to through the browser (**Sign in**), any provider with an API key. Where the choice in force cannot answer, pine switches to the provider's usual one (pi's choice) and the dialog says which, with **Another one…**; so does adding a server of your own. Otherwise nothing switches by itself and the dialog offers **Choose the model your agents run on**. The page keeps it (`defaults.model`) with **Change** |
@@ -136,8 +136,10 @@ npm install
 npm start
 ```
 
-`npm run dev` is the same with the page reloading as you edit it. To make an app that can be
-put into Applications:
+`npm run dev` is the same with the page reloading as you edit it. An app started from a checkout has
+View › Reload and View › Toggle Developer Tools, which a packed app does not have: `⌘R` and `⌥⌘I`
+on a Mac, `F5` and `Ctrl+Alt+I` elsewhere (`Ctrl+R` is Dictate Message there, and `Ctrl+Shift+I` the
+panel's Agent view). To make an app that can be put into Applications:
 
 ```bash
 npm run pack
@@ -208,9 +210,10 @@ pine, setting pine up. To open a folder for a conversation you type its path.
 
 ## The daemon: started or reused
 
+The app starts pine itself, the Mac app as the app on Linux and Windows: you do not have to start
+pine first.
 When the app starts it asks `pine service` ([operations.md](operations.md), "A UI of its own")
-for the daemon of your home, so you never have to start pine first, on a Mac, on Linux and on
-Windows alike:
+for the daemon of your home:
 
 | What it finds | What happens |
 |---|---|
@@ -232,7 +235,9 @@ pine packed into the app; the `pine` of your shell.
 | Notifications | A system notification when an agent is done, stops with an error, needs your approval or asks you something while the window is not in front. The words are pine's own ("main is done"), never the agent's |
 
 Closing the window does not quit the app on a Mac: it, and a daemon it started, stay until
-you quit (`⌘Q`). On Linux and Windows closing the window quits the app. A daemon the app
+you quit (`⌘Q`). On Linux and Windows closing the window quits the app. On every system the window
+closes with its own button: `⌘W` (`Ctrl+W`) closes a tab, never the window, and the Window menu has
+Minimise and Zoom only. A daemon the app
 started that stops answering is started again; one it started is stopped by closing its input,
 so that it closes its database before it ends, on every system.
 
@@ -460,8 +465,10 @@ far right the browser.
 
 On Linux and Windows the window has no title bar of the system's: the bar of tabs reaches the
 top, as on a Mac, and the system draws its window controls (minimise, maximise, close) over its
-right end, in the theme's colors; the bar keeps room for them. The menus are not shown there:
-everything in them is in the palette (`Ctrl+K`), and their keys work. The keys are the Mac's
+right end, in the theme's colors and as tall as the bar at every zoom (`Ctrl+Plus`, `Ctrl+-`, `Ctrl+0`,
+which the app keeps from one start to the next); the bar keeps room for them. There is no menu bar there: the
+menu button (☰) at the right end of the bar opens the same menus, their keys work, and the
+palette (`Ctrl+K`) has their commands too. The keys are the Mac's
 with `Ctrl` for `⌘`, written the system's way: `⌘T` is `Ctrl+T`, `⇧⌘T` `Ctrl+Shift+T`, `⌥⌘B`
 `Ctrl+Alt+B`, and the app says them so in its tooltips, menus and the palette. Where this manual
 says `⌘`, read `Ctrl` there. A folder dropped on the app's icon, or given to it in a terminal
@@ -626,7 +633,7 @@ with Resume and Clear. Its tasks are in the Board tab of the side panel.
 |---|---|
 | Pictures, video, sound | A picture an answer points at is shown as it is; a click enlarges it. A video gets the system's own player controls, with sound. A sound is a line of its own, with bars, that plays by itself when its answer arrives: see "A sound in an answer" below |
 | Files from the Finder | Files put on the input with the mouse are attached to the next message (up to 10 files of 20 MB each); a folder put there is opened for the conversation, as with `/folder`. A folder put on the app's icon in the Dock opens a conversation that works in it, as `pine <folder>` does |
-| Menus and keys | Everything is in the menu bar, with its key |
+| Menus and keys | Everything is in the menu bar, with its key (off a Mac, in the menu button ☰ at the right end of the bar) |
 | Notifications | See the settings above. The app's icon carries the number of conversations that wait for you |
 | Find | `⌘F` marks what you look for in the conversation |
 | Themes | Any VS Code color theme, chosen in Settings > General: the window, code in answers, diffs and the editor, and the terminal all follow it. See "Themes" |
@@ -760,6 +767,7 @@ comes later, after whatever it is doing. A command that never ends never ends an
 |---|---|
 | What is reported | Only blocks run with ▶. What you type yourself is never reported |
 | How the end is known | The shell is started with hooks that mark when a command starts and ends: zsh and bash (Git Bash's `bash.exe` too), after your own startup files; PowerShell after your profile, by wrapping its prompt and the line PSReadLine hands over, as VS Code's shell integration does (without PSReadLine nothing is reported). Another shell (cmd.exe, fish) runs ▶ blocks but does not report them |
+| Another integration that marks | A prompt or a terminal's own shell integration may mark commands too, after pine's hooks: WezTerm's, which its package puts into every login shell (`/etc/profile.d/wezterm.sh`) whatever the terminal, writes `D;<code>;aid=<pid>`. Its marks are read for the code, and one without a code does not hide the one pine's hooks gave |
 | Keys in the terminal, off a Mac | The app's keys are `Ctrl` chords there, and so are the shell's own (`Ctrl+W` deletes a word, `Ctrl+K` the rest of the line, `Ctrl+R` searches). While the terminal has the keyboard, `Ctrl` and a letter go to the shell; `Ctrl+Shift`, `Ctrl+Alt`, `Ctrl` and a digit, `Ctrl+Tab`, `Ctrl+,` and `` Ctrl+` `` stay the app's. `Ctrl+Shift+C` copies what is selected in the terminal and `Ctrl+Shift+V` pastes, as in the system's own terminals |
 | The report | A message of pine's own, not yours, with every line of output marked as output (`POST /agents/<id>/terminal`, [operations.md](operations.md)). In a conversation that has read outside content it keeps that mark |
 
@@ -993,6 +1001,7 @@ the agent to write. So:
 | What is heard | Text for the input: never sent by itself |
 | A code block's Run button | Only your click types a block into your terminal, and only a block whose every character shows as itself: an answer cannot run anything by itself, nor hide a part of what it runs. What the agent hears back is that block's output, quoted, and nothing you typed |
 | The window stays the app | It cannot be taken to another address, and opens no further windows |
+| What the app starts | The daemon, `pine init`, the login shell it asks for your environment, and the shell in the terminal get none of the app's open files, sockets and pipes. On Linux a program keeps whatever its parent did not mark to be closed, and Chromium marks little: there each starts behind `bash`, which closes all but the three standard ones and then becomes the program. So nothing you start in the terminal, and nothing a profile leaves running (`ssh-agent`), holds the app's files after it has quit |
 | The agent's browser beside a conversation | With this computer's pine, the page itself: the app has the agent's browser, a view of its own in the window laid over the panel (its own session, sandboxed, nothing of the app's in it), which you use as any browser and the agent drives at the same time. All of it goes through pine's guard, the same as the browser pine starts itself, which the agent goes back to when the app is closed; logins made in one are not in the other. Its address and titles are text in the app. While a dialog or a menu of the app's lies over the panel, a still picture of the page stands in for it. With another machine's pine, on the phone and in the web client: a picture, drawn, and the app hands the daemon what you did in it (places, keys, an address), which the browser's own server checks piece by piece |
 | Browser access | Off until you turn it on. Then the app's SSH server of its own (not the system's SSH server, Remote Login on macOS) accepts only the keys you allowed at this computer, by key and never by password, and gives them this computer's pine and nothing else; at most 8 connections at a time, and one that has not signed in within 20 seconds is closed. A device's name is shown as plain text, 60 characters at most. See "Browser access" |
 | On the local network | While browser access and Visible on this network are on, a Bonjour record (`_pine._tcp`) named "Pine" and the start of this computer's key fingerprint, never its name, with that fingerprint, the service's address and a random word that changes every five minutes, which a request without a code has to name. Nothing listens behind it: a phone still goes through the service and checks the key, and the four digits are what you compare. Requests without a code are one at a time and paused after refusals. While visibility is off the app has no socket on port 5353 |
@@ -1062,7 +1071,8 @@ desktop/
                    behind the guard of the browser server that drives it through a WebSocket with a word
     service.ts     finds node and pine, runs `pine service`, keeps the daemon it started
     fds.ts         what a program the app starts gets of the app's own open files: on Linux, where
-                   Chromium leaves them open across a start, nothing but its stdio (`sealed`)
+                   Chromium leaves them open across a start, nothing but its stdio: it starts
+                   behind bash, which closes the rest and becomes the program (`withoutFds`)
     command.ts     `pine` for a terminal: the link into the shell's PATH, made and removed (on
                    Windows only looked for: the installer puts it there)
     terminal.ts, shell-hooks.ts  the owner's terminal beside a conversation, and the hooks of zsh,
@@ -1140,7 +1150,8 @@ desktop/
                    update-feed.ts (the names of a release's zip and update feed, and the feed)
   test/            the app from end to end, driven through its real window, which is drawn
                    and never put on the screen; command.test.ts, updates.test.ts,
-                   daemon.test.ts and preview.test.ts need no window.
+                   daemon.test.ts, preview.test.ts and fds.test.ts need no window.
+                   setup.test.ts starts the app on a stand-in for pine with no home yet.
                    support/: the build a test starts, without a screen (app.ts), the one
                    window of app.test.ts and app-around.test.ts (window.ts), and a daemon
                    of the test's own told from another run's by its token (daemon.ts)

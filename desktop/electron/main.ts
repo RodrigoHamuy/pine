@@ -157,22 +157,35 @@ function windowBackground(): string {
 }
 
 /**
- * How tall the bar along the top of the page is (h-11 at the page's 15px, index.css): off a Mac the
- * system draws its window controls over the page at its top right (titleBarOverlay), as tall as it.
+ * How tall the bar along the top of the page is in the page's pixels (h-11 at the page's 15px, index.css): off a
+ * Mac the system draws its window controls over the page at its top right (titleBarOverlay), as tall as it. The
+ * window counts in its own pixels, which are the page's times its zoom.
  */
-const TITLE_BAR = 41;
+const TITLE_BAR = 41.25;
 
 /** The system's window controls off a Mac, in the theme's colors: on the bar's background (the page's `sunk`), drawn in its quieter text. */
-function windowControls(): { color: string; symbolColor: string; height: number } {
+function windowControls(zoom = win && !win.isDestroyed() ? win.webContents.getZoomFactor() : 1): { color: string; symbolColor: string; height: number } {
 	const colors = prefs.look?.colors;
-	return { color: (colors?.sunk ?? "#171922").slice(0, 7), symbolColor: (colors?.["text-muted"] ?? colors?.text ?? "#a6accd").slice(0, 7), height: TITLE_BAR };
+	return { color: (colors?.sunk ?? "#171922").slice(0, 7), symbolColor: (colors?.["text-muted"] ?? colors?.text ?? "#a6accd").slice(0, 7), height: Math.round(TITLE_BAR * zoom) };
+}
+
+/**
+ * Zooms the page by a step as the menu's own roles do (undefined: back to its own size), and off a Mac fits the window's
+ * controls to the bar, which grows and shrinks with the page: taller than it, they would cover the panels' top edge.
+ */
+function zoomBy(step: number | undefined): void {
+	if (!win || win.isDestroyed()) return;
+	const level = step === undefined ? 0 : win.webContents.getZoomLevel() + step;
+	win.webContents.setZoomLevel(level);
+	// (Right after, the window still says the zoom it had. A level is a power of 1.2, as Chromium counts it.)
+	refreshBackground(1.2 ** level);
 }
 
 /** Repaints the window's background (and off a Mac its controls) for the current theme; a no-op before the window exists. */
-function refreshBackground(): void {
+function refreshBackground(zoom?: number): void {
 	if (!win || win.isDestroyed()) return;
 	win.setBackgroundColor(windowBackground());
-	if (!isMac) win.setTitleBarOverlay(windowControls());
+	if (!isMac) win.setTitleBarOverlay(windowControls(zoom));
 }
 
 function savePrefs(): void {
@@ -505,7 +518,8 @@ function createWindow(): void {
 		show: false,
 		title: "Pine",
 		// Off a Mac the page reaches the top too, and the system draws its window controls over its top right
-		// (in the theme's colors, refreshBackground). Its menus are then not shown, and their keys still work.
+		// (in the theme's colors, refreshBackground). Its menus are then not shown: their keys still work, and the
+		// page's menu button opens them (pine:app-menu).
 		titleBarStyle: isMac ? "hiddenInset" : "hidden",
 		trafficLightPosition: { x: 16, y: 16 },
 		// Gives the page where the window buttons are (env(titlebar-area-x) and -width, 0 in full screen), so the bars make room for them by themselves.
@@ -539,6 +553,8 @@ function createWindow(): void {
 	// Off a Mac the shell's own Ctrl keys reach the shell while the terminal has the keyboard, not the menu (shellKeeps).
 	if (!isMac) win.webContents.on("before-input-event", (_e, input) => win?.webContents.setIgnoreMenuShortcuts(terminalFocused && shellKeeps(input)));
 	win.webContents.on("did-start-loading", () => (terminalFocused = false));
+	// Chromium keeps a page's zoom when it is loaded again: the controls fit the bar at that zoom.
+	if (!isMac) win.webContents.on("did-finish-load", () => refreshBackground());
 	const keep = () => {
 		if (!win || win.isDestroyed() || win.isMinimized() || win.isFullScreen()) return;
 		prefs.bounds = win.getBounds();
@@ -723,12 +739,20 @@ function buildMenu(): void {
 				item("Toggle View", "view", "CmdOrCtrl+Shift+O"),
 				item("Events", "events", "CmdOrCtrl+Shift+L"),
 				{ type: "separator" },
-				{ role: "resetZoom" },
-				{ role: "zoomIn" },
-				{ role: "zoomOut" },
+				// Off a Mac the window's controls are as tall as the bar, which zooms with the page: they follow it (zoomBy). The keys are the roles' own.
+				...(isMac
+					? [{ role: "resetZoom" as const }, { role: "zoomIn" as const }, { role: "zoomOut" as const }]
+					: [
+							{ label: "Actual Size", accelerator: "CmdOrCtrl+0", click: () => zoomBy(undefined) },
+							{ label: "Zoom In", accelerator: "CmdOrCtrl+Plus", click: () => zoomBy(0.5) },
+							{ label: "Zoom Out", accelerator: "CmdOrCtrl+-", click: () => zoomBy(-0.5) },
+						]),
 				{ type: "separator" },
 				{ role: "togglefullscreen" },
-				...(app.isPackaged ? [] : [{ type: "separator" as const }, { role: "reload" as const }, { role: "toggleDevTools" as const }]),
+				// From a checkout only. The developer tools have the Mac's key everywhere (⌥⌘I, Ctrl+Alt+I): Electron's own elsewhere,
+				// Ctrl+Shift+I, is the Agent view's above. Reload is ⌘R on a Mac, beside Dictate's ⌃R; elsewhere both would be
+				// Ctrl+R, which stays Dictate's, and Reload is F5.
+				...(app.isPackaged ? [] : [{ type: "separator" as const }, { role: "reload" as const, ...(isMac ? {} : { accelerator: "F5" }) }, { role: "toggleDevTools" as const, accelerator: "CmdOrCtrl+Alt+I" }]),
 			],
 		},
 		{
@@ -755,7 +779,9 @@ function buildMenu(): void {
 				...Array.from({ length: 9 }, (_, i) => item(`Tab ${i + 1}`, `tab-${i + 1}`, `CmdOrCtrl+${i + 1}`, { visible: false, acceleratorWorksWhenHidden: true })),
 			],
 		},
-		{ role: "windowMenu" },
+		// The Mac's Window menu has no Close, and ⌘W closes the tab. Electron's elsewhere has Close on Ctrl+W, Close Tab's key:
+		// there it is the Mac's, and the window closes with its own button, as with the red one.
+		isMac ? { role: "windowMenu" } : { label: "Window", submenu: [{ role: "minimize" }, { role: "zoom" }] },
 		{ role: "help", submenu: [item("Keys and Commands", "help"), ...(RELEASE_API && !isMac ? [item("Check for Updates…", "updates")] : []), { label: "pine on GitHub", click: () => openOutside("https://github.com/pmndre/pine") }] },
 	];
 	Menu.setApplicationMenu(Menu.buildFromTemplate(template));
@@ -808,8 +834,19 @@ function wire(): void {
 	});
 	handle("pine:init", async () => {
 		launch ??= await findPine(APP_ROOT, app.isPackaged ? process.resourcesPath : undefined);
-		const args = ["init", ...(prefs.home ? [prefs.home] : []), "--yes"];
-		return runPine(launch, args, (line) => send("pine:init-line", line), process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
+		// On Linux pine init sets up the sandbox as administrator after --yes: sudo would ask out of sight (in the terminal
+		// the app was started from, if any, or nowhere), or, with a password it still knows there, install packages unseen.
+		// Without --yes pine says what it would run and runs nothing, and the owner runs it in a terminal (Gate in src/App.tsx).
+		// --yes does nothing else, on any system.
+		const linux = process.platform === "linux";
+		const args = ["init", ...(prefs.home ? [prefs.home] : []), ...(linux ? [] : ["--yes"])];
+		let leftToOwner = false;
+		const code = await runPine(launch, args, (line) => {
+			// pine's words for it (src/sandbox-setup.ts).
+			if (linux && line.includes("Nobody is here to say yes")) leftToOwner = true;
+			send("pine:init-line", line);
+		}, process.env.PINE_SKIP_DOWNLOADS ? { PINE_SKIP_DOWNLOADS: "1" } : {});
+		return code === 0 && leftToOwner ? "administrator" : code;
 	});
 	// The browser the web tools drive, fetched by the pine the app runs: each pine wants the build
 	// of its own Playwright, and a home that was set up by another pine has an older one.
@@ -1005,6 +1042,12 @@ function wire(): void {
 	handle("pine:term-run", (id: string, code: string) => terminals.run(String(id), code));
 	handle("pine:term-resize", (id: string, cols: number, rows: number) => terminals.resize(String(id), cols, rows));
 	handle("pine:term-close", (id: string) => terminals.close(String(id)));
+	// Off a Mac the window shows no menu bar (createWindow): the page's menu button opens the menus at its place, given in the page's pixels.
+	handle("pine:app-menu", (x: number, y: number) => {
+		if (!win || win.isDestroyed() || isMac) return;
+		const zoom = win.webContents.getZoomFactor();
+		Menu.getApplicationMenu()?.popup({ window: win, x: Math.round((Number(x) || 0) * zoom), y: Math.round((Number(y) || 0) * zoom) });
+	});
 	// An item with `checked` is one of a set of choices (the side bar's "Sort by"), drawn with the system's mark.
 	handle("pine:context-menu", (items: Array<{ id: string; label: string; enabled?: boolean; separator?: boolean; danger?: boolean; checked?: boolean }>) => {
 		return new Promise<string | undefined>((resolve) => {
