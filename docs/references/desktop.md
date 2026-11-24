@@ -555,13 +555,21 @@ above the input, beside the files. Hovering it shows the whole quote, a click on
 message it was taken from, and its × removes it. You can quote several pieces, and send quotes with
 no text of your own.
 
-On sending, each quote goes before your text as a markdown quote (`> `): that is what the agent
-reads. A quote too long for a message is cut (`…`), never your own text. Text in your messages, the
+**Reply** beside **Quote** adds the quote too (or takes the badge it already has) and opens a field
+under the badges for your reply to that quote; the reply button on a badge opens it later. One reply
+is open at a time: `↩` or `esc` closes it and goes back to the input without sending, `⇧↩` is a
+new line. A badge with a reply shows its beginning as a second line, which a click opens again.
+Replies go only when you send the message, all of them with it; an empty reply is left out.
+
+On sending, each quote goes before your text as a markdown quote (`> `), followed by its reply: that
+is what the agent reads. Quotes too long for a message are cut (`…`), replies with them, never your
+own text. Text in your messages, the
 agent's answers, the welcome letter and the agent's card can be quoted, once the message is known to
-pine. The quotes are kept with the message and stay badges at the top of its bubble, also when the
+pine. The quotes are kept with the message and stay badges at the top of its bubble (with
+replies, one under the other, each followed by its reply), also when the
 conversation is opened again, and a click still goes back to exactly where each was taken from; when
 that message is no longer in the conversation, a note says so. A message you take back (`/undo`)
-gives its quotes back as badges above the input. `> ` that you type by hand stays text.
+gives its quotes back as badges above the input, with their replies. `> ` that you type by hand stays text.
 
 ### Finding a conversation
 
