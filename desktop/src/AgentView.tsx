@@ -100,10 +100,12 @@ export function AgentView({ tab }: { tab: Tab }) {
 
 			{tab.busy || helpers.length || elsewhere.length ? (
 				<FieldSet className={SECTION}>
+					{/* Each ItemMedia here is an icon's box (size-4): ItemMedia puts its content at the top beside a title with a
+					   description, and a dot smaller than an icon would sit above the middle of the title's line. */}
 					<FieldLegend className={TITLE}>At work</FieldLegend>
 					{tab.busy ? (
 						<Item size="xs">
-							<ItemMedia><Pulse /></ItemMedia>
+							<ItemMedia className="size-4"><Pulse /></ItemMedia>
 							<ItemContent>
 								<ItemTitle>this conversation</ItemTitle>
 								<ItemDescription>{`${tab.thinking ? "thinking" : "working"}${tab.toolCalls ? ` · ${tab.toolCalls} tool calls` : ""}`}</ItemDescription>
@@ -112,7 +114,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					) : null}
 					{helpers.map(([id, c]) => (
 						<Item key={id} size="xs" render={<button type="button" onClick={() => void s.openTask(id)} />}>
-							<ItemMedia>{c.running ? <Pulse /> : <CheckIcon />}</ItemMedia>
+							<ItemMedia className="size-4">{c.running ? <Pulse /> : <CheckIcon />}</ItemMedia>
 							<ItemContent>
 								<ItemTitle>{c.agent}</ItemTitle>
 								<ItemDescription>{`${childKind(c.kind)} #${id}: ${c.label}`}</ItemDescription>
@@ -122,7 +124,7 @@ export function AgentView({ tab }: { tab: Tab }) {
 					))}
 					{elsewhere.map((session) => (
 						<Item key={session} size="xs" render={<button type="button" onClick={() => void s.openTab(tab.agent, session)} />}>
-							<ItemMedia><Pulse /></ItemMedia>
+							<ItemMedia className="size-4"><Pulse /></ItemMedia>
 							<ItemContent>
 								<ItemTitle>{session}</ItemTitle>
 								<ItemDescription>another conversation of {tab.agent}</ItemDescription>
