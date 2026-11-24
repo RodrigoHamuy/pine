@@ -23,7 +23,8 @@ function Selecting({ onQuote }: { onQuote: (text: string) => void }) {
 	const [selected, unselect] = useTextSelection(root);
 	return (
 		<div ref={frame} className="flex h-80 max-w-xl flex-col rounded-xl border bg-background">
-			<div ref={root} className="flex-1 overflow-auto p-7 text-sm leading-relaxed">
+			{/* Selectable as an answer is in the app (the page itself is select-none): selected text outside it reads as none. */}
+			<div ref={root} className="flex-1 overflow-auto p-7 text-sm leading-relaxed select-text">
 				<p data-testid="answer">The build passed on the second run. The first failed because the cache held an old copy of the lockfile, so the install took the versions of last week.</p>
 				<p className="mt-3">Clearing the cache before the install keeps it from happening again.</p>
 			</div>
@@ -46,9 +47,6 @@ export const OverSelectedText: Story = {
 		range.setEnd(text, 36);
 		window.getSelection()?.removeAllRanges();
 		window.getSelection()?.addRange(range);
-		// A selection made by a script is not always announced where the page is not in front (Chromatic's
-		// browser): it is announced here as a person's would be.
-		document.dispatchEvent(new Event("selectionchange"));
-		await within(document.body).findByRole("toolbar", undefined, { timeout: 3000 });
+		await within(document.body).findByRole("toolbar");
 	},
 };
