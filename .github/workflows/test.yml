@@ -1,6 +1,6 @@
 name: Test
 
-# pine's tests on every system it runs on, on every pull request and every push to next.
+# pine's tests on every system it runs on, for every pull request (a push to next is not tested again).
 #
 # pine: the type check and `npm test` on Linux (x64 and arm64), macOS and Windows. On Linux the
 # sandbox is set up first the way an owner sets it up, with `pine init` (bubblewrap, and the
@@ -13,8 +13,6 @@ name: Test
 
 on:
   pull_request:
-  push:
-    branches: [next]
 
 permissions:
   contents: read
