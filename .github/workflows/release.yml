@@ -48,6 +48,12 @@ name: Release
 # release.yml -f version=0.38.0). They are built from that release's tag and attached to that
 # release, in place of what is there.
 #
+# The Windows app's signing can be tried from any branch without a release: Run workflow with
+# "signing_trial" checked (gh workflow run release.yml --ref <branch> -f version=0.0.1 -f
+# signing_trial=true). Only the two Windows jobs run, from that branch, with the secrets of the
+# environment "signing-trial" (SignPath's test signing policy), and the signed installers are an
+# artifact of the run, attached to nothing.
+#
 # Publishing uses npm's trusted publishing: on npmjs.com, the package's settings name this
 # repository and this workflow file as a trusted publisher, and no token is stored anywhere.
 # A repository secret NPM_TOKEN, if there is one, is used instead.
@@ -60,6 +66,10 @@ on:
       version:
         description: Build the Pine app again for this release and attach it (a version that has a release, like 0.38.0)
         required: true
+      signing_trial:
+        description: Only try the Windows app's signing, from this branch, with SignPath's test certificate (the version is a label then; nothing is attached to a release)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -103,7 +113,7 @@ jobs:
   app:
     needs: release
     # After a release from main, or by hand for a release there already is (the release job is then skipped).
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
+    if: always() && !inputs.signing_trial && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
     strategy:
       fail-fast: false
       matrix:
@@ -200,7 +210,7 @@ jobs:
   # release's SHA256SUMS and GitHub's attestation of where it was built say.
   app-linux:
     needs: release
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
+    if: always() && !inputs.signing_trial && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
     strategy:
       fail-fast: false
       matrix:
@@ -273,11 +283,13 @@ jobs:
           - arch: arm64
             runner: windows-11-arm
     runs-on: ${{ matrix.runner }}
-    environment: release
+    environment: ${{ inputs.signing_trial && 'signing-trial' || 'release' }}
     permissions:
       contents: read
     env:
       VERSION: ${{ inputs.version || needs.release.outputs.version }}
+      SECRETS_IN: ${{ inputs.signing_trial && 'signing-trial' || 'release' }}
+      TRIAL: ${{ inputs.signing_trial && 'true' || 'false' }}
     defaults:
       run:
         shell: bash
@@ -294,10 +306,10 @@ jobs:
             if [ -z "$(printenv "$name")" ]; then missing="$missing $name"; fi
           done
           if [ "$(echo $missing | wc -w)" -eq 4 ]; then
-            echo "::notice::The Pine app for Windows was not built: the environment \"release\" has no SignPath secrets yet (see release.yml)."
+            echo "::notice::The Pine app for Windows was not built: the environment \"$SECRETS_IN\" has no SignPath secrets yet (see release.yml)."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           elif [ -n "$missing" ]; then
-            echo "::error::The Pine app for Windows cannot be signed: these secrets are missing in the environment \"release\":$missing"
+            echo "::error::The Pine app for Windows cannot be signed: these secrets are missing in the environment \"$SECRETS_IN\":$missing"
             exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -307,7 +319,7 @@ jobs:
       - if: steps.signing.outputs.ready == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.sha }}
+          ref: ${{ !inputs.signing_trial && inputs.version && format('v{0}', inputs.version) || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - if: steps.signing.outputs.ready == 'true'
@@ -338,12 +350,14 @@ jobs:
     runs-on: windows-latest
     # Each request waits for the owner's approval at signpath.io (an e-mail says one is waiting).
     timeout-minutes: 300
-    environment: release
+    environment: ${{ inputs.signing_trial && 'signing-trial' || 'release' }}
     permissions:
       contents: write # the installers go to the release
       actions: read # SignPath reads the artifacts it signs
     env:
       VERSION: ${{ inputs.version || needs.release.outputs.version }}
+      SECRETS_IN: ${{ inputs.signing_trial && 'signing-trial' || 'release' }}
+      TRIAL: ${{ inputs.signing_trial && 'true' || 'false' }}
     defaults:
       run:
         shell: bash
@@ -360,10 +374,10 @@ jobs:
             if [ -z "$(printenv "$name")" ]; then missing="$missing $name"; fi
           done
           if [ "$(echo $missing | wc -w)" -eq 4 ]; then
-            echo "::notice::The Pine app for Windows was not built: the environment \"release\" has no SignPath secrets yet (see release.yml)."
+            echo "::notice::The Pine app for Windows was not built: the environment \"$SECRETS_IN\" has no SignPath secrets yet (see release.yml)."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           elif [ -n "$missing" ]; then
-            echo "::error::The Pine app for Windows cannot be signed: these secrets are missing in the environment \"release\":$missing"
+            echo "::error::The Pine app for Windows cannot be signed: these secrets are missing in the environment \"$SECRETS_IN\":$missing"
             exit 1
           else
             echo "ready=true" >> "$GITHUB_OUTPUT"
@@ -373,7 +387,7 @@ jobs:
       - if: steps.signing.outputs.ready == 'true'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ inputs.version && format('v{0}', inputs.version) || github.sha }}
+          ref: ${{ !inputs.signing_trial && inputs.version && format('v{0}', inputs.version) || github.sha }}
           fetch-depth: 0
           persist-credentials: false
       - if: steps.signing.outputs.ready == 'true'
@@ -459,9 +473,18 @@ jobs:
           foreach ($f in $files) {
             $s = Get-AuthenticodeSignature $f
             "$f : $($s.Status) $($s.SignerCertificate.Subject)"
-            if ($s.Status -ne "Valid") { exit 1 }
+            # SignPath's test certificate is its own: Windows trusts no signature of it, so a trial
+            # only checks that every file was signed.
+            if ($env:TRIAL -eq "true") { if (-not $s.SignerCertificate) { exit 1 } }
+            elseif ($s.Status -ne "Valid") { exit 1 }
           }
-      - if: steps.signing.outputs.ready == 'true'
+      - if: steps.signing.outputs.ready == 'true' && env.TRIAL == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pine-windows-trial
+          path: desktop/release/out/
+          retention-days: 3
+      - if: steps.signing.outputs.ready == 'true' && env.TRIAL != 'true'
         run: gh release upload "v$VERSION" "desktop/release/out/Pine-$VERSION-x64-setup.exe" "desktop/release/out/Pine-$VERSION-arm64-setup.exe" --clobber
         env:
           GH_TOKEN: ${{ github.token }}
@@ -470,7 +493,7 @@ jobs:
   android:
     needs: release
     # As the app job: after a release from main, or by hand for a release there already is.
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
+    if: always() && !inputs.signing_trial && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -558,7 +581,7 @@ jobs:
   ios:
     needs: release
     # As the app job: after a release from main, or by hand for a release there already is.
-    if: always() && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
+    if: always() && !inputs.signing_trial && (github.event_name == 'workflow_dispatch' || needs.release.outputs.channel == 'latest')
     # The image with Xcode 27 (a preview of GitHub's): the app's packages are held at versions that
     # compile on it (swift-collections), and the images up to macos-26 stop at Xcode 26.
     runs-on: xcode-27

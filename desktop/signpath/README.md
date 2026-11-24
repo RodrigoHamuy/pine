@@ -29,26 +29,30 @@ four numbers Windows keeps beside it (0.41.0.0). Should SignPath compare the fou
    release's notes link to it.
 2. **Multi-factor authentication** on GitHub and on SignPath for everyone in the policy (their
    terms require it).
-3. In SignPath, once the organization is set up:
-   - **Trusted build system:** Trusted Build Systems → Add predefined → GitHub.com, then link it to
-     the project. Install the SignPath GitHub App on `pmndre/pine` if it asks for it.
-   - **Project:** repository URL `https://github.com/pmndre/pine`. Its slug is a secret below.
+3. In the organization SignPath Foundation makes for the project ("pine [OSS]"; the project
+   `pine`, GitHub.com linked as its trusted build system, the policies `test-signing` and
+   `release-signing` and the CI user "CI builds" come with it):
    - **Artifact configurations:** two, with the slugs `app-folder` and `installer`, each with the
      XML of the file of that name here.
-   - **Signing policy** (release signing, the Foundation's certificate): "Verify origin" with
-     allowed branch `main` (a release is made from `main`), "Use approval process" with yourself as
-     approver, and a **CI user** as its only submitter. Its slug is a secret below.
-   - **The CI user's API token** (shown once).
-4. **Secrets** in the GitHub environment `release` (Settings → Environments → release):
+   - **The CI user's API token:** Users and Groups → CI builds → Regenerate token (shown once).
+4. **Secrets** in the GitHub environment `signing-trial`, for the trial below:
 
-   | Secret                     | Where it is in SignPath                         |
-   | -------------------------- | ----------------------------------------------- |
-   | `SIGNPATH_API_TOKEN`       | the CI user's API token                         |
-   | `SIGNPATH_ORGANIZATION_ID` | the organization's page (its ID, a GUID)        |
-   | `SIGNPATH_PROJECT_SLUG`    | the project's settings                          |
-   | `SIGNPATH_POLICY_SLUG`     | the release signing policy                      |
+   | Secret                     | Value                                              |
+   | -------------------------- | -------------------------------------------------- |
+   | `SIGNPATH_API_TOKEN`       | the CI user's API token                            |
+   | `SIGNPATH_ORGANIZATION_ID` | the organization's ID (its page, a GUID)           |
+   | `SIGNPATH_PROJECT_SLUG`    | `pine`                                             |
+   | `SIGNPATH_POLICY_SLUG`     | `test-signing`                                     |
 
    Without all four the Windows jobs build nothing and say so; with only some they fail.
+5. **The trial:** `gh workflow run release.yml --ref <branch> -f version=0.0.1 -f
+   signing_trial=true` packs both apps from that branch, has them and their installers signed with
+   the test certificate (no approval) and keeps the result as an artifact of the run. SignPath
+   Foundation looks at a trial that went through before it orders the real certificate.
+6. **Once the certificate is in** (the policy `release-signing` is valid): "Use approval process"
+   with yourself as approver and "Verify origin" with the branch `main` on that policy, and the
+   same four secrets in the environment `release`, the last one `release-signing`. From then on
+   every release from `main` asks for its two approvals.
 
-To try it without a new release: `gh workflow run release.yml -f version=<the last release>` from
-`main` builds the apps of that release again and uploads them to it.
+To build a release's apps again: `gh workflow run release.yml -f version=<the last release>` from
+`main` builds them from that release's tag and uploads them to it.

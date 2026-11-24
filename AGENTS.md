@@ -750,7 +750,10 @@ arm64, started under a virtual screen, with checksums and GitHub's attestation) 
 signed through SignPath Foundation: two approvals a release at signpath.io; four secrets in the
 environment `release`, listed above the job; without them nothing is built). Only pine's own
 programs are signed (`desktop/signpath/`, whose README says how it is set up), and each has to say
-"Pine" and the release's version: the `pack` job of `test.yml` checks that on Windows. The Windows
+"Pine" and the release's version: the `pack` job of `test.yml` checks that on Windows. The signing
+is tried from any branch without a release (`gh workflow run release.yml --ref <branch> -f
+version=0.0.1 -f signing_trial=true`): only the two Windows jobs, with the environment
+`signing-trial` and SignPath's test certificate, the installers an artifact of the run. The Windows
 app talks to pine in WSL as to another machine (`desktop/electron/wsl.ts`), and no runner of
 GitHub's has WSL: `desktop/test/wsl.test.ts` tests it on a stand-in, and a real round trip is by
 hand on a Windows computer.
