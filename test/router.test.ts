@@ -50,7 +50,8 @@ test("an event for a conversation that is working goes into that work: one run, 
 	// The work holds its answer until the other three events are in (a run from outside has no shell to keep it busy).
 	h.mock.state.scripts.work = [{ text: "one answer", until: () => h.pine.tasks.list({}).length >= 4 }];
 	h.pine.bus.publish("slack/message", { key: "PROJ-244", text: "PROJ-244 is broken @@REF:work@@" }, { source: "test" });
-	await until(() => h.pine.agents.status().running.length === 1);
+	// At work once the model has been asked: before that the run has started but not yet its session's stream.
+	await until(() => h.pine.agents.status().running.length === 1 && h.mock.state.requests.some((q: any) => JSON.stringify(q.body).includes("PROJ-244 is broken")));
 	h.pine.bus.publish("jira/issue", { issue: { key: "PROJ-244" }, text: "JIRA-UPDATE status: blocked" }, { source: "test" });
 	// One whose answer goes somewhere else, and one on a route that queues: both wait their turn.
 	h.pine.bus.publish("chat/message", { key: "PROJ-244", text: "OTHER-REPLY" }, { source: "test", reply: { topic: "out/chat" } });
